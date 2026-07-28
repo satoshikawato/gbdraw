@@ -1102,7 +1102,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     identity=0,
     alignment_length=0,
     collinear_min_anchors=1,
-    collinear_max_gene_gap=0,
+    collinear_max_unit_gap=0,
     collinear_unit_mode="auto",
     collinear_color_mode="orientation",
     collinear_anchor_mode="rbh",
@@ -1216,7 +1216,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             str(normalized_membership_mode),
             str(normalized_member_max_hits),
             str(collinear_min_anchors),
-            str(collinear_max_gene_gap),
+            str(collinear_max_unit_gap),
             str(collinear_unit_mode),
             str(collinear_color_mode),
             normalized_collinear_anchor_mode,
@@ -1348,7 +1348,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 directional_tables[(query_index, subject_index)] = item["hits"]
             params = LosslessCollinearityParameters(
                 min_anchors=_collinear_int(collinear_min_anchors, 1),
-                max_unit_gap=_collinear_int(collinear_max_gene_gap, 0),
+                max_unit_gap=_collinear_int(collinear_max_unit_gap, 0),
                 max_diagonal_drift=_collinear_int(collinear_max_diagonal_drift, 0),
                 max_conflicts=_collinear_int(collinear_max_conflicts_in_merge_gap, 1),
             )
@@ -1619,6 +1619,7 @@ def regenerate_definition_svgs(
     from Bio import SeqIO
     from gbdraw.render.groups.circular.definition import DefinitionGroup
     from gbdraw.canvas import CircularCanvasConfigurator
+    from gbdraw.svg.ids import definition_group_svg_id
     from importlib import resources
 
     try:
@@ -1645,6 +1646,11 @@ def regenerate_definition_svgs(
         keep_full_definition = bool(keep_full_definition_with_plot_title)
 
         definitions = []
+        record_count = len(records)
+        record_id_counts = {}
+        for record in records:
+            raw_record_id = str(record.id)
+            record_id_counts[raw_record_id] = record_id_counts.get(raw_record_id, 0) + 1
         for index, record in enumerate(records):
             # Create canvas config
             canvas_config = CircularCanvasConfigurator(
@@ -1658,6 +1664,18 @@ def regenerate_definition_svgs(
                 profile = "full"
             else:
                 profile = "record_summary" if bool(multi_record_canvas) or show_plot_title else "full"
+            raw_record_id = str(record.id)
+            has_duplicate_record_id = record_id_counts[raw_record_id] > 1
+            definition_group_id = (
+                definition_group_svg_id(
+                    raw_record_id,
+                    mode="circular",
+                    record_index=index,
+                    record_count=record_count,
+                )
+                if has_duplicate_record_id
+                else None
+            )
             def_group = DefinitionGroup(
                 gb_record=record,
                 canvas_config=canvas_config,
@@ -1666,6 +1684,9 @@ def regenerate_definition_svgs(
                 strain=strain if strain else None,
                 plot_title=None,
                 definition_profile=profile,
+                definition_group_id=definition_group_id,
+                record_index=index,
+                record_count=record_count if has_duplicate_record_id else 1,
             )
 
             group = def_group.get_group()

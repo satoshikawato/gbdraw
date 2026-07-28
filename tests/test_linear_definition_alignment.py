@@ -11,7 +11,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
-from gbdraw.api import assemble_linear_diagram_from_records
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
@@ -89,7 +89,11 @@ def _bbox_in_svg_space_script() -> str:
       await document.fonts.ready;
       const svg = document.querySelector('svg');
       const definition = document.getElementById(definitionId);
-      const record = document.getElementById(recordId);
+      const record = Array.from(
+        svg?.querySelectorAll('g[data-gbdraw-record-id]') || []
+      ).find(
+        (element) => element.getAttribute('data-gbdraw-record-id') === recordId
+      ) || document.getElementById(recordId);
       if (!svg || !definition || !record) {
         throw new Error('Expected SVG, definition group, and record group to exist');
       }
@@ -438,7 +442,12 @@ def test_linear_definition_band_matches_resolved_feature_center(
         assert match is not None
         return float(match.group(1))
 
-    axis_y = translate_y(elements["record_a"])
+    record_group = next(
+        element
+        for element in drawing.elements
+        if element.attribs.get("data-gbdraw-record-id") == "record_a"
+    )
+    axis_y = translate_y(record_group)
     definition_center_y = translate_y(elements["record_a_definition"])
     half_height = 0.5 * definition_height
     canvas_band = drawing._gbdraw_track_slot_geometry["records"][0]["canvasBand"]

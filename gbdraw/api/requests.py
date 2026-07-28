@@ -22,6 +22,7 @@ from .options import (
     DiagramOptions,
     LinearMultiRecordOptions,
     _validate_diagram_options_mode,
+    resolve_diagram_options_for_mode,
 )
 
 
@@ -320,6 +321,11 @@ class CircularDiagramRequest:
         object.__setattr__(self, "records", records)
         if not isinstance(self.options, DiagramOptions):
             raise ValidationError("Circular request options must be DiagramOptions.")
+        object.__setattr__(
+            self,
+            "options",
+            resolve_diagram_options_for_mode(self.options, mode="circular"),
+        )
         if self.layout is not None and not isinstance(
             self.layout, CircularMultiRecordOptions
         ):
@@ -349,6 +355,11 @@ class LinearDiagramRequest:
         object.__setattr__(self, "records", records)
         if not isinstance(self.options, DiagramOptions):
             raise ValidationError("Linear request options must be DiagramOptions.")
+        object.__setattr__(
+            self,
+            "options",
+            resolve_diagram_options_for_mode(self.options, mode="linear"),
+        )
         if self.layout is not None and not isinstance(self.layout, LinearMultiRecordOptions):
             raise ValidationError("Linear request layout has an unsupported type.")
         if not isinstance(self.output, RenderOutputRequest):

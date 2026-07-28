@@ -639,7 +639,7 @@ def test_prepare_legend_table_plain_gene_entry_uses_default_fallback_color() -> 
     assert legend_table["gene"]["fill"] == "#d3d3d3"
 
 
-def test_circular_cli_feature_table_is_forwarded(
+def test_circular_cli_feature_visibility_table_is_forwarded(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     record = _make_record()
@@ -657,7 +657,9 @@ def test_circular_cli_feature_table_is_forwarded(
     )
 
     def fake_assemble(*_args, **kwargs):
-        captured["feature_table"] = kwargs.get("feature_table")
+        captured["feature_visibility_table"] = kwargs.get(
+            "feature_visibility_table"
+        )
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
     monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
@@ -675,10 +677,10 @@ def test_circular_cli_feature_table_is_forwarded(
         ]
     )
 
-    assert captured["feature_table"] is feature_table_df
+    assert captured["feature_visibility_table"] is feature_table_df
 
 
-def test_linear_cli_feature_table_is_forwarded(
+def test_linear_cli_feature_visibility_table_is_forwarded(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     record = _make_record()
@@ -696,7 +698,9 @@ def test_linear_cli_feature_table_is_forwarded(
     )
 
     def fake_assemble(*_args, **kwargs):
-        captured["feature_table"] = kwargs.get("feature_table")
+        captured["feature_visibility_table"] = kwargs.get(
+            "feature_visibility_table"
+        )
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
     monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
@@ -714,7 +718,7 @@ def test_linear_cli_feature_table_is_forwarded(
         ]
     )
 
-    assert captured["feature_table"] is feature_table_df
+    assert captured["feature_visibility_table"] is feature_table_df
 
 
 def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_table_given(

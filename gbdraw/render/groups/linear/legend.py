@@ -8,6 +8,7 @@ from svgwrite.gradients import LinearGradient
 from ....core.text import calculate_bbox_dimensions
 from ....svg.text_path import generate_text_path
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....svg.ids import stable_svg_id
 
 
 class LegendGroup:
@@ -235,13 +236,35 @@ class LegendGroup:
 
         return group, width, height
 
-    def _build_pairwise_gradient_id(self, key: str, properties: dict) -> str:
-        gradient_key = str(key).replace(" ", "_").replace("+", "plus").replace("-", "minus")
-        return f"blast_legend_grad_{abs(hash(properties['min_color'] + properties['max_color'] + gradient_key))}"
+    @staticmethod
+    def _pairwise_group(orientation: str) -> Group:
+        group = Group(id=f"pairwise_legend_{orientation}", debug=False)
+        group.attribs["data-gbdraw-role"] = "comparison-legend"
+        group.attribs["data-gbdraw-orientation"] = orientation
+        return group
 
-    def _build_compact_pairwise_legend(self, gradient_entries: list[tuple[str, dict]]) -> tuple[Group, float, float]:
+    def _build_pairwise_gradient_id(
+        self,
+        key: str,
+        properties: dict,
+        orientation: str,
+    ) -> str:
+        return stable_svg_id(
+            "blast_legend_grad",
+            "linear-pairwise-gradient",
+            key,
+            properties["min_color"],
+            properties["max_color"],
+            namespace=orientation,
+        )
+
+    def _build_compact_pairwise_legend(
+        self,
+        gradient_entries: list[tuple[str, dict]],
+        orientation: str,
+    ) -> tuple[Group, float, float]:
         """Build multi-row pairwise legend for orientation-specific identity ramps."""
-        group = Group(id="pairwise_legend")
+        group = self._pairwise_group(orientation)
         font = self.font_family
         bar_width = 10 * self.rect_size
         label_gap = 0.2 * self.rect_size
@@ -259,7 +282,7 @@ class LegendGroup:
 
         for idx, (key, properties) in enumerate(gradient_entries):
             row_y = self.rect_size / 2 + idx * row_height
-            gradient_id = self._build_pairwise_gradient_id(key, properties)
+            gradient_id = self._build_pairwise_gradient_id(key, properties, orientation)
             entry_group = Group(debug=False)
             entry_group.attribs["data-legend-key"] = str(key)
 
@@ -336,22 +359,22 @@ class LegendGroup:
         total_height = scale_y + max(min_label_bbox_height, max_label_bbox_height)
         return group, total_width, total_height
 
-    def _build_pairwise_legend(self) -> tuple[Group, float, float]:
+    def _build_pairwise_legend(self, orientation: str) -> tuple[Group, float, float]:
         """Build pairwise (gradient) legend for BLAST comparisons."""
         gradient_entries = self._gradient_entries()
         if not gradient_entries:
-            return Group(id="pairwise_legend"), 0.0, 0.0
+            return self._pairwise_group(orientation), 0.0, 0.0
         if len(gradient_entries) > 1:
-            return self._build_compact_pairwise_legend(gradient_entries)
+            return self._build_compact_pairwise_legend(gradient_entries, orientation)
 
-        group = Group(id="pairwise_legend")
+        group = self._pairwise_group(orientation)
         font = self.font_family
         grad_bar_width = self.pairwise_legend_width or (10 * self.rect_size)
 
         gradient_y_offset = 0
 
         for key, properties in gradient_entries:
-            gradient_id = self._build_pairwise_gradient_id(key, properties)
+            gradient_id = self._build_pairwise_gradient_id(key, properties, orientation)
             entry_group = Group(debug=False)
             entry_group.attribs["data-legend-key"] = str(key)
 
@@ -460,7 +483,7 @@ class LegendGroup:
         pairwise_width, pairwise_height = 0, 0
         pairwise_alignment_width = 0.0
         if has_gradient:
-            _, pairwise_width, pairwise_height = self._build_pairwise_legend()
+            _, pairwise_width, pairwise_height = self._build_pairwise_legend("h")
             pairwise_alignment_width = self._calculate_pairwise_legend_width()
 
         # Create horizontal legend group
@@ -470,7 +493,7 @@ class LegendGroup:
             horizontal_feature_group.add(child)
 
         if has_gradient:
-            h_pairwise_group, _, _ = self._build_pairwise_legend()
+            h_pairwise_group, _, _ = self._build_pairwise_legend("h")
             # Position pairwise legend to the right of feature legend
             h_pairwise_group.translate(h_feature_width + self.text_x_offset, 0)
             # Vertically center both
@@ -494,7 +517,7 @@ class LegendGroup:
             vertical_feature_group.add(child)
 
         if has_gradient:
-            v_pairwise_group, _, _ = self._build_pairwise_legend()
+            v_pairwise_group, _, _ = self._build_pairwise_legend("v")
             if pairwise_alignment_width > v_feature_width:
                 vertical_feature_group.translate(
                     (pairwise_alignment_width - v_feature_width) / 2, 0

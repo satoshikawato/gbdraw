@@ -58,6 +58,9 @@ def add_record_group(
     record_index: int = 0,
     record_count: int = 1,
     group_id: str | None = None,
+    dom_group_id: str | None = None,
+    slot_id: str | None = None,
+    slot_renderer: str | None = None,
     sequence_width: float | None = None,
     record_local_ruler: bool = False,
     placement: LinearRecordPlacement | None = None,
@@ -83,12 +86,16 @@ def add_record_group(
         orthogroup_label_top_member_ids=orthogroup_label_top_member_ids,
         record_index=record_index,
         record_count=record_count,
-        group_id=group_id,
+        group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
         record_local_ruler=record_local_ruler,
         feature_offset_y=feature_offset_y,
         feature_lane_geometry=feature_lane_geometry,
     ).get_group()
+    if slot_id:
+        record_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
+    if slot_renderer:
+        record_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
     if multi_record_layout:
         if placement is None:
             raise ValueError("multi_record_layout requires a resolved record placement")
@@ -114,6 +121,9 @@ def add_gc_content_group(
     gc_df: DataFrame | None = None,
     track_height: float | None = None,
     group_id: str = "gc_content",
+    dom_group_id: str | None = None,
+    slot_id: str | None = None,
+    slot_renderer: str | None = None,
     sequence_width: float | None = None,
 ) -> Drawing:
     """Adds a GC content group to the linear canvas."""
@@ -126,9 +136,13 @@ def add_gc_content_group(
         config_dict=config_dict,
         cfg=cfg,
         gc_df=gc_df,
-        group_id=group_id,
+        group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
     ).get_group()
+    if slot_id:
+        gc_content_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
+    if slot_renderer:
+        gc_content_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
     position_linear_track_group(gc_content_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(gc_content_group)
     return canvas
@@ -147,6 +161,10 @@ def add_depth_group(
     depth_df: DataFrame | None = None,
     group_id: str = "depth",
     axis_group_id: str = "depth_axis",
+    dom_group_id: str | None = None,
+    dom_axis_group_id: str | None = None,
+    slot_id: str | None = None,
+    slot_renderer: str | None = None,
     track_height: float | None = None,
     sequence_width: float | None = None,
 ) -> Drawing:
@@ -160,10 +178,14 @@ def add_depth_group(
         config_dict=config_dict,
         cfg=cfg,
         depth_df=depth_df,
-        group_id=group_id,
-        axis_group_id=axis_group_id,
+        group_id=dom_group_id or group_id,
+        axis_group_id=dom_axis_group_id or axis_group_id,
         sequence_width=sequence_width,
     ).get_group()
+    if slot_id:
+        depth_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
+    if slot_renderer:
+        depth_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
     position_linear_track_group(depth_group, offset_y, offset_x, canvas_config, track_offset_y)
     canvas.add(depth_group)
     return canvas
@@ -182,6 +204,9 @@ def add_gc_skew_group(
     gc_df: DataFrame | None = None,
     track_height: float | None = None,
     group_id: str = "gc_skew",
+    dom_group_id: str | None = None,
+    slot_id: str | None = None,
+    slot_renderer: str | None = None,
     sequence_width: float | None = None,
 ) -> Drawing:
     """Adds a GC skew group to the linear canvas."""
@@ -194,9 +219,13 @@ def add_gc_skew_group(
         config_dict=config_dict,
         cfg=cfg,
         gc_df=gc_df,
-        group_id=group_id,
+        group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
     ).get_group()
+    if slot_id:
+        gc_skew_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
+    if slot_renderer:
+        gc_skew_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
     position_linear_track_group(gc_skew_group, offset, offset_x, canvas_config, track_offset_y)
     canvas.add(gc_skew_group)
     return canvas
@@ -217,6 +246,8 @@ def add_record_definition_group(
     definition_center_y: float | None = None,
     definition_header_center_y: float | None = None,
     multi_record_layout: bool = False,
+    record_index: int = 0,
+    record_count: int = 1,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
     keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
@@ -245,6 +276,8 @@ def add_record_definition_group(
             text_x=0.0,
             group_id=group_id,
             line_kinds=local_line_kinds,
+            record_index=record_index,
+            record_count=record_count,
         )
         record_definition_group = definition_group_obj.get_group()
         header_y = (
@@ -273,6 +306,9 @@ def add_record_definition_group(
                 text_x=0.0,
                 group_id=f"{group_id or str(record.id)}_row",
                 line_kinds={"name", "subtitle"},
+                record_index=record_index,
+                record_count=record_count,
+                definition_part="row",
             )
             reserved_width = (
                 max(0.0, float(row_definition_width))
@@ -304,6 +340,8 @@ def add_record_definition_group(
                 canvas_config,
                 cfg=cfg,
                 group_id=group_id,
+                record_index=record_index,
+                record_count=record_count,
             )
             definition_column_width = provisional_group_obj.definition_bounding_box_width
 
@@ -315,6 +353,8 @@ def add_record_definition_group(
             text_anchor="start",
             text_x=0.0,
             group_id=group_id,
+            record_index=record_index,
+            record_count=record_count,
         )
         positioned_definition_offset_x = definition_column_width + definition_gap
     else:
@@ -324,6 +364,8 @@ def add_record_definition_group(
             canvas_config,
             cfg=cfg,
             group_id=group_id,
+            record_index=record_index,
+            record_count=record_count,
         )
         definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + definition_gap
         positioned_definition_offset_x = definition_offset_x - record_offset_x
@@ -464,5 +506,4 @@ __all__ = [
     "add_length_bar_on_linear_canvas",
     "add_legends_on_linear_canvas",
 ]
-
 

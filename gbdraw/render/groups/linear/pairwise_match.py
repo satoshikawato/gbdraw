@@ -274,7 +274,13 @@ class PairWiseMatchGroup:
         subject_end_x: float
         subject_end_y: float
         identity_percent = float(row.identity)
-        factor = (identity_percent - self.min_identity) / (100 - self.min_identity)
+        if self.min_identity >= 100:
+            factor = 1.0 if identity_percent >= 100 else 0.0
+        else:
+            factor = (identity_percent - self.min_identity) / (
+                100 - self.min_identity
+            )
+            factor = max(0.0, min(1.0, factor))
         default_gradient_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
         dynamic_fill_color = self.resolve_match_fill_color(row, factor, default_gradient_color)
         query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)

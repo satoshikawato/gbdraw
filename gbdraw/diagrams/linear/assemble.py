@@ -57,7 +57,6 @@ from ...legend.table import (  # type: ignore[reportMissingImports]
     configure_pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
 )
-from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...layout.linear import (  # type: ignore[reportMissingImports]
     AxisGapResolution,
     CollisionBand,
@@ -127,6 +126,12 @@ from .precalc import (
 )
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.ids import make_linear_dom_id
+from ...svg.ids import (
+    definition_group_svg_id,
+    instance_svg_id,
+    record_group_svg_id,
+    track_slot_svg_id,
+)
 from .track_slots import (
     LinearRecordVerticalPlan,
     LinearResolvedTrack,
@@ -141,6 +146,29 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ...api.options import LinearMultiRecordOptions
+
+
+def _linear_track_slot_dom_id(
+    *,
+    slot_id: str,
+    renderer: str,
+    slot_index: int,
+    record_index: int,
+    record_count: int,
+) -> str:
+    """Return the deterministic DOM ID for one rendered Linear user slot."""
+
+    group_id = track_slot_svg_id(
+        slot_id,
+        renderer=renderer,
+        slot_index=slot_index,
+    )
+    if int(record_count) <= 1:
+        return group_id
+    return instance_svg_id(
+        group_id,
+        ("linear-record", int(record_index), int(record_count)),
+    )
 
 
 def _annotation_marks_for_set(
@@ -1267,6 +1295,7 @@ def assemble_linear_diagram(
             records,
             depth_track_tables=[[table] for table in depth_tables],
         )
+    user_slot_mode = linear_track_slots is not None
     (
         linear_track_slots,
         resolved_annotations,
@@ -2137,16 +2166,17 @@ def assemble_linear_diagram(
             orthogroup_label_eligibility if show_labels_mode == "orthogroup_top" else None,
             record_index,
         )
-        record_group_id = make_linear_dom_id(
+        record_group_id = record_group_svg_id(
             record.id,
+            mode="linear",
             record_index=record_index,
             record_count=total_records,
         )
-        definition_group_id = make_linear_dom_id(
+        definition_group_id = definition_group_svg_id(
             record.id,
+            mode="linear",
             record_index=record_index,
             record_count=total_records,
-            suffix="definition",
         )
 
         if linear_track_layout is not None:
@@ -2154,11 +2184,22 @@ def assemble_linear_diagram(
 
             for slot in sorted(linear_track_layout.slots, key=lambda item: (item.z, item.slot_index)):
                 resolved_slot = record_vertical_plan.slot_by_id(slot.id)
+                slot_group_id = (
+                    _linear_track_slot_dom_id(
+                        slot_id=str(slot.id),
+                        renderer=str(slot.renderer),
+                        slot_index=int(slot.slot_index),
+                        record_index=record_index,
+                        record_count=total_records,
+                    )
+                    if user_slot_mode
+                    else None
+                )
                 if slot.renderer == "spacer":
                     continue
                 if slot.renderer == "features":
                     slot_feature_layout = "middle" if slot.side == "overlay" else slot.side
-                    add_record_group(
+                    canvas = add_record_group(
                         canvas,
                         record,
                         offset_y,
@@ -2176,6 +2217,11 @@ def assemble_linear_diagram(
                         record_index=record_index,
                         record_count=total_records,
                         group_id=record_group_id,
+                        dom_group_id=slot_group_id,
+                        slot_id=str(slot.id) if slot_group_id is not None else None,
+                        slot_renderer=(
+                            str(slot.renderer) if slot_group_id is not None else None
+                        ),
                         placement=record_placement,
                         multi_record_layout=multi_record_enabled,
                         record_local_ruler=multi_record_enabled,
@@ -2225,6 +2271,10 @@ def assemble_linear_diagram(
                         height_px=annotation_height,
                         font_family=str(cfg.objects.text.font_family),
                         params=params,
+                        dom_group_id=slot_group_id,
+                        semantic_slot_id=(
+                            str(slot.id) if slot_group_id is not None else None
+                        ),
                     )
                     annotation_group.translate(
                         offset_x + canvas_config.horizontal_offset,
@@ -2242,7 +2292,7 @@ def assemble_linear_diagram(
                         record_index=record_index,
                         record_count=total_records,
                     )
-                    add_depth_group(
+                    canvas = add_depth_group(
                         canvas,
                         record,
                         offset_y,
@@ -2254,6 +2304,16 @@ def assemble_linear_diagram(
                         depth_df=depth_track.df,
                         group_id=group_id,
                         axis_group_id=f"{group_id}_axis",
+                        dom_group_id=slot_group_id,
+                        dom_axis_group_id=(
+                            f"{slot_group_id}_axis"
+                            if slot_group_id is not None
+                            else None
+                        ),
+                        slot_id=str(slot.id) if slot_group_id is not None else None,
+                        slot_renderer=(
+                            str(slot.renderer) if slot_group_id is not None else None
+                        ),
                         track_height=slot.height,
                         track_offset_y=track_offset_y,
                         sequence_width=sequence_width,
@@ -2281,7 +2341,7 @@ def assemble_linear_diagram(
                         ),
                         depth_enabled=depth_enabled,
                     )
-                    add_gc_content_group(
+                    canvas = add_gc_content_group(
                         canvas,
                         record,
                         offset_y,
@@ -2298,6 +2358,9 @@ def assemble_linear_diagram(
                             record_index=record_index,
                             record_count=total_records,
                         ),
+                        dom_group_id=slot_group_id,
+                        slot_id=str(slot.id),
+                        slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
                     )
                     continue
@@ -2306,7 +2369,7 @@ def assemble_linear_diagram(
                     nt = _slot_nt(slot, str(skew_config.dinucleotide))
                     per_nt_gc_dfs = record_gc_dfs_by_nt.get(nt, record_gc_dfs)
                     shared_gc_df = per_nt_gc_dfs[record_index] if record_index < len(per_nt_gc_dfs) else None
-                    add_gc_skew_group(
+                    canvas = add_gc_skew_group(
                         canvas,
                         record,
                         offset_y,
@@ -2323,6 +2386,9 @@ def assemble_linear_diagram(
                             record_index=record_index,
                             record_count=total_records,
                         ),
+                        dom_group_id=slot_group_id,
+                        slot_id=str(slot.id),
+                        slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
                     )
 
@@ -2380,6 +2446,8 @@ def assemble_linear_diagram(
                     else None
                 ),
                 multi_record_layout=multi_record_enabled,
+                record_index=record_index,
+                record_count=total_records,
             )
             continue
 
@@ -2419,47 +2487,4 @@ def assemble_linear_diagram(
     return canvas
 
 
-def plot_linear_diagram(
-    records: list[SeqRecord],
-    blast_files,
-    canvas_config: LinearCanvasConfigurator,
-    blast_config,
-    feature_config: FeatureDrawingConfigurator,
-    gc_config: GcContentConfigurator,
-    config_dict: dict,
-    out_formats,
-    legend_config,
-    skew_config,
-    depth_config: DepthConfigurator | None = None,
-    depth_tables: list[DataFrame | None] | None = None,
-    cfg: GbdrawConfig | None = None,
-    comparison_dataframes: list[DataFrame] | None = None,
-    orthogroups: OrthogroupResult | None = None,
-    align_orthogroup_feature: str | None = None,
-) -> Drawing:
-    """Backwards-compatible wrapper that assembles and saves a linear diagram."""
-    canvas = assemble_linear_diagram(
-        records=records,
-        blast_files=blast_files,
-        canvas_config=canvas_config,
-        blast_config=blast_config,
-        feature_config=feature_config,
-        gc_config=gc_config,
-        config_dict=config_dict,
-        legend_config=legend_config,
-        skew_config=skew_config,
-        depth_config=depth_config,
-        depth_tables=depth_tables,
-        comparison_dataframes=comparison_dataframes,
-        orthogroups=orthogroups,
-        align_orthogroup_feature=align_orthogroup_feature,
-        cfg=cfg,
-    )
-    save_figure(canvas, out_formats)
-    return canvas
-
-
-__all__ = [
-    "assemble_linear_diagram",
-    "plot_linear_diagram",
-]
+__all__ = ["assemble_linear_diagram"]

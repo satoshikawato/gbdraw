@@ -21,6 +21,7 @@ from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
+from gbdraw.tracks import CircularTrackSlot
 
 
 def _build_record(record_id: str, feature_start: int, length: int = 1200) -> SeqRecord:
@@ -626,7 +627,16 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
             for group in record_group.findall("./svg:g[@id]", ns)
             if group.attrib.get("id", "").startswith("label_")
         }
-        assert {"label_leaders", "label_text"}.issubset(record_label_ids)
+        assert any(
+            group_id == "label_leaders"
+            or group_id.startswith("label_leaders__record_")
+            for group_id in record_label_ids
+        )
+        assert any(
+            group_id == "label_text"
+            or group_id.startswith("label_text__record_")
+            for group_id in record_label_ids
+        )
 
     skew_ids = [
         gid
@@ -1042,7 +1052,6 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
     ("size_mode", "min_ratio", "expected_ratio"),
     [
         ("auto", 0.55, 0.8),
-        ("sqrt", 0.55, 0.8),
         ("linear", 0.55, 0.64),
         ("equal", 0.55, 1.0),
     ],
@@ -1184,55 +1193,21 @@ def test_assemble_circular_diagram_from_records_auto_keeps_single_clamp_behavior
 
 
 @pytest.mark.circular
-def test_assemble_circular_diagram_from_records_sqrt_alias_matches_auto(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_assemble_circular_diagram_from_records_rejects_removed_sqrt_alias() -> None:
     records = [
         _build_record("max_len", 30, length=1000),
         _build_record("mid_len", 60, length=300),
         _build_record("small_len", 90, length=200),
         _build_record("tiny_len", 120, length=100),
     ]
-    captured_radii: dict[str, list[float]] = {"auto": [], "sqrt": []}
-    active_mode = {"value": "auto"}
-
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
-        cfg = kwargs["cfg"]
-        radius = float(cfg.canvas.circular.radius)
-        width = float(cfg.canvas.circular.width.without_labels)
-        height = float(cfg.canvas.circular.height)
-        captured_radii[active_mode["value"]].append(radius)
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+    with pytest.raises(ValidationError, match="auto, linear, equal"):
+        assemble_circular_diagram_from_records(
+            records,
+            selected_features_set=["CDS"],
+            legend="none",
+            multi_record_size_mode="sqrt",
+            multi_record_min_radius_ratio=0.55,
         )
-
-    monkeypatch.setattr(
-        diagram_api_module,
-        "assemble_circular_diagram_from_record",
-        fake_single,
-    )
-
-    active_mode["value"] = "auto"
-    assemble_circular_diagram_from_records(
-        records,
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_size_mode="auto",
-        multi_record_min_radius_ratio=0.55,
-    )
-    active_mode["value"] = "sqrt"
-    assemble_circular_diagram_from_records(
-        records,
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_size_mode="sqrt",
-        multi_record_min_radius_ratio=0.55,
-    )
-
-    assert captured_radii["auto"] == pytest.approx(captured_radii["sqrt"], rel=1e-6)
 
 
 @pytest.mark.circular
@@ -2139,7 +2114,9 @@ def test_circular_cli_track_table_validates_params_and_forwards_axis(
     )
 
     assert captured["circular_track_axis_index"] == 1
-    assert [spec.split(":", 1)[0] for spec in captured["circular_track_slots"]] == [
+    slots = captured["circular_track_slots"]
+    assert all(isinstance(slot, CircularTrackSlot) for slot in slots)
+    assert [slot.id for slot in slots] == [
         "ticks",
         "features",
         "gc",
@@ -2211,7 +2188,7 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
 
 
 @pytest.mark.circular
-def test_circular_cli_multi_record_canvas_accepts_sqrt_alias(
+def test_circular_cli_multi_record_canvas_rejects_removed_sqrt_alias(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     records = [_build_record("cli_a", 20), _build_record("cli_b", 220)]
@@ -2239,24 +2216,24 @@ def test_circular_cli_multi_record_canvas_accepts_sqrt_alias(
     monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
     monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
 
-    circular_cli_module.circular_main(
-        [
-            "--gbk",
-            "dummy.gb",
-            "--format",
-            "svg",
-            "--multi_record_canvas",
-            "--multi_record_size_mode",
-            "sqrt",
-            "-o",
-            str(tmp_path / "out"),
-        ]
-    )
+    with pytest.raises(SystemExit) as exc_info:
+        circular_cli_module.circular_main(
+            [
+                "--gbk",
+                "dummy.gb",
+                "--format",
+                "svg",
+                "--multi_record_canvas",
+                "--multi_record_size_mode",
+                "sqrt",
+                "-o",
+                str(tmp_path / "out"),
+            ]
+        )
 
-    assert calls["single"] == 0
-    assert calls["multi"] == 1
-    assert calls["save"] == 1
-    assert captured_kwargs["multi_record_size_mode"] == "sqrt"
+    assert exc_info.value.code == 2
+    assert calls == {"single": 0, "multi": 0, "save": 0}
+    assert captured_kwargs == {}
 
 
 @pytest.mark.circular

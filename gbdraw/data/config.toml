@@ -110,17 +110,11 @@ percent_background_color = "#737373"
 percent_background_opacity = 1.0
 percent_border_color = "#4b5563"
 percent_border_width = 0.8
-[objects.gc_content.circular]
-norm_factor = 0.65
-[objects.gc_content.linear]
-height = 20
 
 [objects.gc_skew]
 stroke_color = 'none'
 stroke_width = 0
 fill_opacity = 1
-[objects.gc_skew.circular]
-norm_factor = 0.80
 
 [objects.depth]
 fill_color = "#4A90E2"
@@ -132,7 +126,6 @@ min_depth = "auto"
 max_depth = "auto"
 show_axis = true
 show_ticks = true
-tick_interval = "auto"
 large_tick_interval = "auto"
 small_tick_interval = "none"
 tick_font_size = "auto"

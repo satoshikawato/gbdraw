@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 import re
 from pathlib import Path
 
@@ -14,9 +15,11 @@ import gbdraw.api.diagram as api_diagram_module
 from gbdraw.api import (
     CircularMultiRecordOptions,
     apply_config_overrides,
+    load_gff_fasta,
+)
+from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
-    load_gff_fasta,
 )
 from gbdraw.api.options import ColorOptions, DiagramOptions, OutputOptions, TrackOptions
 from gbdraw.analysis.collinearity import CollinearityResult
@@ -326,8 +329,6 @@ _SHARED_FORWARDING_CASES = [
     ("config", {"extension": {"enabled": True}}, "config_dict", {"extension": {"enabled": True}}),
     ("config_overrides", {"show_labels": True}, "config_overrides", {"show_labels": True}),
     ("selected_features_set", ["gene"], "selected_features_set", ["gene"]),
-    ("feature_table", _FORWARDING_TABLE, "feature_table", _FORWARDING_TABLE),
-    ("feature_table_file", "feature.tsv", "feature_table_file", "feature.tsv"),
     ("feature_visibility_table", _FORWARDING_TABLE, "feature_visibility_table", _FORWARDING_TABLE),
     (
         "feature_visibility_table_file",
@@ -386,6 +387,11 @@ def _call_high_level_builder(builder_name: str, options: DiagramOptions) -> obje
 def _assert_forwarded_value(actual: object, expected: object) -> None:
     if isinstance(expected, pd.DataFrame):
         assert actual is expected
+    elif isinstance(expected, Mapping):
+        assert isinstance(actual, Mapping)
+        for key, expected_value in expected.items():
+            assert key in actual
+            _assert_forwarded_value(actual[key], expected_value)
     elif isinstance(expected, list):
         assert isinstance(actual, list)
         assert len(actual) == len(expected)
@@ -450,21 +456,26 @@ def test_diagram_option_bundles_forward_non_default_values(
     }[builder_name]
     monkeypatch.setattr(api_diagram_module, target, fake_assemble)
 
+    tracks = (
+        TrackOptions(
+            linear_track_slots=["features:features"],
+            linear_track_axis_index=1,
+        )
+        if builder_name == "linear"
+        else TrackOptions(
+            circular_track_slots=["features:features"],
+            circular_track_axis_index=1,
+            center_reserved_radius=0.2,
+        )
+    )
     options = DiagramOptions(
         colors=ColorOptions(
             color_table=color_table,
             default_colors=default_colors,
             default_colors_palette="ajisai",
         ),
-        tracks=TrackOptions(
-            circular_track_slots=["features:features"],
-            circular_track_axis_index=1,
-            linear_track_slots=["features:features"],
-            linear_track_axis_index=1,
-            center_reserved_radius=0.2,
-        ),
+        tracks=tracks,
         output=OutputOptions(
-            output_prefix="forwarded",
             legend="left",
             plot_title_position="top",
         ),
@@ -474,7 +485,7 @@ def test_diagram_option_bundles_forward_non_default_values(
     assert captured["color_table"] is color_table
     assert captured["default_colors"] is default_colors
     assert captured["default_colors_palette"] == "ajisai"
-    assert captured["output_prefix"] == "forwarded"
+    assert captured["output_prefix"] == "out"
     assert captured["legend"] == "left"
     assert captured["plot_title_position"] == "top"
     if builder_name == "linear":
@@ -754,7 +765,7 @@ def test_circular_multi_builder_forwards_layout_options(
     assert captured["multi_record_min_radius_ratio"] == 0.7
     assert captured["multi_record_column_gap_ratio"] == 0.2
     assert captured["multi_record_row_gap_ratio"] == 0.1
-    assert captured["multi_record_positions"] == ["#2@1", "#1@2"]
+    assert captured["multi_record_positions"] == ("#2@1", "#1@2")
     assert captured["plot_title"] == "Two records"
 
 

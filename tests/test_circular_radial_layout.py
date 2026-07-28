@@ -537,14 +537,8 @@ def test_outside_auto_stack_order_is_outermost_first() -> None:
     assert by_id["inner_depth"].draw_band_px.inner_px >= canvas_config.radius
 
 
-def test_user_preset_generated_param_has_no_layout_effect_on_pinned_numeric_slot() -> None:
+def test_user_preset_generated_private_param_is_rejected() -> None:
     canvas_config, cfg = _small_radial_canvas()
-    base_slot = CircularTrackSlot(
-        id="gc_content",
-        renderer="dinucleotide_content",
-        radius=ScalarSpec(0.5, "factor"),
-        width=ScalarSpec(20.0, "px"),
-    )
     tagged_slot = CircularTrackSlot(
         id="gc_content",
         renderer="dinucleotide_content",
@@ -553,27 +547,16 @@ def test_user_preset_generated_param_has_no_layout_effect_on_pinned_numeric_slot
         params={"_preset_generated": True},
     )
 
-    base = resolve_circular_radial_layout(
-        total_length=1000,
-        canvas_config=canvas_config,
-        cfg=cfg,
-        slots=[base_slot],
-        show_features=False,
-        show_ticks=False,
-        definition_reserved_radius_px=35.0,
-    ).tracks[0]
-    tagged = resolve_circular_radial_layout(
-        total_length=1000,
-        canvas_config=canvas_config,
-        cfg=cfg,
-        slots=[tagged_slot],
-        show_features=False,
-        show_ticks=False,
-        definition_reserved_radius_px=35.0,
-    ).tracks[0]
-
-    assert tagged.center_radius_px == pytest.approx(base.center_radius_px)
-    assert tagged.draw_width_px == pytest.approx(base.draw_width_px)
+    with pytest.raises(ValueError, match="private parameter '_preset_generated'"):
+        resolve_circular_radial_layout(
+            total_length=1000,
+            canvas_config=canvas_config,
+            cfg=cfg,
+            slots=[tagged_slot],
+            show_features=False,
+            show_ticks=False,
+            definition_reserved_radius_px=35.0,
+        )
 
 
 def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -> None:

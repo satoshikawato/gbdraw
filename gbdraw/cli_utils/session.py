@@ -83,24 +83,12 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
     )
     parser.add_argument(
-        "--save-session",
-        dest="save_session",
-        help=argparse.SUPPRESS,
-        action="store_true",
-    )
-    parser.add_argument(
         "--session_output",
         metavar="PATH",
         help=(
             "Write the session sidecar to PATH; use a .gz suffix for gzip "
             "compression; implies --save_session."
         ),
-        type=str,
-    )
-    parser.add_argument(
-        "--session-output",
-        dest="session_output",
-        help=argparse.SUPPRESS,
         type=str,
     )
 
@@ -125,9 +113,7 @@ def parse_session_pre_args(
     parser.add_argument("-o", "--output")
     parser.add_argument("-f", "--format")
     parser.add_argument("--save_session", action="store_true")
-    parser.add_argument("--save-session", dest="save_session", action="store_true")
     parser.add_argument("--session_output")
-    parser.add_argument("--session-output", dest="session_output")
     namespace, unknown = parser.parse_known_args(list(cmd_args))
     if unknown:
         parser.error(
@@ -141,16 +127,6 @@ def parse_session_pre_args(
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
     )
-
-
-def validate_session_override_args(
-    cmd_args: Sequence[str],
-    *,
-    mode: Literal["circular", "linear"],
-) -> SessionCliRequest | None:
-    """Compatibility wrapper for the documented session pre-parse helper name."""
-
-    return parse_session_pre_args(cmd_args, mode=mode)
 
 
 def resolve_session_sidecar_path(
@@ -504,13 +480,13 @@ def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:
     index = 0
     while index < len(cmd_args):
         token = str(cmd_args[index])
-        if token in {"--save_session", "--save-session"}:
+        if token == "--save_session":
             index += 1
             continue
-        if token.startswith("--session_output=") or token.startswith("--session-output="):
+        if token.startswith("--session_output="):
             index += 1
             continue
-        if token in {"--session_output", "--session-output"}:
+        if token == "--session_output":
             index += 2
             continue
         result.append(token)
@@ -586,7 +562,7 @@ def collect_embedded_files_from_cli_args(
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
             continue
-        if mode == "linear" and token in {"--gbk", "--gff", "--fasta", "-b", "--blast", "--depth"}:
+        if mode == "linear" and token in {"--gbk", "--gff", "--fasta", "-b", "--blast"}:
             values, next_index = _collect_option_values(cli_args, index + 1)
             for offset, value in enumerate(values):
                 arg_index = index + 1 + offset
@@ -602,12 +578,9 @@ def collect_embedded_files_from_cli_args(
                 elif token == "--fasta":
                     slot = f"files.linearSeqs[{seq_index}].fasta"
                     depth = False
-                elif token in {"-b", "--blast"}:
+                else:
                     slot = f"files.linearSeqs[{seq_index}].blast"
                     depth = False
-                else:
-                    slot = f"files.linearSeqs[{seq_index}].depth"
-                    depth = True
                 _set_file_slot(files, slot, value, depth=depth)
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
@@ -623,14 +596,6 @@ def collect_embedded_files_from_cli_args(
                 bindings.append(_binding(arg_index, slot, value))
             linear_depth_track_index += 1
             index = next_index
-            continue
-        if token == "--depth":
-            value_index = index + 1
-            if value_index < len(cli_args) and _is_embeddable_path(cli_args[value_index]):
-                slot = "files.c_depth"
-                _set_file_slot(files, slot, cli_args[value_index], depth=True)
-                bindings.append(_binding(value_index, slot, cli_args[value_index]))
-            index += 2
             continue
         if token in _COMMON_SINGLE_FILE_OPTIONS:
             value_index = index + 1
@@ -692,7 +657,6 @@ _COMMON_SINGLE_FILE_OPTIONS = {
     "--qualifier_priority": "files.qualifier_priority",
     "--label_table": "files.cliInputs[]",
     "--feature_visibility_table": "files.cliInputs[]",
-    "--feature_table": "files.cliInputs[]",
 }
 
 
@@ -891,5 +855,4 @@ __all__ = [
     "render_canonical_session_if_present",
     "save_session_sidecar_if_requested",
     "strip_session_output_args",
-    "validate_session_override_args",
 ]

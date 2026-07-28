@@ -12,6 +12,7 @@ from ....features.objects import FeatureObject
 from ....features.ids import compute_feature_object_hash
 from ....layout.common import calculate_cds_ratio
 from ....configurators import FeatureDrawingConfigurator
+from ....svg.ids import instance_svg_id
 from ....svg.circular_features import (
     generate_circular_arrowhead_path,
     generate_circular_arrowhead_path_with_radii,
@@ -92,6 +93,8 @@ class FeatureDrawer:
         track_type: str,
         strandedness: bool,
         length_param,
+        feature_instance_id: str | None = None,
+        feature_dom_namespace: str | None = None,
     ) -> Group:
         """
         Draw a feature on the circular canvas.
@@ -129,6 +132,14 @@ class FeatureDrawer:
 
         # Get feature identifier for instant preview support
         feature_data_id = self.get_feature_data_id(feature_object)
+        feature_dom_id = feature_data_id
+        if feature_dom_id and feature_dom_namespace:
+            feature_dom_id = instance_svg_id(
+                feature_dom_id,
+                f"slot_{feature_dom_namespace}",
+            )
+        if feature_dom_id and feature_instance_id:
+            feature_dom_id = instance_svg_id(feature_dom_id, feature_instance_id)
 
         # Keep intron lines behind blocks for the same feature by drawing lines first.
         ordered_types: tuple[str, ...] = ("line", "block", "label")
@@ -146,11 +157,11 @@ class FeatureDrawer:
                 if path_type == "block":
                     block_index += 1
                     dom_element_id = None
-                    if feature_data_id:
+                    if feature_dom_id:
                         dom_element_id = (
-                            feature_data_id
+                            feature_dom_id
                             if block_count <= 1
-                            else f"{feature_data_id}__part{block_index}"
+                            else f"{feature_dom_id}__part{block_index}"
                         )
                     self.draw_path(
                         path_data,
@@ -162,7 +173,7 @@ class FeatureDrawer:
                     )
                 elif path_type == "line":
                     line_index += 1
-                    dom_element_id = f"{feature_data_id}__line{line_index}" if feature_data_id else None
+                    dom_element_id = f"{feature_dom_id}__line{line_index}" if feature_dom_id else None
                     self.draw_path(
                         path_data,
                         group,

@@ -11,6 +11,7 @@ from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ....core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 from ....layout.circular import calculate_feature_position_factors_circular  # type: ignore[reportMissingImports]
 from ....layout.common import calculate_cds_ratio  # type: ignore[reportMissingImports]
+from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path  # type: ignore[reportMissingImports]
 from ....core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 
@@ -151,7 +152,23 @@ class LabelDrawer:
                 "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(label_radius - center_offset) + "," + str(label_radius - center_offset) + param + str(end_x) + "," + str(end_y)
             )
 
-        label_axis_path = Path(d=label_axis_path_desc, stroke="none", fill="none")
+        group_identifier = str(getattr(group, "attribs", {}).get("id", "labels"))
+        label_axis_path = Path(
+            id=stable_svg_id(
+                "circular_feature_label_path",
+                group_identifier,
+                label.get("stable_id"),
+                label.get("input_order"),
+                len(getattr(group, "elements", ()) or ()),
+                record_length,
+                track_id,
+                label["label_text"],
+                label_axis_path_desc,
+            ),
+            d=label_axis_path_desc,
+            stroke="none",
+            fill="none",
+        )
         text_path = Text("")
         text_path.add(
             TextPath(

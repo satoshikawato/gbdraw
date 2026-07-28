@@ -5,8 +5,9 @@
 This beta introduces a small top-level Python interface for new library users.
 `draw_circular` and `draw_linear` return a first-party `Diagram`, mode-specific
 options replace the shared 71-field option bundle, and one Circular function now
-handles both single and multi-record input. Lower-level request, session, table,
-and rendering components remain available from `gbdraw.api` for integrations.
+handles both single and multi-record input. Typed request/session and table
+contracts remain available from `gbdraw.api`; obsolete low-level convenience
+re-exports and compatibility aliases have been removed.
 
 ## New top-level Python interface
 
@@ -23,9 +24,90 @@ and rendering components remain available from `gbdraw.api` for integrations.
 
 See the [Python API guide](./PYTHON_API.md) for executable examples.
 
+## Architecture/API Phase 0 and beta cleanup
+
+- Fresh Python, CLI, and Web requests now resolve one versioned mode profile.
+  Circular defaults to comparison thresholds `1e-5` / `50` / `70` / `0` and
+  visible GC content/skew; Linear defaults to `1e-2` / `50` / `0` / `0` and
+  hidden GC content/skew. Both modes include `misc_RNA`. Linear uses
+  `lightgray` for the default axis and `dimgray` when a ruler is on the axis.
+- Comparison thresholds are validated eagerly on every current entry point:
+  e-value and bitscore must be finite and non-negative, identity must be finite
+  and within `0..100`, and alignment length must be a non-negative integer.
+  Identity `100` is valid.
+- Emitted SVG IDs are valid, unique, and deterministic for the same input,
+  configuration, and gbdraw version. First-party interactivity uses
+  `data-gbdraw-*` roles, record indexes, renderers, and orientations instead of
+  depending on undocumented internal ID spelling.
+- GC content and GC skew now apply `stroke_width` consistently in Circular and
+  Linear rendering. Width `0` produces no visible outline; a positive width uses
+  the configured stroke color, and `stroke_color="none"` remains invisible.
+- The canonical CLI switches are now `--gc` / `--no-gc`, `--skew` /
+  `--no-skew`, and repeatable `--depth_track`. The old executable
+  `--show_gc`, `--show_skew`, `--suppress_gc`, `--suppress_skew`, `--depth`,
+  and `--show_depth` spellings are removed. Supported saved sessions that
+  contain those tokens are migrated by the reader before replay.
+- Fresh CLI options and Python request fields also reject the retired
+  `depth_tick_interval`, `feature_table`, and `collinear_max_gene_gap` names,
+  Circular `multi_record_size_mode=sqrt`, Linear
+  `label_placement=on_feature`, and Linear
+  `track_layout=spreadout|tuckin`. Use `depth_large_tick_interval`,
+  `feature_visibility_table`, `collinear_max_unit_gap`, Circular `auto`,
+  Linear `above_feature`, and Linear `above|below`, respectively. CLI
+  spellings add the leading `--`.
+- Fresh Circular slot specifications reject `spacing`, `strict`, `compress`,
+  and `reserve`. Use `inner_gap_px` and `outer_gap_px`; reservation and
+  compression are derived from current slot geometry and `side`.
+- Those retired forms remain readable only through supported persisted-session
+  and canonical request schema 1–3 migration. The active
+  `--annotation-table` alias for `--annotation_table` and
+  `--gc_content_tick_interval` alias for
+  `--gc_content_large_tick_interval` are unchanged and are not removals.
+- The private `__gbdraw_legacy_spacing` transport is confined to canonical
+  request schema 1–3 and old-session readers and is never emitted by a schema 4
+  writer. Pixel spacing migrates to explicit inner and outer pixel gaps.
+  Factor-based spacing can still be replayed, but it cannot be re-saved
+  losslessly as schema 4; replace it with explicit `inner_gap_px` and
+  `outer_gap_px` first.
+- `gbdraw.api.canvas`, `gbdraw.api.configurators`, and
+  `gbdraw.circular_diagram_components` were thin compatibility modules and have
+  been removed. `gbdraw.api` no longer re-exports
+  `DEFAULT_SELECTED_FEATURES`, the `assemble_*` / `build_*` helpers, or
+  `OutputOptions`. The obsolete `plot_circular_diagram` /
+  `plot_linear_diagram` save wrappers and package-level `gbdraw.render`
+  aliases were removed; use the root drawing facade, `render_to_bytes`, and
+  `save_figure_to`. The CLI-only helpers remain internal to
+  `gbdraw.render.export`. Typed request/render/session contracts,
+  `DiagramOptions`, and table APIs remain supported.
+- Unused argument/session helpers, the old `suppress_gc_content_and_skew`
+  config helper, the CairoSVG availability proxy, the no-op
+  `labels.circular_horizontal` adapter, the unreachable `-i` / `--input`
+  warning path, inert GC normalization/height config keys, and zero-caller
+  layout/label/collinearity helpers were removed. Supported persisted
+  config/session readers still tolerate the recognized old fields; fresh
+  executable APIs no longer expose them.
+- `OutputOptions.output_prefix` was duplicate state and has been removed.
+  `RenderOutputRequest.output_prefix` is the sole output-prefix owner for typed
+  request, CLI, and session execution. Drawing assembly is output-neutral.
+- Explicit output prefixes preserve dots, so `sample.v1` produces
+  `sample.v1.svg`. Separate-diagram Circular batches assign deterministic
+  suffixes to duplicate implicit record IDs instead of overwriting an earlier
+  result. Session saving for this kind of batch is rejected before any diagram
+  output until the typed request model can represent explicit batch grouping;
+  use `--multi_record_canvas` or save each record separately.
+
+The next API iteration will complete the A1/A2 and O4 planner work, including
+explicit grid/batch requests, O4 single-record layout and neutral-loading
+boundaries, and removal of the legacy `CollinearityParameters` type in favor of
+`LosslessCollinearityParameters`.
+
 ## Compact LOSATP runtime handles and session version 36
 
-- Python and Web writers now emit session version 36 with canonical `renderRequest` schema 3. Readers accept versions 27–33 and 36; public typed conversion remains available for canonical versions 31–33 and 36. Versions 34 and 35 were branch-internal development formats and are not supported.
+- Session version 36 introduced canonical `renderRequest` schema 3 and compact
+  runtime handles. Version 36 remains readable after the version 37/schema 4
+  output-ownership cleanup; public typed conversion is available for canonical
+  versions 31–33, 36, and 37. Versions 34 and 35 were branch-internal
+  development formats and are not supported.
 - Generated protein FASTA, raw LOSATP QUERY/SUBJECT fields, protein maps, and derived comparison references now use deterministic session-global handles with the form `h_[a-z2-7]{26}`. The handles bind a record instance to the complete CDS feature identity without repeating long feature hashes or readable aliases in every hit row. Upload filenames, modification times, session resource names, display aliases, and reopen time do not determine the handle or raw-cache identity.
 - Current protein raw cache entries use schema 4, derived comparison payloads use schema 3, and the protein identity manifest uses schema 2. The manifest remains the authority for complete feature identity and display metadata and separates runtime binding from display binding. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
 - **Save Raw LOSAT TSV** hydrates generated protein results at download time: it resolves every internal handle through the manifest and replaces only QUERY and SUBJECT with readable, percent-encoded protein or feature aliases. Duplicate aliases receive deterministic short ordinals. Row order, columns 3–12, numeric text, comments, and line endings are preserved; an unresolved or wrong-binding handle aborts the download instead of exposing an internal ID. User-uploaded comparison TSV is never rewritten.
@@ -37,7 +119,9 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 - New configurations render `repeat_region` as an underlay: the interval covers the full feature band behind foreground glyphs and is excluded from overlap lanes and feature labels. Use `repeat_region=rectangle` to restore the previous appearance.
 - Underlays are generic to any feature type and retain resolved colors, feature legends, interactive metadata, search/edit behavior, and protein-comparison eligibility. Rendering assignments do not change feature visibility.
 - Automatic feature underlays are private render-time highlights, not saved region annotations. Custom track stacks require exactly one enabled feature slot when a visible underlay exists.
-- Session version 36 and canonical request schema 3 record the new default. Sessions 27–33 and schema 1/2 requests with no repeat assignment migrate to `repeat_region=rectangle` so visual replay remains stable.
+- Session version 36/schema 3 and version 37/schema 4 record the new default.
+  Sessions 27–33 and schema 1/2 requests with no repeat assignment migrate to
+  `repeat_region=rectangle` so visual replay remains stable.
 
 ## Python/Web session version 33
 
@@ -193,26 +277,19 @@ The CLI retains its warning-and-skip behavior when an optional binary converter 
 unavailable. The strict contract applies to the explicit Python library helper
 `save_figure_to`.
 
-### High-level builders reject options for the wrong mode
+### Typed execution rejects options for the wrong mode
 
-Previously, a non-default Circular-only option passed to `build_linear_diagram`,
-or a Linear-only option passed to either Circular high-level builder, could be
-silently ignored. The three `build_*` helpers now raise `ValidationError` and name
-the incompatible fields. Move the option to the matching builder or leave it at
-its default when sharing an option bundle.
+Previously, a non-default option for the other drawing mode in a shared
+`DiagramOptions` bundle could be silently ignored. Typed request execution now
+raises `ValidationError` and names the incompatible fields. Root
+`CircularOptions` and `LinearOptions` avoid those fields at construction.
 
-`build_circular_diagram` also rejects ambiguous or lossy legacy depth inputs. Pass
-one of `depth_table`, `depth_file`, a one-element `depth_tables`, or a one-element
-`depth_files`; do not combine singular/plural or table/file forms. The low-level
-mode-specific assembler signatures are unchanged.
-
-## Added lower-level integration capabilities
+## Added integration capabilities
 
 The following remain available from `gbdraw.api` for CLI, web, session, and custom
 integration work:
 
-- Circular multi-record layout: `CircularMultiRecordOptions` and
-  `build_circular_multi_diagram`.
+- Circular multi-record typed layout: `CircularMultiRecordOptions`.
 - Interactive SVG metadata and enrichment: `InteractiveSvgContext`,
   `build_interactive_svg_context`, and `enrich_svg`.
 - Interactive byte rendering through
@@ -230,12 +307,12 @@ integration work:
 
 New drawing code should prefer the top-level interface described above.
 
-## Lower-level compatibility
+## Lower-level contract
 
-- Existing `assemble_circular_diagram_from_record`,
-  `assemble_circular_diagram_from_records`, and
-  `assemble_linear_diagram_from_records` import paths remain available.
-- Existing defaults, including `collinearity_anchor_mode="rbh"`, remain unchanged.
+- Low-level assemblers and builders remain implementation modules, but are no
+  longer re-exported from `gbdraw.api`. New integrations should use the root
+  drawing facade or typed request/render contracts.
+- The existing `collinearity_anchor_mode="rbh"` default remains unchanged.
 - For each label-table input, pass either a DataFrame or a file path. Passing both
   forms raises `ValidationError` instead of choosing one silently.
 - Catch `GbdrawError` for all expected gbdraw library failures, or catch
@@ -243,12 +320,18 @@ New drawing code should prefer the top-level interface described above.
 
 ## Session API boundary
 
-The public session bridge accepts canonical documents from versions 31–33 and 36.
+The public session bridge accepts canonical documents from versions 31–33, 36,
+and 37.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
-Current writers emit version 36 and `renderRequest` schema 3. Versions 27 through 30 can be regenerated with `gbdraw circular --session` or
+Current writers emit version 37 and `renderRequest` schema 4. Schema 4 removes
+the duplicate `diagramOptions.output.outputPrefix`; the authoritative value is
+`renderRequest.output.prefix`. Readers retain schemas 1–3 and ignore that legacy
+nested prefix. Version 36/schema 3 documents, including the bundled Gallery
+sessions, remain supported inputs. Versions 27 through 30 can be regenerated
+with `gbdraw circular --session` or
 `gbdraw linear --session`. Public typed conversion rejects them with
 `SessionVersionError` instead of reconstructing a request from `cliInvocation` or
 GUI state. The

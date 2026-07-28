@@ -29,11 +29,12 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 36
+CURRENT_SESSION_VERSION = 37
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 36, CURRENT_SESSION_VERSION}
 )
+CURRENT_ARTIFACT_SESSION_VERSIONS = frozenset({36, CURRENT_SESSION_VERSION})
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
 NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
 LOSAT_DERIVED_CACHE_SCHEMA = 3
@@ -583,7 +584,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         files = session.get("files")
         if files is None or not isinstance(files, Mapping):
             raise ValidationError("Session files are required for CLI regeneration.")
-    if version == CURRENT_SESSION_VERSION:
+    if version in CURRENT_ARTIFACT_SESSION_VERSIONS:
         validate_current_session_artifacts(session)
 
 
@@ -629,8 +630,9 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
 
 
 def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
-    """Validate version-36 cache, manifest, and legacy artifact boundaries."""
+    """Validate current cache, manifest, and legacy artifact boundaries."""
 
+    session_version = session.get("version")
     cache_entries = _artifact_entries(session, "losatCache")
     protein_entries: list[Mapping[str, Any]] = []
     seen_cache_keys: set[str] = set()
@@ -638,7 +640,8 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
         classification = classify_raw_losat_cache_entry(entry)
         if classification == "protein-legacy":
             raise ValidationError(
-                "Session version 36 cannot store legacy protein entries in losatCache; "
+                f"Session version {session_version} cannot store legacy protein "
+                "entries in losatCache; "
                 "use the matching legacyArtifacts candidate envelope."
             )
         if classification == "invalid":
@@ -1546,11 +1549,6 @@ def build_session_json(
         ).to_dict()
         payload["renderRequest"] = canonical["renderRequest"]
         payload["resources"] = canonical["resources"]
-    elif context.source_session is not None and isinstance(
-        context.source_session.get("renderRequest"), Mapping
-    ) and isinstance(context.source_session.get("resources"), Mapping):
-        payload["renderRequest"] = _json_clone(context.source_session["renderRequest"])
-        payload["resources"] = _json_clone(context.source_session["resources"])
     else:
         raise ValidationError(
             f"A canonical typed request is required to write a version {CURRENT_SESSION_VERSION} session."
@@ -1571,7 +1569,7 @@ def write_session_json(path: str | Path, payload: Mapping[str, Any]) -> None:
     """Write plain or ``.gz`` session JSON with an atomic replacement."""
 
     expanded_payload = expand_session_feature_catalog(payload)
-    if expanded_payload.get("version") == CURRENT_SESSION_VERSION:
+    if expanded_payload.get("version") in CURRENT_ARTIFACT_SESSION_VERSIONS:
         validate_session(expanded_payload)
     serialized_payload = compact_session_feature_catalog(expanded_payload)
 
@@ -1633,6 +1631,128 @@ def get_session_slot(session: Mapping[str, Any], slot: str) -> Any:
     return current
 
 
+def _canonicalize_legacy_session_cli_args(
+    args: Sequence[str],
+    *,
+    mode: Literal["circular", "linear"],
+) -> tuple[list[str], dict[int, int]]:
+    replacements = {
+        "--depth": "--depth_track",
+        "--depth_tick_interval": "--depth_large_tick_interval",
+        "--gc_content_tick_interval": "--gc_content_large_tick_interval",
+        "--feature_table": "--feature_visibility_table",
+        "--annotation-table": "--annotation_table",
+        "--losatp-bin": "--losatp_bin",
+        "--ncbi-blastp-bin": "--ncbi_blastp_bin",
+        "--losatp-threads": "--losatp_threads",
+        "--protein-blastp-mode": "--protein_blastp_mode",
+        "--protein-blastp-max-hits": "--protein_blastp_max_hits",
+        "--protein-blastp-candidate-limit": "--protein_blastp_candidate_limit",
+        "--align-orthogroup-feature": "--align_orthogroup_feature",
+        "--collinear-unit-mode": "--collinear_unit_mode",
+        "--collinear-search-scope": "--collinear_search_scope",
+        "--collinear-min-anchors": "--collinear_min_anchors",
+        "--collinear_max_gene_gap": "--collinear_max_unit_gap",
+        "--collinear-max-unit-gap": "--collinear_max_unit_gap",
+        "--collinear-max-gene-gap": "--collinear_max_unit_gap",
+        "--collinear-max-diagonal-drift": "--collinear_max_diagonal_drift",
+        "--collinear-max-conflicts-in-merge-gap": "--collinear_max_conflicts_in_merge_gap",
+        "--collinear-max-paralog-links-per-orthogroup": (
+            "--collinear_max_paralog_links_per_orthogroup"
+        ),
+        "--collinear-color-mode": "--collinear_color_mode",
+        "--keep-definition-left-aligned": "--keep_definition_left_aligned",
+        "--pairwise-match-style": "--pairwise_match_style",
+        "--definition-line-style": "--definition_line_style",
+        "--record-subtitle": "--record_subtitle",
+        "--circular-track-slot": "--circular_track_slot",
+    }
+    if mode == "circular":
+        replacements.update(
+            {
+                "--suppress_gc": "--no-gc",
+                "--suppress_skew": "--no-skew",
+            }
+        )
+    else:
+        replacements.update(
+            {
+                "--show_gc": "--gc",
+                "--show_skew": "--skew",
+            }
+        )
+
+    canonical_args: list[str] = []
+    source_to_canonical_index: dict[int, int] = {}
+    for source_index, raw_token in enumerate(args):
+        token = str(raw_token)
+        if token == "--show_depth":
+            continue
+        option, separator, inline_value = (
+            token.partition("=")
+            if token.startswith("--")
+            else (token, "", "")
+        )
+        option = replacements.get(option, option)
+        if separator:
+            if mode == "circular" and option == "--circular_track_slot":
+                inline_value = _migrate_legacy_circular_slot_cli_value(inline_value)
+            if option == "--multi_record_size_mode" and inline_value == "sqrt":
+                inline_value = "auto"
+            elif mode == "linear" and option == "--label_placement":
+                inline_value = {
+                    "on_feature": "above_feature",
+                }.get(inline_value, inline_value)
+            elif mode == "linear" and option == "--track_layout":
+                inline_value = {
+                    "spreadout": "above",
+                    "tuckin": "below",
+                }.get(inline_value, inline_value)
+            token = f"{option}={inline_value}"
+        else:
+            token = option
+            if canonical_args:
+                previous_option = canonical_args[-1].partition("=")[0]
+                if previous_option == "--multi_record_size_mode" and token == "sqrt":
+                    token = "auto"
+                elif (
+                    mode == "linear"
+                    and previous_option == "--label_placement"
+                    and token == "on_feature"
+                ):
+                    token = "above_feature"
+                elif mode == "linear" and previous_option == "--track_layout":
+                    token = {"spreadout": "above", "tuckin": "below"}.get(token, token)
+                elif mode == "circular" and previous_option == "--circular_track_slot":
+                    token = _migrate_legacy_circular_slot_cli_value(token)
+        source_to_canonical_index[source_index] = len(canonical_args)
+        canonical_args.append(token)
+    return canonical_args, source_to_canonical_index
+
+
+def _migrate_legacy_circular_slot_cli_value(value: str) -> str:
+    """Move retired slot fields into the private persisted-data transport."""
+
+    head, separator, raw_options = str(value).partition("@")
+    if not separator:
+        return str(value)
+    migrated: list[str] = []
+    for raw_part in raw_options.split(","):
+        part = raw_part.strip()
+        if not part or "=" not in part:
+            migrated.append(part)
+            continue
+        raw_key, raw_value = part.split("=", 1)
+        key = raw_key.strip().lower()
+        if key in {"strict", "compress", "reserve"}:
+            continue
+        if key == "spacing":
+            migrated.append(f"__gbdraw_legacy_spacing={raw_value.strip()}")
+        else:
+            migrated.append(part)
+    return head if not migrated else f"{head}@{','.join(migrated)}"
+
+
 def _session_cli_invocation_to_args(
     session: Mapping[str, Any],
     *,
@@ -1669,13 +1789,40 @@ def _session_cli_invocation_to_args(
         )
         run_args[binding.argIndex] = str(materialized)
 
-    _restore_cli_table_paths(session, run_args, temp_dir=temp_dir)
+    session_version = int(session.get("version", 0))
+    migrate_legacy_cli = session_version < CURRENT_SESSION_VERSION
+    _restore_cli_table_paths(
+        session,
+        run_args,
+        temp_dir=temp_dir,
+        migrate_legacy_cli=migrate_legacy_cli,
+    )
+
+    if migrate_legacy_cli:
+        run_args, _ = _canonicalize_legacy_session_cli_args(run_args, mode=mode)
+        invocation_args, invocation_index_map = _canonicalize_legacy_session_cli_args(
+            invocation_args,
+            mode=mode,
+        )
+        remapped_bindings: list[SessionFileBinding] = []
+        for binding in file_bindings:
+            if binding.argIndex not in invocation_index_map:
+                raise ValidationError(
+                    "cliInvocation.fileBindings cannot reference a removed legacy CLI flag."
+                )
+            remapped_bindings.append(
+                SessionFileBinding(
+                    argIndex=invocation_index_map[binding.argIndex],
+                    slot=binding.slot,
+                    name=binding.name,
+                )
+            )
+        file_bindings = remapped_bindings
 
     run_args = _apply_option_override(run_args, "-o", "--output", output_override)
     run_args = _apply_option_override(run_args, "-f", "--format", format_override)
     invocation_args = _apply_option_override(invocation_args, "-o", "--output", output_override)
     invocation_args = _apply_option_override(invocation_args, "-f", "--format", format_override)
-    session_version = int(session.get("version", 0))
     run_args = migrate_legacy_repeat_feature_shape_args(
         run_args,
         session_version=session_version,
@@ -1780,6 +1927,7 @@ def _restore_cli_table_paths(
     run_args: list[str],
     *,
     temp_dir: Path,
+    migrate_legacy_cli: bool = False,
 ) -> None:
     files = session.get("files")
     if not isinstance(files, Mapping):
@@ -1810,6 +1958,19 @@ def _restore_cli_table_paths(
                 role=f"arg{arg_index}",
             )
             run_args[arg_index] = str(table_path)
+
+        table_kind = str(table_entry.get("kind") or "").strip()
+        preceding_option = (
+            str(run_args[arg_index - 1]) if arg_index > 0 else ""
+        )
+        if (
+            migrate_legacy_cli
+            and (
+                table_kind == "circular_track"
+                or preceding_option == "--circular_track_table"
+            )
+        ):
+            _migrate_legacy_circular_track_table(table_path)
 
         dependencies = table_entry.get("dependencies")
         if not isinstance(dependencies, list) or not dependencies:
@@ -1885,6 +2046,77 @@ def _rewrite_tsv_path_cells(
             writer.writerows(output_rows)
     except OSError as exc:
         raise ValidationError(f"Could not rewrite restored TSV table: {table_path}") from exc
+
+
+def _migrate_legacy_circular_track_table(table_path: Path) -> None:
+    """Move a persisted Circular table's spacing column to reader-only params."""
+
+    try:
+        with table_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.reader(handle, delimiter="\t"))
+    except OSError as exc:
+        raise ValidationError(
+            f"Could not read restored Circular track table: {table_path}"
+        ) from exc
+    if not rows:
+        return
+
+    header_index = next(
+        (
+            index
+            for index, cells in enumerate(rows)
+            if cells and any(str(cell).strip() for cell in cells)
+        ),
+        None,
+    )
+    if header_index is None:
+        return
+    header = [str(cell).strip() for cell in rows[header_index]]
+    if "spacing" not in header:
+        return
+
+    spacing_index = header.index("spacing")
+    if "params" not in header:
+        header.append("params")
+    params_index = header.index("params")
+    migrated_rows: list[list[str]] = []
+    for index, cells in enumerate(rows):
+        if index < header_index:
+            migrated_rows.append([str(cell) for cell in cells])
+            continue
+        if index == header_index:
+            migrated_rows.append(
+                [column for column in header if column != "spacing"]
+            )
+            continue
+        values = [str(cell) for cell in cells]
+        while len(values) < len(header):
+            values.append("")
+        values = values[: len(header)]
+        spacing = values[spacing_index].strip()
+        if spacing:
+            legacy_param = f"__gbdraw_legacy_spacing={spacing}"
+            existing_params = values[params_index].strip()
+            values[params_index] = (
+                f"{existing_params},{legacy_param}"
+                if existing_params
+                else legacy_param
+            )
+        migrated_rows.append(
+            [
+                value
+                for column, value in zip(header, values, strict=True)
+                if column != "spacing"
+            ]
+        )
+    try:
+        with table_path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+            writer.writerows(migrated_rows)
+    except OSError as exc:
+        raise ValidationError(
+            f"Could not migrate restored Circular track table: {table_path}"
+        ) from exc
 
 
 def _append_common_gui_args(
@@ -1985,9 +2217,9 @@ def _append_circular_gui_args(
     elif labels_mode == "both":
         _append_pair(run_args, invocation_args, "--labels", "both")
     if form.get("suppress_gc") is True:
-        _append_flag(run_args, invocation_args, "--suppress_gc")
+        _append_flag(run_args, invocation_args, "--no-gc")
     if form.get("suppress_skew") is True:
-        _append_flag(run_args, invocation_args, "--suppress_skew")
+        _append_flag(run_args, invocation_args, "--no-skew")
     if form.get("multi_record_canvas") is True:
         _append_flag(run_args, invocation_args, "--multi_record_canvas")
     for key, option in (
@@ -2007,6 +2239,11 @@ def _append_circular_gui_args(
     ):
         value = adv.get(key)
         if value not in (None, "", False):
+            if (
+                key == "multi_record_size_mode"
+                and str(value).strip().lower() == "sqrt"
+            ):
+                value = "auto"
             _append_pair(run_args, invocation_args, option, str(value))
 
     input_type = str(ui.get("cInputType") or "gb")
@@ -2084,9 +2321,9 @@ def _append_linear_gui_args(
     if form.get("align_center") is True:
         _append_flag(run_args, invocation_args, "--align_center")
     if form.get("show_gc") is True:
-        _append_flag(run_args, invocation_args, "--show_gc")
+        _append_flag(run_args, invocation_args, "--gc")
     if form.get("show_skew") is True:
-        _append_flag(run_args, invocation_args, "--show_skew")
+        _append_flag(run_args, invocation_args, "--skew")
     if form.get("normalize_length") is True:
         _append_flag(run_args, invocation_args, "--normalize_length")
     if _string_or_none(form.get("legend")) and form.get("legend") != "right":
@@ -2115,9 +2352,13 @@ def _append_linear_gui_args(
     ):
         value = adv.get(key)
         if value not in (None, "", False):
+            if key == "label_placement" and str(value).strip().lower() == "on_feature":
+                value = "above_feature"
             _append_pair(run_args, invocation_args, option, str(value))
     if _string_or_none(form.get("linear_track_layout")):
-        _append_pair(run_args, invocation_args, "--track_layout", str(form.get("linear_track_layout")))
+        layout = str(form.get("linear_track_layout")).strip().lower()
+        layout = {"spreadout": "above", "tuckin": "below"}.get(layout, layout)
+        _append_pair(run_args, invocation_args, "--track_layout", layout)
     if form.get("linear_ruler_on_axis") is True:
         _append_flag(run_args, invocation_args, "--ruler_on_axis")
     _append_linear_definition_line_style_args(run_args, invocation_args, adv)
@@ -2210,8 +2451,6 @@ def _append_linear_gui_args(
                     + (f"[{track_index}]" if isinstance(linear_seqs[record_index].get("depth"), list) else ""),
                     temp_dir=temp_dir,
                 )
-        if track_count:
-            _append_flag(run_args, invocation_args, "--show_depth")
 
 
 def _append_linear_definition_line_style_args(
@@ -2379,7 +2618,7 @@ def _append_linear_gui_blastp_args(
         return
     for key, option in (
         ("collinearMinAnchors", "--collinear_min_anchors"),
-        ("collinearMaxGeneGap", "--collinear_max_gene_gap"),
+        ("collinearMaxUnitGap", "--collinear_max_unit_gap"),
         ("collinearMaxDiagonalDrift", "--collinear_max_diagonal_drift"),
         ("collinearMaxConflictsInMergeGap", "--collinear_max_conflicts_in_merge_gap"),
         ("collinearUnitMode", "--collinear_unit_mode"),
@@ -2388,6 +2627,12 @@ def _append_linear_gui_blastp_args(
         ("collinearMaxParalogLinksPerOrthogroup", "--collinear_max_paralog_links_per_orthogroup"),
     ):
         value = blastp_cfg.get(key)
+        if (
+            key == "collinearMaxUnitGap"
+            and value in (None, "")
+            and int(session.get("version", 0)) < CURRENT_SESSION_VERSION
+        ):
+            value = blastp_cfg.get("collinearMaxGeneGap")
         if value not in (None, "", False):
             _append_pair(run_args, invocation_args, option, str(value))
 
@@ -2419,8 +2664,6 @@ def _append_depth_gui_options(
             slot=slot,
             temp_dir=temp_dir,
         )
-    if entries:
-        _append_flag(run_args, invocation_args, "--show_depth")
 
 
 def _append_materialized_file_option(
@@ -2705,7 +2948,7 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
             "orthogroupMembershipMode": "anchor_core_v1",
             "orthogroupMemberMaxHits": 5,
             "collinearMinAnchors": 1,
-            "collinearMaxGeneGap": 0,
+            "collinearMaxUnitGap": 0,
             "collinearMaxDiagonalDrift": 0,
             "collinearMaxConflictsInMergeGap": 1,
             "collinearMaxParalogLinksPerOrthogroup": 2,
@@ -2729,9 +2972,9 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
                     default_when_absent="none",
                 ),
                 "multi_record_canvas": "--multi_record_canvas" in args,
-                "suppress_gc": "--suppress_gc" in args,
-                "suppress_skew": "--suppress_skew" in args,
-                "show_depth": "--show_depth" in args or "--depth" in args or "--depth_track" in args,
+                "suppress_gc": "--no-gc" in args,
+                "suppress_skew": "--no-skew" in args,
+                "show_depth": "--depth_track" in args,
             }
         )
         adv["plot_title_position"] = _option_value(args, "--plot_title_position") or "none"
@@ -2745,9 +2988,9 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
                 "linear_ruler_on_axis": "--ruler_on_axis" in args,
                 "align_center": "--align_center" in args,
                 "keep_definition_left_aligned": "--keep_definition_left_aligned" in args,
-                "show_gc": "--show_gc" in args,
-                "show_skew": "--show_skew" in args,
-                "show_depth": "--show_depth" in args or "--depth" in args or "--depth_track" in args,
+                "show_gc": "--gc" in args,
+                "show_skew": "--skew" in args,
+                "show_depth": "--depth_track" in args,
                 "normalize_length": "--normalize_length" in args,
                 "show_labels_linear": _optional_choice_option_value(
                     args,
@@ -3209,7 +3452,7 @@ def _populate_depth_cli_config(args: Sequence[str], adv: dict[str, Any]) -> None
         "depth_step_size": ("--depth_step", "--depth-step"),
         "depth_min": ("--depth_min", "--depth-min"),
         "depth_max": ("--depth_max", "--depth-max"),
-        "depth_tick_interval": (
+        "depth_large_tick_interval": (
             "--depth_large_tick_interval",
             "--depth_tick_interval",
             "--depth-large-tick-interval",
@@ -3393,7 +3636,7 @@ def _populate_linear_cli_config(
         )
         blastp["candidateLimit"] = candidate_limit if candidate_limit not in (None, "none") else None
         blastp["collinearMinAnchors"] = _option_value(args, "--collinear_min_anchors", "--collinear-min-anchors") or 1
-        blastp["collinearMaxGeneGap"] = (
+        blastp["collinearMaxUnitGap"] = (
             _option_value(
                 args,
                 "--collinear_max_unit_gap",

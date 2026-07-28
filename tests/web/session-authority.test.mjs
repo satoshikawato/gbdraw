@@ -25,7 +25,7 @@ assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
   'cliInvocation', 'config', 'createdAt', 'editorState', 'features', 'files', 'format',
   'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'orthogroupState',
   'proteinIdentityManifest', 'renderRequest', 'resources',
-  'results', 'title', 'ui', 'version', 'webFiles'
+  'results', 'runMetadata', 'title', 'ui', 'version', 'webFiles'
 ].sort());
 
 const session = {
@@ -48,6 +48,7 @@ const session = {
     recordInstances: {}
   },
   legacyArtifacts: { proteinRawCandidates: { schema: 1, entries: [] } },
+  runMetadata: { trackSlotGeometry: { schema: 1, records: [] } },
   cliInvocation: null
 };
 validateSessionAuthorityInventory(session, 36);
@@ -65,6 +66,7 @@ assert.deepEqual(
   session.proteinIdentityManifest
 );
 assert.deepEqual(projectArtifactState(session).legacyArtifacts, session.legacyArtifacts);
+assert.deepEqual(projectArtifactState(session).runMetadata, session.runMetadata);
 assert.equal(projectDocumentMetadata(session).title, 'Canonical');
 assert.throws(
   () => validateSessionAuthorityInventory({ ...session, unknownField: true }, 36),

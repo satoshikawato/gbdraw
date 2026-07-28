@@ -159,10 +159,24 @@ def test_duplicate_record_id_linear_svg_ids_are_instance_safe() -> None:
     ).tostring()
     root = ET.fromstring(svg)
     ids = [element.attrib["id"] for element in root.iter() if "id" in element.attrib]
+    record_groups = [
+        element
+        for element in root.iter()
+        if element.tag == f"{SVG_NS}g"
+        and element.attrib.get("data-gbdraw-record-id") == "duplicate"
+        and element.attrib.get("data-gbdraw-role") is None
+    ]
 
     assert len(ids) == len(set(ids))
-    assert "duplicate_record_1" in ids
-    assert "duplicate_record_2" in ids
+    assert {
+        element.attrib["data-gbdraw-record-index"]
+        for element in record_groups
+    } == {"0", "1"}
+    assert len({element.attrib["id"] for element in record_groups}) == 2
+    assert all(
+        element.attrib["id"].startswith("record_group_")
+        for element in record_groups
+    )
     assert "duplicate_definition_record_1" in ids
     assert "duplicate_definition_record_2" in ids
     assert "gc_content_record_1" in ids

@@ -18,7 +18,7 @@ from ....features.objects import FeatureObject  # type: ignore[reportMissingImpo
 from ....features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
 from ....features.factory import create_feature_dict  # type: ignore[reportMissingImports]
 from ....labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
-from ....labels.placement import prepare_label_list  # type: ignore[reportMissingImports]
+from ....labels.circular import prepare_label_list  # type: ignore[reportMissingImports]
 from ...drawers.circular.labels import LabelDrawer  # type: ignore[reportMissingImports]
 from ....configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
 from ....diagrams.circular.radial_layout import CircularFeatureLayout  # type: ignore[reportMissingImports]

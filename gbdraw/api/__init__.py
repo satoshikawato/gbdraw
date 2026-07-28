@@ -1,29 +1,10 @@
-"""Public, stable-ish library API for gbdraw.
+"""Typed library contracts for gbdraw requests, sessions, tables, and rendering.
 
-This package is the official entry point for pipeline/library usage (as opposed to CLI
-entry points). It stays intentionally thin and mostly re-exports internal building
-blocks through a stable namespace.
+The beginner-facing drawing facade lives at the package root. This namespace exposes
+the typed contracts and explicit render helpers used by pipelines and integrations.
 """
 
-from .canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
 from .config import GbdrawConfig, apply_config_overrides, load_default_config
-from .configurators import (
-    BlastMatchConfigurator,
-    DepthConfigurator,
-    FeatureDrawingConfigurator,
-    GcContentConfigurator,
-    GcSkewConfigurator,
-    LegendDrawingConfigurator,
-)
-from .diagram import (  # type: ignore[reportMissingImports]
-    DEFAULT_SELECTED_FEATURES,
-    assemble_circular_diagram_from_records,
-    assemble_circular_diagram_from_record,
-    assemble_linear_diagram_from_records,
-    build_circular_diagram,
-    build_circular_multi_diagram,
-    build_linear_diagram,
-)
 from .io import (
     CircularTrackTable,
     ConservationTable,
@@ -73,7 +54,6 @@ from .options import (
     ColorOptions,
     DiagramOptions,
     LinearMultiRecordOptions,
-    OutputOptions,
     TrackOptions,
 )
 from gbdraw.linear_comparison import LinearComparison
@@ -94,7 +74,7 @@ from gbdraw.annotations import (
     read_annotation_table,
     resolve_annotations,
 )
-from .render import parse_formats, render_to_bytes, save_figure, save_figure_to
+from .render import render_to_bytes, save_figure_to
 from .request_render import (
     PreparedDiagramRequest,
     RequestRenderResult,
@@ -160,28 +140,10 @@ from .tracks import (  # type: ignore[reportMissingImports]
 )
 
 __all__ = [
-    # canvas
-    "CircularCanvasConfigurator",
-    "LinearCanvasConfigurator",
     # config
     "GbdrawConfig",
     "apply_config_overrides",
     "load_default_config",
-    # configurators
-    "BlastMatchConfigurator",
-    "DepthConfigurator",
-    "FeatureDrawingConfigurator",
-    "GcContentConfigurator",
-    "GcSkewConfigurator",
-    "LegendDrawingConfigurator",
-    # diagrams
-    "DEFAULT_SELECTED_FEATURES",
-    "assemble_circular_diagram_from_records",
-    "assemble_circular_diagram_from_record",
-    "assemble_linear_diagram_from_records",
-    "build_circular_diagram",
-    "build_circular_multi_diagram",
-    "build_linear_diagram",
     # io
     "CircularTrackTable",
     "ConservationTable",
@@ -245,15 +207,12 @@ __all__ = [
     "RecordKey",
     "ColorOptions",
     "DiagramOptions",
-    "OutputOptions",
     "TrackOptions",
     # render
     "InteractiveSvgContext",
     "build_interactive_svg_context",
     "enrich_svg",
-    "parse_formats",
     "render_to_bytes",
-    "save_figure",
     "save_figure_to",
     # typed requests
     "CircularDiagramRequest",

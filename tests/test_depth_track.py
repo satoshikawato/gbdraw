@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pandas as pd
 import pytest
@@ -168,15 +169,99 @@ def _write_depth_file(path: Path, text: str) -> Path:
 
 
 def _svg_group_translate_y(svg: str, group_id: str) -> float:
+    semantic_groups = _semantic_slot_groups(svg, group_id, renderer=None)
+    if semantic_groups:
+        assert len(semantic_groups) == 1
+        transform = semantic_groups[0].get("transform", "")
+        match = re.fullmatch(r"translate\([^,]+,([^)]+)\)", transform)
+        assert match is not None
+        return float(match.group(1))
     match = re.search(rf'<g id="{re.escape(group_id)}" transform="translate\([^,]+,([^)]+)\)"', svg)
     assert match is not None
     return float(match.group(1))
 
 
 def _svg_group(svg: str, group_id: str) -> str:
-    match = re.search(rf'<g id="{re.escape(group_id)}".*?</g>', svg, flags=re.DOTALL)
+    match = re.search(
+        rf'<g data-gbdraw-slot-id="{re.escape(group_id)}".*?</g>',
+        svg,
+        flags=re.DOTALL,
+    )
+    if match is None:
+        match = re.search(rf'<g id="{re.escape(group_id)}".*?</g>', svg, flags=re.DOTALL)
     assert match is not None
     return match.group(0)
+
+
+def _semantic_slot_groups(
+    svg: str,
+    slot_id: str,
+    *,
+    renderer: str | None = "depth",
+) -> list[ET.Element]:
+    root = ET.fromstring(svg)
+    return [
+        element
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "g"
+        and element.get("data-gbdraw-slot-id") == slot_id
+        and (
+            renderer is None
+            or element.get("data-gbdraw-slot-renderer") == renderer
+        )
+    ]
+
+
+def _semantic_depth_axis_groups(svg: str, slot_id: str) -> list[ET.Element]:
+    axes: list[ET.Element] = []
+    for slot_group in _semantic_slot_groups(svg, slot_id):
+        axes.extend(
+            child
+            for child in slot_group
+            if child.tag.rsplit("}", 1)[-1] == "g"
+        )
+    return axes
+
+
+def _svg_element_markup(element: ET.Element) -> str:
+    return ET.tostring(element, encoding="unicode")
+
+
+def _semantic_slot_translate_y(svg: str, slot_id: str) -> float:
+    groups = _semantic_slot_groups(svg, slot_id)
+    assert len(groups) == 1
+    transform = groups[0].get("transform", "")
+    match = re.fullmatch(r"translate\([^,]+,([^)]+)\)", transform)
+    assert match is not None
+    return float(match.group(1))
+
+
+def _circular_semantic_slot_record_indices(svg: str, slot_id: str) -> list[int]:
+    root = ET.fromstring(svg)
+    parents = {
+        child: parent
+        for parent in root.iter()
+        for child in parent
+    }
+    record_indices: list[int] = []
+    slot_groups = [
+        element
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "g"
+        and element.get("data-gbdraw-slot-id") == slot_id
+        and element.get("data-gbdraw-slot-renderer") == "depth"
+    ]
+    for slot_group in slot_groups:
+        record_container = parents[slot_group]
+        semantic_record_indices = {
+            int(element.get("data-gbdraw-record-index", ""))
+            for element in record_container.iter()
+            if element.get("data-gbdraw-slot-renderer") == "features"
+            and element.get("data-gbdraw-record-index") is not None
+        }
+        assert len(semantic_record_indices) == 1
+        record_indices.append(next(iter(semantic_record_indices)))
+    return record_indices
 
 
 def _svg_line_y_span(svg_fragment: str) -> float:
@@ -631,7 +716,7 @@ def test_circular_depth_axis_uses_record_start_and_tick_options() -> None:
         config_overrides={
             "show_gc": False,
             "show_skew": False,
-            "depth_tick_interval": 4,
+            "depth_large_tick_interval": 4,
             "depth_tick_font_size": 11,
         },
         window=10,
@@ -875,8 +960,12 @@ def test_linear_custom_depth_slot_uses_track_height_when_slot_height_is_auto() -
         depth_step=10,
     ).tostring()
 
-    assert _svg_line_y_span(_svg_group(svg, "depth_a_axis")) == pytest.approx(12)
-    assert _svg_line_y_span(_svg_group(svg, "depth_b_axis")) == pytest.approx(28)
+    depth_a_axes = _semantic_depth_axis_groups(svg, "depth_a")
+    depth_b_axes = _semantic_depth_axis_groups(svg, "depth_b")
+    assert len(depth_a_axes) == 1
+    assert len(depth_b_axes) == 1
+    assert _svg_line_y_span(_svg_element_markup(depth_a_axes[0])) == pytest.approx(12)
+    assert _svg_line_y_span(_svg_element_markup(depth_b_axes[0])) == pytest.approx(28)
 
 
 @pytest.mark.linear
@@ -930,10 +1019,10 @@ def test_circular_multiple_depth_tracks_render_distinct_rings() -> None:
         depth_step=10,
     ).tostring()
 
-    assert svg.count('id="depth_1"') == 1
-    assert svg.count('id="depth_1_axis"') == 1
-    assert svg.count('id="depth_2"') == 1
-    assert svg.count('id="depth_2_axis"') == 1
+    assert len(_semantic_slot_groups(svg, "depth_1")) == 1
+    assert len(_semantic_depth_axis_groups(svg, "depth_1")) == 1
+    assert len(_semantic_slot_groups(svg, "depth_2")) == 1
+    assert len(_semantic_depth_axis_groups(svg, "depth_2")) == 1
 
 
 @pytest.mark.circular
@@ -960,9 +1049,9 @@ def test_circular_custom_depth_slot_selects_track_index() -> None:
         depth_step=10,
     ).tostring()
 
-    assert 'id="selected_depth"' in svg
-    assert 'id="selected_depth_axis"' in svg
-    assert 'id="depth_1"' not in svg
+    assert len(_semantic_slot_groups(svg, "selected_depth")) == 1
+    assert len(_semantic_depth_axis_groups(svg, "selected_depth")) == 1
+    assert _semantic_slot_groups(svg, "depth_1") == []
 
 
 @pytest.mark.linear
@@ -1058,12 +1147,8 @@ def test_linear_custom_depth_slot_skips_leading_or_trailing_missing_record(
     )
     svg = canvas.tostring()
 
-    present_number = present_record_index + 1
-    missing_number = 2 if present_number == 1 else 1
-    assert svg.count(f'id="depth_record_{present_number}"') == 1
-    assert svg.count(f'id="depth_record_{present_number}_axis"') == 1
-    assert f'id="depth_record_{missing_number}"' not in svg
-    assert f'id="depth_record_{missing_number}_axis"' not in svg
+    assert len(_semantic_slot_groups(svg, "depth")) == 1
+    assert len(_semantic_depth_axis_groups(svg, "depth")) == 1
     geometry = canvas._gbdraw_track_slot_geometry["records"]
     depth_slots = [
         next(slot for slot in record_geometry["slots"] if slot["slotId"] == "depth")
@@ -1133,7 +1218,7 @@ def test_linear_diagonal_sparse_depth_binding_survives_slot_order_reversal() -> 
         [None, _constant_depth_table("rec2", 50, length=40)],
     ]
 
-    def render(depth_slot_ids: list[str]) -> str:
+    def render(depth_slot_ids: list[str]) -> Drawing:
         slots = {
             "depth_a": "depth_a:depth@track_index=0,side=below",
             "depth_b": "depth_b:depth@track_index=1,side=below",
@@ -1153,21 +1238,34 @@ def test_linear_diagonal_sparse_depth_binding_survives_slot_order_reversal() -> 
             step=10,
             depth_window=10,
             depth_step=10,
-        ).tostring()
+        )
 
-    original = render(["depth_a", "depth_b"])
-    reversed_order = render(["depth_b", "depth_a"])
+    original_canvas = render(["depth_a", "depth_b"])
+    reversed_canvas = render(["depth_b", "depth_a"])
+    original = original_canvas.tostring()
+    reversed_order = reversed_canvas.tostring()
 
     for svg in (original, reversed_order):
-        assert 'fill="#112233"' in _svg_group(svg, "depth_a_record_1")
-        assert 'fill="#445566"' in _svg_group(svg, "depth_b_record_2")
-        assert 'id="depth_a_record_2"' not in svg
-        assert 'id="depth_b_record_1"' not in svg
-    assert _svg_group_translate_y(original, "depth_a_record_1") == pytest.approx(
-        _svg_group_translate_y(reversed_order, "depth_a_record_1")
+        depth_a_groups = _semantic_slot_groups(svg, "depth_a")
+        depth_b_groups = _semantic_slot_groups(svg, "depth_b")
+        assert len(depth_a_groups) == 1
+        assert len(depth_b_groups) == 1
+        assert 'fill="#112233"' in _svg_element_markup(depth_a_groups[0])
+        assert 'fill="#445566"' in _svg_element_markup(depth_b_groups[0])
+    for canvas in (original_canvas, reversed_canvas):
+        record_slots = [
+            {slot["slotId"]: slot for slot in record["slots"]}
+            for record in canvas._gbdraw_track_slot_geometry["records"]
+        ]
+        assert record_slots[0]["depth_a"]["dataAvailable"] is True
+        assert record_slots[0]["depth_b"]["dataAvailable"] is False
+        assert record_slots[1]["depth_a"]["dataAvailable"] is False
+        assert record_slots[1]["depth_b"]["dataAvailable"] is True
+    assert _semantic_slot_translate_y(original, "depth_a") == pytest.approx(
+        _semantic_slot_translate_y(reversed_order, "depth_a")
     )
-    assert _svg_group_translate_y(original, "depth_b_record_2") == pytest.approx(
-        _svg_group_translate_y(reversed_order, "depth_b_record_2")
+    assert _semantic_slot_translate_y(original, "depth_b") == pytest.approx(
+        _semantic_slot_translate_y(reversed_order, "depth_b")
     )
 
 
@@ -1196,8 +1294,10 @@ def test_linear_custom_slot_can_select_only_second_logical_depth_track() -> None
         depth_step=10,
     ).tostring()
 
-    assert 'fill="#445566"' in _svg_group(svg, "selected_depth")
-    assert 'id="selected_depth_axis"' in svg
+    selected_groups = _semantic_slot_groups(svg, "selected_depth")
+    assert len(selected_groups) == 1
+    assert 'fill="#445566"' in _svg_element_markup(selected_groups[0])
+    assert len(_semantic_depth_axis_groups(svg, "selected_depth")) == 1
 
 
 @pytest.mark.linear
@@ -1205,7 +1305,7 @@ def test_linear_custom_depth_slot_legend_uses_only_selected_sparse_logical_track
     records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
     legend_label = "Selected Sample B"
 
-    svg = assemble_linear_diagram_from_records(
+    canvas = assemble_linear_diagram_from_records(
         records,
         legend="right",
         depth_track_tables=[
@@ -1223,13 +1323,19 @@ def test_linear_custom_depth_slot_legend_uses_only_selected_sparse_logical_track
         step=10,
         depth_window=10,
         depth_step=10,
-    ).tostring()
+    )
+    svg = canvas.tostring()
 
-    assert 'id="selected_depth_record_1"' not in svg
-    assert 'id="selected_depth_record_1_axis"' not in svg
-    assert svg.count('id="selected_depth_record_2"') == 1
-    assert svg.count('id="selected_depth_record_2_axis"') == 1
-    assert 'fill="#445566"' in _svg_group(svg, "selected_depth_record_2")
+    selected_groups = _semantic_slot_groups(svg, "selected_depth")
+    assert len(selected_groups) == 1
+    assert len(_semantic_depth_axis_groups(svg, "selected_depth")) == 1
+    assert 'fill="#445566"' in _svg_element_markup(selected_groups[0])
+    record_slots = [
+        {slot["slotId"]: slot for slot in record["slots"]}
+        for record in canvas._gbdraw_track_slot_geometry["records"]
+    ]
+    assert record_slots[0]["selected_depth"]["dataAvailable"] is False
+    assert record_slots[1]["selected_depth"]["dataAvailable"] is True
     assert "#112233" not in svg
     assert f'data-legend-key="{legend_label}"' in svg
     assert "Original Sample A" not in svg
@@ -1320,14 +1426,16 @@ def test_circular_multi_record_diagonal_sparse_depth_uses_logical_binding() -> N
     svg = canvas.tostring()
     geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
 
-    assert svg.count('id="depth_1_record_1"') == 1
-    assert svg.count('id="depth_1_record_1_axis"') == 1
-    assert svg.count('id="depth_2_record_2"') == 1
-    assert svg.count('id="depth_2_record_2_axis"') == 1
-    assert 'id="depth_1_record_2"' not in svg
-    assert 'id="depth_2_record_1"' not in svg
-    assert 'fill="#112233"' in _svg_group(svg, "depth_1_record_1")
-    assert 'fill="#445566"' in _svg_group(svg, "depth_2_record_2")
+    depth_1_groups = _semantic_slot_groups(svg, "depth_1")
+    depth_2_groups = _semantic_slot_groups(svg, "depth_2")
+    assert len(depth_1_groups) == 1
+    assert len(depth_2_groups) == 1
+    assert len(_semantic_depth_axis_groups(svg, "depth_1")) == 1
+    assert len(_semantic_depth_axis_groups(svg, "depth_2")) == 1
+    assert 'fill="#112233"' in _svg_element_markup(depth_1_groups[0])
+    assert 'fill="#445566"' in _svg_element_markup(depth_2_groups[0])
+    assert _circular_semantic_slot_record_indices(svg, "depth_1") == [0]
+    assert _circular_semantic_slot_record_indices(svg, "depth_2") == [1]
     assert all(
         {slot["slotId"] for slot in record_geometry["slots"]} >= {"depth_1", "depth_2"}
         for record_geometry in geometry["records"]
@@ -1502,6 +1610,15 @@ def test_circular_depth_window_step_defaults_to_tenth_of_gc(
     assert captured == {"window": 100, "step": 10}
 
 
+@pytest.mark.parametrize(
+    "get_args",
+    [circular_cli_module._get_args, linear_cli_module._get_args],
+)
+def test_cli_rejects_removed_depth_tick_interval(get_args) -> None:
+    with pytest.raises(SystemExit):
+        get_args(["--gbk", "dummy.gb", "--depth_tick_interval", "4"])
+
+
 def test_circular_cli_depth_options_forward_to_api(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1526,7 +1643,7 @@ def test_circular_cli_depth_options_forward_to_api(
         [
             "--gbk",
             "dummy.gb",
-            "--depth",
+            "--depth_track",
             str(depth_file),
             "--depth_width",
             "22",
@@ -1536,7 +1653,7 @@ def test_circular_cli_depth_options_forward_to_api(
             "5",
             "--share_depth_axis",
             "--hide_depth_axis",
-            "--depth_tick_interval",
+            "--depth_large_tick_interval",
             "4",
             "--depth_small_tick_interval",
             "2",
@@ -1551,7 +1668,8 @@ def test_circular_cli_depth_options_forward_to_api(
         ]
     )
 
-    assert captured["depth_table"].to_dict("list") == {
+    depth_track_specs = captured["_precomputed_depth_track_specs"]
+    assert depth_track_specs[0].table.to_dict("list") == {
         "reference_name": ["rec1"],
         "position": [1],
         "depth": [10.0],
@@ -1564,7 +1682,7 @@ def test_circular_cli_depth_options_forward_to_api(
     cfg = captured["cfg"]
     assert cfg.objects.depth.show_axis is False
     assert cfg.objects.depth.show_ticks is False
-    assert cfg.objects.depth.tick_interval == pytest.approx(4)
+    assert not hasattr(cfg.objects.depth, "tick_interval")
     assert cfg.objects.depth.large_tick_interval == pytest.approx(4)
     assert cfg.objects.depth.small_tick_interval == pytest.approx(2)
     assert cfg.objects.depth.tick_font_size == pytest.approx(9)
@@ -1581,21 +1699,24 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
     depth_file.write_text("rec1\t1\t10\nrec2\t1\t20\n", encoding="utf-8")
     read_count = 0
     captured_tables: list[pd.DataFrame | None] = []
-    real_read_depth_tsv = circular_cli_module.read_depth_tsv
+    from gbdraw.analysis import depth_tracks as depth_tracks_module
+
+    real_read_depth_tsv = depth_tracks_module.read_depth_tsv
 
     def counting_read_depth_tsv(path: str) -> pd.DataFrame:
         nonlocal read_count
         read_count += 1
         return real_read_depth_tsv(path)
 
-    monkeypatch.setattr(circular_cli_module, "read_depth_tsv", counting_read_depth_tsv)
+    monkeypatch.setattr(depth_tracks_module, "read_depth_tsv", counting_read_depth_tsv)
     monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: records)
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
     monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
 
     def fake_assemble(*args, **kwargs):
-        captured_tables.append(kwargs.get("depth_table"))
+        specs = kwargs.get("_precomputed_depth_track_specs") or ()
+        captured_tables.append(specs[0].table if specs else None)
         return Drawing(filename=str(tmp_path / f"dummy_{len(captured_tables)}.svg"))
 
     monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
@@ -1605,7 +1726,7 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
             "--gbk",
             "dummy1.gb",
             "dummy2.gb",
-            "--depth",
+            "--depth_track",
             str(depth_file),
             "--format",
             "svg",
@@ -1644,7 +1765,7 @@ def test_linear_cli_depth_options_forward_to_api(
         [
             "--gbk",
             "dummy.gb",
-            "--depth",
+            "--depth_track",
             str(depth_file),
             "--depth_height",
             "24",
@@ -1669,13 +1790,14 @@ def test_linear_cli_depth_options_forward_to_api(
         ]
     )
 
-    assert captured["depth_files"] == [str(depth_file)]
+    assert "depth_files" not in captured
+    assert captured["depth_track_files"] == [[str(depth_file)]]
     assert captured["depth_window"] == 10
     assert captured["depth_step"] == 5
     cfg = captured["cfg"]
     assert cfg.objects.depth.show_axis is False
     assert cfg.objects.depth.show_ticks is False
-    assert cfg.objects.depth.tick_interval == pytest.approx(4)
+    assert not hasattr(cfg.objects.depth, "tick_interval")
     assert cfg.objects.depth.large_tick_interval == pytest.approx(4)
     assert cfg.objects.depth.small_tick_interval == pytest.approx(2)
     assert cfg.objects.depth.tick_font_size == pytest.approx(9)
@@ -1739,7 +1861,7 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
         ]
     )
 
-    assert captured["depth_files"] is None
+    assert "depth_files" not in captured
     assert captured["depth_track_files"] == [
         [paths[0], paths[2]],
         [paths[1], paths[3]],
@@ -1797,7 +1919,10 @@ def test_linear_cli_depth_track_placeholders_keep_record_slots(
 
 
 @pytest.mark.linear
-def test_linear_cli_sparse_depth_tracks_render_end_to_end(tmp_path: Path) -> None:
+def test_linear_cli_sparse_depth_tracks_render_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
     record_paths = [tmp_path / "rec1.gb", tmp_path / "rec2.gb"]
     for record, path in zip(records, record_paths):
@@ -1811,6 +1936,14 @@ def test_linear_cli_sparse_depth_tracks_render_end_to_end(tmp_path: Path) -> Non
         )
 
     output_prefix = tmp_path / "sparse-depth"
+    captured_canvas: dict[str, Drawing] = {}
+    real_save_figure = linear_cli_module.save_figure
+
+    def capture_save_figure(canvas: Drawing, *args, **kwargs) -> None:
+        captured_canvas["canvas"] = canvas
+        real_save_figure(canvas, *args, **kwargs)
+
+    monkeypatch.setattr(linear_cli_module, "save_figure", capture_save_figure)
     linear_cli_module.linear_main(
         [
             "--gbk",
@@ -1845,10 +1978,20 @@ def test_linear_cli_sparse_depth_tracks_render_end_to_end(tmp_path: Path) -> Non
     )
 
     svg = output_prefix.with_suffix(".svg").read_text(encoding="utf-8")
-    assert 'fill="#112233"' in _svg_group(svg, "depth_a_record_1")
-    assert 'fill="#445566"' in _svg_group(svg, "depth_b_record_2")
-    assert 'id="depth_a_record_2"' not in svg
-    assert 'id="depth_b_record_1"' not in svg
+    depth_a_groups = _semantic_slot_groups(svg, "depth_a")
+    depth_b_groups = _semantic_slot_groups(svg, "depth_b")
+    assert len(depth_a_groups) == 1
+    assert len(depth_b_groups) == 1
+    assert 'fill="#112233"' in _svg_element_markup(depth_a_groups[0])
+    assert 'fill="#445566"' in _svg_element_markup(depth_b_groups[0])
+    record_slots = [
+        {slot["slotId"]: slot for slot in record["slots"]}
+        for record in captured_canvas["canvas"]._gbdraw_track_slot_geometry["records"]
+    ]
+    assert record_slots[0]["depth_a"]["dataAvailable"] is True
+    assert record_slots[0]["depth_b"]["dataAvailable"] is False
+    assert record_slots[1]["depth_a"]["dataAvailable"] is False
+    assert record_slots[1]["depth_b"]["dataAvailable"] is True
 
 
 def test_circular_cli_repeated_depth_track_forwards_record_major_files(
@@ -1898,7 +2041,7 @@ def test_circular_cli_repeated_depth_track_forwards_record_major_files(
         ]
     )
 
-    assert captured["depth_table"] is None
+    assert "depth_table" not in captured
     assert captured["depth_track_files"] == [
         [paths[0], paths[2]],
         [paths[1], paths[3]],
@@ -1948,9 +2091,9 @@ def test_circular_cli_sparse_depth_tracks_render_separate_outputs(tmp_path: Path
     first_svg = Path(f"{output_prefix}_1.svg").read_text(encoding="utf-8")
     second_svg = Path(f"{output_prefix}_2.svg").read_text(encoding="utf-8")
     assert 'fill="#112233"' in _svg_group(first_svg, "depth_1")
-    assert 'id="depth_2"' not in first_svg
+    assert 'data-gbdraw-slot-id="depth_2"' not in first_svg
     assert 'fill="#445566"' in _svg_group(second_svg, "depth_2")
-    assert 'id="depth_1"' not in second_svg
+    assert 'data-gbdraw-slot-id="depth_1"' not in second_svg
 
 
 @pytest.mark.linear

@@ -1,5 +1,16 @@
 import { normalizePaletteColors } from '../app/color-utils.js';
 import {
+  migrateLegacyCircularTrackSlot,
+  migrateLegacyCircularTrackSlotSpec,
+  parseCircularTrackSlotSpec
+} from '../app/circular-track-slots.js';
+import {
+  migratePersistedCircularMultiRecordSizeMode,
+  migratePersistedLinearLabelPlacement,
+  migratePersistedLinearTrackLayout,
+  migratePersistedWebStateFieldNames
+} from '../app/current-option-values.js';
+import {
   buildCanonicalSessionRequest,
   projectCanonicalSessionRequest
 } from './session-request.js';
@@ -179,7 +190,9 @@ const restoreConservationFiles = (session, filesData, circularConservation) => {
 };
 
 const mergedGuiConfig = (session, projection) => {
-  const saved = isPlainObject(session.config) ? session.config : {};
+  const saved = migratePersistedWebStateFieldNames(
+    isPlainObject(session.config) ? session.config : {}
+  );
   const projected = isPlainObject(projection.config) ? projection.config : {};
   const ui = isPlainObject(session.ui) ? session.ui : {};
   const appliedPaletteColors = isPlainObject(ui.appliedPaletteColors)
@@ -198,6 +211,34 @@ const mergedGuiConfig = (session, projection) => {
       ? cloneJson(saved.annotationSets)
       : cloneJson(projected.annotationSets || [])
   };
+};
+
+const migratePersistedGalleryConfig = (config) => {
+  const migratedNames = migratePersistedWebStateFieldNames(config);
+  const form = { ...(migratedNames.form || {}) };
+  const adv = { ...(migratedNames.adv || {}) };
+  form.linear_track_layout = migratePersistedLinearTrackLayout(
+    form.linear_track_layout
+  );
+  adv.label_placement = migratePersistedLinearLabelPlacement(
+    adv.label_placement
+  );
+  adv.multi_record_size_mode = migratePersistedCircularMultiRecordSizeMode(
+    adv.multi_record_size_mode
+  );
+  if (Array.isArray(adv.circular_track_slots)) {
+    adv.circular_track_slots = adv.circular_track_slots.map((slot, index) => (
+      typeof slot === 'string'
+        ? parseCircularTrackSlotSpec(
+            migrateLegacyCircularTrackSlotSpec(slot),
+            index,
+            adv.nt || 'GC',
+            form.track_type || 'tuckin'
+          )
+        : migrateLegacyCircularTrackSlot(slot)
+    ));
+  }
+  return { ...migratedNames, form, adv };
 };
 
 const circularConservationState = (config) => {
@@ -284,6 +325,22 @@ const preserveComparisonResources = (session, promoted) => {
   }
 };
 
+const retainCanonicalV3OutputShape = (renderRequest) => {
+  const diagramOptions = isPlainObject(renderRequest.diagramOptions)
+    ? renderRequest.diagramOptions
+    : {};
+  const output = isPlainObject(diagramOptions.output) ? diagramOptions.output : {};
+  renderRequest.schema = 3;
+  renderRequest.diagramOptions = diagramOptions;
+  diagramOptions.output = {
+    outputPrefix: String(renderRequest?.output?.prefix ?? 'out'),
+    legend: String(output.legend ?? 'right'),
+    plotTitlePosition: String(
+      output.plotTitlePosition ?? (renderRequest.mode === 'linear' ? 'bottom' : 'none')
+    )
+  };
+};
+
 const promoteCliAuthoredSession = (session, args) => {
   const promoted = {
     ...session,
@@ -291,7 +348,6 @@ const promoteCliAuthoredSession = (session, args) => {
     resources: session.resources
   };
   const renderRequest = promoted.renderRequest;
-  renderRequest.schema = 3;
   renderRequest.diagramOptions = isPlainObject(renderRequest.diagramOptions)
     ? renderRequest.diagramOptions
     : {};
@@ -302,6 +358,7 @@ const promoteCliAuthoredSession = (session, args) => {
   featureShapes.repeat_region = explicitRepeat || 'underlay';
   renderRequest.diagramOptions.featureShapes = featureShapes;
   hydrateRecordPresentations(renderRequest, args);
+  retainCanonicalV3OutputShape(renderRequest);
   for (const comparison of renderRequest.comparisons || []) {
     const resourceId = String(comparison?.resourceId || '');
     if (resourceId && !promoted.resources[resourceId]) {
@@ -320,7 +377,9 @@ const promoteGuiAuthoredSession = (session, args) => {
     fileBindings: session.cliInvocation?.fileBindings,
     repairInvalidComparisonHeight: Number(session.version) <= 33
   });
-  const config = mergedGuiConfig(session, projection);
+  const config = migratePersistedGalleryConfig(
+    mergedGuiConfig(session, projection)
+  );
   const filesData = {
     ...projection.files,
     linearSeqs: (projection.files.linearSeqs || []).map((record) => ({ ...record })),
@@ -343,6 +402,7 @@ const promoteGuiAuthoredSession = (session, args) => {
   };
   hydrateRecordPresentations(promoted.renderRequest, args);
   preserveComparisonResources(session, promoted);
+  retainCanonicalV3OutputShape(promoted.renderRequest);
   return promoted;
 };
 

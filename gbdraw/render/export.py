@@ -28,16 +28,6 @@ logger = logging.getLogger(__name__)
 _cairosvg_module: ModuleType | None = None
 
 
-class _LazyCairoSvgAvailability:
-    """Bool-like compatibility proxy that resolves CairoSVG only on demand."""
-
-    def __bool__(self) -> bool:
-        return has_cairosvg()
-
-    def __repr__(self) -> str:
-        return str(has_cairosvg())
-
-
 def _load_cairosvg() -> ModuleType | None:
     global _cairosvg_module
     if _cairosvg_module is not None:
@@ -58,9 +48,6 @@ def get_cairosvg() -> ModuleType:
     if cairosvg_module is None:
         raise ImportError("CairoSVG is not installed. Install with: pip install gbdraw[export]")
     return cairosvg_module
-
-
-CAIROSVG_AVAILABLE = _LazyCairoSvgAvailability()
 
 
 def parse_formats(out_formats: str) -> list[str]:
@@ -152,7 +139,6 @@ def save_figure(
 
 
 __all__ = [
-    "CAIROSVG_AVAILABLE",
     "get_cairosvg",
     "has_cairosvg",
     "parse_formats",

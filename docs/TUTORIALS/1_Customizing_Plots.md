@@ -141,8 +141,8 @@ gbdraw circular \
   -o WSSV_filtered \
   -f svg \
   --block_stroke_width 1 \
-  --suppress_gc \
-  --suppress_skew \
+  --no-gc \
+  --no-skew \
   --separate_strands \
   --labels \
   --legend none
@@ -186,7 +186,7 @@ gbdraw circular \
   --outer_label_y_radius_offset 0.90 \
   --inner_label_x_radius_offset 0.975 \
   --inner_label_y_radius_offset 0.975 \
-  --suppress_skew \
+  --no-skew \
   --species "<i>Nicotiana tabacum</i>" \
   --definition_font_size 28 \
   --legend upper_left \

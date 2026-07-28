@@ -1,4 +1,9 @@
 import { parseTransform } from './transform-utils.js';
+import {
+  closestRecordGroup,
+  isMultiRecordCanvasSvg,
+  isRecordGroup
+} from '../record-groups.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
 export const createDiagramDragActions = ({ state, debugLog = () => {}, history = null }) => {
@@ -33,6 +38,15 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     'horizontal_legend',
     'vertical_legend'
   ]);
+  const isLegendOwnedGroup = (group) =>
+    Boolean(
+      group &&
+      (
+        LEGEND_GROUP_IDS.has(String(group.id || '')) ||
+        group.getAttribute?.('data-gbdraw-role') === 'comparison-legend' ||
+        group.closest?.('#legend')
+      )
+    );
 
   let activeDragElements = [];
   let activeDragMode = 'group'; // 'group' | 'record' | 'length_bar' | 'plot_title'
@@ -75,14 +89,6 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
   };
 
-  const isMultiRecordCanvasSvg = (svg) => {
-    return Array.from(svg.children).some((el) => {
-      if (!el || el.tagName.toLowerCase() !== 'g') return false;
-      const id = el.getAttribute('id') || '';
-      return id.startsWith('record_');
-    });
-  };
-
   const getTopLevelDiagramGroupsForMultiRecord = (svg) => {
     const groups = [];
     const ids = [];
@@ -90,7 +96,7 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     Array.from(svg.children).forEach((el) => {
       if (!el || el.tagName.toLowerCase() !== 'g') return;
       const id = el.getAttribute('id');
-      if (!id || LEGEND_GROUP_IDS.has(id)) return;
+      if (!id || isLegendOwnedGroup(el)) return;
       groups.push(el);
       ids.push(id);
     });
@@ -119,14 +125,14 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
       const id = group.id;
       if (!id) return;
 
-      if (LEGEND_GROUP_IDS.has(id)) return;
+      if (isLegendOwnedGroup(group)) return;
       if (id === 'length_bar') return;
       if (foundElements.includes(group)) return;
 
       const isAccession = id.match(/^[A-Z]{2}_?\d+/) || id.match(/^[A-Z]+\d+\.\d+$/);
       const isKnown = knownIds.includes(id);
       const isDynamic =
-        id.startsWith('record_') ||
+        isRecordGroup(group) ||
         id.startsWith('definition_') ||
         id.startsWith('seq_') ||
         id.startsWith('track_') ||
@@ -145,7 +151,7 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     Array.from(svg.children).forEach((el) => {
       if (!el || el.tagName.toLowerCase() !== 'g') return;
       const id = el.getAttribute('id');
-      if (!id || LEGEND_GROUP_IDS.has(id)) return;
+      if (!id || isLegendOwnedGroup(el)) return;
       if (id === 'length_bar') return;
       if (foundElements.includes(el)) return;
       foundElements.push(el);
@@ -341,7 +347,7 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
   const refreshDiagramDragAffordances = () => {
     const enabled = isLayoutRepositionModeEnabled();
     const elements = Array.isArray(diagramElements.value) ? diagramElements.value : [];
-    const hasRecordGroups = elements.some((el) => (el?.id || '').startsWith('record_'));
+    const hasRecordGroups = elements.some((el) => isRecordGroup(el));
 
     elements.forEach((el) => {
       if (!enabled) {
@@ -349,7 +355,7 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
         return;
       }
       if (hasRecordGroups) {
-        setElementCursor(el, (el?.id || '').startsWith('record_') ? 'grab' : '');
+        setElementCursor(el, isRecordGroup(el) ? 'grab' : '');
       } else {
         setElementCursor(el, 'grab');
       }
@@ -437,8 +443,8 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     let dragTargets = [];
 
     if (isMultiRecordCanvas) {
-      // Multi-record mode: allow dragging only the clicked record_* group.
-      const clickedRecordGroup = e.target.closest('g[id^="record_"]');
+      // Multi-record mode: allow dragging only the clicked record group.
+      const clickedRecordGroup = closestRecordGroup(e.target);
       if (!clickedRecordGroup) return;
       dragTargets = [clickedRecordGroup];
       activeDragMode = 'record';
@@ -446,8 +452,7 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
       const clickedGroup = e.target.closest('g[id]');
       if (!clickedGroup) return;
 
-      const clickedId = clickedGroup.id;
-      if (LEGEND_GROUP_IDS.has(clickedId)) return;
+      if (isLegendOwnedGroup(clickedGroup)) return;
       if (isLengthBarGroup(clickedGroup)) return;
       if (isPlotTitleGroup(clickedGroup)) return;
 

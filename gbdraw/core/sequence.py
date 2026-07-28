@@ -18,13 +18,32 @@ def determine_length_parameter(record_length: int, length_threshold: int) -> str
     return "long"
 
 
-def determine_output_file_prefix(gb_records, output_prefix, record_count, accession):
-    if len(gb_records) > 1 and output_prefix is not None:
-        return "{}_{}".format(output_prefix, record_count)
-    elif len(gb_records) == 1 and output_prefix is not None:
-        return output_prefix
-    else:
-        return accession
+def determine_output_file_prefixes(
+    records: list[SeqRecord],
+    output_prefix: str | None,
+) -> list[str]:
+    """Resolve one collision-free output prefix per Circular batch record."""
+
+    if output_prefix is not None:
+        if len(records) == 1:
+            return [str(output_prefix)]
+        return [
+            f"{output_prefix}_{index}"
+            for index in range(1, len(records) + 1)
+        ]
+
+    prefixes: list[str] = []
+    used: set[str] = set()
+    for record in records:
+        base = str(record.id)
+        candidate = base
+        suffix = 2
+        while candidate in used:
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        used.add(candidate)
+        prefixes.append(candidate)
+    return prefixes
 
 
 def check_feature_presence(
@@ -81,8 +100,7 @@ __all__ = [
     "check_feature_presence",
     "create_dict_for_sequence_lengths",
     "determine_length_parameter",
-    "determine_output_file_prefix",
+    "determine_output_file_prefixes",
     "get_coordinates_of_longest_segment",
 ]
-
 

@@ -16,9 +16,9 @@ from gbdraw.api import (
     LinearMultiRecordOptions,
     RecordInput,
     RecordPresentation,
-    assemble_linear_diagram_from_records,
     build_request_diagram,
 )
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -45,6 +45,20 @@ def _comparison(query: int, subject: int) -> LinearComparison:
         query,
         subject,
         pd.DataFrame([row], columns=COMPARISON_COLUMNS),
+    )
+
+
+def _record_group(
+    root: ET.Element,
+    record_id: str,
+    record_index: int,
+) -> ET.Element:
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    return next(
+        group
+        for group in root.findall(".//svg:g", namespace)
+        if group.attrib.get("data-gbdraw-record-id") == record_id
+        and group.attrib.get("data-gbdraw-record-index") == str(record_index)
     )
 
 
@@ -319,7 +333,7 @@ def test_bottom_legend_follows_last_resolved_row() -> None:
         assert match is not None
         return float(match.group(2))
 
-    last_row_axis = translate_y(groups["record_10_record_10"])
+    last_row_axis = translate_y(_record_group(root, "record_10", 9))
     legend_top = translate_y(groups["legend"])
     assert 0 < legend_top - last_row_axis < 120
 
@@ -369,8 +383,8 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
         if "id" in group.attrib
     }
 
-    first_record = groups["record_1_record_1"]
-    second_record = groups["record_2_record_2"]
+    first_record = _record_group(root, "record_1", 0)
+    second_record = _record_group(root, "record_2", 1)
     first_local_definition = groups["record_1_definition_record_1"]
     first_row_definition = groups["record_1_definition_record_1_row"]
     second_local_definition = groups["record_2_definition_record_2"]

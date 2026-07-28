@@ -65,8 +65,8 @@ gbdraw linear \
     tests/test_inputs/AP027132_NZ_CP006932.tblastx.out \
   --align_center \
   --separate_strands \
-  --show_gc \
-  --show_skew \
+  --gc \
+  --skew \
   -o hepatoplasmataceae_default \
   -f svg
 ```

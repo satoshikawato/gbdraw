@@ -110,7 +110,13 @@ def _axis_circle_radius(svg_text: str) -> float:
 
 
 def _svg_group_fragment(svg_text: str, group_id: str) -> str:
-    match = re.search(rf'<g id="{re.escape(group_id)}"[^>]*>.*?</g>', svg_text, re.S)
+    match = re.search(
+        rf'<g data-gbdraw-slot-id="{re.escape(group_id)}"[^>]*>.*?</g>',
+        svg_text,
+        re.S,
+    )
+    if match is None:
+        match = re.search(rf'<g id="{re.escape(group_id)}"[^>]*>.*?</g>', svg_text, re.S)
     assert match is not None
     return match.group(0)
 
@@ -150,6 +156,7 @@ def _capture_circular_core_geometry(
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
         feature_anchor_radius_px=None,
+        **kwargs,
     ):
         assert cfg is not None
         ratio_factor = (
@@ -176,6 +183,7 @@ def _capture_circular_core_geometry(
         tick_length_px=None,
         track_preset=None,
         cfg=None,
+        **kwargs,
     ):
         center = float(radius_override if radius_override is not None else canvas_config.radius)
         if tick_length_px is not None and str(tick_side).strip().lower() != "legacy":
@@ -410,7 +418,6 @@ def test_parse_circular_track_slot_accepts_physical_gap_fields() -> None:
         "gc_content:dinucleotide_content@inner_gap_px=4,outer_gap_px=6,w=24px"
     )
 
-    assert slot.spacing is None
     assert slot.inner_gap_px == pytest.approx(4.0)
     assert slot.outer_gap_px == pytest.approx(6.0)
 
@@ -419,14 +426,45 @@ def test_parse_circular_track_slot_accepts_physical_gap_fields() -> None:
     assert normalized.outer_gap_px == pytest.approx(6.0)
 
 
-def test_parse_circular_track_slot_rejects_ambiguous_spacing_and_gap_fields() -> None:
-    with pytest.raises(CircularTrackSlotParseError, match="spacing cannot be combined"):
-        parse_circular_track_slot(
-            "gc_content:dinucleotide_content@spacing=4px,inner_gap_px=4"
-        )
+def test_parse_circular_track_slot_rejects_removed_spacing_field() -> None:
+    with pytest.raises(CircularTrackSlotParseError, match="spacing.*no longer supported"):
+        parse_circular_track_slot("gc_content:dinucleotide_content@spacing=4px")
 
     with pytest.raises(CircularTrackSlotParseError, match="without a unit"):
         parse_circular_track_slot("gc_content:dinucleotide_content@inner_gap_px=4px")
+
+
+@pytest.mark.parametrize(
+    "option_args",
+    [
+        [
+            "--circular-track-slot",
+            "gc_content:dinucleotide_content",
+        ],
+        ["--multi_record_size_mode", "sqrt"],
+        [
+            "--circular_track_slot",
+            "gc_content:dinucleotide_content@spacing=4px",
+        ],
+        [
+            "--circular_track_slot",
+            "gc_content:dinucleotide_content@strict=true",
+        ],
+        [
+            "--circular_track_slot",
+            "gc_content:dinucleotide_content@compress=true",
+        ],
+        [
+            "--circular_track_slot",
+            "gc_content:dinucleotide_content@reserve=true",
+        ],
+    ],
+)
+def test_circular_cli_rejects_removed_layout_syntax(
+    option_args: list[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        circular_cli_module._get_args(["--gbk", "dummy.gb", *option_args])
 
 
 def test_default_circular_track_slots_do_not_include_tick_axis_param() -> None:
@@ -618,24 +656,14 @@ def test_custom_slot_order_places_ticks_axis_side_of_features_when_ordered_befor
     assert layout.ticks.label_band_px.inner_px >= layout.features.all_band_px.outer_px - 1e-6
 
 
-def test_parse_circular_track_slot_ignores_retired_layout_flags() -> None:
-    slot = parse_circular_track_slot(
-        "at_skew:dinucleotide_skew@nt=AT,w=24px,spacing=4px,side=inside,strict=true,compress=true,reserve=true,z=7"
-    )
-
-    assert slot.side == "inside"
-    assert slot.spacing is not None
-    assert slot.spacing.resolve(390.0) == pytest.approx(4.0)
-    assert "side" not in slot.params
-    assert "strict" not in slot.params
-    assert "compress" not in slot.params
-    assert "reserve" not in slot.params
-
-    normalized = normalize_circular_track_slots([slot])[0]
-    assert normalized.side == "inside"
-    assert normalized.compress is False
-    assert normalized.reserve is False
-    assert normalized.params["nt"] == "AT"
+@pytest.mark.parametrize("retired_field", ["strict=true", "compress=true", "reserve=true"])
+def test_parse_circular_track_slot_rejects_retired_layout_flags(
+    retired_field: str,
+) -> None:
+    with pytest.raises(CircularTrackSlotParseError, match="no longer supported"):
+        parse_circular_track_slot(
+            f"at_skew:dinucleotide_skew@nt=AT,w=24px,side=inside,{retired_field},z=7"
+        )
 
 
 def test_normalize_circular_track_slots_derives_feature_side_from_lane_direction() -> None:
@@ -823,11 +851,20 @@ def test_blank_builtin_numeric_slots_reflow_as_movable_stack_without_explicit_ra
         context,
     )
     plan_by_id = {slot.id: slot for slot in plan.slots}
+    normalized_by_id = {
+        slot.id: slot
+        for slot in normalize_circular_track_slots(plan.slots)
+    }
 
     assert plan_by_id["gc_content"].radius is None
     assert plan_by_id["gc_skew"].radius is None
-    assert "_preferred_anchor_radius" in plan_by_id["gc_content"].params
-    assert "_preferred_anchor_radius" in plan_by_id["gc_skew"].params
+    assert normalized_by_id["gc_content"].preferred_anchor_radius is not None
+    assert normalized_by_id["gc_skew"].preferred_anchor_radius is not None
+    assert not any(
+        str(key).startswith("_")
+        for slot in plan.slots
+        for key in slot.params
+    )
 
     layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
@@ -894,13 +931,22 @@ def test_custom_conservation_slot_keeps_auto_width_for_compression() -> None:
         context,
     )
     plan_by_id = {slot.id: slot for slot in plan.slots}
+    normalized_by_id = {
+        slot.id: slot
+        for slot in normalize_circular_track_slots(plan.slots)
+    }
 
     assert plan_by_id["conservation_1"].width is None
-    assert plan_by_id["conservation_1"].params["_auto_compress"] is True
+    assert normalized_by_id["conservation_1"].compress is True
     assert plan_by_id["gc_content"].width is None
-    assert plan_by_id["gc_content"].params["_auto_compress"] is True
+    assert normalized_by_id["gc_content"].compress is True
     assert plan_by_id["gc_skew"].width is None
-    assert plan_by_id["gc_skew"].params["_auto_compress"] is True
+    assert normalized_by_id["gc_skew"].compress is True
+    assert not any(
+        str(key).startswith("_")
+        for slot in plan.slots
+        for key in slot.params
+    )
 
     layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
@@ -950,6 +996,7 @@ def test_default_preset_tick_draw_uses_resolved_tick_options(
         tick_length_px=None,
         track_preset=None,
         cfg=None,
+        **kwargs,
     ):
         captured["label_side"] = label_side
         captured["tick_side"] = tick_side
@@ -1999,6 +2046,7 @@ def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatc
         tick_length_px=None,
         track_preset=None,
         cfg=None,
+        **kwargs,
     ):
         captured["tick_radius"] = radius_override
         return canvas
@@ -2055,7 +2103,10 @@ def test_cli_circular_track_order_forwards_slots(monkeypatch: pytest.MonkeyPatch
     assert slots[2].params["nt"] == "AT"
 
 
-def test_cli_circular_track_slot_forwards_raw_specs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_cli_circular_track_slot_forwards_typed_slots(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     record = _load_record()
     captured: dict[str, object] = {}
 
@@ -2085,10 +2136,15 @@ def test_cli_circular_track_slot_forwards_raw_specs(monkeypatch: pytest.MonkeyPa
         ]
     )
 
-    assert captured["circular_track_slots"] == [
-        "features:features",
-        "at_skew:dinucleotide_skew@nt=AT,w=24px",
+    slots = captured["circular_track_slots"]
+    assert isinstance(slots, list)
+    assert all(isinstance(slot, CircularTrackSlot) for slot in slots)
+    assert [(slot.id, slot.renderer) for slot in slots] == [
+        ("features", "features"),
+        ("at_skew", "dinucleotide_skew"),
     ]
+    assert slots[1].width == ScalarSpec(24.0, "px")
+    assert slots[1].params == {"nt": "AT"}
 
 
 def test_cli_circular_track_axis_index_forwards_value(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

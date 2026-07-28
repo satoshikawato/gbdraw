@@ -642,21 +642,6 @@ def _default_spacing_px(axis_radius_px: float) -> float:
     return max(1.0, 0.01 * float(axis_radius_px))
 
 
-def _preferred_anchor_radius_px(params: Mapping[str, Any], axis_radius_px: float) -> float | None:
-    raw = params.get("_preferred_anchor_radius")
-    if raw is None:
-        return None
-    if hasattr(raw, "resolve"):
-        try:
-            return float(raw.resolve(float(axis_radius_px)))
-        except (TypeError, ValueError):
-            return None
-    try:
-        return float(raw)
-    except (TypeError, ValueError):
-        return None
-
-
 def _slot_intents(
     slots: Sequence[CircularTrackSlot],
     *,
@@ -670,9 +655,10 @@ def _slot_intents(
     for slot in normalize_circular_track_slots(slots):
         radius_px = slot.radius.resolve(axis_radius_px) if slot.radius is not None else None
         preferred_anchor_px = (
-            _preferred_anchor_radius_px(slot.params, axis_radius_px)
+            slot.preferred_anchor_radius.resolve(axis_radius_px)
             if (
                 radius_px is None
+                and slot.preferred_anchor_radius is not None
                 and slot.id in preferred_ids
                 and slot.side == "inside"
                 and slot.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
@@ -684,8 +670,8 @@ def _slot_intents(
             width_px = _default_width_px(slot.renderer, canvas_config=canvas_config, cfg=cfg)
         default_gap_px = _default_spacing_px(axis_radius_px)
         spacing_px = (
-            float(slot.spacing.resolve(axis_radius_px))
-            if slot.spacing is not None
+            float(slot.legacy_spacing.resolve(axis_radius_px))
+            if slot.legacy_spacing is not None
             else default_gap_px
         )
         inner_gap_px = (
@@ -735,10 +721,10 @@ def _slot_intents(
                 width_px=max(0.0, float(width_px)),
                 explicit_anchor=explicit_anchor,
                 explicit_width=slot.width is not None,
-                explicit_spacing=slot.spacing is not None,
+                explicit_spacing=slot.legacy_spacing is not None,
                 spacing_px=max(0.0, float(legacy_spacing_px)),
-                explicit_inner_gap=slot.spacing is not None or slot.inner_gap_px is not None,
-                explicit_outer_gap=slot.spacing is not None or slot.outer_gap_px is not None,
+                explicit_inner_gap=slot.legacy_spacing is not None or slot.inner_gap_px is not None,
+                explicit_outer_gap=slot.legacy_spacing is not None or slot.outer_gap_px is not None,
                 inner_gap_px=max(0.0, float(inner_gap_px)),
                 outer_gap_px=max(0.0, float(outer_gap_px)),
                 z=slot.z,

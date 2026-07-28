@@ -472,7 +472,6 @@ def clone_depth_config(
         config.step = int(step)
     if large_tick_interval is not None:
         config.large_tick_interval = float(large_tick_interval)
-        config.tick_interval = config.large_tick_interval
     if small_tick_interval is not None:
         config.small_tick_interval = float(small_tick_interval)
     if tick_font_size is not None:

@@ -1216,16 +1216,8 @@ def build_request_diagram(
 
 
 def _visibility_table(options: DiagramOptions) -> DataFrame | None:
-    table = (
-        options.feature_visibility_table
-        if options.feature_visibility_table is not None
-        else options.feature_table
-    )
-    file_path = (
-        options.feature_visibility_table_file
-        if options.feature_visibility_table_file is not None
-        else options.feature_table_file
-    )
+    table = options.feature_visibility_table
+    file_path = options.feature_visibility_table_file
     if table is None and file_path is not None:
         return read_feature_visibility_file(file_path)
     return table
@@ -1259,7 +1251,7 @@ def _interactive_context(
     return build_interactive_svg_context(
         prepared.records,
         selected_features_set=options.selected_features_set,
-        feature_table=_visibility_table(options),
+        feature_visibility_table=_visibility_table(options),
         color_table=color_table,
         default_colors=default_colors,
         orthogroups=options.orthogroups,

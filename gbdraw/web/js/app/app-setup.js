@@ -91,6 +91,7 @@ import {
   getDepthTrackLabelFromFile,
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
+import { comparisonProfileDefault } from '../mode-profiles.js';
 import {
   activeDepthTrackIndices,
   clearDepthTrackSourceAt,
@@ -1072,6 +1073,11 @@ export const createAppSetup = () => {
   );
   watch(mode, (nextMode, previousMode) => {
     if (nextMode === previousMode) return;
+    if (state.semanticFileWatchersSuppressed.value) {
+      state.modeProfileStateManager.invalidate(nextMode);
+    } else {
+      state.modeProfileStateManager.transition(adv, previousMode, nextMode);
+    }
     matchSequenceRegistry?.reset?.();
     clickedPairwiseMatch.value = null;
   });
@@ -2556,6 +2562,7 @@ export const createAppSetup = () => {
     linearRecordSelectorWarning: linearRecordSelector.warningFor,
     form,
     adv,
+    comparisonProfileDefault,
     comparisonHeightValidationError,
     optionalNumberInputValue,
     setOptionalNumberInputValue,

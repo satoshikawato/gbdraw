@@ -9,14 +9,6 @@ from gbdraw.labels.circular_types import normalize_circular_label_placement
 
 from .models import GbdrawConfig  # type: ignore[reportMissingImports]
 
-def suppress_gc_content_and_skew(suppress_gc: bool, suppress_skew: bool) -> tuple[bool, bool]:
-    show_gc, show_skew = True, True
-    if suppress_gc is True:
-        show_gc = False
-    if suppress_skew is True:
-        show_skew = False
-    return show_gc, show_skew
-
 
 def update_config_value(config_dict, path, value):
     keys = path.split(".")
@@ -96,7 +88,6 @@ def modify_config_dict(
     depth_normalize=None,
     depth_show_axis=None,
     depth_show_ticks=None,
-    depth_tick_interval=None,
     depth_large_tick_interval=None,
     depth_small_tick_interval=None,
     depth_tick_font_size=None,
@@ -107,7 +98,6 @@ def modify_config_dict(
     linear_track_layout=None,
     linear_track_axis_gap=None,
     linear_ruler_on_axis=None,
-    cicular_width_with_labels=None,
     track_type=None,
     strandedness=None,
     resolve_overlaps=None,
@@ -133,8 +123,6 @@ def modify_config_dict(
     ruler_label_font_size=None,
     scale_interval=None,
     tick_label_font_size=None,
-    blast_color_min=None,
-    blast_color_max=None,
     pairwise_match_style=None,
     legend_box_size=None,
     legend_font_size=None,
@@ -143,6 +131,18 @@ def modify_config_dict(
 
     if circular_label_placement is not None:
         circular_label_placement = normalize_circular_label_placement(circular_label_placement)
+    if label_placement is not None:
+        label_placement = str(label_placement).strip().lower()
+        if label_placement not in {"auto", "above_feature"}:
+            raise ValidationError(
+                "label_placement must be 'auto' or 'above_feature'"
+            )
+    if linear_track_layout is not None:
+        linear_track_layout = str(linear_track_layout).strip().lower()
+        if linear_track_layout not in {"above", "middle", "below"}:
+            raise ValidationError(
+                "linear_track_layout must be 'above', 'middle', or 'below'"
+            )
 
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -271,7 +271,6 @@ def modify_config_dict(
         "depth_normalize": "objects.depth.normalize",
         "depth_show_axis": "objects.depth.show_axis",
         "depth_show_ticks": "objects.depth.show_ticks",
-        "depth_tick_interval": "objects.depth.tick_interval",
         "depth_large_tick_interval": "objects.depth.large_tick_interval",
         "depth_small_tick_interval": "objects.depth.small_tick_interval",
         "depth_tick_font_size": "objects.depth.tick_font_size",
@@ -282,7 +281,6 @@ def modify_config_dict(
         "linear_track_layout": "canvas.linear.track_layout",
         "linear_track_axis_gap": "canvas.linear.track_axis_gap",
         "linear_ruler_on_axis": "canvas.linear.ruler_on_axis",
-        "cicular_width_with_labels": "canvas.circular.width.with_labels",
         "track_type": "canvas.circular.track_type",
         "strandedness": "canvas.strandedness",
         "resolve_overlaps": "canvas.resolve_overlaps",
@@ -311,8 +309,6 @@ def modify_config_dict(
         "ruler_label_font_size_long": "objects.scale.ruler_label_font_size.long",
         "scale_interval": "objects.scale.interval",
         "tick_label_font_size": "objects.ticks.tick_labels.font_size",
-        "blast_color_min": "objects.blast_match.min_color",
-        "blast_color_max": "objects.blast_match.max_color",
         "pairwise_match_style": "objects.blast_match.style",
         "legend_box_size_short": "objects.legends.color_rect_size.short",
         "legend_box_size_long": "objects.legends.color_rect_size.long",
@@ -369,7 +365,6 @@ def modify_config_dict(
 
 __all__ = [
     "modify_config_dict",
-    "suppress_gc_content_and_skew",
     "update_config_value",
     "update_linear_definition_line_styles",
 ]

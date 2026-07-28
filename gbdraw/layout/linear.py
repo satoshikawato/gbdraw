@@ -420,11 +420,7 @@ def calculate_feature_position_factors_linear(
         list[float]: Three position factors [top, middle, bottom] for feature placement.
     """
     layout = str(track_layout).strip().lower()
-    if layout in {"spreadout", "above"}:
-        layout = "above"
-    elif layout in {"tuckin", "below"}:
-        layout = "below"
-    else:
+    if layout not in {"above", "below"}:
         layout = "middle"
 
     if layout == "middle":
@@ -597,5 +593,4 @@ __all__ = [
     "resolve_axis_gap",
     "union_vertical_bands",
 ]
-
 

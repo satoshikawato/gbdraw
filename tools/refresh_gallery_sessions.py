@@ -35,6 +35,7 @@ from gbdraw.session_io import (  # noqa: E402
     validate_session,
     write_session_json,
 )
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
 from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT  # noqa: E402
 from gbdraw.tracks.circular import (  # noqa: E402
     normalize_circular_track_slots_with_axis,
@@ -291,7 +292,10 @@ def _promote_gallery_session(
 ) -> None:
     if source_path.is_file():
         source_session = load_session(source_path)
-        if source_session.get("renderRequest", {}).get("schema") == 3:
+        if source_session.get("renderRequest", {}).get("schema") in {
+            3,
+            CANONICAL_REQUEST_SCHEMA,
+        }:
             write_session_json(output_path, source_session)
             return
     node = shutil.which("node")
@@ -322,9 +326,16 @@ def _merge_refreshed_gallery_artifacts(
     promoted_session: Mapping[str, Any],
     refreshed_session: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Keep the promoted request authoritative while accepting fresh render artifacts."""
+    """Merge fresh canonical output and artifacts with promoted gallery metadata."""
 
     merged = dict(promoted_session)
+    refreshed_request = refreshed_session.get("renderRequest")
+    if (
+        refreshed_session.get("version") == CURRENT_SESSION_VERSION
+        and isinstance(refreshed_request, Mapping)
+        and refreshed_request.get("schema") == CANONICAL_REQUEST_SCHEMA
+    ):
+        merged["renderRequest"] = refreshed_request
     for key in REFRESHED_GALLERY_ARTIFACT_KEYS:
         if key in refreshed_session:
             merged[key] = refreshed_session[key]
@@ -603,6 +614,7 @@ def _validate_staged_gallery_session(
     *,
     artifact_path: Path | None = None,
     require_track_geometry: bool = False,
+    allow_compatibility_fixture: bool = False,
 ) -> None:
     from tools.prepare_interactive_gallery_assets import (
         EXAMPLES,
@@ -610,14 +622,26 @@ def _validate_staged_gallery_session(
     )
 
     validate_session(session)
-    if session.get("version") != CURRENT_SESSION_VERSION:
+    expected_session_version = (
+        36 if allow_compatibility_fixture else CURRENT_SESSION_VERSION
+    )
+    expected_request_schema = (
+        3 if allow_compatibility_fixture else CANONICAL_REQUEST_SCHEMA
+    )
+    if session.get("version") != expected_session_version:
         raise ValueError(
             f"{session_path.name} has session version {session.get('version')}; "
-            f"expected {CURRENT_SESSION_VERSION}"
+            f"expected {expected_session_version}"
         )
     request = session.get("renderRequest")
-    if not isinstance(request, Mapping) or request.get("schema") != 3:
-        raise ValueError(f"{session_path.name} has no canonical schema-3 render request")
+    if (
+        not isinstance(request, Mapping)
+        or request.get("schema") != expected_request_schema
+    ):
+        raise ValueError(
+            f"{session_path.name} has no canonical schema-"
+            f"{expected_request_schema} render request"
+        )
     run_metadata = session.get("runMetadata")
     geometry = (
         run_metadata.get("trackSlotGeometry")
@@ -825,7 +849,8 @@ def _refresh_one_session(
     )
     render_request = session.get("renderRequest")
     is_canonical = (
-        isinstance(render_request, Mapping) and render_request.get("schema") == 3
+        isinstance(render_request, Mapping)
+        and render_request.get("schema") in {3, CANONICAL_REQUEST_SCHEMA}
     )
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-session-") as tmpdir:
         tmpdir_path = Path(tmpdir)

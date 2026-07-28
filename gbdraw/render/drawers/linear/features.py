@@ -9,6 +9,7 @@ from svgwrite.path import Path
 from ....configurators import FeatureDrawingConfigurator
 from ....features.ids import compute_feature_object_hash, make_linear_rendered_feature_id
 from ....layout.linear import LinearFeatureLaneGeometry
+from ....svg.ids import instance_svg_id
 from ....svg.linear_features import (
     create_arrowhead_path_linear,
     create_intron_path_linear,
@@ -90,6 +91,7 @@ class FeatureDrawer:
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
         record_index: int = 0,
         record_count: int = 1,
+        feature_instance_id: str | None = None,
     ) -> Group:
         path_generator = FeaturePathGenerator(
             genome_length=genome_length,
@@ -113,6 +115,11 @@ class FeatureDrawer:
             stable_feature_id=stable_feature_id,
             record_count=record_count,
         )
+        feature_dom_id = (
+            instance_svg_id(feature_data_id, feature_instance_id)
+            if feature_data_id and feature_instance_id
+            else feature_data_id
+        )
         block_count = sum(1 for path_type, *_rest in gene_paths if path_type == "block")
         block_index = 0
         line_index = 0
@@ -122,11 +129,11 @@ class FeatureDrawer:
             if path_type == "block":
                 block_index += 1
                 dom_element_id = None
-                if feature_data_id:
+                if feature_dom_id:
                     dom_element_id = (
-                        feature_data_id
+                        feature_dom_id
                         if block_count <= 1
-                        else f"{feature_data_id}__part{block_index}"
+                        else f"{feature_dom_id}__part{block_index}"
                     )
                 self.draw_path(
                     path_data,
@@ -141,7 +148,7 @@ class FeatureDrawer:
                 )
             elif path_type == "line":
                 line_index += 1
-                dom_element_id = f"{feature_data_id}__line{line_index}" if feature_data_id else None
+                dom_element_id = f"{feature_dom_id}__line{line_index}" if feature_dom_id else None
                 self.draw_path(
                     path_data,
                     group,

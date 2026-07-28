@@ -253,7 +253,7 @@ session の保存・再実行は、CLI 非依存 typed request model の設計�
 context = build_interactive_svg_context(
     records,
     selected_features_set=features,
-    feature_table=feature_table,
+    feature_visibility_table=feature_table,
     color_table=color_table,
     default_colors=default_colors,
     orthogroups=orthogroups,
@@ -334,7 +334,7 @@ label_override_file: str | None = None
 候補 field:
 
 ```python
-multi_record_size_mode: Literal["linear", "auto", "equal", "sqrt"] = "auto"
+multi_record_size_mode: Literal["linear", "auto", "equal"] = "auto"
 multi_record_min_radius_ratio: float = 0.55
 multi_record_column_gap_ratio: float = 0.10
 multi_record_row_gap_ratio: float = 0.05

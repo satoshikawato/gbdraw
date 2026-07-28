@@ -18,6 +18,22 @@ INPUT_MG1655 = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
 SVG_NS = {"svg": "http://www.w3.org/2000/svg"}
 
 
+def _find_record_group(
+    root: ET.Element,
+    record_id: str,
+    record_index: int,
+) -> ET.Element | None:
+    return next(
+        (
+            group
+            for group in root.findall(".//svg:g", SVG_NS)
+            if group.attrib.get("data-gbdraw-record-id") == record_id
+            and group.attrib.get("data-gbdraw-record-index") == str(record_index)
+        ),
+        None,
+    )
+
+
 def _extract_group_translate_y(root: ET.Element, group_id: str) -> float:
     group = root.find(f".//svg:g[@id='{group_id}']", SVG_NS)
     assert group is not None
@@ -439,8 +455,8 @@ def test_linear_plot_title_drawn_once_and_coexists_with_record_labels(
     assert "Global Plot Title" in "".join(plot_title_groups[0].itertext())
     assert "Record A Label" in svg_content
     assert "Record B Label" in svg_content
-    assert root.find(".//svg:g[@id='RecA_record_1']", SVG_NS) is not None
-    assert root.find(".//svg:g[@id='RecB_record_2']", SVG_NS) is not None
+    assert _find_record_group(root, "RecA", 0) is not None
+    assert _find_record_group(root, "RecB", 1) is not None
 
 
 @pytest.mark.linear
@@ -490,7 +506,7 @@ def test_linear_record_label_adds_top_line_without_hiding_accession(
 
     assert returncode == 0, f"gbdraw failed: {output}"
     root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
-    assert root.find(".//svg:g[@id='RecB']", SVG_NS) is not None
+    assert _find_record_group(root, "RecB", 0) is not None
     assert root.find(".//svg:g[@id='RecB_definition']", SVG_NS) is not None
     assert _extract_group_texts(root, "RecB_definition") == ["CustomLabel", "RecB", f"{lengths['RecB']:,} bp"]
 
@@ -659,8 +675,8 @@ def test_linear_definition_group_ids_are_unique_and_multi_line_blocks_do_not_ove
 
     assert returncode == 0, f"gbdraw failed: {output}"
     root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
-    assert root.find(".//svg:g[@id='RecA_record_1']", SVG_NS) is not None
-    assert root.find(".//svg:g[@id='RecB_record_2']", SVG_NS) is not None
+    assert _find_record_group(root, "RecA", 0) is not None
+    assert _find_record_group(root, "RecB", 1) is not None
     assert root.find(".//svg:g[@id='RecA_definition_record_1']", SVG_NS) is not None
     assert root.find(".//svg:g[@id='RecB_definition_record_2']", SVG_NS) is not None
     assert _extract_group_texts(root, "RecA_definition_record_1") == ["Label A", "Chromosome 1", "RecA", f"{lengths['RecA']:,} bp"]

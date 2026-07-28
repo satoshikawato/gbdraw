@@ -27,6 +27,7 @@ from gbdraw.session_io import (
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
+    SUPPORTED_SESSION_VERSIONS,
     load_session,
 )
 
@@ -636,6 +637,9 @@ def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
     assert "Evidence scope" in index_html
     assert "ribbons are still emitted only between adjacent display rows" in index_html
     assert "Merge conflicts" in index_html
+    assert 'v-model.number="losat.blastp.collinearMaxUnitGap"' in index_html
+    assert "collinearMaxUnitGap: 0" in state_js
+    assert "collinearMaxGeneGap" not in state_js
     assert "export const normalizeCollinearAnchorMode = (_value) => 'rbh';" in normalizer_js
     assert "delete cloned.blastp.collinearAnchorMode;" in config_js
     assert "collinearBlockMergeGap" not in state_js
@@ -643,7 +647,10 @@ def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
     assert "delete state.losat.blastp.collinearBlockMergeGap;" in config_js
     assert "delete state.losat.blastp.collinearSingletonMergeGap;" in config_js
     assert "losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode" in run_analysis_js
+    assert "losat.blastp.collinearMaxUnitGap" in run_analysis_js
     assert "losat.blastp.collinearMaxConflictsInMergeGap" in run_analysis_js
+    assert "collinear_max_unit_gap=0" in helper_js
+    assert "collinear_max_gene_gap" not in helper_js
     assert "max_conflicts=_collinear_int(collinear_max_conflicts_in_merge_gap, 1)" in helper_js
     assert "collinear_block_merge_gap=50" not in helper_js
     assert "collinear_singleton_merge_gap=25" not in helper_js
@@ -1092,7 +1099,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert '"format":"gbdraw-session"' in session_prefix
         version_match = re.search(r'"version":(\d+)', session_prefix)
         assert version_match is not None
-        assert int(version_match.group(1)) == CURRENT_SESSION_VERSION
+        assert int(version_match.group(1)) in SUPPORTED_SESSION_VERSIONS
         assert "gbdraw-gallery-interactive-script" not in svg_source
         assert "data-gbdraw-gallery" not in svg_source
         assert "window.parent" not in svg_source
@@ -1405,7 +1412,8 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
         pairwise_ids = set(re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text))
         collinearity_ids = set(re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text))
 
-        assert session.get("version") == CURRENT_SESSION_VERSION, session_name
+        # Bundled gallery sessions intentionally remain compatibility fixtures.
+        assert session.get("version") == 36, session_name
         assert session.get("renderRequest", {}).get("schema") == 3, session_name
         assert (
             session.get("proteinIdentityManifest", {}).get("schema")
@@ -2834,6 +2842,10 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "linearTrackSlotUsesPresetGeometry: linearTrackSlotEditor.linearTrackSlotUsesPresetGeometry" in app_setup_source
     assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in run_source
     assert "args.push('--scale_font_size', adv.scale_font_size);" in run_source
+    assert "if (form.show_gc) args.push('--gc');" in run_source
+    assert "if (form.show_skew) args.push('--skew');" in run_source
+    assert "args.push('--show_gc')" not in run_source
+    assert "args.push('--show_skew')" not in run_source
 
 
 def test_web_wires_gc_content_percent_options() -> None:
@@ -2873,6 +2885,8 @@ def test_web_wires_addable_depth_tracks() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "depth_tracks: []" in state_source
+    assert "depth_large_tick_interval: null" in state_source
+    assert "depth_tick_interval: null" not in state_source
     assert "normalizeDepthTracks(state.adv.depth_tracks, state.adv)" in config_source
     assert "getDepthTrackFileBaseName" in depth_tracks_source
     assert "getDepthTrackLabelFromFile" in depth_tracks_source
@@ -2936,6 +2950,10 @@ def test_web_wires_addable_depth_tracks() -> None:
     assert "args.push('--depth_track_small_tick_interval', ...smallTicks);" in run_source
     assert "args.push('--depth_track_tick_font_size', ...tickFontSizes);" in run_source
     assert "depthPaths.push('');" in run_source
+    assert "source.large_tick_interval ?? source.tick_interval" not in run_source
+    assert "source.large_tick_interval ?? source.tick_interval" not in depth_state_source
+    assert "args.push('--depth_large_tick_interval', adv.depth_large_tick_interval);" in run_source
+    assert "args.push('--show_depth');" not in run_source
 
 
 def test_web_run_analysis_wires_circular_track_slot_options() -> None:
@@ -2958,8 +2976,10 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "args.push('--track_type', form.track_type);" in run_source
     assert "args.push('--center_reserved_radius', String(normalizedCenterReservedRadius));" in run_source
     assert "applyCircularSuppressControlsToSlots" in run_source
-    assert "if (form.suppress_gc) args.push('--suppress_gc');" in run_source
-    assert "if (form.suppress_skew) args.push('--suppress_skew');" in run_source
+    assert "if (form.suppress_gc) args.push('--no-gc');" in run_source
+    assert "if (form.suppress_skew) args.push('--no-skew');" in run_source
+    assert "args.push('--suppress_gc')" not in run_source
+    assert "args.push('--suppress_skew')" not in run_source
     assert "args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));" in run_source
     assert "buildCircularTrackSlotSpec(slot, adv.nt, form.track_type)" in run_source
     assert "forceSplitLane" not in run_source
@@ -3221,7 +3241,13 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
     source_path = WEB_ROOT / "js" / "app" / "linear-track-slots.js"
     module_path = tmp_path / "linear-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["depth-track-state.js", "color-utils.js", "track-slot-colors.js", "track-slot-display.js"]:
+    for dependency in [
+        "depth-track-state.js",
+        "color-utils.js",
+        "track-slot-colors.js",
+        "track-slot-display.js",
+        "current-option-values.js",
+    ]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -3422,7 +3448,8 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
           buildCircularTrackSlotSpec,
           createDefaultCircularTrackSlots,
           createCircularTrackSlotEditor,
-          estimateCircularConservationLayoutWarning
+          estimateCircularConservationLayoutWarning,
+          migrateLegacyCircularTrackSlot
         }} from {module_path.as_uri()!r};
         import {{ normalizeConservationSeriesColor }} from './conservation-series.js';
         import {{ formatCircularWidthValue }} from './track-slot-display.js';
@@ -3481,20 +3508,35 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         if (formatCircularWidthValue('50px') !== '50 px' || formatCircularWidthValue('0.15') !== '0.15 R') {{
           throw new Error('Circular width display did not distinguish px and radius factors');
         }}
-        const legacySpacingSpec = buildCircularTrackSlotSpec(
-          {{
+        let rejectedLegacySpacing = false;
+        try {{
+          buildCircularTrackSlotSpec({{
             id: 'gc_skew',
             renderer: 'dinucleotide_skew',
             side: 'inside',
             spacing: '5',
             params: {{ nt: 'GC' }}
-          }},
+          }}, 'GC', 'tuckin', {{ includeSide: false }});
+        }} catch (error) {{
+          rejectedLegacySpacing = /obsolete/.test(String(error?.message || error));
+        }}
+        if (!rejectedLegacySpacing) {{
+          throw new Error('Fresh circular slot builder accepted obsolete spacing');
+        }}
+        const legacySpacingSpec = buildCircularTrackSlotSpec(
+          migrateLegacyCircularTrackSlot({{
+            id: 'gc_skew',
+            renderer: 'dinucleotide_skew',
+            side: 'inside',
+            spacing: '5',
+            params: {{ nt: 'GC', strict: true, compress: true, reserve: true }}
+          }}),
           'GC',
           'tuckin',
           {{ includeSide: false }}
         );
         if (!legacySpacingSpec.includes('inner_gap_px=5') || !legacySpacingSpec.includes('outer_gap_px=5') || legacySpacingSpec.includes('spacing=')) {{
-          throw new Error(`Legacy circular spacing was not converted to physical gaps: ${{legacySpacingSpec}}`);
+          throw new Error(`Reader-only circular spacing migration did not produce physical gaps: ${{legacySpacingSpec}}`);
         }}
         const defaultSkewSpec = buildCircularTrackSlotSpec(
           {{
@@ -4135,6 +4177,8 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
     assert "const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;" in config_source
     assert "const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;" in config_source
     assert "adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION" in config_source
+    assert "migrateImportedCircularTrackSlots" in config_source
+    assert "migratePersistedWebOptionValues" in config_source
     assert "validateImportedCircularTrackSlots(migrated);" in config_source
     assert "isLegacyConfigPayload(data)" in config_source
     assert "validateImportedCircularTrackSlots(restoredConfig," in config_source
@@ -4149,6 +4193,10 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
         "outerRadius",
         "outer_radius",
         "placement",
+        "spacing",
+        "strict",
+        "compress",
+        "reserve",
     ]:
         assert f"'{obsolete_key}'" in config_source
 
@@ -4542,6 +4590,11 @@ def test_web_session_round_trip_preserves_losat_and_source_names(tmp_path: Path)
     historical_losat = json.loads(json.dumps(historical_session["config"]["losat"]))
     if historical_losat.get("parallelWorkers") is None:
         historical_losat.pop("parallelWorkers", None)
+    historical_blastp = historical_losat.get("blastp", {})
+    if "collinearMaxGeneGap" in historical_blastp:
+        historical_blastp["collinearMaxUnitGap"] = historical_blastp.pop(
+            "collinearMaxGeneGap"
+        )
     custom_losat = {
         "outfmt": "6",
         "parallelWorkers": "3",
@@ -4556,7 +4609,7 @@ def test_web_session_round_trip_preserves_losat_and_source_names(tmp_path: Path)
             "orthogroupMembershipMode": "anchor_core_v1",
             "orthogroupMemberMaxHits": 13,
             "collinearMinAnchors": 4,
-            "collinearMaxGeneGap": 6,
+            "collinearMaxUnitGap": 6,
             "collinearMaxDiagonalDrift": 2,
             "collinearMaxConflictsInMergeGap": 3,
             "collinearMaxParalogLinksPerOrthogroup": 7,

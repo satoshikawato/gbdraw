@@ -27,6 +27,7 @@ Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without insta
 - [0.14.0b0 release notes](./RELEASE_NOTES_0.14.0b0.md): Python API additions, behavior corrections, and migration guidance.
 - [GFF3 + FASTA input](./GFF3_FASTA.md): prepare, validate, and draw annotation files without GenBank conversion.
 - [Export formats](./EXPORT.md): choose SVG, interactive SVG, PNG, PDF, EPS, or PS and understand paired interactive output files.
+- [SVG IDs and semantic hooks](./SVG_SEMANTIC_HOOKS.md): stable selectors for records, tracks, definitions, features, matches, and annotations.
 - [Gallery](./GALLERY.md): example diagrams and the commands used to generate them.
 - [Interactive SVG gallery](https://gbdraw.app/gallery/): hosted genome diagrams with feature and match popups. Selected examples include web-app tutorials.
 - [FAQ](./FAQ.md): common questions, limitations, and workarounds.

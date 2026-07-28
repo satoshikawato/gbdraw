@@ -290,9 +290,12 @@ def prepare_legend_table(
         if identity_legend_entries:
             for entry in identity_legend_entries:
                 label = str(entry["label"])
+                min_color = entry["min_color"]
+                if float(blast_config.identity) >= 100:
+                    min_color = entry["max_color"]
                 legend_table[label] = {
                     "type": "gradient",
-                    "min_color": entry["min_color"],
+                    "min_color": min_color,
                     "max_color": entry["max_color"],
                     "stroke": "none",
                     "width": 0,
@@ -302,9 +305,12 @@ def prepare_legend_table(
             identity_legend_label = str(
                 getattr(blast_config, "pairwise_identity_legend_label", "Pairwise match identity")
             )
+            min_color = blast_config.min_color
+            if float(blast_config.identity) >= 100:
+                min_color = blast_config.max_color
             legend_table[identity_legend_label] = {
                 "type": "gradient",
-                "min_color": blast_config.min_color,
+                "min_color": min_color,
                 "max_color": blast_config.max_color,
                 "stroke": "none",
                 "width": 0,

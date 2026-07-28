@@ -18,6 +18,7 @@ from gbdraw.annotations import (
 )
 from gbdraw.render.drawers.linear.annotations import annotation_dom_id
 from gbdraw.render.patterns import ensure_hatch_pattern
+from gbdraw.svg.ids import stable_svg_id
 
 
 def _point(position: float, total_length: int, radius: float) -> tuple[float, float]:
@@ -65,8 +66,14 @@ def draw_circular_annotation_track(
     side: str,
     font_family: str,
     params: AnnotationTrackParams,
+    dom_group_id: str | None = None,
+    semantic_slot_id: str | None = None,
 ) -> Group:
-    group = Group(id=f"gbdraw-annotation-track-{track.slot_id}-{record_index + 1}", debug=False)
+    group_id = dom_group_id or f"gbdraw-annotation-track-{track.slot_id}-{record_index + 1}"
+    group = Group(id=group_id, debug=False)
+    if semantic_slot_id:
+        group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
+        group.attribs["data-gbdraw-slot-renderer"] = "annotations"
     placements = [item for item in track.placements if item.annotation.record_index == record_index]
     lane_count = max((item.lane for item in placements), default=-1) + 1
     usable = max(1.0, outer_radius_px - inner_radius_px - 2.0 * params.padding_px)
@@ -188,7 +195,11 @@ def draw_circular_annotation_track(
         group.add(item_group)
     if track.clipped:
         group.attribs["data-gbdraw-annotation-clipped"] = "true"
-        clip_id = f"gbdraw-annotation-clip-{track.slot_id}-{record_index + 1}"
+        clip_id = (
+            stable_svg_id("annotation_clip", "circular", group_id)
+            if dom_group_id
+            else f"gbdraw-annotation-clip-{track.slot_id}-{record_index + 1}"
+        )
         ring = Path(
             d=(
                 f"M {outer_radius_px:g},0 A {outer_radius_px:g},{outer_radius_px:g} 0 1 0 "

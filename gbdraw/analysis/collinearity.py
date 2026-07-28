@@ -360,22 +360,6 @@ def _anchor_strand_orientation(anchor: CollinearityAnchor) -> CollinearityOrient
     return "plus" if query_strand == subject_strand else "minus"
 
 
-def _chain_strand_support(chain: _Chain) -> tuple[int, int]:
-    supported = 0
-    conflicted = 0
-    for anchor in chain.anchors:
-        strand_orientation = _anchor_strand_orientation(anchor)
-        if strand_orientation is None:
-            continue
-        if strand_orientation == chain.orientation:
-            supported += 1
-        else:
-            conflicted += 1
-    return supported, conflicted
-
-
-
-
 def protein_hits_to_collinearity_anchors(
     hits: DataFrame,
     *,
@@ -1478,23 +1462,6 @@ def _renumber_blocks(blocks: Sequence[CollinearityBlock], params: CollinearityPa
     return tuple(renumbered)
 
 
-def _chain_rank(chain: _Chain) -> tuple[float, int, int, int, int, int, str, str, int]:
-    first = chain.anchors[0]
-    orientation_rank = 0 if chain.orientation == "plus" else 1
-    strand_supported, strand_conflicted = _chain_strand_support(chain)
-    return (
-        -float(chain.score),
-        -len(chain.anchors),
-        -strand_supported,
-        strand_conflicted,
-        int(first.query_order),
-        int(first.subject_order),
-        str(first.query_protein_id),
-        str(first.subject_protein_id),
-        orientation_rank,
-    )
-
-
 def _chain_path_anchors(chain: _Chain) -> tuple[CollinearityAnchor, ...]:
     if chain.orientation == "minus":
         return tuple(
@@ -2297,49 +2264,6 @@ def build_orthogroup_collinearity_blocks(
     )
 
 
-def build_native_collinearity_blocks(
-    records: Sequence[SeqRecord],
-    *,
-    losatp_bin: str = "losat",
-    ncbi_blastp_bin: str | None = None,
-    losatp_threads: int | None = None,
-    candidate_limit: int | None = None,
-    orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
-    orthogroup_member_max_hits: int = 5,
-    max_paralog_links_per_orthogroup: int = 2,
-    evalue: float = 1e-5,
-    bitscore: float = 50.0,
-    identity: float = 70.0,
-    alignment_length: int = 0,
-    params: CollinearityParameters | LosslessCollinearityParameters | None = None,
-    unit_mode: CollinearityUnitMode | str = "auto",
-    anchor_mode: CollinearityAnchorMode | str = "rbh",
-    search_scope: CollinearitySearchScope | str = "adjacent",
-    runner: LosatpRunner | None = None,
-) -> CollinearityResult:
-    """Compatibility entry point for the orthogroup-first collinearity caller."""
-
-    return build_orthogroup_collinearity_blocks(
-        records,
-        losatp_bin=losatp_bin,
-        ncbi_blastp_bin=ncbi_blastp_bin,
-        losatp_threads=losatp_threads,
-        candidate_limit=candidate_limit,
-        orthogroup_membership_mode=orthogroup_membership_mode,
-        orthogroup_member_max_hits=orthogroup_member_max_hits,
-        max_paralog_links_per_orthogroup=max_paralog_links_per_orthogroup,
-        evalue=evalue,
-        bitscore=bitscore,
-        identity=identity,
-        alignment_length=alignment_length,
-        params=params,
-        unit_mode=unit_mode,
-        edge_mode=anchor_mode,
-        search_scope=search_scope,
-        runner=runner,
-    )
-
-
 def build_collinearity_blocks_from_hits(
     hits_by_pair: Sequence[DataFrame] | Mapping[tuple[int, int], DataFrame],
     extraction: ProteinExtractionResult,
@@ -2563,7 +2487,6 @@ __all__ = [
     "CollinearitySearchScope",
     "LosslessCollinearityParameters",
     "build_collinearity_blocks_from_hits",
-    "build_native_collinearity_blocks",
     "build_orthogroup_collinearity_anchors",
     "build_orthogroup_collinearity_blocks",
     "build_orthogroup_collinearity_blocks_from_hits",

@@ -1,4 +1,5 @@
 import { normalizeOptionalText } from './track-slot-display.js';
+import { requireCurrentLinearTrackLayout } from './current-option-values.js';
 
 const LENGTH_THRESHOLD_BP = 50000;
 
@@ -344,8 +345,8 @@ const linearAxisGapText = (state) => {
 };
 
 const linearLabelPlacementText = (state) => {
-  const layout = String(state?.form?.linear_track_layout || 'middle').toLowerCase();
-  return layout === 'below' || layout === 'tuckin' ? 'below' : 'above';
+  const layout = requireCurrentLinearTrackLayout(state?.form?.linear_track_layout);
+  return layout === 'below' ? 'below' : 'above';
 };
 
 const scaleIntervalText = (state) => {

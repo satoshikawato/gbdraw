@@ -432,7 +432,9 @@ export const setupWatchers = ({
 
       if (svgContainer.value) {
         if (svg) {
-          const tickEl = svg.getElementById('tick');
+          const tickEl = svg.querySelector(
+            'g[data-gbdraw-slot-renderer="ticks"]'
+          ) || svg.getElementById('tick');
           if (tickEl) {
             debugLog(`After DOM update - tick transform: ${tickEl.getAttribute('transform')}`);
           }

@@ -23,7 +23,7 @@ def build_interactive_svg_context(
     records: Sequence[SeqRecord],
     *,
     selected_features_set: Sequence[str] | None = None,
-    feature_table: DataFrame | None = None,
+    feature_visibility_table: DataFrame | None = None,
     feature_visibility_rules: list[dict[str, Any]] | None = None,
     color_table: DataFrame | None = None,
     default_colors: DataFrame | None = None,
@@ -39,17 +39,17 @@ def build_interactive_svg_context(
     metadata remains keyed by stable biological IDs. The final SVG enricher maps
     those IDs to record-specific rendered IDs after inspecting the actual DOM.
     Passing precompiled visibility rules is useful to CLI callers; public callers
-    normally pass ``feature_table``.
+    normally pass ``feature_visibility_table``.
     """
 
-    if feature_table is not None and feature_visibility_rules is not None:
+    if feature_visibility_table is not None and feature_visibility_rules is not None:
         raise ValidationError(
-            "Pass either feature_table or feature_visibility_rules, not both."
+            "Pass either feature_visibility_table or feature_visibility_rules, not both."
         )
     resolved_visibility_rules = (
         feature_visibility_rules
         if feature_visibility_rules is not None
-        else compile_feature_visibility_rules(feature_table)
+        else compile_feature_visibility_rules(feature_visibility_table)
     )
     specific_color_rules = None
     if color_table is not None and default_colors is not None:

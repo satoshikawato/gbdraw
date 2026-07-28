@@ -11,6 +11,7 @@ import {
   isManualSlotValue,
   normalizeOptionalText
 } from './track-slot-display.js';
+import { requireCurrentLinearTrackLayout } from './current-option-values.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -101,9 +102,9 @@ const normalizeSide = (value, fallback = 'below') => {
 const normalizePlacement = (value, fallback = 'below') => normalizeSide(value, fallback);
 
 const sideForLinearTrackLayout = (trackLayout = 'middle') => {
-  const normalized = String(trackLayout || 'middle').trim().toLowerCase();
-  if (normalized === 'above' || normalized === 'spreadout') return 'above';
-  if (normalized === 'below' || normalized === 'tuckin') return 'below';
+  const normalized = requireCurrentLinearTrackLayout(trackLayout);
+  if (normalized === 'above') return 'above';
+  if (normalized === 'below') return 'below';
   return 'overlay';
 };
 

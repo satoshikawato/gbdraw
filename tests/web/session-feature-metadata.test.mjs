@@ -396,4 +396,29 @@ const svgWithFeature = ({
   assert.deepEqual(plan.recoveredFeatureState.biologicalFeatures.map((feature) => feature.id), ['visible', 'hidden']);
 }
 
+{
+  const visible = {
+    id: 'visible',
+    svg_id: 'stable-a',
+    stable_svg_id: 'stable-a',
+    rendered_feature_svg_id: 'rendered-a'
+  };
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear',
+      lInputType: 'gb',
+      selectedResultIndex: 0,
+      results: [{ content: svgWithFeature({ renderedId: 'rendered-a', stableId: 'stable-a' }) }],
+      featureState: {
+        extractedFeatures: [visible],
+        biologicalFeatures: []
+      },
+      editorState: {}
+    },
+    featureVisibilityTsv: ''
+  });
+  assert.equal(plan.status, 'aligned');
+  assert.equal(plan.recoveredFeatureState.extractedFeatures[0].svg_id, 'rendered-a');
+}
+
 console.log('session feature metadata tests passed');

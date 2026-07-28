@@ -1,33 +1,23 @@
-const CLI_DEFAULT_FEATURES = Object.freeze([
-  'CDS',
-  'rRNA',
-  'tRNA',
-  'tmRNA',
-  'ncRNA',
-  'misc_RNA',
-  'repeat_region'
-]);
-
 import {
   defaultFeatureRendering,
   normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
+import {
+  MODE_DEFAULT_FEATURE_TYPES,
+  comparisonFiltersForMode
+} from '../mode-profiles.js';
+
+const CLI_DEFAULT_FEATURES = MODE_DEFAULT_FEATURE_TYPES;
 
 export const DEFINITION_LINE_STYLE_KINDS = Object.freeze(['name', 'subtitle', 'replicon', 'accession', 'length']);
 
-export const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze({
-  bitscore: 50,
-  evalue: '1e-2',
-  identity: 0,
-  alignment_length: 0
-});
+export const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
+  comparisonFiltersForMode('linear')
+);
 
-export const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze({
-  bitscore: 50,
-  evalue: '1e-5',
-  identity: 70,
-  alignment_length: 0
-});
+export const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
+  comparisonFiltersForMode('circular')
+);
 
 const normalizeFeatureList = (features) => {
   const values = Array.isArray(features) ? features : String(features || '').split(',');

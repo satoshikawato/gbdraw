@@ -5,12 +5,30 @@
 - 目的: 公開機能、出力、互換性、配布形態を変えずに、保守対象のコード量とリポジトリ容量を減らす
 - 方針: YAGNI による削除を最優先し、KISS を保てる範囲で DRY と SOLID を適用する
 
+> 2026-07-28 amendment: この文書の「公開 surface と CLI alias を維持する」
+> 前提は、その後に承認された
+> [`LINEAR_CIRCULAR_ARCHITECTURE_API_DECISION_WORKSHEET.md`](LINEAR_CIRCULAR_ARCHITECTURE_API_DECISION_WORKSHEET.md)
+> の `O3.api=B` によって置き換えられた。未使用の
+> `add_output_args` / `add_stroke_args` / `add_legend_args`、
+> `suppress_gc_content_and_skew` / `validate_session_override_args`、dead config keys、
+> `circular_diagram_components` を含む thin API compatibility modules、
+> obsolete low-level re-exports、旧 CLI spellingsは削除済みである。
+> Fresh CLI/API は underscore canonical contract を使い、Linear の旧値
+> `on_feature` / `spreadout` / `tuckin`、Circular の `sqrt`、
+> `depth_tick_interval`、`feature_table`、`collinear_max_gene_gap`、Circular
+> slot の `spacing` / `strict` / `compress` / `reserve` を拒否する。
+> `--annotation-table` と `--gc_content_tick_interval` は引き続き active alias
+> であり、この削除には含めない。
+> 一方、`O3.data=A` により既存 session/config
+> reader と canonical request schema 1～3 migration は旧値を current
+> contract へ変換する。以下の監査値と段階計画は作成時点の履歴として残す。
+
 ## 1. 成功条件
 
 この計画における「機能に影響を与えない」とは、少なくとも次の条件がすべて維持されることを指す。
 
-1. Python 公開 API の import path、`__all__`、関数・クラスのシグネチャ、既定値が変わらない。
-2. Circular/Linear CLI のオプション、別名、既定値、help、生成される `Namespace` が変わらない。
+1. Python 公開 API のうち、後続の O3 決定で削除対象にならなかった import path、`__all__`、関数・クラスのシグネチャ、既定値が変わらない。
+2. Circular/Linear CLI のうち、O3 後の canonical option、active alias、既定値、help、生成される `Namespace` が意図せず変わらない。
 3. 同一入力と同一設定に対する SVG とインタラクティブ SVG の構造・意味・操作結果が変わらない。
 4. PNG、PDF、EPS、PS の生成経路と対応形式が変わらない。
 5. 既存セッション、旧バージョンのセッション、ギャラリー例を読み込める。
@@ -210,7 +228,7 @@ Circular/Linear CLI の共通引数を `cli_utils/common.py` の既存 helper �
 
 1. 両 parser の `add_argument` を option 名、順序、action、type、default、choices、help、metavar 単位で機械比較する。
 2. 完全一致する 55 呼び出しから、既存 helper で表現できるグループを移す。
-3. `add_input_args`、`add_output_args` 等の既存 helper を優先して使う。
+3. 削除対象でない既存 helper を優先して使う。
 4. Circular/Linear 固有の引数は各 parser に明示的に残す。
 5. 汎用 option schema、decorator、reflection ベースの parser generator は導入しない。
 
@@ -218,7 +236,7 @@ Circular/Linear CLI の共通引数を `cli_utils/common.py` の既存 helper �
 
 - `--help` の option 順序と文言が一致する。
 - 省略時と代表的な全指定時の `Namespace` が型を含めて一致する。
-- 既存の別名、deprecated option、エラー終了コードと stderr が一致する。
+- O3 後の canonical option、active alias、エラー終了コードと stderr が一致する。
 
 見込み:
 
@@ -355,12 +373,15 @@ Phase 4～5 の見込み:
 
 次の項目は一見削減候補に見えるが、現状では互換性または機能上の役割があるため対象外とする。
 
-- `circular_diagram_components.py`: 後方互換 shim として維持する。
+- `circular_diagram_components.py`: 当初は後方互換 shim として維持する計画
+  だったが、冒頭 amendment のとおり `O3.api=B` により削除済み。
 - Circular label の legacy fallback: dense label 配置で現在も使用されるため維持する。
 - `svg/`, `layout/`, `tracks/`: 参照中であり、旧構造という理由だけでは削除しない。
 - `standalone-interactivity-assets.js`: standalone SVG の runtime asset として維持する。
 - offline 用 vendor、Pyodide、WASM: 未使用と証明できた個別 asset 以外は削除しない。
-- portable session の旧 field、alias、migration: 互換性維持のため削除しない。
+- supported portable session と canonical request schema 1～3 の旧 field・値を
+  current contract へ変換する reader migration は削除しない。fresh CLI/API
+  の executable alias はこの対象に含めない。
 - reference SVG: 出力同値性の oracle として維持する。
 - config dataclass の明示的 `from_dict`: reflection 化による見かけ上の削減は行わない。
 
@@ -469,7 +490,7 @@ PR ごとに次を記録する。
 
 1. Phase 1～7 の安全な候補が完了または根拠付きで保留されている。
 2. 各 merge 済み PR が純減し、共通検証ゲートを通過している。
-3. 公開 API、CLI、図の出力、Web UI、session、offline/package の機能差がない。
+3. O3 で承認された削除を除き、公開 API、CLI、図の出力、Web UI、session、offline/package に意図しない機能差がない。
 4. 実測した削減行数・容量と、保留項目の理由が最終記録に残っている。
 5. 新しい循環依存、汎用すぎる helper、巨大な option schema、未使用 compatibility layer を導入していない。
 
@@ -489,6 +510,7 @@ PR ごとに次を記録する。
 | 7 | 完了 | 数値 track capture、feature factory、同一 label test body を共有。入力・期待値・元の test 名は維持 |
 | 8-A | 完了 | canonical example を参照するよう test を変更し、重複 test input と未使用 Web font を削除 |
 | 8-B | 保留 | palette SVG は公開 docs/example URL から直接参照される。URL を維持する release 時自動生成工程がないため追跡を継続 |
+| O3 cleanup | 完了 | executable alias、thin compatibility module、obsolete re-export、duplicate output owner を削除し、旧 session/schema reader だけを migration boundary として維持 |
 
 ### 10.1 実測削減量
 

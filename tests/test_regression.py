@@ -274,7 +274,7 @@ class TestCircularRegression:
             [gbk_file],
             "MjeNMV_no_gc",
             temp_output_dir,
-            extra_args=["--suppress_gc", "--legend", "none"],
+            extra_args=["--no-gc", "--legend", "none"],
         )
         assert returncode == 0
 
@@ -284,7 +284,7 @@ class TestCircularRegression:
             [gbk_file],
             "MjeNMV_no_gc_skew",
             temp_output_dir,
-            extra_args=["--suppress_gc", "--suppress_skew", "--legend", "none"],
+            extra_args=["--no-gc", "--no-skew", "--legend", "none"],
         )
         assert returncode == 0
 
@@ -389,7 +389,7 @@ class TestLinearRegression:
             [gbk_file],
             "MjeNMV_gc_skew_test",
             temp_output_dir,
-            extra_args=["--show_gc", "--show_skew", "--legend", "none"],
+            extra_args=["--gc", "--skew", "--legend", "none"],
         )
 
         assert returncode == 0, f"gbdraw failed: {output}"

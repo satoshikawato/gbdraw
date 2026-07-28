@@ -35,7 +35,7 @@ from gbdraw.analysis.collinearity import (
     normalize_collinearity_search_scope,
     orthogroup_edges_to_lossless_collinearity_anchors,
 )
-from gbdraw.api import assemble_linear_diagram_from_records
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
     convert_protein_hits_to_genomic_links,
@@ -1987,6 +1987,30 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
 
 @pytest.mark.linear
 @pytest.mark.parametrize(
+    "option_args",
+    [
+        ["--losatp-bin", "losatp"],
+        ["--losatp-threads", "2"],
+        ["--protein-blastp-mode", "pairwise"],
+        ["--collinear-min-anchors", "1"],
+        ["--collinear-max-unit-gap", "0"],
+        ["--collinear-color-mode", "orientation"],
+        ["--keep-definition-left-aligned"],
+        ["--pairwise-match-style", "ribbon"],
+        ["--save-session"],
+        ["--session-output", "session.json"],
+        ["--collinear_max_gene_gap", "3"],
+    ],
+)
+def test_linear_cli_rejects_removed_hidden_aliases(
+    option_args: list[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        linear_cli_module._get_args(["--gbk", "dummy.gb", *option_args])
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
     "option_name",
     [
         "--collinear_blocks",
@@ -2931,7 +2955,7 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
     vertical_legend = root.find(".//svg:g[@id='legend_vertical']", namespace)
     assert vertical_legend is not None
     feature_legend = vertical_legend.find("svg:g[@id='feature_legend_v']", namespace)
-    pairwise_legend = vertical_legend.find("svg:g[@id='pairwise_legend']", namespace)
+    pairwise_legend = vertical_legend.find("svg:g[@id='pairwise_legend_v']", namespace)
     assert feature_legend is not None
     assert pairwise_legend is not None
 
@@ -3018,7 +3042,7 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
     vertical_legend = root.find(".//svg:g[@id='legend_vertical']", namespace)
     assert vertical_legend is not None
     feature_legend = vertical_legend.find("svg:g[@id='feature_legend_v']", namespace)
-    pairwise_legend = vertical_legend.find("svg:g[@id='pairwise_legend']", namespace)
+    pairwise_legend = vertical_legend.find("svg:g[@id='pairwise_legend_v']", namespace)
     assert feature_legend is not None
     assert pairwise_legend is not None
     pairwise_entry = pairwise_legend.find(

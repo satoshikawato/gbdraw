@@ -184,7 +184,6 @@ class ObjectsDepthConfig:
     max_depth: float | None
     show_axis: bool
     show_ticks: bool
-    tick_interval: float | None
     large_tick_interval: float | None
     small_tick_interval: float | None
     tick_font_size: float | None
@@ -206,7 +205,6 @@ class ObjectsDepthConfig:
             max_depth=_optional_depth_bound(d.get("max_depth", None)),
             show_axis=_bool_from_config(d.get("show_axis", True), default=True),
             show_ticks=_bool_from_config(d.get("show_ticks", True), default=True),
-            tick_interval=large_tick_interval,
             large_tick_interval=large_tick_interval,
             small_tick_interval=_optional_depth_bound(d.get("small_tick_interval", None)),
             tick_font_size=_optional_depth_bound(d.get("tick_font_size", None)),

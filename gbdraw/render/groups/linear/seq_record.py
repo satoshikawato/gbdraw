@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from collections import Counter
 from typing import Optional
 
 from pandas import DataFrame
@@ -13,13 +14,14 @@ from ....canvas import LinearCanvasConfigurator
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.linear.labels import LabelDrawer
-from ....labels.placement import prepare_label_list_linear
+from ....labels.linear import prepare_label_list_linear
 from ....layout.linear import LinearFeatureLaneGeometry
 from ....features.factory import create_feature_dict
 from ....features.objects import FeatureObject
 from ....features.colors import preprocess_color_tables
 from ....labels.filtering import preprocess_label_filtering
 from ....configurators import FeatureDrawingConfigurator
+from ....svg.ids import record_group_svg_id
 from .length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
@@ -68,7 +70,16 @@ class SeqRecordGroup:
         self.orthogroup_label_top_member_ids = orthogroup_label_top_member_ids
         self.record_index = int(record_index)
         self.record_count = int(record_count)
-        self.record_group_id = str(group_id) if group_id else str(gb_record.id)
+        self.record_group_id = (
+            str(group_id)
+            if group_id
+            else record_group_svg_id(
+                gb_record.id,
+                mode="linear",
+                record_index=self.record_index,
+                record_count=self.record_count,
+            )
+        )
         self.sequence_width = float(sequence_width) if sequence_width is not None else None
         self.record_local_ruler = bool(record_local_ruler)
         self.feature_offset_y = float(feature_offset_y)
@@ -292,9 +303,15 @@ class SeqRecordGroup:
 
         # Draw features
         if self.draw_features_enabled:
+            feature_drawer = FeatureDrawer(self.feature_config)
+            feature_id_counts = Counter(
+                feature_drawer.get_feature_data_id(feature_object)
+                for feature_object in feature_dict.values()
+            )
             for feature_object in feature_dict.values():
                 feature_strand = feature_object.strand
-                feature_group = FeatureDrawer(self.feature_config).draw(
+                stable_feature_id = feature_drawer.get_feature_data_id(feature_object)
+                feature_group = feature_drawer.draw(
                     feature_object=feature_object,
                     group=feature_group,
                     genome_length=record_length,
@@ -309,6 +326,12 @@ class SeqRecordGroup:
                     feature_lane_geometry=self.feature_lane_geometry,
                     record_index=self.record_index,
                     record_count=self.record_count,
+                    feature_instance_id=(
+                        feature_object.feature_id
+                        if stable_feature_id
+                        and feature_id_counts[stable_feature_id] > 1
+                        else None
+                    ),
                 )
 
         # Add labels
@@ -344,6 +367,8 @@ class SeqRecordGroup:
         resolve_overlaps = self.canvas_config.resolve_overlaps
         label_filtering = self.label_filtering  # type: ignore
         record_group: Group = Group(id=self.record_group_id, debug=False)
+        record_group.attribs["data-gbdraw-record-id"] = str(self.gb_record.id)
+        record_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
 
         record_length: int = len(self.gb_record.seq)
 

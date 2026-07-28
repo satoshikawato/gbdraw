@@ -4,6 +4,40 @@
 
 This reference mirrors the current command help from `python -m gbdraw.cli` and lists the available options and defaults.
 
+The current boolean spelling is symmetric in both modes:
+`--gc` / `--no-gc` and `--skew` / `--no-skew`. Depth files use repeatable
+`--depth_track`. The former mode-specific GC/skew switches, `--depth`, and the
+no-op `--show_depth` switch are no longer executable CLI aliases. Supported
+saved sessions that contain them are migrated during replay.
+
+Apart from the canonical `--no-gc` / `--no-skew` switches and the two active
+aliases noted below, current multiword long option names use the documented
+underscore spelling. Fresh CLI and Python requests reject the retired names
+and values in this table; the CLI spellings are shown with `--`, while Python
+request fields use the same names without it. Supported saved-session and
+canonical request schema 1–3 readers migrate them before replay.
+
+| Retired input | Current input |
+| --- | --- |
+| Circular `--multi_record_size_mode sqrt` | `--multi_record_size_mode auto` |
+| Linear `--label_placement on_feature` | `--label_placement above_feature` |
+| Linear `--track_layout spreadout` / `tuckin` | `--track_layout above` / `below` |
+| `--depth_tick_interval` | `--depth_large_tick_interval` |
+| `--feature_table` | `--feature_visibility_table` |
+| `--collinear_max_gene_gap` | `--collinear_max_unit_gap` |
+| Circular slot `spacing` | `inner_gap_px` and `outer_gap_px` |
+| Circular slot `strict`, `compress`, or `reserve` | No direct replacement; geometry and reservation are derived from `side` |
+
+`--annotation_table` remains canonical and `--annotation-table` remains an
+active alias. `--gc_content_tick_interval` also remains an active alias for
+`--gc_content_large_tick_interval`; neither belongs to the retired list.
+
+The private `__gbdraw_legacy_spacing` key is not a current slot parameter. It is
+used only inside canonical request schema 1–3 and old-session readers and is
+never written to schema 4. Legacy factor-based spacing can be replayed but
+cannot be re-saved losslessly as schema 4; replace it with explicit
+`inner_gap_px` and `outer_gap_px` values before saving a current session.
+
 ## Main command
 
 ```text
@@ -56,7 +90,7 @@ Additional Information:
 ## Circular mode
 
 ```text
-usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
+usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [--records_table TSV] [-o OUTPUT] [-p PALETTE] [-t TABLE]
               [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP]
               [--species SPECIES] [--strain STRAIN] [-k FEATURES]
@@ -72,8 +106,13 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--keep_full_definition_with_plot_title]
               [--center_reserved_radius CENTER_RESERVED_RADIUS]
-              [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
-              [--suppress_skew]
+              [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--gc | --no-gc]
+              [--skew | --no-skew] [--depth_track DEPTH [DEPTH ...]]
+              [--depth_track_label LABEL [LABEL ...]]
+              [--depth_track_color COLOR [COLOR ...]]
+              [--depth_track_large_tick_interval VALUE [VALUE ...]]
+              [--depth_track_small_tick_interval VALUE [VALUE ...]]
+              [--depth_track_tick_font_size VALUE [VALUE ...]]
               [--conservation_blast BLAST [BLAST ...]]
               [--conservation_table TSV]
               [--conservation_fasta FASTA [FASTA ...]]
@@ -84,13 +123,13 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--evalue EVALUE] [--bitscore BITSCORE] [--identity IDENTITY]
               [--alignment_length ALIGNMENT_LENGTH]
               [-l LEGEND] [--multi_record_canvas]
-              [--multi_record_size_mode {auto,linear,equal,sqrt}]
+              [--multi_record_size_mode {auto,linear,equal}]
               [--multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO]
               [--multi_record_column_gap_ratio MULTI_RECORD_COLUMN_GAP_RATIO]
               [--multi_record_row_gap_ratio MULTI_RECORD_ROW_GAP_RATIO]
               [--multi_record_position MULTI_RECORD_POSITION]
               [--plot_title_position {none,top,bottom}] [--separate_strands]
-              [--track_type TRACK_TYPE] [--resolve_overlaps]
+              [--track_type {tuckin,middle,spreadout}] [--resolve_overlaps]
               [--labels [{none,out,both}]]
               [--label_rendering {auto,embedded_only,external_only}]
               [--label_placement {horizontal,radial}]
@@ -99,6 +138,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--qualifier_priority QUALIFIER_PRIORITY]
               [--label_table LABEL_TABLE]
               [--feature_visibility_table FEATURE_VISIBILITY_TABLE]
+              [--annotation_table ANNOTATION_TABLE]
               [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
               [--outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET]
               [--inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET]
@@ -127,6 +167,14 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
 Generate genome diagrams in PNG/PDF/SVG/PS/EPS. By default, diagrams for
 multiple entries are saved separately. Use --multi_record_canvas to place
 multiple records on one grid canvas.
+
+For separate output, `-o sample.v1` preserves the dot and produces
+`sample.v1_1.svg`, `sample.v1_2.svg`, and so on. Without `-o`, duplicate
+record IDs receive the first available deterministic `_2`, `_3`, ... suffix
+instead of overwriting an earlier result. A session cannot currently represent
+this separate-diagram batch: `--save_session` or `--session_output` is rejected
+before any diagram is written. Use `--multi_record_canvas` or save each record
+separately when a session is required.
 
 options:
   -h, --help            show this help message and exit
@@ -194,8 +242,10 @@ options:
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
                         interactive_svg, png, pdf, eps, ps; default: svg).
                         PNG/PDF/EPS/PS require CairoSVG.
-  --suppress_gc         Suppress GC content track (default: False).
-  --suppress_skew       Suppress GC skew track (default: False).
+  --gc                  Show the GC content track.
+  --no-gc               Hide the GC content track.
+  --skew                Show the GC skew track.
+  --no-skew             Hide the GC skew track.
   --conservation_blast BLAST [BLAST ...]
                         Precomputed BLAST outfmt 6/7 file(s) for circular
                         similarity rings.
@@ -237,10 +287,9 @@ options:
   --multi_record_canvas
                         Place multiple records on one shared canvas using
                         automatic grid layout (default: False).
-  --multi_record_size_mode {auto,linear,equal,sqrt}
+  --multi_record_size_mode {auto,linear,equal}
                         Size mode for multi-record circular canvas ("auto",
-                        "linear", "equal"; "sqrt" is accepted as an alias of
-                        "auto"; default: "auto").
+                        "linear", "equal"; default: "auto").
   --multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO
                         Minimum radius ratio for multi-record scaling (0 <
                         ratio <= 1; default: 0.55).
@@ -259,10 +308,9 @@ options:
                         Plot title position in circular mode ("none", "top",
                         "bottom"; default: "none").
   --separate_strands    Separate strands (default: False).
-  --track_type TRACK_TYPE
-                        Circular preset for legacy/simple layout. Choices:
-                        "tuckin", "middle", "spreadout". Ignored when
-                        explicit --circular_track_slot layouts are supplied.
+  --track_type {tuckin,middle,spreadout}
+                        Circular track preset. Custom track slots inherit
+                        omitted geometry from this preset.
   --resolve_overlaps    Resolve overlapping features by placing them on
                         separate tracks (default: False). Useful for plasmid
                         visualization.
@@ -325,11 +373,11 @@ options:
                         Circular track slot spec:
                         <slot_id>:<renderer>@key=value,key=value. Can be
                         repeated. Use r=<radius>, w=<width>,
-                        inner_gap_px=<px>, and outer_gap_px=<px>. The legacy
-                        spacing=<scalar> field is still accepted as a
-                        compatibility alias for both gaps. ri/ro/gap are
-                        obsolete. side and z are slot fields. If r, w, gap,
-                        side, or standard renderer params are
+                        inner_gap_px=<px>, and outer_gap_px=<px>. Retired
+                        spacing, strict, compress, and reserve fields are
+                        rejected. ri/ro/gap are also obsolete. side and z are
+                        slot fields. If r, w, the explicit gaps, side, or
+                        standard renderer params are
                         omitted for built-in slots, they inherit the active
                         --track_type preset at render time. Inside numeric/depth
                         slots with no explicit r or w auto-compress when needed
@@ -374,8 +422,6 @@ options:
   --gc_skew_radius GC_SKEW_RADIUS
                         GC skew track center radius for circular mode (as a
                         ratio of base radius; must be > 0).
-  --depth DEPTH         Depth TSV file in samtools depth format. Implies
-                        --show_depth.
   --depth_track DEPTH [DEPTH ...]
                         Repeatable logical depth track. In circular mode,
                         provide one file for a single record, or one file per
@@ -386,8 +432,6 @@ options:
   --depth_track_color COLOR [COLOR ...]
                         Depth track fill color(s). Provide one color or one
                         per --depth_track.
-  --show_depth          Show depth coverage track. Required only when no depth
-                        file option is supplied.
   --depth_width DEPTH_WIDTH
                         Depth track width for circular mode (in px; must be
                         > 0).
@@ -605,8 +649,8 @@ gbdraw circular \
   --evalue 1e-30 \
   --identity 90 \
   --alignment_length 100 \
-  --suppress_gc \
-  --suppress_skew \
+  --no-gc \
+  --no-skew \
   --track_type spreadout \
   -o WSSV_genome_comparison \
   -f interactive_svg
@@ -625,7 +669,6 @@ Allowed columns:
 | `side` | optional | `outside`, `axis`, or `inside`. If omitted, rows default to `inside`, except the first `features` row may become `axis` when no explicit axis row exists. |
 | `r` | optional | Slot radius scalar. Values may be ratios such as `0.8`, percentages such as `80%`, or pixels such as `200px`. |
 | `w` | optional | Slot width scalar, using the same scalar syntax as `r`. |
-| `spacing` | optional | Compatibility scalar for both circular gaps. Do not combine with `inner_gap_px` or `outer_gap_px`. |
 | `inner_gap_px` | optional | Numeric inner gap in pixels, without a unit. |
 | `outer_gap_px` | optional | Numeric outer gap in pixels, without a unit. |
 | `z` | optional | Integer SVG layering order. |
@@ -633,7 +676,7 @@ Allowed columns:
 
 Only one row may use `side=axis`, and it must use `renderer=features`. That row defines the circular axis boundary and is converted internally to a split feature slot. Rows with `side=outside` are placed before the axis boundary, and rows with `side=inside` are placed after it. Relative row order is preserved within each side group.
 
-Do not put slot identity, renderer, placement, geometry, layering, or generic state keys in `params`. Reserved keys and aliases include `id`, `renderer`, `type`, `side`, `r`, `radius`, `w`, `width`, `spacing`, `inner_gap_px`, `outer_gap_px`, `z`, `z_index`, `zindex`, `enabled`, `show`, `visible`, `strict`, `compress`, and `reserve`. Feature rows also reserve `lane_direction` and `lanes`; use the table's `side` column and Axis row to select the feature lane. Renderer-specific keys such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout` remain valid.
+Do not put slot identity, renderer, placement, geometry, layering, or generic state keys in `params`. Reserved keys and aliases include `id`, `renderer`, `type`, `side`, `r`, `radius`, `w`, `width`, `inner_gap_px`, `outer_gap_px`, `z`, `z_index`, `zindex`, `enabled`, `show`, and `visible`. Retired Circular keys `spacing`, `strict`, `compress`, and `reserve` are rejected whether supplied as slot fields or parameters. Feature rows also reserve `lane_direction` and `lanes`; use the table's `side` column and Axis row to select the feature lane. Renderer-specific keys such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout` remain valid.
 
 ```tsv
 id	renderer	side	r	w	params
@@ -670,16 +713,15 @@ gbdraw circular \
   -f interactive_svg
 ```
 
-Depth tracks can be supplied with the legacy `--depth` option or the repeatable
-`--depth_track` option. `--depth` keeps the single-track SVG IDs `depth` and
-`depth_axis`. Multiple `--depth_track` groups render as `depth_1`,
-`depth_2`, and so on. Each `--depth_track` group is one logical track; provide
-one file to reuse it for every record, or one file per record.
+Depth tracks use repeatable `--depth_track` groups. Each group is one logical
+track; provide one file to reuse it for every record, or one file per record.
+Semantic SVG track hooks identify the renderer and logical slot; internal ID
+spelling is deterministic but is not a cross-version selector contract.
 
 ## Linear mode
 
 ```text
-usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
+usage: gbdraw [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [--records_table TSV]
               [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
               [--comparisons_table TSV] [-b [BLAST ...]] [-t TABLE]
@@ -691,7 +733,7 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
               [--collinear_color_mode {average_identity,orientation,orientation_identity}]
               [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW]
-              [-s STEP] [--separate_strands] [--show_gc]
+              [-s STEP] [--separate_strands] [--gc | --no-gc]
               [--gc_content_mode {deviation,percent}]
               [--gc_content_min_percent GC_CONTENT_MIN_PERCENT]
               [--gc_content_max_percent GC_CONTENT_MAX_PERCENT]
@@ -701,7 +743,13 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--gc_content_tick_font_size GC_CONTENT_TICK_FONT_SIZE]
               [--show_gc_content_axis] [--hide_gc_content_axis]
               [--show_gc_content_ticks] [--hide_gc_content_ticks]
-              [--show_skew]
+              [--skew | --no-skew] [--depth_track DEPTH [DEPTH ...]]
+              [--depth_track_label LABEL [LABEL ...]]
+              [--depth_track_color COLOR [COLOR ...]]
+              [--depth_track_height PX [PX ...]]
+              [--depth_track_large_tick_interval VALUE [VALUE ...]]
+              [--depth_track_small_tick_interval VALUE [VALUE ...]]
+              [--depth_track_tick_font_size VALUE [VALUE ...]]
               [--align_center] [--keep_definition_left_aligned]
               [--evalue EVALUE] [--bitscore BITSCORE]
               [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
@@ -794,7 +842,7 @@ options:
                         Minimum anchors/genes required for a rendered
                         Collinear block. The default 1 includes singleton
                         links.
-  --collinear_max_unit_gap, --collinear_max_gene_gap COLLINEAR_MAX_UNIT_GAP
+  --collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP
                         Maximum unit gap between neighboring collinear anchors
                         (default: 0).
   --collinear_color_mode {average_identity,orientation,orientation_identity}
@@ -815,7 +863,8 @@ options:
   --separate_strands    separate forward and reverse strands (default: False).
                         Features of undefined strands are shown on the forward
                         strand.
-  --show_gc             plot GC content below genome (default: False).
+  --gc                  Show the GC content track.
+  --no-gc               Hide the GC content track.
   --gc_content_mode {deviation,percent}
                         GC content display mode. deviation keeps the existing
                         mean-centered track. percent draws absolute GC
@@ -837,7 +886,8 @@ options:
                         Show or hide the GC content percent-mode axis.
   --show_gc_content_ticks, --hide_gc_content_ticks
                         Show or hide GC content percent-mode ticks and labels.
-  --show_skew           plot GC skew below genome (default: False).
+  --skew                Show the GC skew track.
+  --no-skew             Hide the GC skew track.
   --align_center        Align genomes to the center (default: False).
   --keep_definition_left_aligned
                         Keep linear record definitions in the left column. With
@@ -910,8 +960,7 @@ options:
                         start from the feature midpoint.
   --track_layout {above,middle,below}
                         Linear track layout mode ("above", "middle", or
-                        "below"; default: "middle"). Aliases: "spreadout" ->
-                        "above", "tuckin" -> "below".
+                        "below"; default: "middle").
   --track_axis_gap AUTO|PX
                         Gap between axis and nearest feature edge in pixels
                         for above/below layouts. Use 'auto' to derive it from
@@ -968,9 +1017,6 @@ options:
   --gc_height GC_HEIGHT
                         GC content/skew vertical width (optional; float;
                         default: 20 (pixels, 96 dpi))
-  --depth DEPTH [DEPTH ...]
-                        Depth TSV file(s) in samtools depth format. Provide
-                        one file for all records or one file per input record.
   --depth_track DEPTH [DEPTH ...]
                         Repeatable logical depth track. Each group accepts one
                         shared file or one file per input record.
@@ -980,8 +1026,6 @@ options:
   --depth_track_color COLOR [COLOR ...]
                         Depth track fill color(s). Provide one color or one
                         per --depth_track.
-  --show_depth          Show depth coverage track. Required only when no depth
-                        file option is supplied.
   --depth_height DEPTH_HEIGHT
                         Depth track height for linear mode (in px; must be
                         > 0).

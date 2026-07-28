@@ -14,6 +14,7 @@ import logging
 import math
 import re
 import xml.etree.ElementTree as ET
+from collections import Counter
 from dataclasses import replace
 from typing import Any, Optional, Sequence, Mapping, Literal, cast
 
@@ -80,6 +81,7 @@ from gbdraw.api.options import (  # type: ignore[reportMissingImports]
     DiagramOptions,
     LinearMultiRecordOptions,
     _validate_diagram_options_mode,
+    resolve_diagram_options_for_mode,
 )
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.linear_multi_record import (
@@ -113,6 +115,13 @@ from gbdraw.diagrams.circular import assemble_circular_diagram  # type: ignore[r
 from gbdraw.diagrams.circular.positioning import place_definition_group_on_size  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.mode_profiles import (
+    CIRCULAR_MODE_PROFILE,
+    ComparisonThresholds,
+    DEFAULT_FEATURE_TYPES,
+    LINEAR_MODE_PROFILE,
+    resolve_mode_profile_overrides,
+)
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
 from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
@@ -120,6 +129,7 @@ from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
     prepare_legend_table,
 )
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
+from gbdraw.svg.ids import definition_group_svg_id
 from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     LinearTrackSlot,
@@ -133,15 +143,7 @@ from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     parse_nonnegative_integer,
 )
 
-DEFAULT_SELECTED_FEATURES = (
-    "CDS",
-    "rRNA",
-    "tRNA",
-    "tmRNA",
-    "ncRNA",
-    "misc_RNA",
-    "repeat_region",
-)
+DEFAULT_SELECTED_FEATURES = DEFAULT_FEATURE_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +155,7 @@ _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {
     "skew",
     "gc_skew",
 }
-_MULTI_RECORD_SIZE_MODES = {"linear", "auto", "equal", "sqrt"}
+_MULTI_RECORD_SIZE_MODES = {"linear", "auto", "equal"}
 _DEFINITION_POSITIONS = {"center", "top", "bottom"}
 _LINEAR_PLOT_TITLE_POSITIONS = {"center", "top", "bottom"}
 _CIRCULAR_PLOT_TITLE_POSITIONS = {"none", "top", "bottom"}
@@ -267,29 +269,6 @@ def _resolve_diagram_options_config(
         ),
     )
     return None, cfg, None
-
-
-def _resolve_feature_visibility_table_inputs(
-    *,
-    feature_table: DataFrame | None = None,
-    feature_table_file: str | None = None,
-    feature_visibility_table: DataFrame | None = None,
-    feature_visibility_table_file: str | None = None,
-) -> tuple[DataFrame | None, str | None]:
-    if feature_table is not None and feature_visibility_table is not None:
-        raise ValidationError(
-            "Pass either feature_visibility_table or feature_table, not both."
-        )
-    if feature_table_file is not None and feature_visibility_table_file is not None:
-        raise ValidationError(
-            "Pass either feature_visibility_table_file or feature_table_file, not both."
-        )
-    return (
-        feature_visibility_table if feature_visibility_table is not None else feature_table,
-        feature_visibility_table_file
-        if feature_visibility_table_file is not None
-        else feature_table_file,
-    )
 
 
 def _parse_circular_track_slot_inputs(
@@ -504,7 +483,8 @@ def _conservation_slots_for_tracks(
             renderer="sequence_conservation",
             side="inside",
             width=ScalarSpec(float(width), "px") if width is not None else None,
-            spacing=ScalarSpec(float(gap), "px") if gap is not None else None,
+            inner_gap_px=float(gap) if gap is not None else None,
+            outer_gap_px=float(gap) if gap is not None else None,
             params={
                 "track_index": int(track.track_index),
                 "source_index": int(track.source_index),
@@ -600,7 +580,16 @@ def _apply_conservation_track_params_to_slots(
                 slot,
                 side=slot.side,
                 width=slot.width or (ScalarSpec(float(width), "px") if width is not None else None),
-                spacing=slot.spacing or (ScalarSpec(float(gap), "px") if gap is not None else None),
+                inner_gap_px=(
+                    slot.inner_gap_px
+                    if slot.inner_gap_px is not None
+                    else (float(gap) if gap is not None else None)
+                ),
+                outer_gap_px=(
+                    slot.outer_gap_px
+                    if slot.outer_gap_px is not None
+                    else (float(gap) if gap is not None else None)
+                ),
                 params=params,
             )
         )
@@ -649,8 +638,11 @@ def _validate_depth_bounds(min_depth: float | None, max_depth: float | None) -> 
 
 def _validate_depth_config(depth_config) -> None:
     _validate_depth_bounds(depth_config.min_depth, depth_config.max_depth)
-    if depth_config.tick_interval is not None and float(depth_config.tick_interval) <= 0:
-        raise ValidationError("depth_tick_interval/depth_large_tick_interval must be > 0")
+    if (
+        depth_config.large_tick_interval is not None
+        and float(depth_config.large_tick_interval) <= 0
+    ):
+        raise ValidationError("depth_large_tick_interval must be > 0")
     if depth_config.small_tick_interval is not None and float(depth_config.small_tick_interval) <= 0:
         raise ValidationError("depth_small_tick_interval must be > 0")
     if depth_config.tick_font_size is not None and float(depth_config.tick_font_size) <= 0:
@@ -1225,15 +1217,47 @@ def _set_group_translate(group: Group, *, x: float, y: float) -> None:
     attribs["transform"] = f"translate({float(x)}, {float(y)})"
 
 
+def _is_record_definition_group(
+    element: object,
+    *,
+    record_index: int,
+    record_id: str,
+) -> bool:
+    """Return whether an SVG element is the semantic definition for a record."""
+    attribs = getattr(element, "attribs", None)
+    if not isinstance(attribs, dict):
+        return False
+    if str(attribs.get("data-gbdraw-role", "")) != "record-definition":
+        return False
+
+    semantic_index = attribs.get("data-gbdraw-record-index")
+    if semantic_index is not None and str(semantic_index) != str(int(record_index)):
+        return False
+    semantic_record_id = attribs.get("data-gbdraw-record-id")
+    if semantic_record_id is not None and str(semantic_record_id) != str(record_id):
+        return False
+    return True
+
+
 def _center_record_definition_group_on_record_axis(
     record_group: Group,
     *,
     record_index: int,
     record_id: str,
+    record_count: int = 1,
 ) -> None:
     """Center one per-record definition group vertically on its record axis."""
     axis_group_id = f"Axis_{record_index}"
-    definition_group_id = f"{str(record_id).replace(' ', '_')}_definition"
+    definition_group_ids = {
+        definition_group_svg_id(
+            record_id,
+            mode="circular",
+            record_index=record_index,
+            record_count=record_count,
+        ),
+        definition_group_svg_id(record_id, mode="circular"),
+        f"{str(record_id).replace(' ', '_')}_definition",
+    }
     axis_group: Group | None = None
     definition_group: Group | None = None
 
@@ -1244,7 +1268,13 @@ def _center_record_definition_group_on_record_axis(
         child_id = str(attribs.get("id", ""))
         if child_id == axis_group_id:
             axis_group = child
-        elif child_id == definition_group_id:
+        elif _is_record_definition_group(
+            child,
+            record_index=record_index,
+            record_id=record_id,
+        ):
+            definition_group = child
+        elif definition_group is None and child_id in definition_group_ids:
             definition_group = child
 
     if axis_group is None or definition_group is None:
@@ -1270,11 +1300,20 @@ def _center_single_record_definition_group_on_axis(
     canvas: Drawing,
     *,
     record_id: str,
+    record_index: int = 0,
 ) -> None:
     """Center a top-level single-record definition group vertically on its axis."""
     axis_group: Group | None = None
     definition_group: Group | None = None
-    definition_group_id = f"{str(record_id).replace(' ', '_')}_definition"
+    definition_group_ids = {
+        definition_group_svg_id(
+            record_id,
+            mode="circular",
+            record_index=record_index,
+            record_count=1,
+        ),
+        f"{str(record_id).replace(' ', '_')}_definition",
+    }
 
     for child in getattr(canvas, "elements", []):
         attribs = getattr(child, "attribs", None)
@@ -1283,7 +1322,13 @@ def _center_single_record_definition_group_on_axis(
         child_id = str(attribs.get("id", ""))
         if child_id == "Axis":
             axis_group = child
-        elif child_id == definition_group_id:
+        elif _is_record_definition_group(
+            child,
+            record_index=record_index,
+            record_id=record_id,
+        ):
+            definition_group = child
+        elif definition_group is None and child_id in definition_group_ids:
             definition_group = child
 
     if axis_group is None or definition_group is None:
@@ -1330,6 +1375,69 @@ def _suffix_fixed_top_level_group_id(element: object, record_index: int) -> None
                 child_attribs["id"] = f"{child_id}_record_{record_index + 1}"
 
 
+_SVG_URL_REFERENCE_RE = re.compile(r"url\(#([^)]+)\)")
+
+
+def _walk_svgwrite_elements(element: object):
+    yield element
+    for child in getattr(element, "elements", []) or []:
+        yield from _walk_svgwrite_elements(child)
+
+
+def _uniquify_copied_subtrees_ids(
+    elements: Sequence[object],
+    *,
+    record_index: int,
+    used_ids: set[str],
+) -> None:
+    """Repair copied multi-record subtrees with one shared reference namespace."""
+
+    renamed: dict[str, str] = {}
+    for element in elements:
+        for child in _walk_svgwrite_elements(element):
+            attribs = getattr(child, "attribs", None)
+            if not isinstance(attribs, dict):
+                continue
+            raw_id = attribs.get("id")
+            if not isinstance(raw_id, str) or not raw_id:
+                continue
+            candidate = raw_id
+            if candidate in used_ids:
+                base = f"{raw_id}__record_{record_index + 1}"
+                candidate = base
+                duplicate_index = 2
+                while candidate in used_ids:
+                    candidate = f"{base}_{duplicate_index}"
+                    duplicate_index += 1
+                attribs["id"] = candidate
+                renamed.setdefault(raw_id, candidate)
+            used_ids.add(candidate)
+
+    if not renamed:
+        return
+
+    def replace_url_reference(match: re.Match[str]) -> str:
+        referenced_id = match.group(1)
+        return f"url(#{renamed.get(referenced_id, referenced_id)})"
+
+    for element in elements:
+        for child in _walk_svgwrite_elements(element):
+            attribs = getattr(child, "attribs", None)
+            if not isinstance(attribs, dict):
+                continue
+            for name, value in tuple(attribs.items()):
+                if not isinstance(value, str):
+                    continue
+                rewritten = _SVG_URL_REFERENCE_RE.sub(replace_url_reference, value)
+                if (
+                    name in {"href", "xlink:href"}
+                    or str(name).rsplit("}", 1)[-1] == "href"
+                ) and rewritten.startswith("#"):
+                    rewritten = f"#{renamed.get(rewritten[1:], rewritten[1:])}"
+                if rewritten != value:
+                    attribs[name] = rewritten
+
+
 def _is_defs_element(element: object) -> bool:
     """Return True if the element is an SVG <defs> container."""
     class_name = element.__class__.__name__.lower()
@@ -1346,10 +1454,8 @@ def _resolve_multi_record_size_mode(mode: str) -> Literal["linear", "auto", "equ
     normalized = str(mode).strip().lower()
     if normalized not in _MULTI_RECORD_SIZE_MODES:
         raise ValidationError(
-            "multi_record_size_mode must be one of: auto, linear, equal, sqrt (alias of auto)"
+            "multi_record_size_mode must be one of: auto, linear, equal"
         )
-    if normalized == "sqrt":
-        normalized = "auto"
     return cast(Literal["linear", "auto", "equal"], normalized)
 
 
@@ -1810,8 +1916,6 @@ def assemble_linear_diagram_from_records(
     default_colors_palette: str = "default",
     default_colors_file: str | None = None,
     selected_features_set: Sequence[str] | None = None,
-    feature_table: DataFrame | None = None,
-    feature_table_file: str | None = None,
     feature_visibility_table: DataFrame | None = None,
     feature_visibility_table_file: str | None = None,
     feature_shapes: Mapping[str, str] | None = None,
@@ -1840,10 +1944,10 @@ def assemble_linear_diagram_from_records(
     plot_title: str | None = None,
     plot_title_position: Literal["center", "top", "bottom"] = "bottom",
     plot_title_font_size: float | None = None,
-    evalue: float = 1e-5,
-    bitscore: float = 50.0,
-    identity: float = 70.0,
-    alignment_length: int = 0,
+    evalue: float = LINEAR_MODE_PROFILE.comparison.evalue,
+    bitscore: float = LINEAR_MODE_PROFILE.comparison.bitscore,
+    identity: float = LINEAR_MODE_PROFILE.comparison.identity,
+    alignment_length: int = LINEAR_MODE_PROFILE.comparison.alignment_length,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Builds and assembles a linear diagram for the given records.
@@ -1858,6 +1962,18 @@ def assemble_linear_diagram_from_records(
     """
     if not records:
         raise ValidationError("records is empty")
+    thresholds = ComparisonThresholds(
+        evalue=evalue,
+        bitscore=bitscore,
+        identity=identity,
+        alignment_length=alignment_length,
+    )
+    evalue = thresholds.evalue
+    bitscore = thresholds.bitscore
+    identity = thresholds.identity
+    alignment_length = thresholds.alignment_length
+    if config_dict is None and cfg is None:
+        config_overrides = resolve_mode_profile_overrides("linear", config_overrides)
     if layout is not None and not isinstance(layout, LinearMultiRecordOptions):
         raise ValidationError("layout must be LinearMultiRecordOptions or None")
     if linear_comparisons is not None and not all(
@@ -1894,8 +2010,6 @@ def assemble_linear_diagram_from_records(
                     f"query=#{query_index + 1} row={pair_rows[query_index] + 1}, "
                     f"subject=#{subject_index + 1} row={pair_rows[subject_index] + 1}."
                 )
-    if alignment_length < 0:
-        raise ValidationError("alignment_length must be >= 0")
     normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
     if normalized_protein_pairs is not None and normalized_protein_blastp_mode != "pairwise":
         raise ValidationError("protein_comparison_pairs requires protein_blastp_mode='pairwise'")
@@ -1954,12 +2068,8 @@ def assemble_linear_diagram_from_records(
         )
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
-    feature_table, feature_table_file = _resolve_feature_visibility_table_inputs(
-        feature_table=feature_table,
-        feature_table_file=feature_table_file,
-        feature_visibility_table=feature_visibility_table,
-        feature_visibility_table_file=feature_visibility_table_file,
-    )
+    feature_table = feature_visibility_table
+    feature_table_file = feature_visibility_table_file
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
     if feature_table is None and feature_table_file is not None:
@@ -2371,8 +2481,6 @@ def assemble_circular_diagram_from_record(
     default_colors_palette: str = "default",
     default_colors_file: str | None = None,
     selected_features_set: Sequence[str] | None = None,
-    feature_table: DataFrame | None = None,
-    feature_table_file: str | None = None,
     feature_visibility_table: DataFrame | None = None,
     feature_visibility_table_file: str | None = None,
     feature_shapes: Mapping[str, str] | None = None,
@@ -2402,10 +2510,10 @@ def assemble_circular_diagram_from_record(
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
     annotation_options: AnnotationOptions | None = None,
-    evalue: float = 1e-5,
-    bitscore: float = 50.0,
-    identity: float = 70.0,
-    alignment_length: int = 0,
+    evalue: float = CIRCULAR_MODE_PROFILE.comparison.evalue,
+    bitscore: float = CIRCULAR_MODE_PROFILE.comparison.bitscore,
+    identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
+    alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     _definition_profile: Literal["full", "record_summary", "shared_common"] = "full",
     _tick_track_channel_override: Literal["short", "long"] | None = None,
     _precomputed_depth_df: DataFrame | None = None,
@@ -2416,6 +2524,7 @@ def assemble_circular_diagram_from_record(
     _precomputed_conservation_tracks: Sequence[ConservationTrack] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
     _annotation_record_index: int = 0,
+    _definition_group_id: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
@@ -2426,17 +2535,25 @@ def assemble_circular_diagram_from_record(
     If color_table is None and color_table_file is provided, it is loaded.
     If selected_features_set is None, it uses the CLI default feature list.
     """
+    thresholds = ComparisonThresholds(
+        evalue=evalue,
+        bitscore=bitscore,
+        identity=identity,
+        alignment_length=alignment_length,
+    )
+    evalue = thresholds.evalue
+    bitscore = thresholds.bitscore
+    identity = thresholds.identity
+    alignment_length = thresholds.alignment_length
+    if config_dict is None and cfg is None:
+        config_overrides = resolve_mode_profile_overrides("circular", config_overrides)
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
     _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
     _validate_positive_float_optional("conservation_ring_gap", conservation_ring_gap)
     _validate_nonnegative_float_optional("center_reserved_radius", center_reserved_radius)
-    feature_table, feature_table_file = _resolve_feature_visibility_table_inputs(
-        feature_table=feature_table,
-        feature_table_file=feature_table_file,
-        feature_visibility_table=feature_visibility_table,
-        feature_visibility_table_file=feature_visibility_table_file,
-    )
+    feature_table = feature_visibility_table
+    feature_table_file = feature_visibility_table_file
     if color_table is None and color_table_file is not None:
         color_table = read_color_table(color_table_file)
     if feature_table is None and feature_table_file is not None:
@@ -2786,6 +2903,7 @@ def assemble_circular_diagram_from_record(
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
+        definition_group_id=_definition_group_id,
         center_reserved_radius=center_reserved_radius,
         _tick_track_channel_override=_tick_track_channel_override,
     )
@@ -2793,6 +2911,7 @@ def assemble_circular_diagram_from_record(
         _center_single_record_definition_group_on_axis(
             canvas,
             record_id=str(gb_record.id),
+            record_index=_annotation_record_index,
         )
         _add_single_record_plot_title_group(
             canvas=canvas,
@@ -2828,8 +2947,6 @@ def assemble_circular_diagram_from_records(
     default_colors_palette: str = "default",
     default_colors_file: str | None = None,
     selected_features_set: Sequence[str] | None = None,
-    feature_table: DataFrame | None = None,
-    feature_table_file: str | None = None,
     feature_visibility_table: DataFrame | None = None,
     feature_visibility_table_file: str | None = None,
     feature_shapes: Mapping[str, str] | None = None,
@@ -2858,7 +2975,7 @@ def assemble_circular_diagram_from_records(
     plot_title_font_size: float | None = None,
     keep_full_definition_with_plot_title: bool = False,
     center_reserved_radius: float | None = None,
-    multi_record_size_mode: Literal["linear", "auto", "equal", "sqrt"] = "auto",
+    multi_record_size_mode: Literal["linear", "auto", "equal"] = "auto",
     multi_record_min_radius_ratio: float = 0.55,
     multi_record_column_gap_ratio: float = _MULTI_RECORD_COLUMN_GAP_RATIO,
     multi_record_row_gap_ratio: float = _MULTI_RECORD_ROW_GAP_RATIO,
@@ -2866,15 +2983,27 @@ def assemble_circular_diagram_from_records(
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
     annotation_options: AnnotationOptions | None = None,
-    evalue: float = 1e-5,
-    bitscore: float = 50.0,
-    identity: float = 70.0,
-    alignment_length: int = 0,
+    evalue: float = CIRCULAR_MODE_PROFILE.comparison.evalue,
+    bitscore: float = CIRCULAR_MODE_PROFILE.comparison.bitscore,
+    identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
+    alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
     if not records:
         raise ValidationError("records is empty")
+    thresholds = ComparisonThresholds(
+        evalue=evalue,
+        bitscore=bitscore,
+        identity=identity,
+        alignment_length=alignment_length,
+    )
+    evalue = thresholds.evalue
+    bitscore = thresholds.bitscore
+    identity = thresholds.identity
+    alignment_length = thresholds.alignment_length
+    if config_dict is None and cfg is None:
+        config_overrides = resolve_mode_profile_overrides("circular", config_overrides)
     resolved_annotations = resolve_annotations(annotation_options, records, mode="circular")
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
@@ -2898,12 +3027,8 @@ def assemble_circular_diagram_from_records(
         str(plot_title_position)
     )
     normalized_plot_title = _normalize_plot_title(plot_title)
-    feature_table, feature_table_file = _resolve_feature_visibility_table_inputs(
-        feature_table=feature_table,
-        feature_table_file=feature_table_file,
-        feature_visibility_table=feature_visibility_table,
-        feature_visibility_table_file=feature_visibility_table_file,
-    )
+    feature_table = feature_visibility_table
+    feature_table_file = feature_visibility_table_file
 
     if len(records) == 1:
         if (depth_table is not None or depth_file is not None) and (
@@ -2937,8 +3062,8 @@ def assemble_circular_diagram_from_records(
             default_colors_palette=default_colors_palette,
             default_colors_file=default_colors_file,
             selected_features_set=selected_features_set,
-            feature_table=feature_table,
-            feature_table_file=feature_table_file,
+            feature_visibility_table=feature_table,
+            feature_visibility_table_file=feature_table_file,
             feature_shapes=feature_shapes,
             output_prefix=output_prefix,
             legend=legend,
@@ -3198,9 +3323,22 @@ def assemble_circular_diagram_from_records(
     heights: list[float] = []
     record_radii_px: list[float] = []
     track_slot_geometry_records: list[dict[str, Any]] = []
+    record_id_counts = Counter(str(record.id) for record in records)
+    total_record_count = len(records)
     for record_index, (record, record_scale) in enumerate(zip(records, record_scales)):
         scaled_cfg = _scale_circular_cfg(cfg, scale=record_scale)
         record_radii_px.append(float(scaled_cfg.canvas.circular.radius))
+        raw_record_id = str(record.id)
+        definition_group_id = (
+            definition_group_svg_id(
+                raw_record_id,
+                mode="circular",
+                record_index=record_index,
+                record_count=total_record_count,
+            )
+            if record_id_counts[raw_record_id] > 1
+            else None
+        )
         record_conservation_tracks = (
             normalize_conservation_tracks_for_record(
                 conservation_load_result,
@@ -3218,7 +3356,7 @@ def assemble_circular_diagram_from_records(
             color_table=color_table,
             default_colors=default_colors,
             selected_features_set=list(selected_features_set),
-            feature_table=feature_table,
+            feature_visibility_table=feature_table,
             feature_shapes=feature_shapes,
             output_prefix=output_prefix,
             legend="none",
@@ -3236,6 +3374,7 @@ def assemble_circular_diagram_from_records(
             circular_track_axis_index=circular_track_axis_index,
             _resolved_annotations=resolved_annotations,
             _annotation_record_index=record_index,
+            _definition_group_id=definition_group_id,
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
@@ -3662,6 +3801,7 @@ def assemble_circular_diagram_from_records(
         viewBox=f"0 0 {total_width} {total_height}",
         debug=False,
     )
+    used_ids: set[str] = set()
 
     for record_index, sub_canvas in enumerate(canvases):
         row = int(record_row_by_index.get(record_index, 0))
@@ -3673,19 +3813,38 @@ def assemble_circular_diagram_from_records(
         cell_origin_y = grid_origin_y + (row_offsets[row] if row < len(row_offsets) else 0.0)
         cell_offset_x = cell_origin_x
         cell_offset_y = cell_origin_y + (cell_height - sub_height) * 0.5
-        record_group = Group(id=f"record_{record_index}")
+        record_group = Group(id=f"record_{record_index}", debug=False)
+        record_group.attribs["data-gbdraw-record-id"] = str(records[record_index].id)
+        record_group.attribs["data-gbdraw-record-index"] = str(record_index)
         record_group.translate(cell_offset_x, cell_offset_y)
+        used_ids.add(f"record_{record_index}")
 
+        copied_definitions: list[object] = []
+        copied_elements: list[object] = []
         for element in sub_canvas.elements:
-            if _is_defs_element(element):
-                continue
             copied = copy.deepcopy(element)
+            if _is_defs_element(element):
+                copied_definitions.extend(
+                    list(getattr(copied, "elements", ()) or ())
+                )
+                continue
             _suffix_fixed_top_level_group_id(copied, record_index)
+            copied_elements.append(copied)
+
+        _uniquify_copied_subtrees_ids(
+            (*copied_definitions, *copied_elements),
+            record_index=record_index,
+            used_ids=used_ids,
+        )
+        for definition in copied_definitions:
+            merged_canvas.defs.add(definition)
+        for copied in copied_elements:
             record_group.add(copied)
         _center_record_definition_group_on_record_axis(
             record_group,
             record_index=record_index,
             record_id=str(records[record_index].id),
+            record_count=len(records),
         )
         merged_canvas.add(record_group)
 
@@ -3734,7 +3893,10 @@ def build_circular_diagram(
 ) -> Drawing:
     """Build a circular diagram using bundled DiagramOptions."""
 
-    options = options or DiagramOptions()
+    options = resolve_diagram_options_for_mode(
+        DiagramOptions() if options is None else options,
+        mode="circular",
+    )
     _validate_diagram_options_mode(options, mode="circular")
     depth_table, depth_file = _resolve_single_circular_depth_options(options)
     colors = options.colors
@@ -3753,12 +3915,10 @@ def build_circular_diagram(
         default_colors_palette=colors.default_colors_palette if colors else "default",
         default_colors_file=colors.default_colors_file if colors else None,
         selected_features_set=options.selected_features_set,
-        feature_table=options.feature_table,
-        feature_table_file=options.feature_table_file,
         feature_visibility_table=options.feature_visibility_table,
         feature_visibility_table_file=options.feature_visibility_table_file,
         feature_shapes=options.feature_shapes,
-        output_prefix=output.output_prefix if output else "out",
+        output_prefix="out",
         legend=output.legend if output else "right",
         dinucleotide=options.dinucleotide,
         window=options.window,
@@ -3813,7 +3973,10 @@ def build_linear_diagram(
 ) -> Drawing:
     """Build a linear diagram using bundled DiagramOptions."""
 
-    options = options or DiagramOptions()
+    options = resolve_diagram_options_for_mode(
+        DiagramOptions() if options is None else options,
+        mode="linear",
+    )
     _validate_diagram_options_mode(options, mode="linear")
     colors = options.colors
     output = options.output
@@ -3858,12 +4021,10 @@ def build_linear_diagram(
         default_colors_palette=colors.default_colors_palette if colors else "default",
         default_colors_file=colors.default_colors_file if colors else None,
         selected_features_set=options.selected_features_set,
-        feature_table=options.feature_table,
-        feature_table_file=options.feature_table_file,
         feature_visibility_table=options.feature_visibility_table,
         feature_visibility_table_file=options.feature_visibility_table_file,
         feature_shapes=options.feature_shapes,
-        output_prefix=output.output_prefix if output else "out",
+        output_prefix="out",
         legend=output.legend if output else "right",
         dinucleotide=options.dinucleotide,
         window=options.window,
@@ -3908,8 +4069,15 @@ def build_circular_multi_diagram(
 ) -> Drawing:
     """Build a circular multi-record canvas using bundled public options."""
 
-    options = options or DiagramOptions()
+    options = resolve_diagram_options_for_mode(
+        DiagramOptions() if options is None else options,
+        mode="circular",
+    )
     _validate_diagram_options_mode(options, mode="circular_multi")
+    if layout is not None and not isinstance(layout, CircularMultiRecordOptions):
+        raise ValidationError(
+            "layout must be CircularMultiRecordOptions or None."
+        )
     layout = layout or CircularMultiRecordOptions()
     colors = options.colors
     output = options.output
@@ -3933,12 +4101,10 @@ def build_circular_multi_diagram(
         default_colors_palette=colors.default_colors_palette if colors else "default",
         default_colors_file=colors.default_colors_file if colors else None,
         selected_features_set=options.selected_features_set,
-        feature_table=options.feature_table,
-        feature_table_file=options.feature_table_file,
         feature_visibility_table=options.feature_visibility_table,
         feature_visibility_table_file=options.feature_visibility_table_file,
         feature_shapes=options.feature_shapes,
-        output_prefix=output.output_prefix if output else "out",
+        output_prefix="out",
         legend=output.legend if output else "right",
         dinucleotide=options.dinucleotide,
         window=options.window,

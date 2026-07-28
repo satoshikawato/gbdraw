@@ -25,8 +25,8 @@ gbdraw linear \
   --gbk MjeNMV.gb MelaMJNV.gb \
   --track_layout below \
   --track_axis_gap auto \
-  --show_gc \
-  --show_skew \
+  --gc \
+  --skew \
   -o majani_tracks_below \
   -f svg
 ```
@@ -111,22 +111,22 @@ For simple ordering, use `--linear_track_order`:
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb \
-  --show_gc \
-  --show_skew \
+  --gc \
+  --skew \
   --linear_track_order gc_skew,gc_content,features \
   -o MjeNMV_linear_track_order \
   -f svg
 ```
 
-Keep `--show_gc`, `--show_skew`, or `--show_depth` when the order includes the corresponding numeric track; disabled tracks are skipped.
+Keep `--gc` or `--skew` when the order includes the corresponding GC track, and provide at least one `--depth_track` group when it includes Depth; disabled or data-less tracks are skipped.
 
 Use `--linear_track_slot` when a track needs explicit height, spacing, side, or renderer parameters:
 
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb \
-  --show_gc \
-  --show_skew \
+  --gc \
+  --skew \
   --linear_track_slot features:features@side=overlay,h=60px \
   --linear_track_slot gc_content:gc_content@h=24px,spacing=8px \
   --linear_track_slot gc_skew:gc_skew@h=24px,spacing=8px \
@@ -218,7 +218,7 @@ gbdraw linear \
   --ruler_on_axis \
   --scale_interval 750000 \
   --separate_strands \
-  --show_gc \
+  --gc \
   --hide_accession \
   --hide_length \
   --definition_font_size 8 \

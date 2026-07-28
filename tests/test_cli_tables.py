@@ -161,6 +161,39 @@ def test_circular_track_table_rejects_non_feature_axis_row(tmp_path: Path) -> No
         read_circular_track_table(str(table))
 
 
+def test_circular_track_table_rejects_removed_spacing_column(
+    tmp_path: Path,
+) -> None:
+    table = tmp_path / "tracks.tsv"
+    table.write_text(
+        "id\trenderer\tspacing\n"
+        "content\tdinucleotide_content\t4\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="unknown table column 'spacing'"):
+        read_circular_track_table(str(table))
+
+
+@pytest.mark.parametrize(
+    "private_param",
+    ["__gbdraw_legacy_spacing=4px", "_auto_compress=false"],
+)
+def test_fresh_circular_track_table_rejects_private_transport(
+    tmp_path: Path,
+    private_param: str,
+) -> None:
+    table = tmp_path / "tracks.tsv"
+    table.write_text(
+        "id\trenderer\tparams\n"
+        f"content\tdinucleotide_content\t{private_param}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="private key"):
+        read_circular_track_table(str(table))
+
+
 @pytest.mark.parametrize(
     "key",
     [

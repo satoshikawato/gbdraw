@@ -17,13 +17,17 @@ from gbdraw.api import (
     LinearDiagramRequest,
     LinearMultiRecordOptions,
     RecordInput,
-    assemble_linear_diagram_from_records,
     read_comparisons_table,
 )
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import merge_linear_comparisons, validate_linear_comparison_topology
-from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
+from gbdraw.session_request_codec import (
+    CANONICAL_REQUEST_SCHEMA,
+    decode_canonical_request,
+    encode_canonical_request,
+)
 
 
 def _comparison(query: int, subject: int) -> LinearComparison:
@@ -127,8 +131,16 @@ def test_comparison_ribbons_attach_to_painted_occupancy_without_extra_padding() 
             )
         ]
 
-    top_record = groups["r1_record_1"]
-    bottom_record = groups["r3_record_3"]
+    def record_group(record_id: str, record_index: int) -> ET.Element:
+        return next(
+            group
+            for group in groups.values()
+            if group.attrib.get("data-gbdraw-record-id") == record_id
+            and group.attrib.get("data-gbdraw-record-index") == str(record_index)
+        )
+
+    top_record = record_group("r1", 0)
+    bottom_record = record_group("r3", 2)
     comparison = groups["comparison1"]
     top_record_axis = translate_y(top_record)
     top_record_bottom = top_record_axis + max(path_y_values(top_record))
@@ -266,7 +278,7 @@ def test_current_schema_preserves_record_keys_layout_and_explicit_endpoints(tmp_
         ),
     )
     encoded = encode_canonical_request(request)
-    assert encoded.payload["schema"] == 3
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["records"][0]["recordKey"] == "stable-1"
     assert encoded.payload["comparisons"][0]["queryRecordIndex"] == 1
 

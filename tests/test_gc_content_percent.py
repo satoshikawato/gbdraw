@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import re
+import xml.etree.ElementTree as ET
 
 import pandas as pd
 import pytest
@@ -56,8 +57,17 @@ def _axis_font_sizes(svg: str, axis_id: str) -> set[str]:
     return set(re.findall(r'font-size="([^"]+)"', match.group(0)))
 
 
-def _svg_group_translate_y(svg: str, group_id: str) -> float:
-    match = re.search(rf'<g id="{re.escape(group_id)}" transform="translate\([^,]+,([^)]+)\)"', svg)
+def _svg_slot_translate_y(svg: str, renderer: str) -> float:
+    root = ET.fromstring(svg)
+    group = next(
+        element
+        for element in root.iter()
+        if element.get("data-gbdraw-slot-renderer") == renderer
+    )
+    match = re.fullmatch(
+        r"translate\([^,]+,([^)]+)\)",
+        group.get("transform", ""),
+    )
     assert match is not None
     return float(match.group(1))
 
@@ -224,8 +234,8 @@ def test_linear_gc_content_percent_mode_reserves_full_height_before_gc_skew() ->
         step=20,
     )
     svg = canvas.tostring()
-    gc_y = _svg_group_translate_y(svg, "gc_content")
-    skew_y = _svg_group_translate_y(svg, "gc_skew")
+    gc_y = _svg_slot_translate_y(svg, "dinucleotide_content")
+    skew_y = _svg_slot_translate_y(svg, "dinucleotide_skew")
     slots = {
         slot["slotId"]: slot
         for slot in canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
@@ -278,12 +288,31 @@ def test_circular_gc_content_percent_container_ids_are_slot_scoped() -> None:
         step=20,
     ).tostring()
 
-    assert 'id="gc_content_percent_background"' in svg
-    assert 'id="at_content_percent_background"' in svg
-    assert 'id="gc_content_percent_border"' in svg
-    assert 'id="at_content_percent_border"' in svg
-    assert svg.count("percent_background") == 2
-    assert svg.count("percent_border") == 2
+    root = ET.fromstring(svg)
+    groups = {
+        element.attrib["data-gbdraw-slot-id"]: element
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-slot-id")
+    }
+    child_ids_by_slot = {
+        slot_id: {
+            child.attrib["id"]
+            for child in group.iter()
+            if child is not group and child.attrib.get("id")
+        }
+        for slot_id, group in groups.items()
+    }
+
+    assert set(child_ids_by_slot) == {"gc_content", "at_content"}
+    assert all(len(child_ids) == 2 for child_ids in child_ids_by_slot.values())
+    assert child_ids_by_slot["gc_content"].isdisjoint(
+        child_ids_by_slot["at_content"]
+    )
+    assert all(
+        child_id.startswith("track_slot_child_")
+        for child_ids in child_ids_by_slot.values()
+        for child_id in child_ids
+    )
 
 
 def test_circular_scalar_area_closure_is_opt_in_for_depth_paths() -> None:
@@ -438,7 +467,7 @@ def test_linear_cli_gc_percent_options_forward_to_api(
         [
             "--gbk",
             "dummy.gb",
-            "--show_gc",
+            "--gc",
             "--gc_content_mode",
             "percent",
             "--gc_content_min_percent",

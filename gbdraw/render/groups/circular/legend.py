@@ -9,6 +9,7 @@ from svgwrite.path import Path
 
 from ....legend.circular_layout import CircularGradientLegendLayout, build_circular_legend_layout
 from ....svg.text_path import generate_text_path
+from ....svg.ids import stable_svg_id
 
 
 class LegendGroup:
@@ -61,12 +62,18 @@ class LegendGroup:
         return rectangle_path
 
     def _gradient_id(self, key: str, properties: Mapping[str, object]) -> str:
-        raw = f"{key}_{properties['min_color']}_{properties['max_color']}"
-        safe = "".join(char if char.isalnum() else "_" for char in raw).strip("_")
-        return f"circular_legend_grad_{safe or 'identity'}"
+        return stable_svg_id(
+            "circular_legend_grad",
+            "circular-conservation-gradient",
+            key,
+            properties["min_color"],
+            properties["max_color"],
+        )
 
     def _build_gradient_legend(self, layout: CircularGradientLegendLayout) -> Group:
-        group = Group(id="conservation_identity_legend")
+        group = Group(id="conservation_identity_legend", debug=False)
+        group.attribs["data-gbdraw-role"] = "comparison-legend"
+        group.attribs["data-gbdraw-orientation"] = "circular"
         font = self.font_family
         path_desc = (
             f"M 0,{-self.color_rect_size / 2} L {layout.bar_width},{-self.color_rect_size / 2} "

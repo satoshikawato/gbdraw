@@ -40,6 +40,8 @@ from gbdraw.api.options import (
     LinearMultiRecordOptions as _LinearLayout,
     OutputOptions as _OutputOptions,
     TrackOptions as _TrackOptions,
+    _validate_center_reserved_radius,
+    _validate_track_configuration,
 )
 from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
@@ -47,6 +49,12 @@ from gbdraw.features.visibility import read_feature_visibility_file
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.mode_profiles import (
+    CIRCULAR_MODE_PROFILE,
+    ComparisonThresholds,
+    DEFAULT_FEATURE_TYPES,
+    LINEAR_MODE_PROFILE,
+)
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
@@ -60,7 +68,7 @@ RecordCollection: TypeAlias = SeqRecord | Sequence[SeqRecord]
 class FeatureOptions:
     """Feature selection, colors, visibility, and shape overrides."""
 
-    types: Sequence[str] | None = None
+    types: Sequence[str] | None = DEFAULT_FEATURE_TYPES
     color_table: TableSource | None = None
     default_colors: TableSource | None = None
     palette: str = "default"
@@ -88,12 +96,58 @@ class TitleOptions:
 
 @dataclass(frozen=True)
 class Thresholds:
-    """Filters shared by comparison and conservation inputs."""
+    """Optional comparison filters resolved by the owning diagram mode."""
 
-    evalue: float = 1e-5
-    bitscore: float = 50.0
-    identity: float = 70.0
-    alignment_length: int = 0
+    evalue: float | None = None
+    bitscore: float | None = None
+    identity: float | None = None
+    alignment_length: int | None = None
+
+    def __post_init__(self) -> None:
+        validated = ComparisonThresholds(
+            evalue=0.0 if self.evalue is None else self.evalue,
+            bitscore=0.0 if self.bitscore is None else self.bitscore,
+            identity=0.0 if self.identity is None else self.identity,
+            alignment_length=(
+                0 if self.alignment_length is None else self.alignment_length
+            ),
+        )
+        for field_name in (
+            "evalue",
+            "bitscore",
+            "identity",
+            "alignment_length",
+        ):
+            if getattr(self, field_name) is not None:
+                object.__setattr__(
+                    self,
+                    field_name,
+                    getattr(validated, field_name),
+                )
+
+
+def _resolve_thresholds(
+    thresholds: Thresholds,
+    defaults: ComparisonThresholds,
+) -> Thresholds:
+    return Thresholds(
+        evalue=defaults.evalue if thresholds.evalue is None else thresholds.evalue,
+        bitscore=(
+            defaults.bitscore
+            if thresholds.bitscore is None
+            else thresholds.bitscore
+        ),
+        identity=(
+            defaults.identity
+            if thresholds.identity is None
+            else thresholds.identity
+        ),
+        alignment_length=(
+            defaults.alignment_length
+            if thresholds.alignment_length is None
+            else thresholds.alignment_length
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -108,6 +162,19 @@ class DepthTrackOptions:
     small_tick_interval: float | str | None = None
     tick_font_size: float | str | None = None
 
+    def __post_init__(self) -> None:
+        source = self.source
+        if isinstance(source, (DataFrame, str, PathLike)):
+            _source(source, name="depth track source")
+            return
+        if isinstance(source, (str, bytes)) or not isinstance(source, Sequence):
+            raise ValidationError(
+                "DepthTrackOptions.source must be a table, path, or sequence "
+                "of tables, paths, and None values."
+            )
+        for index, item in enumerate(source):
+            _source(item, name=f"DepthTrackOptions.source[{index}]")
+
 
 @dataclass(frozen=True)
 class CircularTrackOptions:
@@ -117,6 +184,25 @@ class CircularTrackOptions:
     axis_index: int | None = None
     center_reserved_radius: float | None = None
 
+    def __post_init__(self) -> None:
+        axis_index = _validate_track_configuration(
+            self.slots,
+            axis_index=self.axis_index,
+            mode="circular",
+            expected_type=CircularTrackSlot,
+            slots_field_name="CircularTrackOptions.slots",
+            axis_field_name="CircularTrackOptions.axis_index",
+        )
+        object.__setattr__(self, "axis_index", axis_index)
+        object.__setattr__(
+            self,
+            "center_reserved_radius",
+            _validate_center_reserved_radius(
+                self.center_reserved_radius,
+                field_name="CircularTrackOptions.center_reserved_radius",
+            ),
+        )
+
 
 @dataclass(frozen=True)
 class LinearTrackOptions:
@@ -125,16 +211,47 @@ class LinearTrackOptions:
     slots: Sequence[str | LinearTrackSlot] | None = None
     axis_index: int | None = None
 
+    def __post_init__(self) -> None:
+        axis_index = _validate_track_configuration(
+            self.slots,
+            axis_index=self.axis_index,
+            mode="linear",
+            expected_type=LinearTrackSlot,
+            slots_field_name="LinearTrackOptions.slots",
+            axis_field_name="LinearTrackOptions.axis_index",
+        )
+        object.__setattr__(self, "axis_index", axis_index)
+
 
 @dataclass(frozen=True)
 class CircularLayout:
     """Grid layout used automatically when a circular diagram has multiple records."""
 
-    size: Literal["linear", "auto", "equal", "sqrt"] = "auto"
+    size: Literal["linear", "auto", "equal"] = "auto"
     min_radius_ratio: float = 0.55
     column_gap_ratio: float = 0.10
     row_gap_ratio: float = 0.05
     positions: Sequence[str] | None = None
+
+    def __post_init__(self) -> None:
+        normalized = self._legacy()
+        object.__setattr__(self, "size", normalized.multi_record_size_mode)
+        object.__setattr__(
+            self,
+            "min_radius_ratio",
+            normalized.multi_record_min_radius_ratio,
+        )
+        object.__setattr__(
+            self,
+            "column_gap_ratio",
+            normalized.multi_record_column_gap_ratio,
+        )
+        object.__setattr__(
+            self,
+            "row_gap_ratio",
+            normalized.multi_record_row_gap_ratio,
+        )
+        object.__setattr__(self, "positions", normalized.multi_record_positions)
 
     def _legacy(self) -> _CircularLayout:
         return _CircularLayout(
@@ -152,6 +269,11 @@ class LinearLayout:
 
     record_gap: float = 24.0
     positions: Sequence[str] | None = None
+
+    def __post_init__(self) -> None:
+        normalized = self._legacy()
+        object.__setattr__(self, "record_gap", normalized.record_gap_px)
+        object.__setattr__(self, "positions", normalized.multi_record_positions)
 
     def _legacy(self) -> _LinearLayout:
         return _LinearLayout(
@@ -226,6 +348,30 @@ class _CommonOptions:
     thresholds: Thresholds = field(default_factory=Thresholds)
 
 
+def _validate_common_options(options: _CommonOptions) -> None:
+    expected_types = (
+        ("features", options.features, FeatureOptions),
+        ("labels", options.labels, LabelOptions),
+        ("title", options.title, TitleOptions),
+        ("thresholds", options.thresholds, Thresholds),
+    )
+    for field_name, value, expected_type in expected_types:
+        if not isinstance(value, expected_type):
+            raise ValidationError(
+                f"{field_name} must be {expected_type.__name__}."
+            )
+    if (
+        isinstance(options.depth_tracks, (str, bytes))
+        or not isinstance(options.depth_tracks, Sequence)
+        or not all(
+            isinstance(track, DepthTrackOptions) for track in options.depth_tracks
+        )
+    ):
+        raise ValidationError(
+            "depth_tracks must contain DepthTrackOptions values."
+        )
+
+
 @dataclass(frozen=True)
 class CircularOptions(_CommonOptions):
     """Options accepted only by :func:`draw_circular`."""
@@ -235,6 +381,31 @@ class CircularOptions(_CommonOptions):
     species: str | None = None
     strain: str | None = None
     keep_full_definition_with_title: bool = False
+    thresholds: Thresholds = field(default_factory=Thresholds)
+
+    def __post_init__(self) -> None:
+        _validate_common_options(self)
+        object.__setattr__(
+            self,
+            "thresholds",
+            _resolve_thresholds(
+                self.thresholds,
+                CIRCULAR_MODE_PROFILE.comparison,
+            ),
+        )
+        if not isinstance(self.tracks, CircularTrackOptions):
+            raise ValidationError("tracks must be CircularTrackOptions.")
+        if not isinstance(self.conservation, ConservationOptions):
+            raise ValidationError("conservation must be ConservationOptions.")
+        if self.title.position not in {None, "none", "top", "bottom"}:
+            raise ValidationError(
+                "Circular title position must be one of: none, top, bottom."
+            )
+        for track in self.depth_tracks:
+            if track.height is not None:
+                raise ValidationError(
+                    "Depth track height is supported only by linear diagrams."
+                )
 
 
 @dataclass(frozen=True)
@@ -243,6 +414,26 @@ class LinearOptions(_CommonOptions):
 
     tracks: LinearTrackOptions = field(default_factory=LinearTrackOptions)
     comparisons: LinearComparisonOptions = field(default_factory=LinearComparisonOptions)
+    thresholds: Thresholds = field(default_factory=Thresholds)
+
+    def __post_init__(self) -> None:
+        _validate_common_options(self)
+        object.__setattr__(
+            self,
+            "thresholds",
+            _resolve_thresholds(
+                self.thresholds,
+                LINEAR_MODE_PROFILE.comparison,
+            ),
+        )
+        if not isinstance(self.tracks, LinearTrackOptions):
+            raise ValidationError("tracks must be LinearTrackOptions.")
+        if not isinstance(self.comparisons, LinearComparisonOptions):
+            raise ValidationError("comparisons must be LinearComparisonOptions.")
+        if self.title.position not in {None, "center", "top", "bottom"}:
+            raise ValidationError(
+                "Linear title position must be one of: center, top, bottom."
+            )
 
 
 class Diagram:
@@ -594,7 +785,7 @@ def _interactive_context(
     return build_interactive_svg_context(
         records,
         selected_features_set=options.features.types,
-        feature_table=visibility_table,
+        feature_visibility_table=visibility_table,
         color_table=color_table,
         default_colors=default_colors,
         orthogroups=legacy.orthogroups,
@@ -617,6 +808,8 @@ def draw_circular(
     options = options or CircularOptions()
     if not isinstance(options, CircularOptions):
         raise ValidationError("draw_circular options must be CircularOptions.")
+    if layout is not None and not isinstance(layout, CircularLayout):
+        raise ValidationError("draw_circular layout must be CircularLayout.")
     if len(normalized) == 1 and layout is not None:
         raise ValidationError("CircularLayout requires at least two records.")
     legacy = _circular_options(options, record_count=len(normalized))
@@ -653,6 +846,8 @@ def draw_linear(
     options = options or LinearOptions()
     if not isinstance(options, LinearOptions):
         raise ValidationError("draw_linear options must be LinearOptions.")
+    if layout is not None and not isinstance(layout, LinearLayout):
+        raise ValidationError("draw_linear layout must be LinearLayout.")
     legacy = _linear_options(options, record_count=len(normalized))
     drawing = _build_linear_diagram(
         normalized,

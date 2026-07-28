@@ -21,6 +21,8 @@ from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import load_comparisons
+from gbdraw.legend.table import prepare_legend_table
+from gbdraw.render.drawers.circular.conservation import ConservationDrawer
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 
 
@@ -295,6 +297,75 @@ def test_pairwise_match_ribbon_path_uses_straight_segments() -> None:
     assert "C" not in path_desc
     assert path.attribs["data-pairwise-match-style"] == "ribbon"
     assert float(path.attribs["data-identity-factor"]) == pytest.approx(0.95)
+
+
+@pytest.mark.linear
+def test_pairwise_match_identity_100_uses_the_maximum_color() -> None:
+    group = _build_pairwise_group("ribbon")
+    group.min_identity = 100
+    row = _build_match_row()
+    row.identity = 100
+
+    path = group.generate_linear_match_path(row)
+
+    assert path.attribs["fill"] == "#000000"
+    assert float(path.attribs["data-identity-factor"]) == 1
+
+
+@pytest.mark.circular
+def test_circular_conservation_identity_100_uses_the_maximum_color() -> None:
+    drawer = ConservationDrawer(
+        min_identity=100,
+        min_color="#ffffff",
+        max_color="#000000",
+        fill_opacity=1,
+        stroke_color="none",
+        stroke_width=0,
+    )
+
+    assert drawer._identity_factor(100) == 1
+    assert drawer._fill_color(100) == "#000000"
+
+
+def test_identity_100_legend_is_a_safe_zero_span_at_the_maximum_color() -> None:
+    feature_config = SimpleNamespace(
+        color_table=None,
+        default_colors=pd.DataFrame(
+            [("CDS", "#54bcf8"), ("default", "#d3d3d3")],
+            columns=["feature_type", "color"],
+        ),
+        block_stroke_color="none",
+        block_stroke_width=0,
+    )
+    hidden_track = SimpleNamespace(
+        show_gc=False,
+        show_skew=False,
+        dinucleotide="GC",
+        stroke_color="none",
+        stroke_width=0,
+        high_fill_color="#ffffff",
+        low_fill_color="#000000",
+    )
+    blast_config = SimpleNamespace(
+        min_color="#ffffff",
+        max_color="#000000",
+        identity=100,
+        hide_pairwise_identity_legend=False,
+    )
+
+    legend = prepare_legend_table(
+        hidden_track,
+        hidden_track,
+        feature_config,
+        [],
+        blast_config=blast_config,
+        has_blast=True,
+    )
+    gradient = legend["Pairwise match identity"]
+
+    assert gradient["min_value"] == 100
+    assert gradient["min_color"] == "#000000"
+    assert gradient["max_color"] == "#000000"
 
 
 @pytest.mark.linear

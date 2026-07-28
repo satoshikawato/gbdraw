@@ -33,9 +33,32 @@ REFERENCE_DIR = TESTS_DIR / "reference_outputs"
 EXAMPLES_DIR = TESTS_DIR.parent / "examples"
 
 
-def _strip_additive_match_ids(svg_text: str) -> str:
-    """Ignore non-visual generic match IDs in geometry reference comparisons."""
-    return re.sub(r'\sdata-gbdraw-match-id="[^"]*"', "", svg_text)
+def _strip_additive_semantic_attributes(svg_text: str) -> str:
+    """Ignore non-visual metadata in geometry reference comparisons."""
+
+    def strip_definition_group_metadata(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        role_match = re.search(r'\sdata-gbdraw-role="([^"]*)"', tag)
+        if role_match is None or role_match.group(1) not in {
+            "record-definition",
+            "record-definition-row",
+            "plot-title",
+        }:
+            return tag
+        for attribute in ("data-gbdraw-role", "data-gbdraw-definition-part"):
+            tag = re.sub(rf'\s{attribute}="[^"]*"', "", tag)
+        return tag
+
+    svg_text = re.sub(r"<g\b[^>]*>", strip_definition_group_metadata, svg_text)
+    for attribute in (
+        "data-gbdraw-match-id",
+        "data-gbdraw-record-id",
+        "data-gbdraw-record-index",
+        "data-gbdraw-slot-id",
+        "data-gbdraw-slot-renderer",
+    ):
+        svg_text = re.sub(rf'\s{attribute}="[^"]*"', "", svg_text)
+    return svg_text
 
 
 def get_file_hash(path: Path) -> str:
@@ -160,22 +183,22 @@ TEST_CASES = {
     "circular_no_gc": {
         "type": "circular",
         "gbk": "MjeNMV.gb",
-        "args": ["--suppress_gc", "--legend", "none"],
+        "args": ["--no-gc", "--legend", "none"],
     },
     "circular_no_skew": {
         "type": "circular",
         "gbk": "MjeNMV.gb",
-        "args": ["--suppress_skew", "--legend", "none"],
+        "args": ["--no-skew", "--legend", "none"],
     },
     "circular_no_gc_skew": {
         "type": "circular",
         "gbk": "MjeNMV.gb",
-        "args": ["--suppress_gc", "--suppress_skew", "--legend", "none"],
+        "args": ["--no-gc", "--no-skew", "--legend", "none"],
     },
     "circular_hepatoplasma_repeat_underlay": {
         "type": "circular",
         "gbk": "AP027078.gb",
-        "args": ["--suppress_gc", "--suppress_skew", "--legend", "none"],
+        "args": ["--no-gc", "--no-skew", "--legend", "none"],
     },
     # Linear test cases
     "linear_basic": {
@@ -186,7 +209,7 @@ TEST_CASES = {
     "linear_with_gc_skew": {
         "type": "linear",
         "gbk": ["MjeNMV.gb"],
-        "args": ["--show_gc", "--show_skew", "--legend", "none"],
+        "args": ["--gc", "--skew", "--legend", "none"],
     },
     "linear_separate_strands": {
         "type": "linear",
@@ -283,8 +306,8 @@ class TestOutputComparison:
 
         # Compare with reference
         result = compare_svgs(
-            _strip_additive_match_ids(ref_path.read_text(encoding="utf-8")),
-            _strip_additive_match_ids(output_svg.read_text(encoding="utf-8")),
+            _strip_additive_semantic_attributes(ref_path.read_text(encoding="utf-8")),
+            _strip_additive_semantic_attributes(output_svg.read_text(encoding="utf-8")),
         )
 
         if not result.equal:

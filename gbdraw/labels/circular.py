@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""
-Circular label placement utilities.
-
-This module contains the circular/arc-based label placement logic that used to live in
-`gbdraw.labels.placement`.
-"""
+"""Circular and arc-based label placement utilities."""
 
 from __future__ import annotations
 
@@ -18,7 +13,6 @@ from ..features.coordinates import get_strand
 from .filtering import preprocess_label_filtering
 from .policy import normalize_label_rendering
 from .circular_candidates import build_circular_label_candidates
-from .circular_horizontal import keep_horizontal_layout
 from .circular_radial import place_radial_labels
 from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ..core.text import calculate_bbox_dimensions
@@ -4452,54 +4446,6 @@ def rearrange_labels_fc(
     return _assign_leader_start_points(best_labels, total_length)
 
 
-def _coalesce_origin_spanning_label_segment(
-    feature_object,
-    total_length: int,
-) -> tuple[int, int, str] | None:
-    """
-    Return a merged origin-spanning segment for boundary-touching two-block features.
-
-    This mirrors circular feature path coalescing so label midpoint logic stays
-    consistent with rendered feature geometry.
-    """
-    if total_length <= 0:
-        return None
-
-    block_coords = [coord for coord in feature_object.location if coord.kind == "block"]
-    if len(block_coords) != 2:
-        return None
-
-    starts = [int(coord.start) for coord in block_coords]
-    ends = [int(coord.end) for coord in block_coords]
-    if min(starts) > 1 or max(ends) < int(total_length):
-        return None
-
-    left_blocks = [coord for coord in block_coords if int(coord.start) <= 1]
-    right_blocks = [coord for coord in block_coords if int(coord.end) >= int(total_length)]
-    if len(left_blocks) != 1 or len(right_blocks) != 1 or left_blocks[0] is right_blocks[0]:
-        return None
-
-    merged_start = max(starts)
-    merged_end = min(ends)
-    if merged_start <= merged_end:
-        return None
-
-    return merged_start, merged_end, str(block_coords[0].strand)
-
-
-def _segment_midpoint_bp(
-    segment_start: int,
-    segment_end: int,
-    total_length: int,
-) -> float:
-    """Return segment midpoint in bp, supporting origin-spanning segments."""
-    if segment_start <= segment_end or total_length <= 0:
-        return float(segment_start + segment_end) / 2.0
-
-    span_bp = (float(total_length) - float(segment_start)) + float(segment_end)
-    return float((float(segment_start) + (0.5 * span_bp)) % float(total_length))
-
-
 def _segment_span_bp(
     segment_start: int,
     segment_end: int,
@@ -5079,7 +5025,7 @@ def prepare_label_list(
         key=lambda label: float(label["middle"]),
     )
     label_list_fc = embedded_labels + external_labels_ordered
-    return list(keep_horizontal_layout(label_list_fc).labels)
+    return label_list_fc
 
 
 __all__ = [

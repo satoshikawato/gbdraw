@@ -30,7 +30,7 @@ class GcContentGroup:
         cfg: GbdrawConfig | None = None,
     ) -> None:
         self.group_id = group_id or "gc_content"
-        self.gc_group = Group(id=self.group_id)
+        self.gc_group = Group(id=self.group_id, debug=False)
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record

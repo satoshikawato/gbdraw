@@ -14,6 +14,7 @@ def make_feature_draw_ratio_capture(captured: list[float]):
         _track_type,
         _strandedness,
         _length_param,
+        **_kwargs,
     ):
         captured.append(float(track_ratio_factor))
         return group

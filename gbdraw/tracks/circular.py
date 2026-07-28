@@ -124,11 +124,65 @@ class CircularTrackSlot:
     side: str | None = None
     radius: ScalarSpec | None = None
     width: ScalarSpec | None = None
-    spacing: ScalarSpec | None = None
     z: int = 0
     params: Mapping[str, Any] = field(default_factory=dict)
     inner_gap_px: float | None = None
     outer_gap_px: float | None = None
+
+
+@dataclass(frozen=True)
+class _InternalCircularTrackSlot(CircularTrackSlot):
+    """Reader/planner-only state that must never be accepted as public params."""
+
+    legacy_spacing: ScalarSpec | None = None
+    auto_compress: bool = False
+    preferred_anchor_radius: ScalarSpec | None = None
+
+
+def _internal_circular_track_slot(
+    slot: CircularTrackSlot,
+    *,
+    legacy_spacing: ScalarSpec | None = None,
+    auto_compress: bool = False,
+    preferred_anchor_radius: ScalarSpec | None = None,
+) -> _InternalCircularTrackSlot:
+    """Attach trusted reader/planner state without exposing private param keys."""
+
+    existing = (
+        slot
+        if isinstance(slot, _InternalCircularTrackSlot)
+        else None
+    )
+    return _InternalCircularTrackSlot(
+        id=slot.id,
+        renderer=slot.renderer,
+        enabled=slot.enabled,
+        side=slot.side,
+        radius=slot.radius,
+        width=slot.width,
+        z=slot.z,
+        params=slot.params,
+        inner_gap_px=slot.inner_gap_px,
+        outer_gap_px=slot.outer_gap_px,
+        legacy_spacing=(
+            legacy_spacing
+            if legacy_spacing is not None
+            else (existing.legacy_spacing if existing is not None else None)
+        ),
+        auto_compress=(
+            auto_compress
+            or (existing.auto_compress if existing is not None else False)
+        ),
+        preferred_anchor_radius=(
+            preferred_anchor_radius
+            if preferred_anchor_radius is not None
+            else (
+                existing.preferred_anchor_radius
+                if existing is not None
+                else None
+            )
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -140,7 +194,7 @@ class NormalizedCircularTrackSlot:
     side: str
     radius: ScalarSpec | None
     width: ScalarSpec | None
-    spacing: ScalarSpec | None
+    legacy_spacing: ScalarSpec | None
     inner_gap_px: float | None
     outer_gap_px: float | None
     z: int
@@ -148,6 +202,7 @@ class NormalizedCircularTrackSlot:
     reserve: bool
     params: Mapping[str, Any]
     annotation: AnnotationTrackParams | None = None
+    preferred_anchor_radius: ScalarSpec | None = None
 
 
 def _normalize_renderer(raw: str) -> str:
@@ -245,7 +300,11 @@ def _parse_slot_head(head: str, original: str) -> tuple[str, str]:
 
 
 
-def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
+def parse_circular_track_slot(
+    raw: str,
+    *,
+    _allow_legacy_transport: bool = False,
+) -> CircularTrackSlot:
     """Parse `<slot_id>:<renderer>@key=value,...` into a slot input object."""
 
     original = raw
@@ -269,9 +328,9 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
     side: str | None = None
     radius: ScalarSpec | None = None
     width: ScalarSpec | None = None
-    spacing: ScalarSpec | None = None
     inner_gap_px: float | None = None
     outer_gap_px: float | None = None
+    legacy_spacing: ScalarSpec | None = None
     z = 0
     params: dict[str, Any] = {}
 
@@ -295,7 +354,17 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
                 elif key in {"w", "width"}:
                     width = ScalarSpec.parse(value)
                 elif key == "spacing":
-                    spacing = ScalarSpec.parse(value)
+                    if not _allow_legacy_transport:
+                        raise ValueError(
+                            "'spacing' is no longer supported; use inner_gap_px and outer_gap_px"
+                        )
+                    legacy_spacing = ScalarSpec.parse(value)
+                elif key == "__gbdraw_legacy_spacing":
+                    if not _allow_legacy_transport:
+                        raise ValueError(
+                            "private legacy spacing transport is not accepted by fresh track slots"
+                        )
+                    legacy_spacing = ScalarSpec.parse(value)
                 elif key == "inner_gap_px":
                     inner_gap_px = _parse_gap_px(value, field_name="inner_gap_px")
                 elif key == "outer_gap_px":
@@ -305,15 +374,22 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
                 elif key in {"innerradius", "outerradius"}:
                     raise ValueError(f"'{raw_key}' is no longer supported; use r=<radius> with w=<width>")
                 elif key in _OBSOLETE_SPACING_KEYS or key == "gapafter":
-                    raise ValueError(f"'{key}' is no longer supported; use spacing=<ScalarSpec>")
+                    raise ValueError(
+                        f"'{key}' is no longer supported; use inner_gap_px and outer_gap_px"
+                    )
                 elif key == "side":
                     side = _normalize_side_value(value)
                 elif key in {"strict", "compress", "reserve"}:
-                    # Retired public flags: resolver strictness, compression,
-                    # and reservation are now determined from geometry/side.
-                    continue
+                    if not _allow_legacy_transport:
+                        raise ValueError(
+                            f"'{key}' is no longer supported; geometry and reservation are derived from side"
+                        )
                 elif key in {"nt", "dinucleotide"}:
                     params["nt"] = value.upper()
+                elif key.startswith("_"):
+                    raise ValueError(
+                        f"private circular track parameter '{raw_key}' is not supported"
+                    )
                 else:
                     params[key] = value
         except CircularTrackSlotParseError:
@@ -323,11 +399,6 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
 
     if not slot_id:
         raise CircularTrackSlotParseError("missing circular track slot id", original)
-    if spacing is not None and (inner_gap_px is not None or outer_gap_px is not None):
-        raise CircularTrackSlotParseError(
-            "spacing cannot be combined with inner_gap_px or outer_gap_px",
-            original,
-        )
     if renderer == "dinucleotide_skew":
         params = _normalize_dinucleotide_skew_color_params(params)
 
@@ -338,12 +409,16 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
         side=side,
         radius=radius,
         width=width,
-        spacing=spacing,
         z=z,
         params=params,
         inner_gap_px=inner_gap_px,
         outer_gap_px=outer_gap_px,
     )
+    if legacy_spacing is not None:
+        slot = _internal_circular_track_slot(
+            slot,
+            legacy_spacing=legacy_spacing,
+        )
     try:
         _normalize_circular_track_slots([slot], validate_anchor_references=False)
     except Exception as exc:
@@ -351,7 +426,11 @@ def parse_circular_track_slot(raw: str) -> CircularTrackSlot:
     return slot
 
 
-def parse_circular_track_slots(specs: Sequence[str | CircularTrackSlot]) -> list[CircularTrackSlot]:
+def parse_circular_track_slots(
+    specs: Sequence[str | CircularTrackSlot],
+    *,
+    _allow_legacy_transport: bool = False,
+) -> list[CircularTrackSlot]:
     """Parse and validate circular slot specs."""
 
     out: list[CircularTrackSlot] = []
@@ -360,15 +439,32 @@ def parse_circular_track_slots(specs: Sequence[str | CircularTrackSlot]) -> list
         if isinstance(item, CircularTrackSlot):
             renderer = _normalize_renderer(str(item.renderer))
             params = {str(key): value for key, value in dict(item.params or {}).items()}
+            legacy_spacing: ScalarSpec | None = None
+            if _allow_legacy_transport:
+                legacy_spacing_raw = params.pop("__gbdraw_legacy_spacing", None)
+                if legacy_spacing_raw is not None:
+                    legacy_spacing = (
+                        legacy_spacing_raw
+                        if isinstance(legacy_spacing_raw, ScalarSpec)
+                        else ScalarSpec.parse(legacy_spacing_raw)
+                    )
             if renderer == "dinucleotide_skew":
                 params = _normalize_dinucleotide_skew_color_params(params)
             slot = replace(item, renderer=renderer, params=params)
+            if legacy_spacing is not None:
+                slot = _internal_circular_track_slot(
+                    slot,
+                    legacy_spacing=legacy_spacing,
+                )
             try:
                 _normalize_circular_track_slots([slot], validate_anchor_references=False)
             except Exception as exc:
                 raise CircularTrackSlotParseError(str(exc), str(slot.id)) from exc
         else:
-            slot = parse_circular_track_slot(str(item))
+            slot = parse_circular_track_slot(
+                str(item),
+                _allow_legacy_transport=_allow_legacy_transport,
+            )
         if slot.id in seen:
             raise CircularTrackSlotParseError("duplicate circular track slot id", slot.id)
         seen.add(slot.id)
@@ -486,13 +582,12 @@ def circular_track_slots_with_axis_side(
     ]
 
 
-def _normalized_tick_params(params: dict[str, Any], side: str) -> dict[str, Any]:
+def _normalized_tick_params(params: dict[str, Any]) -> dict[str, Any]:
     if "axis" in {str(key).strip().lower() for key in params}:
         raise ValueError("ticks slots no longer accept 'axis'; the circular axis is fixed and not a slot")
     lowered_keys = {str(key).strip().lower() for key in params}
     if "label_side" in lowered_keys or "tick_side" in lowered_keys:
         raise ValueError("ticks slots use tick_label_layout; label_side and tick_side are no longer supported")
-    del side
     params["tick_label_layout"] = normalize_tick_label_layout(params.get("tick_label_layout"))
     return params
 
@@ -513,13 +608,26 @@ def _normalize_circular_track_slots(
         renderer = _normalize_renderer(str(slot.renderer))
         if renderer not in SUPPORTED_CIRCULAR_TRACK_RENDERERS:
             raise ValueError(f"unknown circular track renderer: {slot.renderer}")
-        if not slot.enabled:
-            continue
 
         raw_params = {str(key): value for key, value in dict(slot.params or {}).items()}
+        internal_slot = (
+            slot
+            if isinstance(slot, _InternalCircularTrackSlot)
+            else None
+        )
+        legacy_spacing = (
+            internal_slot.legacy_spacing
+            if internal_slot is not None
+            else None
+        )
         for raw_key in raw_params:
             key = raw_key.strip()
             normalized_key = key.lower()
+            if normalized_key.startswith("_"):
+                raise ValueError(
+                    f"circular track slot '{slot.id}' contains private "
+                    f"parameter '{raw_key}', which is not accepted by fresh slots"
+                )
             if (
                 normalized_key in _OBSOLETE_CAMEL_KEYS
                 or normalized_key in _GENERIC_LAYOUT_KEYS
@@ -528,8 +636,10 @@ def _normalize_circular_track_slots(
             ):
                 raise ValueError(
                     f"circular track slot '{slot.id}' stores generic layout field '{raw_key}' in params; "
-                    "use slot-level radius, width, spacing, side, and z fields"
+                    "use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields"
                 )
+        if not slot.enabled:
+            continue
         params = dict(raw_params)
         side = _normalize_side_value(slot.side) if slot.side is not None else (
             "outside" if renderer == "annotations" else "inside"
@@ -542,7 +652,7 @@ def _normalize_circular_track_slots(
         elif renderer == "ticks":
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
             reserve = side == "overlay"
-            params = _normalized_tick_params(params, side)
+            params = _normalized_tick_params(params)
         elif renderer == "sequence_conservation":
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
             if side == "overlay":
@@ -573,11 +683,11 @@ def _normalize_circular_track_slots(
             if side != "overlay" and annotation_params.anchor_slot is not None:
                 raise ValueError(f"annotation slot '{slot.id}' uses anchor_slot without side=overlay")
 
-        auto_compress = bool(params.pop("_auto_compress", False))
-        if slot.spacing is not None and (slot.inner_gap_px is not None or slot.outer_gap_px is not None):
-            raise ValueError(
-                f"circular track slot '{slot.id}' cannot combine spacing with inner_gap_px or outer_gap_px"
-            )
+        auto_compress = (
+            internal_slot.auto_compress
+            if internal_slot is not None
+            else False
+        )
         inner_gap_px = (
             _parse_gap_px(slot.inner_gap_px, field_name="inner_gap_px")
             if slot.inner_gap_px is not None
@@ -604,7 +714,7 @@ def _normalize_circular_track_slots(
                 side=side,
                 radius=slot.radius,
                 width=slot.width,
-                spacing=slot.spacing,
+                legacy_spacing=legacy_spacing,
                 inner_gap_px=inner_gap_px,
                 outer_gap_px=outer_gap_px,
                 z=int(slot.z),
@@ -612,6 +722,11 @@ def _normalize_circular_track_slots(
                 reserve=reserve,
                 params=params,
                 annotation=annotation_params,
+                preferred_anchor_radius=(
+                    internal_slot.preferred_anchor_radius
+                    if internal_slot is not None
+                    else None
+                ),
             )
         )
     if validate_anchor_references:

@@ -113,6 +113,12 @@ const TICK_LABEL_LAYOUTS = [
 ];
 const DEFAULT_TICK_LABEL_LAYOUT = 'label_out_tick_in';
 const DEFAULT_INNER_TICK_LABEL_LAYOUT = 'label_in_tick_out';
+const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = new Set([
+  'spacing',
+  'strict',
+  'compress',
+  'reserve'
+]);
 
 export const CIRCULAR_TRACK_PRESETS = ['tuckin', 'middle', 'spreadout'];
 
@@ -326,7 +332,6 @@ const getPresetRadiusRatio = (slot, renderer, preset, lengthParam, state) => {
 const slotHasManualGeometry = (slot) => (
   normalizeOptionalText(slot?.width) !== null ||
   normalizeOptionalText(slot?.radius) !== null ||
-  normalizeOptionalText(slot?.spacing) !== null ||
   normalizeOptionalText(slot?.inner_gap_px) !== null ||
   normalizeOptionalText(slot?.outer_gap_px) !== null
 );
@@ -334,6 +339,97 @@ const slotHasManualGeometry = (slot) => (
 const cloneParams = (params = {}) => {
   if (!params || typeof params !== 'object' || Array.isArray(params)) return {};
   return { ...params };
+};
+
+const obsoleteCircularTrackSlotKey = (source) => {
+  for (const key of Object.keys(source || {})) {
+    if (OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(String(key).toLowerCase())) {
+      return key;
+    }
+  }
+  for (const key of Object.keys(source?.params || {})) {
+    if (OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(String(key).toLowerCase())) {
+      return `params.${key}`;
+    }
+  }
+  return null;
+};
+
+const assertCurrentCircularTrackSlotShape = (source) => {
+  const obsoleteKey = obsoleteCircularTrackSlotKey(source);
+  if (!obsoleteKey) return;
+  throw new Error(
+    `Circular track slot field '${obsoleteKey}' is obsolete. ` +
+    'Use inner_gap_px and outer_gap_px for physical gaps.'
+  );
+};
+
+export const migrateLegacyCircularTrackSlot = (slot) => {
+  if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return slot;
+  const source = { ...slot };
+  const params = cloneParams(source.params);
+  const topLevelSpacing = Object.prototype.hasOwnProperty.call(source, 'spacing')
+    ? source.spacing
+    : undefined;
+  const paramSpacing = Object.prototype.hasOwnProperty.call(params, 'spacing')
+    ? params.spacing
+    : undefined;
+  const legacySpacing = normalizeOptionalText(topLevelSpacing) !== null
+    ? topLevelSpacing
+    : paramSpacing;
+
+  Object.keys(source).forEach((key) => {
+    if (OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(key.toLowerCase())) {
+      delete source[key];
+    }
+  });
+  Object.keys(params).forEach((key) => {
+    if (OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(key.toLowerCase())) {
+      delete params[key];
+    }
+  });
+  source.params = params;
+  if (normalizeOptionalText(legacySpacing) !== null) {
+    if (normalizeOptionalText(source.inner_gap_px ?? source.innerGapPx) === null) {
+      source.inner_gap_px = legacySpacing;
+    }
+    if (normalizeOptionalText(source.outer_gap_px ?? source.outerGapPx) === null) {
+      source.outer_gap_px = legacySpacing;
+    }
+  }
+  return source;
+};
+
+export const migrateLegacyCircularTrackSlotSpec = (spec) => {
+  const text = String(spec || '').trim();
+  const atIndex = text.indexOf('@');
+  if (atIndex < 0) return text;
+
+  const head = text.slice(0, atIndex).trim();
+  const retained = [];
+  let legacySpacing = null;
+  let hasInnerGap = false;
+  let hasOuterGap = false;
+  text.slice(atIndex + 1).split(',').forEach((token) => {
+    const equalsIndex = token.indexOf('=');
+    if (equalsIndex < 0) return;
+    const key = token.slice(0, equalsIndex).trim();
+    const normalizedKey = key.toLowerCase();
+    const rawValue = token.slice(equalsIndex + 1).trim();
+    if (normalizedKey === 'spacing') {
+      legacySpacing = rawValue;
+      return;
+    }
+    if (OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedKey)) return;
+    if (normalizedKey === 'inner_gap_px') hasInnerGap = true;
+    if (normalizedKey === 'outer_gap_px') hasOuterGap = true;
+    retained.push(`${key}=${rawValue}`);
+  });
+  if (legacySpacing !== null && legacySpacing !== '') {
+    if (!hasInnerGap) retained.push(`inner_gap_px=${legacySpacing}`);
+    if (!hasOuterGap) retained.push(`outer_gap_px=${legacySpacing}`);
+  }
+  return retained.length > 0 ? `${head}@${retained.join(',')}` : head;
 };
 
 const circularDepthTrackCountForState = (state) => {
@@ -487,7 +583,6 @@ const makeSlot = ({
   enabled = true,
   width = null,
   radius = null,
-  spacing = null,
   inner_gap_px = null,
   outer_gap_px = null,
   side = null,
@@ -499,7 +594,6 @@ const makeSlot = ({
   enabled,
   width,
   radius,
-  spacing,
   inner_gap_px,
   outer_gap_px,
   side: normalizeSlotSide(side),
@@ -522,7 +616,6 @@ const paramsMatchExactly = (params, expected = {}) => {
 const hasBlankSlotGeometry = (source) =>
   normalizeOptionalText(source.width) === null &&
   normalizeOptionalText(source.radius) === null &&
-  normalizeOptionalText(source.spacing) === null &&
   normalizeOptionalText(source.inner_gap_px) === null &&
   normalizeOptionalText(source.outer_gap_px) === null;
 
@@ -686,20 +779,17 @@ export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [],
 
 export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', preset = 'tuckin') => {
   const source = slot && typeof slot === 'object' && !Array.isArray(slot) ? slot : {};
+  assertCurrentCircularTrackSlotShape(source);
   const renderer = SUPPORTED_RENDERERS.includes(source.renderer) ? source.renderer : 'dinucleotide_skew';
   const fallbackId = DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`;
   const inheritsPresetDefaults = isLegacyDefaultWebSlotShape(source, renderer, defaultNt, preset);
   const params = inheritsPresetDefaults ? {} : cloneParams(source.params);
   [
     'side',
-    'strict',
-    'compress',
-    'reserve',
     'r',
     'radius',
     'w',
     'width',
-    'spacing',
     'inner_gap_px',
     'outer_gap_px'
   ].forEach((key) => {
@@ -708,9 +798,8 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
 
   let side = inheritsPresetDefaults ? null : normalizeSlotSide(source.side);
   const radius = source.radius ?? null;
-  const legacySpacingPx = normalizePxNumberText(source.spacing);
-  const innerGapPx = normalizePxNumberText(source.inner_gap_px ?? source.innerGapPx) ?? legacySpacingPx;
-  const outerGapPx = normalizePxNumberText(source.outer_gap_px ?? source.outerGapPx) ?? legacySpacingPx;
+  const innerGapPx = normalizePxNumberText(source.inner_gap_px ?? source.innerGapPx);
+  const outerGapPx = normalizePxNumberText(source.outer_gap_px ?? source.outerGapPx);
 
   if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
     const nt = normalizeOptionalText(params.nt ?? params.dinucleotide);
@@ -787,7 +876,6 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
     enabled: source.enabled !== false,
     width: source.width ?? null,
     radius,
-    spacing: null,
     inner_gap_px: innerGapPx,
     outer_gap_px: outerGapPx,
     side,
@@ -822,6 +910,12 @@ export const parseCircularTrackSlotSpec = (spec, index = 0, defaultNt = 'GC', pr
       const key = token.slice(0, equalsIndex).trim();
       const rawValue = token.slice(equalsIndex + 1).trim();
       if (!key) return;
+      if (OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(key.toLowerCase())) {
+        throw new Error(
+          `Circular track slot field '${key}' is obsolete. ` +
+          'Use inner_gap_px and outer_gap_px for physical gaps.'
+        );
+      }
       const value = rawValue === 'true' ? true : (rawValue === 'false' ? false : rawValue);
       if (key === 'enabled') source.enabled = value !== false;
       else if (key === 'w' || key === 'width') source.width = rawValue;
@@ -1356,7 +1450,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     duplicate.enabled = source.enabled;
     duplicate.width = source.width;
     duplicate.radius = source.radius;
-    duplicate.spacing = null;
     duplicate.inner_gap_px = source.inner_gap_px;
     duplicate.outer_gap_px = source.outer_gap_px;
     duplicate.side = source.side;

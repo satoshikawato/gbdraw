@@ -26,7 +26,6 @@ class DepthConfigurator:
         normalize: bool | None = None,
         show_axis: bool | None = None,
         show_ticks: bool | None = None,
-        tick_interval: float | None = None,
         large_tick_interval: float | None = None,
         small_tick_interval: float | None = None,
         tick_font_size: float | None = None,
@@ -45,14 +44,11 @@ class DepthConfigurator:
         self.max_depth: float | None = cfg.objects.depth.max_depth if max_depth is None else float(max_depth)
         self.show_axis: bool = bool(cfg.objects.depth.show_axis if show_axis is None else show_axis)
         self.show_ticks: bool = bool(cfg.objects.depth.show_ticks if show_ticks is None else show_ticks)
-        if large_tick_interval is None and tick_interval is not None:
-            large_tick_interval = tick_interval
         self.large_tick_interval: float | None = (
             cfg.objects.depth.large_tick_interval
             if large_tick_interval is None
             else float(large_tick_interval)
         )
-        self.tick_interval: float | None = self.large_tick_interval
         self.small_tick_interval: float | None = (
             cfg.objects.depth.small_tick_interval
             if small_tick_interval is None

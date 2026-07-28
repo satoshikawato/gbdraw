@@ -13,6 +13,7 @@ from ....render.drawers.circular.conservation import (  # type: ignore[reportMis
     _safe_id_fragment,
 )
 from ....svg.circular_conservation import generate_full_annulus_path_desc
+from ....svg.ids import stable_svg_id
 
 
 class ConservationGroup:
@@ -29,10 +30,22 @@ class ConservationGroup:
         outer_radius_px: float,
         min_identity: float,
         cfg: GbdrawConfig,
+        group_id: str | None = None,
+        slot_id: str | None = None,
     ) -> None:
         safe_label = _safe_id_fragment(track_label)
-        group_id = f"conservation_{safe_label}" if safe_label else f"conservation_{int(source_index) + 1}"
-        self.group = Group(id=group_id, debug=False)
+        resolved_group_id = group_id or stable_svg_id(
+            "conservation_ring",
+            "circular-conservation-ring",
+            int(source_index),
+            int(track_index),
+            str(track_label),
+            namespace=safe_label or f"source_{int(source_index) + 1}",
+        )
+        self.group = Group(id=resolved_group_id, debug=False)
+        if slot_id:
+            self.group.attribs["data-gbdraw-slot-id"] = str(slot_id)
+            self.group.attribs["data-gbdraw-slot-renderer"] = "sequence_conservation"
         self.group.attribs["data-source-index"] = str(source_index)
         self.group.attribs["data-track-index"] = str(track_index)
         self.group.attribs["data-track-label"] = str(track_label)

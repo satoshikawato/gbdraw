@@ -88,6 +88,8 @@ def add_conservation_group_on_canvas(
     outer_radius_px: float,
     min_identity: float,
     cfg: GbdrawConfig | None = None,
+    group_id: str | None = None,
+    slot_id: str | None = None,
 ) -> Drawing:
     """Adds one circular conservation ring group to the canvas."""
     cfg = cfg or canvas_config._cfg
@@ -102,6 +104,8 @@ def add_conservation_group_on_canvas(
         outer_radius_px=outer_radius_px,
         min_identity=min_identity,
         cfg=cfg,
+        group_id=group_id,
+        slot_id=slot_id,
     ).get_group()
     conservation_group = center_group_on_canvas(conservation_group, canvas_config)
     canvas.add(conservation_group)
@@ -219,6 +223,8 @@ def add_record_definition_group_on_canvas(
     definition_profile: str = "full",
     definition_position: str = "center",
     definition_group_id: str | None = None,
+    record_index: int = 0,
+    record_count: int = 1,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -244,6 +250,8 @@ def add_record_definition_group_on_canvas(
         config_dict=config_dict,
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,
+        record_index=record_index,
+        record_count=record_count,
         cfg=cfg or canvas_config._cfg,
     ).get_group()
     definition_group = place_definition_group_on_canvas(
@@ -267,6 +275,10 @@ def add_record_group_on_canvas(
     precalculated_labels: list[dict] | None = None,
     feature_track_ratio_factor_override: float | None = None,
     feature_anchor_radius_px: float | None = None,
+    record_index: int = 0,
+    group_id: str | None = None,
+    slot_id: str | None = None,
+    feature_dom_namespace: str | None = None,
 ) -> Drawing:
     """
     Adds the record group to the canvas.
@@ -292,6 +304,10 @@ def add_record_group_on_canvas(
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         feature_anchor_radius_px=feature_anchor_radius_px,
+        record_index=record_index,
+        group_id=group_id,
+        slot_id=slot_id,
+        feature_dom_namespace=feature_dom_namespace,
     ).get_group()
     # Calculate start and end points for the 60-degree arc
 
@@ -343,6 +359,8 @@ def add_tick_group_on_canvas(
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
     track_preset: str | None = None,
+    group_id: str | None = None,
+    slot_id: str | None = None,
     cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
@@ -367,6 +385,8 @@ def add_tick_group_on_canvas(
         tick_side=tick_side,
         tick_length_px=tick_length_px,
         track_preset=track_preset,
+        group_id=group_id,
+        slot_id=slot_id,
         cfg=cfg or canvas_config._cfg,
     ).get_group()
     tick_group = center_group_on_canvas(tick_group, canvas_config)

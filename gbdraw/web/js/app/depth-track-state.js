@@ -180,7 +180,7 @@ export const normalizeDepthTrackConfig = (entry, index, defaults = {}) => {
     color: String(source.color || fallbackColor(index, defaults)),
     height: normalizePositiveNumber(hasHeight ? source.height : defaults.depthHeight),
     large_tick_interval: normalizePositiveNumber(
-      source.large_tick_interval ?? source.tick_interval ?? defaults.largeTickInterval
+      source.large_tick_interval ?? defaults.largeTickInterval
     ),
     small_tick_interval: normalizePositiveNumber(
       source.small_tick_interval ?? defaults.smallTickInterval

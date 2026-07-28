@@ -55,7 +55,7 @@ class GcContentGroup:
             start_y (float): Starting y-coordinate for the GC content visualization.
         """
         self.group_id = group_id
-        self.gc_group = Group(id=self.group_id)
+        self.gc_group = Group(id=self.group_id, debug=False)
         self.start_x: float = start_x
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len

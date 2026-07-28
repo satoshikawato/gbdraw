@@ -18,6 +18,8 @@ import {
 import {
   buildCircularTrackSlotSpec,
   CIRCULAR_TRACK_RENDERERS,
+  migrateLegacyCircularTrackSlot,
+  migrateLegacyCircularTrackSlotSpec,
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
@@ -41,8 +43,53 @@ import {
   defaultFeatureRendering,
   normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
+import {
+  comparisonFiltersForMode,
+  effectiveLinearAxisColor,
+  MODE_DEFAULT_FEATURE_TYPES,
+  modeProfile,
+  trackDefaultsForMode
+} from '../mode-profiles.js';
+import {
+  migratePersistedCircularMultiRecordSizeMode,
+  migratePersistedLinearLabelPlacement,
+  migratePersistedLinearTrackLayout,
+  requireCurrentCircularMultiRecordSizeMode,
+  requireCurrentLinearLabelPlacement,
+  requireCurrentLinearTrackLayout,
+  requireCurrentWebStateFieldNames
+} from '../app/current-option-values.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 3;
+export const CANONICAL_REQUEST_SCHEMA = 4;
+
+// Canonical schemas 1-3 omitted values that matched the former shared API
+// defaults. Keep those values stable when reading sparse persisted requests.
+const HISTORICAL_COMPARISON_DEFAULTS = Object.freeze({
+  bitscore: 50,
+  evalue: 1e-5,
+  identity: 70,
+  alignmentLength: 0
+});
+const HISTORICAL_FEATURE_TYPES = Object.freeze([
+  'CDS',
+  'rRNA',
+  'tRNA',
+  'tmRNA',
+  'ncRNA',
+  'misc_RNA',
+  'repeat_region'
+]);
+const HISTORICAL_CONFIG_OVERRIDES = Object.freeze({
+  circular: Object.freeze({
+    show_gc: true,
+    show_skew: true
+  }),
+  linear: Object.freeze({
+    show_gc: true,
+    show_skew: true,
+    linear_axis_stroke_color: 'gray'
+  })
+});
 
 const safePrefix = (value) => {
   const normalized = String(value || '').trim().replace(/[\\/]+/g, '_');
@@ -243,16 +290,33 @@ const buildRecords = ({ state, filesData, resources }) => {
 const buildConfigOverrides = (state) => {
   const { form, adv } = state;
   const circular = state.mode.value === 'circular';
+  const linearLabelPlacement = circular
+    ? null
+    : requireCurrentLinearLabelPlacement(adv.label_placement);
+  const linearTrackLayout = circular
+    ? null
+    : requireCurrentLinearTrackLayout(form.linear_track_layout);
   const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
   if (!circular && comparisonHeight.status === 'invalid') {
     throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
   }
+  const linearAxisManaged = state.modeProfileStateManager?.isManaged?.(
+    adv,
+    'axis_stroke_color'
+  ) === true;
+  const linearAxisStrokeColor = circular
+    ? null
+    : effectiveLinearAxisColor({
+        axisColor: adv.axis_stroke_color,
+        rulerOnAxis: Boolean(form.linear_ruler_on_axis),
+        managed: linearAxisManaged
+      });
   return {
     block_stroke_width: optionalNumber(adv.block_stroke_width),
     block_stroke_color: adv.block_stroke_color || null,
     circular_axis_stroke_color: circular ? (adv.axis_stroke_color || null) : null,
     circular_axis_stroke_width: circular ? optionalNumber(adv.axis_stroke_width) : null,
-    linear_axis_stroke_color: circular ? null : (adv.axis_stroke_color || null),
+    linear_axis_stroke_color: linearAxisStrokeColor,
     linear_axis_stroke_width: circular ? null : optionalNumber(adv.axis_stroke_width),
     line_stroke_color: adv.line_stroke_color || null,
     line_stroke_width: optionalNumber(adv.line_stroke_width),
@@ -268,7 +332,7 @@ const buildConfigOverrides = (state) => {
     linear_label_spacing: circular ? null : optionalNumber(adv.linear_label_spacing),
     label_rendering: adv.label_rendering || 'auto',
     circular_label_placement: circular ? (adv.circular_label_placement || 'horizontal') : null,
-    label_placement: circular ? null : (adv.label_placement || 'auto'),
+    label_placement: linearLabelPlacement,
     label_rotation: circular ? null : optionalNumber(adv.label_rotation),
     show_gc: circular ? !form.suppress_gc : Boolean(form.show_gc),
     show_skew: circular ? !form.suppress_skew : Boolean(form.show_skew),
@@ -288,14 +352,14 @@ const buildConfigOverrides = (state) => {
     depth_normalize: Boolean(adv.depth_normalize),
     depth_show_axis: Boolean(adv.depth_show_axis),
     depth_show_ticks: Boolean(adv.depth_show_ticks),
-    depth_large_tick_interval: optionalNumber(adv.depth_tick_interval),
+    depth_large_tick_interval: optionalNumber(adv.depth_large_tick_interval),
     depth_small_tick_interval: optionalNumber(adv.depth_small_tick_interval),
     depth_tick_font_size: optionalNumber(adv.depth_tick_font_size),
     depth_share_axis: Boolean(adv.depth_share_axis),
     show_labels: circular ? form.labels_mode !== 'none' : form.show_labels_linear,
     align_center: circular ? null : Boolean(form.align_center),
     keep_definition_left_aligned: circular ? null : Boolean(form.keep_definition_left_aligned),
-    linear_track_layout: circular ? null : (form.linear_track_layout || 'middle'),
+    linear_track_layout: linearTrackLayout,
     linear_track_axis_gap: circular ? null : optionalNumber(adv.track_axis_gap),
     linear_ruler_on_axis: circular ? null : Boolean(form.linear_ruler_on_axis),
     track_type: circular ? form.track_type : null,
@@ -514,7 +578,7 @@ const buildComparisons = ({ state, filesData, resources }) => {
           kind: 'lossless',
           parameters: {
             minAnchors: Number(blastp.collinearMinAnchors) || 1,
-            maxUnitGap: Number(blastp.collinearMaxGeneGap) || 0,
+            maxUnitGap: Number(blastp.collinearMaxUnitGap) || 0,
             maxDiagonalDrift: Number(blastp.collinearMaxDiagonalDrift) || 0,
             maxConflicts: Number(blastp.collinearMaxConflictsInMergeGap) || 0,
             mergeOrientation: 'either'
@@ -564,7 +628,9 @@ const buildLayout = (state, filesData) => {
         .filter(Boolean)
     : [];
   return {
-    multiRecordSizeMode: String(state.adv.multi_record_size_mode || 'auto'),
+    multiRecordSizeMode: requireCurrentCircularMultiRecordSizeMode(
+      state.adv.multi_record_size_mode
+    ),
     multiRecordMinRadiusRatio: Number(state.adv.multi_record_min_radius_ratio) || 0.55,
     multiRecordColumnGapRatio: Number(state.adv.multi_record_column_gap_ratio) || 0,
     multiRecordRowGapRatio: Number(state.adv.multi_record_row_gap_ratio) || 0,
@@ -573,6 +639,21 @@ const buildLayout = (state, filesData) => {
 };
 
 export const buildCanonicalSessionRequest = ({ state, filesData }) => {
+  requireCurrentWebStateFieldNames(state);
+  requireCurrentCircularMultiRecordSizeMode(state.adv.multi_record_size_mode);
+  requireCurrentLinearTrackLayout(state.form.linear_track_layout);
+  requireCurrentLinearLabelPlacement(state.adv.label_placement);
+  (state.adv.circular_track_slots || []).forEach((slot, index) => {
+    if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+      throw new Error(`Circular track slot #${index + 1} must be an object.`);
+    }
+    normalizeCircularTrackSlot(
+      slot,
+      index,
+      state.adv.nt,
+      state.form.track_type
+    );
+  });
   const resources = createResourceBuilder();
   const webFiles = {};
   const records = buildRecords({ state, filesData, resources });
@@ -582,7 +663,6 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
     configOverrides: buildConfigOverrides(state),
     tracks: buildTracks(state),
     output: {
-      outputPrefix: safePrefix(state.form.prefix),
       legend: String(state.form.legend || 'right'),
       plotTitlePosition: String(state.adv.plot_title_position || (state.mode.value === 'linear' ? 'bottom' : 'none'))
     },
@@ -1002,10 +1082,17 @@ const projectCanonicalCircularSlot = (slot) => ({
   ...slot,
   width: projectCanonicalCircularMeasure(slot?.width),
   radius: projectCanonicalCircularMeasure(slot?.radius),
-  spacing: projectCanonicalCircularMeasure(slot?.spacing),
   inner_gap_px: projectCanonicalCircularMeasure(slot?.innerGapPx ?? slot?.inner_gap_px),
   outer_gap_px: projectCanonicalCircularMeasure(slot?.outerGapPx ?? slot?.outer_gap_px)
 });
+
+const projectLegacyCanonicalCircularSlot = (slot) => {
+  const projected = projectCanonicalCircularSlot(slot);
+  if (Object.prototype.hasOwnProperty.call(slot, 'spacing')) {
+    projected.spacing = projectCanonicalCircularMeasure(slot.spacing);
+  }
+  return migrateLegacyCircularTrackSlot(projected);
+};
 
 const combineCircularGenbankResources = (resources, records, originalName = '') => {
   const resourceIds = [];
@@ -1040,6 +1127,29 @@ const combineCircularGenbankResources = (resources, records, originalName = '') 
   };
 };
 
+const validateCanonicalAssemblyOutput = (value, schema) => {
+  if (value === undefined || value === null) return;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Canonical diagramOptions.output must be an object.');
+  }
+  const required = schema <= 3
+    ? ['outputPrefix', 'legend', 'plotTitlePosition']
+    : ['legend', 'plotTitlePosition'];
+  const keys = Object.keys(value);
+  const missing = required.filter((key) => !Object.prototype.hasOwnProperty.call(value, key));
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required canonical diagramOptions.output field(s): ${missing.join(', ')}.`
+    );
+  }
+  const unknown = keys.filter((key) => !required.includes(key));
+  if (unknown.length > 0) {
+    throw new Error(
+      `Unknown canonical diagramOptions.output field(s): ${unknown.join(', ')}.`
+    );
+  }
+};
+
 export const projectCanonicalSessionRequest = ({
   renderRequest,
   resources: canonicalResources,
@@ -1049,7 +1159,7 @@ export const projectCanonicalSessionRequest = ({
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false
 }) => {
-  if (!renderRequest || ![1, 2, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
+  if (!renderRequest || ![1, 2, 3, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
     throw new Error('Unsupported canonical renderRequest schema.');
   }
   if (!['circular', 'linear'].includes(renderRequest.mode)) {
@@ -1164,6 +1274,18 @@ export const projectCanonicalSessionRequest = ({
   }
 
   const options = renderRequest.diagramOptions || {};
+  validateCanonicalAssemblyOutput(options.output, renderRequest.schema);
+  const projectedCircularSizeMode = renderRequest.mode === 'circular'
+    ? (
+        renderRequest.schema <= 3
+          ? migratePersistedCircularMultiRecordSizeMode(
+              renderRequest.layout?.multiRecordSizeMode
+            )
+          : requireCurrentCircularMultiRecordSizeMode(
+              renderRequest.layout?.multiRecordSizeMode
+            )
+      )
+    : 'auto';
   const depthRows = Array.isArray(options.depthTrackFiles) ? options.depthTrackFiles : [];
   if (depthRows.length > 0) {
     if (depthRows.length !== records.length || depthRows.some((row) => !Array.isArray(row))) {
@@ -1243,10 +1365,45 @@ export const projectCanonicalSessionRequest = ({
       resourceId ? resourceAsLegacyFile(resources, resourceId) : null
     ));
   }
+  const explicitOverrides = Object.fromEntries(
+    Object.entries(options.configOverrides || {}).filter(
+      ([, value]) => value !== null && value !== undefined
+    )
+  );
+  const legacySparseDefaults = renderRequest.schema <= 3;
+  const currentTrackDefaults = trackDefaultsForMode(renderRequest.mode);
+  const sparseConfigDefaults = legacySparseDefaults
+    ? HISTORICAL_CONFIG_OVERRIDES[renderRequest.mode]
+    : {
+        show_gc: currentTrackDefaults.gc,
+        show_skew: currentTrackDefaults.skew,
+        ...(renderRequest.mode === 'linear'
+          ? { linear_axis_stroke_color: modeProfile('linear').linearAxisColor }
+          : {})
+      };
   const overrides = {
+    ...(
+      options.config === null || options.config === undefined
+        ? sparseConfigDefaults
+        : {}
+    ),
     ...projectFullConfigOverrides(options.config, renderRequest.mode),
-    ...(options.configOverrides || {})
+    ...explicitOverrides
   };
+  const projectedLinearLabelPlacement = renderRequest.mode === 'linear'
+    ? (
+        renderRequest.schema <= 3
+          ? migratePersistedLinearLabelPlacement(overrides.label_placement)
+          : requireCurrentLinearLabelPlacement(overrides.label_placement)
+      )
+    : 'auto';
+  const projectedLinearTrackLayout = renderRequest.mode === 'linear'
+    ? (
+        renderRequest.schema <= 3
+          ? migratePersistedLinearTrackLayout(overrides.linear_track_layout)
+          : requireCurrentLinearTrackLayout(overrides.linear_track_layout)
+      )
+    : 'middle';
   const comparisonHeight = classifyOptionalPositiveNumber(overrides.comparison_height);
   if (renderRequest.mode === 'linear' && comparisonHeight.status === 'invalid') {
     if (!repairInvalidComparisonHeight) {
@@ -1259,13 +1416,19 @@ export const projectCanonicalSessionRequest = ({
         ? tracks.circularTrackSlots.map((slot, index) => (
             slot && typeof slot === 'object' && !Array.isArray(slot)
               ? normalizeCircularTrackSlot(
-                  projectCanonicalCircularSlot(slot),
+                  renderRequest.schema <= 3
+                    ? projectLegacyCanonicalCircularSlot(slot)
+                    : projectCanonicalCircularSlot(slot),
                   index,
                   options.dinucleotide || 'GC',
                   overrides.track_type || 'tuckin'
                 )
               : parseCircularTrackSlotSpecs(
-                  [slot],
+                  [
+                    renderRequest.schema <= 3
+                      ? migrateLegacyCircularTrackSlotSpec(slot)
+                      : slot
+                  ],
                   options.dinucleotide || 'GC',
                   overrides.track_type || 'tuckin'
                 )[0]
@@ -1342,7 +1505,7 @@ export const projectCanonicalSessionRequest = ({
     labels_mode: renderRequest.mode === 'circular' ? (overrides.allow_inner_labels ? 'both' : (overrides.show_labels ? 'out' : 'none')) : 'none',
     show_labels_linear: renderRequest.mode === 'linear' ? (overrides.show_labels || 'none') : 'none',
     track_type: overrides.track_type || 'tuckin',
-    linear_track_layout: overrides.linear_track_layout || 'middle',
+    linear_track_layout: projectedLinearTrackLayout,
     scale_style: overrides.scale_style || 'bar',
     align_center: Boolean(overrides.align_center),
     keep_definition_left_aligned: Boolean(overrides.keep_definition_left_aligned),
@@ -1366,8 +1529,18 @@ export const projectCanonicalSessionRequest = ({
       ? 'rectangle'
       : defaultFeatureRendering('repeat_region');
   }
+  const sparseFeatureTypes = legacySparseDefaults
+    ? HISTORICAL_FEATURE_TYPES
+    : MODE_DEFAULT_FEATURE_TYPES;
+  const currentComparisonDefaults = comparisonFiltersForMode(renderRequest.mode);
+  const sparseComparisonDefaults = legacySparseDefaults
+    ? HISTORICAL_COMPARISON_DEFAULTS
+    : {
+        ...currentComparisonDefaults,
+        alignmentLength: currentComparisonDefaults.alignment_length
+      };
   const adv = {
-    features: options.selectedFeaturesSet || [],
+    features: options.selectedFeaturesSet ?? [...sparseFeatureTypes],
     feature_shapes: projectedFeatureShapes,
     nt: options.dinucleotide || 'GC',
     window_size: options.window ?? null,
@@ -1376,7 +1549,7 @@ export const projectCanonicalSessionRequest = ({
     circular_label_placement: renderRequest.mode === 'circular'
       ? (overrides.circular_label_placement || 'horizontal')
       : 'horizontal',
-    label_placement: renderRequest.mode === 'linear' ? (overrides.label_placement || 'auto') : 'auto',
+    label_placement: projectedLinearLabelPlacement,
     circular_label_spacing: renderRequest.mode === 'circular'
       ? (overrides.circular_label_spacing ?? null)
       : null,
@@ -1402,7 +1575,7 @@ export const projectCanonicalSessionRequest = ({
       : (overrides.linear_axis_stroke_color ?? null),
     legend_box_size: overrides.legend_box_size ?? null,
     legend_font_size: overrides.legend_font_size ?? null,
-    multi_record_size_mode: renderRequest.layout?.multiRecordSizeMode || 'auto',
+    multi_record_size_mode: projectedCircularSizeMode,
     multi_record_min_radius_ratio: renderRequest.layout?.multiRecordMinRadiusRatio ?? 0.55,
     multi_record_column_gap_ratio: renderRequest.layout?.multiRecordColumnGapRatio ?? 0.10,
     multi_record_row_gap_ratio: renderRequest.layout?.multiRecordRowGapRatio ?? 0.05,
@@ -1434,19 +1607,20 @@ export const projectCanonicalSessionRequest = ({
     depth_normalize: Boolean(overrides.depth_normalize),
     depth_show_axis: overrides.depth_show_axis !== false,
     depth_show_ticks: overrides.depth_show_ticks !== false,
-    depth_tick_interval: overrides.depth_large_tick_interval ?? null,
+    depth_large_tick_interval: overrides.depth_large_tick_interval ?? null,
     depth_small_tick_interval: overrides.depth_small_tick_interval ?? null,
     depth_tick_font_size: overrides.depth_tick_font_size ?? null,
     depth_share_axis: Boolean(overrides.depth_share_axis),
     depth_window_size: options.depthWindow ?? null,
     depth_step_size: options.depthStep ?? null,
     depth_tracks: projectedDepthTracks,
-    min_bitscore: options.bitscore ?? 50,
+    min_bitscore: options.bitscore ?? sparseComparisonDefaults.bitscore,
     evalue: options.evalue === null || options.evalue === undefined
-      ? '1e-2'
+      ? String(sparseComparisonDefaults.evalue)
       : String(options.evalue),
-    identity: options.identity ?? 0,
-    alignment_length: options.alignmentLength ?? 0,
+    identity: options.identity ?? sparseComparisonDefaults.identity,
+    alignment_length:
+      options.alignmentLength ?? sparseComparisonDefaults.alignmentLength,
     scale_stroke_color: overrides.scale_stroke_color ?? null,
     ruler_label_color: overrides.scale_label_color ?? null,
     scale_stroke_width: overrides.scale_stroke_width ?? null,

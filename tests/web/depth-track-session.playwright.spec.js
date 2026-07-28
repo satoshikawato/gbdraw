@@ -64,14 +64,38 @@ const inspectSparseDepthResult = async (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   const content = app.results?.[0]?.content || '';
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
-  const hasGroup = (id) => Boolean(svg.querySelector(`[id="${id}"]`));
-  const groupFills = (id) => {
-    const group = svg.querySelector(`[id="${id}"]`);
+  const depthGroups = (slotId) => [
+    ...svg.querySelectorAll(
+      `g[data-gbdraw-slot-id="${slotId}"][data-gbdraw-slot-renderer="depth"]`
+    )
+  ];
+  const recordIndexForGroup = (group) => {
+    for (
+      let sibling = group?.nextElementSibling;
+      sibling;
+      sibling = sibling.nextElementSibling
+    ) {
+      if (sibling.matches(
+        'g[data-gbdraw-role="record-definition"][data-gbdraw-record-index]'
+      )) {
+        return Number.parseInt(sibling.getAttribute('data-gbdraw-record-index'), 10);
+      }
+    }
+    return null;
+  };
+  const depthGroup = (slotId, recordIndex) => depthGroups(slotId)
+    .find((group) => recordIndexForGroup(group) === recordIndex);
+  const hasAxis = (group) => Boolean(group?.querySelector(':scope > g'));
+  const groupFills = (group) => {
     if (!group) return [];
     return [group, ...group.querySelectorAll('[fill]')]
       .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
       .filter(Boolean);
   };
+  const depthARecord1 = depthGroup('depth_a', 0);
+  const depthARecord2 = depthGroup('depth_a', 1);
+  const depthBRecord1 = depthGroup('depth_b', 0);
+  const depthBRecord2 = depthGroup('depth_b', 1);
   const args = Array.isArray(app.lastRunInfo?.invocation?.args)
     ? app.lastRunInfo.invocation.args
     : [];
@@ -82,15 +106,15 @@ const inspectSparseDepthResult = async (page) => page.evaluate(() => {
   return {
     resultCount: app.results?.length || 0,
     groups: {
-      depthARecord1: hasGroup('depth_a_record_1'),
-      depthARecord1Axis: hasGroup('depth_a_record_1_axis'),
-      depthARecord2: hasGroup('depth_a_record_2'),
-      depthBRecord1: hasGroup('depth_b_record_1'),
-      depthBRecord2: hasGroup('depth_b_record_2'),
-      depthBRecord2Axis: hasGroup('depth_b_record_2_axis')
+      depthARecord1: Boolean(depthARecord1),
+      depthARecord1Axis: hasAxis(depthARecord1),
+      depthARecord2: Boolean(depthARecord2),
+      depthBRecord1: Boolean(depthBRecord1),
+      depthBRecord2: Boolean(depthBRecord2),
+      depthBRecord2Axis: hasAxis(depthBRecord2)
     },
-    depthAFills: groupFills('depth_a_record_1'),
-    depthBFills: groupFills('depth_b_record_2'),
+    depthAFills: groupFills(depthARecord1),
+    depthBFills: groupFills(depthBRecord2),
     depthArgs
   };
 });
@@ -99,14 +123,32 @@ const inspectCircularSparseDepthResult = async (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   const content = app.results?.[0]?.content || '';
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
-  const hasGroup = (id) => Boolean(svg.querySelector(`[id="${id}"]`));
-  const groupFills = (id) => {
-    const group = svg.querySelector(`[id="${id}"]`);
+  const depthGroups = (slotId) => [
+    ...svg.querySelectorAll(
+      `g[data-gbdraw-slot-id="${slotId}"][data-gbdraw-slot-renderer="depth"]`
+    )
+  ];
+  const recordIndexForGroup = (group) => {
+    const featureGroup = group?.parentElement?.querySelector(
+      'g[data-gbdraw-slot-renderer="features"][data-gbdraw-record-index]'
+    );
+    return featureGroup
+      ? Number.parseInt(featureGroup.getAttribute('data-gbdraw-record-index'), 10)
+      : null;
+  };
+  const depthGroup = (slotId, recordIndex) => depthGroups(slotId)
+    .find((group) => recordIndexForGroup(group) === recordIndex);
+  const hasAxis = (group) => Boolean(group?.querySelector(':scope > g'));
+  const groupFills = (group) => {
     if (!group) return [];
     return [group, ...group.querySelectorAll('[fill]')]
       .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
       .filter(Boolean);
   };
+  const depthARecord1 = depthGroup('depth_1', 0);
+  const depthARecord2 = depthGroup('depth_1', 1);
+  const depthBRecord1 = depthGroup('depth_2', 0);
+  const depthBRecord2 = depthGroup('depth_2', 1);
   const args = Array.isArray(app.lastRunInfo?.invocation?.args)
     ? app.lastRunInfo.invocation.args
     : [];
@@ -116,15 +158,15 @@ const inspectCircularSparseDepthResult = async (page) => page.evaluate(() => {
   });
   return {
     groups: {
-      depthARecord1: hasGroup('depth_1_record_1'),
-      depthARecord1Axis: hasGroup('depth_1_record_1_axis'),
-      depthARecord2: hasGroup('depth_1_record_2'),
-      depthBRecord1: hasGroup('depth_2_record_1'),
-      depthBRecord2: hasGroup('depth_2_record_2'),
-      depthBRecord2Axis: hasGroup('depth_2_record_2_axis')
+      depthARecord1: Boolean(depthARecord1),
+      depthARecord1Axis: hasAxis(depthARecord1),
+      depthARecord2: Boolean(depthARecord2),
+      depthBRecord1: Boolean(depthBRecord1),
+      depthBRecord2: Boolean(depthBRecord2),
+      depthBRecord2Axis: hasAxis(depthBRecord2)
     },
-    depthAFills: groupFills('depth_1_record_1'),
-    depthBFills: groupFills('depth_2_record_2'),
+    depthAFills: groupFills(depthARecord1),
+    depthBFills: groupFills(depthBRecord2),
     depthArgs
   };
 });
@@ -573,7 +615,11 @@ ORIGIN
       ...unknownAuthoritySession.renderRequest,
       diagramOptions: {
         configOverrides: { comparison_height: -2 },
-        output: { legend: 'bottom', plotTitlePosition: 'top' },
+        output: {
+          outputPrefix: 'preflight',
+          legend: 'bottom',
+          plotTitlePosition: 'top'
+        },
         tracks: {}
       }
     },
@@ -788,7 +834,7 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
     };
   });
 
-  ['--separate_strands', '--resolve_overlaps', '--show_gc', '--show_skew'].forEach((arg) => {
+  ['--separate_strands', '--resolve_overlaps', '--gc', '--skew'].forEach((arg) => {
     expect(geometry.args).toContain(arg);
   });
   for (const bands of [geometry.client, geometry.bbox]) {

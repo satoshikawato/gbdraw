@@ -62,9 +62,8 @@ const session = (rawEntries, derivedEntries) => ({
   }
 });
 
-const version = 36;
-{
-  test('version-36 import rejects duplicate raw LOSAT cache keys', () => {
+for (const version of [36, 37]) {
+  test(`version-${version} import rejects duplicate raw LOSAT cache keys`, () => {
     assert.throws(
       () => validateSessionLosatArtifacts(
         session([rawEntry('raw-key'), rawEntry('raw-key')], []),
@@ -74,7 +73,7 @@ const version = 36;
     );
   });
 
-  test('version-36 import rejects duplicate derived LOSATP cache keys', () => {
+  test(`version-${version} import rejects duplicate derived LOSATP cache keys`, () => {
     assert.throws(
       () => validateSessionLosatArtifacts(
           session(
@@ -128,23 +127,22 @@ const version = 36;
       );
     });
   }
+  test(`version-${version} import rejects branch-internal raw schema 3`, () => {
+    const malformed = session([{ ...proteinRawEntry('raw-key'), schema: 3 }], []);
+    assert.throws(
+      () => validateSessionLosatArtifacts(malformed, version),
+      new RegExp(`Session version ${version} contains a non-current raw LOSAT entry`)
+    );
+  });
+
+  test(`version-${version} import rejects branch-internal derived schema 2`, () => {
+    const malformed = session([], [{ ...derivedEntry('derived-key'), schema: 2 }]);
+    assert.throws(
+      () => validateSessionLosatArtifacts(malformed, version),
+      new RegExp(`Session version ${version} contains an invalid derived LOSATP entry`)
+    );
+  });
 }
-
-test('version-36 import rejects branch-internal raw schema 3', () => {
-  const malformed = session([{ ...proteinRawEntry('raw-key'), schema: 3 }], []);
-  assert.throws(
-    () => validateSessionLosatArtifacts(malformed, 36),
-    /Session version 36 contains a non-current raw LOSAT entry/
-  );
-});
-
-test('version-36 import rejects branch-internal derived schema 2', () => {
-  const malformed = session([], [{ ...derivedEntry('derived-key'), schema: 2 }]);
-  assert.throws(
-    () => validateSessionLosatArtifacts(malformed, 36),
-    /Session version 36 contains an invalid derived LOSATP entry/
-  );
-});
 
 for (const unsupportedVersion of [34, 35]) {
   test(`session import rejects branch-internal version ${unsupportedVersion}`, async () => {

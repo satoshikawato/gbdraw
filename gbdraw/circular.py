@@ -12,7 +12,6 @@ from tempfile import TemporaryDirectory
 from typing import Optional
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from Bio import SeqIO  # type: ignore[reportMissingImports]
-from .analysis.depth import read_depth_tsv  # type: ignore[reportMissingImports]
 from .analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     depth_track_count,
     normalize_depth_tracks,
@@ -49,9 +48,9 @@ from .api.requests import (
     RecordInput,
     RenderOutputRequest,
 )
-from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # type: ignore[reportMissingImports]
+from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
+from .core.sequence import determine_output_file_prefixes  # type: ignore[reportMissingImports]
 from .labels.filtering import (
     read_filter_list_file,
     read_label_override_file,
@@ -64,6 +63,7 @@ from .features.visibility import (
     resolve_candidate_feature_types,
 )
 from .exceptions import ValidationError
+from .mode_profiles import CIRCULAR_MODE_PROFILE, ComparisonThresholds
 from .tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     ScalarSpec,
@@ -80,6 +80,7 @@ from .cli_utils.common import (
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
     _add_format_arg,
+    _add_gc_skew_toggle_args,
     _add_gc_content_axis_args,
     _add_legend_size_args,
     add_analysis_args,
@@ -139,7 +140,7 @@ def _build_interactive_svg_context(
         return build_interactive_svg_context(
             records,
             selected_features_set=selected_features,
-            feature_table=feature_table,
+            feature_visibility_table=feature_table,
             color_table=color_table,
             default_colors=default_colors,
             annotations=annotations,
@@ -193,7 +194,11 @@ def _parse_multi_record_position_arg(value: str) -> str:
 
 
 
-def _get_args(args) -> argparse.Namespace:
+def _get_args(
+    args,
+    *,
+    _allow_legacy_track_transport: bool = False,
+) -> argparse.Namespace:
     """
     Parses command-line arguments for generating circular genome diagrams.
 
@@ -280,18 +285,11 @@ def _get_args(args) -> argparse.Namespace:
         help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
         type=float)
     _add_format_arg(parser)
-    parser.add_argument(
-        '--suppress_gc',
-        help='Suppress GC content track (default: False).',
-        action='store_true')
-    parser.add_argument(
-        '--suppress_skew',
-        help='Suppress GC skew track (default: False).',
-        action='store_true')
-    parser.add_argument(
-        '--depth',
-        help='Depth TSV file in samtools depth format (reference, position, depth).',
-        type=str)
+    _add_gc_skew_toggle_args(
+        parser,
+        show_gc_default=CIRCULAR_MODE_PROFILE.show_gc,
+        show_skew_default=CIRCULAR_MODE_PROFILE.show_skew,
+    )
     parser.add_argument(
         '--depth_track',
         metavar='DEPTH',
@@ -366,9 +364,9 @@ def _get_args(args) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--multi_record_size_mode',
-        help='Size mode for multi-record circular canvas ("auto", "linear", "equal"; "sqrt" is accepted as an alias of "auto"; default: "auto").',
+        help='Size mode for multi-record circular canvas ("auto", "linear", "equal"; default: "auto").',
         type=str,
-        choices=['auto', 'linear', 'equal', 'sqrt'],
+        choices=['auto', 'linear', 'equal'],
         default='auto')
     parser.add_argument(
         '--multi_record_min_radius_ratio',
@@ -472,7 +470,7 @@ def _get_args(args) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         '--circular_track_slot',
-        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Omitted built-in slot geometry inherits --track_type; use r, w, spacing, side, and z for explicit overrides. The annotations renderer requires set_id from --annotation_table; overlay annotations also require anchor_slot and layer. Implicit inside numeric/depth slots auto-compress and never move outside automatically.',
+        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Omitted built-in slot geometry inherits --track_type; use r, w, inner_gap_px, outer_gap_px, side, and z for explicit overrides. The annotations renderer requires set_id from --annotation_table; overlay annotations also require anchor_slot and layer. Implicit inside numeric/depth slots auto-compress and never move outside automatically.',
         action='append',
         default=[])
     parser.add_argument(
@@ -559,10 +557,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_window must be > 0")
     if args.depth_step is not None and args.depth_step <= 0:
         parser.error("--depth_step must be > 0")
-    if args.depth and args.depth_track:
-        parser.error("--depth cannot be combined with --depth_track")
-    if args.show_depth and not (args.depth or args.depth_track):
-        parser.error("--show_depth requires --depth or --depth_track")
     if args.conservation_ring_width is not None and args.conservation_ring_width <= 0:
         parser.error("--conservation_ring_width must be > 0")
     if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
@@ -571,14 +565,15 @@ def _get_args(args) -> argparse.Namespace:
         not math.isfinite(float(args.center_reserved_radius)) or args.center_reserved_radius < 0
     ):
         parser.error("--center_reserved_radius must be a finite number >= 0")
-    if args.alignment_length < 0:
-        parser.error("--alignment_length must be >= 0")
-    if not math.isfinite(float(args.identity)) or args.identity < 0 or args.identity > 100:
-        parser.error("--identity must be a finite number in [0, 100]")
-    if not math.isfinite(float(args.evalue)) or args.evalue < 0:
-        parser.error("--evalue must be a finite number >= 0")
-    if not math.isfinite(float(args.bitscore)):
-        parser.error("--bitscore must be a finite number")
+    try:
+        ComparisonThresholds(
+            evalue=args.evalue,
+            bitscore=args.bitscore,
+            identity=args.identity,
+            alignment_length=args.alignment_length,
+        )
+    except ValidationError as exc:
+        parser.error(str(exc))
     if args.conservation_labels and not args.conservation_blast:
         parser.error("--conservation_labels requires --conservation_blast")
     if args.conservation_colors and not args.conservation_blast:
@@ -593,8 +588,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_max must be >= 0")
     if args.depth_min is not None and args.depth_max is not None and args.depth_min > args.depth_max:
         parser.error("--depth_min must be <= --depth_max")
-    if args.depth_tick_interval is not None and args.depth_tick_interval <= 0:
-        parser.error("--depth_tick_interval must be > 0")
     if args.depth_large_tick_interval is not None and args.depth_large_tick_interval <= 0:
         parser.error("--depth_large_tick_interval must be > 0")
     if args.depth_small_tick_interval is not None and args.depth_small_tick_interval <= 0:
@@ -632,9 +625,13 @@ def _get_args(args) -> argparse.Namespace:
             parser.error(str(exc))
     if args.circular_track_slot:
         try:
-            circular_track_slots_for_validation = parse_circular_track_slots(args.circular_track_slot)
+            circular_track_slots_for_validation = parse_circular_track_slots(
+                args.circular_track_slot,
+                _allow_legacy_transport=_allow_legacy_track_transport,
+            )
         except Exception as exc:
             parser.error(str(exc))
+        args.circular_track_slot = circular_track_slots_for_validation
     if args.circular_track_axis_index is not None:
         try:
             normalize_circular_track_slots_with_axis(
@@ -693,7 +690,15 @@ def circular_main(cmd_args) -> None:
                 output_override=session_request.output,
                 format_override=session_request.format,
             )
-            args = _get_args(list(run_spec.args))
+            args = _get_args(
+                list(run_spec.args),
+                _allow_legacy_track_transport=True,
+            )
+            args._allow_legacy_track_transport = True
+            args._require_canonical_session = bool(
+                session_request.save_session
+                or session_request.session_output
+            )
             run_result = run_circular_from_namespace(args)
             save_session_sidecar_if_requested(
                 save_session=session_request.save_session,
@@ -748,17 +753,15 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     keep_full_definition_with_plot_title: bool = args.keep_full_definition_with_plot_title
     center_reserved_radius: Optional[float] = args.center_reserved_radius
     label_font_size: Optional[float] = args.label_font_size
-    suppress_gc: bool = args.suppress_gc
-    suppress_skew: bool = args.suppress_skew
-    depth_file: str | None = args.depth
+    show_gc: bool = args.show_gc
+    show_skew: bool = args.show_skew
     depth_track_groups: list[list[str]] | None = args.depth_track
     depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
     depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
     depth_track_large_tick_intervals: list[str] | None = list(args.depth_track_large_tick_interval or []) or None
     depth_track_small_tick_intervals: list[str] | None = list(args.depth_track_small_tick_interval or []) or None
     depth_track_tick_font_sizes: list[str] | None = list(args.depth_track_tick_font_size or []) or None
-    show_depth: bool = bool(args.show_depth or depth_file or depth_track_groups)
-    depth_table: DataFrame | None = read_depth_tsv(depth_file) if depth_file else None
+    show_depth: bool = bool(depth_track_groups)
     depth_color: str | None = args.depth_color
     depth_width: Optional[float] = args.depth_width
     depth_window: Optional[int] = args.depth_window
@@ -769,7 +772,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     depth_normalize: bool | None = args.depth_normalize
     depth_show_axis: bool | None = args.depth_show_axis
     depth_show_ticks: bool | None = args.depth_show_ticks
-    depth_tick_interval: Optional[float] = args.depth_tick_interval
     depth_large_tick_interval: Optional[float] = args.depth_large_tick_interval
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
@@ -825,10 +827,23 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     legend_box_size = args.legend_box_size
     legend_font_size = args.legend_font_size
     feature_width: Optional[float] = args.feature_width
-    circular_track_table = read_circular_track_table(args.circular_track_table) if args.circular_track_table else None
+    allow_legacy_track_transport = bool(
+        getattr(args, "_allow_legacy_track_transport", False)
+    )
+    circular_track_table = (
+        read_circular_track_table(
+            args.circular_track_table,
+            _allow_legacy_transport=allow_legacy_track_transport,
+        )
+        if args.circular_track_table
+        else None
+    )
     circular_track_order: str | None = None if circular_track_table else args.circular_track_order
-    circular_track_slot_specs: list[str] = (
-        list(circular_track_table.slot_specs)
+    circular_track_slot_specs: list[str | CircularTrackSlot] = (
+        parse_circular_track_slots(
+            circular_track_table.slot_specs,
+            _allow_legacy_transport=allow_legacy_track_transport,
+        )
         if circular_track_table
         else list(args.circular_track_slot or [])
     )
@@ -900,6 +915,19 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         depth_track_groups,
         record_count=len(gb_records),
     )
+    if (
+        len(gb_records) > 1
+        and not multi_record_canvas
+        and (
+            bool(args.save_session or args.session_output)
+            or bool(getattr(args, "_require_canonical_session", False))
+        )
+    ):
+        raise ValidationError(
+            "Saving a session for a separate-diagram Circular batch is not "
+            "supported by the current typed request schema. Use "
+            "--multi_record_canvas or save each record separately."
+        )
     logical_depth_track_count = max(
         (len(row) for row in (depth_track_files or [])),
         default=0,
@@ -912,11 +940,11 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     if (
         circular_label_placement == "horizontal"
         and allow_inner_labels
-        and not (suppress_gc and suppress_skew)
+        and (show_gc or show_skew)
     ):
 
-        suppress_gc = True
-        suppress_skew = True
+        show_gc = False
+        show_skew = False
         logger.warning(
             "WARNING: --labels both requires suppressing GC and skew tracks. Suppressing GC and skew tracks.")  #
 
@@ -963,9 +991,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors, palette)
 
-    show_gc, show_skew = suppress_gc_content_and_skew(
-        suppress_gc, suppress_skew)
-
     config_dict = modify_config_dict(
         config_dict,
         block_stroke_color=block_stroke_color,
@@ -996,7 +1021,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         depth_normalize=depth_normalize,
         depth_show_axis=depth_show_axis,
         depth_show_ticks=depth_show_ticks,
-        depth_tick_interval=depth_tick_interval,
         depth_large_tick_interval=depth_large_tick_interval,
         depth_small_tick_interval=depth_small_tick_interval,
         depth_tick_font_size=depth_tick_font_size,
@@ -1100,7 +1124,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     if depth_track_files is not None and not (multi_record_canvas and len(gb_records) > 1):
         separate_record_depth_tracks = normalize_depth_tracks(
             gb_records,
-            depth_table=depth_table,
             depth_track_files=depth_track_files,
             depth_track_labels=depth_track_labels,
             depth_track_colors=depth_track_colors,
@@ -1125,7 +1148,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             color_table=color_table,
             default_colors=default_colors,
             selected_features_set=selected_features_set,
-            feature_table=feature_table,
+            feature_visibility_table=feature_table,
             feature_shapes=feature_shapes or None,
             output_prefix=outfile_prefix,
             legend=legend,
@@ -1134,7 +1157,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             step=manual_step,
             depth_window=depth_window,
             depth_step=depth_step,
-            depth_table=depth_table,
             depth_track_files=depth_track_files,
             depth_track_labels=depth_track_labels,
             depth_track_colors=depth_track_colors,
@@ -1193,13 +1215,19 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         )
         outputs.append(rendered_svg)
     else:
-        for gb_record in gb_records:
+        separate_output_prefixes = determine_output_file_prefixes(
+            gb_records,
+            output_prefix,
+        )
+        for gb_record, outfile_prefix in zip(
+            gb_records,
+            separate_output_prefixes,
+            strict=True,
+        ):
             record_count += 1
-            accession = gb_record.id
             seq_length = len(gb_record.seq)
             window, step = calculate_window_step(seq_length, cfg, manual_window, manual_step)
 
-            outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
             record_depth_track_specs = (
                 separate_record_depth_tracks[record_count - 1]
                 if separate_record_depth_tracks is not None
@@ -1217,7 +1245,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 color_table=color_table,
                 default_colors=default_colors,
                 selected_features_set=selected_features_set,
-                feature_table=feature_table,
+                feature_visibility_table=feature_table,
                 feature_shapes=feature_shapes or None,
                 output_prefix=outfile_prefix,
                 legend=legend,
@@ -1226,7 +1254,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 step=step,
                 depth_window=depth_window,
                 depth_step=depth_step,
-                depth_table=depth_table if record_depth_track_specs is None else None,
                 depth_track_files=None,
                 depth_track_labels=(depth_track_labels if record_depth_track_specs is None else None),
                 depth_track_colors=(depth_track_colors if record_depth_track_specs is None else None),
@@ -1317,7 +1344,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 ),
                 annotations=annotation_options,
                 output=OutputOptions(
-                    output_prefix=request_prefix,
                     legend=legend,
                     plot_title_position=plot_title_position,
                 ),
@@ -1332,7 +1358,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 step=manual_step,
                 depth_window=depth_window,
                 depth_step=depth_step,
-                depth_table=depth_table,
                 depth_track_files=depth_track_files,
                 depth_track_labels=depth_track_labels,
                 depth_track_colors=depth_track_colors,

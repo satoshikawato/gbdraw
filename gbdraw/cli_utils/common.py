@@ -17,7 +17,8 @@ from gbdraw.features.shapes import parse_feature_shape_assignment
 from gbdraw.features.visibility import resolve_candidate_feature_types
 from gbdraw.io.cli_tables import RecordsTable
 from gbdraw.io.genome import load_gbks, load_gff_fasta
-from gbdraw.render.export import CAIROSVG_AVAILABLE, has_cairosvg
+from gbdraw.mode_profiles import CIRCULAR_MODE_PROFILE, DEFAULT_FEATURE_TYPES
+from gbdraw.render.export import has_cairosvg
 from gbdraw.render.formats import CAIROSVG_FORMATS, SVG_FORMAT, is_cairosvg_format, normalize_format_token
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,40 @@ def _add_format_arg(parser: argparse.ArgumentParser) -> None:
         default="svg")
 
 
+def _add_gc_skew_toggle_args(
+    parser: argparse.ArgumentParser,
+    *,
+    show_gc_default: bool,
+    show_skew_default: bool,
+) -> None:
+    gc_group = parser.add_mutually_exclusive_group()
+    gc_group.add_argument(
+        '--gc',
+        dest='show_gc',
+        help='Show the GC content track.',
+        action='store_true')
+    gc_group.add_argument(
+        '--no-gc',
+        dest='show_gc',
+        help='Hide the GC content track.',
+        action='store_false')
+    skew_group = parser.add_mutually_exclusive_group()
+    skew_group.add_argument(
+        '--skew',
+        dest='show_skew',
+        help='Show the GC skew track.',
+        action='store_true')
+    skew_group.add_argument(
+        '--no-skew',
+        dest='show_skew',
+        help='Hide the GC skew track.',
+        action='store_false')
+    parser.set_defaults(
+        show_gc=bool(show_gc_default),
+        show_skew=bool(show_skew_default),
+    )
+
+
 def _add_depth_track_label_color_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--depth_track_label',
@@ -139,10 +174,6 @@ def _add_depth_track_tick_args(parser: argparse.ArgumentParser) -> None:
         help='Depth track tick font size(s). Provide one value or one per --depth_track.',
         type=str,
         nargs='+')
-    parser.add_argument(
-        '--show_depth',
-        help='Show depth coverage track. Implied when --depth is supplied.',
-        action='store_true')
 
 
 def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
@@ -200,10 +231,6 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
         help='Hide depth coverage axis ticks and labels.',
         action='store_false')
     parser.add_argument(
-        '--depth_tick_interval',
-        help='Depth coverage large tick interval in x coverage units (optional; must be > 0; legacy alias for --depth_large_tick_interval).',
-        type=float)
-    parser.add_argument(
         '--depth_large_tick_interval',
         help='Depth coverage large tick interval in x coverage units (optional; must be > 0).',
         type=float)
@@ -218,26 +245,27 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
+    thresholds = CIRCULAR_MODE_PROFILE.comparison
     parser.add_argument(
         '--evalue',
         help='Maximum BLAST e-value retained for similarity rings (default: 1e-5).',
         type=float,
-        default=1e-5)
+        default=thresholds.evalue)
     parser.add_argument(
         '--bitscore',
         help='Minimum BLAST bitscore retained for similarity rings (default: 50).',
         type=float,
-        default=50.0)
+        default=thresholds.bitscore)
     parser.add_argument(
         '--identity',
         help='Minimum BLAST identity percentage retained for similarity rings (default: 70).',
         type=float,
-        default=70.0)
+        default=thresholds.identity)
     parser.add_argument(
         '--alignment_length',
         help='Minimum BLAST alignment length retained for similarity rings (default: 0).',
         type=int,
-        default=0)
+        default=thresholds.alignment_length)
 
 
 def _add_gc_content_axis_args(parser: argparse.ArgumentParser) -> None:
@@ -305,23 +333,6 @@ def _add_legend_size_args(parser: argparse.ArgumentParser) -> None:
         type=float)
 
 
-def add_output_args(parser: argparse.ArgumentParser, default_output: Optional[str] = None) -> None:
-    """Add output-related arguments (-o, -f)."""
-    parser.add_argument(
-        '-o',
-        '--output',
-        help='output file prefix (default: accession number of the sequence)' if default_output is None else f'output file prefix (default: {default_output})',
-        type=str,
-        default=default_output)
-
-    parser.add_argument(
-        '-f',
-        '--format',
-        help=_OUTPUT_FORMAT_HELP,
-        type=str,
-        default="svg")
-
-
 def add_color_args(parser: argparse.ArgumentParser) -> None:
     """Add color-related arguments (-p, -t, -d)."""
     parser.add_argument(
@@ -371,27 +382,7 @@ def add_feature_args(parser: argparse.ArgumentParser) -> None:
         '--features',
         help='Comma-separated list of feature keys to draw (default: CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)',
         type=str,
-        default="CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region")
-
-
-def add_stroke_args(parser: argparse.ArgumentParser) -> None:
-    """Add stroke styling arguments."""
-    parser.add_argument(
-        '--block_stroke_color',
-        help='Block stroke color (str; default: "gray")',
-        type=str)
-    parser.add_argument(
-        '--block_stroke_width',
-        help='Block stroke width (optional; float; default: 2 pt for genomes <= 50 kb, 0 pt for genomes >= 50 kb)',
-        type=float)
-    parser.add_argument(
-        '--line_stroke_color',
-        help='Line stroke color (str; default: "gray")',
-        type=str)
-    parser.add_argument(
-        '--line_stroke_width',
-        help='Line stroke width (optional; float; default: 5 pt for genomes <= 50 kb, 1 pt for genomes >= 50 kb)',
-        type=float)
+        default=",".join(DEFAULT_FEATURE_TYPES))
 
 
 def add_label_args(parser: argparse.ArgumentParser) -> None:
@@ -424,36 +415,12 @@ def add_label_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         default="")
     parser.add_argument(
-        '--feature_table',
-        dest='feature_table',
-        help=argparse.SUPPRESS,
-        type=str,
-        default=argparse.SUPPRESS)
-    parser.add_argument(
         '--annotation_table',
         '--annotation-table',
         dest='annotation_table',
         help='Path to a TSV file defining region annotation sets and marks (optional)',
         type=str,
         default='')
-
-
-def add_legend_args(parser: argparse.ArgumentParser, choices_help: str = '"right", "left", "none"') -> None:
-    """Add legend-related arguments."""
-    parser.add_argument(
-        '-l',
-        '--legend',
-        help=f'Legend position (default: "right"; {choices_help})',
-        type=str,
-        default="right")
-    parser.add_argument(
-        '--legend_box_size',
-        help='Legend box size (optional; float; default: 24 (pixels, 96 dpi) for genomes <= 50 kb, 20 for genomes >= 50 kb).',
-        type=float)
-    parser.add_argument(
-        '--legend_font_size',
-        help='Legend font size (optional; float; default: 20 (pt) for genomes <= 50 kb, 16 for genomes >= 50 kb).',
-        type=float)
 
 
 def validate_input_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
@@ -593,7 +560,7 @@ def record_major_depth_track_files_from_cli(
 ) -> list[list[str | None]] | None:
     if not depth_track_groups:
         return None
-    rows: list[list[str | None]] = [[] for _ in range(record_count)]
+    logical_tracks: list[list[str | None]] = []
     for track_number, group in enumerate(depth_track_groups, start=1):
         values = [
             None
@@ -603,29 +570,29 @@ def record_major_depth_track_files_from_cli(
         ]
         if not values or all(value is None for value in values):
             raise ValidationError(f"--depth_track #{track_number} must include at least one file.")
-        if len(values) == 1:
-            expanded = values * record_count
-        elif len(values) == record_count:
-            expanded = values
-        else:
+        if len(values) not in {1, record_count}:
             raise ValidationError(
                 f"--depth_track #{track_number} must contain one file or one per record ({record_count}); got {len(values)}."
             )
+        logical_tracks.append(values)
+
+    if all(len(values) == 1 for values in logical_tracks):
+        return [[values[0] for values in logical_tracks]]
+
+    rows: list[list[str | None]] = [[] for _ in range(record_count)]
+    for values in logical_tracks:
+        expanded = values * record_count if len(values) == 1 else values
         for record_index, path in enumerate(expanded):
             rows[record_index].append(path)
     return rows
 
 
 __all__ = [
-    "CAIROSVG_AVAILABLE",
     "add_analysis_args",
     "add_color_args",
     "add_feature_args",
     "add_input_args",
     "add_label_args",
-    "add_legend_args",
-    "add_output_args",
-    "add_stroke_args",
     "calculate_window_step",
     "handle_output_formats",
     "setup_logging",

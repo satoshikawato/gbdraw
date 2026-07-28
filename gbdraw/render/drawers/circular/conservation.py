@@ -58,7 +58,9 @@ class ConservationDrawer:
         self.stroke_width = float(stroke_width)
 
     def _identity_factor(self, identity: float) -> float:
-        denominator = max(1e-9, 100.0 - float(self.min_identity))
+        if self.min_identity >= 100:
+            return 1.0 if float(identity) >= 100 else 0.0
+        denominator = 100.0 - float(self.min_identity)
         factor = (float(identity) - float(self.min_identity)) / denominator
         return max(0.0, min(1.0, factor))
 

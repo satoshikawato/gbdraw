@@ -78,7 +78,7 @@ gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels bo
 ### Hide GC, skew, and legend
 
 ```bash
-gbdraw circular --gbk genome.gb -o output -f svg --suppress_gc --suppress_skew --legend none
+gbdraw circular --gbk genome.gb -o output -f svg --no-gc --no-skew --legend none
 ```
 
 ### Resolve overlapping features

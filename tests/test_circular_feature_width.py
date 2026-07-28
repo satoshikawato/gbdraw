@@ -19,11 +19,9 @@ from gbdraw.features.factory import create_feature_dict
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.svg.circular_ticks import (
-    get_circular_tick_label_radius_bounds,
-    get_circular_tick_path_radius_bounds,
     get_circular_tick_path_ratio_bounds,
 )
-from gbdraw.tracks import CircularTrackSlot, default_circular_track_slots, parse_circular_track_slot
+from gbdraw.tracks import default_circular_track_slots, parse_circular_track_slot
 from tests.utils.circular_drawer_fakes import make_feature_draw_ratio_capture, make_numeric_track_capture
 from svgwrite import Drawing
 
@@ -254,7 +252,6 @@ def test_short_tuckin_separate_strands_default_tracks_do_not_overlap() -> None:
 def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     record = _load_record()
     config_dict = _make_config_dict(show_labels=True)
-    cfg = GbdrawConfig.from_dict(config_dict)
 
     captured: dict[str, Any] = {}
 
@@ -301,6 +298,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
         feature_anchor_radius_px=None,
+        **kwargs,
     ):
         captured["record_feature_ratio"] = feature_track_ratio_factor_override
         return canvas
@@ -314,7 +312,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -385,7 +383,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -631,8 +629,8 @@ def test_cli_gc_track_width_radius_respects_suppress_flags(
             [
                 "--gbk",
                 "dummy.gb",
-                "--suppress_gc",
-                "--suppress_skew",
+                "--no-gc",
+                "--no-skew",
                 "--gc_content_radius",
                 "0.74",
                 "--gc_content_width",
@@ -878,7 +876,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -969,7 +967,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1081,7 +1079,7 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1191,7 +1189,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1295,7 +1293,7 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1381,7 +1379,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
         circular_assemble_module.add_labels_group_on_canvas = fake_add_labels_group_on_canvas
         circular_assemble_module.add_record_group_on_canvas = lambda canvas, *args, **kwargs: canvas
         circular_assemble_module.add_record_definition_group_on_canvas = (
-            lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None: canvas
+            lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas
         )
         circular_assemble_module.add_legend_group_on_canvas = (
             lambda canvas, canvas_config, legend_config, legend_table: canvas
@@ -1438,7 +1436,27 @@ def test_feature_width_keeps_axis_concentric_with_rendered_tracks(track_type: st
     svg_text = canvas.tostring()
 
     axis_transform = _extract_group_translate(svg_text, "Axis")
-    record_transform = _extract_group_translate(svg_text, record.id)
+    record_group_match = re.search(
+        r'<g[^>]*data-gbdraw-slot-id="features"[^>]*>',
+        svg_text,
+    )
+    record_transform_match = (
+        re.search(
+            r'\btransform="translate\(\s*'
+            r'([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)"',
+            record_group_match.group(0),
+        )
+        if record_group_match is not None
+        else None
+    )
+    record_transform = (
+        (
+            float(record_transform_match.group(1)),
+            float(record_transform_match.group(2)),
+        )
+        if record_transform_match is not None
+        else None
+    )
     assert axis_transform is not None
     assert record_transform is not None
     assert axis_transform == pytest.approx(record_transform, abs=1e-6)

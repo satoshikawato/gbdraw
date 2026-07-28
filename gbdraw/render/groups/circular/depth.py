@@ -28,7 +28,7 @@ class DepthGroup:
         axis_group_id: str | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
-        self.depth_group = Group(id=group_id or "depth")
+        self.depth_group = Group(id=group_id or "depth", debug=False)
         self.radius = float(radius)
         self.depth_config = depth_config
         self.gb_record = gb_record

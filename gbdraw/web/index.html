@@ -1314,7 +1314,7 @@
                                         <template v-if="losat.blastp.mode === 'collinear'">
                                             <div>
                                                 <label class="text-[9px] flex items-center">Max unit gap <help-tip text="Maximum CDS-order gap between neighboring Orthogroup RBH anchors that can be merged into one span ribbon."></help-tip></label>
-                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxGeneGap" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Min block genes <help-tip text="Minimum connected genes required for a Collinear ribbon. Use 1 to include singleton links."></help-tip></label>
@@ -1347,19 +1347,19 @@
                                         <div class="col-span-2 grid grid-cols-2 gap-1 pt-2 border-t border-slate-200">
                                             <div>
                                                 <label class="text-[9px] flex items-center">Bitscore <help-tip text="Minimum LOSATP blastp bitscore retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
-                                                <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" placeholder="50">
+                                                <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">E-value <help-tip text="Maximum LOSATP blastp e-value retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
-                                                <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input px-1 py-0.5 text-xs" placeholder="1e-2">
+                                                <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'evalue'))">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Minimum Identity <help-tip text="Minimum LOSATP blastp percent identity retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
-                                                <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" placeholder="0">
+                                                <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'identity'))">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Minimum Length <help-tip text="Minimum LOSATP blastp alignment length retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
-                                                <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" placeholder="0">
+                                                <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))">
                                             </div>
                                         </div>
                                     </div>
@@ -1835,19 +1835,19 @@
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
                                         <label class="input-label text-[10px]">Bitscore</label>
-                                        <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input form-input-compact" placeholder="50">
+                                        <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('circular', 'min_bitscore') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'min_bitscore'))">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">E-value</label>
-                                        <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input form-input-compact" placeholder="1e-2">
+                                        <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('circular', 'evalue') : String($event.target.value).trim()" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'evalue'))">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Minimum Identity</label>
-                                        <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                        <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('circular', 'identity') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'identity'))">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Minimum Length</label>
-                                        <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                        <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('circular', 'alignment_length') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'alignment_length'))">
                                     </div>
                                 </div>
                             </div>
@@ -3601,19 +3601,19 @@
                             <div v-if="!(blastSource === 'losat' && losatProgram === 'blastp')" class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <label class="input-label text-[10px]">Bitscore</label>
-                                    <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input form-input-compact" placeholder="50">
+                                    <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))">
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">E-value</label>
-                                    <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input form-input-compact" placeholder="1e-2">
+                                    <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'evalue'))">
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Minimum Identity</label>
-                                    <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                    <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'identity'))">
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Minimum Length</label>
-                                    <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                    <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))">
                                 </div>
                             </div>
                         </div>

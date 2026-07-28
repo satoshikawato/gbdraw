@@ -73,6 +73,11 @@ const syntheticCliSession = {
 const originalCliRequest = structuredClone(syntheticCliSession.renderRequest);
 const promotedSyntheticCli = promoteGallerySessionToCanonicalV3(syntheticCliSession);
 assert.equal(promotedSyntheticCli.renderRequest.schema, 3);
+assert.deepEqual(promotedSyntheticCli.renderRequest.diagramOptions.output, {
+  outputPrefix: 'cli',
+  legend: 'right',
+  plotTitlePosition: 'bottom'
+});
 assert.equal(promotedSyntheticCli.renderRequest.records[0].presentation.label, 'CLI label');
 assert.equal(promotedSyntheticCli.renderRequest.records[0].presentation.reverseComplement, false);
 assert.equal(promotedSyntheticCli.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
@@ -95,7 +100,8 @@ const syntheticGuiSession = {
       evalue: 0.01,
       min_bitscore: 50,
       identity: 30,
-      alignment_length: 0
+      alignment_length: 0,
+      depth_tick_interval: 15
     },
     palette: 'pending-palette',
     colors: { CDS: '#111111' }
@@ -143,9 +149,16 @@ const syntheticGuiSession = {
 };
 const promotedSyntheticGui = promoteGallerySessionToCanonicalV3(syntheticGuiSession);
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
+assert.equal(promotedSyntheticGui.renderRequest.schema, 3);
+assert.deepEqual(syntheticGuiOptions.output, {
+  outputPrefix: 'gui',
+  legend: 'left',
+  plotTitlePosition: 'none'
+});
 assert.equal(syntheticGuiOptions.output.legend, 'left');
 assert.equal(syntheticGuiOptions.configOverrides.show_labels, true);
 assert.equal(syntheticGuiOptions.configOverrides.circular_definition_font_size, 31);
+assert.equal(syntheticGuiOptions.configOverrides.depth_large_tick_interval, 15);
 assert.equal(syntheticGuiOptions.colors.defaultColorsPalette, 'applied-palette');
 assert.match(
   resourceText(promotedSyntheticGui, syntheticGuiOptions.colors.defaultColorsFile),
@@ -298,6 +311,16 @@ assert.deepEqual(
 assert.equal(
   promotedMajani.renderRequest.diagramOptions.featureShapes.repeat_region,
   'underlay'
+);
+
+const vibrio = await loadSession('vibrio-harveyi-group-collinear.gbdraw-session.json.gz');
+const promotedVibrio = promoteGallerySessionToCanonicalV3(vibrio);
+const promotedVibrioComparison = promotedVibrio.renderRequest.comparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+);
+assert.equal(
+  promotedVibrioComparison.settings.collinearityParams.parameters.maxUnitGap,
+  2
 );
 
 for (const session of [promotedBgc, promotedMajani]) {

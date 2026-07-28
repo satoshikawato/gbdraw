@@ -42,6 +42,17 @@ def _comparison_frame(rows: list[tuple[object, ...]]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=COMPARISON_COLUMNS)
 
 
+def _conservation_group_id(svg: str, label: str) -> str | None:
+    matching = [
+        element.get("id")
+        for element in ET.fromstring(svg).iter()
+        if element.tag.rsplit("}", 1)[-1] == "g"
+        and element.get("data-track-label") == label
+    ]
+    assert len(matching) <= 1
+    return matching[0] if matching else None
+
+
 def _hit(
     query: str = "query1",
     subject: str = "rec1",
@@ -309,7 +320,11 @@ def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_Reference_A"' in svg
+    assert (_conservation_group_id(svg, "Reference A") or "").startswith(
+        "track_slot_"
+    )
+    assert 'data-gbdraw-slot-id="conservation_1"' in svg
+    assert 'data-gbdraw-slot-renderer="sequence_conservation"' in svg
     assert 'data-track-label="Reference A"' in svg
     assert 'data-reference-record-id="rec1"' in svg
     assert 'data-gbdraw-match-id="homology_ring1_hit1"' in svg
@@ -335,7 +350,9 @@ def test_circular_api_renders_source_colored_conservation_ring() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_barcode13"' in svg
+    assert (_conservation_group_id(svg, "barcode13") or "").startswith(
+        "track_slot_"
+    )
     assert 'data-track-label="barcode13"' in svg
     assert 'data-track-color="#e15759"' in svg
     assert 'data-legend-key="barcode13"' in svg
@@ -650,9 +667,11 @@ def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_Reference_B"' in svg
-    assert 'id="conservation_Reference_A"' in svg
-    assert svg.index('id="conservation_Reference_B"') < svg.index('id="conservation_Reference_A"')
+    reference_b_id = _conservation_group_id(svg, "Reference B")
+    reference_a_id = _conservation_group_id(svg, "Reference A")
+    assert reference_b_id is not None
+    assert reference_a_id is not None
+    assert svg.index(f'id="{reference_b_id}"') < svg.index(f'id="{reference_a_id}"')
 
 
 def test_circular_api_keeps_axis_derived_side_for_conservation_slot() -> None:
@@ -677,7 +696,9 @@ def test_circular_api_keeps_axis_derived_side_for_conservation_slot() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_Outer_conservation"' in svg
+    assert (_conservation_group_id(svg, "Outer conservation") or "").startswith(
+        "track_slot_"
+    )
     assert 'data-track-label="Outer conservation"' in svg
 
 
@@ -701,7 +722,7 @@ def test_disabled_explicit_conservation_slot_suppresses_auto_insert() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_Hidden_reference"' not in svg
+    assert _conservation_group_id(svg, "Hidden reference") is None
 
 
 def test_circular_diagram_options_forward_conservation_dataframe() -> None:
@@ -720,7 +741,9 @@ def test_circular_diagram_options_forward_conservation_dataframe() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_Option_ring"' in svg
+    assert (_conservation_group_id(svg, "Option ring") or "").startswith(
+        "track_slot_"
+    )
     assert 'data-track-label="Option ring"' in svg
     assert 'data-track-color="#ff0000"' in svg
 

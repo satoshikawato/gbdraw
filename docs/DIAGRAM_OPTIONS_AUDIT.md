@@ -4,14 +4,17 @@
 
 - Date: 2026-07-14
 - Version: `0.14.0b0`
-- Contract: 71 fields in `gbdraw.api.DiagramOptions`
+- Audited contract: 71 fields in `gbdraw.api.DiagramOptions`
+- Current contract: the two `feature_table*` aliases were removed by the
+  2026-07-28 `O3.api=B` decision; use `feature_visibility_table*`
 
-## All 71 fields reach an owner
+## Original 71-field audit
 
 Every field is read by at least one public `build_*` adapter and has a non-default
 forwarding test. No dead field was found. The audit found 31 mode-specific fields,
 two compatibility aliases, and two depth input forms whose behavior changes by
-mode. Those findings do not justify splitting the dataclass in this release.
+mode. The later architecture decision removed those two executable aliases
+immediately while retaining schema 1–3 reader migration.
 
 The main problem found by the audit was discoverability: a caller could set a field
 for the wrong mode and the adapter could ignore it. The follow-up validation now
@@ -78,8 +81,8 @@ reference. CLI documentation may still describe the equivalent CLI option.
 | 4a | `annotations`; `AnnotationOptions`; `None` | CS, CM, L | annotation source resolver and track binding to `A` | annotation track suites | API | live bundle; keep data separate from placement |
 | 5 | `output`; `OutputOptions`; `None` | CS, CM, L | prefix/legend/title position to canvas and `T` | H-B, O-T | API | live bundle; keep |
 | 6 | `selected_features_set`; sequence; `None` | CS, CM, L | same-name assembler argument to `F` | H-S, O-F | API | live; keep |
-| 7 | `feature_table`; DataFrame; `None` | CS, CM, L | `feature_table` to compatibility resolver to `F` | H-S, O-F | Audit | compatibility alias; keep |
-| 8 | `feature_table_file`; path; `None` | CS, CM, L | `feature_table_file` to visibility reader to `F` | H-S, O-F | Audit | compatibility alias; keep |
+| 7 | `feature_table`; DataFrame; `None` | CS, CM, L | Historical alias for `F` | H-S, O-F | Audit | removed by `O3.api=B`; schema 1–3 reader migrates it |
+| 8 | `feature_table_file`; path; `None` | CS, CM, L | Historical alias for the visibility reader | H-S, O-F | Audit | removed by `O3.api=B`; schema 1–3 reader migrates it |
 | 9 | `feature_visibility_table`; DataFrame; `None` | CS, CM, L | same-name argument to visibility resolver to `F` | H-S, O-F | Audit | canonical input; keep |
 | 10 | `feature_visibility_table_file`; path; `None` | CS, CM, L | same-name argument to visibility reader to `F` | H-S, O-F | Audit | canonical input; keep |
 | 11 | `label_whitelist_table`; DataFrame; `None` | CS, CM, L | config resolver to `whitelist_df` to `LB` | H-LB, O-LB | API | DataFrame/file pair; keep |
@@ -90,9 +93,9 @@ reference. CLI documentation may still describe the equivalent CLI option.
 | 16 | `label_override_file`; path; `None` | CS, CM, L | override reader to `label_override_df` to `LB` | H-LB, O-LB | API | DataFrame/file pair; keep |
 | 17 | `feature_shapes`; mapping; `None` | CS, CM, L | same-name assembler argument to `F` and feature drawers | H-S, O-F | Audit | live; keep |
 
-`feature_table*` and `feature_visibility_table*` have the same final owner. The
-former names are compatibility aliases. Passing both table forms, or both file
-forms, raises `ValidationError`; no deprecation is proposed for the beta release.
+Fresh Python requests accept only `feature_visibility_table*`. Supported
+canonical schemas 1–3 still migrate stored `feature_table*` fields before
+constructing the current request.
 
 ## Scalar and depth fields
 
@@ -182,14 +185,15 @@ covered by the comparison and collinearity owner suites.
 | Shared live field | 39 | configuration, feature, label, scalar/depth fields, title, thresholds |
 | Circular-only | 10 | conservation fields, circular definition controls |
 | Linear-only | 21 | `depth_track_heights` and comparison/protein/collinearity fields |
-| Compatibility alias | 2 | `feature_table`, `feature_table_file` (also counted as shared) |
+| Removed executable alias | 2 | `feature_table`, `feature_table_file` (historical audit rows) |
 | Dead candidate | 0 | none |
 
 ## Decision and backlog
 
-Keep `DiagramOptions` intact for `0.14.0b0`. A split would add conversion code while
-39 fields remain shared, and there is no dead field to remove. The public
-`assemble_*` functions remain the lower-level escape hatch.
+Keep `DiagramOptions` intact for `0.14.0b0`; the full mode-specific split remains
+the next API iteration. The approved beta cleanup removed the two aliases above
+from `DiagramOptions`, the low-level assemblers, and the interactive-context
+builder without retaining executable adapters.
 
 The audit produced three follow-up items:
 

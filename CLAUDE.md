@@ -105,12 +105,15 @@ gbdraw/
 ### Entry Points
 
 1. **CLI:** `gbdraw.cli:main()` → dispatches to `circular` or `linear` subcommands
-2. **Public API:** `gbdraw.api` module exports:
-   - `assemble_circular_diagram_from_record()` - Build circular diagram from SeqRecord
-   - `assemble_linear_diagram_from_records()` - Build linear diagram from multiple SeqRecords
-   - Configurator classes (`FeatureDrawingConfigurator`, `GcContentConfigurator`, etc.)
-   - Canvas configurators (`CircularCanvasConfigurator`, `LinearCanvasConfigurator`)
-   - Track specs (`TrackSpec`, `parse_track_specs()`) - Control individual track visibility/styling
+2. **Beginner-facing Python API:** the `gbdraw` package root exports
+   `read_genbank()`, `read_gff()`, `draw_circular()`, `draw_linear()`,
+   mode-specific option types, and `Diagram`.
+3. **Typed integration API:** `gbdraw.api` exports typed request, render, session,
+   table, option, and track-slot contracts plus explicit render helpers.
+
+Low-level assemblers remain in `gbdraw.api.diagram` for internal engine use.
+Canvas and drawing configurators remain implementation details in their owner
+modules; they are not re-exported from `gbdraw.api`.
 
 ### Data Flow
 

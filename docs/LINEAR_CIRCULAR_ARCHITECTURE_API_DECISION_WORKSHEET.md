@@ -3,7 +3,7 @@
 # Linear/Circular architecture and API decision worksheet
 
 - Date: 2026-07-28
-- Status: owner decisions recorded; implementation not started
+- Status: owner decisions recorded; Phase 0 and approved beta cleanup implemented
 - Source: [`LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md`](./LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md)
 
 ## How to respond
@@ -384,5 +384,62 @@ ALL=A; O3.api=B
 | O4 | Approved | `A/A/A/A/A` | Use the recommended Circular collection, loading, naming, and collision policies. |
 | O5 | Approved | `A/A` | Use the recommended SVG ID and style contracts. |
 | O6 | Approved | `A/A` | Apply the recommended release gate and staged delivery plan. |
+
+## Implementation record
+
+Implemented on 2026-07-28:
+
+- Phase 0 now uses one versioned mode-profile source for Python, CLI, Web, and
+  newly saved sessions; current entry points enforce the approved numeric and
+  wrong-mode validation rules.
+- SVG IDs are deterministic, valid, and collision-safe. First-party consumers
+  select records, definitions, tracks, legends, and orientations through
+  semantic `data-gbdraw-*` hooks. GC content/skew `stroke_width` now has the
+  same outline meaning in both modes.
+- Under `O3.api=B`, obsolete executable compatibility was removed immediately:
+  the old GC/skew and Depth CLI spellings, unused CLI/config helpers, dead
+  config keys, the `gbdraw.api.canvas`, `gbdraw.api.configurators`, and
+  `gbdraw.circular_diagram_components` compatibility modules, obsolete
+  low-level `gbdraw.api` re-exports, `plot_circular_diagram` /
+  `plot_linear_diagram` save wrappers, package-level render aliases, the
+  CairoSVG availability proxy, no-op label adapters, zero-caller helpers, and
+  duplicate `OutputOptions.output_prefix`. CLI export implementations remain
+  internal to `gbdraw.render.export`.
+- The canonical CLI is `--gc` / `--no-gc`, `--skew` / `--no-skew`, and
+  repeatable `--depth_track`. `RenderOutputRequest` alone owns output naming.
+- Fresh CLI/API entry points reject the retired `depth_tick_interval`,
+  `feature_table`, and `collinear_max_gene_gap` names; Circular
+  `multi_record_size_mode=sqrt`; Linear `label_placement=on_feature` and
+  `track_layout=spreadout|tuckin`; and Circular slot `spacing`, `strict`,
+  `compress`, and `reserve`. Their canonical replacements are
+  `depth_large_tick_interval`, `feature_visibility_table`,
+  `collinear_max_unit_gap`, Circular `auto`, Linear `above_feature`,
+  Linear `above|below`, and explicit `inner_gap_px` / `outer_gap_px`.
+- Under `O3.data=A`, persisted-data compatibility is intentionally separate
+  from executable compatibility. New writers emit session version 37 and
+  canonical request schema 4. Readers retain versions 27–33 and 36 and schemas
+  1–3, migrate those stored legacy names, values, and slot fields before replay,
+  and ignore the obsolete nested assembly prefix. `--annotation-table` and
+  `--gc_content_tick_interval` remain active aliases and are not part of the
+  removal set.
+- Circular private compatibility transport is confined to canonical request
+  schemas 1–3 and old-session readers. The schema 4 writer never emits
+  `__gbdraw_legacy_spacing`. Pixel-based legacy spacing is rewritten as explicit
+  `innerGapPx` and `outerGapPx`; factor-based spacing remains replayable but
+  cannot be saved losslessly as schema 4 until it is replaced with explicit
+  inner and outer pixel gaps.
+- The approved O4 naming and collision rules are active: an explicit prefix
+  preserves dots, and duplicate implicit Circular batch IDs receive the first
+  available deterministic `_2`, `_3`, ... suffix. A separate-diagram Circular
+  batch that requests session output is rejected before diagram output until a
+  typed batch request can represent that grouping.
+
+The full A1/A2 and O4 planner work and the mode-specific typed-boundary
+migration remain for the next API iteration under `O6.delivery=A`. That
+iteration includes explicit grid/batch request forms, the remaining O4
+single-layout and neutral-loading work, and removal of the legacy
+`CollinearityParameters` type in favor of `LosslessCollinearityParameters`.
+`DiagramOptions` and the internal assembler implementations remain because
+current typed requests still require them; they are not compatibility aliases.
 
 [Architecture/API audit](./LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md) | [Python API](./PYTHON_API.md) | [API improvement plan](./PYTHON_API_IMPROVEMENT_PLAN.md)

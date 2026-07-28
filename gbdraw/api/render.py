@@ -33,7 +33,6 @@ def _normalize_formats(formats: Sequence[str] | str | None) -> list[str]:
 def _resolve_base_prefix(canvas: Drawing, output_prefix: str | None, output_dir: str | None) -> str:
     base_from_canvas = os.path.splitext(getattr(canvas, "filename", "") or "out.svg")[0]
     base_prefix = output_prefix or base_from_canvas or "out"
-    base_prefix = os.path.splitext(base_prefix)[0]
 
     if output_dir:
         if output_prefix and os.path.dirname(output_prefix) not in {"", "."}:
@@ -214,8 +213,4 @@ def render_to_bytes(
     return bytes(rendered)
 
 
-__all__ = ["parse_formats", "render_to_bytes", "save_figure", "save_figure_to"]
-
-# Re-exported for convenience.
-parse_formats = _export.parse_formats
-save_figure = _export.save_figure
+__all__ = ["render_to_bytes", "save_figure_to"]

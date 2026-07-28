@@ -125,3 +125,19 @@ not replay user-upload watchers.
 For Linear comparison height, versions 31–33 map an invalid historical value to
 Auto without a user warning. New Web, CLI, and Python config inputs continue to
 reject non-finite and non-positive values.
+
+## Version 37 output-ownership amendment
+
+Canonical request schema 4 removes
+`diagramOptions.output.outputPrefix`. That value duplicated
+`renderRequest.output.prefix` and could disagree with the actual writer policy.
+For typed request, CLI, and session execution, `RenderOutputRequest` is now the
+sole owner of destination, filename prefix, formats, and overwrite behavior.
+Assembly remains output-neutral; its output options retain only diagram layout
+choices such as legend and plot-title position.
+
+Python and Web writers emit session version 37 with schema 4. Readers continue to
+accept versions 27–33 and 36. Schema 1–3 readers accept and ignore the obsolete
+nested prefix, while schema 4 rejects it. Version 36 and 37 share the same
+current protein-cache and manifest validation rules. This is a structural writer
+change, not permission to remove any supported persisted-data reader.

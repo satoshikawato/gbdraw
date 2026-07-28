@@ -7,6 +7,7 @@ import {
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
 import {
   FEATURE_ID_ATTRIBUTE,
   FEATURE_SELECTOR,
@@ -327,7 +328,7 @@ export const createFeatureSvgActions = ({
           '[data-label-feature-id]',
           '#legend',
           '#feature_legend',
-          '#pairwise_legend',
+          COMPARISON_LEGEND_SELECTOR,
           '#horizontal_legend',
           '#vertical_legend',
           '[data-legend-key]'

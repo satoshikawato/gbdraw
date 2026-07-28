@@ -8,6 +8,7 @@ from svgwrite.masking import ClipPath
 
 from ....configurators import GcSkewConfigurator
 from ....svg.linear_tracks import calculate_gc_skew_path_desc
+from ....svg.ids import stable_svg_id
 
 
 class SkewDrawer:
@@ -39,7 +40,19 @@ class SkewDrawer:
             start_x, start_y, gc_df, record_len, alignment_width, genome_size_normalization_factor, track_height
         )
 
-        clip_id = f"{group_id}_clipper_line_{abs(hash(skew_desc))}"
+        clip_id = stable_svg_id(
+            f"{group_id}_clipper_line",
+            "linear-skew-clip",
+            group_id,
+            dinucleotide,
+            record_len,
+            alignment_width,
+            genome_size_normalization_factor,
+            track_height,
+            start_x,
+            start_y,
+            skew_desc,
+        )
         clip_path = ClipPath(id=clip_id)
         clip_path.add(
             Path(

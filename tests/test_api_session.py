@@ -219,31 +219,36 @@ def test_session_document_returns_detached_payload() -> None:
 def test_v32_web_slot_specs_drop_only_legacy_feature_geometry(
     tmp_path: Path,
 ) -> None:
-    legacy_slots = (
-        "features:features@side=overlay,h=48px,spacing=9px,z=3,legend_label=Genes",
+    canonical_slots = (
         "gc_content:dinucleotide_content@side=above,h=27px,spacing=4px,nt=GC",
-        "features_secondary:features@side=below,z=4",
+        "features:features@side=below,z=3,legend_label=Genes",
     )
     request = LinearDiagramRequest(
         records=(_record(),),
         options=DiagramOptions(
             tracks=TrackOptions(
-                linear_track_slots=legacy_slots,
+                linear_track_slots=canonical_slots,
                 linear_track_axis_index=1,
             )
         ),
     )
     data = build_session_document(request).to_dict()
     data["version"] = 32
+    encoded_slots = data["renderRequest"]["diagramOptions"]["tracks"][
+        "linearTrackSlots"
+    ]
+    encoded_slots[1] = (
+        "features:features@side=below,h=48px,spacing=9px,"
+        "z=3,legend_label=Genes"
+    )
     document = load_session_document(data)
 
     with materialize_session(document, output_directory=tmp_path) as materialized:
         decoded = session_to_request(materialized)
 
     assert decoded.options.tracks.linear_track_slots == (
-        "features:features@side=overlay,z=3,legend_label=Genes",
         "gc_content:dinucleotide_content@side=above,h=27px,spacing=4px,nt=GC",
-        "features_secondary:features@side=below,z=4",
+        "features:features@side=below,z=3,legend_label=Genes",
     )
     assert decoded.options.tracks.linear_track_axis_index == 1
     assert document.to_dict()["renderRequest"]["diagramOptions"]["tracks"][
@@ -258,9 +263,7 @@ def test_v32_structured_slots_preserve_non_feature_geometry_and_fields(
         id="features",
         renderer="features",
         enabled=False,
-        side="overlay",
-        height=ScalarSpec(48, "px"),
-        spacing=ScalarSpec(9, "px"),
+        side="below",
         z=3,
         params={"legend_label": "Genes"},
     )
@@ -276,23 +279,28 @@ def test_v32_structured_slots_preserve_non_feature_geometry_and_fields(
         records=(_record(),),
         options=DiagramOptions(
             tracks=TrackOptions(
-                linear_track_slots=(feature_slot, numeric_slot),
+                linear_track_slots=(numeric_slot, feature_slot),
                 linear_track_axis_index=1,
             )
         ),
     )
     data = build_session_document(request).to_dict()
     data["version"] = 32
+    encoded_feature = data["renderRequest"]["diagramOptions"]["tracks"][
+        "linearTrackSlots"
+    ][1]
+    encoded_feature["height"] = {"value": 48, "unit": "px"}
+    encoded_feature["spacing"] = {"value": 9, "unit": "px"}
 
     with materialize_session(data, output_directory=tmp_path) as materialized:
         decoded = session_to_request(materialized)
 
-    migrated_feature, preserved_numeric = decoded.options.tracks.linear_track_slots
+    preserved_numeric, migrated_feature = decoded.options.tracks.linear_track_slots
     assert migrated_feature == LinearTrackSlot(
         id="features",
         renderer="features",
         enabled=False,
-        side="overlay",
+        side="below",
         height=None,
         spacing=None,
         z=3,

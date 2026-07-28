@@ -1,6 +1,7 @@
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import pytest
+from xml.etree import ElementTree
 
 from gbdraw.api import (
     AnnotationOptions,
@@ -9,10 +10,9 @@ from gbdraw.api import (
     DiagramOptions,
     RegionAnnotation,
     RegionAnnotationStyle,
-    build_circular_diagram,
-    build_circular_multi_diagram,
     parse_record_selector,
 )
+from gbdraw.api.diagram import build_circular_diagram, build_circular_multi_diagram
 from gbdraw.tracks import (
     CircularTrackSlot,
     normalize_circular_track_slots,
@@ -134,7 +134,19 @@ def test_circular_highlight_automatically_renders_behind_features() -> None:
     )
     assert 'data-gbdraw-annotation-mark="highlight"' in svg
     assert 'fill="#94a3b8"' in svg
-    assert svg.index('data-gbdraw-annotation-id="highlighted"') < svg.index('<g id="r1"')
+    root = ElementTree.fromstring(svg)
+    elements = list(root.iter())
+    highlight_group = next(
+        element
+        for element in elements
+        if element.attrib.get("data-gbdraw-annotation-id") == "highlighted"
+    )
+    record_group = next(
+        element
+        for element in root
+        if element.attrib.get("data-gbdraw-record-id") == "r1"
+    )
+    assert elements.index(highlight_group) < elements.index(record_group)
 
 
 def test_circular_multi_record_annotations_bind_by_record_index() -> None:

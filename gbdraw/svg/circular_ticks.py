@@ -9,6 +9,7 @@ from svgwrite.path import Path
 from svgwrite.text import Text, TextPath
 
 from ..core.text import calculate_bbox_dimensions
+from .ids import stable_svg_id
 
 
 _TICK_LABEL_MIN_MARGIN_PX = 2.0
@@ -595,12 +596,14 @@ def generate_circular_tick_labels(
     tick_length_px: float | None = None,
     tick_width: float = 0.0,
     length_reference_radius_px: float | None = None,
+    group_identifier: str | None = None,
+    record_identifier: str | None = None,
 ) -> list[Text]:
     tick_label_paths_list: list[Text] = []
     normalized_side = str(label_side or "legacy").strip().lower()
     if normalized_side in {"none", ""}:
         return []
-    for tick in ticks:
+    for label_index, tick in enumerate(ticks):
         angle = 360.0 * (tick / total_len)
         label_text = _format_tick_label_text(tick, total_len)
 
@@ -673,7 +676,22 @@ def generate_circular_tick_labels(
             + ","
             + str(end_y)
         )
-        label_axis_path = Path(d=label_axis_path_desc, stroke="none", fill="none")
+        label_axis_path = Path(
+            id=stable_svg_id(
+                "circular_tick_label_path",
+                group_identifier,
+                record_identifier,
+                size,
+                label_index,
+                tick,
+                total_len,
+                label_text,
+                label_axis_path_desc,
+            ),
+            d=label_axis_path_desc,
+            stroke="none",
+            fill="none",
+        )
         text_path = Text("", dominant_baseline=geometry.dominant_baseline)
         text_path.add(
             TextPath(

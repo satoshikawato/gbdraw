@@ -42,6 +42,11 @@ from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
+from gbdraw.tracks.circular import (
+    _InternalCircularTrackSlot,
+    _internal_circular_track_slot,
+    parse_circular_track_slot,
+)
 from gbdraw.annotations import (
     AnnotationOptions,
     AnnotationSet,
@@ -74,7 +79,8 @@ from .api.requests import (
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 3
+CANONICAL_REQUEST_SCHEMA = 4
+SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, 3, 4})
 UNKNOWN_FIELD_POLICY = "reject"
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -82,6 +88,44 @@ _TOP_LEVEL_FIELDS = frozenset(
     {"schema", "mode", "records", "diagramOptions", "layout", "comparisons", "output"}
 )
 _DEFAULT_OPTIONS = DiagramOptions()
+_LEGACY_SPARSE_COMPARISON_DEFAULTS = {
+    "evalue": 1e-5,
+    "bitscore": 50.0,
+    "identity": 70.0,
+    "alignment_length": 0,
+}
+_LEGACY_SPARSE_FEATURE_TYPES = (
+    "CDS",
+    "rRNA",
+    "tRNA",
+    "tmRNA",
+    "ncRNA",
+    "misc_RNA",
+    "repeat_region",
+)
+_LEGACY_SPARSE_CONFIG_OVERRIDES = {
+    "circular": {
+        "show_gc": True,
+        "show_skew": True,
+    },
+    "linear": {
+        "show_gc": True,
+        "show_skew": True,
+        "linear_axis_stroke_color": "gray",
+    },
+}
+_LEGACY_CONFIG_OVERRIDE_KEYS = {
+    "depth_tick_interval": "depth_large_tick_interval",
+}
+_LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES = {
+    "label_placement": {
+        "on_feature": "above_feature",
+    },
+    "linear_track_layout": {
+        "spreadout": "above",
+        "tuckin": "below",
+    },
+}
 
 _COMPARISON_SOURCE_FIELDS = frozenset(
     {
@@ -114,7 +158,6 @@ _COMPARISON_FIELDS = _COMPARISON_SOURCE_FIELDS | frozenset(_PIPELINE_FIELDS)
 
 _TABLE_FIELDS = frozenset(
     {
-        "feature_table",
         "feature_visibility_table",
         "label_whitelist_table",
         "qualifier_priority_table",
@@ -124,7 +167,6 @@ _TABLE_FIELDS = frozenset(
 )
 _FILE_FIELDS = frozenset(
     {
-        "feature_table_file",
         "feature_visibility_table_file",
         "label_whitelist_file",
         "qualifier_priority_file",
@@ -305,7 +347,7 @@ def decode_canonical_request(
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
 ) -> DiagramRequest:
-    """Decode canonical schemas 1, 2, or 3 and normalize validation failures."""
+    """Decode canonical schemas 1 through 4 and normalize validation failures."""
 
     try:
         return _decode_canonical_request(
@@ -333,7 +375,7 @@ def _decode_canonical_request(
     schema = top["schema"]
     if not isinstance(schema, int) or isinstance(schema, bool):
         raise CanonicalRequestDecodingError("renderRequest.schema must be an integer.")
-    if schema not in {1, 2, CANONICAL_REQUEST_SCHEMA}:
+    if schema not in SUPPORTED_CANONICAL_REQUEST_SCHEMAS:
         raise CanonicalRequestDecodingError(
             f"Unsupported canonical request schema: {schema!r}."
         )
@@ -361,7 +403,10 @@ def _decode_canonical_request(
         for index, value in enumerate(raw_records, start=1)
     )
     options_kwargs = _decode_diagram_options(
-        top["diagramOptions"], schema=schema, resource_paths=resource_paths
+        top["diagramOptions"],
+        mode=mode,
+        schema=schema,
+        resource_paths=resource_paths,
     )
     comparison_kwargs = _decode_comparisons(
         top["comparisons"], mode=mode, schema=schema, resource_paths=resource_paths
@@ -387,7 +432,7 @@ def _decode_canonical_request(
             output=output,
         )
 
-    layout = _decode_circular_layout(top["layout"])
+    layout = _decode_circular_layout(top["layout"], schema=schema)
     return CircularDiagramRequest(
         records=records,
         options=options,
@@ -642,7 +687,11 @@ def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
     }
 
 
-def _decode_circular_layout(value: object) -> CircularMultiRecordOptions | None:
+def _decode_circular_layout(
+    value: object,
+    *,
+    schema: int,
+) -> CircularMultiRecordOptions | None:
     layout = _object(value, path="renderRequest.layout")
     if not layout:
         return None
@@ -662,8 +711,11 @@ def _decode_circular_layout(value: object) -> CircularMultiRecordOptions | None:
         raise CanonicalRequestDecodingError(
             "renderRequest.layout.multiRecordPositions must be a string array or null."
         )
+    size_mode = layout["multiRecordSizeMode"]
+    if schema in {1, 2, 3} and size_mode == "sqrt":
+        size_mode = "auto"
     result = CircularMultiRecordOptions(
-        multi_record_size_mode=layout["multiRecordSizeMode"],
+        multi_record_size_mode=size_mode,
         multi_record_min_radius_ratio=layout["multiRecordMinRadiusRatio"],
         multi_record_column_gap_ratio=layout["multiRecordColumnGapRatio"],
         multi_record_row_gap_ratio=layout["multiRecordRowGapRatio"],
@@ -719,10 +771,13 @@ def _encode_diagram_options(
 def _decode_diagram_options(
     value: object,
     *,
+    mode: Literal["circular", "linear"],
     schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> dict[str, Any]:
     payload = _object(value, path="renderRequest.diagramOptions")
+    if schema in {1, 2, 3}:
+        payload = _migrate_legacy_feature_visibility_fields(payload)
     known = {
         _camel(item.name): item.name
         for item in fields(DiagramOptions)
@@ -737,15 +792,136 @@ def _decode_diagram_options(
         )
     decoded = {
         known[key]: _decode_option_value(
-            known[key], raw, resource_paths=resource_paths
+            known[key],
+            raw,
+            schema=schema,
+            resource_paths=resource_paths,
         )
         for key, raw in payload.items()
     }
+    if decoded.get("config_overrides") is not None:
+        decoded["config_overrides"] = _decode_config_overrides(
+            decoded["config_overrides"],
+            mode=mode,
+            schema=schema,
+        )
     if schema in {1, 2}:
         feature_shapes = dict(decoded.get("feature_shapes") or {})
         feature_shapes.setdefault("repeat_region", "rectangle")
         decoded["feature_shapes"] = feature_shapes
+    if schema in {1, 2, 3}:
+        _restore_legacy_sparse_defaults(decoded, mode=mode)
     return decoded
+
+
+def _migrate_legacy_feature_visibility_fields(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Move removed feature-table aliases at the legacy schema boundary."""
+
+    migrated = dict(payload)
+    for old_name, current_name in (
+        ("featureTable", "featureVisibilityTable"),
+        ("featureTableFile", "featureVisibilityTableFile"),
+    ):
+        if old_name not in migrated:
+            continue
+        old_value = migrated.pop(old_name)
+        current_value = migrated.get(current_name)
+        if old_value is not None and current_value is not None:
+            raise CanonicalRequestDecodingError(
+                f"renderRequest.diagramOptions cannot contain both "
+                f"{old_name} and {current_name}."
+            )
+        if current_name not in migrated or current_value is None:
+            migrated[current_name] = old_value
+    return migrated
+
+
+def _decode_config_overrides(
+    value: object,
+    *,
+    mode: Literal["circular", "linear"],
+    schema: int,
+) -> dict[str, Any]:
+    path = "renderRequest.diagramOptions.configOverrides"
+    overrides = dict(_object(value, path=path))
+    if schema in {1, 2, 3}:
+        for old_name, current_name in _LEGACY_CONFIG_OVERRIDE_KEYS.items():
+            if old_name not in overrides:
+                continue
+            old_value = overrides.pop(old_name)
+            current_value = overrides.get(current_name)
+            if old_value is not None and current_value is not None:
+                raise CanonicalRequestDecodingError(
+                    f"{path} cannot contain both {old_name} and {current_name}."
+                )
+            if current_name not in overrides or current_value is None:
+                overrides[current_name] = old_value
+        if mode == "linear":
+            for name, replacements in _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES.items():
+                raw = overrides.get(name)
+                if isinstance(raw, str):
+                    overrides[name] = replacements.get(
+                        raw.strip().lower(),
+                        raw,
+                    )
+        return overrides
+
+    retired = _retired_config_override(overrides)
+    if retired is not None:
+        raise CanonicalRequestDecodingError(
+            f"{path} contains retired value {retired!r}; schema 4 requires canonical config overrides."
+        )
+    return overrides
+
+
+def _retired_config_override(overrides: Mapping[str, Any]) -> str | None:
+    for old_name in _LEGACY_CONFIG_OVERRIDE_KEYS:
+        if old_name in overrides:
+            return old_name
+    for name, replacements in _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES.items():
+        raw = overrides.get(name)
+        if isinstance(raw, str):
+            normalized = raw.strip().lower()
+            if normalized in replacements:
+                return f"{name}={normalized}"
+    return None
+
+
+def _restore_legacy_sparse_defaults(
+    decoded: dict[str, Any],
+    *,
+    mode: Literal["circular", "linear"],
+) -> None:
+    """Keep supported sparse payloads on the defaults they were saved with.
+
+    Canonical schemas 1 through 3 omitted values equal to the
+    shared Python defaults. Fresh requests now use mode-specific profiles, so
+    the compatibility reader materializes the historical values before the
+    typed request applies the current profile.
+    """
+
+    for name, default in _LEGACY_SPARSE_COMPARISON_DEFAULTS.items():
+        decoded.setdefault(name, default)
+    decoded.setdefault("selected_features_set", _LEGACY_SPARSE_FEATURE_TYPES)
+
+    if decoded.get("config") is not None:
+        return
+    explicit_overrides = decoded.get("config_overrides")
+    if explicit_overrides is not None and not isinstance(
+        explicit_overrides, MappingABC
+    ):
+        return
+    overrides = dict(_LEGACY_SPARSE_CONFIG_OVERRIDES[mode])
+    overrides.update(
+        {
+            key: value
+            for key, value in (explicit_overrides or {}).items()
+            if value is not None
+        }
+    )
+    decoded["config_overrides"] = overrides
 
 
 def _encode_option_value(
@@ -762,6 +938,13 @@ def _encode_option_value(
                 config.labels.filtering.as_dict()
             )
         return _json_value(value, path="diagramOptions.config")
+    if name == "config_overrides" and isinstance(value, MappingABC):
+        retired = _retired_config_override(value)
+        if retired is not None:
+            raise CanonicalRequestEncodingError(
+                "diagramOptions.configOverrides contains retired value "
+                f"{retired!r}; use canonical config overrides."
+            )
     if name == "colors":
         return _encode_colors(value, resources=resources)
     if name == "tracks":
@@ -795,6 +978,7 @@ def _decode_option_value(
     name: str,
     value: object,
     *,
+    schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> Any:
     if name == "config":
@@ -802,11 +986,11 @@ def _decode_option_value(
     if name == "colors":
         return _decode_colors(value, resource_paths=resource_paths)
     if name == "tracks":
-        return _decode_tracks(value)
+        return _decode_tracks(value, schema=schema)
     if name == "annotations":
         return _decode_annotations(value, resource_paths=resource_paths)
     if name == "output":
-        return _decode_assembly_output(value)
+        return _decode_assembly_output(value, schema=schema)
     if name in _TABLE_FIELDS:
         return _decode_table_ref(value, name=name, resource_paths=resource_paths)
     if name in _FILE_FIELDS:
@@ -944,7 +1128,7 @@ def _encode_tracks(value: object) -> dict[str, Any]:
     }
 
 
-def _decode_tracks(value: object) -> TrackOptions:
+def _decode_tracks(value: object, *, schema: int) -> TrackOptions:
     path = "renderRequest.diagramOptions.tracks"
     payload = _object(
         value,
@@ -959,11 +1143,17 @@ def _decode_tracks(value: object) -> TrackOptions:
     )
     result = TrackOptions(
         circular_track_slots=_decode_track_slots(
-            payload["circularTrackSlots"], mode="circular", path=f"{path}.circularTrackSlots"
+            payload["circularTrackSlots"],
+            mode="circular",
+            schema=schema,
+            path=f"{path}.circularTrackSlots",
         ),
         circular_track_axis_index=payload["circularTrackAxisIndex"],
         linear_track_slots=_decode_track_slots(
-            payload["linearTrackSlots"], mode="linear", path=f"{path}.linearTrackSlots"
+            payload["linearTrackSlots"],
+            mode="linear",
+            schema=schema,
+            path=f"{path}.linearTrackSlots",
         ),
         linear_track_axis_index=payload["linearTrackAxisIndex"],
         center_reserved_radius=payload["centerReservedRadius"],
@@ -1211,15 +1401,53 @@ def _encode_track_slot(
     kind: str,
 ) -> dict[str, Any]:
     result = {"kind": kind}
-    for item in fields(slot):
+    legacy_spacing = (
+        slot.legacy_spacing
+        if isinstance(slot, _InternalCircularTrackSlot)
+        else None
+    )
+    slot_fields = (
+        fields(CircularTrackSlot)
+        if isinstance(slot, CircularTrackSlot)
+        else fields(LinearTrackSlot)
+    )
+    for item in slot_fields:
         raw = getattr(slot, item.name)
         if isinstance(raw, ScalarSpec):
             raw = {"value": raw.value, "unit": raw.unit}
         elif item.name == "params" and isinstance(raw, MappingABC):
             raw = dict(raw)
+            private_keys = [
+                str(key)
+                for key in raw
+                if str(key).strip().startswith("_")
+            ]
+            if private_keys:
+                raise CanonicalRequestEncodingError(
+                    "trackSlot.params cannot contain private key(s): "
+                    + ", ".join(sorted(private_keys))
+                    + "."
+                )
             if isinstance(raw.get("style_override"), RegionAnnotationStyle):
                 raw["style_override"] = _encode_annotation_style(raw["style_override"])
         result[_camel(item.name)] = _json_value(raw, path=f"trackSlot.{_camel(item.name)}")
+    if legacy_spacing is not None:
+        if legacy_spacing.unit != "px":
+            raise CanonicalRequestEncodingError(
+                "A legacy factor-based Circular spacing value can be replayed "
+                "but cannot be written to canonical schema 4. Set explicit "
+                "inner_gap_px and outer_gap_px values before saving."
+            )
+        result["innerGapPx"] = (
+            slot.inner_gap_px
+            if slot.inner_gap_px is not None
+            else legacy_spacing.value
+        )
+        result["outerGapPx"] = (
+            slot.outer_gap_px
+            if slot.outer_gap_px is not None
+            else legacy_spacing.value
+        )
     return result
 
 
@@ -1227,6 +1455,7 @@ def _decode_track_slots(
     value: object,
     *,
     mode: Literal["circular", "linear"],
+    schema: int,
     path: str,
 ) -> tuple[str | CircularTrackSlot | LinearTrackSlot, ...] | None:
     if value is None:
@@ -1237,10 +1466,38 @@ def _decode_track_slots(
     result: list[str | CircularTrackSlot | LinearTrackSlot] = []
     for index, raw in enumerate(raw_slots):
         if isinstance(raw, str):
-            result.append(raw)
+            if mode == "circular" and schema in {1, 2, 3}:
+                migrated = _migrate_legacy_circular_track_slot_spec(raw)
+                try:
+                    result.append(
+                        parse_circular_track_slot(
+                            migrated,
+                            _allow_legacy_transport=True,
+                        )
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise CanonicalRequestDecodingError(
+                        f"Invalid legacy Circular slot at {path}[{index}]: {exc}"
+                    ) from exc
+            else:
+                result.append(raw)
             continue
         slot_path = f"{path}[{index}]"
         slot = _object(raw, path=slot_path, required={"kind"}, exact=False)
+        legacy_spacing: ScalarSpec | None = None
+        if mode == "circular" and schema in {1, 2, 3} and "spacing" in slot:
+            slot = dict(slot)
+            raw_legacy_spacing = slot.pop("spacing")
+            if raw_legacy_spacing is not None:
+                decoded_spacing = _decode_scalar_if_needed(
+                    raw_legacy_spacing,
+                    path=f"{slot_path}.spacing",
+                )
+                legacy_spacing = (
+                    decoded_spacing
+                    if isinstance(decoded_spacing, ScalarSpec)
+                    else ScalarSpec.parse(decoded_spacing)
+                )
         if slot["kind"] != expected_kind:
             raise CanonicalRequestDecodingError(
                 f"Unsupported track slot kind at {slot_path}: {slot['kind']!r}."
@@ -1250,7 +1507,7 @@ def _decode_track_slots(
             slot, path=slot_path, required={"kind", *field_map.keys()}
         )
         scalar_fields = (
-            {"radius", "width", "spacing"}
+            {"radius", "width"}
             if mode == "circular"
             else {"height", "spacing"}
         )
@@ -1262,6 +1519,20 @@ def _decode_track_slots(
             )
             for key, name in field_map.items()
         }
+        if mode == "circular" and schema in {1, 2, 3}:
+            params = dict(kwargs.get("params") or {})
+            private_spacing = params.pop("__gbdraw_legacy_spacing", None)
+            if private_spacing is not None:
+                if legacy_spacing is not None:
+                    raise CanonicalRequestDecodingError(
+                        f"{slot_path} contains two legacy spacing values."
+                    )
+                legacy_spacing = (
+                    private_spacing
+                    if isinstance(private_spacing, ScalarSpec)
+                    else ScalarSpec.parse(private_spacing)
+                )
+            kwargs["params"] = params
         if str(kwargs.get("renderer", "")).strip().lower() == "annotations":
             params = dict(kwargs.get("params") or {})
             if isinstance(params.get("style_override"), MappingABC):
@@ -1269,8 +1540,42 @@ def _decode_track_slots(
                     params["style_override"], path=f"{slot_path}.params.style_override"
                 )
             kwargs["params"] = params
-        result.append(cls(**kwargs))
+        decoded_slot = cls(**kwargs)
+        if (
+            isinstance(decoded_slot, CircularTrackSlot)
+            and legacy_spacing is not None
+        ):
+            decoded_slot = _internal_circular_track_slot(
+                decoded_slot,
+                legacy_spacing=legacy_spacing,
+            )
+        result.append(decoded_slot)
     return tuple(result)
+
+
+def _migrate_legacy_circular_track_slot_spec(spec: str) -> str:
+    """Translate retired Circular slot fields at the persisted-data boundary."""
+
+    head, separator, options = str(spec).partition("@")
+    if not separator:
+        return str(spec)
+    migrated: list[str] = []
+    for raw_part in options.split(","):
+        part = raw_part.strip()
+        if not part or "=" not in part:
+            migrated.append(part)
+            continue
+        raw_key, raw_value = part.split("=", 1)
+        key = raw_key.strip().lower()
+        if key in {"strict", "compress", "reserve"}:
+            continue
+        if key == "spacing":
+            migrated.append(
+                f"__gbdraw_legacy_spacing={raw_value.strip()}"
+            )
+        else:
+            migrated.append(part)
+    return head if not migrated else f"{head}@{','.join(migrated)}"
 
 
 def _decode_scalar_if_needed(value: object, *, path: str) -> object:
@@ -1286,20 +1591,21 @@ def _encode_assembly_output(value: object) -> dict[str, Any]:
     if not isinstance(value, OutputOptions):
         raise CanonicalRequestEncodingError("diagramOptions.output must be OutputOptions.")
     return {
-        "outputPrefix": value.output_prefix,
         "legend": value.legend,
         "plotTitlePosition": value.plot_title_position,
     }
 
 
-def _decode_assembly_output(value: object) -> OutputOptions:
+def _decode_assembly_output(value: object, *, schema: int) -> OutputOptions:
+    required = {"legend", "plotTitlePosition"}
+    if schema in {1, 2, 3}:
+        required.add("outputPrefix")
     payload = _object(
         value,
         path="renderRequest.diagramOptions.output",
-        required={"outputPrefix", "legend", "plotTitlePosition"},
+        required=required,
     )
     result = OutputOptions(
-        output_prefix=payload["outputPrefix"],
         legend=payload["legend"],
         plot_title_position=payload["plotTitlePosition"],
     )
@@ -2231,6 +2537,7 @@ def _check_singleton_kind(kind: str, seen: set[str], *, path: str) -> None:
 
 __all__ = [
     "CANONICAL_REQUEST_SCHEMA",
+    "SUPPORTED_CANONICAL_REQUEST_SCHEMAS",
     "UNKNOWN_FIELD_POLICY",
     "CanonicalRequestCodecError",
     "CanonicalRequestDecodingError",

@@ -348,8 +348,8 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
             extra_args=(
                 "--block_stroke_width",
                 "1",
-                "--suppress_gc",
-                "--suppress_skew",
+                "--no-gc",
+                "--no-skew",
                 "--separate_strands",
                 "--labels",
                 "--legend",
@@ -705,8 +705,8 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                 "3",
                 "--line_stroke_width",
                 "2",
-                "--suppress_gc",
-                "--suppress_skew",
+                "--no-gc",
+                "--no-skew",
                 "-p",
                 "default",
                 "--track_type",
@@ -761,7 +761,7 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                 "3",
                 "--line_stroke_width",
                 "2",
-                "--suppress_skew",
+                "--no-skew",
                 "-p",
                 "default",
                 "--track_type",
@@ -1031,8 +1031,8 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                             "--labels",
                             "--track_type",
                             "tuckin",
-                            "--suppress_gc",
-                            "--suppress_skew",
+                            "--no-gc",
+                            "--no-skew",
                             "--separate_strands",
                         ),
                     )
@@ -1049,8 +1049,8 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                             "--labels",
                             "--track_type",
                             "middle",
-                            "--suppress_gc",
-                            "--suppress_skew",
+                            "--no-gc",
+                            "--no-skew",
                             "--separate_strands",
                         ),
                     )
@@ -1067,8 +1067,8 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                             "--labels",
                             "--track_type",
                             "spreadout",
-                            "--suppress_gc",
-                            "--suppress_skew",
+                            "--no-gc",
+                            "--no-skew",
                             "--separate_strands",
                         ),
                     )
@@ -1384,8 +1384,8 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                 "0",
                 "--identity",
                 "0",
-                "--show_gc",
-                "--show_skew",
+                "--gc",
+                "--skew",
             ),
         ),
         description="CLI-equivalent rendering of the documented linear Python API example.",
@@ -1479,7 +1479,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
                 "--ruler_on_axis",
                 "--scale_interval", "750000",
                 "--separate_strands",
-                "--show_gc",
+                "--gc",
                 "--hide_accession",
                 "--hide_length",
                 "--definition_font_size", "8",
@@ -1669,7 +1669,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         CliRecipe(
             subcommand="circular",
             gbk_files=("AP027133.gb",),
-            file_args=(_file_arg("--depth", "AP027133.DRR394922.depth.tsv"),),
+            file_args=(_file_arg("--depth_track", "AP027133.DRR394922.depth.tsv"),),
             extra_args=(
                 "--depth_width",
                 "45",
@@ -1739,7 +1739,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         CliRecipe(
             subcommand="linear",
             gbk_files=("AP027078.gb",),
-            file_args=(_file_arg("--depth", "AP027078.DRR394944.depth.tsv"),),
+            file_args=(_file_arg("--depth_track", "AP027078.DRR394944.depth.tsv"),),
             extra_args=(
                 "--depth_height",
                 "40",
@@ -1765,7 +1765,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             subcommand="linear",
             gbk_files=("MjeNMV.gb",),
             extra_args=(
-                "--show_gc",
+                "--gc",
                 "--gc_content_mode",
                 "percent",
                 "--gc_content_min_percent",
@@ -1789,7 +1789,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             subcommand="linear",
             gbk_files=("MjeNMV.gb",),
             extra_args=(
-                "--show_skew",
+                "--skew",
                 "--linear_track_slot",
                 "features:features@side=overlay",
                 "--linear_track_slot",
@@ -1810,7 +1810,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         CliRecipe(
             subcommand="linear",
             gbk_files=layout_inputs,
-            extra_args=("--track_layout", "below", "--track_axis_gap", "auto", "--show_gc", "--show_skew"),
+            extra_args=("--track_layout", "below", "--track_axis_gap", "auto", "--gc", "--skew"),
         ),
         required_inputs=layout_inputs,
     )
@@ -1878,8 +1878,8 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             subcommand="linear",
             gbk_files=("MjeNMV.gb",),
             extra_args=(
-                "--show_gc",
-                "--show_skew",
+                "--gc",
+                "--skew",
                 "--linear_track_slot",
                 "features:features@side=overlay,h=60px",
                 "--linear_track_slot",
@@ -1987,7 +1987,7 @@ def _palette_figures() -> dict[str, FigureSpec]:
                 "AP027133_AP027132.tblastx.out",
                 "AP027132_NZ_CP006932.tblastx.out",
             ),
-            extra_args=("--align_center", "--separate_strands", "--show_gc", "--show_skew", "-p", palette_name),
+            extra_args=("--align_center", "--separate_strands", "--gc", "--skew", "-p", palette_name),
         )
 
     for palette_name in representative_names:

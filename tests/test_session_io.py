@@ -23,7 +23,6 @@ from gbdraw.circular import circular_main
 from gbdraw.linear import (
     _get_args as get_linear_args,
     _record_instance_keys_for_web_losat,
-    _source_session_legacy_protein_candidates,
     _source_session_losat_entries,
 )
 from gbdraw.cli_utils.session import (
@@ -65,6 +64,7 @@ from gbdraw.session_io import (
     validate_session,
     write_session_json,
 )
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from gbdraw.session import load_session_document
 
 
@@ -351,9 +351,9 @@ def test_current_session_version_matches_web_config() -> None:
     source = Path("gbdraw/web/js/services/config.js").read_text(encoding="utf-8")
     match = re.search(r"const\s+SESSION_VERSION\s*=\s*(\d+);", source)
     assert match is not None
-    assert CURRENT_SESSION_VERSION == 36
+    assert CURRENT_SESSION_VERSION == 37
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 36, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
 
@@ -590,6 +590,31 @@ def test_v36_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
         NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     ]
     assert payload["losatDerivedCache"]["entries"][0]["schema"] == 3
+
+
+def test_version36_schema3_sessions_keep_current_artifact_validation() -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        losat_cache_entries=(_current_protein_cache_entry(),),
+        protein_identity_manifest=_protein_identity_manifest(),
+        canonical_request=_canonical_request("linear"),
+    )
+    payload["version"] = 36
+    payload["renderRequest"]["schema"] = 3
+
+    validate_session(payload)
+
+    invalid = copy.deepcopy(payload)
+    invalid["losatCache"]["entries"][0]["schema"] = 3
+    with pytest.raises(ValidationError, match="losatCache"):
+        validate_session(invalid)
 
 
 @pytest.mark.parametrize(
@@ -881,7 +906,50 @@ def test_v36_rejects_legacy_protein_entry_in_current_cache() -> None:
         validate_session(payload)
 
 
-def test_v36_writer_quarantines_v27_to_v33_protein_artifacts(
+def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> None:
+    source = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="old",
+            render_formats=("svg",),
+        ),
+        svg_results=(("old", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 20),
+        canonical_request=_canonical_request("linear"),
+    )
+    source["version"] = 36
+    source["renderRequest"]["schema"] = 3
+
+    context = SessionBuildContext(
+        mode="linear",
+        output_prefix="new",
+        render_formats=("svg",),
+        source_session=source,
+    )
+    kwargs = {
+        "svg_results": (("new", "<svg></svg>"),),
+        "embedded_files": {"linearSeqs": []},
+        "generated_at": datetime(2026, 7, 21),
+    }
+
+    with pytest.raises(
+        ValidationError,
+        match="canonical typed request is required",
+    ):
+        build_session_json(context, **kwargs)
+
+    promoted = build_session_json(
+        context,
+        canonical_request=_canonical_request("linear"),
+        **kwargs,
+    )
+
+    assert promoted["version"] == CURRENT_SESSION_VERSION
+    assert promoted["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+
+
+def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
     tmp_path: Path,
 ) -> None:
     legacy_raw = _legacy_protein_cache_entry()
@@ -921,7 +989,7 @@ def test_v36_writer_quarantines_v27_to_v33_protein_artifacts(
         canonical_request=_canonical_request("linear"),
     )
 
-    assert promoted["version"] == 36
+    assert promoted["version"] == CURRENT_SESSION_VERSION
     assert promoted["losatCache"]["entries"] == []
     assert promoted["losatDerivedCache"]["entries"] == []
     assert promoted["legacyArtifacts"]["proteinRawCandidates"]["entries"] == [
@@ -995,13 +1063,6 @@ def test_linear_source_cache_restores_legacy_candidate_original_entries() -> Non
     }
 
     assert _source_session_losat_entries(session) == (current, legacy)
-    assert _source_session_legacy_protein_candidates(session) == (
-        {
-            "state": "pending",
-            "originalEntry": legacy,
-            "rejectionReason": None,
-        },
-    )
 
 
 def test_future_session_version_fails() -> None:
@@ -1182,6 +1243,191 @@ def test_cli_invocation_restoration_substitutes_embedded_files(tmp_path: Path) -
     assert spec.file_bindings[0].slot == "files.c_gb"
 
 
+def test_circular_legacy_cli_invocation_is_canonicalized_after_materialization(
+    tmp_path: Path,
+) -> None:
+    session = _minimal_session(
+        {
+            "c_gb": _file_entry("input.gb", b"LOCUS       TEST\n"),
+            "c_depth": [_file_entry("depth.tsv", b"TEST\t1\t10\n")],
+        }
+    )
+    session["cliInvocation"] = {
+        "schema": 1,
+        "mode": "circular",
+        "args": [
+            "--suppress_gc",
+            "--suppress_skew",
+            "--show_depth",
+            "--gbk",
+            "input.gb",
+            "--depth",
+            "depth.tsv",
+            "--depth_tick_interval",
+            "4",
+            "--feature_table",
+            "features.tsv",
+            "--multi_record_size_mode",
+            "sqrt",
+            "--circular-track-slot",
+            "gc_content:dinucleotide_content@spacing=4px,strict=true,compress=true,reserve=true",
+            "-f",
+            "svg",
+        ],
+        "renderFormats": ["svg"],
+        "fileBindings": [
+            {"argIndex": 4, "slot": "files.c_gb", "name": "input.gb"},
+            {"argIndex": 6, "slot": "files.c_depth[0]", "name": "depth.tsv"},
+        ],
+        "generatedBy": "gbdraw",
+    }
+
+    spec = session_to_cli_args(
+        session,
+        mode="circular",
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assert "--no-gc" in spec.args
+    assert "--no-skew" in spec.args
+    assert "--depth_track" in spec.args
+    assert spec.args[spec.args.index("--depth_large_tick_interval") + 1] == "4"
+    assert spec.args[spec.args.index("--feature_visibility_table") + 1] == "features.tsv"
+    assert spec.args[spec.args.index("--multi_record_size_mode") + 1] == "auto"
+    slot_value = spec.args[spec.args.index("--circular_track_slot") + 1]
+    assert "__gbdraw_legacy_spacing=4px" in slot_value
+    assert not any(
+        token in slot_value
+        for token in ("@spacing=", ",spacing=", "strict=", "compress=", "reserve=")
+    )
+    assert not {
+        "--suppress_gc",
+        "--suppress_skew",
+        "--show_depth",
+        "--depth",
+        "--depth_tick_interval",
+        "--feature_table",
+        "--circular-track-slot",
+    }.intersection(spec.args)
+    assert [binding.argIndex for binding in spec.file_bindings] == [3, 5]
+    parsed = circular_cli_module._get_args(
+        list(spec.args),
+        _allow_legacy_track_transport=True,
+    )
+    assert parsed.show_gc is False
+    assert parsed.show_skew is False
+    assert parsed.depth_track == [[spec.args[5]]]
+    assert parsed.depth_large_tick_interval == pytest.approx(4)
+    assert parsed.feature_table == "features.tsv"
+    assert parsed.multi_record_size_mode == "auto"
+    assert not hasattr(parsed, "depth")
+    assert not hasattr(parsed, "show_depth")
+
+
+@pytest.mark.parametrize(
+    ("legacy_layout", "canonical_layout"),
+    [("spreadout", "above"), ("tuckin", "below")],
+)
+def test_linear_legacy_cli_invocation_is_canonicalized_after_materialization(
+    tmp_path: Path,
+    legacy_layout: str,
+    canonical_layout: str,
+) -> None:
+    session = _minimal_session(
+        {
+            "linearSeqs": [
+                {"gb": _file_entry("a.gb", b"LOCUS       A\n")},
+                {"gb": _file_entry("b.gb", b"LOCUS       B\n")},
+            ],
+            "linearDepth": [
+                _file_entry("a.tsv", b"A\t1\t10\n"),
+                _file_entry("b.tsv", b"B\t1\t12\n"),
+            ],
+        },
+        mode="linear",
+    )
+    session["cliInvocation"] = {
+        "schema": 1,
+        "mode": "linear",
+        "args": [
+            "--show_gc",
+            "--show_skew",
+            "--show_depth",
+            "--gbk",
+            "a.gb",
+            "b.gb",
+            "--depth",
+            "a.tsv",
+            "b.tsv",
+            "--depth_tick_interval",
+            "4",
+            "--feature_table",
+            "features.tsv",
+            "--collinear_max_gene_gap",
+            "3",
+            "--pairwise-match-style",
+            "curve",
+            "--label_placement",
+            "on_feature",
+            "--track_layout",
+            legacy_layout,
+            "-f",
+            "svg",
+        ],
+        "renderFormats": ["svg"],
+        "fileBindings": [
+            {"argIndex": 4, "slot": "files.linearSeqs[0].gb", "name": "a.gb"},
+            {"argIndex": 5, "slot": "files.linearSeqs[1].gb", "name": "b.gb"},
+            {"argIndex": 7, "slot": "files.linearDepth[0]", "name": "a.tsv"},
+            {"argIndex": 8, "slot": "files.linearDepth[1]", "name": "b.tsv"},
+        ],
+        "generatedBy": "gbdraw",
+    }
+
+    spec = session_to_cli_args(
+        session,
+        mode="linear",
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assert "--gc" in spec.args
+    assert "--skew" in spec.args
+    assert "--depth_track" in spec.args
+    assert spec.args[spec.args.index("--depth_large_tick_interval") + 1] == "4"
+    assert spec.args[spec.args.index("--feature_visibility_table") + 1] == "features.tsv"
+    assert spec.args[spec.args.index("--collinear_max_unit_gap") + 1] == "3"
+    assert spec.args[spec.args.index("--pairwise_match_style") + 1] == "curve"
+    assert spec.args[spec.args.index("--label_placement") + 1] == "above_feature"
+    assert spec.args[spec.args.index("--track_layout") + 1] == canonical_layout
+    assert not {
+        "--show_gc",
+        "--show_skew",
+        "--show_depth",
+        "--depth",
+        "--depth_tick_interval",
+        "--feature_table",
+        "--collinear_max_gene_gap",
+        "--pairwise-match-style",
+    }.intersection(spec.args)
+    assert [binding.argIndex for binding in spec.file_bindings] == [3, 4, 6, 7]
+    parsed = get_linear_args(list(spec.args))
+    assert parsed.show_gc is True
+    assert parsed.show_skew is True
+    assert parsed.depth_track == [[spec.args[6], spec.args[7]]]
+    assert parsed.depth_large_tick_interval == pytest.approx(4)
+    assert parsed.feature_table == "features.tsv"
+    assert parsed.collinear_max_unit_gap == 3
+    assert parsed.pairwise_match_style == "curve"
+    assert parsed.label_placement == "above_feature"
+    assert parsed.track_layout == canonical_layout
+    assert not hasattr(parsed, "depth")
+    assert not hasattr(parsed, "show_depth")
+
+
 def test_cli_session_capture_embeds_records_table_dependencies(tmp_path: Path) -> None:
     gbk_path = tmp_path / "input.gb"
     gbk_path.write_text("LOCUS       TEST\n", encoding="utf-8")
@@ -1216,6 +1462,34 @@ def test_cli_session_capture_embeds_records_table_dependencies(tmp_path: Path) -
             ],
         }
     ]
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_session_capture_embeds_only_canonical_depth_track_option(
+    mode: str,
+    tmp_path: Path,
+) -> None:
+    depth_path = tmp_path / "depth.tsv"
+    depth_path.write_text("record\t1\t10\n", encoding="utf-8")
+
+    canonical_files, canonical_bindings = collect_embedded_files_from_cli_args(
+        mode,
+        ["--depth_track", str(depth_path)],
+    )
+    _legacy_files, legacy_bindings = collect_embedded_files_from_cli_args(
+        mode,
+        ["--depth", str(depth_path)],
+    )
+
+    assert len(canonical_bindings) == 1
+    assert canonical_bindings[0].argIndex == 1
+    assert legacy_bindings == ()
+    if mode == "circular":
+        assert canonical_bindings[0].slot == "files.c_depth[0]"
+        assert canonical_files["c_depth"][0]["name"] == "depth.tsv"
+    else:
+        assert canonical_bindings[0].slot == "files.linearSeqs[0].depth[0]"
+        assert canonical_files["linearSeqs"][0]["depth"][0]["name"] == "depth.tsv"
 
 
 def test_cli_invocation_restoration_rewrites_records_table_paths(tmp_path: Path) -> None:
@@ -1316,8 +1590,19 @@ def test_cli_session_round_trip_rewrites_bom_records_table_first_column(
 
 def test_gui_only_circular_session_maps_to_cli_args(tmp_path: Path) -> None:
     session = _minimal_session(
-        {"c_gb": _file_entry("input.gb", b"LOCUS       TEST\n")}
+        {
+            "c_gb": _file_entry("input.gb", b"LOCUS       TEST\n"),
+            "c_depth": _file_entry("depth.tsv", b"TEST\t1\t10\n"),
+        }
     )
+    session["config"]["form"].update(
+        {
+            "suppress_gc": True,
+            "suppress_skew": True,
+            "show_depth": True,
+        }
+    )
+    session["config"]["adv"]["multi_record_size_mode"] = "sqrt"
 
     spec = session_to_cli_args(
         session,
@@ -1332,6 +1617,13 @@ def test_gui_only_circular_session_maps_to_cli_args(tmp_path: Path) -> None:
     assert Path(spec.args[gbk_index]).read_bytes() == b"LOCUS       TEST\n"
     assert spec.cli_invocation_args[gbk_index] == "input.gb"
     assert spec.file_bindings[0].argIndex == gbk_index
+    assert "--no-gc" in spec.args
+    assert "--no-skew" in spec.args
+    assert "--depth_track" in spec.args
+    assert spec.args[spec.args.index("--multi_record_size_mode") + 1] == "auto"
+    assert "--show_depth" not in spec.args
+    assert "--suppress_gc" not in spec.args
+    assert "--suppress_skew" not in spec.args
 
 
 def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> None:
@@ -1344,6 +1636,8 @@ def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> 
         },
         mode="linear",
     )
+    session["config"]["form"]["show_gc"] = True
+    session["config"]["form"]["show_skew"] = True
     session["config"]["adv"] = {
         "blastSource": "losat",
         "losatProgram": "blastp",
@@ -1351,7 +1645,9 @@ def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> 
         "evalue": "1e-4",
         "identity": 55,
         "alignment_length": 30,
+        "label_placement": "on_feature",
     }
+    session["config"]["form"]["linear_track_layout"] = "tuckin"
     session["config"]["form"]["show_labels_linear"] = "orthogroup_top"
     session["config"]["losat"] = {
         "executionMode": "auto",
@@ -1381,12 +1677,19 @@ def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> 
     assert "--protein_blastp_mode" in spec.args
     assert spec.args[spec.args.index("--protein_blastp_mode") + 1] == "collinear"
     assert spec.args[spec.args.index("--losatp_threads") + 1] == "2"
-    assert spec.args[spec.args.index("--collinear_max_gene_gap") + 1] == "3"
+    assert spec.args[spec.args.index("--collinear_max_unit_gap") + 1] == "3"
     assert spec.args[spec.args.index("--collinear_max_diagonal_drift") + 1] == "4"
     assert spec.args[spec.args.index("--collinear_max_conflicts_in_merge_gap") + 1] == "6"
     assert spec.args[spec.args.index("--collinear_search_scope") + 1] == "all"
     assert spec.args[spec.args.index("--collinear_color_mode") + 1] == "orientation_identity"
+    assert spec.args[spec.args.index("--label_placement") + 1] == "above_feature"
+    assert spec.args[spec.args.index("--track_layout") + 1] == "below"
+    assert "--collinear_max_gene_gap" not in spec.args
     assert spec.args[spec.args.index("--show_labels") + 1] == "orthogroup_top"
+    assert "--gc" in spec.args
+    assert "--skew" in spec.args
+    assert "--show_gc" not in spec.args
+    assert "--show_skew" not in spec.args
 
 
 def test_linear_cli_accepts_orthogroup_top_show_labels() -> None:
@@ -1532,12 +1835,22 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
         "--separate_strands",
         "--pairwise_match_style",
         "curve",
+        "--depth_large_tick_interval",
+        "4",
+        "--feature_visibility_table",
+        "features.tsv",
+        "--collinear_max_unit_gap",
+        "3",
+        "--label_placement",
+        "above_feature",
+        "--track_layout",
+        "above",
         "--scale_style",
         "ruler",
         "--palette",
         "ajisai",
-        "--show_gc",
-        "--show_skew",
+        "--gc",
+        "--skew",
         "--show_labels",
         "orthogroup_top",
     )
@@ -1557,6 +1870,19 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
 
     config = payload["config"]
     assert payload["cliInvocation"]["renderFormats"] == ["interactive_svg"]
+    stored_args = payload["cliInvocation"]["args"]
+    assert not {
+        "--depth_tick_interval",
+        "--feature_table",
+        "--collinear_max_gene_gap",
+        "--pairwise-match-style",
+        "--save-session",
+        "--session-output",
+        "on_feature",
+        "spreadout",
+        "tuckin",
+        "sqrt",
+    }.intersection(stored_args)
     assert config["form"]["prefix"] == "out"
     assert config["form"]["align_center"] is True
     assert config["form"]["separate_strands"] is True
@@ -1565,11 +1891,15 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
     assert config["form"]["show_skew"] is True
     assert config["form"]["show_labels_linear"] == "orthogroup_top"
     assert config["adv"]["pairwise_match_style"] == "curve"
+    assert config["adv"]["depth_large_tick_interval"] == "4"
+    assert "depth_tick_interval" not in config["adv"]
     assert config["palette"] == "ajisai"
     assert config["blastSource"] == "losat"
     assert config["losatProgram"] == "blastp"
     assert config["losat"]["threadsPerJob"] == "32"
     assert config["losat"]["blastp"]["mode"] == "orthogroup"
+    assert config["losat"]["blastp"]["collinearMaxUnitGap"] == "3"
+    assert "collinearMaxGeneGap" not in config["losat"]["blastp"]
     assert "collinearBlockMergeGap" not in config["losat"]["blastp"]
     assert "collinearSingletonMergeGap" not in config["losat"]["blastp"]
     assert config["cliOptions"]["rawArgs"] == list(args)
@@ -1740,25 +2070,40 @@ def test_session_cli_help_uses_underscore_options(capsys: pytest.CaptureFixture[
     assert "--session-output" not in help_text
 
 
-def test_session_hyphen_aliases_remain_compatible() -> None:
-    request = parse_session_pre_args(
-        [
-            "--session",
-            "session.gbdraw-session.json",
-            "--session-output",
-            "roundtrip.gbdraw-session.json",
-        ],
-        mode="circular",
-    )
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize(
+    "option_args",
+    [
+        ["--save-session"],
+        ["--session-output", "roundtrip.gbdraw-session.json"],
+    ],
+)
+def test_session_preparser_rejects_removed_hyphen_aliases(
+    mode: str,
+    option_args: list[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        parse_session_pre_args(
+            ["--session", "session.gbdraw-session.json", *option_args],
+            mode=mode,
+        )
 
-    assert request is not None
-    assert request.save_session is True
-    assert request.session_output == "roundtrip.gbdraw-session.json"
+
+@pytest.mark.parametrize(
+    "get_args",
+    [circular_cli_module._get_args, get_linear_args],
+)
+def test_current_cli_rejects_removed_feature_table(get_args) -> None:
+    with pytest.raises(SystemExit):
+        get_args(["--gbk", "input.gb", "--feature_table", "features.tsv"])
+
+
+def test_current_session_output_controls_are_stripped_before_writing() -> None:
     assert strip_session_output_args(
         [
             "--gbk",
             "input.gb",
-            "--save-session",
+            "--save_session",
             "--session_output=roundtrip.gbdraw-session.json",
         ]
     ) == ["--gbk", "input.gb"]
@@ -1791,6 +2136,7 @@ def test_render_formats_do_not_include_session_json_aliases() -> None:
 
 def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path) -> None:
     output_prefix = tmp_path / "circular_session"
+    session_path = tmp_path / "custom-session.gbdraw-session.json"
     circular_main(
         [
             "--gbk",
@@ -1800,22 +2146,35 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
             "-f",
             "svg",
             "--save_session",
+            "--session_output",
+            str(session_path),
         ]
     )
 
     svg_path = output_prefix.with_suffix(".svg")
-    session_path = output_prefix.with_suffix(".gbdraw-session.json")
     assert svg_path.exists()
     assert session_path.exists()
 
     payload = load_session(session_path)
     assert payload["format"] == SESSION_FORMAT
     assert payload["version"] == CURRENT_SESSION_VERSION
+    assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert (
+        "outputPrefix"
+        not in payload["renderRequest"]["diagramOptions"].get("output", {})
+    )
     assert "files" not in payload
     assert payload["resources"]["record-1-genbank"]["data"]
     assert "<svg" in payload["results"][0]["content"]
     assert payload["cliInvocation"]["mode"] == "circular"
     assert payload["cliInvocation"]["fileBindings"][0]["slot"] == "files.c_gb"
+    stored_args = payload["cliInvocation"]["args"]
+    assert not {
+        "--save_session",
+        "--session_output",
+        "--save-session",
+        "--session-output",
+    }.intersection(stored_args)
 
     regenerated_prefix = tmp_path / "regenerated"
     circular_main(

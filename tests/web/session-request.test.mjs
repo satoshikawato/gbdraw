@@ -25,6 +25,8 @@ const {
 );
 const {
   buildCircularTrackSlotSpec,
+  migrateLegacyCircularTrackSlot,
+  migrateLegacyCircularTrackSlotSpec,
   parseCircularTrackSlotSpec,
   resolveCircularTrackFeaturePlacement
 } = await import(
@@ -258,7 +260,7 @@ assert.throws(
     anchorlessRenderers: ['ticks', 'spacer'],
     depthTrackCount: 1
   }),
-  /cannot combine spacing/
+  /obsolete field 'spacing'/
 );
 assert.throws(
   () => validateTrackSlotBindingInvariants([
@@ -299,6 +301,7 @@ const state = {
     min_bitscore: 50, identity: 70, alignment_length: 0, plot_title_position: 'none',
     gc_content_mode: 'deviation', gc_content_show_axis: true, gc_content_show_ticks: true,
     depth_color: '#4A90E2', depth_show_axis: true, depth_show_ticks: true,
+    depth_large_tick_interval: 25,
     pairwise_match_style: 'ribbon', multi_record_size_mode: 'auto',
     multi_record_min_radius_ratio: 0.55, multi_record_column_gap_ratio: 0.10,
     multi_record_row_gap_ratio: 0.05, multi_record_positions: [], depth_tracks: [],
@@ -325,7 +328,7 @@ const state = {
   circularConservation: { reference: 'auto', labels: '', series: [] },
   blastSource: ref('files'),
   losatProgram: ref('blastn'),
-  losat: { blastp: {} },
+  losat: { blastp: { collinearMaxUnitGap: 2 } },
   selectedOrthogroupAlignmentFeature: ref(''),
   linearRecordLayoutEnabled: ref(false),
   linearRecordGap: ref(24),
@@ -356,7 +359,7 @@ const genbank = {
 const filesData = { c_gb: genbank, linearSeqs: [] };
 
 const canonical = buildCanonicalSessionRequest({ state, filesData });
-assert.equal(canonical.renderRequest.schema, 3);
+assert.equal(canonical.renderRequest.schema, 4);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
 assert.equal(canonical.resources['record-1-genbank'].kind, 'genbank');
@@ -365,12 +368,113 @@ assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
 assert.equal(canonical.webFiles.resourceOriginalNames['record-1-genbank'], 'input.gb');
 assert.equal(canonical.webFiles.circularInputOriginalName, 'input.gb');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
+assert.deepEqual(canonical.renderRequest.diagramOptions.output, {
+  legend: 'right',
+  plotTitlePosition: 'none'
+});
+assert.equal(
+  Object.prototype.hasOwnProperty.call(
+    canonical.renderRequest.diagramOptions.output,
+    'outputPrefix'
+  ),
+  false
+);
 assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
 assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
 assert.equal(canonical.renderRequest.diagramOptions.evalue, 1e-5);
 assert.equal(canonical.renderRequest.diagramOptions.bitscore, 50);
 assert.equal(canonical.renderRequest.diagramOptions.identity, 70);
 assert.equal(canonical.renderRequest.diagramOptions.alignmentLength, 0);
+assert.equal(
+  canonical.renderRequest.diagramOptions.configOverrides.depth_large_tick_interval,
+  25
+);
+assert.equal(projectCanonicalSessionRequest(canonical).config.adv.depth_large_tick_interval, 25);
+
+state.adv.multi_record_size_mode = 'sqrt';
+assert.throws(
+  () => buildCanonicalSessionRequest({ state, filesData }),
+  /Circular multi-record size mode/
+);
+state.adv.multi_record_size_mode = 'auto';
+state.form.linear_track_layout = 'tuckin';
+assert.throws(
+  () => buildCanonicalSessionRequest({ state, filesData }),
+  /Linear track layout/
+);
+state.form.linear_track_layout = 'middle';
+state.adv.label_placement = 'on_feature';
+assert.throws(
+  () => buildCanonicalSessionRequest({ state, filesData }),
+  /Linear label placement/
+);
+state.adv.label_placement = 'auto';
+state.adv.circular_track_slots = [
+  { id: 'stale', renderer: 'dinucleotide_skew', spacing: null, params: {} }
+];
+assert.throws(
+  () => buildCanonicalSessionRequest({ state, filesData }),
+  /obsolete/
+);
+state.adv.circular_track_slots = [];
+
+state.adv.depth_tick_interval = 10;
+assert.throws(
+  () => buildCanonicalSessionRequest({ state, filesData }),
+  /depth_tick_interval is obsolete/
+);
+delete state.adv.depth_tick_interval;
+state.adv.depth_tracks = [{ tick_interval: 10 }];
+assert.throws(
+  () => buildCanonicalSessionRequest({ state, filesData }),
+  /tick_interval is obsolete/
+);
+state.adv.depth_tracks = [];
+state.losat.blastp.collinearMaxGeneGap = 3;
+assert.throws(
+  () => buildCanonicalSessionRequest({ state, filesData }),
+  /collinearMaxGeneGap is obsolete/
+);
+delete state.losat.blastp.collinearMaxGeneGap;
+
+for (const obsoleteKey of ['spacing', 'strict', 'compress', 'reserve']) {
+  assert.throws(
+    () => buildCircularTrackSlotSpec({
+      id: `obsolete_${obsoleteKey}`,
+      renderer: 'dinucleotide_skew',
+      side: 'inside',
+      [obsoleteKey]: obsoleteKey === 'spacing' ? '5' : true,
+      params: { nt: 'GC' }
+    }),
+    /obsolete/
+  );
+  assert.throws(
+    () => parseCircularTrackSlotSpec(
+      `obsolete_${obsoleteKey}:dinucleotide_skew@${obsoleteKey}=true`
+    ),
+    /obsolete/
+  );
+}
+const migratedLegacyCircularObject = migrateLegacyCircularTrackSlot({
+  id: 'legacy_object',
+  renderer: 'dinucleotide_skew',
+  spacing: '5px',
+  strict: true,
+  params: { nt: 'GC', compress: true, reserve: true }
+});
+assert.equal(migratedLegacyCircularObject.spacing, undefined);
+assert.equal(migratedLegacyCircularObject.strict, undefined);
+assert.equal(migratedLegacyCircularObject.params.compress, undefined);
+assert.equal(migratedLegacyCircularObject.params.reserve, undefined);
+assert.equal(migratedLegacyCircularObject.inner_gap_px, '5px');
+assert.equal(migratedLegacyCircularObject.outer_gap_px, '5px');
+const migratedLegacyCircularSpec = migrateLegacyCircularTrackSlotSpec(
+  'legacy_spec:dinucleotide_skew@spacing=4,strict=true,compress=true,reserve=true'
+);
+assert.equal(
+  migratedLegacyCircularSpec,
+  'legacy_spec:dinucleotide_skew@inner_gap_px=4,outer_gap_px=4'
+);
 
 state.adv.circular_track_slots_axis_index = 2;
 const circularSlotsDisabled = buildCanonicalSessionRequest({ state, filesData });
@@ -390,7 +494,6 @@ for (const { preset, laneDirection, side, axisIndex } of circularFeaturePresetCa
     enabled: true,
     width: null,
     radius: null,
-    spacing: null,
     inner_gap_px: null,
     outer_gap_px: null,
     side,
@@ -451,6 +554,7 @@ state.adv.circular_track_slots = [];
 
 const legacyRepeatCanonical = structuredClone(canonical);
 legacyRepeatCanonical.renderRequest.schema = 2;
+legacyRepeatCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
 legacyRepeatCanonical.renderRequest.diagramOptions.selectedFeaturesSet = ['repeat_region'];
 delete legacyRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region;
 assert.equal(
@@ -654,6 +758,60 @@ assert.equal(projection.config.adv.evalue, '0.00001');
 assert.equal(projection.config.adv.min_bitscore, 50);
 assert.equal(projection.config.adv.identity, 70);
 assert.equal(projection.config.adv.alignment_length, 0);
+const legacyOutputCanonical = structuredClone(canonical);
+legacyOutputCanonical.renderRequest.schema = 3;
+legacyOutputCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored-nested';
+assert.equal(
+  projectCanonicalSessionRequest(legacyOutputCanonical).config.form.prefix,
+  'web-session'
+);
+const missingLegacyOutputPrefix = structuredClone(legacyOutputCanonical);
+delete missingLegacyOutputPrefix.renderRequest.diagramOptions.output.outputPrefix;
+assert.throws(
+  () => projectCanonicalSessionRequest(missingLegacyOutputPrefix),
+  /outputPrefix/
+);
+const currentWithLegacyOutputPrefix = structuredClone(canonical);
+currentWithLegacyOutputPrefix.renderRequest.diagramOptions.output.outputPrefix = 'stale';
+assert.throws(
+  () => projectCanonicalSessionRequest(currentWithLegacyOutputPrefix),
+  /outputPrefix/
+);
+const legacyCircularOptions = structuredClone(legacyOutputCanonical);
+legacyCircularOptions.renderRequest.layout = { multiRecordSizeMode: 'sqrt' };
+assert.equal(
+  projectCanonicalSessionRequest(legacyCircularOptions).config.adv.multi_record_size_mode,
+  'auto'
+);
+const currentCircularOptions = structuredClone(canonical);
+currentCircularOptions.renderRequest.layout = { multiRecordSizeMode: 'sqrt' };
+assert.throws(
+  () => projectCanonicalSessionRequest(currentCircularOptions),
+  /Circular multi-record size mode/
+);
+for (const schema of [1, 2, 3]) {
+  const sparseCircularCanonical = structuredClone(canonical);
+  sparseCircularCanonical.renderRequest.schema = schema;
+  sparseCircularCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+  delete sparseCircularCanonical.renderRequest.diagramOptions.evalue;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.bitscore;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.identity;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.alignmentLength;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.selectedFeaturesSet;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.config;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.configOverrides;
+  const sparseCircularProjection = projectCanonicalSessionRequest(sparseCircularCanonical);
+  assert.equal(sparseCircularProjection.config.adv.evalue, '0.00001');
+  assert.equal(sparseCircularProjection.config.adv.min_bitscore, 50);
+  assert.equal(sparseCircularProjection.config.adv.identity, 70);
+  assert.equal(sparseCircularProjection.config.adv.alignment_length, 0);
+  assert.deepEqual(
+    sparseCircularProjection.config.adv.features,
+    ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'repeat_region']
+  );
+  assert.equal(sparseCircularProjection.config.form.suppress_gc, false);
+  assert.equal(sparseCircularProjection.config.form.suppress_skew, false);
+}
 const repeatedResourcePrefix = structuredClone(canonical);
 repeatedResourcePrefix.resources['record-1-genbank'].name =
   'record-1-genbank-record-1-genbank-original.gb';
@@ -700,7 +858,6 @@ assert.deepEqual(customTrackProjection.config.adv.circular_track_slots[1], {
   enabled: true,
   width: '20px',
   radius: '0.65',
-  spacing: null,
   inner_gap_px: '1',
   outer_gap_px: '1',
   side: 'inside',
@@ -713,6 +870,82 @@ assert.deepEqual(customTrackProjection.config.adv.circular_track_slots[1], {
     layer: 'foreground'
   }
 });
+
+const legacyCircularSlotsCanonical = structuredClone(canonical);
+legacyCircularSlotsCanonical.renderRequest.schema = 3;
+legacyCircularSlotsCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+legacyCircularSlotsCanonical.renderRequest.diagramOptions.tracks = {
+  circularTrackSlots: [
+    {
+      id: 'legacy_object',
+      renderer: 'dinucleotide_skew',
+      side: 'inside',
+      spacing: { value: 5, unit: 'px' },
+      strict: true,
+      params: { nt: 'GC', reserve: true }
+    },
+    'legacy_spec:dinucleotide_content@side=inside,spacing=4,compress=true,nt=AT'
+  ],
+  circularTrackAxisIndex: 0,
+  centerReservedRadius: null
+};
+const legacyCircularSlotsProjection = projectCanonicalSessionRequest(
+  legacyCircularSlotsCanonical
+);
+assert.deepEqual(
+  legacyCircularSlotsProjection.config.adv.circular_track_slots.map((slot) => ({
+    id: slot.id,
+    inner: slot.inner_gap_px,
+    outer: slot.outer_gap_px
+  })),
+  [
+    { id: 'legacy_object', inner: '5', outer: '5' },
+    { id: 'legacy_spec', inner: '4', outer: '4' }
+  ]
+);
+const currentCircularObjectSlot = structuredClone(canonical);
+currentCircularObjectSlot.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+  { id: 'old', renderer: 'dinucleotide_skew', spacing: 5, params: {} }
+];
+assert.throws(
+  () => projectCanonicalSessionRequest(currentCircularObjectSlot),
+  /obsolete/
+);
+const currentStructuredCircularSlot = structuredClone(canonical);
+currentStructuredCircularSlot.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+  {
+    id: 'current',
+    renderer: 'dinucleotide_skew',
+    innerGapPx: { value: 2, unit: 'px' },
+    outerGapPx: { value: 3, unit: 'px' },
+    params: {}
+  }
+];
+assert.deepEqual(
+  projectCanonicalSessionRequest(
+    currentStructuredCircularSlot
+  ).config.adv.circular_track_slots[0],
+  {
+    id: 'current',
+    renderer: 'dinucleotide_skew',
+    enabled: true,
+    width: null,
+    radius: null,
+    inner_gap_px: '2',
+    outer_gap_px: '3',
+    side: null,
+    z: 0,
+    params: {}
+  }
+);
+const currentCircularStringSlot = structuredClone(canonical);
+currentCircularStringSlot.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+  'old:dinucleotide_skew@reserve=true'
+];
+assert.throws(
+  () => projectCanonicalSessionRequest(currentCircularStringSlot),
+  /obsolete/
+);
 
 const secondGenbank = {
   ...genbank,
@@ -759,6 +992,45 @@ const linearFilesData = {
   linearComparisons: []
 };
 const linearCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+const legacyLinearOptions = structuredClone(linearCanonical);
+legacyLinearOptions.renderRequest.schema = 3;
+legacyLinearOptions.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+legacyLinearOptions.renderRequest.diagramOptions.configOverrides.label_placement = 'on_feature';
+legacyLinearOptions.renderRequest.diagramOptions.configOverrides.linear_track_layout = 'spreadout';
+const legacyLinearOptionsProjection = projectCanonicalSessionRequest(
+  legacyLinearOptions
+);
+assert.equal(
+  legacyLinearOptionsProjection.config.adv.label_placement,
+  'above_feature'
+);
+assert.equal(
+  legacyLinearOptionsProjection.config.form.linear_track_layout,
+  'above'
+);
+const currentLinearOptions = structuredClone(linearCanonical);
+currentLinearOptions.renderRequest.diagramOptions.configOverrides.label_placement = 'on_feature';
+assert.throws(
+  () => projectCanonicalSessionRequest(currentLinearOptions),
+  /Linear label placement/
+);
+currentLinearOptions.renderRequest.diagramOptions.configOverrides.label_placement = 'auto';
+currentLinearOptions.renderRequest.diagramOptions.configOverrides.linear_track_layout = 'tuckin';
+assert.throws(
+  () => projectCanonicalSessionRequest(currentLinearOptions),
+  /Linear track layout/
+);
+assert.equal(
+  linearCanonical.renderRequest.diagramOptions.configOverrides.linear_axis_stroke_color,
+  'lightgray'
+);
+state.form.linear_ruler_on_axis = true;
+const rulerAxisCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+assert.equal(
+  rulerAxisCanonical.renderRequest.diagramOptions.configOverrides.linear_axis_stroke_color,
+  'dimgray'
+);
+state.form.linear_ruler_on_axis = false;
 assert.deepEqual(linearCanonical.webFiles.linearRecordMetadata, [
   { recordKey: 'first', losatGencode: 11, losatFilename: 'first-to-second.losat.tsv' },
   { recordKey: 'second', losatGencode: 4, losatFilename: 'second-to-third.losat.tsv' },
@@ -802,12 +1074,91 @@ const generatedProtein = losatPairCanonical.renderRequest.comparisons.find(
 );
 assert.deepEqual(generatedProtein.pairs, [{ queryRecordIndex: 0, subjectRecordIndex: 2 }]);
 assert.equal(
+  generatedProtein.settings.collinearityParams.parameters.maxUnitGap,
+  2
+);
+assert.equal(
   projectCanonicalSessionRequest(losatPairCanonical).files.linearComparisons[0].source,
   'losat'
 );
 
 const linearProjection = projectCanonicalSessionRequest(linearCanonical);
 assert.equal(linearProjection.config.adv.comparison_height, 42.5);
+let sparseLinearCanonical;
+for (const schema of [1, 2, 3]) {
+  sparseLinearCanonical = structuredClone(linearCanonical);
+  sparseLinearCanonical.renderRequest.schema = schema;
+  sparseLinearCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+  delete sparseLinearCanonical.renderRequest.diagramOptions.evalue;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.bitscore;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.identity;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.alignmentLength;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.selectedFeaturesSet;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.config;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.configOverrides;
+  const sparseLinearProjection = projectCanonicalSessionRequest(sparseLinearCanonical);
+  assert.equal(sparseLinearProjection.config.adv.evalue, '0.00001');
+  assert.equal(sparseLinearProjection.config.adv.min_bitscore, 50);
+  assert.equal(sparseLinearProjection.config.adv.identity, 70);
+  assert.equal(sparseLinearProjection.config.adv.alignment_length, 0);
+  assert.deepEqual(
+    sparseLinearProjection.config.adv.features,
+    ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'repeat_region']
+  );
+  assert.equal(sparseLinearProjection.config.form.show_gc, true);
+  assert.equal(sparseLinearProjection.config.form.show_skew, true);
+  assert.equal(sparseLinearProjection.config.adv.axis_stroke_color, 'gray');
+}
+const nullOverrideSparseLinear = structuredClone(sparseLinearCanonical);
+nullOverrideSparseLinear.renderRequest.diagramOptions.configOverrides = {
+  show_gc: null,
+  show_skew: null,
+  linear_axis_stroke_color: null
+};
+const nullOverrideSparseLinearProjection = projectCanonicalSessionRequest(
+  nullOverrideSparseLinear
+);
+assert.equal(nullOverrideSparseLinearProjection.config.form.show_gc, true);
+assert.equal(nullOverrideSparseLinearProjection.config.form.show_skew, true);
+assert.equal(nullOverrideSparseLinearProjection.config.adv.axis_stroke_color, 'gray');
+
+const sparseCurrentLinear = structuredClone(linearCanonical);
+delete sparseCurrentLinear.renderRequest.diagramOptions.evalue;
+delete sparseCurrentLinear.renderRequest.diagramOptions.bitscore;
+delete sparseCurrentLinear.renderRequest.diagramOptions.identity;
+delete sparseCurrentLinear.renderRequest.diagramOptions.alignmentLength;
+delete sparseCurrentLinear.renderRequest.diagramOptions.selectedFeaturesSet;
+delete sparseCurrentLinear.renderRequest.diagramOptions.config;
+delete sparseCurrentLinear.renderRequest.diagramOptions.configOverrides;
+const sparseCurrentLinearProjection = projectCanonicalSessionRequest(sparseCurrentLinear);
+assert.equal(sparseCurrentLinearProjection.config.adv.evalue, '1e-2');
+assert.equal(sparseCurrentLinearProjection.config.adv.min_bitscore, 50);
+assert.equal(sparseCurrentLinearProjection.config.adv.identity, 0);
+assert.equal(sparseCurrentLinearProjection.config.adv.alignment_length, 0);
+assert.equal(sparseCurrentLinearProjection.config.form.show_gc, false);
+assert.equal(sparseCurrentLinearProjection.config.form.show_skew, false);
+assert.equal(sparseCurrentLinearProjection.config.adv.axis_stroke_color, 'lightgray');
+
+const explicitLinearThresholds = structuredClone(sparseLinearCanonical);
+explicitLinearThresholds.renderRequest.diagramOptions.evalue = 0;
+explicitLinearThresholds.renderRequest.diagramOptions.bitscore = 0;
+explicitLinearThresholds.renderRequest.diagramOptions.identity = 0;
+explicitLinearThresholds.renderRequest.diagramOptions.alignmentLength = 1;
+explicitLinearThresholds.renderRequest.diagramOptions.selectedFeaturesSet = [];
+explicitLinearThresholds.renderRequest.diagramOptions.configOverrides = {
+  show_gc: false,
+  show_skew: false,
+  linear_axis_stroke_color: ''
+};
+const explicitLinearProjection = projectCanonicalSessionRequest(explicitLinearThresholds);
+assert.equal(explicitLinearProjection.config.adv.evalue, '0');
+assert.equal(explicitLinearProjection.config.adv.min_bitscore, 0);
+assert.equal(explicitLinearProjection.config.adv.identity, 0);
+assert.equal(explicitLinearProjection.config.adv.alignment_length, 1);
+assert.deepEqual(explicitLinearProjection.config.adv.features, []);
+assert.equal(explicitLinearProjection.config.form.show_gc, false);
+assert.equal(explicitLinearProjection.config.form.show_skew, false);
+assert.equal(explicitLinearProjection.config.adv.axis_stroke_color, '');
 assert.deepEqual(
   linearProjection.files.linearSeqs.map((seq) => seq.gb.name),
   ['input.gb', 'input.gb', 'input.gb']
@@ -857,7 +1208,7 @@ pythonConfigCanonical.renderRequest.diagramOptions.config = {
     font_size: { short: 13, long: 13, linear: { short: 15, long: 15 } },
     spacing: { circular: 4, linear: 5 },
     circular: { placement: 'radial' },
-    linear: { placement: 'strand', rotation: 30 },
+    linear: { placement: 'above_feature', rotation: 30 },
     filtering: { blacklist_keywords: ['hypothetical'] },
     unified_adjustment: {
       outer_labels: { x_radius_offset: 0.9, y_radius_offset: 0.91 },
@@ -914,6 +1265,7 @@ assert.equal(pythonConfigProjection.config.adv.axis_stroke_color, '#444444');
 assert.equal(pythonConfigProjection.config.adv.def_font_size, 16);
 assert.equal(pythonConfigProjection.config.adv.feature_height, 23);
 assert.equal(pythonConfigProjection.config.adv.label_font_size, 15);
+assert.equal(pythonConfigProjection.config.adv.label_placement, 'above_feature');
 assert.equal(pythonConfigProjection.config.adv.legend_box_size, 17);
 assert.equal(pythonConfigProjection.config.adv.legend_font_size, 19);
 assert.equal(pythonConfigProjection.config.adv.scale_font_size, 21);

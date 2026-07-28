@@ -78,6 +78,7 @@ from .features.visibility import (
     resolve_candidate_feature_types,
 )
 from .exceptions import ValidationError
+from .mode_profiles import ComparisonThresholds, LINEAR_MODE_PROFILE
 from .tracks import (
     linear_track_slots_from_order,
     normalize_linear_track_slots_with_axis,
@@ -92,6 +93,7 @@ from .cli_utils.common import (
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
     _add_format_arg,
+    _add_gc_skew_toggle_args,
     _add_gc_content_axis_args,
     _add_legend_size_args,
     _add_window_step_args,
@@ -117,23 +119,6 @@ from .cli_utils.session import (
     save_session_sidecar_if_requested,
 )
 from .session_io import load_session, session_to_cli_args
-
-
-def _add_argument_with_hidden_aliases(
-    parser: argparse.ArgumentParser,
-    *option_strings: str,
-    hidden_aliases: Sequence[str] = (),
-    **kwargs: Any,
-) -> None:
-    """Add public underscore options and hidden legacy hyphen aliases."""
-
-    parser.add_argument(*option_strings, **kwargs)
-    if not hidden_aliases:
-        return
-    alias_kwargs = dict(kwargs)
-    alias_kwargs["help"] = argparse.SUPPRESS
-    alias_kwargs["default"] = argparse.SUPPRESS
-    parser.add_argument(*hidden_aliases, **alias_kwargs)
 
 
 def _web_safe_filename(name: object, fallback: str = "losat") -> str:
@@ -281,21 +266,6 @@ def _source_session_losat_entries(
     return tuple(collected)
 
 
-def _source_session_legacy_protein_candidates(
-    source_session: Mapping[str, Any] | None,
-) -> tuple[Mapping[str, object], ...]:
-    if not isinstance(source_session, Mapping):
-        return ()
-    legacy_artifacts = source_session.get("legacyArtifacts")
-    if not isinstance(legacy_artifacts, Mapping):
-        return ()
-    envelope = legacy_artifacts.get("proteinRawCandidates")
-    entries = envelope.get("entries") if isinstance(envelope, Mapping) else None
-    if not isinstance(entries, list):
-        return ()
-    return tuple(entry for entry in entries if isinstance(entry, Mapping))
-
-
 def _source_session_losat_config(source_session: Mapping[str, Any] | None) -> Mapping[str, Any]:
     if not isinstance(source_session, Mapping):
         return {}
@@ -393,26 +363,19 @@ def _build_interactive_svg_context(
 
 def _parse_linear_label_placement(value: str) -> str:
     normalized = str(value).strip().lower()
-    if normalized == "on_feature":
-        return "above_feature"
     if normalized in {"auto", "above_feature"}:
         return normalized
     raise argparse.ArgumentTypeError(
-        "label placement must be 'auto' or 'above_feature' (legacy alias: 'on_feature')"
+        "label placement must be 'auto' or 'above_feature'"
     )
 
 
 def _parse_linear_track_layout(value: str) -> str:
     normalized = str(value).strip().lower()
-    if normalized in {"above", "spreadout"}:
-        return "above"
-    if normalized in {"below", "tuckin"}:
-        return "below"
-    if normalized == "middle":
-        return "middle"
+    if normalized in {"above", "middle", "below"}:
+        return normalized
     raise argparse.ArgumentTypeError(
-        "track layout must be 'above', 'middle', or 'below' "
-        "(legacy aliases: 'spreadout' -> 'above', 'tuckin' -> 'below')"
+        "track layout must be 'above', 'middle', or 'below'"
     )
 
 
@@ -610,74 +573,56 @@ def _get_args(args) -> argparse.Namespace:
         help="input BLAST result file in tab-separated format (-outfmt 6 or 7) (optional)",
         type=str,
         nargs='*')
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--losatp_bin',
-        hidden_aliases=('--losatp-bin',),
         dest='losatp_bin',
         help='Native LOSAT executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: losat).',
         type=str,
         default='losat')
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--ncbi_blastp_bin',
-        hidden_aliases=('--ncbi-blastp-bin',),
         dest='ncbi_blastp_bin',
         help='NCBI BLAST+ blastp executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: use automatic runtime resolution).',
         type=str,
         default=None)
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--losatp_threads',
-        hidden_aliases=('--losatp-threads',),
         dest='losatp_threads',
         help='Threads passed to the selected protein blastp runtime for --protein_blastp_mode pairwise/orthogroup/collinear (default: runtime default).',
         type=int,
         default=None)
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--protein_blastp_mode',
-        hidden_aliases=('--protein-blastp-mode',),
         dest='protein_blastp_mode',
         help='Protein blastp comparison mode: none, pairwise adjacent ribbons, all-record similarity groups (orthogroup), or collinear blocks (default: none).',
         choices=PROTEIN_BLASTP_MODES,
         default='none')
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--protein_blastp_max_hits',
-        hidden_aliases=('--protein-blastp-max-hits',),
         dest='protein_blastp_max_hits',
         help='Maximum distinct subject protein hits per query protein for pairwise protein blastp display links (default: 5).',
         type=int,
         default=5)
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--protein_blastp_candidate_limit',
-        hidden_aliases=('--protein-blastp-candidate-limit',),
         dest='protein_blastp_candidate_limit',
         help="Optional protein blastp candidate cap per query; use 'none' for no cap (default: none).",
         type=_parse_optional_positive_int,
         default=None)
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--align_orthogroup_feature',
-        hidden_aliases=('--align-orthogroup-feature',),
         dest='align_orthogroup_feature',
         help='Align linear records by the gbdraw similarity group containing this feature SVG hash or protein ID.',
         type=str,
         default="")
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--collinear_unit_mode',
-        hidden_aliases=('--collinear-unit-mode',),
         dest='collinear_unit_mode',
         help=argparse.SUPPRESS,
         choices=["auto", "cds", "locus"],
         default='auto')
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--collinear_search_scope',
-        hidden_aliases=('--collinear-search-scope',),
         dest='collinear_search_scope',
         help=(
             'Collinear protein blastp scope: adjacent displayed records/rows or all record pairs. '
@@ -689,51 +634,38 @@ def _get_args(args) -> argparse.Namespace:
         type=_parse_collinear_search_scope,
         choices=["adjacent", "all"],
         default='adjacent')
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--collinear_min_anchors',
-        hidden_aliases=('--collinear-min-anchors',),
         dest='collinear_min_anchors',
         help='Minimum anchors/genes required for a rendered Collinear block; 1 allows singleton links (default: 1).',
         type=int,
         default=1)
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--collinear_max_unit_gap',
-        '--collinear_max_gene_gap',
-        hidden_aliases=('--collinear-max-unit-gap', '--collinear-max-gene-gap'),
         dest='collinear_max_unit_gap',
         help='Maximum unit gap between neighboring collinear anchors (default: 0).',
         type=int,
         default=0)
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--collinear_max_diagonal_drift',
-        hidden_aliases=('--collinear-max-diagonal-drift',),
         dest='collinear_max_diagonal_drift',
         help='Maximum order-space diagonal drift allowed within or between collinear runs (default: 0).',
         type=int,
         default=0)
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--collinear_max_conflicts_in_merge_gap',
-        hidden_aliases=('--collinear-max-conflicts-in-merge-gap',),
         dest='collinear_max_conflicts_in_merge_gap',
         help=argparse.SUPPRESS,
         type=int,
         default=1)
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--collinear_max_paralog_links_per_orthogroup',
-        hidden_aliases=('--collinear-max-paralog-links-per-orthogroup',),
         dest='collinear_max_paralog_links_per_orthogroup',
         help=argparse.SUPPRESS,
         type=int,
         default=2)
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--collinear_color_mode',
-        hidden_aliases=('--collinear-color-mode',),
         dest='collinear_color_mode',
         help='Collinear ribbon color mode: average_identity, orientation, or orientation_identity (default: orientation).',
         type=_parse_collinear_color_mode,
@@ -775,20 +707,12 @@ def _get_args(args) -> argparse.Namespace:
         '--separate_strands',
         help='separate forward and reverse strands (default: False). Features of undefined strands are shown on the forward strand.',
         action='store_true')
-    parser.add_argument(
-        '--show_gc',
-        help='plot GC content below genome (default: False). ',
-        action='store_true')
+    _add_gc_skew_toggle_args(
+        parser,
+        show_gc_default=LINEAR_MODE_PROFILE.show_gc,
+        show_skew_default=LINEAR_MODE_PROFILE.show_skew,
+    )
     _add_gc_content_axis_args(parser)
-    parser.add_argument(
-        '--show_skew',
-        help='plot GC skew below genome (default: False). ',
-        action='store_true')
-    parser.add_argument(
-        '--depth',
-        help='Depth TSV file(s) in samtools depth format. Provide one for all records or one per input record.',
-        type=str,
-        nargs='+')
     parser.add_argument(
         '--depth_track',
         metavar='DEPTH',
@@ -817,10 +741,8 @@ def _get_args(args) -> argparse.Namespace:
         '--align_center',
         help='Align genomes to the center (default: False). ',
         action='store_true')
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--keep_definition_left_aligned',
-        hidden_aliases=('--keep-definition-left-aligned',),
         dest='keep_definition_left_aligned',
         help=(
             'Keep linear record definitions in the left column. With multi-record rows, '
@@ -832,26 +754,24 @@ def _get_args(args) -> argparse.Namespace:
         '--evalue',
         help='evalue threshold (default=1e-2)',
         type=float,
-        default="1e-2")
+        default=LINEAR_MODE_PROFILE.comparison.evalue)
     parser.add_argument(
         '--bitscore',
         help='bitscore threshold (default=50)',
         type=float,
-        default="50")
+        default=LINEAR_MODE_PROFILE.comparison.bitscore)
     parser.add_argument(
         '--identity',
         help='identity threshold (default=0)',
         type=float,
-        default="0")
+        default=LINEAR_MODE_PROFILE.comparison.identity)
     parser.add_argument(
         '--alignment_length',
         help='minimum BLAST alignment length threshold (default=0)',
         type=int,
-        default=0)
-    _add_argument_with_hidden_aliases(
-        parser,
+        default=LINEAR_MODE_PROFILE.comparison.alignment_length)
+    parser.add_argument(
         '--pairwise_match_style',
-        hidden_aliases=('--pairwise-match-style',),
         dest='pairwise_match_style',
         help=(
             'Pairwise comparison link style: ribbon keeps straight filled ribbons; '
@@ -884,10 +804,8 @@ def _get_args(args) -> argparse.Namespace:
         '--definition_font_size',
         help='Definition font size (optional; float; default: 24 pt for genomes <= 50 kb, 10 pt for genomes >= 50 kb)',
         type=float)
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--definition_line_style',
-        hidden_aliases=('--definition-line-style',),
         dest='definition_line_style',
         help=(
             'Definition line style override (repeatable): '
@@ -920,10 +838,8 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         action='append',
         default=[])
-    _add_argument_with_hidden_aliases(
-        parser,
+    parser.add_argument(
         '--record_subtitle',
-        hidden_aliases=('--record-subtitle',),
         dest='record_subtitle',
         help='Optional second record-label line (repeatable; order matches input records)',
         type=str,
@@ -969,10 +885,7 @@ def _get_args(args) -> argparse.Namespace:
     )
     parser.add_argument(
         '--track_layout',
-        help=(
-            'Linear track layout mode ("above", "middle", or "below"; default: "middle"). '
-            'Aliases: "spreadout" -> "above", "tuckin" -> "below".'
-        ),
+        help='Linear track layout mode ("above", "middle", or "below"; default: "middle").',
         type=_parse_linear_track_layout,
         metavar="{above,middle,below}",
         default="middle",
@@ -1149,10 +1062,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--losatp_threads must be > 0")
     if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
         parser.error("--align_orthogroup_feature requires --protein_blastp_mode orthogroup")
-    if args.depth and args.depth_track:
-        parser.error("--depth cannot be combined with --depth_track")
-    if args.show_depth and not (args.depth or args.depth_track):
-        parser.error("--show_depth requires --depth or --depth_track")
     if args.depth_height is not None and args.depth_height <= 0:
         parser.error("--depth_height must be > 0")
     if args.depth_window is not None and args.depth_window <= 0:
@@ -1165,8 +1074,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_max must be >= 0")
     if args.depth_min is not None and args.depth_max is not None and args.depth_min > args.depth_max:
         parser.error("--depth_min must be <= --depth_max")
-    if args.depth_tick_interval is not None and args.depth_tick_interval <= 0:
-        parser.error("--depth_tick_interval must be > 0")
     if args.depth_large_tick_interval is not None and args.depth_large_tick_interval <= 0:
         parser.error("--depth_large_tick_interval must be > 0")
     if args.depth_small_tick_interval is not None and args.depth_small_tick_interval <= 0:
@@ -1216,7 +1123,7 @@ def _get_args(args) -> argparse.Namespace:
         if args.linear_track_order:
             linear_track_slot_specs = linear_track_slots_from_order(
                 args.linear_track_order,
-                show_depth=bool(args.show_depth or args.depth or args.depth_track),
+                show_depth=bool(args.depth_track),
                 depth_track_count=max(1, len(args.depth_track or [])),
                 show_gc=bool(args.show_gc),
                 show_skew=bool(args.show_skew),
@@ -1245,6 +1152,15 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--collinear_max_conflicts_in_merge_gap must be >= 0")
     if args.collinear_max_paralog_links_per_orthogroup <= 0:
         parser.error("--collinear_max_paralog_links_per_orthogroup must be > 0")
+    try:
+        ComparisonThresholds(
+            evalue=args.evalue,
+            bitscore=args.bitscore,
+            identity=args.identity,
+            alignment_length=args.alignment_length,
+        )
+    except ValidationError as exc:
+        parser.error(str(exc))
     return args
 
 
@@ -1312,9 +1228,6 @@ def linear_main(cmd_args) -> None:
             )
         return
 
-    if '-i' in cmd_args or '--input' in cmd_args:
-        logger.warning(
-            "WARNING: The -i/--input option is deprecated and will be removed in a future version. Please use --gbk instead.")
     args: argparse.Namespace = _get_args(cmd_args)
     run_result = run_linear_from_namespace(args)
     save_session_sidecar_if_requested(
@@ -1381,7 +1294,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     gc_content_tick_font_size: Optional[float] = args.gc_content_tick_font_size
     manual_window: int = args.window
     manual_step: int = args.step
-    depth_files: list[str] | None = args.depth
     depth_track_groups: list[list[str]] | None = args.depth_track
     depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
     depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
@@ -1389,7 +1301,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     depth_track_large_tick_intervals: list[str] | None = list(args.depth_track_large_tick_interval or []) or None
     depth_track_small_tick_intervals: list[str] | None = list(args.depth_track_small_tick_interval or []) or None
     depth_track_tick_font_sizes: list[str] | None = list(args.depth_track_tick_font_size or []) or None
-    show_depth: bool = bool(args.show_depth or depth_files or depth_track_groups)
+    show_depth: bool = bool(depth_track_groups)
     depth_color: str | None = args.depth_color
     depth_height: Optional[float] = args.depth_height
     depth_window: Optional[int] = args.depth_window
@@ -1400,7 +1312,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     depth_normalize: bool | None = args.depth_normalize
     depth_show_axis: bool | None = args.depth_show_axis
     depth_show_ticks: bool | None = args.depth_show_ticks
-    depth_tick_interval: Optional[float] = args.depth_tick_interval
     depth_large_tick_interval: Optional[float] = args.depth_large_tick_interval
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
@@ -1501,7 +1412,11 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     axis_stroke_color: str = (
         args.axis_stroke_color
         if args.axis_stroke_color is not None
-        else ("dimgray" if ruler_on_axis else "lightgray")
+        else (
+            LINEAR_MODE_PROFILE.linear_ruler_axis_color or "dimgray"
+            if ruler_on_axis
+            else LINEAR_MODE_PROFILE.linear_axis_color or "lightgray"
+        )
     )
     if ruler_on_axis and scale_stroke_color is None:
         scale_stroke_color = axis_stroke_color
@@ -1551,7 +1466,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         depth_normalize=depth_normalize,
         depth_show_axis=depth_show_axis,
         depth_show_ticks=depth_show_ticks,
-        depth_tick_interval=depth_tick_interval,
         depth_large_tick_interval=depth_large_tick_interval,
         depth_small_tick_interval=depth_small_tick_interval,
         depth_tick_font_size=depth_tick_font_size,
@@ -1897,7 +1811,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=selected_features_set,
-        feature_table=feature_table,
+        feature_visibility_table=feature_table,
         feature_shapes=feature_shapes or None,
         output_prefix=out_file_prefix,
         legend=legend,
@@ -1906,7 +1820,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         step=step,
         depth_window=depth_window,
         depth_step=depth_step,
-        depth_files=depth_files,
         depth_track_files=depth_track_files,
         depth_track_labels=depth_track_labels,
         depth_track_colors=depth_track_colors,
@@ -2011,7 +1924,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             ),
             annotations=annotation_options,
             output=OutputOptions(
-                output_prefix=request_prefix,
                 legend=legend,
                 plot_title_position=plot_title_position,
             ),
@@ -2026,7 +1938,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             step=step,
             depth_window=depth_window,
             depth_step=depth_step,
-            depth_files=tuple(depth_files) if depth_files else None,
             depth_track_files=depth_track_files,
             depth_track_labels=depth_track_labels,
             depth_track_colors=depth_track_colors,

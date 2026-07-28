@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
@@ -13,6 +14,7 @@ from gbdraw.features.ids import (
     make_linear_rendered_feature_id,
 )
 from gbdraw.features.objects import FeatureObject
+from gbdraw.svg.ids import instance_svg_id
 
 from .models import (
     RegionAnnotationStyle,
@@ -25,6 +27,7 @@ from .resolve import annotation_midpoint, merge_annotation_segments
 AUTO_FEATURE_UNDERLAY_KIND = "gbdraw:auto-feature-underlay"
 AUTO_FEATURE_STABLE_ID = "gbdraw:stable-feature-id"
 AUTO_FEATURE_RENDERED_ID = "gbdraw:rendered-feature-id"
+AUTO_FEATURE_DOM_ID = "gbdraw:dom-feature-id"
 AUTO_FEATURE_UNDERLAY_SET_ID = "__gbdraw_auto_feature_underlay__"
 AUTO_FEATURE_UNDERLAY_SLOT_ID = "__gbdraw_auto_feature_underlay_slot__"
 AUTO_FEATURE_UNDERLAY_FILL = "#808080"
@@ -81,11 +84,16 @@ def merge_feature_underlays(
     ):
         record_index = int(indices[local_index])
         record_length = len(record.seq)
+        stable_ids = [
+            compute_feature_object_hash(feature) or str(feature.feature_id)
+            for feature in features
+        ]
+        stable_id_counts = Counter(stable_ids)
         for feature_index, feature in enumerate(features):
             segments = _feature_segments(feature)
             if not segments:
                 continue
-            stable_id = compute_feature_object_hash(feature) or str(feature.feature_id)
+            stable_id = stable_ids[feature_index]
             rendered_id = (
                 make_linear_rendered_feature_id(
                     record_index=record_index,
@@ -95,6 +103,14 @@ def merge_feature_underlays(
                 if mode == "linear"
                 else stable_id
             ) or stable_id
+            dom_id = (
+                instance_svg_id(
+                    rendered_id,
+                    f"{feature.feature_id}_{feature_index + 1}",
+                )
+                if stable_id_counts[stable_id] > 1
+                else rendered_id
+            )
             annotation_id = (
                 f"record_{record_index + 1}_{feature.feature_id}_{feature_index + 1}"
             )
@@ -116,6 +132,7 @@ def merge_feature_underlays(
                         AUTO_FEATURE_UNDERLAY_KIND: "true",
                         AUTO_FEATURE_STABLE_ID: stable_id,
                         AUTO_FEATURE_RENDERED_ID: rendered_id,
+                        AUTO_FEATURE_DOM_ID: dom_id,
                     },
                 )
             )
@@ -175,11 +192,12 @@ def apply_feature_underlay_dom_attributes(
     """Mark one private annotation shape as a feature-owned SVG block."""
 
     rendered_id = annotation.metadata.get(AUTO_FEATURE_RENDERED_ID, "")
+    dom_id = annotation.metadata.get(AUTO_FEATURE_DOM_ID, "") or rendered_id
     stable_id = annotation.metadata.get(AUTO_FEATURE_STABLE_ID, "")
     if not rendered_id:
         return
     element.attribs["id"] = (
-        rendered_id if part_count <= 1 else f"{rendered_id}__part{part_index}"
+        dom_id if part_count <= 1 else f"{dom_id}__part{part_index}"
     )
     element.attribs.update(
         {

@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""
-Linear label placement utilities.
-
-This module contains the linear track-based label placement logic that used to live in
-`gbdraw.labels.placement`.
-"""
+"""Linear track-based label placement utilities."""
 
 from collections import defaultdict
 
@@ -25,7 +20,6 @@ from ..layout.linear import (  # type: ignore[reportMissingImports]
 from ..layout.spatial import Aabb, AabbIndex, Interval, IntervalIndex
 from ..layout.text_geometry import (
     aabb_from_points,
-    anchor_x_bounds,
     convex_polygons_intersect,
     text_box_corner_offsets,
     translate_points,
@@ -114,10 +108,6 @@ def _insert_external_label_index(
 ) -> None:
     index = track_indexes.setdefault(track_id, IntervalIndex(bucket_size=bucket_size))
     index.insert(label_id, _linear_label_interval(label))
-
-
-def _anchor_x_values(width_px: float, text_anchor: str) -> tuple[float, float]:
-    return anchor_x_bounds(width_px, text_anchor)
 
 
 def _rotated_corner_offsets(
@@ -635,7 +625,7 @@ def prepare_label_list_linear(
 
         for label in track_labels:
             # Compact vertical positioning for external labels
-            if track_layout_normalized in {"below", "tuckin"}:
+            if track_layout_normalized == "below":
                 label["middle_y"] = bottom_feature_y_limit + (track_height * track_num)
             else:
                 label["middle_y"] = top_feature_y_limit - (track_height * track_num)

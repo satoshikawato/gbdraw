@@ -73,7 +73,7 @@ multi_diagram = draw_circular(
 assert multi_diagram.to_svg().startswith("<svg")
 ```
 
-`size` accepts `auto`, `equal`, `linear`, or `sqrt`. Grid-only values remain in
+`size` accepts `auto`, `equal`, or `linear`. Grid-only values remain in
 `CircularLayout`; they are not mixed into drawing and feature options.
 
 ## Linear diagrams and comparisons
@@ -260,6 +260,29 @@ The CLI, web app, saved sessions, and integrations that need materialized input
 descriptions use request and session models under `gbdraw.api`. Those models are an
 orchestration layer, not a prerequisite for drawing from Python. Internal assembler
 functions and `svgwrite.Drawing` are not part of the beginner-facing contract.
+The former `plot_circular_diagram` / `plot_linear_diagram` save wrappers and
+package-level `gbdraw.render` aliases have been removed; use `Diagram.save`,
+`render_to_bytes`, or `save_figure_to` at their documented boundaries.
+
+`RenderOutputRequest.output_prefix` preserves an explicit prefix exactly, including
+dots: `sample.v1` produces `sample.v1.svg`. In the Circular CLI, duplicate implicit
+record IDs in a separate-diagram batch receive deterministic suffixes. Saving a
+session for that batch is rejected before diagram output until the typed request
+model supports explicit batch grouping; use `--multi_record_canvas` or save each
+record separately.
+
+Canonical request schema 4 never writes the private
+`__gbdraw_legacy_spacing` migration transport. Schema 1–3 and old-session readers
+can replay factor-based Circular spacing, but cannot re-save it losslessly as schema
+4. Replace it with explicit `inner_gap_px` and `outer_gap_px` values before saving a
+current session. See the
+[session compatibility matrix](./PYTHON_SESSION_COMPATIBILITY_MATRIX.md) for the
+reader boundary.
+
+The next API iteration will complete the A1/A2 and O4 planner boundary, including
+explicit grid/batch requests, single-record Circular layout and neutral loading,
+and replacement of legacy `CollinearityParameters` with
+`LosslessCollinearityParameters`.
 
 Pin a gbdraw version in reproducible pipelines and test representative output after
 upgrading. SVG geometry can change intentionally even when the Python call remains

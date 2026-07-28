@@ -20,7 +20,8 @@ import gbdraw.labels.linear as linear_labels_module
 import gbdraw.layout.linear as linear_layout_module
 import gbdraw.svg.linear_features as linear_svg_features_module
 
-from gbdraw.api import LinearMultiRecordOptions, assemble_linear_diagram_from_records
+from gbdraw.api import LinearMultiRecordOptions
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
@@ -33,7 +34,12 @@ from gbdraw.layout.linear import (
     calculate_feature_position_factors_linear,
 )
 from gbdraw.labels.linear import calculate_label_y_bounds
-from gbdraw.linear import _parse_linear_track_axis_gap, _parse_linear_track_layout
+from gbdraw.linear import (
+    _get_args as get_linear_args,
+    _parse_linear_label_placement,
+    _parse_linear_track_axis_gap,
+    _parse_linear_track_layout,
+)
 from gbdraw.render.groups.linear.length_bar import LengthBarGroup, RULER_TICK_LENGTH
 
 
@@ -75,9 +81,21 @@ def _run_linear(tmp_path: Path, extra_args: list[str]) -> tuple[int, str, str, P
 
 
 def _extract_axis_group_y(svg_content: str, record_id: str) -> float:
+    root = ET.fromstring(svg_content)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    group = next(
+        (
+            element
+            for element in root.findall("svg:g", namespace)
+            if element.attrib.get("data-gbdraw-record-id") == record_id
+            and element.find('svg:line[@y1="0"][@y2="0"]', namespace) is not None
+        ),
+        None,
+    )
+    assert group is not None
     match = re.search(
-        rf'<g id="{re.escape(record_id)}(?:_record_\d+)?" transform="translate\([^,]+,([0-9.]+)\)"><line[^>]*y1="0" y2="0"',
-        svg_content,
+        r"translate\([^,]+,([-+0-9.eE]+)\)",
+        group.attrib.get("transform", ""),
     )
     assert match is not None
     return float(match.group(1))
@@ -93,6 +111,23 @@ def _extract_comparison_group_y(svg_content: str) -> float:
 
 
 def _extract_group_translate_y(svg_content: str, group_id: str) -> float:
+    root = ET.fromstring(svg_content)
+    semantic_group = next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and element.attrib.get("data-gbdraw-slot-id") == group_id
+        ),
+        None,
+    )
+    if semantic_group is not None:
+        match = re.search(
+            r"translate\([^,]+,([\-+0-9.eE]+)\)",
+            semantic_group.attrib.get("transform", ""),
+        )
+        assert match is not None
+        return float(match.group(1))
     match = re.search(
         rf'<g id="{re.escape(group_id)}(?:_record_\d+)?" transform="translate\([^,]+,([\-0-9.]+)\)">',
         svg_content,
@@ -268,7 +303,13 @@ def _extract_group_path_absolute_y_bounds(svg_content: str, group_id: str) -> tu
 
     def walk(element: ET.Element, parent_y: float, inside_target: bool) -> None:
         absolute_y = parent_y + translate_y(element)
-        inside = inside_target or element.attrib.get("id") == group_id
+        inside = (
+            inside_target
+            or element.attrib.get("id") == group_id
+            or element.attrib.get("data-gbdraw-slot-id") == group_id
+        )
+        if element.attrib.get("data-gbdraw-record-id") == group_id:
+            inside = True
         if inside and element.tag.rsplit("}", 1)[-1] == "path":
             for match in re.finditer(
                 rf"[ML]\s*({number})(?:\s*,\s*|\s+)({number})",
@@ -324,14 +365,47 @@ def _expected_middle_rotated_label_bottom_relative_y() -> float:
 
 
 @pytest.mark.linear
-def test_parse_linear_track_layout_aliases() -> None:
+def test_parse_linear_track_layout_accepts_only_canonical_values() -> None:
     assert _parse_linear_track_layout("above") == "above"
     assert _parse_linear_track_layout("middle") == "middle"
     assert _parse_linear_track_layout("below") == "below"
-    assert _parse_linear_track_layout("spreadout") == "above"
-    assert _parse_linear_track_layout("tuckin") == "below"
-    with pytest.raises(argparse.ArgumentTypeError):
-        _parse_linear_track_layout("invalid")
+    for removed_value in ("spreadout", "tuckin", "invalid"):
+        with pytest.raises(argparse.ArgumentTypeError):
+            _parse_linear_track_layout(removed_value)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    "option_args",
+    [
+        ["--label_placement", "on_feature"],
+        ["--track_layout", "spreadout"],
+        ["--track_layout", "tuckin"],
+    ],
+)
+def test_linear_cli_rejects_removed_layout_values(option_args: list[str]) -> None:
+    with pytest.raises(SystemExit):
+        get_linear_args(["--gbk", str(INPUT_GBK), *option_args])
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("legacy_layout", "canonical_layout"),
+    [("spreadout", "above"), ("tuckin", "below")],
+)
+def test_legacy_linear_config_reader_migrates_removed_layout_values(
+    legacy_layout: str,
+    canonical_layout: str,
+) -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    config_dict["canvas"]["linear"]["track_layout"] = legacy_layout
+    config_dict["labels"]["linear"]["placement"] = "on_feature"
+
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    assert cfg.canvas.linear.track_layout == canonical_layout
+    assert cfg.labels.linear.placement == "above_feature"
+    assert _parse_linear_label_placement("above_feature") == "above_feature"
 
 
 @pytest.mark.linear
@@ -551,7 +625,7 @@ def test_linear_above_displaced_positive_tracks_move_outward_from_axis() -> None
 
 
 @pytest.mark.linear
-@pytest.mark.parametrize("layout", ["above", "below", "spreadout", "tuckin"])
+@pytest.mark.parametrize("layout", ["above", "below"])
 def test_linear_track_layout_cli_generates_svg(tmp_path: Path, layout: str) -> None:
     returncode, stdout, stderr, output_svg = _run_linear(
         tmp_path,
@@ -593,8 +667,8 @@ def test_linear_pairwise_starts_at_percent_gc_skew_stack_bottom(tmp_path: Path) 
         [
             "-b",
             str(INPUT_MJE_MELA_BLAST),
-            "--show_gc",
-            "--show_skew",
+            "--gc",
+            "--skew",
             "--gc_content_mode",
             "percent",
         ],
@@ -657,8 +731,8 @@ def test_linear_middle_resolved_feature_lanes_do_not_overlap_gc_or_skew(tmp_path
             "--resolve_overlaps",
             "--show_labels",
             "none",
-            "--show_gc",
-            "--show_skew",
+            "--gc",
+            "--skew",
         ],
         output_name="linear_middle_resolved_feature_numeric_clearance",
     )
@@ -1081,10 +1155,24 @@ def test_linear_ruler_on_axis_uses_shared_auto_interval_across_records(tmp_path:
     )
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     svg_content = output_svg.read_text(encoding="utf-8")
-    group_matches = re.findall(r'<g id="NC_000913\.3(?:_record_\d+)?"[^>]*>(.*?)</g>', svg_content)
-    axis_groups = [g for g in group_matches if _count_ruler_ticks(g) > 0]
-    assert len(axis_groups) == 3
-    tick_counts = [_count_ruler_ticks(g) for g in axis_groups]
+    root = ET.fromstring(svg_content)
+    record_groups = [
+        group
+        for group in root
+        if group.tag.rsplit("}", 1)[-1] == "g"
+        and group.attrib.get("data-gbdraw-record-id") == "NC_000913.3"
+    ]
+    tick_counts = [
+        sum(
+            1
+            for element in group.iter()
+            if element.tag.rsplit("}", 1)[-1] == "line"
+            and _is_ruler_tick_y2(float(element.attrib.get("y2", "nan")))
+        )
+        for group in record_groups
+    ]
+    tick_counts = [count for count in tick_counts if count > 0]
+    assert len(tick_counts) == 3
     assert tick_counts[2] <= 1
     assert tick_counts[0] > tick_counts[2]
 

@@ -645,3 +645,23 @@ def test_render_request_circular_smoke_creates_svg(tmp_path: Path) -> None:
     assert result.mode == "circular"
     assert result.output_paths == (tmp_path / "request-smoke.svg",)
     assert result.output_paths[0].is_file()
+
+
+@pytest.mark.circular
+def test_render_request_preserves_dotted_output_prefix(tmp_path: Path) -> None:
+    record = _seqrecord("dotted-prefix", "ATGCGC" * 200)
+    record.annotations["topology"] = "circular"
+    request = CircularDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(record)),),
+        output=RenderOutputRequest(
+            output_prefix="sample.v1",
+            output_directory=tmp_path,
+            formats=("svg",),
+        ),
+    )
+
+    result = render_request(request)
+
+    assert result.output_paths == (tmp_path / "sample.v1.svg",)
+    assert result.output_paths[0].is_file()
+    assert not (tmp_path / "sample.svg").exists()

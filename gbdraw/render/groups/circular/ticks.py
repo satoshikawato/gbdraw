@@ -31,12 +31,17 @@ class TickGroup:
         tick_side: str = "legacy",
         tick_length_px: float | None = None,
         track_preset: str | None = None,
+        group_id: str | None = None,
+        slot_id: str | None = None,
         cfg: GbdrawConfig | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.radius: float = float(radius) if radius is not None else self.canvas_config.radius
-        self.tick_group = Group(id="tick")
+        self.tick_group = Group(id=str(group_id or "tick"), debug=False)
+        if slot_id:
+            self.tick_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
+            self.tick_group.attribs["data-gbdraw-slot-renderer"] = "ticks"
         self.total_len: int = len(self.gb_record.seq)
         self.config_dict: dict = config_dict
         cfg = cfg or GbdrawConfig.from_dict(config_dict)
@@ -108,6 +113,8 @@ class TickGroup:
             tick_length_px=self.tick_length_px,
             tick_width=float(self.tick_width),
             length_reference_radius_px=float(self.canvas_config.radius),
+            group_identifier=str(self.tick_group.attribs.get("id", "tick")),
+            record_identifier=str(self.gb_record.id),
         )
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)
@@ -120,5 +127,4 @@ class TickGroup:
 
 
 __all__ = ["TickGroup"]
-
 

@@ -35,7 +35,7 @@ class GcSkewGroup:
         """
         Initializes the GcSkewGroup with the given parameters and configurations.
         """
-        self.skew_group = Group(id=group_id)
+        self.skew_group = Group(id=group_id, debug=False)
         self.start_x: float = start_x
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len

@@ -236,6 +236,11 @@ class GcContentDrawer:
             fill_opacity=self.gc_path_fill_opacity,
             fill_rule="evenodd",
         )
+        if (
+            self.gc_path_stroke_width > 0
+            or self.gc_path_stroke_color.strip().lower() != "none"
+        ):
+            gc_path["stroke-width"] = self.gc_path_stroke_width
         group.add(gc_path)
         if self.mode == "percent":
             baseline_radius, outer_radius = self._percent_radii(radius, track_width, norm_factor)

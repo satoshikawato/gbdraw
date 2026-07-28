@@ -11,7 +11,7 @@ const baselineInput = {
   identity: 70,
   alignmentLength: 0,
   collinearMinAnchors: 1,
-  collinearMaxGeneGap: 0,
+  collinearMaxUnitGap: 0,
   collinearUnitMode: 'cds',
   collinearColorMode: 'orientation',
   collinearAnchorMode: 'rbh',
@@ -69,7 +69,7 @@ assert.equal(cacheKey(unchangedIdentity), cacheKey(baselineIdentity));
 
 const invalidationCases = [
   ['collinearMinAnchors', 'minAnchors', 2],
-  ['collinearMaxGeneGap', 'maxGeneGap', 1],
+  ['collinearMaxUnitGap', 'maxGeneGap', 1],
   ['collinearMaxDiagonalDrift', 'maxDiagonalDrift', 1],
   ['collinearMaxConflictsInMergeGap', 'maxConflictsInMergeGap', 2],
   ['collinearMaxParalogLinksPerOrthogroup', 'maxParalogLinksPerOrthogroup', 3],

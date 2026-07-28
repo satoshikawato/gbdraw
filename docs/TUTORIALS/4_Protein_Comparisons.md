@@ -135,7 +135,10 @@ Current sessions identify each CDS from its complete location, strand, and stabl
 
 Changing an upload filename, file modification time, resource name, display alias, or saving and loading the same biological inputs does not invalidate a compatible raw protein-search result. A display-only change can rebuild derived display metadata without rerunning LOSAT. Changing an amino-acid sequence, the selected protein set, record-instance binding, feature location or strand, or a search argument does invalidate the affected result. Query/subject direction is significant.
 
-Session version 36 keeps current protein raw results in cache schema 4, derived protein comparisons in schema 3, and the protein identity manifest in schema 2. Nucleotide LOSAT results remain schema 2, so protein and nucleotide entries with different schemas may appear in one valid session.
+Session versions 36 and 37 keep current protein raw results in cache schema 4,
+derived protein comparisons in schema 3, and the protein identity manifest in
+schema 2. Nucleotide LOSAT results remain schema 2, so protein and nucleotide
+entries with different schemas may appear in one valid session.
 
 Sessions 27–33 retain the verified migration path for schema-2 protein candidates and derived schema-1 evidence. On import, gbdraw keeps those artifacts separate from current hits. Generation verifies the complete FASTA content, program and arguments, direction, and one-to-one feature mapping before writing a schema-4 copy and rebuilding derived schema 3 without rerunning LOSAT. A candidate that cannot be verified is ignored only for that pair, and LOSAT runs normally. Session versions 34 and 35 were branch-internal development formats and are not supported.
 

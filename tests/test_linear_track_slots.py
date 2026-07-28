@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import numpy as np
 import pandas as pd
@@ -12,7 +13,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.linear as linear_cli_module
-from gbdraw.api import assemble_linear_diagram_from_records
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
@@ -78,32 +79,71 @@ def _layout_track(layout: LinearTrackLayout, track_id: str):
 
 
 def _extract_group_y(svg_text: str, group_id: str) -> float:
+    root = ET.fromstring(svg_text)
+    group = next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and (
+                element.attrib.get("data-gbdraw-record-id") == group_id
+                or element.attrib.get("data-gbdraw-slot-id") == group_id
+                or element.attrib.get("id") == group_id
+            )
+        ),
+        None,
+    )
+    assert group is not None
     match = re.search(
-        rf'<g id="{re.escape(group_id)}" transform="translate\([^,]+,([\-0-9.]+)\)">',
-        svg_text,
+        r"translate\([^,]+,([\-0-9.]+)\)",
+        group.attrib.get("transform", ""),
     )
     assert match is not None
     return float(match.group(1))
 
 
 def _extract_axis_baseline_y(svg_text: str, group_id: str) -> float:
-    group_match = re.search(
-        rf'<g id="{re.escape(group_id)}">(.*?)</g>',
-        svg_text,
-        flags=re.DOTALL,
+    root = ET.fromstring(svg_text)
+    slot_group = next(
+        element
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "g"
+        and (
+            element.attrib.get("data-gbdraw-slot-id") == group_id
+            or element.attrib.get("id") == group_id
+        )
     )
-    assert group_match is not None
-    for line_match in re.finditer(r"<line\b[^>]*>", group_match.group(1)):
-        attrs = dict(re.findall(r'([A-Za-z_:][\w:.-]*)="([^"]*)"', line_match.group(0)))
+    axis_group = next(
+        (
+            element
+            for element in slot_group.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and element is not slot_group
+            and element.attrib.get("id", "").endswith("_axis")
+        ),
+        slot_group,
+    )
+    for line in axis_group.iter():
+        if line.tag.rsplit("}", 1)[-1] != "line":
+            continue
+        attrs = line.attrib
         if "y1" in attrs and attrs.get("y2") == attrs["y1"]:
             return float(attrs["y1"])
     raise AssertionError(f"axis baseline line not found for {group_id}")
 
 
 def _extract_group_fragment(svg_text: str, group_id: str) -> str:
-    match = re.search(rf'<g id="{re.escape(group_id)}"[^>]*>.*?</g>', svg_text, flags=re.DOTALL)
-    assert match is not None
-    return match.group(0)
+    root = ET.fromstring(svg_text)
+    group = next(
+        element
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "g"
+        and (
+            element.attrib.get("data-gbdraw-slot-id") == group_id
+            or element.attrib.get("id") == group_id
+        )
+    )
+    return ET.tostring(group, encoding="unicode")
 
 
 def _resolved_slot_geometry(canvas, slot_id: str) -> dict[str, object]:
@@ -574,7 +614,7 @@ def test_assemble_linear_custom_depth_above_axis_keeps_depth_axis_clear() -> Non
 
     genome_axis_y = _extract_group_y(svg, "rec1")
     depth_group_y = _extract_group_y(svg, "depth")
-    depth_axis_y = depth_group_y + _extract_axis_baseline_y(svg, "depth_axis")
+    depth_axis_y = depth_group_y + _extract_axis_baseline_y(svg, "depth")
 
     assert depth_axis_y < genome_axis_y
     assert genome_axis_y - depth_axis_y == pytest.approx(cfg.canvas.linear.vertical_padding)
@@ -602,8 +642,8 @@ def test_linear_cli_forwards_track_slots_to_api(
         [
             "--gbk",
             "dummy.gb",
-            "--show_gc",
-            "--show_skew",
+            "--gc",
+            "--skew",
             "--linear_track_axis_index",
             "1",
             "--linear_track_slot",

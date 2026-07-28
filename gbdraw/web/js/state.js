@@ -11,6 +11,13 @@ import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibilit
 import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
 import { createSequenceSourceRegistry } from './app/match-sequences.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
+import {
+  MODE_DEFAULT_FEATURE_TYPES,
+  comparisonStateForMode,
+  createModeProfileStateManager,
+  managedAdvStateForMode,
+  trackDefaultsForMode
+} from './mode-profiles.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -137,6 +144,8 @@ const svgContent = computed(() => {
         'data-gbdraw-record-index',
         'data-gbdraw-annotation-mark',
         'data-gbdraw-annotation-label',
+        'data-gbdraw-role',
+        'data-gbdraw-orientation',
         'data-annotation-set-id',
         'data-annotation-track-id',
         'data-annotation-record-id',
@@ -365,6 +374,9 @@ const selectedAnnotation = ref(null);
 
 export const createDefaultFeatureShapes = () => createDefaultFeatureRenderings();
 
+const circularTrackDefaults = trackDefaultsForMode('circular');
+const linearTrackDefaults = trackDefaultsForMode('linear');
+
 export const createDefaultForm = () => ({
   prefix: '',
   species: '',
@@ -379,19 +391,19 @@ export const createDefaultForm = () => ({
   show_labels_linear: 'none',
   multi_record_canvas: false,
   separate_strands: true,
-  suppress_gc: false,
-  suppress_skew: false,
+  suppress_gc: !circularTrackDefaults.gc,
+  suppress_skew: !circularTrackDefaults.skew,
   align_center: false,
   keep_definition_left_aligned: false,
-  show_gc: false,
-  show_skew: false,
+  show_gc: linearTrackDefaults.gc,
+  show_skew: linearTrackDefaults.skew,
   show_depth: false,
   normalize_length: false
 });
 
-export const createDefaultAdv = () => ({
+export const createDefaultAdv = (profileMode = 'circular') => ({
   rich_feature_popup: true,
-  features: ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'repeat_region'],
+  features: [...MODE_DEFAULT_FEATURE_TYPES],
   feature_shapes: createDefaultFeatureShapes(),
   window_size: null,
   step_size: null,
@@ -411,7 +423,7 @@ export const createDefaultAdv = () => ({
   line_stroke_width: null,
   line_stroke_color: null,
   axis_stroke_width: null,
-  axis_stroke_color: null,
+  axis_stroke_color: managedAdvStateForMode(profileMode).axis_stroke_color,
 
   // Legend
   legend_box_size: null,
@@ -439,7 +451,7 @@ export const createDefaultAdv = () => ({
   depth_normalize: false,
   depth_show_axis: true,
   depth_show_ticks: true,
-  depth_tick_interval: null,
+  depth_large_tick_interval: null,
   depth_small_tick_interval: null,
   depth_tick_font_size: null,
   linear_track_slots_enabled: false,
@@ -456,10 +468,7 @@ export const createDefaultAdv = () => ({
   gc_content_tick_font_size: null,
   comparison_height: null,
   pairwise_match_style: 'ribbon',
-  min_bitscore: 50,
-  evalue: '1e-2',
-  identity: 0,
-  alignment_length: 0,
+  ...comparisonStateForMode(profileMode),
   scale_interval: null,
   scale_font_size: null,
   scale_stroke_width: null,
@@ -509,7 +518,7 @@ export const createDefaultLosat = () => ({
     orthogroupMembershipMode: 'anchor_core_v1',
     orthogroupMemberMaxHits: 5,
     collinearMinAnchors: 1,
-    collinearMaxGeneGap: 0,
+    collinearMaxUnitGap: 0,
     collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1,
     collinearMaxParalogLinksPerOrthogroup: 2,
@@ -580,7 +589,8 @@ const defaultEditorDraftState = createDefaultEditorDraftState();
 const form = reactive(createDefaultForm());
 
 // Extended Advanced Config
-const adv = reactive(createDefaultAdv());
+const adv = reactive(createDefaultAdv(mode.value));
+const modeProfileStateManager = createModeProfileStateManager(mode.value, adv);
 
 const losat = reactive(createDefaultLosat());
 
@@ -1160,6 +1170,7 @@ export const state = {
   linearComparisons,
   form,
   adv,
+  modeProfileStateManager,
   losat,
   losatCacheInfo,
   losatThreadingStatus,

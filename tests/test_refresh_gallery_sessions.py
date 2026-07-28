@@ -24,6 +24,7 @@ from gbdraw.session_io import (
     PROTEIN_LOSAT_CACHE_SCHEMA,
     load_session,
 )
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 import tools.prepare_interactive_gallery_assets as gallery_assets_module
 import tools.refresh_gallery_sessions as refresh_gallery_sessions_module
 from tools.prepare_interactive_gallery_assets import (
@@ -133,7 +134,12 @@ def test_vibrio_gallery_session_retains_complete_compact_cache() -> None:
     path = _session_path("vibrio-harveyi-group-collinear")
     session = load_session(path)
 
-    _validate_staged_gallery_session(path, session, artifact_path=path)
+    _validate_staged_gallery_session(
+        path,
+        session,
+        artifact_path=path,
+        allow_compatibility_fixture=True,
+    )
 
     protein_entries = [
         entry
@@ -154,7 +160,7 @@ def test_gallery_session_inventory_matches_files_and_examples() -> None:
     _validate_gallery_session_inventory()
 
 
-def test_all_bundled_current_sessions_use_current_artifact_schemas() -> None:
+def test_all_bundled_v36_schema3_sessions_use_supported_artifact_schemas() -> None:
     repo_root = Path(__file__).parents[1]
     paths = sorted(
         (repo_root / "gbdraw" / "web" / "gallery" / "sessions").glob(
@@ -170,7 +176,8 @@ def test_all_bundled_current_sessions_use_current_artifact_schemas() -> None:
     assert len(paths) == 13
     for path in paths:
         session = load_session(path)
-        assert session["version"] == CURRENT_SESSION_VERSION, path
+        # These files intentionally exercise the supported compatibility reader.
+        assert session["version"] == 36, path
         assert session["renderRequest"]["schema"] == 3, path
         assert (
             session["proteinIdentityManifest"]["schema"]
@@ -368,7 +375,10 @@ def _staged_geometry_session(
     records: list[dict[str, object]] | None,
     tracks: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    request: dict[str, object] = {"schema": 3, "mode": mode}
+    request: dict[str, object] = {
+        "schema": CANONICAL_REQUEST_SCHEMA,
+        "mode": mode,
+    }
     options: dict[str, object] = {}
     if mode == "linear":
         options["config"] = {
@@ -698,6 +708,12 @@ def test_refresh_records_resolved_track_geometry(
     _refresh_one_session(source, destination_path=destination)
 
     refreshed = load_session(destination)
+    assert refreshed["version"] == CURRENT_SESSION_VERSION
+    assert refreshed["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert (
+        "outputPrefix"
+        not in refreshed["renderRequest"]["diagramOptions"].get("output", {})
+    )
     geometry = refreshed["runMetadata"]["trackSlotGeometry"]
     assert geometry["schema"] == 1
     assert geometry["mode"] == "circular"
@@ -705,7 +721,7 @@ def test_refresh_records_resolved_track_geometry(
     assert geometry["records"][0]["axisRadiusPx"] > 0
 
 
-def test_staged_gallery_validator_requires_current_artifact_schemas(
+def test_staged_gallery_validator_accepts_v36_current_artifact_schemas(
     tmp_path: Path,
 ) -> None:
     session_path = tmp_path / "synthetic.gbdraw-session.json"
@@ -725,15 +741,27 @@ def test_staged_gallery_validator_requires_current_artifact_schemas(
         },
     }
 
-    _validate_staged_gallery_session(session_path, session)
+    _validate_staged_gallery_session(
+        session_path,
+        session,
+        allow_compatibility_fixture=True,
+    )
 
     stale_version = dict(session, version=33)
     with pytest.raises(ValueError, match="expected 36"):
-        _validate_staged_gallery_session(session_path, stale_version)
+        _validate_staged_gallery_session(
+            session_path,
+            stale_version,
+            allow_compatibility_fixture=True,
+        )
 
     stale_reference = dict(session, orthogroupState={"proteinId": "p_r_old"})
     with pytest.raises(ValueError, match="legacy protein identifiers"):
-        _validate_staged_gallery_session(session_path, stale_reference)
+        _validate_staged_gallery_session(
+            session_path,
+            stale_reference,
+            allow_compatibility_fixture=True,
+        )
 
 
 def test_gallery_session_refresh_does_not_partially_replace_on_failure(

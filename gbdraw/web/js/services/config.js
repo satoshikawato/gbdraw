@@ -12,6 +12,9 @@ import {
   CIRCULAR_TRACK_RENDERERS,
   clampCircularTrackAxisIndex,
   inferLegacyAxisIndexFromFeature,
+  migrateLegacyCircularTrackSlot,
+  migrateLegacyCircularTrackSlotSpec,
+  parseCircularTrackSlotSpec,
   normalizeCircularTrackSlots
 } from '../app/circular-track-slots.js';
 import {
@@ -97,14 +100,25 @@ import {
   projectWebOnlyEditorMetadata,
   validateSessionAuthorityInventory
 } from './session-authority.js';
+import {
+  migratePersistedCircularMultiRecordSizeMode,
+  migratePersistedLinearLabelPlacement,
+  migratePersistedLinearTrackLayout,
+  migratePersistedWebStateFieldNames,
+  requireCurrentCircularMultiRecordSizeMode,
+  requireCurrentLinearLabelPlacement,
+  requireCurrentLinearTrackLayout,
+  requireCurrentWebStateFieldNames
+} from '../app/current-option-values.js';
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 36;
+const SESSION_VERSION = 37;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, 36, SESSION_VERSION
 ]);
+const CURRENT_ARTIFACT_SESSION_VERSIONS = new Set([36, SESSION_VERSION]);
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
@@ -116,6 +130,7 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = [
   'outerRadius',
   'outer_radius',
   'placement',
+  'spacing',
   'strict',
   'compress',
   'reserve'
@@ -410,10 +425,7 @@ const validateImportedCircularTrackSlots = (configData = {}, { depthTrackCount =
   if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return;
   if (!Object.prototype.hasOwnProperty.call(adv, 'circular_track_slots')) return;
 
-  if (
-    adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION &&
-    adv.circular_track_slots_schema_version !== LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
-  ) {
+  if (adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) {
     throw new Error(
       `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${CIRCULAR_TRACK_SLOT_SCHEMA_VERSION}.`
     );
@@ -433,6 +445,67 @@ const validateImportedCircularTrackSlots = (configData = {}, { depthTrackCount =
     anchorlessRenderers: ['ticks', 'spacer'],
     depthTrackCount
   });
+};
+
+const migrateImportedCircularTrackSlots = (configData = {}) => {
+  const adv = configData && typeof configData === 'object' ? configData.adv : null;
+  if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return configData;
+  if (!Object.prototype.hasOwnProperty.call(adv, 'circular_track_slots')) return configData;
+  if (!Array.isArray(adv.circular_track_slots)) {
+    throw new Error('Custom Track Slots must be an array.');
+  }
+  const sourceSchemaVersion = adv.circular_track_slots_schema_version;
+  if (sourceSchemaVersion === CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) return configData;
+  if (sourceSchemaVersion !== LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) {
+    throw new Error(
+      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${CIRCULAR_TRACK_SLOT_SCHEMA_VERSION}.`
+    );
+  }
+
+  const defaultNt = adv.nt || 'GC';
+  const preset = configData.form?.track_type || 'tuckin';
+  return {
+    ...configData,
+    adv: {
+      ...adv,
+      circular_track_slots_schema_version: CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
+      circular_track_slots: adv.circular_track_slots.map((slot, index) => (
+        typeof slot === 'string'
+          ? parseCircularTrackSlotSpec(
+              migrateLegacyCircularTrackSlotSpec(slot),
+              index,
+              defaultNt,
+              preset
+            )
+          : migrateLegacyCircularTrackSlot(slot)
+      ))
+    }
+  };
+};
+
+const migratePersistedWebOptionValues = (configData = {}) => {
+  if (!configData || typeof configData !== 'object' || Array.isArray(configData)) {
+    return configData;
+  }
+  const migratedNames = migratePersistedWebStateFieldNames(configData);
+  const form = isPlainObject(migratedNames.form) ? { ...migratedNames.form } : migratedNames.form;
+  const adv = isPlainObject(migratedNames.adv) ? { ...migratedNames.adv } : migratedNames.adv;
+  if (isPlainObject(form) && Object.prototype.hasOwnProperty.call(form, 'linear_track_layout')) {
+    form.linear_track_layout = migratePersistedLinearTrackLayout(form.linear_track_layout);
+  }
+  if (isPlainObject(adv) && Object.prototype.hasOwnProperty.call(adv, 'label_placement')) {
+    adv.label_placement = migratePersistedLinearLabelPlacement(adv.label_placement);
+  }
+  if (isPlainObject(adv) && Object.prototype.hasOwnProperty.call(adv, 'multi_record_size_mode')) {
+    adv.multi_record_size_mode = migratePersistedCircularMultiRecordSizeMode(
+      adv.multi_record_size_mode
+    );
+  }
+  return {
+    ...migratedNames,
+    ...(form === undefined ? {} : { form }),
+    ...(adv === undefined ? {} : { adv })
+  };
 };
 
 const validateImportedLinearTrackSlots = (configData = {}, { depthTrackCount = null } = {}) => {
@@ -679,7 +752,7 @@ const normalizeDepthTrackConfig = (entry, index, legacyAdv = {}) => {
     color: resolveColorToHex(String(source.color || fallbackColor)),
     height: normalizePositiveNumberOrNull(hasHeight ? source.height : legacyAdv.depth_height),
     large_tick_interval: normalizePositiveNumberOrNull(
-      source.large_tick_interval ?? source.tick_interval ?? (index === 0 ? legacyAdv.depth_tick_interval : null)
+      source.large_tick_interval ?? (index === 0 ? legacyAdv.depth_large_tick_interval : null)
     ),
     small_tick_interval: normalizePositiveNumberOrNull(
       source.small_tick_interval ?? (index === 0 ? legacyAdv.depth_small_tick_interval : null)
@@ -928,7 +1001,7 @@ const rejectInvalidLosatCacheKeys = (entries, owner, { requireKey = false } = {}
 };
 
 export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
-  if (sourceSessionVersion !== SESSION_VERSION) return;
+  if (!CURRENT_ARTIFACT_SESSION_VERSIONS.has(sourceSessionVersion)) return;
   const rawEntries = sessionArtifactEntries(data, 'losatCache');
   const derivedEntries = sessionArtifactEntries(data, 'losatDerivedCache');
   const manifest = data.proteinIdentityManifest;
@@ -936,12 +1009,16 @@ export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
   rejectInvalidLosatCacheKeys(derivedEntries, 'derived LOSATP');
 
   if (!validateProteinIdentityManifest(manifest)) {
-    throw new Error('Session version 36 requires a valid schema-2 protein manifest.');
+    throw new Error(
+      `Session version ${sourceSessionVersion} requires a valid schema-2 protein manifest.`
+    );
   }
   for (const entry of rawEntries) {
     const classification = classifyRawLosatCacheEntry(entry);
     if (!['protein-current', 'nucleotide-current'].includes(classification)) {
-      throw new Error('Session version 36 contains a non-current raw LOSAT entry.');
+      throw new Error(
+        `Session version ${sourceSessionVersion} contains a non-current raw LOSAT entry.`
+      );
     }
     if (classification !== 'protein-current') continue;
     const ids = proteinRuntimeIdSets(
@@ -954,7 +1031,9 @@ export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
       !ids ||
       !rawProteinTextMatchesBindings(entry.text, ids.query, ids.subject)
     ) {
-      throw new Error('Session version 36 contains an unresolved protein raw entry.');
+      throw new Error(
+        `Session version ${sourceSessionVersion} contains an unresolved protein raw entry.`
+      );
     }
   }
   if (
@@ -962,7 +1041,9 @@ export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
       (entry) => !validateDerivedProteinReferences(entry, manifest)
     )
   ) {
-    throw new Error('Session version 36 contains an invalid derived LOSATP entry.');
+    throw new Error(
+      `Session version ${sourceSessionVersion} contains an invalid derived LOSATP entry.`
+    );
   }
 };
 
@@ -981,12 +1062,19 @@ export const buildSessionLegacyArtifacts = ({
 };
 
 const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
+  const readsLegacyOptionValues = (
+    sourceSessionVersion < SESSION_VERSION ||
+    Number(data.renderRequest?.schema) <= 3
+  );
+  const migratedOptions = readsLegacyOptionValues
+    ? migratePersistedWebOptionValues(data.config)
+    : data.config;
   return {
     ...data,
     version: SESSION_VERSION,
     config: migrateLegacyFeatureRenderingConfig(
       migrateImportedLinearTrackSlots(
-        data.config,
+        migrateImportedCircularTrackSlots(migratedOptions),
         sourceSessionVersion
       ),
       sourceSessionVersion <= 33
@@ -1017,8 +1105,14 @@ const isLegacyConfigPayload = (data) =>
   Object.keys(data).some((key) => LEGACY_CONFIG_KEYS.has(key));
 
 const applyLegacyConfigPayload = (data) => {
+  const circularSlotSchema = data?.adv?.circular_track_slots_schema_version;
+  const migratedOptions = circularSlotSchema === CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
+    ? data
+    : migratePersistedWebOptionValues(data);
   const migrated = migrateLegacyFeatureRenderingConfig(
-    migrateImportedLinearTrackSlots(data),
+    migrateImportedLinearTrackSlots(
+      migrateImportedCircularTrackSlots(migratedOptions)
+    ),
     true
   );
   validateImportedCircularTrackSlots(migrated);
@@ -1100,6 +1194,7 @@ const preflightSessionImport = (rawData) => {
   const sourceSessionVersion = rawData.version;
   const normalizedData = normalizeSessionData(rawData);
   validateSessionAuthorityInventory(normalizedData, sourceSessionVersion);
+  migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   const promotedData = (
     sourceSessionVersion >= 31 &&
     Number(normalizedData.renderRequest?.schema) === 2
@@ -1269,6 +1364,16 @@ const restoreSessionCircularLayoutCaches = (ui = {}) => {
 };
 
 export const applyConfigData = (data) => {
+  requireCurrentWebStateFieldNames(data);
+  if (isPlainObject(data.form) && Object.prototype.hasOwnProperty.call(data.form, 'linear_track_layout')) {
+    requireCurrentLinearTrackLayout(data.form.linear_track_layout);
+  }
+  if (isPlainObject(data.adv) && Object.prototype.hasOwnProperty.call(data.adv, 'label_placement')) {
+    requireCurrentLinearLabelPlacement(data.adv.label_placement);
+  }
+  if (isPlainObject(data.adv) && Object.prototype.hasOwnProperty.call(data.adv, 'multi_record_size_mode')) {
+    requireCurrentCircularMultiRecordSizeMode(data.adv.multi_record_size_mode);
+  }
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
   state.annotationSets.splice(
@@ -1305,9 +1410,9 @@ export const applyConfigData = (data) => {
       .filter((comparison) => comparison.queryUid && comparison.subjectUid)
   );
   state.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;
-  if (state.adv.label_placement === 'on_feature') {
-    state.adv.label_placement = 'above_feature';
-  }
+  state.adv.label_placement = requireCurrentLinearLabelPlacement(
+    state.adv.label_placement
+  );
   state.adv.label_rendering = normalizeLabelRendering(state.adv.label_rendering);
   state.adv.circular_label_placement =
     String(state.adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
@@ -1332,24 +1437,15 @@ export const applyConfigData = (data) => {
       ? numericTrackAxisGap
       : null;
   }
-  if (state.form.linear_track_layout === 'spreadout') {
-    state.form.linear_track_layout = 'above';
-  } else if (state.form.linear_track_layout === 'tuckin') {
-    state.form.linear_track_layout = 'below';
-  } else if (!['above', 'middle', 'below'].includes(state.form.linear_track_layout)) {
-    state.form.linear_track_layout = 'middle';
-  }
+  state.form.linear_track_layout = requireCurrentLinearTrackLayout(
+    state.form.linear_track_layout
+  );
   state.form.plot_title = String(state.form.plot_title || '');
   state.form.legend = normalizeLegendPosition(state.form.legend, state.mode.value === 'linear' ? 'bottom' : 'left');
   state.adv.feature_shapes = normalizeFeatureRenderingMap(state.adv.feature_shapes);
-  const normalizedMultiRecordSizeMode = String(state.adv.multi_record_size_mode || '').trim().toLowerCase();
-  if (normalizedMultiRecordSizeMode === 'sqrt') {
-    state.adv.multi_record_size_mode = 'auto';
-  } else {
-    state.adv.multi_record_size_mode = ['auto', 'linear', 'equal'].includes(normalizedMultiRecordSizeMode)
-      ? normalizedMultiRecordSizeMode
-      : 'auto';
-  }
+  state.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
+    state.adv.multi_record_size_mode
+  );
   const numericMinRadiusRatio = Number(state.adv.multi_record_min_radius_ratio);
   state.adv.multi_record_min_radius_ratio =
     Number.isFinite(numericMinRadiusRatio) && numericMinRadiusRatio > 0 && numericMinRadiusRatio <= 1
@@ -1470,7 +1566,9 @@ export const applyConfigData = (data) => {
   }
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
   state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
-  state.adv.depth_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_tick_interval);
+  state.adv.depth_large_tick_interval = normalizePositiveNumberOrNull(
+    state.adv.depth_large_tick_interval
+  );
   state.adv.depth_small_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_small_tick_interval);
   state.adv.depth_tick_font_size = normalizePositiveNumberOrNull(state.adv.depth_tick_font_size);
   state.adv.depth_tracks.splice(
@@ -1563,8 +1661,8 @@ export const applyConfigData = (data) => {
     state.losat.blastp.orthogroupMemberMaxHits = normalizePositiveInteger(state.losat.blastp?.orthogroupMemberMaxHits, 5);
     state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 1);
     {
-      const maxGap = Number(state.losat.blastp?.collinearMaxGeneGap);
-      state.losat.blastp.collinearMaxGeneGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
+      const maxGap = Number(state.losat.blastp?.collinearMaxUnitGap);
+      state.losat.blastp.collinearMaxUnitGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
       const diagonalDrift = Number(state.losat.blastp?.collinearMaxDiagonalDrift);
       state.losat.blastp.collinearMaxDiagonalDrift = Number.isInteger(diagonalDrift) && diagonalDrift >= 0 ? diagonalDrift : 0;
       const mergeConflicts = Number(state.losat.blastp?.collinearMaxConflictsInMergeGap);
@@ -2304,7 +2402,7 @@ const reconcileDepthTrackStateAfterSessionFiles = () => {
   const defaults = {
     depthColor: state.adv.depth_color,
     depthHeight: state.adv.depth_height,
-    largeTickInterval: state.adv.depth_tick_interval,
+    largeTickInterval: state.adv.depth_large_tick_interval,
     smallTickInterval: state.adv.depth_small_tick_interval,
     tickFontSize: state.adv.depth_tick_font_size
   };
@@ -2845,14 +2943,6 @@ const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-f
     selectedResultIndex: state.selectedResultIndex.value,
     extractedFeatures: state.extractedFeatures.value
   });
-
-  if (
-    (validation.state === 'ready' || validation.state === 'not-needed') &&
-    hasUsableBiologicalFeatureCatalog({ biologicalFeatures: state.biologicalFeatures?.value })
-  ) {
-    applySessionFeatureRecoveryPlan({ status: 'ready', validation }, { generationId });
-    return { status: 'ready', validation };
-  }
 
   if (validation.state === 'missing' || validation.state === 'alignable' || validation.state === 'stale') {
     state.featureExtractionPending.value = true;

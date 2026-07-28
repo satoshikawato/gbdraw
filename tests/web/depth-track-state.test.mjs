@@ -21,6 +21,7 @@ const {
   depthTrackMatrixWidth,
   depthTrackSessionWidth,
   isRecordMajorDepthFileMatrix,
+  normalizeDepthTrackConfig,
   normalizeRecordMajorDepthFileRows,
   padDepthFileSlots,
   representativeDepthFiles,
@@ -48,6 +49,18 @@ const depthSlots = (count) => Array.from({ length: count }, (_, index) => ({
     legend_label: ['24 hpi', '12 hpi', '6 hpi'][index]
   }
 }));
+
+{
+  assert.equal(
+    normalizeDepthTrackConfig(
+      { tick_interval: 5 },
+      0,
+      { largeTickInterval: 25 }
+    ).large_tick_interval,
+    25,
+    'fresh depth-track normalization must not read the obsolete tick_interval field'
+  );
+}
 
 {
   const shared = file('shared.tsv');

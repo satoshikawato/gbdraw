@@ -7,6 +7,13 @@
 - 状態: 設計合意済み、未実装
 - 目的: 複数 feature または任意のゲノム領域を、line、bracket、band、hatch と任意ラベルで示す annotation track を Circular/Linear の第一級機能として実装する
 
+> **現行契約に関する追記（2026-07-29）:** この文書は上記設計スナップショットを
+> 保存した履歴資料である。本文中の Circular TrackSlot `spacing` は廃止済みの旧設計を
+> 指し、fresh CLI、Python API、Web 入力では受理しない。Circular の物理 gap は
+> `inner_gap_px` と `outer_gap_px` で個別に指定する。保存済み schema 1～3 session の
+> `spacing` だけを reader migration で両 field へ変換する。Linear TrackSlot の
+> `spacing` は現行契約であり、この変更の対象外である。
+
 ## 1. 結論
 
 Issue #286 は既存 feature label の拡張として実装しない。`RegionAnnotation` を独立した
@@ -258,7 +265,9 @@ Linear:   features, numeric tracks, depth, annotations, spacer
 
 Annotation用の別TrackSpecは作らない。既存slotの共通fieldをそのまま使う。
 
-- Circular: `side`, `radius`, `width`, `spacing`, `inner_gap_px`, `outer_gap_px`, `z`。
+- Circular（設計スナップショット）: `side`, `radius`, `width`, `spacing`,
+  `inner_gap_px`, `outer_gap_px`, `z`。現行契約では `spacing` を除き、上記追記の
+  reader migration 以外では受理しない。
 - Linear: `side`, `height`, `spacing`, `z`。
 
 ### 4.2 typed renderer params

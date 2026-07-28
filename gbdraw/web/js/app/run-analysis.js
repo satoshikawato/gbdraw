@@ -85,6 +85,12 @@ import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
 } from './plot-title-position.js';
+import {
+  requireCurrentCircularMultiRecordSizeMode,
+  requireCurrentLinearLabelPlacement,
+  requireCurrentLinearTrackLayout
+} from './current-option-values.js';
+import { PAIRWISE_LEGEND_SELECTOR } from './legend/utils.js';
 import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
@@ -261,7 +267,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   identity,
   alignmentLength,
   collinearMinAnchors,
-  collinearMaxGeneGap,
+  collinearMaxUnitGap,
   collinearUnitMode,
   collinearColorMode,
   collinearAnchorMode,
@@ -291,7 +297,8 @@ export const buildLosatDerivedPayloadCachePayload = ({
   },
   collinear: {
     minAnchors: String(collinearMinAnchors),
-    maxGeneGap: String(collinearMaxGeneGap),
+    // Persisted LOSAT derived-cache schema 3 uses this historical identity key.
+    maxGeneGap: String(collinearMaxUnitGap),
     unitMode: String(collinearUnitMode || 'auto'),
     colorMode: String(collinearColorMode || 'orientation'),
     anchorMode: String(collinearAnchorMode || 'rbh'),
@@ -624,11 +631,6 @@ const buildConservationSeries = (sourceFiles, circularConservation) => {
     label: entry.label,
     color: entry.color
   }));
-};
-const normalizeMultiRecordSizeMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'sqrt') return 'auto';
-  return ['auto', 'linear', 'equal'].includes(normalized) ? normalized : 'auto';
 };
 const normalizeMultiRecordMinRadiusRatio = (value) => {
   const numeric = Number(value);
@@ -1793,12 +1795,12 @@ json.dumps({
   };
 
   const removePairwiseIdentityLegendFromSvgContent = (content) => {
-    if (typeof content !== 'string' || !content.includes('pairwise_legend')) return content;
+    if (typeof content !== 'string') return content;
     const doc = new DOMParser().parseFromString(content, 'image/svg+xml');
     const parseError = doc.querySelector('parsererror');
     if (parseError) return content;
     let removed = false;
-    doc.querySelectorAll('#pairwise_legend, [id="pairwise_legend"]').forEach((legend) => {
+    doc.querySelectorAll(PAIRWISE_LEGEND_SELECTOR).forEach((legend) => {
       legend.remove();
       removed = true;
     });
@@ -2265,7 +2267,12 @@ json.dumps({
       if (adv.line_stroke_width !== null) args.push('--line_stroke_width', adv.line_stroke_width);
       if (adv.line_stroke_color) args.push('--line_stroke_color', adv.line_stroke_color);
       if (adv.axis_stroke_width !== null) args.push('--axis_stroke_width', adv.axis_stroke_width);
-      if (adv.axis_stroke_color) args.push('--axis_stroke_color', adv.axis_stroke_color);
+      const usesManagedLinearAxisColor =
+        mode.value === 'linear' &&
+        state.modeProfileStateManager?.isManaged?.(adv, 'axis_stroke_color') === true;
+      if (adv.axis_stroke_color && !usesManagedLinearAxisColor) {
+        args.push('--axis_stroke_color', adv.axis_stroke_color);
+      }
 
       if (adv.legend_box_size) args.push('--legend_box_size', adv.legend_box_size);
       if (adv.legend_font_size) args.push('--legend_font_size', adv.legend_font_size);
@@ -2397,12 +2404,12 @@ json.dumps({
         }
         if (adv.depth_show_ticks === false) args.push('--hide_depth_ticks');
         if (
-          adv.depth_tick_interval !== null &&
-          adv.depth_tick_interval !== undefined &&
-          adv.depth_tick_interval !== ''
+          adv.depth_large_tick_interval !== null &&
+          adv.depth_large_tick_interval !== undefined &&
+          adv.depth_large_tick_interval !== ''
         ) {
-          if (Number(adv.depth_tick_interval) <= 0) throw new Error('Depth large tick interval must be greater than 0.');
-          args.push('--depth_large_tick_interval', adv.depth_tick_interval);
+          if (Number(adv.depth_large_tick_interval) <= 0) throw new Error('Depth large tick interval must be greater than 0.');
+          args.push('--depth_large_tick_interval', adv.depth_large_tick_interval);
         }
         if (
           mode.value === 'circular' &&
@@ -2435,7 +2442,7 @@ json.dumps({
           label: String(rawLabel).trim() ? String(rawLabel) : getDepthTrackLabelFromFile(file, index),
           color: String(source.color || (index === 0 ? adv.depth_color : '')),
           height: normalizeDepthTrackValue(source.height),
-          largeTick: normalizeDepthTrackValue(source.large_tick_interval ?? source.tick_interval),
+          largeTick: normalizeDepthTrackValue(source.large_tick_interval),
           smallTick: normalizeDepthTrackValue(source.small_tick_interval),
           tickFontSize: normalizeDepthTrackValue(source.tick_font_size)
         };
@@ -2774,8 +2781,8 @@ json.dumps({
           }
           args.push('--label_placement', normalizedCircularLabelPlacement);
         }
-        if (form.suppress_gc) args.push('--suppress_gc');
-        if (form.suppress_skew) args.push('--suppress_skew');
+        if (form.suppress_gc) args.push('--no-gc');
+        if (form.suppress_skew) args.push('--no-skew');
         if (form.multi_record_canvas) {
           if (!multiCanvasSupport.circular) {
             throw new Error(
@@ -2807,7 +2814,9 @@ json.dumps({
               'Current gbdraw wheel does not support --multi_record_position. Rebuild and redeploy the web wheel.'
             );
           }
-          const normalizedSizeMode = normalizeMultiRecordSizeMode(adv.multi_record_size_mode);
+          const normalizedSizeMode = requireCurrentCircularMultiRecordSizeMode(
+            adv.multi_record_size_mode
+          );
           const normalizedMinRatio = normalizeMultiRecordMinRadiusRatio(adv.multi_record_min_radius_ratio);
           const normalizedColumnGapRatio = normalizeMultiRecordColumnGapRatio(adv.multi_record_column_gap_ratio);
           const normalizedRowGapRatio = normalizeMultiRecordRowGapRatio(adv.multi_record_row_gap_ratio);
@@ -2985,7 +2994,6 @@ json.dumps({
             args.push('--depth_track', ...depthPaths);
           }
           appendDepthTrackMetadataArgs(circularDepthEntries);
-          args.push('--show_depth');
           appendDepthStyleArgs();
           if (
             !useCircularTrackSlots &&
@@ -3122,16 +3130,19 @@ json.dumps({
             }
             adv.min_bitscore = normalizeBlastThresholdNumber(
               adv.min_bitscore,
-              DEFAULT_LINEAR_BLAST_FILTERS.bitscore
+              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.bitscore
             );
-            adv.evalue = normalizeBlastThresholdText(adv.evalue, DEFAULT_LINEAR_BLAST_FILTERS.evalue);
+            adv.evalue = normalizeBlastThresholdText(
+              adv.evalue,
+              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.evalue
+            );
             adv.identity = normalizeBlastThresholdNumber(
               adv.identity,
-              DEFAULT_LINEAR_BLAST_FILTERS.identity
+              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.identity
             );
             adv.alignment_length = normalizeBlastThresholdNumber(
               adv.alignment_length,
-              DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
+              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.alignment_length,
               { integer: true }
             );
             args.push(...buildBlastFilterArgs(
@@ -3394,12 +3405,9 @@ json.dumps({
           });
         }
         if (form.scale_style && form.scale_style !== 'bar') args.push('--scale_style', form.scale_style);
-        const normalizedTrackLayout =
-          form.linear_track_layout === 'spreadout'
-            ? 'above'
-            : form.linear_track_layout === 'tuckin'
-              ? 'below'
-              : (form.linear_track_layout || 'middle');
+        const normalizedTrackLayout = requireCurrentLinearTrackLayout(
+          form.linear_track_layout
+        );
         const normalizedPairwiseMatchStyle = normalizePairwiseMatchStyle(adv.pairwise_match_style);
         adv.pairwise_match_style = normalizedPairwiseMatchStyle;
         if (form.align_center) args.push('--align_center');
@@ -3462,8 +3470,8 @@ json.dumps({
           adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
           adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
         } else {
-          if (form.show_gc) args.push('--show_gc');
-          if (form.show_skew) args.push('--show_skew');
+          if (form.show_gc) args.push('--gc');
+          if (form.show_skew) args.push('--skew');
         }
         if (form.normalize_length) args.push('--normalize_length');
         if (form.legend !== 'right') args.push('-l', form.legend);
@@ -3518,9 +3526,9 @@ json.dumps({
           1,
           normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 1, { integer: true })
         );
-        losat.blastp.collinearMaxGeneGap = Math.max(
+        losat.blastp.collinearMaxUnitGap = Math.max(
           0,
-          normalizeBlastThresholdNumber(losat.blastp?.collinearMaxGeneGap, 0, { integer: true })
+          normalizeBlastThresholdNumber(losat.blastp?.collinearMaxUnitGap, 0, { integer: true })
         );
         losat.blastp.collinearMaxDiagonalDrift = Math.max(
           0,
@@ -3584,7 +3592,9 @@ json.dumps({
           if (form.show_labels_linear === 'first') args.push('first');
           if (form.show_labels_linear === 'orthogroup_top') args.push('orthogroup_top');
         }
-        const normalizedLabelPlacement = adv.label_placement === 'on_feature' ? 'above_feature' : adv.label_placement;
+        const normalizedLabelPlacement = requireCurrentLinearLabelPlacement(
+          adv.label_placement
+        );
         let normalizedLabelRendering = form.show_labels_linear === 'none' ? 'auto' : normalizeLabelRendering(adv.label_rendering);
         if (normalizedLabelPlacement === 'above_feature') {
           normalizedLabelRendering = 'auto';
@@ -4635,7 +4645,7 @@ json.dumps({
                 identity: adv.identity,
                 alignmentLength: adv.alignment_length,
                 collinearMinAnchors: losat.blastp.collinearMinAnchors,
-                collinearMaxGeneGap: losat.blastp.collinearMaxGeneGap,
+                collinearMaxUnitGap: losat.blastp.collinearMaxUnitGap,
                 collinearUnitMode: 'cds',
                 collinearColorMode: losat.blastp.collinearColorMode,
                 collinearAnchorMode: 'rbh',
@@ -4675,7 +4685,7 @@ json.dumps({
                   adv.identity,
                   adv.alignment_length,
                   losat.blastp.collinearMinAnchors,
-                  losat.blastp.collinearMaxGeneGap,
+                  losat.blastp.collinearMaxUnitGap,
                   'cds',
                   losat.blastp.collinearColorMode,
                   'rbh',
@@ -4964,7 +4974,6 @@ json.dumps({
             });
           }
           appendDepthTrackMetadataArgs(depthTrackEntries);
-          args.push('--show_depth');
           appendDepthStyleArgs();
           if (
             adv.depth_height !== null &&
