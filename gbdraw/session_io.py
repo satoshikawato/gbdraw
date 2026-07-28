@@ -1487,6 +1487,7 @@ def build_session_json(
     """Build a GUI-loadable session JSON payload from a CLI run."""
 
     if context.source_session is not None:
+        validate_session(context.source_session)
         payload: dict[str, Any] = _json_clone(context.source_session)
     else:
         payload = {}

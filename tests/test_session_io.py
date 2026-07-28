@@ -129,10 +129,10 @@ def _current_protein_cache_entry() -> dict:
     feature_b = next(
         iter(manifest["recordInstances"]["record-2"]["runtimeIds"])
     )
-    query_transport = manifest["recordInstances"]["record-1"]["runtimeIds"][
+    query_runtime_handle = manifest["recordInstances"]["record-1"]["runtimeIds"][
         feature_a
     ]
-    subject_transport = manifest["recordInstances"]["record-2"]["runtimeIds"][
+    subject_runtime_handle = manifest["recordInstances"]["record-2"]["runtimeIds"][
         feature_b
     ]
     analysis_a = manifest["recordInstances"]["record-1"]["recordAnalysisId"]
@@ -149,7 +149,7 @@ def _current_protein_cache_entry() -> dict:
         "idEncoding": "runtime-handle-v1",
         "key": build_protein_losat_cache_key(pair_identity, args=[]),
         "text": (
-            f"{query_transport}\t{subject_transport}\t"
+            f"{query_runtime_handle}\t{subject_runtime_handle}\t"
             "100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n"
         ),
         "program": "blastp",
@@ -1013,13 +1013,29 @@ def test_future_session_version_fails() -> None:
 
 
 @pytest.mark.parametrize("version", (34, 35))
-def test_branch_internal_session_versions_are_unsupported(version: int) -> None:
+def test_branch_internal_session_versions_are_rejected_at_read_and_rewrite_boundaries(
+    version: int,
+) -> None:
     session = _minimal_session({})
     session["version"] = version
 
     with pytest.raises(ValidationError, match=f"Unsupported session version: {version}"):
         validate_session(session)
     assert version not in SUPPORTED_SESSION_VERSIONS
+
+    with pytest.raises(ValidationError, match=f"Unsupported session version: {version}"):
+        build_session_json(
+            SessionBuildContext(
+                mode="circular",
+                output_prefix="out",
+                render_formats=("svg",),
+                source_session=session,
+            ),
+            svg_results=(("out", "<svg></svg>"),),
+            embedded_files={},
+            generated_at=datetime(2026, 7, 28),
+            canonical_request=_canonical_request("circular"),
+        )
 
 
 def test_session_version_27_remains_supported() -> None:

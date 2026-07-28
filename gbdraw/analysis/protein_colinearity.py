@@ -736,10 +736,6 @@ def select_protein_display_alias(protein: CdsProtein) -> str:
     return f"CDS:{location}:{_strand_display(protein.feature_hash_strand)}"
 
 
-def _manifest_dict(value: ProteinIdentityManifest | Mapping[str, object]) -> Mapping[str, object]:
-    return value.to_dict() if isinstance(value, ProteinIdentityManifest) else value
-
-
 def _validate_protein_sets_and_record_analyses(
     raw_sets: Mapping[object, object],
     raw_analyses: Mapping[object, object],
@@ -1036,7 +1032,7 @@ def extract_web_stable_cds_proteins(
     record_index_offset: int = 0,
     feature_visibility_rules: list[dict[str, object]] | None = None,
 ) -> ProteinExtractionResult:
-    """Extract CDS proteins with schema-1 identity and readable transport IDs."""
+    """Extract CDS proteins with the current manifest and runtime handles."""
 
     return extract_protein_identity_manifest(
         records,
@@ -1139,7 +1135,7 @@ def extract_protein_identity_manifest(
     record_index_offset: int = 0,
     feature_visibility_rules: list[dict[str, object]] | None = None,
 ) -> ProteinExtractionResult:
-    """Build the canonical protein manifest and transport-bound extraction."""
+    """Build the canonical protein manifest and runtime-bound extraction."""
 
     base = extract_cds_proteins(
         records,
@@ -1867,7 +1863,7 @@ def _legacy_fasta_and_id_map(
             raise ValidationError("Legacy protein IDs are not one-to-one.")
         mapping[legacy_protein.protein_id] = current_protein.protein_id
     if len(set(mapping.values())) != len(mapping):
-        raise ValidationError("Current transport IDs are not one-to-one.")
+        raise ValidationError("Current runtime handles are not one-to-one.")
     return proteins_to_fasta(legacy), mapping
 
 
