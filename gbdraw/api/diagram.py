@@ -109,6 +109,7 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     GcContentConfigurator,
     GcSkewConfigurator,
     LegendDrawingConfigurator,
+    LegendMeasurement,
 )
 from gbdraw.core.sequence import create_dict_for_sequence_lengths, check_feature_presence  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.circular import assemble_circular_diagram  # type: ignore[reportMissingImports]
@@ -1453,7 +1454,7 @@ def _add_single_record_plot_title_group(
     *,
     canvas: Drawing,
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
     gb_record: SeqRecord,
     output_prefix: str,
     cfg: GbdrawConfig,
@@ -1481,11 +1482,11 @@ def _add_single_record_plot_title_group(
     if (
         plot_title_position == "top"
         and str(canvas_config.legend_position).strip().lower() == "top"
-        and float(legend_config.legend_height) > 0.0
+        and float(legend_measurement.legend_height) > 0.0
     ):
         legend_top = (
             float(canvas_config.legend_offset_y)
-            - (0.5 * float(legend_config.color_rect_size))
+            - (0.5 * float(legend_measurement.color_rect_size))
         )
         required_legend_top = (
             _MULTI_RECORD_PLOT_TITLE_BOTTOM_MARGIN_PX
@@ -1508,8 +1509,8 @@ def _add_single_record_plot_title_group(
         if str(canvas_config.legend_position).strip().lower() == "bottom":
             anchor_bottom = (
                 float(canvas_config.legend_offset_y)
-                - (0.5 * float(legend_config.color_rect_size))
-                + float(legend_config.legend_height)
+                - (0.5 * float(legend_measurement.color_rect_size))
+                + float(legend_measurement.legend_height)
             )
         required_height = (
             anchor_bottom
@@ -2700,7 +2701,7 @@ def assemble_circular_diagram_from_record(
         canvas_config=canvas_config,
     )
 
-    canvas = assemble_circular_diagram(
+    canvas, legend_measurement = assemble_circular_diagram(
         gb_record=gb_record,
         canvas_config=canvas_config,
         gc_df=gc_df,
@@ -2742,7 +2743,7 @@ def assemble_circular_diagram_from_record(
         _add_single_record_plot_title_group(
             canvas=canvas,
             canvas_config=canvas_config,
-            legend_config=legend_config,
+            legend_measurement=legend_measurement,
             gb_record=gb_record,
             output_prefix=output_prefix,
             cfg=cfg,
@@ -3396,6 +3397,7 @@ def assemble_circular_diagram_from_records(
     legend_offset_x = 0.0
     legend_offset_y = 0.0
     legend_config: LegendDrawingConfigurator | None = None
+    legend_measurement: LegendMeasurement | None = None
     legend_canvas_config: CircularCanvasConfigurator | None = None
     legend_table: dict = {}
     legend_local_top = 0.0
@@ -3540,11 +3542,15 @@ def assemble_circular_diagram_from_records(
                 feature_config=feature_config,
                 canvas_config=legend_canvas_config,
             )
-            legend_config = legend_config.recalculate_legend_dimensions(
+            legend_measurement = legend_config.measure_legend(
                 legend_table, legend_canvas_config
             )
-            legend_local_top = -0.5 * float(legend_config.color_rect_size)
-            legend_local_bottom = legend_local_top + float(legend_config.legend_height)
+            legend_local_top = -0.5 * float(
+                legend_measurement.color_rect_size
+            )
+            legend_local_bottom = (
+                legend_local_top + float(legend_measurement.legend_height)
+            )
             side_inner_gap = 0.0
             side_edge_margin = 0.0
             side_reserved_width = 0.0
@@ -3552,28 +3558,36 @@ def assemble_circular_diagram_from_records(
                 side_inner_gap, side_edge_margin, side_reserved_width = (
                     resolve_circular_side_legend_geometry(
                         canvas_height=float(total_height),
-                        legend_width=float(legend_config.legend_width),
-                        color_rect_size=float(legend_config.color_rect_size),
+                        legend_width=float(legend_measurement.legend_width),
+                        color_rect_size=float(legend_measurement.color_rect_size),
                     )
                 )
 
             if legend_effective == "right":
                 total_width = grid_width + side_reserved_width
                 legend_offset_x = grid_width + side_inner_gap
-                legend_offset_y = (total_height - legend_config.legend_height) / 2.0
+                legend_offset_y = (
+                    total_height - legend_measurement.legend_height
+                ) / 2.0
             elif legend_effective == "left":
                 total_width = grid_width + side_reserved_width
                 grid_origin_x = side_reserved_width
                 legend_offset_x = side_edge_margin
-                legend_offset_y = (total_height - legend_config.legend_height) / 2.0
+                legend_offset_y = (
+                    total_height - legend_measurement.legend_height
+                ) / 2.0
             elif legend_effective == "top":
                 legend_offset_y = _MULTI_RECORD_LEGEND_TOP_EDGE_PADDING_PX - legend_local_top
                 legend_bottom = legend_offset_y + legend_local_bottom
                 grid_origin_y = legend_bottom + _MULTI_RECORD_LEGEND_GRID_GAP_PX
                 total_height = grid_origin_y + grid_height
-                legend_offset_x = (total_width - legend_config.legend_width) / 2.0
+                legend_offset_x = (
+                    total_width - legend_measurement.legend_width
+                ) / 2.0
             elif legend_effective == "bottom":
-                legend_offset_x = (total_width - legend_config.legend_width) / 2.0
+                legend_offset_x = (
+                    total_width - legend_measurement.legend_width
+                ) / 2.0
                 legend_offset_y = grid_height + _MULTI_RECORD_LEGEND_GRID_GAP_PX - legend_local_top
                 legend_bottom = legend_offset_y + legend_local_bottom
                 total_height = max(
@@ -3603,7 +3617,7 @@ def assemble_circular_diagram_from_records(
 
         records_bottom = float(grid_origin_y) + float(grid_height)
         anchor_bottom = records_bottom
-        if legend_effective == "bottom" and legend_config is not None:
+        if legend_effective == "bottom" and legend_measurement is not None:
             legend_bottom = legend_offset_y + legend_local_bottom
             anchor_bottom = max(anchor_bottom, float(legend_bottom))
 
@@ -3680,12 +3694,12 @@ def assemble_circular_diagram_from_records(
     if (
         legend_effective != "none"
         and legend_table
-        and legend_config is not None
+        and legend_measurement is not None
         and legend_canvas_config is not None
     ):
         legend_group = LegendGroup(
             legend_canvas_config,
-            legend_config,
+            legend_measurement,
             legend_table,
         ).get_group()
         legend_group.translate(legend_offset_x, legend_offset_y)

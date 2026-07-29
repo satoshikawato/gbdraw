@@ -106,7 +106,7 @@ class LabelsLinearConfig:
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsLinearConfig":
         raw = d if isinstance(d, dict) else dict(d)
-        scope_raw = raw.get("scope")
+        scope_raw = raw.get("scope", "none")
         if not isinstance(scope_raw, str):
             raise ValidationError(
                 "labels.linear.scope must be one of: "
@@ -145,7 +145,7 @@ class LabelsCircularConfig:
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsCircularConfig":
         raw = d if isinstance(d, dict) else dict(d)
-        scope_raw = raw.get("scope")
+        scope_raw = raw.get("scope", "none")
         if not isinstance(scope_raw, str):
             raise ValidationError(
                 "labels.circular.scope must be one of: none, outer, both"

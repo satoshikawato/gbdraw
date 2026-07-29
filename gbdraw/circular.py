@@ -69,6 +69,7 @@ from .cli_utils.common import (
     _add_block_stroke_args,
     _add_comparison_filter_args,
     _add_depth_axis_args,
+    _add_depth_track_arg,
     _add_depth_track_label_color_args,
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
@@ -238,13 +239,7 @@ def _get_args(
         show_gc_default=CIRCULAR_MODE_PROFILE.show_gc,
         show_skew_default=CIRCULAR_MODE_PROFILE.show_skew,
     )
-    parser.add_argument(
-        '--depth_track',
-        metavar='DEPTH',
-        help='Repeatable logical depth track. Provide one file for all records or one file per record.',
-        type=str,
-        nargs='+',
-        action='append')
+    _add_depth_track_arg(parser, mode="circular")
     _add_depth_track_label_color_args(parser)
     _add_depth_track_tick_args(parser)
     parser.add_argument(

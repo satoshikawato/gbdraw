@@ -2843,8 +2843,9 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "linearTrackSlotUsesPresetGeometry: linearTrackSlotEditor.linearTrackSlotUsesPresetGeometry" in app_setup_source
     assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in run_source
     assert "args.push('--scale_font_size', adv.scale_font_size);" in run_source
-    assert "if (form.show_gc) args.push('--gc');" in run_source
-    assert "if (form.show_skew) args.push('--skew');" in run_source
+    assert "args.push(...buildModeTrackVisibilityArgs('linear', form));" in run_source
+    assert "if (form.show_gc) args.push('--gc');" not in run_source
+    assert "if (form.show_skew) args.push('--skew');" not in run_source
     assert "args.push('--show_gc')" not in run_source
     assert "args.push('--show_skew')" not in run_source
 
@@ -2990,8 +2991,9 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "args.push('--track_type', form.track_type);" in run_source
     assert "args.push('--center_reserved_radius', String(normalizedCenterReservedRadius));" in run_source
     assert "applyCircularSuppressControlsToSlots" in run_source
-    assert "if (form.suppress_gc) args.push('--no-gc');" in run_source
-    assert "if (form.suppress_skew) args.push('--no-skew');" in run_source
+    assert "args.push(...buildModeTrackVisibilityArgs('circular', form));" in run_source
+    assert "if (form.suppress_gc) args.push('--no-gc');" not in run_source
+    assert "if (form.suppress_skew) args.push('--no-skew');" not in run_source
     assert "args.push('--suppress_gc')" not in run_source
     assert "args.push('--suppress_skew')" not in run_source
     assert "args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));" in run_source

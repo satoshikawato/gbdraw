@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import json
 import math
+from pathlib import Path
 
 import pytest
 from Bio.Seq import Seq
@@ -32,24 +34,27 @@ from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
     DEFAULT_FEATURE_TYPES,
     LINEAR_MODE_PROFILE,
+    MODE_PROFILE_VERSION,
     ComparisonThresholds,
 )
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
 
 
+SEMANTIC_PARITY = json.loads(
+    (Path(__file__).parent / "fixtures" / "mode_semantic_parity.json").read_text(
+        encoding="utf-8"
+    )
+)
+EXPECTED_MODES = SEMANTIC_PARITY["modes"]
+EXPECTED_FEATURE_TYPES = tuple(SEMANTIC_PARITY["featureTypes"])
 EXPECTED_THRESHOLDS = {
-    "circular": {
-        "evalue": 1e-5,
-        "bitscore": 50.0,
-        "identity": 70.0,
-        "alignment_length": 0,
-    },
-    "linear": {
-        "evalue": 1e-2,
-        "bitscore": 50.0,
-        "identity": 0.0,
-        "alignment_length": 0,
-    },
+    mode: {
+        "evalue": values["comparison"]["evalue"],
+        "bitscore": values["comparison"]["bitscore"],
+        "identity": values["comparison"]["identity"],
+        "alignment_length": values["comparison"]["alignmentLength"],
+    }
+    for mode, values in EXPECTED_MODES.items()
 }
 
 
@@ -70,22 +75,72 @@ def _threshold_dict(value: object) -> dict[str, float | int]:
     }
 
 
+def _different_leaf_paths(
+    left: dict[str, object],
+    right: dict[str, object],
+    prefix: str = "",
+) -> set[str]:
+    paths: set[str] = set()
+    for key in left.keys() | right.keys():
+        path = f"{prefix}.{key}" if prefix else key
+        left_value = left.get(key)
+        right_value = right.get(key)
+        if isinstance(left_value, dict) and isinstance(right_value, dict):
+            paths.update(_different_leaf_paths(left_value, right_value, path))
+        elif left_value != right_value:
+            paths.add(path)
+    return paths
+
+
 def test_mode_profiles_define_the_approved_defaults() -> None:
+    assert SEMANTIC_PARITY["schema"] == 1
+    assert SEMANTIC_PARITY["profileVersion"] == MODE_PROFILE_VERSION
     assert asdict(CIRCULAR_MODE_PROFILE.comparison) == EXPECTED_THRESHOLDS["circular"]
     assert asdict(LINEAR_MODE_PROFILE.comparison) == EXPECTED_THRESHOLDS["linear"]
     assert (CIRCULAR_MODE_PROFILE.show_gc, CIRCULAR_MODE_PROFILE.show_skew) == (
-        True,
-        True,
+        EXPECTED_MODES["circular"]["tracks"]["gc"],
+        EXPECTED_MODES["circular"]["tracks"]["skew"],
     )
     assert (LINEAR_MODE_PROFILE.show_gc, LINEAR_MODE_PROFILE.show_skew) == (
-        False,
-        False,
+        EXPECTED_MODES["linear"]["tracks"]["gc"],
+        EXPECTED_MODES["linear"]["tracks"]["skew"],
     )
-    assert CIRCULAR_MODE_PROFILE.feature_types == DEFAULT_FEATURE_TYPES
-    assert LINEAR_MODE_PROFILE.feature_types == DEFAULT_FEATURE_TYPES
+    assert DEFAULT_FEATURE_TYPES == EXPECTED_FEATURE_TYPES
+    assert CIRCULAR_MODE_PROFILE.feature_types == EXPECTED_FEATURE_TYPES
+    assert LINEAR_MODE_PROFILE.feature_types == EXPECTED_FEATURE_TYPES
     assert "misc_RNA" in DEFAULT_FEATURE_TYPES
-    assert LINEAR_MODE_PROFILE.linear_axis_color == "lightgray"
-    assert LINEAR_MODE_PROFILE.linear_ruler_axis_color == "dimgray"
+    assert (
+        CIRCULAR_MODE_PROFILE.linear_axis_color
+        == EXPECTED_MODES["circular"]["linearAxisColor"]
+    )
+    assert (
+        LINEAR_MODE_PROFILE.linear_axis_color
+        == EXPECTED_MODES["linear"]["linearAxisColor"]
+    )
+    assert (
+        CIRCULAR_MODE_PROFILE.linear_ruler_axis_color
+        == EXPECTED_MODES["circular"]["linearRulerAxisColor"]
+    )
+    assert (
+        LINEAR_MODE_PROFILE.linear_ruler_axis_color
+        == EXPECTED_MODES["linear"]["linearRulerAxisColor"]
+    )
+
+
+def test_reviewed_mode_difference_allowlist_is_exhaustive() -> None:
+    actual_differences = _different_leaf_paths(
+        EXPECTED_MODES["circular"],
+        EXPECTED_MODES["linear"],
+    )
+    reviewed_differences = {
+        entry["path"] for entry in SEMANTIC_PARITY["reviewedModeDifferences"]
+    }
+
+    assert actual_differences == reviewed_differences
+    assert all(
+        entry["reason"].strip()
+        for entry in SEMANTIC_PARITY["reviewedModeDifferences"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -108,9 +163,20 @@ def test_fresh_python_request_and_cli_threshold_defaults_match(
     assert _threshold_dict(root_options.thresholds) == expected
     assert _threshold_dict(request.options) == expected
     assert _threshold_dict(cli_args) == expected
-    assert tuple(root_options.features.types or ()) == DEFAULT_FEATURE_TYPES
-    assert tuple(request.options.selected_features_set or ()) == DEFAULT_FEATURE_TYPES
-    assert tuple(str(cli_args.features).split(",")) == DEFAULT_FEATURE_TYPES
+    assert tuple(root_options.features.types or ()) == EXPECTED_FEATURE_TYPES
+    assert tuple(request.options.selected_features_set or ()) == EXPECTED_FEATURE_TYPES
+    assert tuple(str(cli_args.features).split(",")) == EXPECTED_FEATURE_TYPES
+    assert (cli_args.show_gc, cli_args.show_skew) == (
+        EXPECTED_MODES[mode]["tracks"]["gc"],
+        EXPECTED_MODES[mode]["tracks"]["skew"],
+    )
+    assert request.options.config_overrides["canvas.show_gc"] is cli_args.show_gc
+    assert request.options.config_overrides["canvas.show_skew"] is cli_args.show_skew
+    if mode == "linear":
+        assert (
+            request.options.config_overrides["objects.axis.linear.stroke_color"]
+            == EXPECTED_MODES[mode]["linearAxisColor"]
+        )
 
 
 def test_mode_resolution_preserves_explicit_values_and_applies_track_defaults() -> None:
@@ -257,6 +323,8 @@ def test_threshold_models_reject_invalid_public_domains(
         interface.Thresholds(**values)
     with pytest.raises(ValidationError):
         CircularDiagramOptions(**kwargs)
+    with pytest.raises(ValidationError):
+        LinearDiagramOptions(**kwargs)
 
 
 def test_threshold_overflow_is_normalized_to_validation_error() -> None:

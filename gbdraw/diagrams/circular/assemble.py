@@ -39,6 +39,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     GcContentConfigurator,
     GcSkewConfigurator,
     LegendDrawingConfigurator,
+    LegendMeasurement,
 )
 from ...configurators.gc import _slot_skew_config
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
@@ -422,12 +423,17 @@ def _serialize_circular_track_slot_geometry(
     }
 
 
-def _legend_bbox(canvas_config: CircularCanvasConfigurator, legend_config: LegendDrawingConfigurator) -> tuple[float, float, float, float]:
+def _legend_bbox(
+    canvas_config: CircularCanvasConfigurator,
+    legend_measurement: LegendMeasurement,
+) -> tuple[float, float, float, float]:
     """Return legend bbox on canvas as (min_x, min_y, max_x, max_y)."""
     min_x = float(canvas_config.legend_offset_x)
-    min_y = float(canvas_config.legend_offset_y) - 0.5 * float(legend_config.color_rect_size)
-    max_x = min_x + float(legend_config.legend_width)
-    max_y = min_y + float(legend_config.legend_height)
+    min_y = float(canvas_config.legend_offset_y) - 0.5 * float(
+        legend_measurement.color_rect_size
+    )
+    max_x = min_x + float(legend_measurement.legend_width)
+    max_y = min_y + float(legend_measurement.legend_height)
     return min_x, min_y, max_x, max_y
 
 
@@ -635,11 +641,11 @@ def _legend_collision_indices(
     labels: list[dict[str, Any]],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
     margin_px: float = LEGEND_LABEL_MARGIN_PX,
 ) -> list[int]:
     """Return indices of labels that currently collide with the legend."""
-    legend_box = _legend_bbox(canvas_config, legend_config)
+    legend_box = _legend_bbox(canvas_config, legend_measurement)
     collided: list[int] = []
     for idx, label in enumerate(labels):
         if label.get("is_embedded"):
@@ -654,20 +660,30 @@ def _labels_collide_with_legend(
     labels: list[dict[str, Any]],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
 ) -> bool:
     """Whether any external label overlaps with the legend bbox."""
-    return bool(_legend_collision_indices(labels, total_length, canvas_config, legend_config))
+    return bool(
+        _legend_collision_indices(
+            labels,
+            total_length,
+            canvas_config,
+            legend_measurement,
+        )
+    )
 
 
 
 
 def _legend_center_local(
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
 ) -> tuple[float, float]:
     """Return legend center in local (circle-centered) coordinates."""
-    legend_min_x, legend_min_y, legend_max_x, legend_max_y = _legend_bbox(canvas_config, legend_config)
+    legend_min_x, legend_min_y, legend_max_x, legend_max_y = _legend_bbox(
+        canvas_config,
+        legend_measurement,
+    )
     legend_center_x = 0.5 * (legend_min_x + legend_max_x)
     legend_center_y = 0.5 * (legend_min_y + legend_max_y)
     return legend_center_x - float(canvas_config.offset_x), legend_center_y - float(canvas_config.offset_y)
@@ -676,7 +692,7 @@ def _legend_center_local(
 def _preferred_angular_shift_sign(
     label: dict[str, Any],
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
 ) -> int:
     """Return preferred angular direction (+1 ccw / -1 cw) to move away from legend."""
     start_x = float(label["start_x"])
@@ -684,7 +700,10 @@ def _preferred_angular_shift_sign(
     radius = math.hypot(start_x, start_y)
     if radius <= 1e-6:
         return 1
-    legend_local_x, legend_local_y = _legend_center_local(canvas_config, legend_config)
+    legend_local_x, legend_local_y = _legend_center_local(
+        canvas_config,
+        legend_measurement,
+    )
     away_x = start_x - legend_local_x
     away_y = start_y - legend_local_y
     # Unit tangents at current point (CCW and CW).
@@ -737,7 +756,7 @@ def _try_shift_labels_away_from_legend(
     labels: list[dict[str, Any]],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
 ) -> bool:
     """Resolve collisions by moving labels first (preferred strategy)."""
     if not labels:
@@ -745,12 +764,17 @@ def _try_shift_labels_away_from_legend(
 
     max_passes = 4
     for _ in range(max_passes):
-        collided_indices = _legend_collision_indices(labels, total_length, canvas_config, legend_config)
+        collided_indices = _legend_collision_indices(
+            labels,
+            total_length,
+            canvas_config,
+            legend_measurement,
+        )
         if not collided_indices:
             return True
 
         changed = False
-        legend_box = _legend_bbox(canvas_config, legend_config)
+        legend_box = _legend_bbox(canvas_config, legend_measurement)
         for idx in collided_indices:
             label = labels[idx]
             if label.get("is_embedded"):
@@ -761,7 +785,11 @@ def _try_shift_labels_away_from_legend(
             if radius <= 1e-6:
                 continue
             moving_side = 1 if start_x >= 0 else -1
-            preferred_sign = _preferred_angular_shift_sign(label, canvas_config, legend_config)
+            preferred_sign = _preferred_angular_shift_sign(
+                label,
+                canvas_config,
+                legend_measurement,
+            )
             side_indices = [
                 side_idx
                 for side_idx, side_label in enumerate(labels)
@@ -867,31 +895,56 @@ def _try_shift_labels_away_from_legend(
         if not changed:
             break
 
-    return not _labels_collide_with_legend(labels, total_length, canvas_config, legend_config)
+    return not _labels_collide_with_legend(
+        labels,
+        total_length,
+        canvas_config,
+        legend_measurement,
+    )
 
 
 def _legend_offset_bounds(
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
 ) -> tuple[float, float, float, float]:
     """Return min/max bounds for legend offsets (x_min, x_max, y_min, y_max)."""
     x_min = 0.0
-    x_max = max(0.0, float(canvas_config.total_width) - float(legend_config.legend_width))
-    y_min = 0.5 * float(legend_config.color_rect_size)
-    y_max = max(y_min, float(canvas_config.total_height) - float(legend_config.legend_height) + 0.5 * float(legend_config.color_rect_size))
+    x_max = max(
+        0.0,
+        float(canvas_config.total_width) - float(legend_measurement.legend_width),
+    )
+    y_min = 0.5 * float(legend_measurement.color_rect_size)
+    y_max = max(
+        y_min,
+        float(canvas_config.total_height)
+        - float(legend_measurement.legend_height)
+        + 0.5 * float(legend_measurement.color_rect_size),
+    )
     return x_min, x_max, y_min, y_max
 
 
-def _clamp_legend_offsets(canvas_config: CircularCanvasConfigurator, legend_config: LegendDrawingConfigurator) -> None:
+def _clamp_legend_offsets(
+    canvas_config: CircularCanvasConfigurator,
+    legend_measurement: LegendMeasurement,
+) -> None:
     """Keep legend offsets inside the current canvas."""
-    x_min, x_max, y_min, y_max = _legend_offset_bounds(canvas_config, legend_config)
+    x_min, x_max, y_min, y_max = _legend_offset_bounds(
+        canvas_config,
+        legend_measurement,
+    )
     canvas_config.legend_offset_x = min(max(float(canvas_config.legend_offset_x), x_min), x_max)
     canvas_config.legend_offset_y = min(max(float(canvas_config.legend_offset_y), y_min), y_max)
 
 
-def _legend_push_direction(canvas_config: CircularCanvasConfigurator, legend_config: LegendDrawingConfigurator) -> tuple[float, float]:
+def _legend_push_direction(
+    canvas_config: CircularCanvasConfigurator,
+    legend_measurement: LegendMeasurement,
+) -> tuple[float, float]:
     """Direction that moves legend farther away from the circular map center."""
-    legend_min_x, legend_min_y, legend_max_x, legend_max_y = _legend_bbox(canvas_config, legend_config)
+    legend_min_x, legend_min_y, legend_max_x, legend_max_y = _legend_bbox(
+        canvas_config,
+        legend_measurement,
+    )
     legend_center_x = 0.5 * (legend_min_x + legend_max_x)
     legend_center_y = 0.5 * (legend_min_y + legend_max_y)
     dx = legend_center_x - float(canvas_config.offset_x)
@@ -913,24 +966,34 @@ def _try_move_legend_away_from_labels(
     labels: list[dict[str, Any]],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
 ) -> bool:
     """Resolve collisions by moving legend within the current canvas bounds."""
-    if not _labels_collide_with_legend(labels, total_length, canvas_config, legend_config):
+    if not _labels_collide_with_legend(
+        labels,
+        total_length,
+        canvas_config,
+        legend_measurement,
+    ):
         return True
-    dir_x, dir_y = _legend_push_direction(canvas_config, legend_config)
+    dir_x, dir_y = _legend_push_direction(canvas_config, legend_measurement)
     for _ in range(MAX_LEGEND_SHIFT_STEPS):
         prev_x = float(canvas_config.legend_offset_x)
         prev_y = float(canvas_config.legend_offset_y)
         canvas_config.legend_offset_x = prev_x + dir_x * LEGEND_SHIFT_STEP_PX
         canvas_config.legend_offset_y = prev_y + dir_y * LEGEND_SHIFT_STEP_PX
-        _clamp_legend_offsets(canvas_config, legend_config)
+        _clamp_legend_offsets(canvas_config, legend_measurement)
         if (
             abs(float(canvas_config.legend_offset_x) - prev_x) < 1e-6
             and abs(float(canvas_config.legend_offset_y) - prev_y) < 1e-6
         ):
             break
-        if not _labels_collide_with_legend(labels, total_length, canvas_config, legend_config):
+        if not _labels_collide_with_legend(
+            labels,
+            total_length,
+            canvas_config,
+            legend_measurement,
+        ):
             return True
     return False
 
@@ -939,13 +1002,18 @@ def _expand_canvas_for_legend(
     labels: list[dict[str, Any]],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
 ) -> bool:
     """Expand canvas in legend direction until legend-label collisions disappear."""
-    if not _labels_collide_with_legend(labels, total_length, canvas_config, legend_config):
+    if not _labels_collide_with_legend(
+        labels,
+        total_length,
+        canvas_config,
+        legend_measurement,
+    ):
         return True
 
-    dir_x, dir_y = _legend_push_direction(canvas_config, legend_config)
+    dir_x, dir_y = _legend_push_direction(canvas_config, legend_measurement)
     sign_x = 1 if dir_x > 0.25 else (-1 if dir_x < -0.25 else 0)
     sign_y = 1 if dir_y > 0.25 else (-1 if dir_y < -0.25 else 0)
     if sign_x == 0 and sign_y == 0:
@@ -966,8 +1034,13 @@ def _expand_canvas_for_legend(
             canvas_config.total_height = float(canvas_config.total_height) + CANVAS_EXPAND_STEP_PX
             canvas_config.offset_y = float(canvas_config.offset_y) + CANVAS_EXPAND_STEP_PX
 
-        _clamp_legend_offsets(canvas_config, legend_config)
-        if not _labels_collide_with_legend(labels, total_length, canvas_config, legend_config):
+        _clamp_legend_offsets(canvas_config, legend_measurement)
+        if not _labels_collide_with_legend(
+            labels,
+            total_length,
+            canvas_config,
+            legend_measurement,
+        ):
             return True
     return False
 
@@ -1097,7 +1170,7 @@ def _resolve_content_vertical_bounds_for_single_legend(
 def _position_single_top_bottom_legend_between_edge_and_content(
     canvas: Drawing,
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
     *,
     position: str,
     content_top: float,
@@ -1109,10 +1182,10 @@ def _position_single_top_bottom_legend_between_edge_and_content(
     if position not in {"top", "bottom"}:
         return
 
-    legend_height = float(legend_config.legend_height)
-    legend_local_top = -0.5 * float(legend_config.color_rect_size)
+    legend_height = float(legend_measurement.legend_height)
+    legend_local_top = -0.5 * float(legend_measurement.color_rect_size)
     canvas_config.legend_offset_x = (
-        float(canvas_config.total_width) - float(legend_config.legend_width)
+        float(canvas_config.total_width) - float(legend_measurement.legend_width)
     ) / 2.0
 
     if position == "top":
@@ -1152,27 +1225,50 @@ def _resolve_label_legend_collisions(
     labels: list[dict[str, Any]],
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
-    legend_config: LegendDrawingConfigurator,
+    legend_measurement: LegendMeasurement,
 ) -> None:
     """Resolve label-vs-legend collisions with ordered fallbacks."""
     if canvas_config.legend_position == "none":
         return
-    if float(legend_config.legend_width) <= 0 or float(legend_config.legend_height) <= 0:
+    if (
+        float(legend_measurement.legend_width) <= 0
+        or float(legend_measurement.legend_height) <= 0
+    ):
         return
 
     external_labels = [label for label in labels if not label.get("is_embedded")]
     if not external_labels:
         return
-    if not _labels_collide_with_legend(external_labels, total_length, canvas_config, legend_config):
+    if not _labels_collide_with_legend(
+        external_labels,
+        total_length,
+        canvas_config,
+        legend_measurement,
+    ):
         return
 
     is_radial = any(label.get("placement") == "radial" for label in external_labels)
     if not is_radial:
-        if _try_shift_labels_away_from_legend(external_labels, total_length, canvas_config, legend_config):
+        if _try_shift_labels_away_from_legend(
+            external_labels,
+            total_length,
+            canvas_config,
+            legend_measurement,
+        ):
             return
-    if _try_move_legend_away_from_labels(external_labels, total_length, canvas_config, legend_config):
+    if _try_move_legend_away_from_labels(
+        external_labels,
+        total_length,
+        canvas_config,
+        legend_measurement,
+    ):
         return
-    _expand_canvas_for_legend(external_labels, total_length, canvas_config, legend_config)
+    _expand_canvas_for_legend(
+        external_labels,
+        total_length,
+        canvas_config,
+        legend_measurement,
+    )
 
 
 def _slot_width_ratio_factor(
@@ -1934,7 +2030,7 @@ def add_record_on_circular_canvas(
     species: str | None,
     strain: str | None,
     plot_title: str | None,
-    legend_config,
+    legend_measurement: LegendMeasurement,
     legend_table,
     *,
     depth_config: DepthConfigurator | None = None,
@@ -2430,7 +2526,7 @@ def add_record_on_circular_canvas(
             precalculated_labels,
             len(gb_record.seq),
             canvas_config,
-            legend_config,
+            legend_measurement,
         )
         if profile.label_placement == "horizontal":
             assign_leader_start_points(
@@ -2572,12 +2668,17 @@ def add_record_on_circular_canvas(
             _position_single_top_bottom_legend_between_edge_and_content(
                 canvas,
                 canvas_config,
-                legend_config,
+                legend_measurement,
                 position=canvas_config.legend_position,
                 content_top=content_top,
                 content_bottom=content_bottom,
             )
-        canvas = add_legend_group_on_canvas(canvas, canvas_config, legend_config, legend_table)
+        canvas = add_legend_group_on_canvas(
+            canvas,
+            canvas_config,
+            legend_measurement,
+            legend_table,
+        )
     return canvas
 
 
@@ -2611,7 +2712,7 @@ def assemble_circular_diagram(
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
     annotation_record_index: int = 0,
     definition_record_count: int = 1,
-) -> Drawing:
+) -> tuple[Drawing, LegendMeasurement]:
     """
     Assembles a circular diagram for a GenBank record and returns the SVG canvas.
 
@@ -2626,7 +2727,8 @@ def assemble_circular_diagram(
     out_formats (list): List of formats to save the output (e.g., ['png', 'svg']).
 
     Returns:
-    Drawing: The assembled SVG canvas (not saved).
+    tuple[Drawing, LegendMeasurement]: The SVG canvas and its immutable legend
+    measurement.
     """
     # Configure and create canvas
 
@@ -2650,6 +2752,7 @@ def assemble_circular_diagram(
     )
 
     legend_table: dict = {}
+    legend_measurement = legend_config.measure_legend(legend_table, canvas_config)
     if canvas_config.legend_position != "none":
         color_map, default_color_map = preprocess_color_tables(
             feature_config.color_table, feature_config.default_colors
@@ -2710,8 +2813,11 @@ def assemble_circular_diagram(
             resolved_annotations,
             normalized_annotation_slots,
         )
-        legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
-        canvas_config.recalculate_canvas_dimensions(legend_config)
+        legend_measurement = legend_config.measure_legend(
+            legend_table,
+            canvas_config,
+        )
+        canvas_config.recalculate_canvas_dimensions(legend_measurement)
     canvas: Drawing = canvas_config.create_svg_canvas()
     canvas = add_record_on_circular_canvas(
         canvas,
@@ -2724,7 +2830,7 @@ def assemble_circular_diagram(
         species,
         strain,
         plot_title,
-        legend_config,
+        legend_measurement,
         legend_table,
         depth_config=depth_config,
         depth_df=depth_df,
@@ -2746,7 +2852,7 @@ def assemble_circular_diagram(
         annotation_record_index=annotation_record_index,
         definition_record_count=definition_record_count,
     )
-    return canvas
+    return canvas, legend_measurement
 
 
 __all__ = [

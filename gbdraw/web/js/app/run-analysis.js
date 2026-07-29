@@ -70,8 +70,9 @@ import {
   DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
   DEFAULT_LINEAR_BLAST_FILTERS,
   buildDefinitionLineStyleAssignments,
-  buildBlastFilterArgs,
   buildFeatureShapeAssignments,
+  buildModeBlastFilterArgs,
+  buildModeTrackVisibilityArgs,
   buildRecordSelectorArgs,
   buildReverseComplementArgs,
   isCliDefaultFeatureList,
@@ -2781,8 +2782,7 @@ json.dumps({
           }
           args.push('--label_placement', normalizedCircularLabelPlacement);
         }
-        if (form.suppress_gc) args.push('--no-gc');
-        if (form.suppress_skew) args.push('--no-skew');
+        args.push(...buildModeTrackVisibilityArgs('circular', form));
         if (form.multi_record_canvas) {
           if (!multiCanvasSupport.circular) {
             throw new Error(
@@ -3145,14 +3145,14 @@ json.dumps({
               DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.alignment_length,
               { integer: true }
             );
-            args.push(...buildBlastFilterArgs(
+            args.push(...buildModeBlastFilterArgs(
+              'circular',
               {
                 bitscore: adv.min_bitscore,
                 evalue: adv.evalue,
                 identity: adv.identity,
                 alignment_length: adv.alignment_length
-              },
-              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS
+              }
             ));
           };
 
@@ -3470,8 +3470,7 @@ json.dumps({
           adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
           adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
         } else {
-          if (form.show_gc) args.push('--gc');
-          if (form.show_skew) args.push('--skew');
+          args.push(...buildModeTrackVisibilityArgs('linear', form));
         }
         if (form.normalize_length) args.push('--normalize_length');
         if (form.legend !== 'right') args.push('-l', form.legend);
@@ -3556,7 +3555,7 @@ json.dumps({
         const orthogroupMembershipMode = losat.blastp.orthogroupMembershipMode;
         const orthogroupMemberMaxHits = Math.max(1, losat.blastp.orthogroupMemberMaxHits);
         const collinearSearchScope = losat.blastp.collinearSearchScope;
-        args.push(...buildBlastFilterArgs({
+        args.push(...buildModeBlastFilterArgs('linear', {
           bitscore: adv.min_bitscore,
           evalue: adv.evalue,
           identity: adv.identity,

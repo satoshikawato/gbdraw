@@ -20,6 +20,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
+    LegendMeasurement,
 )
 from ...render.groups.circular import (  # type: ignore[reportMissingImports]
     AxisGroup,
@@ -404,20 +405,29 @@ def add_labels_group_on_canvas(
     return canvas
 
 
-def add_legend_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasConfigurator, legend_config, legend_table) -> Drawing:
+def add_legend_group_on_canvas(
+    canvas: Drawing,
+    canvas_config: CircularCanvasConfigurator,
+    legend_measurement: LegendMeasurement,
+    legend_table,
+) -> Drawing:
     """
     Adds the legend group to the canvas.
 
     Parameters:
     canvas (Drawing): The SVG drawing canvas.
     canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    legend_config: Configuration for the legend.
+    legend_measurement: Immutable measurement for the legend.
     legend_table: The legend table data.
 
     Returns:
     Drawing: The updated SVG drawing with the legend group added.
     """
-    legend_group = LegendGroup(canvas_config, legend_config, legend_table).get_group()
+    legend_group = LegendGroup(
+        canvas_config,
+        legend_measurement,
+        legend_table,
+    ).get_group()
     legend_group = place_legend_on_canvas(legend_group, canvas_config)
     canvas.add(legend_group)
 

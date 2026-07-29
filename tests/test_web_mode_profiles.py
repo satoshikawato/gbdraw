@@ -55,6 +55,9 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(
         encoding="utf-8"
     )
+    cli_args_source = (WEB_ROOT / "js" / "app" / "cli-args.js").read_text(
+        encoding="utf-8"
+    )
 
     assert "createDefaultAdv = (profileMode = 'circular')" in state_source
     assert "...comparisonStateForMode(profileMode)" in state_source
@@ -76,9 +79,11 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
         "const appendConservationStyleArgs = (series) => {", 1
     )[1].split("const runCircularLosatConservation", 1)[0]
     assert "DEFAULT_LINEAR_BLAST_FILTERS" not in circular_normalization
-    assert circular_normalization.count(
-        "DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS"
-    ) >= 5
+    assert "DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS" in circular_normalization
+    assert "buildModeBlastFilterArgs(" in circular_normalization
+    assert "buildBlastFilterArgs(filters, comparisonFiltersForMode(mode))" in (
+        cli_args_source
+    )
     assert "usesManagedLinearAxisColor" in run_source
     assert "adv.axis_stroke_color && !usesManagedLinearAxisColor" in run_source
     assert "import { PAIRWISE_LEGEND_SELECTOR }" in run_source

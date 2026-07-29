@@ -14,10 +14,9 @@ from typing import Any
 
 from Bio import SeqIO
 
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.canvas import CircularCanvasConfigurator
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
-from gbdraw.config.modify import modify_config_dict
-from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_radial_plan_for_preset
 from gbdraw.diagrams.circular.radial_layout import RadialBand, resolve_circular_radial_layout
@@ -100,16 +99,17 @@ def capture_case(
     visibility: dict[str, bool],
 ) -> dict[str, Any]:
     record = SeqIO.read(str(input_path), "genbank")
-    config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=visibility["show_gc"],
-        show_skew=visibility["show_skew"],
-        show_depth=visibility["show_depth"],
-        track_type=preset,
-        strandedness=strandedness,
+    cfg = apply_config_overrides(
+        None,
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": visibility["show_gc"],
+            "canvas.show_skew": visibility["show_skew"],
+            "canvas.show_depth": visibility["show_depth"],
+            "canvas.circular.track_type": preset,
+            "canvas.strandedness": strandedness,
+        },
     )
-    cfg = GbdrawConfig.from_dict(config_dict)
     profile = CircularRenderProfile(cfg)
     canvas_config = CircularCanvasConfigurator(
         input_path.stem,
@@ -142,7 +142,6 @@ def capture_case(
     layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=radial_plan.slots,
         feature_dict=_feature_dict(record, cfg),
         show_features=True,

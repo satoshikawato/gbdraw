@@ -21,8 +21,10 @@ from gbdraw.api.diagram import (
 )
 from gbdraw.annotations import AnnotationSet, CoordinateSpan, RegionAnnotation
 from gbdraw.api.options import AnnotationOptions
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.canvas import LinearCanvasConfigurator
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
+from gbdraw.configurators import LegendDrawingConfigurator
 from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import LinearComparison
@@ -97,16 +99,13 @@ def _duplicate_feature_record(record_id: str = "duplicate-feature") -> SeqRecord
 
 def _linear_legend_svg() -> str:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
-    canvas_config = SimpleNamespace(legend_position="bottom", total_width=800)
-    legend_config = SimpleNamespace(
-        font_family="'Liberation Sans', 'Arial', sans-serif",
-        font_weight="normal",
-        font_size=12.0,
-        color_rect_size=16.0,
-        num_of_columns=1,
-        has_gradient=True,
-        total_feature_legend_width=0.0,
-        pairwise_legend_width=140.0,
+    cfg = GbdrawConfig.from_dict(config_dict)
+    profile = LinearRenderProfile(cfg)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=1_000,
+        profile=profile,
+        legend="bottom",
     )
     legend_table = {
         "CDS": {
@@ -124,13 +123,27 @@ def _linear_legend_svg() -> str:
             "min_value": 0,
         },
     }
+    configurator = LegendDrawingConfigurator(
+        color_table=None,
+        default_colors=None,
+        selected_features_set=[],
+        profile=profile,
+        gc_config=None,
+        skew_config=None,
+        feature_config=None,
+        canvas_config=canvas_config,
+    )
+    legend_measurement = configurator.measure_legend(
+        legend_table,
+        canvas_config,
+    )
     drawing = Drawing(debug=False)
     drawing.add(
         LegendGroup(
             canvas_config,
-            legend_config,
+            legend_measurement,
             legend_table,
-            cfg=GbdrawConfig.from_dict(config_dict),
+            cfg=cfg,
         ).get_group()
     )
     return drawing.tostring()

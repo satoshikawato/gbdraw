@@ -1737,7 +1737,8 @@ def test_circular_cli_depth_options_forward_to_api(
     slots = options.tracks.circular_track_slots
     by_id = {slot.id: slot for slot in slots}
     assert by_id["depth"].width.resolve(390.0) == pytest.approx(22.0)
-    cfg = GbdrawConfig.from_dict(options.config)
+    cfg = options.config
+    assert isinstance(cfg, GbdrawConfig)
     assert cfg.objects.depth.show_axis is False
     assert cfg.objects.depth.show_ticks is False
     assert not hasattr(cfg.objects.depth, "tick_interval")
@@ -1843,7 +1844,8 @@ def test_linear_cli_depth_options_forward_to_api(
     assert options.depth_track_files == [[str(depth_file)]]
     assert options.depth_window == 10
     assert options.depth_step == 5
-    cfg = GbdrawConfig.from_dict(options.config)
+    cfg = options.config
+    assert isinstance(cfg, GbdrawConfig)
     assert cfg.objects.depth.show_axis is False
     assert cfg.objects.depth.show_ticks is False
     assert not hasattr(cfg.objects.depth, "tick_interval")

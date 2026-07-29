@@ -86,6 +86,7 @@ from .tracks import (
 from .cli_utils.common import (
     _add_block_stroke_args,
     _add_depth_axis_args,
+    _add_depth_track_arg,
     _add_depth_track_label_color_args,
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
@@ -680,13 +681,7 @@ def _get_args(args) -> argparse.Namespace:
         show_skew_default=LINEAR_MODE_PROFILE.show_skew,
     )
     _add_gc_content_axis_args(parser)
-    parser.add_argument(
-        '--depth_track',
-        metavar='DEPTH',
-        help='Repeatable logical depth track. Provide one file for all records or one file per input record.',
-        type=str,
-        nargs='+',
-        action='append')
+    _add_depth_track_arg(parser, mode="linear")
     _add_depth_track_label_color_args(parser)
     parser.add_argument(
         '--depth_track_height',

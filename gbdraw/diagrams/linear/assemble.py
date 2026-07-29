@@ -45,6 +45,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     GcContentConfigurator,
     GcSkewConfigurator,
     LegendDrawingConfigurator,
+    LegendMeasurement,
 )
 from ...configurators.gc import _slot_skew_config
 from ...core.text import calculate_bbox_dimensions
@@ -1507,6 +1508,7 @@ def assemble_linear_diagram(
     configure_pairwise_identity_legend_from_comparisons(blast_config, comparisons)
     legend_table: dict = {}
     legend_group: LegendGroup | None = None
+    legend_measurement: LegendMeasurement | None = None
     required_legend_height = 0.0
     if canvas_config.legend_position != "none":
         color_map, default_color_map = preprocess_color_tables(
@@ -1557,21 +1559,24 @@ def assemble_linear_diagram(
             resolved_annotations,
             normalized_linear_track_slots,
         )
-        legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
+        legend_measurement = legend_config.measure_legend(
+            legend_table,
+            canvas_config,
+        )
         legend_group = LegendGroup(
             canvas_config,
-            legend_config,
+            legend_measurement,
             legend_table,
             cfg=cfg,
         )
-        required_legend_height = float(legend_group.legend_height)
+        required_legend_height = float(legend_measurement.legend_height)
         definition_reserve_width = (
             row_definition_width
             if split_row_definitions
             else (0.0 if multi_record_enabled else max_def_width)
         )
         canvas_config.recalculate_canvas_dimensions(
-            legend_group,
+            legend_measurement,
             definition_reserve_width,
         )
     else:
@@ -1963,9 +1968,10 @@ def assemble_linear_diagram(
             final_height += int(required_legend_height)
     canvas_config.total_height = max(final_height, required_legend_height)
 
-    if legend_group is not None:
+    if legend_measurement is not None:
         canvas_config.recalculate_canvas_dimensions(
-            legend_group, definition_reserve_width
+            legend_measurement,
+            definition_reserve_width,
         )
 
     alignment_shift_x = alignment_extents.horizontal_shift
@@ -2018,9 +2024,14 @@ def assemble_linear_diagram(
     vertical_vb_height = canvas_config.total_height
     horizontal_vb_width = canvas_config.total_width
     horizontal_vb_height = canvas_config.total_height
-    if legend_group is not None:
-        h_legend_width, h_legend_height = legend_group.get_horizontal_dimensions()
-        v_legend_width, v_legend_height = legend_group.get_vertical_dimensions()
+    if (
+        legend_measurement is not None
+        and legend_measurement.linear_layout is not None
+    ):
+        linear_legend_layout = legend_measurement.linear_layout
+        h_legend_width = linear_legend_layout.horizontal.width
+        h_legend_height = linear_legend_layout.horizontal.height
+        v_legend_width = linear_legend_layout.vertical.width
 
         if canvas_config.legend_position in ["top", "bottom"]:
             vertical_vb_width = canvas_config.total_width - h_legend_width + v_legend_width

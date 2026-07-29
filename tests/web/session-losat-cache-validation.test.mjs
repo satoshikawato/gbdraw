@@ -17,6 +17,7 @@ globalThis.alert = (message) => alerts.push(String(message));
 const { importSession, validateSessionLosatArtifacts } = await import(
   '../../gbdraw/web/js/services/config.js'
 );
+const { state } = await import('../../gbdraw/web/js/state.js');
 
 const rawEntry = (key) => ({
   schema: 2,
@@ -60,6 +61,32 @@ const session = (rawEntries, derivedEntries) => ({
     recordAnalyses: {},
     recordInstances: {}
   }
+});
+
+test('legacy standalone config import migrates retired values without a writer envelope', async () => {
+  alerts.length = 0;
+  const file = new Blob([JSON.stringify({
+    form: {
+      prefix: 'legacy-standalone',
+      linear_track_layout: 'tuckin'
+    },
+    adv: {
+      label_placement: 'on_feature',
+      multi_record_size_mode: 'sqrt'
+    }
+  })], { type: 'application/json' });
+  const event = { target: { files: [file], value: 'selected' } };
+
+  const result = await importSession(event);
+
+  assert.equal(result.status, 'legacy');
+  assert.equal(state.form.prefix, 'legacy-standalone');
+  assert.equal(state.form.linear_track_layout, 'below');
+  assert.equal(state.adv.label_placement, 'above_feature');
+  assert.equal(state.adv.multi_record_size_mode, 'auto');
+  assert.deepEqual(alerts, [
+    'Legacy configuration loaded. Save as a session to use the current format.'
+  ]);
 });
 
 for (const version of [36, 37, 38, 39]) {

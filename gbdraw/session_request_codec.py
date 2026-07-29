@@ -1731,7 +1731,10 @@ def _migrate_legacy_full_config(
         if scope is None:
             continue
         section = labels.get(section_name)
-        if not isinstance(section, dict):
+        if section is None:
+            section = {}
+            labels[section_name] = section
+        elif not isinstance(section, dict):
             raise CanonicalRequestDecodingError(
                 f"{path}.labels.{section_name} must be an object."
             )
@@ -2195,7 +2198,7 @@ def _encode_track_slot(
         if legacy_spacing.unit != "px":
             raise CanonicalRequestEncodingError(
                 "A legacy factor-based Circular spacing value can be replayed "
-                "but cannot be written to canonical schema 4. Set explicit "
+                "but cannot be written to the current canonical schema. Set explicit "
                 "inner_gap_px and outer_gap_px values before saving."
             )
         result["innerGapPx"] = (

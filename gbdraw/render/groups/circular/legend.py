@@ -7,48 +7,37 @@ from svgwrite.container import Group
 from svgwrite.gradients import LinearGradient
 from svgwrite.path import Path
 
-from ....legend.circular_layout import CircularGradientLegendLayout, build_circular_legend_layout
+from ....configurators.legend import LegendMeasurement
+from ....legend.circular_layout import CircularGradientLegendLayout
 from ....svg.text_path import generate_text_path
 from ....svg.ids import stable_svg_id
 
 
 class LegendGroup:
-    def __init__(self, canvas_config, legend_config, legend_table):
+    def __init__(
+        self,
+        canvas_config,
+        legend_measurement: LegendMeasurement,
+        legend_table,
+    ):
         self.legend_group = Group(id="legend")
         self.canvas_config = canvas_config
-        self.legend_config = legend_config
+        self.legend_measurement = legend_measurement
         self.legend_table = legend_table
-        self.font_family = self.legend_config.font_family
-        self.font_size = self.legend_config.font_size
+        self.font_family = self.legend_measurement.font_family
+        self.font_size = self.legend_measurement.font_size
         self.dpi = self.canvas_config.dpi
 
-        self.color_rect_size = self.legend_config.color_rect_size
+        self.color_rect_size = self.legend_measurement.color_rect_size
         self.num_of_lines = len(self.legend_table.keys())
-        canvas_width = float(
-            getattr(
-                self.canvas_config,
-                "total_width",
-                getattr(self.legend_config, "legend_width", 0.0),
-            )
-        )
-        configured_width = float(getattr(self.legend_config, "legend_width", 0.0) or 0.0)
-        configured_pairwise_width = float(
-            getattr(self.legend_config, "pairwise_legend_width", 0.0) or 0.0
-        )
-        self.layout = build_circular_legend_layout(
-            self.legend_table,
-            legend_position=str(getattr(self.canvas_config, "legend_position", "right")),
-            canvas_width=canvas_width,
-            font_family=self.font_family,
-            font_size=float(self.font_size),
-            dpi=int(self.dpi),
-            color_rect_size=float(self.color_rect_size),
-            legend_width=configured_width if configured_width > 0 else None,
-            pairwise_legend_width=(
-                configured_pairwise_width if configured_pairwise_width > 0 else None
-            ),
-        )
-        self.add_elements_to_group()
+        self.layout = self.legend_measurement.circular_layout
+        if self.layout is None:
+            if self.legend_table:
+                raise ValueError(
+                    "Circular legend rendering requires a measured circular layout."
+                )
+        else:
+            self.add_elements_to_group()
 
     def create_rectangle_path_for_legend(self) -> str:
         normalized_start: float = 0

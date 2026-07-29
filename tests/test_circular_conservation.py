@@ -18,6 +18,7 @@ from gbdraw.analysis.conservation import (
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_circular_diagram_from_record, build_circular_diagram
 from gbdraw.api.options import CircularDiagramOptions
+from gbdraw.configurators import LegendMeasurement
 from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -91,6 +92,42 @@ def _translate_xy_or_zero(transform: str | None) -> tuple[float, float]:
     if not transform:
         return 0.0, 0.0
     return _translate_xy(transform)
+
+
+def _circular_legend_measurement(
+    canvas_config: SimpleNamespace,
+    legend_config: SimpleNamespace,
+    legend_table: dict,
+) -> LegendMeasurement:
+    layout = build_circular_legend_layout(
+        legend_table,
+        legend_position=canvas_config.legend_position,
+        canvas_width=float(
+            getattr(canvas_config, "total_width", legend_config.legend_width)
+        ),
+        font_family=legend_config.font_family,
+        font_size=float(legend_config.font_size),
+        dpi=int(canvas_config.dpi),
+        color_rect_size=float(legend_config.color_rect_size),
+        legend_width=float(legend_config.legend_width),
+        pairwise_legend_width=float(legend_config.pairwise_legend_width),
+    )
+    return LegendMeasurement(
+        font_family=legend_config.font_family,
+        font_weight="normal",
+        font_size=float(legend_config.font_size),
+        color_rect_size=float(legend_config.color_rect_size),
+        dpi=int(canvas_config.dpi),
+        legend_width=layout.width,
+        legend_height=layout.height,
+        total_feature_legend_width=layout.feature_width,
+        pairwise_legend_width=layout.pairwise_legend_width,
+        num_of_lines=layout.num_lines,
+        num_of_columns=layout.num_columns,
+        num_of_items_per_line=layout.num_items_per_line,
+        has_gradient=layout.has_gradient,
+        circular_layout=layout,
+    )
 
 
 def _text_x_bounds(text: ET.Element, x_offset: float, dpi: int) -> tuple[float, float]:
@@ -392,7 +429,17 @@ def test_circular_multi_conservation_gradient_legend_uses_compact_linear_layout(
     }
 
     drawing = Drawing(debug=False)
-    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    drawing.add(
+        CircularLegendGroup(
+            canvas_config,
+            _circular_legend_measurement(
+                canvas_config,
+                legend_config,
+                legend_table,
+            ),
+            legend_table,
+        ).get_group()
+    )
     root = ET.fromstring(drawing.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
     legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
@@ -460,7 +507,17 @@ def test_circular_vertical_conservation_legend_centers_feature_and_gradient_bloc
     }
 
     drawing = Drawing(debug=False)
-    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    drawing.add(
+        CircularLegendGroup(
+            canvas_config,
+            _circular_legend_measurement(
+                canvas_config,
+                legend_config,
+                legend_table,
+            ),
+            legend_table,
+        ).get_group()
+    )
     root = ET.fromstring(drawing.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
 
@@ -531,7 +588,17 @@ def test_circular_bottom_conservation_legend_centers_feature_and_gradient_blocks
     }
 
     drawing = Drawing(debug=False)
-    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    drawing.add(
+        CircularLegendGroup(
+            canvas_config,
+            _circular_legend_measurement(
+                canvas_config,
+                legend_config,
+                legend_table,
+            ),
+            legend_table,
+        ).get_group()
+    )
     root = ET.fromstring(drawing.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
 
@@ -583,7 +650,17 @@ def test_circular_bottom_multi_conservation_layout_height_contains_gradient_bloc
     )
 
     drawing = Drawing(debug=False)
-    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    drawing.add(
+        CircularLegendGroup(
+            canvas_config,
+            _circular_legend_measurement(
+                canvas_config,
+                legend_config,
+                legend_table,
+            ),
+            legend_table,
+        ).get_group()
+    )
     root = ET.fromstring(drawing.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
 

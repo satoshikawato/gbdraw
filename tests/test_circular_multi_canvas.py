@@ -1017,7 +1017,7 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
     ]
     captured_gc_window_steps: dict[str, tuple[int, int]] = {}
 
-    def fake_assemble(**kwargs: Any) -> Drawing:
+    def fake_assemble(**kwargs: Any) -> tuple[Drawing, object]:
         gb_record = kwargs["gb_record"]
         canvas_config = kwargs["canvas_config"]
         gc_config = kwargs["gc_config"]
@@ -1027,12 +1027,14 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
         )
         width = float(canvas_config.total_width)
         height = float(canvas_config.total_height)
-        return Drawing(
+        drawing = Drawing(
             filename=f"{gb_record.id}.svg",
             size=(f"{width}px", f"{height}px"),
             viewBox=f"0 0 {width} {height}",
             debug=False,
         )
+        measurement = kwargs["legend_config"].measure_legend({}, canvas_config)
+        return drawing, measurement
 
     monkeypatch.setattr(diagram_api_module, "assemble_circular_diagram", fake_assemble)
 

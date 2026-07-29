@@ -28,6 +28,20 @@ _OUTPUT_FORMAT_HELP = (
     "(svg, interactive_svg, png, pdf, eps, ps; default: svg; "
     "png/pdf/eps/ps require CairoSVG)."
 )
+_TRACK_VISIBILITY_FLAG_SPECS = (
+    ("gc", "show_gc", "GC content"),
+    ("skew", "show_skew", "GC skew"),
+)
+_DEPTH_TRACK_HELP_BY_MODE = {
+    "circular": (
+        "Repeatable logical depth track. Provide one file for all records "
+        "or one file per record."
+    ),
+    "linear": (
+        "Repeatable logical depth track. Provide one file for all records "
+        "or one file per input record."
+    ),
+}
 
 
 def setup_logging() -> None:
@@ -112,32 +126,36 @@ def _add_gc_skew_toggle_args(
     show_gc_default: bool,
     show_skew_default: bool,
 ) -> None:
-    gc_group = parser.add_mutually_exclusive_group()
-    gc_group.add_argument(
-        '--gc',
-        dest='show_gc',
-        help='Show the GC content track.',
-        action='store_true')
-    gc_group.add_argument(
-        '--no-gc',
-        dest='show_gc',
-        help='Hide the GC content track.',
-        action='store_false')
-    skew_group = parser.add_mutually_exclusive_group()
-    skew_group.add_argument(
-        '--skew',
-        dest='show_skew',
-        help='Show the GC skew track.',
-        action='store_true')
-    skew_group.add_argument(
-        '--no-skew',
-        dest='show_skew',
-        help='Hide the GC skew track.',
-        action='store_false')
+    for option_name, destination, label in _TRACK_VISIBILITY_FLAG_SPECS:
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument(
+            f'--{option_name}',
+            dest=destination,
+            help=f'Show the {label} track.',
+            action='store_true')
+        group.add_argument(
+            f'--no-{option_name}',
+            dest=destination,
+            help=f'Hide the {label} track.',
+            action='store_false')
     parser.set_defaults(
         show_gc=bool(show_gc_default),
         show_skew=bool(show_skew_default),
     )
+
+
+def _add_depth_track_arg(
+    parser: argparse.ArgumentParser,
+    *,
+    mode: str,
+) -> None:
+    parser.add_argument(
+        '--depth_track',
+        metavar='DEPTH',
+        help=_DEPTH_TRACK_HELP_BY_MODE[mode],
+        type=str,
+        nargs='+',
+        action='append')
 
 
 def _add_depth_track_label_color_args(parser: argparse.ArgumentParser) -> None:

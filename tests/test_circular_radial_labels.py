@@ -83,10 +83,17 @@ def test_long_inner_label_reports_required_radius_growth_without_truncation() ->
     assert result.labels[0]["width_px"] == 500.0
 
 
-def test_circular_placement_config_default_override_and_validation() -> None:
+def test_mode_label_config_defaults_and_circular_placement_validation() -> None:
     old_config = load_default_config()
     old_config["labels"].pop("circular")
-    assert apply_config_overrides(old_config, None).labels.circular.placement == "horizontal"
+    old_config["labels"].pop("linear")
+    labels = apply_config_overrides(old_config, None).labels
+    assert (labels.circular.scope, labels.circular.placement) == ("none", "horizontal")
+    assert (labels.linear.scope, labels.linear.placement, labels.linear.rotation) == (
+        "none",
+        "auto",
+        0.0,
+    )
     assert apply_config_overrides(
         None,
         {"labels.circular.placement": "radial"},

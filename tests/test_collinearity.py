@@ -42,8 +42,13 @@ from gbdraw.analysis.protein_colinearity import (
     extract_cds_proteins,
     select_rbh_orthogroup_edges_from_directional_hits,
 )
+from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
+from gbdraw.configurators import (
+    LegendDrawingConfigurator,
+    LegendMeasurement,
+)
 from gbdraw.configurators.blast import BlastMatchConfigurator
 from gbdraw.core.color import interpolate_color
 from gbdraw.core.text import calculate_bbox_dimensions
@@ -53,6 +58,37 @@ from gbdraw.legend.table import prepare_legend_table
 from gbdraw.render.groups.linear.legend import LegendGroup
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 from gbdraw.exceptions import ValidationError
+
+
+def _linear_legend_measurement(
+    legend_position: str,
+    legend_table: dict[str, dict[str, object]],
+) -> tuple[LinearCanvasConfigurator, LegendMeasurement, GbdrawConfig]:
+    cfg = GbdrawConfig.from_dict(
+        load_config_toml("gbdraw.data", "config.toml")
+    )
+    profile = LinearRenderProfile(cfg)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=1_000,
+        profile=profile,
+        legend=legend_position,
+    )
+    configurator = LegendDrawingConfigurator(
+        color_table=None,
+        default_colors=None,
+        selected_features_set=[],
+        profile=profile,
+        gc_config=None,
+        skew_config=None,
+        feature_config=None,
+        canvas_config=canvas_config,
+    )
+    return (
+        canvas_config,
+        configurator.measure_legend(legend_table, canvas_config),
+        cfg,
+    )
 
 
 def _record(record_id: str, features: list[SeqFeature]) -> SeqRecord:
@@ -2866,18 +2902,6 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
 
 @pytest.mark.linear
 def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted() -> None:
-    config_dict = load_config_toml("gbdraw.data", "config.toml")
-    canvas_config = SimpleNamespace(legend_position="bottom", total_width=800)
-    legend_config = SimpleNamespace(
-        font_family="'Liberation Sans', 'Arial', sans-serif",
-        font_weight="normal",
-        font_size=16.0,
-        color_rect_size=20.0,
-        num_of_columns=1,
-        has_gradient=True,
-        total_feature_legend_width=0.0,
-        pairwise_legend_width=160.0,
-    )
     legend_table = {
         "Collinear": {
             "type": "gradient",
@@ -2897,12 +2921,16 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
         },
     }
 
+    canvas_config, legend_measurement, cfg = _linear_legend_measurement(
+        "bottom",
+        legend_table,
+    )
     drawing = Drawing(debug=False)
     legend_group = LegendGroup(
         canvas_config,
-        legend_config,
+        legend_measurement,
         legend_table,
-        cfg=GbdrawConfig.from_dict(config_dict),
+        cfg=cfg,
     )
     drawing.add(legend_group.get_group())
     svg_text = drawing.tostring()
@@ -2923,25 +2951,18 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
     )
     bar_x, _ = _translate_xy(collinear_bar.get("transform"))
     label_width, _ = calculate_bbox_dimensions(
-        "Collinear", legend_config.font_family, legend_config.font_size, legend_group.dpi
+        "Collinear",
+        legend_measurement.font_family,
+        legend_measurement.font_size,
+        legend_group.dpi,
     )
-    assert bar_x == pytest.approx(label_width + 0.2 * legend_config.color_rect_size)
+    assert bar_x == pytest.approx(
+        label_width + 0.2 * legend_measurement.color_rect_size
+    )
 
 
 @pytest.mark.linear
 def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> None:
-    config_dict = load_config_toml("gbdraw.data", "config.toml")
-    canvas_config = SimpleNamespace(legend_position="right", total_width=800)
-    legend_config = SimpleNamespace(
-        font_family="'Liberation Sans', 'Arial', sans-serif",
-        font_weight="normal",
-        font_size=10.0,
-        color_rect_size=12.0,
-        num_of_columns=1,
-        has_gradient=True,
-        total_feature_legend_width=0.0,
-        pairwise_legend_width=120.0,
-    )
     feature_key = "tyrosine recombinase"
     gradient_key = "Pairwise match identity"
     legend_table = {
@@ -2961,12 +2982,16 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
         },
     }
 
+    canvas_config, legend_measurement, cfg = _linear_legend_measurement(
+        "right",
+        legend_table,
+    )
     drawing = Drawing(debug=False)
     legend_group = LegendGroup(
         canvas_config,
-        legend_config,
+        legend_measurement,
         legend_table,
-        cfg=GbdrawConfig.from_dict(config_dict),
+        cfg=cfg,
     )
     drawing.add(legend_group.get_group())
     root = ET.fromstring(drawing.tostring())
@@ -3004,11 +3029,17 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
     title_x, _ = _translate_xy(title.get("transform"))
 
     text_width, _ = calculate_bbox_dimensions(
-        feature_key, legend_config.font_family, legend_config.font_size, legend_group.dpi
+        feature_key,
+        legend_measurement.font_family,
+        legend_measurement.font_size,
+        legend_group.dpi,
     )
-    text_x_offset = (22 / 14) * legend_config.color_rect_size
+    text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width
-    pairwise_alignment_width = legend_config.pairwise_legend_width
+    assert legend_measurement.linear_layout is not None
+    gradient_layout = legend_measurement.linear_layout.vertical.gradient
+    assert gradient_layout is not None
+    pairwise_alignment_width = gradient_layout.width
 
     assert feature_width > pairwise_alignment_width
     feature_left = feature_group_x + feature_rect_x
@@ -3022,18 +3053,6 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
 
 @pytest.mark.linear
 def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> None:
-    config_dict = load_config_toml("gbdraw.data", "config.toml")
-    canvas_config = SimpleNamespace(legend_position="right", total_width=800)
-    legend_config = SimpleNamespace(
-        font_family="'Liberation Sans', 'Arial', sans-serif",
-        font_weight="normal",
-        font_size=10.0,
-        color_rect_size=12.0,
-        num_of_columns=1,
-        has_gradient=True,
-        total_feature_legend_width=0.0,
-        pairwise_legend_width=220.0,
-    )
     feature_key = "CDS"
     gradient_key = "Pairwise match identity"
     legend_table = {
@@ -3053,12 +3072,16 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
         },
     }
 
+    canvas_config, legend_measurement, cfg = _linear_legend_measurement(
+        "right",
+        legend_table,
+    )
     drawing = Drawing(debug=False)
     legend_group = LegendGroup(
         canvas_config,
-        legend_config,
+        legend_measurement,
         legend_table,
-        cfg=GbdrawConfig.from_dict(config_dict),
+        cfg=cfg,
     )
     drawing.add(legend_group.get_group())
     root = ET.fromstring(drawing.tostring())
@@ -3081,11 +3104,17 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
     pairwise_group_x, _ = _translate_xy_or_zero(pairwise_legend.get("transform"))
 
     text_width, _ = calculate_bbox_dimensions(
-        feature_key, legend_config.font_family, legend_config.font_size, legend_group.dpi
+        feature_key,
+        legend_measurement.font_family,
+        legend_measurement.font_size,
+        legend_group.dpi,
     )
-    text_x_offset = (22 / 14) * legend_config.color_rect_size
+    text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width
-    pairwise_alignment_width = legend_config.pairwise_legend_width
+    assert legend_measurement.linear_layout is not None
+    gradient_layout = legend_measurement.linear_layout.vertical.gradient
+    assert gradient_layout is not None
+    pairwise_alignment_width = gradient_layout.width
     expected_feature_offset = (pairwise_alignment_width - feature_width) / 2
     title_x, _ = _translate_xy(title.get("transform"))
 

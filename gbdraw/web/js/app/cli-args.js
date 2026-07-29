@@ -4,7 +4,8 @@ import {
 } from '../utils/feature-rendering.js';
 import {
   MODE_DEFAULT_FEATURE_TYPES,
-  comparisonFiltersForMode
+  comparisonFiltersForMode,
+  trackDefaultsForMode
 } from '../mode-profiles.js';
 
 const CLI_DEFAULT_FEATURES = MODE_DEFAULT_FEATURE_TYPES;
@@ -148,6 +149,29 @@ export const buildBlastFilterArgs = (filters, defaults = DEFAULT_LINEAR_BLAST_FI
     args.push('--alignment_length', normalizedFilters.alignment_length);
   }
   return args;
+};
+
+export const buildModeBlastFilterArgs = (mode, filters) => (
+  buildBlastFilterArgs(filters, comparisonFiltersForMode(mode))
+);
+
+export const buildModeTrackVisibilityArgs = (mode, form = {}) => {
+  const defaults = trackDefaultsForMode(mode);
+  const normalizedMode = String(mode || '').trim().toLowerCase();
+  const visibility = normalizedMode === 'circular'
+    ? {
+        gc: !Boolean(form.suppress_gc),
+        skew: !Boolean(form.suppress_skew)
+      }
+    : {
+        gc: Boolean(form.show_gc),
+        skew: Boolean(form.show_skew)
+      };
+
+  return ['gc', 'skew'].flatMap((track) => {
+    if (visibility[track] === defaults[track]) return [];
+    return [visibility[track] ? `--${track}` : `--no-${track}`];
+  });
 };
 
 export const buildRecordSelectorArgs = (selectors) => buildTrimmedRepeatedOptionArgs(

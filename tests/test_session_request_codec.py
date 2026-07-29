@@ -458,7 +458,7 @@ def test_supported_schemas_ignore_wrong_mode_shared_defaults(
         ("linear", "conservationReference", "query"),
     ],
 )
-def test_schema4_rejects_nondefault_wrong_mode_shared_options(
+def test_current_schema_rejects_nondefault_wrong_mode_shared_options(
     tmp_path: Path,
     mode: str,
     field_name: str,
@@ -493,7 +493,7 @@ def test_schema4_rejects_nondefault_wrong_mode_shared_options(
         ("linear", "centerReservedRadius", 10, "Circular track values"),
     ],
 )
-def test_schema4_rejects_populated_wrong_mode_track_fields(
+def test_current_schema_rejects_populated_wrong_mode_track_fields(
     tmp_path: Path,
     mode: str,
     field_name: str,
@@ -819,7 +819,7 @@ def test_schema3_nested_output_prefix_is_required_but_ignored(
         )
 
 
-def test_schema4_rejects_legacy_nested_output_prefix(tmp_path: Path) -> None:
+def test_current_schema_rejects_legacy_nested_output_prefix(tmp_path: Path) -> None:
     source = _source_file(tmp_path / "record.gbk")
     encoded = encode_canonical_request(
         CircularDiagramRequest(
@@ -948,7 +948,7 @@ def test_current_circular_writer_uses_only_canonical_layout_fields() -> None:
     assert {"spacing", "strict", "compress", "reserve"}.isdisjoint(slot)
 
 
-def test_schema4_rejects_private_circular_track_params(tmp_path: Path) -> None:
+def test_current_schema_rejects_private_circular_track_params(tmp_path: Path) -> None:
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
     encoded = encode_canonical_request(
         CircularDiagramRequest(
@@ -975,13 +975,13 @@ def test_schema4_rejects_private_circular_track_params(tmp_path: Path) -> None:
             payload,
             resource_paths=_materialize_resources(
                 encoded,
-                tmp_path / "schema4-private-slot",
+                tmp_path / "current-schema-private-slot",
             ),
             output_directory=tmp_path / "output",
         )
 
 
-def test_legacy_factor_spacing_replays_but_cannot_leak_into_schema4(
+def test_legacy_factor_spacing_replays_but_cannot_leak_into_current_schema(
     tmp_path: Path,
 ) -> None:
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
@@ -1063,7 +1063,7 @@ def test_schema3_migrates_removed_feature_table_field(
     assert "featureVisibilityTable" in latest
 
 
-def test_schema4_rejects_removed_feature_table_field(
+def test_current_schema_rejects_removed_feature_table_field(
     tmp_path: Path,
 ) -> None:
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
@@ -1399,7 +1399,7 @@ def test_sparse_supported_schemas_retain_historical_defaults(
     "request_type",
     [CircularDiagramRequest, LinearDiagramRequest],
 )
-def test_schema4_sparse_options_use_current_mode_defaults(
+def test_current_schema_sparse_options_use_current_mode_defaults(
     tmp_path: Path,
     request_type,
 ) -> None:
@@ -1692,7 +1692,7 @@ def test_legacy_schemas_migrate_retired_config_overrides(
         ({"linear_track_layout": "tuckin"}, "linear_track_layout"),
     ],
 )
-def test_schema4_rejects_retired_config_overrides(
+def test_current_schema_rejects_retired_config_overrides(
     tmp_path: Path,
     overrides: dict[str, object],
     retired: str,
@@ -1726,7 +1726,7 @@ def test_schema4_rejects_retired_config_overrides(
         ({"linear_track_layout": "tuckin"}, "linear_track_layout"),
     ],
 )
-def test_schema4_writer_rejects_retired_config_overrides(
+def test_current_schema_writer_rejects_retired_config_overrides(
     overrides: dict[str, object],
     retired: str,
 ) -> None:

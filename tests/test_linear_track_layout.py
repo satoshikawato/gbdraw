@@ -5,7 +5,6 @@ from functools import lru_cache
 import re
 import subprocess
 import sys
-from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -27,7 +26,7 @@ from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
-from gbdraw.configurators import FeatureDrawingConfigurator
+from gbdraw.configurators import FeatureDrawingConfigurator, LegendMeasurement
 from gbdraw.diagrams.linear.precalc import _precalculate_label_dimensions
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import load_default_colors
@@ -206,12 +205,23 @@ def test_linear_side_legend_expands_canvas_with_vertical_padding() -> None:
         legend="right",
     )
     legend_height = float(canvas_config.total_height) + 100.0
-    legend_group = SimpleNamespace(
+    legend_measurement = LegendMeasurement(
+        font_family="sans-serif",
+        font_weight="normal",
+        font_size=10.0,
+        color_rect_size=12.0,
+        dpi=96,
         legend_height=legend_height,
         legend_width=120.0,
+        total_feature_legend_width=0.0,
+        pairwise_legend_width=0.0,
+        num_of_lines=0,
+        num_of_columns=0,
+        num_of_items_per_line=0,
+        has_gradient=False,
     )
 
-    canvas_config.recalculate_canvas_dimensions(legend_group, 0.0)
+    canvas_config.recalculate_canvas_dimensions(legend_measurement, 0.0)
 
     assert canvas_config.total_height >= legend_height + 2.0 * canvas_config.vertical_padding
     assert canvas_config.legend_offset_y >= canvas_config.vertical_padding
