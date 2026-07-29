@@ -135,7 +135,7 @@ Current sessions identify each CDS from its complete location, strand, and stabl
 
 Changing an upload filename, file modification time, resource name, display alias, or saving and loading the same biological inputs does not invalidate a compatible raw protein-search result. A display-only change can rebuild derived display metadata without rerunning LOSAT. Changing an amino-acid sequence, the selected protein set, record-instance binding, feature location or strand, or a search argument does invalidate the affected result. Query/subject direction is significant.
 
-Session versions 36 and 37 keep current protein raw results in cache schema 4,
+Session versions 36–38 keep current protein raw results in cache schema 4,
 derived protein comparisons in schema 3, and the protein identity manifest in
 schema 2. Nucleotide LOSAT results remain schema 2, so protein and nucleotide
 entries with different schemas may appear in one valid session.

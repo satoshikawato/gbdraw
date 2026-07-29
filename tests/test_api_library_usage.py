@@ -81,7 +81,6 @@ def test_documented_gff3_fasta_fixture_preserves_records_and_cds() -> None:
     records = load_gff_fasta(
         [str(fixture_dir / "lambda_two_contigs.gff3")],
         [str(fixture_dir / "lambda_two_contigs.fna")],
-        mode="linear",
         selected_features_set=["CDS", "gene"],
     )
 
@@ -836,7 +835,7 @@ def test_api_linear_minimal(examples_dir: Path, temp_output_dir: Path) -> None:
         str(examples_dir / "MjeNMV.gb"),
         str(examples_dir / "MelaMJNV.gb"),
     ]
-    records = load_gbks(gbk_files, mode="linear", load_comparison=False)
+    records = load_gbks(gbk_files)
 
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     default_colors = load_default_colors("", palette="default", load_comparison=False)

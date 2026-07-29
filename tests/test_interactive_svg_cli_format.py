@@ -449,7 +449,13 @@ def test_linear_cli_interactive_context_includes_orthogroup_payload() -> None:
         source_record_index_by_orthogroup_id={},
     )
 
-    context = linear_cli._build_interactive_svg_context([record], {"CDS"}, orthogroups)
+    context = build_interactive_svg_context(
+        [record],
+        selected_features_set={"CDS"},
+        orthogroups=orthogroups,
+        linear_rendered_feature_ids=True,
+        mode="linear",
+    )
 
     assert context.orthogroups[0]["id"] == "og_1"
     assert context.orthogroups[0]["members"][0]["start"] == 0
@@ -516,7 +522,13 @@ def test_linear_cli_interactive_context_orthogroup_members_use_absolute_region_c
         source_record_index_by_orthogroup_id={},
     )
 
-    context = linear_cli._build_interactive_svg_context([record], {"CDS"}, orthogroups)
+    context = build_interactive_svg_context(
+        [record],
+        selected_features_set={"CDS"},
+        orthogroups=orthogroups,
+        linear_rendered_feature_ids=True,
+        mode="linear",
+    )
 
     member_payload = context.orthogroups[0]["members"][0]
     assert member_payload["start"] == 9999

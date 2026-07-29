@@ -267,32 +267,39 @@ package-level `gbdraw.render` aliases have been removed; use `Diagram.save`,
 Typed Circular requests accept `CircularDiagramOptions`, with
 `CircularTrackOptions` and `CircularOutputOptions` for mode-specific nested
 settings. Typed Linear requests use `LinearDiagramOptions`,
-`LinearTrackOptions`, and `LinearOutputOptions`. `CircularRequestPlan` and
-`LinearRequestPlan` normalize records, layout, and builder selection. The root
-`draw_circular` and `draw_linear` facade routes through these planners while
-remaining output-neutral.
+`LinearTrackOptions`, and `LinearOutputOptions`. `CircularDiagramRequest`
+explicitly selects `single` or `grid`; a one-record grid is valid.
+`CircularBatchRequest` selects `batch` and carries one
+`RenderOutputRequest` per record, without grid placement.
+Optional Circular comparison FASTA paths belong to
+`CircularDiagramOptions.conservation_fasta_files`; this keeps interactive
+comparison-span metadata inside the same typed request and session resource
+contract as the corresponding BLAST inputs.
+`CircularRequestPlan`, `CircularBatchRequestPlan`, and `LinearRequestPlan`
+normalize records, layout, and builder selection. `CircularBatchRenderResult`
+returns the corresponding per-record results. The root facade, fresh CLI and
+Web generation, current canonical replay, and legacy internal replay all render
+through these planners while assembly remains output-neutral.
 
 `RenderOutputRequest.output_prefix` preserves an explicit prefix exactly, including
 dots: `sample.v1` produces `sample.v1.svg`. In the Circular CLI, duplicate implicit
-record IDs in a separate-diagram batch receive deterministic suffixes. Saving a
-session for that batch is rejected before diagram output until the typed request
-model supports explicit batch grouping; use `--multi_record_canvas` or save each
-record separately.
+record IDs in a separate-diagram batch receive deterministic suffixes. A batch
+session preserves its explicit `batch` grouping and resolved output array.
 
-Canonical request schema 4 never writes the private
-`__gbdraw_legacy_spacing` migration transport. Schema 1–3 and old-session readers
-can replay factor-based Circular spacing, but cannot re-save it losslessly as schema
-4. Replace it with explicit `inner_gap_px` and `outer_gap_px` values before saving a
-current session. See the
+Canonical request schemas 4 and 5 never write the private
+`__gbdraw_legacy_spacing` migration transport. Schema 1–3 and old-session
+readers can replay factor-based Circular spacing, but the current schema 5
+writer cannot re-save it losslessly. Replace it with explicit `inner_gap_px`
+and `outer_gap_px` values before saving a current session. See the
 [session compatibility matrix](./PYTHON_SESSION_COMPATIBILITY_MATRIX.md) for the
 reader boundary.
 
-Current canonical session replay reaches the same planners through
-`render_request`. The remaining migration covers fresh CLI/Web generation and
-legacy internal replay. Explicit grid/batch request forms, persisted grouping
-and its schema bump, and mode-neutral loading remain future work. Active and
-public runtime collinearity configuration uses
-`LosslessCollinearityParameters`; supported canonical request schemas 1–4
+Canonical request schema 5 persists explicit `single`, `grid`, or `batch`
+grouping. Its output is one object for a single diagram or grid and an array
+for Circular batch, with one entry per record. Record loading is mode-neutral;
+planners own topology warnings and mode, comparison, and cardinality policy.
+Active and public runtime collinearity configuration uses
+`LosslessCollinearityParameters`; supported canonical request schemas 1–5
 privately migrate legacy `standard` parameter payloads while preserving their
 effective fields.
 

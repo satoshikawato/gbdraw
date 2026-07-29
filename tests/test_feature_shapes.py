@@ -3,6 +3,7 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 import re
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -13,6 +14,7 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
+import gbdraw.api.request_render as request_render_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record, assemble_linear_diagram_from_records
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.features.colors import preprocess_color_tables
@@ -262,7 +264,7 @@ def test_circular_feature_paths_change_with_directionality() -> None:
 
 
 def test_hmmtdna_origin_spanning_d_loop_arrow_renders_as_single_block() -> None:
-    record = load_gbks([str(Path("tests/test_inputs/HmmtDNA.gbk"))], "circular")[0]
+    record = load_gbks([str(Path("tests/test_inputs/HmmtDNA.gbk"))])[0]
     d_loop_feature = next(feature for feature in record.features if feature.type == "D-loop")
     d_loop_id = compute_feature_hash(d_loop_feature, record_id=record.id)
 
@@ -428,13 +430,19 @@ def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tm
     monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
 
     def fake_assemble(*_args, **kwargs):
-        captured["feature_shapes"] = kwargs.get("feature_shapes")
+        captured["feature_shapes"] = kwargs["options"].feature_shapes
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     circular_cli_module.circular_main(
         [
@@ -463,13 +471,15 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
     monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
 
-    def fake_assemble(*_args, **kwargs):
-        captured["feature_shapes"] = kwargs.get("feature_shapes")
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render_request(request):
+        captured["canonical_request"] = request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
@@ -485,7 +495,7 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
             str(tmp_path / "out"),
         ]
     )
-    assert captured["feature_shapes"] == {
+    assert captured["canonical_request"].options.feature_shapes == {
         "CDS": "rectangle",
         "repeat_region": "underlay",
     }

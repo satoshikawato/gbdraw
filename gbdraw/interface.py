@@ -536,7 +536,7 @@ def read_genbank(
 ) -> list[SeqRecord]:
     """Read all records from one or more GenBank files."""
 
-    return _load_gbks(_paths(paths), mode="linear")
+    return _load_gbks(_paths(paths))
 
 
 def read_gff(
@@ -554,7 +554,6 @@ def read_gff(
     return _load_gff_fasta(
         normalized_gff,
         normalized_fasta,
-        mode="linear",
         selected_features_set=features,
     )
 

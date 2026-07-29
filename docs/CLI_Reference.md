@@ -34,9 +34,10 @@ active alias. `--gc_content_tick_interval` also remains an active alias for
 
 The private `__gbdraw_legacy_spacing` key is not a current slot parameter. It is
 used only inside canonical request schema 1–3 and old-session readers and is
-never written to schema 4. Legacy factor-based spacing can be replayed but
-cannot be re-saved losslessly as schema 4; replace it with explicit
-`inner_gap_px` and `outer_gap_px` values before saving a current session.
+never written to schema 4 or 5. Legacy factor-based spacing can be replayed but
+cannot be re-saved losslessly by the current schema 5 writer; replace it with
+explicit `inner_gap_px` and `outer_gap_px` values before saving a current
+session.
 
 ## Main command
 
@@ -168,13 +169,15 @@ Generate genome diagrams in PNG/PDF/SVG/PS/EPS. By default, diagrams for
 multiple entries are saved separately. Use --multi_record_canvas to place
 multiple records on one grid canvas.
 
-For separate output, `-o sample.v1` preserves the dot and produces
-`sample.v1_1.svg`, `sample.v1_2.svg`, and so on. Without `-o`, duplicate
-record IDs receive the first available deterministic `_2`, `_3`, ... suffix
-instead of overwriting an earlier result. A session cannot currently represent
-this separate-diagram batch: `--save_session` or `--session_output` is rejected
-before any diagram is written. Use `--multi_record_canvas` or save each record
-separately when a session is required.
+For separate output, one record with `-o sample.v1` produces
+`sample.v1.svg`; multiple records produce `sample.v1_1.svg`,
+`sample.v1_2.svg`, and so on. Without `-o`, each record ID is used, and a
+duplicate receives the first available deterministic `_2`, `_3`, ... suffix
+instead of overwriting an earlier result. For a grid,
+`--multi_record_canvas` uses the first record ID by default and preserves an
+explicit prefix, including dots, unchanged. `--save_session` and
+`--session_output` preserve a separate-diagram batch as explicit `batch`
+grouping with one resolved output entry per record.
 
 options:
   -h, --help            show this help message and exit

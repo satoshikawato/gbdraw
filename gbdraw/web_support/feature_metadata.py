@@ -490,7 +490,6 @@ def extract_features_from_gff_fasta_payload(
     gff_path: str | Path,
     fasta_path: str | Path,
     *,
-    mode: str = "linear",
     region_spec: object | None = None,
     record_selector: object | None = None,
     reverse_flag: object | None = None,
@@ -503,16 +502,11 @@ def extract_features_from_gff_fasta_payload(
 
     from gbdraw.io.genome import load_gff_fasta
 
-    normalized_mode = str(mode or "linear").strip().lower()
-    if normalized_mode not in {"circular", "linear"}:
-        raise ValueError(f"Unsupported GFF3 feature extraction mode: {mode}")
-
     selector = _normalize_record_selector(record_selector)
     reverse = str(reverse_flag).strip().lower() in {"1", "true", "yes", "y", "on"}
     records = load_gff_fasta(
         [str(gff_path)],
         [str(fasta_path)],
-        mode=normalized_mode,
         keep_all_features=True,
         record_selectors=[selector] if selector else None,
         reverse_flags=[reverse],
@@ -565,7 +559,6 @@ def extract_features_from_genbank_json(
 def extract_features_from_gff_fasta_json(
     gff_path: str | Path,
     fasta_path: str | Path,
-    mode: str = "linear",
     region_spec: object | None = None,
     record_selector: object | None = None,
     reverse_flag: object | None = None,
@@ -577,7 +570,6 @@ def extract_features_from_gff_fasta_json(
         payload = extract_features_from_gff_fasta_payload(
             gff_path,
             fasta_path,
-            mode=mode,
             region_spec=region_spec,
             record_selector=record_selector,
             reverse_flag=reverse_flag,

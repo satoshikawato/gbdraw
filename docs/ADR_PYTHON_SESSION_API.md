@@ -1,6 +1,6 @@
 # ADR: Version 31 session documents in the public Python API
 
-- Status: accepted; version 31 bridge implemented
+- Status: accepted; version 31 bridge and version 38 grouping amendment implemented
 - Date: 2026-07-14
 - Gate review: 2026-07-15、version 31 `renderRequest` round-trip により公開 gate を開放
 - Related plan: `PYTHON_API_IMPROVEMENT_PLAN.md`, Phase 4
@@ -136,8 +136,26 @@ sole owner of destination, filename prefix, formats, and overwrite behavior.
 Assembly remains output-neutral; its output options retain only diagram layout
 choices such as legend and plot-title position.
 
-Python and Web writers emit session version 37 with schema 4. Readers continue to
-accept versions 27–33 and 36. Schema 1–3 readers accept and ignore the obsolete
-nested prefix, while schema 4 rejects it. Version 36 and 37 share the same
-current protein-cache and manifest validation rules. This is a structural writer
-change, not permission to remove any supported persisted-data reader.
+Version 37 Python and Web writers emitted schema 4. Schema 1–3 readers accept
+and ignore the obsolete nested prefix, while schema 4 rejects it. Version 36
+and 37 share the same protein-cache and manifest validation rules. This was a
+structural writer change, not permission to remove any supported
+persisted-data reader.
+
+## Version 38 Circular grouping amendment
+
+Canonical request schema 5 makes render cardinality explicit.
+`CircularDiagramRequest` uses `single` or `grid`; a one-record grid is valid.
+`CircularBatchRequest` uses `batch`, has no grid placement, and carries one
+`RenderOutputRequest` per record. Schema 5 stores one output object for
+Circular single/grid and Linear requests, and an output array for Circular
+batch requests.
+
+Python and Web writers emit session version 38 with schema 5. Readers accept
+versions 27–33 and 36–38 and canonical request schemas 1–5; public typed
+conversion accepts versions 31–33 and 36–38. For schema 1–4 Circular requests,
+the reader infers grouping from the stored layout and record count. Fresh CLI
+and Web generation, current canonical replay, and legacy internal replay all
+render through the typed request planners. Record loading is mode-neutral;
+planners own Circular topology warnings and mode, comparison, and cardinality
+policy.

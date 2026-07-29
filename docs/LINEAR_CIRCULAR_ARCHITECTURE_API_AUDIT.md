@@ -10,21 +10,24 @@
 
 ## Implementation status
 
-This audit describes the 2026-07-28 baseline. Phase 0 and the Phase 1 core are
-now implemented. Typed requests use `CircularDiagramOptions` and
+This audit describes the 2026-07-28 baseline. Phase 0 and Phase 1 are now
+implemented. Typed requests use `CircularDiagramOptions` and
 `LinearDiagramOptions`, with mode-specific `CircularTrackOptions`,
 `LinearTrackOptions`, `CircularOutputOptions`, and `LinearOutputOptions`.
-`CircularRequestPlan` and `LinearRequestPlan` own normalized builder selection,
-the root drawing facade routes through those planners, and a one-record
-`CircularLayout` produces a valid 1×1 grid.
+`CircularDiagramRequest` explicitly represents `single` and `grid`, while
+`CircularBatchRequest` represents `batch` with one output per record.
+`CircularRequestPlan`, `CircularBatchRequestPlan`, and `LinearRequestPlan` own
+normalized builder selection; root API, fresh CLI/Web generation, current
+canonical replay, and legacy internal replay reach those planners. A one-record
+grid is valid.
 
-Current canonical session replay reaches the planners through `render_request`.
-Fresh CLI/Web generation and legacy internal replay remain incomplete. Explicit
-Circular grid/batch request forms and persisted grouping, the corresponding
-schema bump, and mode-neutral loading remain future work. Active and public
-runtime collinearity configuration now uses `LosslessCollinearityParameters`;
-supported canonical request schemas 1–4 privately migrate legacy `standard`
-parameter payloads while preserving their effective fields.
+Session version 38 and canonical request schema 5 persist the explicit Circular
+grouping and batch output array. Record loading is mode-neutral, with topology
+warnings and mode/comparison cardinality policy applied by planners. Active and
+public runtime collinearity configuration uses
+`LosslessCollinearityParameters`; supported canonical request schemas 1–5
+privately migrate legacy `standard` parameter payloads while preserving their
+effective fields.
 
 ## Executive summary
 
@@ -503,9 +506,8 @@ record-name behavior for both modes
 [`gbdraw/circular.py`](../gbdraw/circular.py#L224-L228),
 [`gbdraw/linear.py`](../gbdraw/linear.py#L761-L766)).
 
-Separate neutral record loading from mode-specific input validation. Keep output
-policy mode-specific, but represent it explicitly in the mode default profile and
-show mode-aware help.
+Implementation outcome: record loading is neutral, planners apply mode-specific
+input policy, and adapters resolve output policy into typed output requests.
 
 ## I2 — P2: Circular collection cardinality differs by surface
 
@@ -525,11 +527,10 @@ At the audited baseline, the root API rejected a `CircularLayout` for one record
 while the typed request accepted it. The Phase 1 core resolved that mismatch:
 both paths now accept a one-record layout and produce a 1×1 grid.
 
-Add an explicit Circular grouping policy such as `separate` or `grid` to the
-canonical request layer. A `CircularBatchRequest` can preserve the CLI's established
-separate-file behavior, while the root facade can continue to default to `grid`
-during a compatibility period. Test the selected policy rather than inferring it
-from the entry point or record count.
+Implementation outcome: `CircularDiagramRequest` explicitly stores `single` or
+`grid`, while `CircularBatchRequest` stores `batch` and preserves the CLI's
+established separate-file behavior with one output per record. Schema 5 persists
+the selected grouping instead of inferring it from the entry point.
 
 ## U1 — P3: compatibility CLI surface needs a controlled reduction
 
@@ -577,16 +578,16 @@ not own one universal layout solver or renderer.
 ```text
 Declarative mode defaults + typed configuration
                        |
-          +------------+------------+
-          |                         |
- CircularDiagramRequest     LinearDiagramRequest
-          |                         |
-   CircularPlanner            LinearPlanner
-          |                         |
-  CircularLayoutPlan         LinearLayoutPlan
-          |                         |
-  Circular renderers          Linear renderers
-          +------------+------------+
+          +------------+------------+------------+
+          |                         |            |
+ CircularDiagramRequest  CircularBatchRequest  LinearDiagramRequest
+          |                         |            |
+  CircularRequestPlan  CircularBatchRequestPlan  LinearRequestPlan
+          |                         |            |
+  Prepared request       Prepared per-record items  Prepared request
+          |                         |            |
+  Circular renderers       Circular renderers   Linear renderers
+          +------------+------------+------------+
                        |
                  Drawing/output
 ```
@@ -631,11 +632,11 @@ refactor.
    compatibility APIs.
 4. Add mode-specific nested options and eager layout validation.
 
-The Phase 1 core completes root-facade routing, current canonical session replay,
-and item 4 through `CircularDiagramOptions`, `LinearDiagramOptions`, their
-mode-specific track and output bundles, and `CircularRequestPlan` /
-`LinearRequestPlan`. Fresh CLI/Web generation and legacy internal replay in item
-1 remain.
+Phase 1 is complete through `CircularDiagramOptions`, `LinearDiagramOptions`,
+their mode-specific track and output bundles, and `CircularRequestPlan`,
+`CircularBatchRequestPlan`, and `LinearRequestPlan`. Root API, fresh CLI/Web
+generation, current canonical replay, and legacy internal replay all reach the
+typed planners.
 
 ### Phase 2 — remove duplicated state and planners
 

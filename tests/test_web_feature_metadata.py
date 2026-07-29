@@ -219,7 +219,6 @@ def test_gff_fasta_feature_metadata_includes_nested_rendered_features(
     payload = extract_features_from_gff_fasta_payload(
         gff_path,
         fasta_path,
-        mode="linear",
         selected_features=["CDS"],
     )
     features = payload["features"]
@@ -234,7 +233,6 @@ def test_gff_fasta_feature_metadata_includes_nested_rendered_features(
     rendered_records = load_gff_fasta(
         [str(gff_path)],
         [str(fasta_path)],
-        mode="linear",
         selected_features_set={"CDS"},
     )
     assert features[0]["svg_id"] == compute_feature_hash(
@@ -246,7 +244,6 @@ def test_gff_fasta_feature_metadata_includes_nested_rendered_features(
         python_helpers_namespace["extract_features_from_gff_fasta"](  # type: ignore[operator]
             str(gff_path),
             str(fasta_path),
-            "linear",
             None,
             None,
             None,

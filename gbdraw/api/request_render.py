@@ -5,17 +5,24 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import re
 from dataclasses import dataclass, fields, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence, TypeAlias
 
+from Bio import SeqIO  # type: ignore[reportMissingImports]
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.collinearity import (
     LosslessCollinearityParameters,
+)
+from gbdraw.analysis.depth_tracks import (
+    DepthTrackSpec,
+    depth_track_count,
+    normalize_depth_tracks,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.analysis.protein_colinearity import (
@@ -40,6 +47,7 @@ from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.io.record_select import reverse_records, select_record
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import InteractiveSvgContext
+from gbdraw.render.formats import resolve_output_paths
 from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload
 
 from .diagram import (
@@ -57,6 +65,7 @@ from .options import (
 )
 from .render import save_figure_to
 from .requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
     GenBankInputSource,
@@ -65,6 +74,8 @@ from .requests import (
     LinearDiagramRequest,
     RecordInput,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -103,6 +114,44 @@ class RequestRenderResult:
     warnings: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class PreparedCircularBatchRequest:
+    """A validated Circular batch with one prepared diagram per record."""
+
+    request: CircularBatchRequest
+    records: tuple[SeqRecord, ...]
+    items: tuple[PreparedDiagramRequest, ...]
+
+    @property
+    def mode(self) -> Literal["circular"]:
+        return "circular"
+
+
+@dataclass(frozen=True)
+class CircularBatchRenderResult:
+    """Saved outputs for an explicit separate-diagram Circular batch."""
+
+    request: CircularBatchRequest
+    records: tuple[SeqRecord, ...]
+    items: tuple[RequestRenderResult, ...]
+
+    @property
+    def mode(self) -> Literal["circular"]:
+        return "circular"
+
+    @property
+    def drawings(self) -> tuple[Drawing, ...]:
+        return tuple(item.drawing for item in self.items)
+
+    @property
+    def output_paths(self) -> tuple[Path, ...]:
+        return tuple(path for item in self.items for path in item.output_paths)
+
+    @property
+    def interactive_contexts(self) -> tuple[InteractiveSvgContext | None, ...]:
+        return tuple(item.interactive_context for item in self.items)
+
+
 def _validated_plan_records(
     value: Sequence[SeqRecord],
     *,
@@ -136,6 +185,8 @@ class CircularRequestPlan:
     request: CircularDiagramRequest
     records: tuple[SeqRecord, ...]
     layout: CircularMultiRecordOptions | None
+    precomputed_depth_track_specs: tuple[DepthTrackSpec, ...] | None = None
+    precomputed_depth_track_count: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularDiagramRequest):
@@ -168,15 +219,117 @@ class CircularRequestPlan:
 
     def build(self) -> Drawing:
         if self.layout is None:
+            depth_kwargs = {}
+            if self.precomputed_depth_track_specs is not None:
+                depth_kwargs = {
+                    "_precomputed_depth_track_specs": self.precomputed_depth_track_specs,
+                    "_precomputed_depth_track_count": self.precomputed_depth_track_count,
+                }
             return build_circular_diagram(
                 self.records[0],
                 options=self.request.options,
+                **depth_kwargs,
             )
         return build_circular_multi_diagram(
             self.records,
             options=self.request.options,
             layout=self.layout,
         )
+
+
+def _without_depth_inputs(options: CircularDiagramOptions) -> CircularDiagramOptions:
+    """Strip depth sources after a batch plan has normalized them once."""
+
+    return replace(
+        options,
+        depth_table=None,
+        depth_file=None,
+        depth_tables=None,
+        depth_files=None,
+        depth_track_tables=None,
+        depth_track_files=None,
+        depth_track_labels=None,
+        depth_track_colors=None,
+        depth_track_large_tick_intervals=None,
+        depth_track_small_tick_intervals=None,
+        depth_track_tick_font_sizes=None,
+    )
+
+
+@dataclass(frozen=True)
+class CircularBatchRequestPlan:
+    """Normalized records and one single-diagram plan per Circular batch item."""
+
+    request: CircularBatchRequest
+    records: tuple[SeqRecord, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, CircularBatchRequest):
+            raise ValidationError(
+                "CircularBatchRequestPlan request must be CircularBatchRequest."
+            )
+        object.__setattr__(
+            self,
+            "records",
+            _validated_plan_records(
+                self.records,
+                expected_count=len(self.request.records),
+            ),
+        )
+
+    @property
+    def mode(self) -> Literal["circular"]:
+        return "circular"
+
+    def item_plans(self) -> tuple[CircularRequestPlan, ...]:
+        plans: list[CircularRequestPlan] = []
+        options = self.request.options
+        normalized_depth = normalize_depth_tracks(
+            self.records,
+            depth_table=options.depth_table,
+            depth_file=options.depth_file,
+            depth_tables=options.depth_tables,
+            depth_files=options.depth_files,
+            depth_track_tables=options.depth_track_tables,
+            depth_track_files=options.depth_track_files,
+            depth_track_labels=options.depth_track_labels,
+            depth_track_colors=options.depth_track_colors,
+            depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
+            depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
+            depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
+        )
+        logical_depth_count = depth_track_count(normalized_depth)
+        item_options = _without_depth_inputs(options) if normalized_depth is not None else options
+        for index, (record, output) in enumerate(
+            zip(self.records, self.request.outputs, strict=True)
+        ):
+            item_request = CircularDiagramRequest(
+                records=(
+                    RecordInput(
+                        source=InMemoryRecordSource(record),
+                        record_key=self.request.records[index].record_key,
+                    ),
+                ),
+                options=item_options,
+                output=output,
+                grouping="single",
+            )
+            plans.append(
+                CircularRequestPlan(
+                    request=item_request,
+                    records=(record,),
+                    layout=None,
+                    precomputed_depth_track_specs=(
+                        tuple(normalized_depth[index])
+                        if normalized_depth is not None
+                        else None
+                    ),
+                    precomputed_depth_track_count=(
+                        logical_depth_count if normalized_depth is not None else None
+                    ),
+                )
+            )
+        return tuple(plans)
 
 
 @dataclass(frozen=True)
@@ -232,7 +385,9 @@ class LinearRequestPlan:
         return build_linear_diagram(self.records, **kwargs)
 
 
-DiagramRequestPlan: TypeAlias = CircularRequestPlan | LinearRequestPlan
+DiagramRequestPlan: TypeAlias = (
+    CircularRequestPlan | CircularBatchRequestPlan | LinearRequestPlan
+)
 
 
 @dataclass(frozen=True)
@@ -255,19 +410,14 @@ _LEGACY_PROTEIN_REFERENCE_RE = re.compile(
 _FEATURE_ANALYSIS_REFERENCE_RE = re.compile(r"f_[0-9a-f]{64}")
 
 
-def _mode(request: DiagramRequest) -> Literal["circular", "linear"]:
-    return "circular" if isinstance(request, CircularDiagramRequest) else "linear"
-
-
 def _load_record_input(
     record_input: RecordInput,
     *,
-    mode: Literal["circular", "linear"],
     gff_candidate_features: Sequence[str] | None,
     gff_keep_all_features: bool,
     color_table: DataFrame | None,
     feature_visibility_table: DataFrame | None,
-) -> SeqRecord:
+) -> list[SeqRecord]:
     selector = record_input.selector
     selector_values = [selector.raw] if selector is not None else None
     reverse = record_input.presentation.reverse_complement
@@ -276,7 +426,6 @@ def _load_record_input(
     if isinstance(source, GenBankInputSource):
         records = load_gbks(
             [str(source.path)],
-            mode=mode,
             record_selectors=selector_values,
             reverse_flags=[reverse],
         )
@@ -284,7 +433,6 @@ def _load_record_input(
         records = load_gff_fasta(
             [str(source.gff_path)],
             [str(source.fasta_path)],
-            mode=mode,
             selected_features_set=gff_candidate_features,
             keep_all_features=gff_keep_all_features,
             record_selectors=selector_values,
@@ -304,12 +452,61 @@ def _load_record_input(
 
     if record_input.region is not None:
         records = apply_region_specs(records, [record_input.region])
-    if len(records) != 1:
+    return records
+
+
+def _linear_request_uses_comparisons(request: LinearDiagramRequest) -> bool:
+    options = request.options
+    return bool(
+        options.blast_files
+        or options.linear_comparisons
+        or options.protein_comparisons
+        or options.collinearity_blocks
+        or options.protein_blastp_mode != "none"
+    )
+
+
+def _select_linear_comparison_records(
+    records: Sequence[SeqRecord],
+    *,
+    is_gff_source: bool,
+    input_count: int,
+) -> list[SeqRecord]:
+    """Apply the legacy Linear comparison cardinality rule in the planner."""
+
+    selected = list(records)
+    if len(selected) > 1 and (is_gff_source or input_count > 1):
+        return selected[:1]
+    return selected
+
+
+def _select_planned_record(
+    request: DiagramRequest,
+    record_input: RecordInput,
+    records: Sequence[SeqRecord],
+) -> SeqRecord:
+    selected = list(records)
+    if isinstance(request, LinearDiagramRequest) and _linear_request_uses_comparisons(
+        request
+    ):
+        selected = _select_linear_comparison_records(
+            selected,
+            is_gff_source=isinstance(record_input.source, GffFastaInputSource),
+            input_count=len(request.records),
+        )
+    if len(selected) < len(records):
+        logger.info(
+            "Comparison-aware Linear planning selected the first record from %s.",
+            getattr(record_input.source, "path", None)
+            or getattr(record_input.source, "gff_path", "input"),
+        )
+        selected = selected[:1]
+    if len(selected) != 1:
         raise ValidationError(
             "Each RecordInput must resolve to exactly one record; add a selector or region."
         )
 
-    record = records[0]
+    record = selected[0]
     presentation = record_input.presentation
     if getattr(record, "annotations", None) is None:
         record.annotations = {}
@@ -325,9 +522,11 @@ def _load_record_input(
 def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
     """Load/copy every RecordInput and return exactly one record per input."""
 
-    if not isinstance(request, (CircularDiagramRequest, LinearDiagramRequest)):
+    if not isinstance(
+        request,
+        (CircularDiagramRequest, CircularBatchRequest, LinearDiagramRequest),
+    ):
         raise ValidationError("Unsupported diagram request type.")
-    mode = _mode(request)
     has_gff_source = any(
         isinstance(record_input.source, GffFastaInputSource)
         for record_input in request.records
@@ -345,17 +544,33 @@ def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
         if has_gff_source
         else (set(request.options.selected_features_set or DEFAULT_SELECTED_FEATURES), False)
     )
-    return tuple(
-        _load_record_input(
+    records: list[SeqRecord] = []
+    for record_input in request.records:
+        loaded = _load_record_input(
             record_input,
-            mode=mode,
             gff_candidate_features=tuple(sorted(candidate_features)),
             gff_keep_all_features=keep_all_features,
             color_table=color_table,
             feature_visibility_table=feature_visibility_table,
         )
-        for record_input in request.records
-    )
+        records.append(_select_planned_record(request, record_input, loaded))
+    return tuple(records)
+
+
+def _warn_circular_topologies(records: Sequence[SeqRecord]) -> None:
+    for record in records:
+        topology = getattr(record, "annotations", {}).get("topology")
+        if topology == "linear":
+            logger.warning(
+                "WARNING: The annotation indicates that record %s is linear. "
+                "Are you sure you want to visualize it as circular?",
+                record.id,
+            )
+        elif topology is not None and topology != "circular":
+            logger.warning(
+                "WARNING: Topology information not available for %s.",
+                record.id,
+            )
 
 
 def _layout_with_record_placements(
@@ -423,10 +638,27 @@ def plan_circular_request(
 
     if not isinstance(request, CircularDiagramRequest):
         raise ValidationError("request must be CircularDiagramRequest.")
+    records = normalize_request_records(request)
+    _warn_circular_topologies(records)
     return CircularRequestPlan(
         request=request,
-        records=normalize_request_records(request),
+        records=records,
         layout=_layout_with_record_placements(request),
+    )
+
+
+def plan_circular_batch_request(
+    request: CircularBatchRequest,
+) -> CircularBatchRequestPlan:
+    """Normalize an explicit separate-diagram Circular batch."""
+
+    if not isinstance(request, CircularBatchRequest):
+        raise ValidationError("request must be CircularBatchRequest.")
+    records = normalize_request_records(request)
+    _warn_circular_topologies(records)
+    return CircularBatchRequestPlan(
+        request=request,
+        records=records,
     )
 
 
@@ -445,6 +677,8 @@ def plan_linear_request(
 
 
 def _plan_request(request: DiagramRequest) -> DiagramRequestPlan:
+    if isinstance(request, CircularBatchRequest):
+        return plan_circular_batch_request(request)
     if isinstance(request, CircularDiagramRequest):
         return plan_circular_request(request)
     if isinstance(request, LinearDiagramRequest):
@@ -1223,10 +1457,25 @@ def build_request_diagram(
     request: DiagramRequest,
     *,
     session_artifacts: Mapping[str, Any] | None = None,
-) -> PreparedDiagramRequest:
+) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
     """Normalize inputs and build a drawing through the high-level API owners."""
 
     plan = _plan_request(request)
+    if isinstance(plan, CircularBatchRequestPlan):
+        items = tuple(
+            PreparedDiagramRequest(
+                mode="circular",
+                request=item_plan.request,
+                records=item_plan.records,
+                drawing=item_plan.build(),
+            )
+            for item_plan in plan.item_plans()
+        )
+        return PreparedCircularBatchRequest(
+            request=plan.request,
+            records=plan.records,
+            items=items,
+        )
     request = plan.request
     records = plan.records
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
@@ -1353,6 +1602,8 @@ def _color_table(
 
 def _interactive_context(
     prepared: PreparedDiagramRequest,
+    *,
+    comparison_sequence_records: Sequence[Sequence[SeqRecord]] = (),
 ) -> InteractiveSvgContext | None:
     output = prepared.request.output
     if "interactive_svg" not in output.formats or output.interactive_metadata_policy == "omit":
@@ -1367,37 +1618,142 @@ def _interactive_context(
             colors.default_colors_file if colors is not None and colors.default_colors_file else "",
             colors.default_colors_palette if colors is not None else "default",
         )
-    return build_interactive_svg_context(
-        prepared.records,
-        selected_features_set=options.selected_features_set,
-        feature_visibility_table=_visibility_table(options),
-        color_table=color_table,
-        default_colors=default_colors,
-        orthogroups=(
-            options.orthogroups
-            if isinstance(options, LinearDiagramOptions)
-            else None
-        ),
-        linear_rendered_feature_ids=prepared.mode == "linear",
-        annotations=options.annotations,
-        mode=prepared.mode,
-    )
+    try:
+        return build_interactive_svg_context(
+            prepared.records,
+            selected_features_set=options.selected_features_set,
+            feature_visibility_table=_visibility_table(options),
+            color_table=color_table,
+            default_colors=default_colors,
+            orthogroups=(
+                getattr(prepared.drawing, "_gbdraw_orthogroups", None)
+                or options.orthogroups
+                if isinstance(options, LinearDiagramOptions)
+                else None
+            ),
+            linear_rendered_feature_ids=prepared.mode == "linear",
+            annotations=options.annotations,
+            mode=prepared.mode,
+            comparison_sequence_records=comparison_sequence_records,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Rich interactive feature metadata could not be generated; "
+            "using rendered SVG metadata only: %s",
+            exc,
+        )
+        return InteractiveSvgContext()
 
 
 def render_request(
     request: DiagramRequest,
     *,
     session_artifacts: Mapping[str, Any] | None = None,
-) -> RequestRenderResult:
+) -> RequestRenderResult | CircularBatchRenderResult:
     """Build and save one typed request, returning only paths that were created."""
 
+    if isinstance(request, CircularBatchRequest):
+        _preflight_circular_batch_outputs(request)
     prepared = (
         build_request_diagram(request)
         if session_artifacts is None
         else build_request_diagram(request, session_artifacts=session_artifacts)
     )
+    comparison_sequence_records = _comparison_sequence_records(prepared)
+    if isinstance(prepared, PreparedCircularBatchRequest):
+        return CircularBatchRenderResult(
+            request=prepared.request,
+            records=prepared.records,
+            items=tuple(
+                _render_prepared_request(
+                    item,
+                    comparison_sequence_records=comparison_sequence_records,
+                )
+                for item in prepared.items
+            ),
+        )
+    return _render_prepared_request(
+        prepared,
+        comparison_sequence_records=comparison_sequence_records,
+    )
+
+
+def _comparison_sequence_records(
+    prepared: PreparedDiagramRequest | PreparedCircularBatchRequest,
+) -> tuple[tuple[SeqRecord, ...], ...]:
+    """Load optional Circular comparison FASTA sources once per render."""
+
+    options = prepared.request.options
+    if not isinstance(options, CircularDiagramOptions):
+        return ()
+    outputs = (
+        prepared.request.outputs
+        if isinstance(prepared, PreparedCircularBatchRequest)
+        else (prepared.request.output,)
+    )
+    if not any(
+        "interactive_svg" in output.formats
+        and output.interactive_metadata_policy != "omit"
+        for output in outputs
+    ):
+        return ()
+    records = []
+    for path in options.conservation_fasta_files or ():
+        try:
+            records.append(tuple(SeqIO.parse(path, "fasta")) if path else ())
+        except Exception as exc:
+            logger.warning(
+                "Comparison FASTA could not be embedded in interactive SVG: %s",
+                exc,
+            )
+            records.append(())
+    return tuple(records)
+
+
+def _preflight_circular_batch_outputs(
+    request: CircularBatchRequest,
+) -> None:
+    """Reject batch collisions before writing any item."""
+
+    all_paths: list[Path] = []
+    existing: list[Path] = []
+    for output in request.outputs:
+        base = Path(output.output_directory or ".") / output.output_prefix
+        paths = tuple(
+            Path(path)
+            for path in resolve_output_paths(
+                str(base),
+                output.formats,
+                include_base_svg=True,
+            )
+        )
+        all_paths.extend(paths)
+        if not output.overwrite:
+            existing.extend(path for path in paths if path.exists())
+    if len(set(all_paths)) != len(all_paths):
+        raise ValidationError(
+            "Circular batch output requests resolve to duplicate file paths."
+        )
+    if existing:
+        raise ValidationError(
+            "Output file(s) already exist: "
+            + ", ".join(str(path) for path in existing)
+            + ". Use overwrite=True to replace."
+        )
+
+
+def _render_prepared_request(
+    prepared: PreparedDiagramRequest,
+    *,
+    comparison_sequence_records: Sequence[Sequence[SeqRecord]] = (),
+) -> RequestRenderResult:
+    """Write one already-planned diagram using its canonical output request."""
+
     output = prepared.request.output
-    interactive_context = _interactive_context(prepared)
+    interactive_context = _interactive_context(
+        prepared,
+        comparison_sequence_records=comparison_sequence_records,
+    )
     paths = save_figure_to(
         prepared.drawing,
         output.formats,
@@ -1428,13 +1784,17 @@ def render_request(
 
 
 __all__ = [
+    "CircularBatchRenderResult",
+    "CircularBatchRequestPlan",
     "CircularRequestPlan",
     "DiagramRequestPlan",
     "LinearRequestPlan",
+    "PreparedCircularBatchRequest",
     "PreparedDiagramRequest",
     "RequestRenderResult",
     "build_request_diagram",
     "normalize_request_records",
+    "plan_circular_batch_request",
     "plan_circular_request",
     "plan_linear_request",
     "render_request",

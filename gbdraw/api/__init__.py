@@ -79,18 +79,23 @@ from gbdraw.annotations import (
 )
 from .render import render_to_bytes, save_figure_to
 from .request_render import (
+    CircularBatchRenderResult,
+    CircularBatchRequestPlan,
     CircularRequestPlan,
     DiagramRequestPlan,
     LinearRequestPlan,
+    PreparedCircularBatchRequest,
     PreparedDiagramRequest,
     RequestRenderResult,
     build_request_diagram,
     normalize_request_records,
+    plan_circular_batch_request,
     plan_circular_request,
     plan_linear_request,
     render_request,
 )
 from .requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
     GenBankInputSource,
@@ -226,6 +231,7 @@ __all__ = [
     "render_to_bytes",
     "save_figure_to",
     # typed requests
+    "CircularBatchRequest",
     "CircularDiagramRequest",
     "DiagramRequest",
     "GenBankInputSource",
@@ -236,13 +242,17 @@ __all__ = [
     "RecordInputSource",
     "RecordPresentation",
     "RenderOutputRequest",
+    "CircularBatchRenderResult",
+    "CircularBatchRequestPlan",
     "CircularRequestPlan",
     "DiagramRequestPlan",
     "LinearRequestPlan",
+    "PreparedCircularBatchRequest",
     "PreparedDiagramRequest",
     "RequestRenderResult",
     "build_request_diagram",
     "normalize_request_records",
+    "plan_circular_batch_request",
     "plan_circular_request",
     "plan_linear_request",
     "render_request",
@@ -287,5 +297,3 @@ __all__ = [
     "parse_linear_track_slot",
     "parse_linear_track_slots",
 ]
-
-

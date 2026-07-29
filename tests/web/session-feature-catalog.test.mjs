@@ -62,7 +62,7 @@ test('current session feature catalog is compact and lossless', () => {
   const features = richFeatureState();
   const compact = compactSessionFeatureCatalog({
     format: 'gbdraw-session',
-    version: 37,
+    version: 38,
     features
   });
 
@@ -86,7 +86,7 @@ test('sanitized browser feature catalog retains its sequence-free shape', () => 
     }
   }
 
-  const compact = compactSessionFeatureCatalog({ version: 37, features });
+  const compact = compactSessionFeatureCatalog({ version: 38, features });
 
   assert.equal(compact.features.featureCatalog.profile, 'sanitized-v1');
   assert.deepEqual(expandSessionFeatureCatalog(compact).features, features);
@@ -94,7 +94,7 @@ test('sanitized browser feature catalog retains its sequence-free shape', () => 
 
 test('compact feature catalog rejects an out-of-range biological reference', () => {
   const compact = compactSessionFeatureCatalog({
-    version: 37,
+    version: 38,
     features: richFeatureState()
   });
   compact.features.featureCatalog.extracted[0][0] = 99;
@@ -107,7 +107,7 @@ test('compact feature catalog rejects an out-of-range biological reference', () 
 
 test('compact feature catalog bounds expansion and requires string qualifiers', () => {
   const compact = compactSessionFeatureCatalog({
-    version: 37,
+    version: 38,
     features: richFeatureState()
   });
   const duplicate = structuredClone(compact);

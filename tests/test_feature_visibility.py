@@ -15,6 +15,8 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
+import gbdraw.api.request_render as request_render_module
+from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.core.sequence import check_feature_presence
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
 from gbdraw.features.colors import compute_feature_hash, precompute_used_color_rules, preprocess_color_tables
@@ -649,7 +651,13 @@ def test_circular_cli_feature_visibility_table_is_forwarded(
     monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
     monkeypatch.setattr(
         circular_cli_module,
         "read_feature_visibility_file",
@@ -657,12 +665,12 @@ def test_circular_cli_feature_visibility_table_is_forwarded(
     )
 
     def fake_assemble(*_args, **kwargs):
-        captured["feature_visibility_table"] = kwargs.get(
-            "feature_visibility_table"
+        captured["feature_visibility_table"] = (
+            kwargs["options"].feature_visibility_table
         )
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     circular_cli_module.circular_main(
         [
@@ -690,20 +698,20 @@ def test_linear_cli_feature_visibility_table_is_forwarded(
     monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
     monkeypatch.setattr(
         linear_cli_module,
         "read_feature_visibility_file",
         lambda _path: feature_table_df,
     )
 
-    def fake_assemble(*_args, **kwargs):
-        captured["feature_visibility_table"] = kwargs.get(
-            "feature_visibility_table"
+    def fake_render(canonical_request):
+        captured["canonical_request"] = canonical_request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
         )
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
 
     linear_cli_module.linear_main(
         [
@@ -718,7 +726,9 @@ def test_linear_cli_feature_visibility_table_is_forwarded(
         ]
     )
 
-    assert captured["feature_visibility_table"] is feature_table_df
+    canonical_request = captured["canonical_request"]
+    assert isinstance(canonical_request, LinearDiagramRequest)
+    assert canonical_request.options.feature_visibility_table is feature_table_df
 
 
 def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_table_given(
@@ -728,22 +738,28 @@ def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_tab
     captured: dict[str, Any] = {}
 
     def fake_load_gff_fasta(*args, **kwargs):
-        captured["selected_features_set"] = set(args[3])
+        captured["selected_features_set"] = set(kwargs["selected_features_set"])
         captured["keep_all_features"] = kwargs.get("keep_all_features")
         return [record]
 
     monkeypatch.setattr(circular_cli_module, "load_gff_fasta", fake_load_gff_fasta)
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
     monkeypatch.setattr(
         circular_cli_module,
         "read_feature_visibility_file",
         lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "off"]]),
     )
     monkeypatch.setattr(
-        circular_cli_module,
-        "assemble_circular_diagram_from_record",
+        request_render_module,
+        "build_circular_diagram",
         lambda *_args, **_kwargs: Drawing(filename=str(tmp_path / "dummy.svg")),
     )
 
@@ -771,27 +787,33 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     record = _make_record()
+    feature_table_df = _visibility_df(
+        [["*", "misc_feature", "gene", "^geneA$", "off"]]
+    )
     captured: dict[str, Any] = {}
 
     def fake_load_gff_fasta(*args, **kwargs):
-        captured["selected_features_set"] = set(args[3])
+        captured["selected_features_set"] = set(kwargs["selected_features_set"])
         captured["keep_all_features"] = kwargs.get("keep_all_features")
         return [record]
 
     monkeypatch.setattr(linear_cli_module, "load_gff_fasta", fake_load_gff_fasta)
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
     monkeypatch.setattr(
         linear_cli_module,
         "read_feature_visibility_file",
-        lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "off"]]),
+        lambda _path: feature_table_df,
     )
-    monkeypatch.setattr(
-        linear_cli_module,
-        "assemble_linear_diagram_from_records",
-        lambda *_args, **_kwargs: Drawing(filename=str(tmp_path / "dummy.svg")),
-    )
+
+    def fake_render(canonical_request):
+        captured["canonical_request"] = canonical_request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+        )
+
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
 
     linear_cli_module.linear_main(
         [
@@ -811,3 +833,6 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
     assert captured["keep_all_features"] is False
     assert "CDS" in captured["selected_features_set"]
     assert "misc_feature" in captured["selected_features_set"]
+    canonical_request = captured["canonical_request"]
+    assert isinstance(canonical_request, LinearDiagramRequest)
+    assert canonical_request.options.feature_visibility_table is feature_table_df

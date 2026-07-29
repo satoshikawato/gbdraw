@@ -69,6 +69,7 @@ from .api.options import (
     LinearTrackOptions,
 )
 from .api.requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
     GenBankInputSource,
@@ -81,8 +82,8 @@ from .api.requests import (
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 4
-SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, 3, 4})
+CANONICAL_REQUEST_SCHEMA = 5
+SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, 3, 4, 5})
 UNKNOWN_FIELD_POLICY = "reject"
 
 
@@ -154,6 +155,7 @@ _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _TOP_LEVEL_FIELDS = frozenset(
     {"schema", "mode", "records", "diagramOptions", "layout", "comparisons", "output"}
 )
+_TOP_LEVEL_FIELDS_V5 = _TOP_LEVEL_FIELDS | {"grouping"}
 _DEFAULT_CIRCULAR_OPTIONS = CircularDiagramOptions()
 _DEFAULT_LINEAR_OPTIONS = LinearDiagramOptions()
 _SHARED_OPTION_WRONG_MODE_DEFAULTS = {
@@ -163,6 +165,7 @@ _SHARED_OPTION_WRONG_MODE_DEFAULTS = {
     },
     "linear": {
         "conservation_blast_files": None,
+        "conservation_fasta_files": None,
         "conservation_dataframes": None,
         "conservation_reference": "auto",
         "conservation_labels": None,
@@ -262,6 +265,7 @@ _FILE_FIELDS = frozenset(
 )
 _TABLE_SEQUENCE_FIELDS = frozenset({"depth_tables", "conservation_dataframes"})
 _FILE_SEQUENCE_FIELDS = frozenset({"depth_files", "conservation_blast_files"})
+_OPTIONAL_FILE_SEQUENCE_FIELDS = frozenset({"conservation_fasta_files"})
 _TABLE_MATRIX_FIELDS = frozenset({"depth_track_tables"})
 _FILE_MATRIX_FIELDS = frozenset({"depth_track_files"})
 
@@ -396,20 +400,39 @@ def encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalRequest
 def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalRequest:
     """Encode without embedding files or changing the session version."""
 
-    if not isinstance(request, (CircularDiagramRequest, LinearDiagramRequest)):
+    if not isinstance(
+        request,
+        (CircularDiagramRequest, CircularBatchRequest, LinearDiagramRequest),
+    ):
         raise CanonicalRequestEncodingError("Unsupported typed diagram request.")
     _validate_dataclass_contract(request.options, path="diagramOptions", error="encode")
-    _validate_dataclass_contract(request.output, path="output", error="encode")
-    if request.layout is not None:
+    if isinstance(request, CircularBatchRequest):
+        for index, output in enumerate(request.outputs, start=1):
+            _validate_dataclass_contract(
+                output,
+                path=f"output[{index - 1}]",
+                error="encode",
+            )
+    else:
+        _validate_dataclass_contract(request.output, path="output", error="encode")
+    if getattr(request, "layout", None) is not None:
         _validate_dataclass_contract(request.layout, path="layout", error="encode")
 
     resources = _ResourceBuilder()
     mode: Literal["circular", "linear"] = (
-        "circular" if isinstance(request, CircularDiagramRequest) else "linear"
+        "circular"
+        if isinstance(request, (CircularDiagramRequest, CircularBatchRequest))
+        else "linear"
+    )
+    grouping = (
+        request.grouping
+        if isinstance(request, (CircularDiagramRequest, CircularBatchRequest))
+        else "single"
     )
     payload = {
         "schema": CANONICAL_REQUEST_SCHEMA,
         "mode": mode,
+        "grouping": grouping,
         "records": [
             _encode_record(record, index=index, resources=resources)
             for index, record in enumerate(request.records, start=1)
@@ -417,12 +440,11 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
         "diagramOptions": _encode_diagram_options(request.options, resources=resources),
         "layout": _encode_layout(request),
         "comparisons": _encode_comparisons(request.options, mode=mode, resources=resources),
-        "output": {
-            "prefix": request.output.output_prefix,
-            "formats": list(request.output.formats),
-            "overwrite": request.output.overwrite,
-            "interactiveMetadataPolicy": request.output.interactive_metadata_policy,
-        },
+        "output": (
+            [_encode_output(output) for output in request.outputs]
+            if isinstance(request, CircularBatchRequest)
+            else _encode_output(request.output)
+        ),
     }
     return EncodedCanonicalRequest(payload=payload, resources=resources.result())
 
@@ -433,7 +455,7 @@ def decode_canonical_request(
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
 ) -> DiagramRequest:
-    """Decode canonical schemas 1 through 4 and normalize validation failures."""
+    """Decode every supported canonical schema and normalize validation failures."""
 
     try:
         return _decode_canonical_request(
@@ -457,7 +479,12 @@ def _decode_canonical_request(
 ) -> DiagramRequest:
     """Decode a supported schema using caller-owned materialized resources."""
 
-    top = _object(payload, path="renderRequest", required=_TOP_LEVEL_FIELDS)
+    top = _object(
+        payload,
+        path="renderRequest",
+        required={"schema"},
+        exact=False,
+    )
     schema = top["schema"]
     if not isinstance(schema, int) or isinstance(schema, bool):
         raise CanonicalRequestDecodingError("renderRequest.schema must be an integer.")
@@ -465,6 +492,13 @@ def _decode_canonical_request(
         raise CanonicalRequestDecodingError(
             f"Unsupported canonical request schema: {schema!r}."
         )
+    _require_exact_fields(
+        top,
+        path="renderRequest",
+        required=set(
+            _TOP_LEVEL_FIELDS_V5 if schema >= 5 else _TOP_LEVEL_FIELDS
+        ),
+    )
     mode = top["mode"]
     if mode not in {"circular", "linear"}:
         raise CanonicalRequestDecodingError(
@@ -502,9 +536,20 @@ def _decode_canonical_request(
     )
     options = options_type(**options_kwargs, **comparison_kwargs)
     _validate_dataclass_contract(options, path="diagramOptions", error="decode")
-    output = _decode_output(top["output"], output_directory=output_directory)
+    grouping = top.get("grouping")
+    if schema >= 5:
+        allowed_groupings = (
+            {"single", "grid", "batch"}
+            if mode == "circular"
+            else {"single"}
+        )
+        if grouping not in allowed_groupings:
+            raise CanonicalRequestDecodingError(
+                f"Unsupported {mode} request grouping: {grouping!r}."
+            )
 
     if mode == "linear":
+        output = _decode_output(top["output"], output_directory=output_directory)
         if schema == 1:
             layout_payload = _object(top["layout"], path="renderRequest.layout")
             if layout_payload:
@@ -522,11 +567,29 @@ def _decode_canonical_request(
         )
 
     layout = _decode_circular_layout(top["layout"], schema=schema)
+    if schema < 5:
+        grouping = "grid" if layout is not None or len(records) > 1 else "single"
+    if grouping == "batch":
+        if layout is not None:
+            raise CanonicalRequestDecodingError(
+                "A Circular batch canonical request cannot define a grid layout."
+            )
+        return CircularBatchRequest(
+            records=records,
+            options=options,
+            outputs=_decode_batch_outputs(
+                top["output"],
+                output_directory=output_directory,
+                record_count=len(records),
+            ),
+        )
+    output = _decode_output(top["output"], output_directory=output_directory)
     return CircularDiagramRequest(
         records=records,
         options=options,
         layout=layout,
         output=output,
+        grouping=grouping,
     )
 
 
@@ -749,6 +812,8 @@ def _decode_region(value: object, *, path: str) -> RegionSpec | None:
 
 
 def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
+    if isinstance(request, CircularBatchRequest):
+        return {}
     if isinstance(request, LinearDiagramRequest):
         if request.layout is None:
             return {}
@@ -773,6 +838,15 @@ def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
             if layout.multi_record_positions is not None
             else None
         ),
+    }
+
+
+def _encode_output(output: RenderOutputRequest) -> dict[str, Any]:
+    return {
+        "prefix": output.output_prefix,
+        "formats": list(output.formats),
+        "overwrite": output.overwrite,
+        "interactiveMetadataPolicy": output.interactive_metadata_policy,
     }
 
 
@@ -1073,6 +1147,15 @@ def _encode_option_value(
             _file_ref(f"{name}-{index}", item, resources=resources)
             for index, item in enumerate(_sequence(value, name=name), start=1)
         ]
+    if name in _OPTIONAL_FILE_SEQUENCE_FIELDS:
+        return [
+            (
+                _file_ref(f"{name}-{index}", item, resources=resources)
+                if item is not None
+                else None
+            )
+            for index, item in enumerate(_sequence(value, name=name), start=1)
+        ]
     if name in _TABLE_MATRIX_FIELDS:
         return _encode_resource_matrix(name, value, table=True, resources=resources)
     if name in _FILE_MATRIX_FIELDS:
@@ -1115,6 +1198,22 @@ def _decode_option_value(
                 _decode_file_ref(
                     item, name=f"{name}-{index}", resource_paths=resource_paths
                 )
+            )
+            for index, item in enumerate(raw, start=1)
+        )
+    if name in _OPTIONAL_FILE_SEQUENCE_FIELDS:
+        raw = _array(value, path=f"renderRequest.diagramOptions.{_camel(name)}")
+        return tuple(
+            (
+                str(
+                    _decode_file_ref(
+                        item,
+                        name=f"{name}-{index}",
+                        resource_paths=resource_paths,
+                    )
+                )
+                if item is not None
+                else None
             )
             for index, item in enumerate(raw, start=1)
         )
@@ -2222,6 +2321,26 @@ def _decode_output(
         formats=tuple(formats),
         overwrite=payload["overwrite"],
         interactive_metadata_policy=payload["interactiveMetadataPolicy"],
+    )
+
+
+def _decode_batch_outputs(
+    value: object,
+    *,
+    output_directory: str | Path,
+    record_count: int,
+) -> tuple[RenderOutputRequest, ...]:
+    payloads = _array(value, path="renderRequest.output")
+    if len(payloads) != record_count:
+        raise CanonicalRequestDecodingError(
+            "A Circular batch canonical request requires one output per record."
+        )
+    return tuple(
+        _decode_output(
+            payload,
+            output_directory=output_directory,
+        )
+        for payload in payloads
     )
 
 

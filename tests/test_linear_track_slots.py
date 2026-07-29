@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -630,13 +631,15 @@ def test_linear_cli_forwards_track_slots_to_api(
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda canvas, formats: None)
 
-    def fake_assemble(*args, **kwargs):
-        captured.update(kwargs)
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render_request(request):
+        captured["canonical_request"] = request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
@@ -659,6 +662,9 @@ def test_linear_cli_forwards_track_slots_to_api(
         ]
     )
 
-    slots = captured["linear_track_slots"]
+    tracks = captured["canonical_request"].options.tracks
+    assert tracks is not None
+    slots = tracks.linear_track_slots
+    assert slots is not None
     assert [slot.id for slot in slots] == ["gc_skew", "features", "gc_content"]
-    assert captured["linear_track_axis_index"] == 1
+    assert tracks.linear_track_axis_index == 1

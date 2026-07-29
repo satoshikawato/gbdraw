@@ -358,9 +358,12 @@ const genbank = {
 };
 const filesData = { c_gb: genbank, linearSeqs: [] };
 
+state.form.multi_record_canvas = true;
 const canonical = buildCanonicalSessionRequest({ state, filesData });
-assert.equal(canonical.renderRequest.schema, 4);
+state.form.multi_record_canvas = false;
+assert.equal(canonical.renderRequest.schema, 5);
 assert.equal(canonical.renderRequest.mode, 'circular');
+assert.equal(canonical.renderRequest.grouping, 'grid');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
 assert.equal(canonical.resources['record-1-genbank'].kind, 'genbank');
 assert.equal(canonical.resources['record-1-genbank'].name, 'record-1-genbank-input.gb');
@@ -390,6 +393,90 @@ assert.equal(
   25
 );
 assert.equal(projectCanonicalSessionRequest(canonical).config.adv.depth_large_tick_interval, 25);
+
+state.circularRecordList.value = [{ selector: '#1', record_id: 'single.id' }];
+state.form.prefix = '';
+const implicitSingleCanonical = buildCanonicalSessionRequest({ state, filesData });
+assert.equal(implicitSingleCanonical.renderRequest.grouping, 'batch');
+assert.deepEqual(
+  implicitSingleCanonical.renderRequest.records[0].selector,
+  { kind: 'recordId', value: 'single.id' }
+);
+assert.deepEqual(
+  implicitSingleCanonical.renderRequest.output.map((output) => output.prefix),
+  ['single.id']
+);
+assert.equal(projectCanonicalSessionRequest(implicitSingleCanonical).config.form.prefix, '');
+
+state.form.prefix = 'release.v1';
+const explicitSingleBatchCanonical = buildCanonicalSessionRequest({ state, filesData });
+assert.deepEqual(
+  explicitSingleBatchCanonical.renderRequest.output.map((output) => output.prefix),
+  ['release.v1']
+);
+assert.equal(
+  projectCanonicalSessionRequest(explicitSingleBatchCanonical).config.form.prefix,
+  'release.v1'
+);
+
+const namingRecords = [
+  { selector: '#1', record_id: 'dup' },
+  { selector: '#2', record_id: 'dup_2' },
+  { selector: '#3', record_id: 'dup' }
+];
+state.circularRecordList.value = namingRecords;
+state.form.prefix = '';
+const implicitBatchCanonical = buildCanonicalSessionRequest({ state, filesData });
+assert.equal(implicitBatchCanonical.renderRequest.grouping, 'batch');
+assert.deepEqual(
+  implicitBatchCanonical.renderRequest.output.map((output) => output.prefix),
+  ['dup', 'dup_2', 'dup_3']
+);
+assert.equal(
+  projectCanonicalSessionRequest(implicitBatchCanonical).config.form.prefix,
+  ''
+);
+assert.equal(
+  projectCanonicalSessionRequest(implicitBatchCanonical).config.form.multi_record_canvas,
+  false
+);
+
+state.form.prefix = 'release.v1';
+const explicitBatchCanonical = buildCanonicalSessionRequest({ state, filesData });
+assert.deepEqual(
+  explicitBatchCanonical.renderRequest.output.map((output) => output.prefix),
+  ['release.v1_1', 'release.v1_2', 'release.v1_3']
+);
+assert.equal(
+  projectCanonicalSessionRequest(explicitBatchCanonical).config.form.prefix,
+  'release.v1'
+);
+
+state.form.prefix = '';
+state.form.multi_record_canvas = true;
+const gridCanonical = buildCanonicalSessionRequest({ state, filesData });
+assert.equal(gridCanonical.renderRequest.grouping, 'grid');
+assert.equal(gridCanonical.renderRequest.output.prefix, 'dup');
+assert.equal(projectCanonicalSessionRequest(gridCanonical).config.form.multi_record_canvas, true);
+
+const legacyCountGridCanonical = structuredClone(implicitBatchCanonical);
+legacyCountGridCanonical.renderRequest.schema = 4;
+delete legacyCountGridCanonical.renderRequest.grouping;
+legacyCountGridCanonical.renderRequest.output = implicitBatchCanonical.renderRequest.output[0];
+assert.equal(
+  projectCanonicalSessionRequest(legacyCountGridCanonical).config.form.multi_record_canvas,
+  true
+);
+const missingCurrentGrouping = structuredClone(canonical);
+delete missingCurrentGrouping.renderRequest.grouping;
+assert.throws(
+  () => projectCanonicalSessionRequest(missingCurrentGrouping),
+  /grouping/
+);
+
+state.form.prefix = 'web-session';
+state.form.multi_record_canvas = false;
+state.circularRecordList.value = [];
 
 state.adv.multi_record_size_mode = 'sqrt';
 assert.throws(
@@ -682,8 +769,11 @@ const conservationCanonical = buildCanonicalSessionRequest({
     c_conservation_sequence_sources: [comparisonFasta],
   },
 });
-assert.equal(conservationCanonical.renderRequest.diagramOptions.conservationSequenceSources, undefined);
-assert.deepEqual(conservationCanonical.webFiles.conservationSequenceSources, ['conservation-sequence-sources-1']);
+assert.deepEqual(
+  conservationCanonical.renderRequest.diagramOptions.conservationFastaFiles,
+  [{ resourceId: 'conservation-fasta-files-1', representation: 'file' }]
+);
+assert.equal(conservationCanonical.webFiles.conservationSequenceSources, undefined);
 assert.equal(
   projectCanonicalSessionRequest(conservationCanonical).files.c_conservation_sequence_sources[0].data,
   comparisonFasta.data
@@ -955,6 +1045,7 @@ const secondGenbank = {
 const multiCircularProjection = projectCanonicalSessionRequest({
   renderRequest: {
     ...canonical.renderRequest,
+    grouping: 'grid',
     records: [
       canonical.renderRequest.records[0],
       { ...canonical.renderRequest.records[0], source: { kind: 'genbank', resourceId: 'record-2-genbank' } }
@@ -991,6 +1082,11 @@ const linearFilesData = {
   ],
   linearComparisons: []
 };
+state.form.prefix = '';
+const linearDefaultCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+assert.equal(linearDefaultCanonical.renderRequest.grouping, 'single');
+assert.equal(linearDefaultCanonical.renderRequest.output.prefix, 'out');
+state.form.prefix = 'web-session';
 const linearCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
 const legacyLinearOptions = structuredClone(linearCanonical);
 legacyLinearOptions.renderRequest.schema = 3;

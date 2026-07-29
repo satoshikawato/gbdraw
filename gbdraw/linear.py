@@ -19,11 +19,8 @@ from .io.comparisons import COMPARISON_COLUMNS
 from .io.genome import load_gbks, load_gff_fasta
 from .io.regions import apply_region_specs, parse_region_specs
 from .config.toml import load_config_toml
-from .render.export import parse_formats, save_figure
-from .render.formats import INTERACTIVE_SVG_FORMAT
-from .render.interactive_svg import InteractiveSvgContext
-from .render.interactive_context import build_interactive_svg_context
-from .api.diagram import assemble_linear_diagram_from_records  # type: ignore[reportMissingImports]
+from .render.export import parse_formats
+from .api.request_render import _select_linear_comparison_records, render_request
 from .api.options import (
     AnnotationOptions,
     ColorOptions,
@@ -330,36 +327,6 @@ def _parse_optional_positive_int(value: str) -> int | None:
 logger = logging.getLogger()
 setup_logging()
 
-
-def _build_interactive_svg_context(
-    records,
-    selected_features,
-    orthogroups=None,
-    *,
-    feature_visibility_rules=None,
-    color_table=None,
-    default_colors=None,
-    annotations=None,
-) -> InteractiveSvgContext:
-    try:
-        return build_interactive_svg_context(
-            records,
-            selected_features_set=selected_features,
-            feature_visibility_rules=feature_visibility_rules,
-            color_table=color_table,
-            default_colors=default_colors,
-            orthogroups=orthogroups,
-            linear_rendered_feature_ids=True,
-            annotations=annotations,
-            mode="linear",
-        )
-    except Exception as exc:
-        logger.warning(
-            "WARNING: Rich interactive feature metadata could not be generated; "
-            "falling back to rendered SVG feature metadata. %s",
-            exc,
-        )
-        return InteractiveSvgContext()
 
 def _parse_linear_label_placement(value: str) -> str:
     normalized = str(value).strip().lower()
@@ -1544,7 +1511,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         args.region = records_table.row_scoped_region_specs()
         records = _load_records_table_records(
             records_table,
-            mode="linear",
             selected_features_set=selected_features_set,
             color_table=color_table,
             feature_table=feature_table,
@@ -1560,13 +1526,26 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         record_selectors = _normalize_list(args.record_id, file_count, "")
         reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
         reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
-        records = load_gbks(
-            args.gbk,
-            "linear",
-            load_comparison,
-            record_selectors=record_selectors,
-            reverse_flags=reverse_flags,
-        )
+        if load_comparison and file_count > 1:
+            records = [
+                record
+                for index, path in enumerate(args.gbk)
+                for record in _select_linear_comparison_records(
+                    load_gbks(
+                        [path],
+                        record_selectors=[record_selectors[index]],
+                        reverse_flags=[reverse_flags[index]],
+                    ),
+                    is_gff_source=False,
+                    input_count=file_count,
+                )
+            ]
+        else:
+            records = load_gbks(
+                args.gbk,
+                record_selectors=record_selectors,
+                reverse_flags=reverse_flags,
+            )
         record_label_values = list(args.record_label or [])
         record_subtitle_values = list(args.record_subtitle or [])
         region_arg_values = list(args.region or [])
@@ -1581,16 +1560,32 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             color_table=color_table,
             feature_visibility_table=feature_table,
         )
-        records = load_gff_fasta(
-            args.gff,
-            args.fasta,
-            "linear",
-            candidate_feature_types,
-            keep_all_features=keep_all_features,
-            load_comparison=load_comparison,
-            record_selectors=record_selectors,
-            reverse_flags=reverse_flags,
-        )
+        if load_comparison:
+            records = [
+                record
+                for index, gff_path in enumerate(args.gff)
+                for record in _select_linear_comparison_records(
+                    load_gff_fasta(
+                        [gff_path],
+                        [args.fasta[index]],
+                        selected_features_set=candidate_feature_types,
+                        keep_all_features=keep_all_features,
+                        record_selectors=[record_selectors[index]],
+                        reverse_flags=[reverse_flags[index]],
+                    ),
+                    is_gff_source=True,
+                    input_count=file_count,
+                )
+            ]
+        else:
+            records = load_gff_fasta(
+                args.gff,
+                args.fasta,
+                selected_features_set=candidate_feature_types,
+                keep_all_features=keep_all_features,
+                record_selectors=record_selectors,
+                reverse_flags=reverse_flags,
+            )
         record_label_values = list(args.record_label or [])
         record_subtitle_values = list(args.record_subtitle or [])
         region_arg_values = list(args.region or [])
@@ -1802,107 +1797,12 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     cfg = GbdrawConfig.from_dict(config_dict)
     window, step = calculate_window_step(longest_genome, cfg, manual_window, manual_step)
 
-    canvas = assemble_linear_diagram_from_records(
-        records=records,
-        blast_files=blast_files,
-        linear_comparisons=active_linear_comparisons,
-        layout=linear_layout,
-        config_dict=config_dict,
-        color_table=color_table,
-        default_colors=default_colors,
-        selected_features_set=selected_features_set,
-        feature_visibility_table=feature_table,
-        feature_shapes=feature_shapes or None,
-        output_prefix=out_file_prefix,
-        legend=legend,
-        dinucleotide=dinucleotide,
-        window=window,
-        step=step,
-        depth_window=depth_window,
-        depth_step=depth_step,
-        depth_track_files=depth_track_files,
-        depth_track_labels=depth_track_labels,
-        depth_track_colors=depth_track_colors,
-        depth_track_heights=depth_track_heights,
-        depth_track_large_tick_intervals=depth_track_large_tick_intervals,
-        depth_track_small_tick_intervals=depth_track_small_tick_intervals,
-        depth_track_tick_font_sizes=depth_track_tick_font_sizes,
-        linear_track_slots=linear_track_slot_specs,
-        linear_track_axis_index=linear_track_axis_index,
-        annotation_options=annotation_options,
-        plot_title=plot_title,
-        plot_title_position=plot_title_position,
-        plot_title_font_size=plot_title_font_size,
-        protein_comparisons=collinearity_comparisons,
-        orthogroups=collinearity_orthogroups,
-        protein_blastp_mode=(
-            "none"
-            if collinearity_comparisons is not None
-            or collinearity_linear_comparisons is not None
-            else protein_blastp_mode
-        ),
-        losatp_bin=losatp_bin,
-        ncbi_blastp_bin=ncbi_blastp_bin,
-        losatp_threads=losatp_threads,
-        protein_blastp_max_hits=protein_blastp_max_hits,
-        protein_blastp_candidate_limit=protein_blastp_candidate_limit,
-        orthogroup_membership_mode=orthogroup_membership_mode,
-        orthogroup_member_max_hits=orthogroup_member_max_hits,
-        collinear_max_paralog_links_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
-        align_orthogroup_feature=align_orthogroup_feature or None,
-        pairwise_match_style=pairwise_match_style,
-        evalue=evalue,
-        bitscore=bitscore,
-        identity=identity,
-        alignment_length=alignment_length,
-        cfg=cfg,
-    )
-    interactive_context = None
-    if INTERACTIVE_SVG_FORMAT in out_formats:
-        interactive_context = _build_interactive_svg_context(
-            records,
-            selected_features_set,
-            getattr(canvas, "_gbdraw_orthogroups", None) or collinearity_orthogroups,
-            feature_visibility_rules=feature_visibility_rules,
-            color_table=color_table,
-            default_colors=default_colors,
-            annotations=annotation_options,
-        )
-        save_figure(
-            canvas,
-            out_formats,
-            interactive_context=interactive_context,
-        )
-    else:
-        save_figure(canvas, out_formats)
-
-    if losatp_cache is not None:
-        losatp_cache_entries = losatp_cache.session_entries()
-        legacy_envelope = losatp_cache.legacy_candidate_envelope()
-        legacy_entries = legacy_envelope.get("entries")
-        legacy_protein_raw_candidates = (
-            tuple(
-                dict(entry)
-                for entry in legacy_entries
-                if isinstance(entry, Mapping)
-            )
-            if isinstance(legacy_entries, list)
-            else ()
-        )
-
-    rendered_svg = make_rendered_svg(out_file_prefix, Path(str(out_file_prefix)).name)
-    track_slot_geometry_records = collect_track_slot_geometry_records(
-        canvas,
-        result_index=0,
-        result_name=rendered_svg.svg_path.name,
-    )
-
     canonical_config = copy.deepcopy(config_dict)
     canonical_filtering = canonical_config["labels"]["filtering"]
     qualifier_priority_table = canonical_filtering.pop("qualifier_priority_df", None)
     label_whitelist_table = canonical_filtering.pop("whitelist_df", None)
     label_override_table = canonical_filtering.pop("label_override_df", None)
-    request_prefix = Path(rendered_svg.output_prefix).name
+    request_path = Path(str(out_file_prefix))
     canonical_request = LinearDiagramRequest(
         records=tuple(
             RecordInput(
@@ -1987,10 +1887,37 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         ),
         layout=linear_layout,
         output=RenderOutputRequest(
-            output_prefix=request_prefix,
+            output_prefix=request_path.name,
+            output_directory=(
+                request_path.parent if request_path.parent != Path(".") else None
+            ),
             formats=tuple(out_formats),
             overwrite=True,
         ),
+    )
+    render_result = render_request(canonical_request)
+    canvas = render_result.drawing
+    interactive_context = render_result.interactive_context
+
+    if losatp_cache is not None:
+        losatp_cache_entries = losatp_cache.session_entries()
+        legacy_envelope = losatp_cache.legacy_candidate_envelope()
+        legacy_entries = legacy_envelope.get("entries")
+        legacy_protein_raw_candidates = (
+            tuple(
+                dict(entry)
+                for entry in legacy_entries
+                if isinstance(entry, Mapping)
+            )
+            if isinstance(legacy_entries, list)
+            else ()
+        )
+
+    rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)
+    track_slot_geometry_records = collect_track_slot_geometry_records(
+        canvas,
+        result_index=0,
+        result_name=rendered_svg.svg_path.name,
     )
 
     return DiagramRunResult(

@@ -53,6 +53,8 @@ python -m build
 
 ## Expectations When Editing
 
+- Audit production-code and test diffs separately before handoff. Optimize for
+  fewer change points, branches, and duplicated behavior rather than raw line counts.
 - Keep the web UI as a single-page app with no build step; `gbdraw/web/index.html` hosts HTML/CSS/templates and loads ES modules from `gbdraw/web/js/` (`app.js` entry with `app/`, `services/`, `utils/`).
 - Keep larger UI modules split into focused subfolders under `gbdraw/web/js/app/` (for example `legend/`, `legend-layout/`, `feature-editor/`) and keep the `create*` entry points in the top-level `app/*.js` files.
 - If adding CDN dependencies, update the CSP in `gbdraw/web/index.html`.

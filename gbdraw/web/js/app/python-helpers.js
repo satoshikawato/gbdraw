@@ -539,13 +539,12 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         records = load_gff_fasta(
             [path],
             [fasta_path],
-            "linear",
             selected_features_set=["CDS"],
             keep_all_features=True,
-            load_comparison=True,
             record_selectors=[_normalize_web_record_selector(record_selector) or ""],
             reverse_flags=[reverse],
         )
+        records = records[:1]
     else:
         raise ValueError(f"Unsupported format: {fmt}")
     if region_spec:
@@ -1563,19 +1562,10 @@ def list_sequence_records(path, format):
         return json.dumps({"error": traceback.format_exc()})
 
 def list_gff_fasta_records(gff_path, fasta_path):
-    """List records in the same FASTA order used by diagram generation."""
+    """List every FASTA record available to paired GFF3 diagram generation."""
     try:
-        from gbdraw.io.genome import load_gff_fasta
-        records = load_gff_fasta(
-            [gff_path],
-            [fasta_path],
-            "linear",
-            selected_features_set=(),
-            keep_all_features=False,
-            load_comparison=False,
-            record_selectors=[""],
-            reverse_flags=[False],
-        )
+        from Bio import SeqIO
+        records = list(SeqIO.parse(fasta_path, "fasta"))
         payload = [
             {
                 "selector": f"#{idx + 1}",
@@ -1779,12 +1769,11 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
         include_biological_features=include_biological_features,
     )
 
-def extract_features_from_gff_fasta(gff_path, fasta_path, mode="linear", region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
+def extract_features_from_gff_fasta(gff_path, fasta_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from paired GFF3 and FASTA files for UI display."""
     return extract_features_from_gff_fasta_json(
         gff_path,
         fasta_path,
-        mode=mode,
         region_spec=region_spec,
         record_selector=record_selector,
         reverse_flag=reverse_flag,

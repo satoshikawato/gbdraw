@@ -413,7 +413,38 @@ def with_request_output(
 ) -> DiagramRequest:
     """Return a request with caller-owned replay output overrides."""
 
-    from gbdraw.api.requests import RenderOutputRequest
+    from gbdraw.api.requests import CircularBatchRequest, RenderOutputRequest
+
+    if isinstance(request, CircularBatchRequest):
+        item_count = len(request.outputs)
+        if output_prefix is None:
+            prefixes = tuple(output.output_prefix for output in request.outputs)
+        elif item_count == 1:
+            prefixes = (output_prefix,)
+        else:
+            prefixes = tuple(
+                f"{output_prefix}_{index}"
+                for index in range(1, item_count + 1)
+            )
+        outputs = tuple(
+            RenderOutputRequest(
+                output_prefix=prefix,
+                output_directory=(
+                    output_directory
+                    if output_directory is not None
+                    else current.output_directory
+                ),
+                formats=formats if formats is not None else current.formats,
+                overwrite=current.overwrite,
+                interactive_metadata_policy=current.interactive_metadata_policy,
+            )
+            for prefix, current in zip(
+                prefixes,
+                request.outputs,
+                strict=True,
+            )
+        )
+        return replace(request, outputs=outputs)
 
     current = request.output
     updated = RenderOutputRequest(

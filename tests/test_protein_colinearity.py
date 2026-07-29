@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -18,6 +19,7 @@ from svgwrite import Drawing
 import gbdraw.api.diagram as api_diagram_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.linear as linear_cli_module
+from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.analysis.protein_colinearity import (
     PROTEIN_LOSAT_CACHE_SCHEMA,
     LosatpCacheManager,
@@ -1916,19 +1918,28 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
     input_a.write_text("LOCUS       A\n", encoding="utf-8")
     input_b.write_text("LOCUS       B\n", encoding="utf-8")
     output_prefix = tmp_path / "out"
+    captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
+    records_by_path = {
+        str(input_a): records[0],
+        str(input_b): records[1],
+    }
+
+    def fake_load_gbks(paths, **_kwargs):
+        return [records_by_path[str(path)] for path in paths]
+
+    monkeypatch.setattr(linear_cli_module, "load_gbks", fake_load_gbks)
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(
-        linear_cli_module,
-        "assemble_linear_diagram_from_records",
-        lambda *_args, **_kwargs: object(),
-    )
 
-    def fake_save_figure(_canvas, _formats, **_kwargs):
+    def fake_render(canonical_request):
+        captured["canonical_request"] = canonical_request
         output_prefix.with_suffix(".svg").write_text("<svg></svg>", encoding="utf-8")
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(output_prefix.with_suffix(".svg"))),
+            interactive_context=None,
+        )
 
     def fake_losatp(query_fasta: str, subject_fasta: str, **kwargs) -> pd.DataFrame:
         query_id = query_fasta.splitlines()[0][1:].split()[0]
@@ -1941,7 +1952,7 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
             callback(raw_text)
         return parse_losatp_outfmt6(raw_text)
 
-    monkeypatch.setattr(linear_cli_module, "save_figure", fake_save_figure)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_losatp)
 
     linear_cli_module.linear_main(
@@ -1971,6 +1982,10 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
     assert entries[0]["queryProteinSetHash"].startswith("sha256:")
     assert entries[0]["subjectProteinSetHash"].startswith("sha256:")
     assert payload["proteinIdentityManifest"]["schema"] == 2
+    canonical_request = captured["canonical_request"]
+    assert isinstance(canonical_request, LinearDiagramRequest)
+    assert canonical_request.options.protein_blastp_mode == "none"
+    assert canonical_request.options.protein_comparisons is not None
 
 
 @pytest.mark.linear
@@ -3580,13 +3595,15 @@ def test_linear_cli_forwards_protein_blastp_options(
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
 
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render(canonical_request):
+        captured["canonical_request"] = canonical_request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
 
     linear_cli_module.linear_main(
         [
@@ -3610,13 +3627,16 @@ def test_linear_cli_forwards_protein_blastp_options(
         ]
     )
 
-    assert captured["protein_blastp_mode"] == "orthogroup"
-    assert captured["losatp_bin"] == "custom-losat"
-    assert captured["losatp_threads"] == 6
-    assert captured["protein_blastp_max_hits"] == 9
-    assert captured["protein_blastp_candidate_limit"] == 123
-    assert captured["orthogroup_membership_mode"] == "anchor_core_v1"
-    assert captured["align_orthogroup_feature"] is None
+    canonical_request = captured["canonical_request"]
+    assert isinstance(canonical_request, LinearDiagramRequest)
+    options = canonical_request.options
+    assert options.protein_blastp_mode == "orthogroup"
+    assert options.losatp_bin == "custom-losat"
+    assert options.losatp_threads == 6
+    assert options.protein_blastp_max_hits == 9
+    assert options.protein_blastp_candidate_limit == 123
+    assert options.orthogroup_membership_mode == "anchor_core_v1"
+    assert options.align_orthogroup_feature is None
 
 
 @pytest.mark.linear
@@ -3631,13 +3651,15 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
 
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render(canonical_request):
+        captured["canonical_request"] = canonical_request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
 
     linear_cli_module.linear_main(
         [
@@ -3655,8 +3677,11 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
         ]
     )
 
-    assert captured["protein_blastp_mode"] == "pairwise"
-    assert captured["ncbi_blastp_bin"] == "/opt/ncbi/bin/blastp"
+    canonical_request = captured["canonical_request"]
+    assert isinstance(canonical_request, LinearDiagramRequest)
+    options = canonical_request.options
+    assert options.protein_blastp_mode == "pairwise"
+    assert options.ncbi_blastp_bin == "/opt/ncbi/bin/blastp"
 
 
 @pytest.mark.linear
@@ -3671,13 +3696,15 @@ def test_linear_cli_forwards_orthogroup_alignment_option(
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
 
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render(canonical_request):
+        captured["canonical_request"] = canonical_request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
 
     linear_cli_module.linear_main(
         [
@@ -3695,4 +3722,6 @@ def test_linear_cli_forwards_orthogroup_alignment_option(
         ]
     )
 
-    assert captured["align_orthogroup_feature"] == "fanchor"
+    canonical_request = captured["canonical_request"]
+    assert isinstance(canonical_request, LinearDiagramRequest)
+    assert canonical_request.options.align_orthogroup_feature == "fanchor"

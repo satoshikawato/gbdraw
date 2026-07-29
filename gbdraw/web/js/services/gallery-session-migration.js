@@ -330,10 +330,15 @@ const retainCanonicalV3OutputShape = (renderRequest) => {
     ? renderRequest.diagramOptions
     : {};
   const output = isPlainObject(diagramOptions.output) ? diagramOptions.output : {};
+  const renderOutput = Array.isArray(renderRequest.output)
+    ? renderRequest.output[0]
+    : renderRequest.output;
   renderRequest.schema = 3;
+  delete renderRequest.grouping;
+  renderRequest.output = renderOutput;
   renderRequest.diagramOptions = diagramOptions;
   diagramOptions.output = {
-    outputPrefix: String(renderRequest?.output?.prefix ?? 'out'),
+    outputPrefix: String(renderOutput?.prefix ?? 'out'),
     legend: String(output.legend ?? 'right'),
     plotTitlePosition: String(
       output.plotTitlePosition ?? (renderRequest.mode === 'linear' ? 'bottom' : 'none')

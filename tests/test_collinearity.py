@@ -1833,16 +1833,8 @@ def test_linear_cli_builds_collinearity(
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
 
-    def fake_build(*_args, **kwargs):
-        captured["collinearity_params"] = kwargs["params"]
-        captured["unit_mode"] = kwargs["unit_mode"]
-        captured["edge_mode"] = kwargs["edge_mode"]
-        captured["search_scope"] = kwargs["search_scope"]
-        captured["orthogroup_membership_mode"] = kwargs["orthogroup_membership_mode"]
-        captured["orthogroup_member_max_hits"] = kwargs["orthogroup_member_max_hits"]
-        captured["max_paralog_links_per_orthogroup"] = kwargs["max_paralog_links_per_orthogroup"]
+    def fake_build(*_args, **_kwargs):
         anchor = _anchor(0, 0)
         return CollinearityResult(
             blocks=(
@@ -1857,13 +1849,15 @@ def test_linear_cli_builds_collinearity(
             )
         )
 
-    def fake_assemble(*_args, **kwargs):
-        captured["protein_comparisons"] = kwargs.get("protein_comparisons")
-        captured["protein_blastp_mode"] = kwargs.get("protein_blastp_mode")
-        return kwargs.get("canvas") or object()
+    def fake_render_request(request):
+        captured["canonical_request"] = request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+        )
 
     monkeypatch.setattr(linear_cli_module, "build_orthogroup_collinearity_blocks", fake_build)
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
@@ -1889,21 +1883,22 @@ def test_linear_cli_builds_collinearity(
         ]
     )
 
-    params = captured["collinearity_params"]
+    options = captured["canonical_request"].options
+    params = options.collinearity_params
     assert isinstance(params, LosslessCollinearityParameters)
     assert params.min_anchors == 1
     assert params.max_unit_gap == 0
     assert params.max_diagonal_drift == 0
     assert params.max_conflicts == 3
-    assert captured["unit_mode"] == "cds"
-    assert captured["edge_mode"] == "rbh"
-    assert captured["search_scope"] == "all"
-    assert captured["orthogroup_membership_mode"] == "anchor_core_v1"
-    assert captured["orthogroup_member_max_hits"] == 5
-    assert captured["max_paralog_links_per_orthogroup"] == 2
-    assert captured["protein_blastp_mode"] == "none"
-    comparisons = captured["protein_comparisons"]
-    assert isinstance(comparisons, list)
+    assert options.collinearity_unit_mode == "cds"
+    assert options.collinearity_anchor_mode == "rbh"
+    assert options.collinearity_search_scope == "all"
+    assert options.orthogroup_membership_mode == "anchor_core_v1"
+    assert options.orthogroup_member_max_hits == 5
+    assert options.collinear_max_paralog_links_per_orthogroup == 2
+    assert options.protein_blastp_mode == "none"
+    comparisons = options.protein_comparisons
+    assert comparisons is not None
     assert comparisons[0].iloc[0]["collinearity_color_mode"] == "orientation"
 
 

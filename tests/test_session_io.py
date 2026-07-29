@@ -351,9 +351,9 @@ def test_current_session_version_matches_web_config() -> None:
     source = Path("gbdraw/web/js/services/config.js").read_text(encoding="utf-8")
     match = re.search(r"const\s+SESSION_VERSION\s*=\s*(\d+);", source)
     assert match is not None
-    assert CURRENT_SESSION_VERSION == 37
+    assert CURRENT_SESSION_VERSION == 38
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 36, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 36, 37, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
 

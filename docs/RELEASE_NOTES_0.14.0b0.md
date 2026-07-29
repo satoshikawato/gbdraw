@@ -16,7 +16,8 @@ re-exports and compatibility aliases have been removed.
 - Pass `CircularOptions` or `LinearOptions`; wrong-mode fields are absent instead
   of being accepted and rejected later.
 - Pass one `SeqRecord` or a sequence to the same drawing function.
-- Use `CircularLayout` only for a multi-record grid.
+- Use `CircularLayout` for explicit grid placement; a one-record 1×1 grid is
+  valid.
 - Call `Diagram.to_svg()`, `Diagram.to_bytes()`, or `Diagram.save(path)` without
   handling `svgwrite.Drawing` directly.
 - `Diagram.save(path)` writes exactly the requested path. It does not create an
@@ -24,7 +25,7 @@ re-exports and compatibility aliases have been removed.
 
 See the [Python API guide](./PYTHON_API.md) for executable examples.
 
-## Architecture/API Phase 0, Phase 1 core, and beta cleanup
+## Architecture/API Phase 0, Phase 1, and beta cleanup
 
 - Fresh Python, CLI, and Web requests now resolve one versioned mode profile.
   Circular defaults to comparison thresholds `1e-5` / `50` / `70` / `0` and
@@ -38,9 +39,12 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 - Typed requests now use `CircularDiagramOptions` and `LinearDiagramOptions`.
   Their mode-specific nested contracts are `CircularTrackOptions`,
   `LinearTrackOptions`, `CircularOutputOptions`, and `LinearOutputOptions`.
-  `CircularRequestPlan` and `LinearRequestPlan` normalize builder selection, and
-  the root drawing facade and current canonical session replay route through
-  those planners. A one-record `CircularLayout` now produces a valid 1×1 grid.
+  `CircularDiagramRequest` explicitly represents `single` and `grid`;
+  `CircularBatchRequest` represents `batch` and carries one output per record.
+  `CircularRequestPlan`, `CircularBatchRequestPlan`, and `LinearRequestPlan`
+  normalize builder selection. Root API, fresh CLI/Web generation, current
+  canonical replay, and legacy internal replay route through those planners.
+  A one-record `CircularLayout` produces a valid 1×1 grid.
 - Emitted SVG IDs are valid, unique, and deterministic for the same input,
   configuration, and gbdraw version. First-party interactivity uses
   `data-gbdraw-*` roles, record indexes, renderers, and orientations instead of
@@ -70,11 +74,11 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   `--gc_content_tick_interval` alias for
   `--gc_content_large_tick_interval` are unchanged and are not removals.
 - The private `__gbdraw_legacy_spacing` transport is confined to canonical
-  request schema 1–3 and old-session readers and is never emitted by a schema 4
-  writer. Pixel spacing migrates to explicit inner and outer pixel gaps.
+  request schema 1–3 and old-session readers and is never emitted by schema 4
+  or 5 writers. Pixel spacing migrates to explicit inner and outer pixel gaps.
   Factor-based spacing can still be replayed, but it cannot be re-saved
-  losslessly as schema 4; replace it with explicit `inner_gap_px` and
-  `outer_gap_px` first.
+  losslessly by the current schema 5 writer; replace it with explicit
+  `inner_gap_px` and `outer_gap_px` first.
 - `gbdraw.api.canvas`, `gbdraw.api.configurators`, and
   `gbdraw.circular_diagram_components` were thin compatibility modules and have
   been removed. `gbdraw.api` no longer re-exports
@@ -96,28 +100,30 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 - `OutputOptions.output_prefix` was duplicate state and has been removed.
   `RenderOutputRequest.output_prefix` is the sole output-prefix owner for typed
   request and session execution, and the root drawing facade is output-neutral.
-  The CLI export adapter still forwards its resolved prefix through internal
-  assembly until the remaining planner migration is complete.
-- Explicit output prefixes preserve dots, so `sample.v1` produces
-  `sample.v1.svg`. Separate-diagram Circular batches assign deterministic
-  suffixes to duplicate implicit record IDs instead of overwriting an earlier
-  result. Session saving for this kind of batch is rejected before any diagram
-  output until the typed request model can represent explicit batch grouping;
-  use `--multi_record_canvas` or save each record separately.
+  Assembly remains output-neutral.
+- Explicit output prefixes preserve dots. One-record Circular batch output uses
+  the prefix unchanged; multiple records use `_1`, `_2`, ... suffixes. Without
+  a prefix, each record ID is used and duplicate implicit names receive the
+  first available `_2`, `_3`, ... suffix. Circular grid output uses the first
+  record ID by default and preserves an explicit prefix unchanged. Batch
+  sessions preserve the explicit grouping and every resolved output.
+- Session version 38 and canonical request schema 5 persist explicit `single`,
+  `grid`, or `batch` grouping. Schema 5 stores one output object for a single
+  diagram or grid and an output array for Circular batch. Record loading is
+  mode-neutral; planners own topology warnings and mode, comparison, and
+  cardinality policy.
 
-The remaining planner work covers fresh CLI/Web generation and legacy internal
-replay. Explicit grid/batch request forms, persisted grouping and its schema
-bump, and mode-neutral loading remain future work. Active and public runtime
-collinearity configuration uses `LosslessCollinearityParameters`; supported
-canonical request schemas 1–4 privately migrate legacy `standard` parameter
-payloads while preserving their effective fields.
+Active and public runtime collinearity configuration uses
+`LosslessCollinearityParameters`; supported canonical request schemas 1–5
+privately migrate legacy `standard` parameter payloads while preserving their
+effective fields.
 
 ## Compact LOSATP runtime handles and session version 36
 
 - Session version 36 introduced canonical `renderRequest` schema 3 and compact
   runtime handles. Version 36 remains readable after the version 37/schema 4
   output-ownership cleanup; public typed conversion is available for canonical
-  versions 31–33, 36, and 37. Versions 34 and 35 were branch-internal
+  versions 31–33 and 36–38. Versions 34 and 35 were branch-internal
   development formats and are not supported.
 - Generated protein FASTA, raw LOSATP QUERY/SUBJECT fields, protein maps, and derived comparison references now use deterministic session-global handles with the form `h_[a-z2-7]{26}`. The handles bind a record instance to the complete CDS feature identity without repeating long feature hashes or readable aliases in every hit row. Upload filenames, modification times, session resource names, display aliases, and reopen time do not determine the handle or raw-cache identity.
 - Current protein raw cache entries use schema 4, derived comparison payloads use schema 3, and the protein identity manifest uses schema 2. The manifest remains the authority for complete feature identity and display metadata and separates runtime binding from display binding. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
@@ -333,15 +339,17 @@ New drawing code should prefer the top-level interface described above.
 
 ## Session API boundary
 
-The public session bridge accepts canonical documents from versions 31–33, 36,
-and 37.
+The public session bridge accepts canonical documents from versions 31–33 and
+36–38.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
-Current writers emit version 37 and `renderRequest` schema 4. Schema 4 removes
-the duplicate `diagramOptions.output.outputPrefix`; the authoritative value is
-`renderRequest.output.prefix`. Readers retain schemas 1–3 and ignore that legacy
+Current writers emit version 38 and `renderRequest` schema 5. Schema 5 persists
+explicit Circular `single`, `grid`, or `batch` grouping; batch output is an
+array with one resolved entry per record, while other requests use one output
+object. Version 37/schema 4 introduced sole output-prefix ownership at
+`renderRequest.output.prefix`; readers retain schemas 1–3 and ignore the legacy
 nested prefix. Version 36/schema 3 documents, including the bundled Gallery
 sessions, remain supported inputs. Versions 27 through 30 can be regenerated
 with `gbdraw circular --session` or

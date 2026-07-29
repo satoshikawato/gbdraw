@@ -10,6 +10,7 @@ from Bio import SeqIO
 from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
+import gbdraw.api.request_render as request_render_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
@@ -30,6 +31,18 @@ from tests.utils.circular_drawer_fakes import (
     make_numeric_slot_capture,
     make_numeric_slot_geometry_capture,
 )
+
+
+def _stub_typed_request_export(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
 
 
 SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
@@ -2070,16 +2083,16 @@ def test_cli_circular_track_order_forwards_slots(monkeypatch: pytest.MonkeyPatch
     record = _load_record()
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
-        captured["circular_track_slots"] = kwargs.get("circular_track_slots")
+        captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     circular_cli_module.circular_main(
         [
@@ -2110,16 +2123,16 @@ def test_cli_circular_track_slot_forwards_typed_slots(
     record = _load_record()
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
-        captured["circular_track_slots"] = kwargs.get("circular_track_slots")
+        captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     circular_cli_module.circular_main(
         [
@@ -2151,16 +2164,18 @@ def test_cli_circular_track_axis_index_forwards_value(monkeypatch: pytest.Monkey
     record = _load_record()
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
-        captured["circular_track_axis_index"] = kwargs.get("circular_track_axis_index")
+        captured["circular_track_axis_index"] = (
+            kwargs["options"].tracks.circular_track_axis_index
+        )
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     circular_cli_module.circular_main(
         [
@@ -2198,16 +2213,18 @@ def test_cli_center_reserved_radius_forwards_value(monkeypatch: pytest.MonkeyPat
     record = _load_record()
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [record])
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
-        captured["center_reserved_radius"] = kwargs.get("center_reserved_radius")
+        captured["center_reserved_radius"] = (
+            kwargs["options"].tracks.center_reserved_radius
+        )
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     circular_cli_module.circular_main(
         [

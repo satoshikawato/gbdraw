@@ -2247,7 +2247,7 @@ json.dumps({
       };
 
       const normalizedOutputPrefix = String(form.prefix || '').trim();
-      if (normalizedOutputPrefix && normalizedOutputPrefix !== 'out') args.push('-o', normalizedOutputPrefix);
+      if (normalizedOutputPrefix) args.push('-o', normalizedOutputPrefix);
       if (mode.value === 'circular') {
         if (form.species) args.push('--species', form.species);
         if (form.strain) args.push('--strain', form.strain);

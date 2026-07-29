@@ -308,36 +308,116 @@ def _validate_linear_placements(
         )
 
 
+def _resolve_circular_request_options(
+    options: object,
+) -> CircularDiagramOptions:
+    if not isinstance(options, CircularDiagramOptions):
+        raise ValidationError(
+            "Circular request options must be CircularDiagramOptions."
+        )
+    return resolve_circular_diagram_options(options)
+
+
 @dataclass(frozen=True)
 class CircularDiagramRequest:
-    """Materialized record inputs and options for a Circular render."""
+    """Materialized record inputs for one Circular diagram.
+
+    ``grouping`` is normalized eagerly so the request states whether the one
+    diagram is a regular single-record render or a grid.  A grid may contain
+    one record; separate-diagram collections use :class:`CircularBatchRequest`.
+    """
 
     records: Sequence[RecordInput]
     options: CircularDiagramOptions = field(default_factory=CircularDiagramOptions)
     layout: CircularMultiRecordOptions | None = None
     output: RenderOutputRequest = field(default_factory=RenderOutputRequest)
+    grouping: Literal["single", "grid"] | None = None
 
     def __post_init__(self) -> None:
         records = _request_records(self.records)
         object.__setattr__(self, "records", records)
-        if not isinstance(self.options, CircularDiagramOptions):
-            raise ValidationError(
-                "Circular request options must be CircularDiagramOptions."
-            )
         object.__setattr__(
             self,
             "options",
-            resolve_circular_diagram_options(self.options),
+            _resolve_circular_request_options(self.options),
         )
         if self.layout is not None and not isinstance(
             self.layout, CircularMultiRecordOptions
         ):
             raise ValidationError("Circular request layout has an unsupported type.")
-        if len(records) > 1 and self.layout is None:
+        grouping = self.grouping
+        if grouping is None:
+            grouping = "grid" if self.layout is not None or len(records) > 1 else "single"
+        if grouping not in {"single", "grid"}:
+            raise ValidationError("Circular request grouping must be 'single' or 'grid'.")
+        if grouping == "single" and len(records) != 1:
+            raise ValidationError(
+                "A single Circular request requires exactly one record."
+            )
+        if grouping == "single" and self.layout is not None:
+            raise ValidationError(
+                "A single Circular request cannot define a grid layout."
+            )
+        if grouping == "grid" and self.layout is None:
             object.__setattr__(self, "layout", CircularMultiRecordOptions())
+        object.__setattr__(self, "grouping", grouping)
         if not isinstance(self.output, RenderOutputRequest):
             raise ValidationError("Circular request output has an unsupported type.")
         _validate_circular_placements(records, layout=self.layout)
+
+
+@dataclass(frozen=True)
+class CircularBatchRequest:
+    """A collection of one-record Circular diagrams with resolved outputs."""
+
+    records: Sequence[RecordInput]
+    options: CircularDiagramOptions = field(default_factory=CircularDiagramOptions)
+    outputs: Sequence[RenderOutputRequest] = ()
+
+    def __post_init__(self) -> None:
+        records = _request_records(self.records)
+        object.__setattr__(self, "records", records)
+        object.__setattr__(
+            self,
+            "options",
+            _resolve_circular_request_options(self.options),
+        )
+        if isinstance(self.outputs, (str, bytes)) or not isinstance(
+            self.outputs,
+            Sequence,
+        ):
+            raise ValidationError(
+                "Circular batch outputs must be a sequence of RenderOutputRequest values."
+            )
+        outputs = tuple(self.outputs)
+        if len(outputs) != len(records):
+            raise ValidationError(
+                "Circular batch requires one resolved output request per record."
+            )
+        if not all(isinstance(output, RenderOutputRequest) for output in outputs):
+            raise ValidationError(
+                "Circular batch outputs must be RenderOutputRequest values."
+            )
+        resolved_targets = {
+            (
+                Path(output.output_directory or "."),
+                output.output_prefix,
+            )
+            for output in outputs
+        }
+        if len(resolved_targets) != len(outputs):
+            raise ValidationError(
+                "Circular batch output prefixes must be unique within each directory."
+            )
+        if any(record.presentation.grid_row is not None for record in records):
+            raise ValidationError(
+                "Circular batch records cannot define grid placement."
+            )
+        object.__setattr__(self, "outputs", outputs)
+
+    @property
+    def grouping(self) -> Literal["batch"]:
+        return "batch"
 
 
 @dataclass(frozen=True)
@@ -373,10 +453,13 @@ class LinearDiagramRequest:
         _validate_linear_placements(records, layout=self.layout)
 
 
-DiagramRequest: TypeAlias = CircularDiagramRequest | LinearDiagramRequest
+DiagramRequest: TypeAlias = (
+    CircularDiagramRequest | CircularBatchRequest | LinearDiagramRequest
+)
 
 
 __all__ = [
+    "CircularBatchRequest",
     "CircularDiagramRequest",
     "DiagramRequest",
     "GenBankInputSource",

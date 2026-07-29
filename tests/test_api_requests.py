@@ -16,6 +16,7 @@ from gbdraw.api.options import (
     LinearOutputOptions,
 )
 from gbdraw.api.requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     GenBankInputSource,
     GffFastaInputSource,
@@ -149,7 +150,35 @@ def test_circular_request_normalizes_records_and_default_multi_layout() -> None:
     request = CircularDiagramRequest(records=[_record("a.gbk"), _record("b.gbk")])
 
     assert request.records == (_record("a.gbk"), _record("b.gbk"))
+    assert request.grouping == "grid"
     assert request.layout == CircularMultiRecordOptions()
+
+
+def test_circular_request_allows_explicit_one_record_grid() -> None:
+    request = CircularDiagramRequest(
+        records=(_record("a.gbk"),),
+        grouping="grid",
+    )
+
+    assert request.grouping == "grid"
+    assert request.layout == CircularMultiRecordOptions()
+
+
+def test_circular_batch_requires_one_unique_output_per_record() -> None:
+    records = (_record("a.gbk"), _record("b.gbk"))
+    outputs = (
+        RenderOutputRequest(output_prefix="a"),
+        RenderOutputRequest(output_prefix="b"),
+    )
+
+    request = CircularBatchRequest(records=records, outputs=outputs)
+
+    assert request.grouping == "batch"
+    assert request.outputs == outputs
+    with pytest.raises(ValidationError, match="one resolved output"):
+        CircularBatchRequest(records=records, outputs=outputs[:1])
+    with pytest.raises(ValidationError, match="must be unique"):
+        CircularBatchRequest(records=records, outputs=(outputs[0], outputs[0]))
 
 
 def test_circular_request_accepts_unique_record_grid() -> None:
@@ -224,6 +253,7 @@ def test_mode_specific_option_fields_do_not_overlap_other_mode_features() -> Non
     assert {"blast_files", "protein_blastp_mode"}.isdisjoint(circular_fields)
     assert {
         "conservation_blast_files",
+        "conservation_fasta_files",
         "conservation_reference",
     }.isdisjoint(linear_fields)
 

@@ -13,10 +13,12 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.api.diagram as diagram_api_module
+import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
 import gbdraw.render.groups.circular.ticks as circular_ticks_group_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_records
 from gbdraw.api.options import DiagramOptions, OutputOptions
+from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest
 from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
@@ -1952,15 +1954,29 @@ def test_circular_cli_multi_record_canvas_opt_in_saves_once(
 
     def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["multi"] += 1
-        captured_kwargs.update(_kwargs)
+        layout = _kwargs["layout"]
+        options = _kwargs["options"]
+        captured_kwargs.update(
+            multi_record_size_mode=layout.multi_record_size_mode,
+            multi_record_min_radius_ratio=layout.multi_record_min_radius_ratio,
+            multi_record_column_gap_ratio=layout.multi_record_column_gap_ratio,
+            multi_record_row_gap_ratio=layout.multi_record_row_gap_ratio,
+            plot_title_position=options.output.plot_title_position,
+        )
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+    def fake_save(
+        *_args: Any,
+        output_dir: str | None = None,
+        output_prefix: str | None = None,
+        **_kwargs: Any,
+    ) -> list[str]:
         calls["save"] += 1
+        return [str(Path(output_dir or ".") / f"{output_prefix}.svg")]
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
 
     circular_cli_module.circular_main(
         [
@@ -1982,6 +1998,124 @@ def test_circular_cli_multi_record_canvas_opt_in_saves_once(
     assert captured_kwargs["multi_record_column_gap_ratio"] == pytest.approx(0.10)
     assert captured_kwargs["multi_record_row_gap_ratio"] == pytest.approx(0.05)
     assert captured_kwargs["plot_title_position"] == "none"
+
+
+@pytest.mark.circular
+def test_circular_cli_one_record_grid_uses_typed_multi_planner(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    record = _build_record("one_grid", 20)
+    calls = {"single": 0, "multi": 0}
+
+    monkeypatch.setattr(
+        circular_cli_module,
+        "load_gbks",
+        lambda *_args, **_kwargs: [record],
+    )
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(
+        circular_cli_module,
+        "read_feature_visibility_file",
+        lambda _path: None,
+    )
+    monkeypatch.setattr(
+        circular_cli_module,
+        "load_default_colors",
+        lambda *_args, **_kwargs: None,
+    )
+
+    def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
+        calls["single"] += 1
+        return Drawing(filename=str(tmp_path / "single.svg"))
+
+    def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
+        calls["multi"] += 1
+        return Drawing(filename=str(tmp_path / "grid.svg"))
+
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
+
+    args = circular_cli_module._get_args(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--multi_record_canvas",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "one.grid"),
+        ]
+    )
+    result = circular_cli_module.run_circular_from_namespace(args)
+
+    assert calls == {"single": 0, "multi": 1}
+    assert isinstance(result.canonical_request, CircularDiagramRequest)
+    assert result.canonical_request.grouping == "grid"
+    assert result.canonical_request.layout is not None
+    assert result.canonical_request.output.output_directory == tmp_path
+    assert result.canonical_request.output.output_prefix == "one.grid"
+
+
+@pytest.mark.circular
+def test_circular_cli_one_record_without_grid_uses_typed_batch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    record = _build_record("one_batch", 20)
+
+    monkeypatch.setattr(
+        circular_cli_module,
+        "load_gbks",
+        lambda *_args, **_kwargs: [record],
+    )
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(
+        circular_cli_module,
+        "read_feature_visibility_file",
+        lambda _path: None,
+    )
+    monkeypatch.setattr(
+        circular_cli_module,
+        "load_default_colors",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_circular_diagram",
+        lambda *_args, **_kwargs: Drawing(filename=str(tmp_path / "single.svg")),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
+
+    args = circular_cli_module._get_args(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "one.batch"),
+        ]
+    )
+    result = circular_cli_module.run_circular_from_namespace(args)
+
+    assert isinstance(result.canonical_request, CircularBatchRequest)
+    assert result.canonical_request.grouping == "batch"
+    assert result.canonical_request.outputs[0].output_directory == tmp_path
+    assert result.canonical_request.outputs[0].output_prefix == "one.batch"
 
 
 @pytest.mark.circular
@@ -2014,8 +2148,14 @@ def test_circular_cli_records_table_regions_follow_sorted_rows(
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
 
     circular_cli_module.circular_main(
         [
@@ -2048,7 +2188,7 @@ def test_circular_cli_rejects_qualified_records_table_region_before_rendering(
         rendered = True
         return Drawing(filename=str(tmp_path / "unexpected.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     with pytest.raises(ValidationError, match=rf"{table}.*row 2, column 'region'"):
         circular_cli_module.circular_main(["--records_table", str(table), "-f", "svg"])
@@ -2092,13 +2232,19 @@ def test_circular_cli_track_table_validates_params_and_forwards_axis(
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
 
     def fake_single(*_args, **kwargs):
         captured.update(kwargs)
         return Drawing(filename=str(tmp_path / "single.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
 
     circular_cli_module.circular_main(
         [
@@ -2113,8 +2259,9 @@ def test_circular_cli_track_table_validates_params_and_forwards_axis(
         ]
     )
 
-    assert captured["circular_track_axis_index"] == 1
-    slots = captured["circular_track_slots"]
+    options = captured["options"]
+    assert options.tracks.circular_track_axis_index == 1
+    slots = options.tracks.circular_track_slots
     assert all(isinstance(slot, CircularTrackSlot) for slot in slots)
     assert [slot.id for slot in slots] == [
         "ticks",
@@ -2142,15 +2289,22 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
 
     def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["multi"] += 1
-        captured_kwargs.update(_kwargs)
+        captured_kwargs["layout"] = _kwargs["layout"]
+        captured_kwargs["options"] = _kwargs["options"]
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+    def fake_save(
+        *_args: Any,
+        output_dir: str | None = None,
+        output_prefix: str | None = None,
+        **_kwargs: Any,
+    ) -> list[str]:
         calls["save"] += 1
+        return [str(Path(output_dir or ".") / f"{output_prefix}.svg")]
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
 
     circular_cli_module.circular_main(
         [
@@ -2179,12 +2333,14 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
     assert calls["single"] == 0
     assert calls["multi"] == 1
     assert calls["save"] == 1
-    assert captured_kwargs["multi_record_size_mode"] == "linear"
-    assert captured_kwargs["multi_record_min_radius_ratio"] == pytest.approx(0.4)
-    assert captured_kwargs["multi_record_column_gap_ratio"] == pytest.approx(0.2)
-    assert captured_kwargs["multi_record_row_gap_ratio"] == pytest.approx(0.12)
-    assert captured_kwargs["plot_title_position"] == "top"
-    assert captured_kwargs["cfg"].objects.definition.circular.plot_title_font_size == pytest.approx(30.0)
+    layout = captured_kwargs["layout"]
+    options = captured_kwargs["options"]
+    assert layout.multi_record_size_mode == "linear"
+    assert layout.multi_record_min_radius_ratio == pytest.approx(0.4)
+    assert layout.multi_record_column_gap_ratio == pytest.approx(0.2)
+    assert layout.multi_record_row_gap_ratio == pytest.approx(0.12)
+    assert options.output.plot_title_position == "top"
+    assert options.plot_title_font_size == pytest.approx(30.0)
 
 
 @pytest.mark.circular
@@ -2209,12 +2365,18 @@ def test_circular_cli_multi_record_canvas_rejects_removed_sqrt_alias(
         captured_kwargs.update(_kwargs)
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+    def fake_save(
+        *_args: Any,
+        output_dir: str | None = None,
+        output_prefix: str | None = None,
+        **_kwargs: Any,
+    ) -> list[str]:
         calls["save"] += 1
+        return [str(Path(output_dir or ".") / f"{output_prefix}.svg")]
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
 
     with pytest.raises(SystemExit) as exc_info:
         circular_cli_module.circular_main(
@@ -2259,15 +2421,21 @@ def test_circular_cli_multi_record_canvas_passes_positions(
 
     def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["multi"] += 1
-        captured_kwargs.update(_kwargs)
+        captured_kwargs["layout"] = _kwargs["layout"]
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+    def fake_save(
+        *_args: Any,
+        output_dir: str | None = None,
+        output_prefix: str | None = None,
+        **_kwargs: Any,
+    ) -> list[str]:
         calls["save"] += 1
+        return [str(Path(output_dir or ".") / f"{output_prefix}.svg")]
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
 
     circular_cli_module.circular_main(
         [
@@ -2290,7 +2458,11 @@ def test_circular_cli_multi_record_canvas_passes_positions(
     assert calls["single"] == 0
     assert calls["multi"] == 1
     assert calls["save"] == 1
-    assert captured_kwargs["multi_record_positions"] == ["#3@1", "cli_a@2", "#2@2"]
+    assert captured_kwargs["layout"].multi_record_positions == (
+        "#3@1",
+        "cli_a@2",
+        "#2@2",
+    )
 
 
 @pytest.mark.circular
@@ -2493,12 +2665,18 @@ def test_circular_cli_without_multi_record_canvas_keeps_per_record_saves(
         calls["multi"] += 1
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+    def fake_save(
+        *_args: Any,
+        output_dir: str | None = None,
+        output_prefix: str | None = None,
+        **_kwargs: Any,
+    ) -> list[str]:
         calls["save"] += 1
+        return [str(Path(output_dir or ".") / f"{output_prefix}.svg")]
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
 
     circular_cli_module.circular_main(
         [
@@ -2522,10 +2700,22 @@ def test_circular_cli_without_multi_record_canvas_keeps_per_record_saves(
     assert calls["multi"] == 0
     assert calls["save"] == len(records)
     assert single_kwargs
-    assert all(kwargs.get("plot_title") == "CLI Shared Title" for kwargs in single_kwargs)
-    assert all(kwargs.get("plot_title_position") == "top" for kwargs in single_kwargs)
-    assert all(kwargs.get("plot_title_font_size") == pytest.approx(30.0) for kwargs in single_kwargs)
-    assert all(kwargs.get("keep_full_definition_with_plot_title") is True for kwargs in single_kwargs)
+    assert all(
+        kwargs["options"].plot_title == "CLI Shared Title"
+        for kwargs in single_kwargs
+    )
+    assert all(
+        kwargs["options"].output.plot_title_position == "top"
+        for kwargs in single_kwargs
+    )
+    assert all(
+        kwargs["options"].plot_title_font_size == pytest.approx(30.0)
+        for kwargs in single_kwargs
+    )
+    assert all(
+        kwargs["options"].keep_full_definition_with_plot_title is True
+        for kwargs in single_kwargs
+    )
 
 
 @pytest.mark.circular
@@ -2540,17 +2730,23 @@ def test_circular_cli_multi_record_canvas_passes_keep_full_definition_option(
     monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
-        circular_cli_module,
-        "assemble_circular_diagram_from_record",
+        request_render_module,
+        "build_circular_diagram",
         lambda *_args, **_kwargs: Drawing(filename=str(tmp_path / "single.svg")),
     )
 
     def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
-        captured_kwargs.update(_kwargs)
+        captured_kwargs["options"] = _kwargs["options"]
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
 
     circular_cli_module.circular_main(
         [
@@ -2565,7 +2761,7 @@ def test_circular_cli_multi_record_canvas_passes_keep_full_definition_option(
         ]
     )
 
-    assert captured_kwargs["keep_full_definition_with_plot_title"] is True
+    assert captured_kwargs["options"].keep_full_definition_with_plot_title is True
 
 
 @pytest.mark.circular

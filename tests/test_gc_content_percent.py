@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import re
 import xml.etree.ElementTree as ET
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -13,6 +14,7 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
+import gbdraw.api.request_render as request_render_module
 from gbdraw.analysis.gc import circular_dinucleotide_content_df, gc_content_percent_df
 from gbdraw.analysis.skew import skew_df
 from gbdraw.api.diagram import (
@@ -399,16 +401,22 @@ def test_circular_cli_gc_percent_options_forward_to_api(
 ) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, mode: [_make_record()])
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [_make_record()])
     monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda canvas, formats: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(tmp_path / f"{output_prefix}.svg")
+        ],
+    )
 
     def fake_assemble(*args, **kwargs):
-        captured.update(kwargs)
+        captured["options"] = kwargs["options"]
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     circular_cli_module.circular_main(
         [
@@ -435,7 +443,7 @@ def test_circular_cli_gc_percent_options_forward_to_api(
         ]
     )
 
-    cfg = captured["cfg"]
+    cfg = GbdrawConfig.from_dict(captured["options"].config)
     assert cfg.objects.gc_content.mode == "percent"
     assert cfg.objects.gc_content.min_percent == pytest.approx(30)
     assert cfg.objects.gc_content.max_percent == pytest.approx(70)
@@ -455,13 +463,15 @@ def test_linear_cli_gc_percent_options_forward_to_api(
     monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *args, **kwargs: [_make_record()])
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *args, **kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda canvas, formats: None)
 
-    def fake_assemble(*args, **kwargs):
-        captured.update(kwargs)
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render_request(request):
+        captured["canonical_request"] = request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
@@ -489,7 +499,7 @@ def test_linear_cli_gc_percent_options_forward_to_api(
         ]
     )
 
-    cfg = captured["cfg"]
+    cfg = GbdrawConfig.from_dict(captured["canonical_request"].options.config)
     assert cfg.objects.gc_content.mode == "percent"
     assert cfg.objects.gc_content.min_percent == pytest.approx(35)
     assert cfg.objects.gc_content.max_percent == pytest.approx(65)

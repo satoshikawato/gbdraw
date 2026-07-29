@@ -3928,6 +3928,8 @@ def build_circular_diagram(
     gb_record: SeqRecord,
     *,
     options: CircularDiagramOptions | DiagramOptions | None = None,
+    _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
+    _precomputed_depth_track_count: int | None = None,
 ) -> Drawing:
     """Build a circular diagram using strict or internal compatibility options."""
 
@@ -3994,6 +3996,8 @@ def build_circular_diagram(
         circular_track_slots=tracks.circular_track_slots if tracks else None,
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         annotation_options=options.annotations,
+        _precomputed_depth_track_specs=_precomputed_depth_track_specs,
+        _precomputed_depth_track_count=_precomputed_depth_track_count,
         cfg=cfg,
     )
 

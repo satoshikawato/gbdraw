@@ -23,6 +23,7 @@ from gbdraw.api.options import (
     LinearMultiRecordOptions,
 )
 from gbdraw.api.request_render import (
+    CircularBatchRenderResult,
     CircularRequestPlan,
     LinearRequestPlan,
     PreparedDiagramRequest,
@@ -33,6 +34,7 @@ from gbdraw.api.request_render import (
     render_request,
 )
 from gbdraw.api.requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     GffFastaInputSource,
     InMemoryRecordSource,
@@ -394,6 +396,25 @@ def test_request_render_module_does_not_import_cli_or_session_owners() -> None:
     )
 
 
+@pytest.mark.parametrize("module_name", ("circular.py", "linear.py"))
+def test_cli_renderers_do_not_call_assemblers_or_export_directly(
+    module_name: str,
+) -> None:
+    source = (Path(request_render_module.__file__).parents[1] / module_name).read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    called_names = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+    assert "render_request" in called_names
+    assert "save_figure" not in called_names
+    assert not any(name.startswith("assemble_") for name in called_names)
+
+
 def test_normalize_in_memory_record_applies_region_and_presentation_without_mutation() -> None:
     source_record = _seqrecord("record-a")
     request = LinearDiagramRequest(
@@ -464,6 +485,45 @@ def test_normalize_record_input_requires_one_resolved_record() -> None:
 
     with pytest.raises(ValidationError, match="exactly one record"):
         normalize_request_records(request)
+
+
+def test_linear_planner_applies_comparison_selection_after_neutral_gff_load() -> None:
+    fixture_dir = Path(__file__).parents[1] / "examples" / "gff3_lambda"
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(
+                source=GffFastaInputSource(
+                    fixture_dir / "lambda_two_contigs.gff3",
+                    fixture_dir / "lambda_two_contigs.fna",
+                )
+            ),
+        ),
+        options=LinearDiagramOptions(blast_files=("comparison.tsv",)),
+    )
+
+    assert normalize_request_records(request)[0].id == "lambda_left"
+
+
+@pytest.mark.parametrize(
+    ("topology", "warning"),
+    (("circular", None), (None, None), ("linear", "is linear"), ("unknown", "not available")),
+)
+def test_circular_planner_owns_topology_warnings(
+    caplog: pytest.LogCaptureFixture,
+    topology: str | None,
+    warning: str | None,
+) -> None:
+    record = _seqrecord("topology")
+    if topology is not None:
+        record.annotations["topology"] = topology
+
+    plan_circular_request(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+        )
+    )
+
+    assert (warning is not None) == (warning in caplog.text if warning else False)
 
 
 def test_mode_planners_return_validated_plan_types(
@@ -614,7 +674,11 @@ def test_render_request_passes_output_policy_and_returns_existing_paths(
     context = object()
 
     monkeypatch.setattr(request_render_module, "build_request_diagram", lambda _: prepared)
-    monkeypatch.setattr(request_render_module, "_interactive_context", lambda _: context)
+    monkeypatch.setattr(
+        request_render_module,
+        "_interactive_context",
+        lambda _, **__: context,
+    )
 
     def fake_save(canvas, formats, **kwargs):
         captured["canvas"] = canvas
@@ -677,3 +741,136 @@ def test_render_request_preserves_dotted_output_prefix(tmp_path: Path) -> None:
     assert result.output_paths == (tmp_path / "sample.v1.svg",)
     assert result.output_paths[0].is_file()
     assert not (tmp_path / "sample.svg").exists()
+
+
+@pytest.mark.circular
+def test_render_request_circular_batch_creates_one_output_per_record(
+    tmp_path: Path,
+) -> None:
+    records = tuple(
+        RecordInput(source=InMemoryRecordSource(_seqrecord(record_id, "ATGCGC" * 50)))
+        for record_id in ("batch-a", "batch-b")
+    )
+    request = CircularBatchRequest(
+        records=records,
+        outputs=tuple(
+            RenderOutputRequest(
+                output_prefix=prefix,
+                output_directory=tmp_path,
+            )
+            for prefix in ("batch-a", "batch-b")
+        ),
+    )
+
+    result = render_request(request)
+
+    assert isinstance(result, CircularBatchRenderResult)
+    assert result.output_paths == (
+        tmp_path / "batch-a.svg",
+        tmp_path / "batch-b.svg",
+    )
+    assert all(path.is_file() for path in result.output_paths)
+
+
+@pytest.mark.circular
+def test_render_request_circular_batch_loads_comparison_fasta_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    comparison_fasta = tmp_path / "comparison.fna"
+    comparison_fasta.write_text(">comparison\nAACCGG\n", encoding="utf-8")
+    parse_calls: list[object] = []
+    parse = request_render_module.SeqIO.parse
+
+    def counting_parse(source, format_name):
+        parse_calls.append(source)
+        return parse(source, format_name)
+
+    monkeypatch.setattr(request_render_module.SeqIO, "parse", counting_parse)
+    request = CircularBatchRequest(
+        records=(_memory_input("batch-a"), _memory_input("batch-b")),
+        options=CircularDiagramOptions(
+            conservation_fasta_files=(str(comparison_fasta),),
+        ),
+        outputs=tuple(
+            RenderOutputRequest(
+                output_prefix=prefix,
+                output_directory=tmp_path,
+                formats=("interactive_svg",),
+            )
+            for prefix in ("batch-a", "batch-b")
+        ),
+    )
+
+    result = render_request(request)
+
+    assert isinstance(result, CircularBatchRenderResult)
+    assert parse_calls == [str(comparison_fasta)]
+    assert all(
+        any(
+            source["origin"] == "homology-comparison"
+            for source in context.sequence_sources
+        )
+        for context in result.interactive_contexts
+        if context is not None
+    )
+
+
+@pytest.mark.parametrize(
+    ("formats", "expects_warning"),
+    [(("svg",), False), (("interactive_svg",), True)],
+)
+def test_render_request_only_loads_comparison_fasta_for_interactive_output(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    formats: tuple[str, ...],
+    expects_warning: bool,
+) -> None:
+    request = CircularDiagramRequest(
+        records=(_memory_input("record"),),
+        options=CircularDiagramOptions(
+            conservation_fasta_files=(str(tmp_path / "missing.fna"),),
+        ),
+        output=RenderOutputRequest(
+            output_prefix="diagram",
+            output_directory=tmp_path,
+            formats=formats,
+        ),
+    )
+
+    result = render_request(request)
+
+    assert result.output_paths
+    assert (
+        "Comparison FASTA could not be embedded in interactive SVG" in caplog.text
+    ) is expects_warning
+
+
+@pytest.mark.circular
+def test_render_request_circular_batch_preflights_existing_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    existing = tmp_path / "batch-b.svg"
+    existing.write_text("keep", encoding="utf-8")
+    request = CircularBatchRequest(
+        records=(_memory_input("batch-a"), _memory_input("batch-b")),
+        outputs=tuple(
+            RenderOutputRequest(
+                output_prefix=prefix,
+                output_directory=tmp_path,
+            )
+            for prefix in ("batch-a", "batch-b")
+        ),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_request_diagram",
+        lambda _request: pytest.fail("batch outputs must be preflighted before building"),
+    )
+
+    with pytest.raises(ValidationError, match="already exist"):
+        render_request(request)
+
+    assert not (tmp_path / "batch-a.svg").exists()
+    assert existing.read_text(encoding="utf-8") == "keep"

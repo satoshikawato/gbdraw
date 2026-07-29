@@ -3,7 +3,7 @@
 # Linear/Circular architecture and API decision worksheet
 
 - Date: 2026-07-28
-- Status: owner decisions recorded; Phase 0, approved beta cleanup, and Phase 1 core implemented
+- Status: owner decisions recorded; Phase 0, approved beta cleanup, and A1/O4 implemented
 - Source: [`LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md`](./LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md)
 
 ## How to respond
@@ -407,8 +407,8 @@ Implemented through 2026-07-29:
   internal to `gbdraw.render.export`.
 - The canonical CLI is `--gc` / `--no-gc`, `--skew` / `--no-skew`, and
   repeatable `--depth_track`. `RenderOutputRequest` alone owns output naming in
-  the typed request/session contract. The CLI export adapter still forwards the
-  same resolved prefix through internal assembly until its planner migration.
+  the typed request/session contract. Fresh CLI and Web generation construct
+  typed requests before rendering and save only through `render_request`.
 - Fresh CLI/API entry points reject the retired `depth_tick_interval`,
   `feature_table`, and `collinear_max_gene_gap` names; Circular
   `multi_record_size_mode=sqrt`; Linear `label_placement=on_feature` and
@@ -418,41 +418,53 @@ Implemented through 2026-07-29:
   `collinear_max_unit_gap`, Circular `auto`, Linear `above_feature`,
   Linear `above|below`, and explicit `inner_gap_px` / `outer_gap_px`.
 - Under `O3.data=A`, persisted-data compatibility is intentionally separate
-  from executable compatibility. New writers emit session version 37 and
-  canonical request schema 4. Readers retain versions 27–33 and 36 and schemas
-  1–3, migrate those stored legacy names, values, and slot fields before replay,
-  and ignore the obsolete nested assembly prefix. `--annotation-table` and
+  from executable compatibility. New writers emit session version 38 and
+  canonical request schema 5. Readers accept versions 27–33 and 36–38 and
+  canonical schemas 1–5, migrate stored legacy names, values, and slot fields
+  before replay, and ignore the obsolete nested assembly prefix where it was
+  previously accepted. `--annotation-table` and
   `--gc_content_tick_interval` remain active aliases and are not part of the
   removal set.
 - Circular private compatibility transport is confined to canonical request
-  schemas 1–3 and old-session readers. The schema 4 writer never emits
+  schemas 1–3 and old-session readers. Schema 4 and 5 writers never emit
   `__gbdraw_legacy_spacing`. Pixel-based legacy spacing is rewritten as explicit
   `innerGapPx` and `outerGapPx`; factor-based spacing remains replayable but
-  cannot be saved losslessly as schema 4 until it is replaced with explicit
-  inner and outer pixel gaps.
-- The approved O4 naming and collision rules are active: an explicit prefix
-  preserves dots, and duplicate implicit Circular batch IDs receive the first
-  available deterministic `_2`, `_3`, ... suffix. A separate-diagram Circular
-  batch that requests session output is rejected before diagram output until a
-  typed batch request can represent that grouping.
-- The Phase 1 core uses `CircularDiagramOptions` and `LinearDiagramOptions` at
+  cannot be saved losslessly by the current schema 5 writer until it is replaced
+  with explicit inner and outer pixel gaps.
+- The approved O4 naming and collision rules are active. Circular batch without
+  `-o` uses each record ID and resolves duplicate implicit names with the first
+  available `_2`, `_3`, ... suffix. One batch record with `-o PREFIX` uses
+  `PREFIX`; multiple records use `PREFIX_1`, `PREFIX_2`, ... . Circular grid
+  uses the first record ID without `-o` and preserves an explicit prefix,
+  including dots, unchanged. Batch sessions preserve every resolved output.
+- The Phase 1 request layer uses `CircularDiagramOptions` and
+  `LinearDiagramOptions` at
   the typed request boundary. Their mode-specific nested contracts are
   `CircularTrackOptions`, `LinearTrackOptions`, `CircularOutputOptions`, and
-  `LinearOutputOptions`. `CircularRequestPlan` and `LinearRequestPlan` own
-  normalized builder selection, and the root drawing facade now routes through
-  those planners. Current canonical session replay also reaches the planners
-  through `render_request`. A one-record `CircularLayout` is valid and produces
-  a 1×1 grid.
+  `LinearOutputOptions`. `CircularDiagramRequest` states `single` or `grid`;
+  `CircularBatchRequest` states `batch` and carries one resolved
+  `RenderOutputRequest` per record. `CircularRequestPlan`,
+  `CircularBatchRequestPlan`, and `LinearRequestPlan` own normalized builder
+  selection. Root API, fresh CLI/Web generation, current canonical replay, and
+  legacy internal replay now reach those planners. A one-record grid is valid
+  and produces a 1×1 diagram.
+- Circular comparison FASTA resources now use
+  `CircularDiagramOptions.conservation_fasta_files` in the same canonical
+  request as their BLAST resources; the former Web-only metadata path is
+  reader compatibility only. Circular batch rendering loads each shared FASTA
+  once per request.
+- Record parsing is mode-neutral. Selectors, regions, and reverse-complement
+  transforms remain reusable input operations; Circular topology warnings and
+  mode/comparison cardinality policy are applied by request planners.
 - Active and public runtime collinearity configuration uses
   `LosslessCollinearityParameters`. Readers for supported canonical request
-  schemas 1–4 privately migrate legacy `standard` parameter payloads while
+  schemas 1–5 privately migrate legacy `standard` parameter payloads while
   preserving their effective fields.
 
-The remaining A1 and O4 work under `O6.delivery=A` is to route fresh CLI/Web
-generation and legacy internal replay through the planners; add explicit grid
-and batch request forms with persisted grouping and the required schema bump;
-and complete mode-neutral loading. `DiagramOptions` and the internal assembler
-implementations remain as an internal compatibility bridge while those entry
-points migrate; they are not the canonical typed request options.
+A1 and O4 are complete under `O6.delivery=A`. Schema 5 persists explicit
+`single` / `grid` / `batch` grouping and uses an output object for one diagram
+or an output array for Circular batch. `DiagramOptions` and the internal
+assembler implementations remain implementation bridges below the planners;
+they are not canonical request options or alternate orchestration paths.
 
 [Architecture/API audit](./LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md) | [Python API](./PYTHON_API.md) | [API improvement plan](./PYTHON_API_IMPROVEMENT_PLAN.md)

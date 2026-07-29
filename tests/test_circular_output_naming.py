@@ -5,11 +5,9 @@ from pathlib import Path
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-import pytest
 
 from gbdraw.circular import circular_main
 from gbdraw.core.sequence import determine_output_file_prefixes
-from gbdraw.exceptions import ValidationError
 
 
 def _record(record_id: str) -> SeqRecord:
@@ -57,7 +55,32 @@ def test_circular_cli_duplicate_record_ids_do_not_overwrite(
     assert (tmp_path / "duplicate_2.svg").is_file()
 
 
-def test_circular_batch_session_rejects_before_writing_partial_outputs(
+def test_circular_cli_batch_splits_dotted_path_prefix(
+    tmp_path: Path,
+) -> None:
+    input_paths = [tmp_path / "first.gb", tmp_path / "second.gb"]
+    for index, path in enumerate(input_paths, start=1):
+        SeqIO.write(_record(f"record-{index}"), path, "genbank")
+    output_directory = tmp_path / "nested"
+    output_directory.mkdir()
+    output_prefix = output_directory / "diagram.v1"
+
+    circular_main(
+        [
+            "--gbk",
+            *(str(path) for path in input_paths),
+            "--format",
+            "svg",
+            "-o",
+            str(output_prefix),
+        ]
+    )
+
+    assert (output_directory / "diagram.v1_1.svg").is_file()
+    assert (output_directory / "diagram.v1_2.svg").is_file()
+
+
+def test_circular_batch_session_writes_all_outputs_and_sidecar(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -66,16 +89,16 @@ def test_circular_batch_session_rejects_before_writing_partial_outputs(
         SeqIO.write(_record(f"record-{index}"), path, "genbank")
     monkeypatch.chdir(tmp_path)
 
-    with pytest.raises(ValidationError, match="separate-diagram Circular batch"):
-        circular_main(
-            [
-                "--gbk",
-                *(str(path) for path in input_paths),
-                "--format",
-                "svg",
-                "--save_session",
-            ]
-        )
+    circular_main(
+        [
+            "--gbk",
+            *(str(path) for path in input_paths),
+            "--format",
+            "svg",
+            "--save_session",
+        ]
+    )
 
-    assert not list(tmp_path.glob("record-*.svg"))
-    assert not list(tmp_path.glob("*.gbdraw-session.json"))
+    assert (tmp_path / "record-1.svg").is_file()
+    assert (tmp_path / "record-2.svg").is_file()
+    assert (tmp_path / "gbdraw.gbdraw-session.json").is_file()

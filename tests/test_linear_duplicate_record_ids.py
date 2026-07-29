@@ -9,7 +9,6 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
-import gbdraw.linear as linear_cli
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig
@@ -23,6 +22,7 @@ from gbdraw.diagrams.linear.orthogroup_alignment import (
 from gbdraw.diagrams.linear.precalc import _precalculate_label_dimensions
 from gbdraw.features.ids import compute_feature_hash, make_linear_rendered_feature_id
 from gbdraw.io.colors import load_default_colors
+from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import enrich_svg
 
 
@@ -207,7 +207,12 @@ def test_duplicate_rendered_feature_payload_entries_do_not_collapse() -> None:
     )
     enriched = enrich_svg(
         canvas.tostring(),
-        linear_cli._build_interactive_svg_context(records, {"CDS"}),
+        build_interactive_svg_context(
+            records,
+            selected_features_set={"CDS"},
+            linear_rendered_feature_ids=True,
+            mode="linear",
+        ),
     )
     payload = _metadata_payload(enriched)
     feature_ids = {feature["svg_id"] for feature in payload["features"]}

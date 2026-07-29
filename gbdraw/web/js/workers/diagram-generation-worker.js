@@ -124,7 +124,6 @@ const runFeatureExtraction = async ({
   path,
   format = 'genbank',
   fastaPath = null,
-  mode = 'linear',
   files = [],
   regionSpec = null,
   recordSelector = null,
@@ -161,7 +160,6 @@ const runFeatureExtraction = async ({
       ? extractFeatures(
           normalizedPath,
           normalizedFastaPath,
-          String(mode || 'linear'),
           regionSpec || null,
           recordSelector || null,
           reverseFlag ? '1' : '0',

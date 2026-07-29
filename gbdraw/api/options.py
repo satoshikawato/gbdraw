@@ -674,6 +674,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     tracks: CircularTrackOptions | None = None
     output: CircularOutputOptions | None = None
     conservation_blast_files: Sequence[str] | None = None
+    conservation_fasta_files: Sequence[str | None] | None = None
     conservation_dataframes: Sequence[DataFrame] | None = None
     conservation_reference: Literal["query", "subject", "auto"] = "auto"
     conservation_labels: Sequence[str] | None = None
@@ -709,6 +710,12 @@ class CircularDiagramOptions(_ModeDiagramOptions):
             self.conservation_blast_files,
             field_name="conservation_blast_files",
             element_type=str,
+        )
+        _validate_sequence_elements(
+            self.conservation_fasta_files,
+            field_name="conservation_fasta_files",
+            element_type=str,
+            allow_none=True,
         )
         _validate_sequence_elements(
             self.conservation_labels,
@@ -1048,6 +1055,7 @@ def _legacy_diagram_options(
     """Convert a strict request option object for an internal legacy builder."""
 
     values = {item.name: getattr(options, item.name) for item in fields(options)}
+    values.pop("conservation_fasta_files", None)
     tracks = values.get("tracks")
     if isinstance(tracks, CircularTrackOptions):
         values["tracks"] = TrackOptions(

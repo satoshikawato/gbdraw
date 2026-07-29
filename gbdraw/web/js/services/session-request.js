@@ -36,6 +36,7 @@ import {
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
 } from '../app/depth-track-state.js';
+import { buildDisambiguatedRecordEntries } from '../app/record-options.js';
 import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
@@ -60,7 +61,8 @@ import {
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 4;
+export const CANONICAL_REQUEST_SCHEMA = 5;
+const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([1, 2, 3, 4, 5]);
 
 // Canonical schemas 1-3 omitted values that matched the former shared API
 // defaults. Keep those values stable when reading sparse persisted requests.
@@ -91,10 +93,47 @@ const HISTORICAL_CONFIG_OVERRIDES = Object.freeze({
   })
 });
 
-const safePrefix = (value) => {
+const safePrefix = (value, fallback = 'out') => {
   const normalized = String(value || '').trim().replace(/[\\/]+/g, '_');
-  return normalized && normalized !== '.' && normalized !== '..' ? normalized : 'out';
+  return normalized && normalized !== '.' && normalized !== '..' ? normalized : fallback;
 };
+
+const explicitOutputPrefix = (value) => {
+  const raw = String(value || '').trim();
+  return raw ? safePrefix(raw) : null;
+};
+
+const circularRecordId = (record, index) => (
+  String(record?.record_id ?? record?.recordId ?? '').trim() || `Record_${index + 1}`
+);
+
+const resolveCircularBatchPrefixes = (records, explicitPrefix) => {
+  if (explicitPrefix !== null) {
+    if (records.length === 1) return [explicitPrefix];
+    return records.map((_, index) => `${explicitPrefix}_${index + 1}`);
+  }
+  const prefixes = [];
+  const used = new Set();
+  records.forEach((record, index) => {
+    const base = safePrefix(circularRecordId(record, index));
+    let candidate = base;
+    let suffix = 2;
+    while (used.has(candidate)) {
+      candidate = `${base}_${suffix}`;
+      suffix += 1;
+    }
+    used.add(candidate);
+    prefixes.push(candidate);
+  });
+  return prefixes;
+};
+
+const renderOutputPayload = (prefix) => ({
+  prefix,
+  formats: ['interactive_svg'],
+  overwrite: true,
+  interactiveMetadataPolicy: 'auto'
+});
 
 const optionalNumber = (value) => {
   if (value === null || value === undefined || String(value).trim() === '') return null;
@@ -270,18 +309,17 @@ const buildRecords = ({ state, filesData, resources }) => {
   const knownRecords = Array.isArray(state.circularRecordList.value)
     ? state.circularRecordList.value
     : [];
-  if (!state.form.multi_record_canvas && knownRecords.length > 1) {
-    throw new Error(
-      'A non-canvas Circular run with multiple outputs cannot be represented by canonical request schema 1.'
-    );
-  }
-  const selectedRecords = state.form.multi_record_canvas && knownRecords.length > 0
-    ? knownRecords
-    : [null];
+  const selectedRecords = knownRecords.length > 0 ? knownRecords : [null];
+  const recordSelectors = buildDisambiguatedRecordEntries(
+    knownRecords.map((record) => ({
+      ...record,
+      recordId: record?.record_id ?? record?.recordId
+    }))
+  );
   return selectedRecords.map((record, index) => ({
     recordKey: `record-${index + 1}`,
     source,
-    selector: selectorPayload(record?.selector),
+    selector: selectorPayload(recordSelectors[index]?.value ?? record?.selector),
     region: null,
     presentation: presentationPayload()
   }));
@@ -658,7 +696,23 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
   const webFiles = {};
   const records = buildRecords({ state, filesData, resources });
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
-
+  const grouping = state.mode.value === 'linear'
+    ? 'single'
+    : (state.form.multi_record_canvas ? 'grid' : 'batch');
+  const explicitPrefix = explicitOutputPrefix(state.form.prefix);
+  const knownCircularRecords = Array.isArray(state.circularRecordList.value)
+    ? state.circularRecordList.value
+    : [];
+  const circularOutputRecords = knownCircularRecords.length > 0
+    ? knownCircularRecords
+    : records.map(() => ({ record_id: 'out' }));
+  const defaultCircularPrefix = safePrefix(circularRecordId(circularOutputRecords[0], 0));
+  const output = grouping === 'batch'
+    ? resolveCircularBatchPrefixes(circularOutputRecords, explicitPrefix)
+        .map(renderOutputPayload)
+    : renderOutputPayload(
+        explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : 'out')
+      );
   const diagramOptions = {
     configOverrides: buildConfigOverrides(state),
     tracks: buildTracks(state),
@@ -701,13 +755,13 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
         ? filesData.c_conservation_sequence_sources
         : [];
       if (comparisonSources.some(Boolean)) {
-        webFiles.conservationSequenceSources = comparisonSources.map((entry, index) => (
+        diagramOptions.conservationFastaFiles = comparisonSources.map((entry, index) => (
           entry
-            ? resources.addFile(
-                `conservation-sequence-sources-${index + 1}`,
-                'conservation-sequence-source',
-                entry
-              )
+            ? fileRef(resources.addFile(
+              `conservation-fasta-files-${index + 1}`,
+              'conservation-fasta-file',
+              entry
+            ))
             : null
         ));
       }
@@ -756,16 +810,12 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
     renderRequest: {
       schema: CANONICAL_REQUEST_SCHEMA,
       mode: state.mode.value,
+      grouping,
       records,
       diagramOptions,
       layout: buildLayout(state, filesData),
       comparisons: buildComparisons({ state, filesData, resources }),
-      output: {
-        prefix: safePrefix(state.form.prefix),
-        formats: ['interactive_svg'],
-        overwrite: true,
-        interactiveMetadataPolicy: 'auto'
-      }
+      output
     },
     resources: resources.resources,
     webFiles
@@ -1150,6 +1200,88 @@ const validateCanonicalAssemblyOutput = (value, schema) => {
   }
 };
 
+const canonicalGrouping = (renderRequest, records) => {
+  if (renderRequest.schema < 5) {
+    if (renderRequest.mode === 'linear') return 'single';
+    return Object.keys(renderRequest.layout || {}).length > 0 || records.length > 1
+      ? 'grid'
+      : 'single';
+  }
+  const allowed = renderRequest.mode === 'circular'
+    ? ['single', 'grid', 'batch']
+    : ['single'];
+  if (!allowed.includes(renderRequest.grouping)) {
+    throw new Error(`Unsupported canonical ${renderRequest.mode} grouping.`);
+  }
+  if (
+    renderRequest.mode === 'circular' &&
+    renderRequest.grouping === 'single' &&
+    (
+      records.length !== 1 ||
+      Object.keys(renderRequest.layout || {}).length > 0
+    )
+  ) {
+    throw new Error('A single Circular canonical request requires one record and no grid layout.');
+  }
+  if (
+    renderRequest.grouping === 'batch' &&
+    Object.keys(renderRequest.layout || {}).length > 0
+  ) {
+    throw new Error('A Circular batch canonical request cannot define a grid layout.');
+  }
+  return renderRequest.grouping;
+};
+
+const canonicalOutputPrefixes = (renderRequest, grouping, recordCount) => {
+  const outputs = grouping === 'batch' ? renderRequest.output : [renderRequest.output];
+  if (
+    !Array.isArray(outputs) ||
+    outputs.length !== (grouping === 'batch' ? recordCount : 1) ||
+    outputs.some((output) => !output || typeof output !== 'object' || Array.isArray(output))
+  ) {
+    throw new Error(
+      grouping === 'batch'
+        ? 'Canonical Circular batch output must contain one object per record.'
+        : 'Canonical renderRequest output must be an object.'
+    );
+  }
+  const prefixes = outputs.map((output) => String(output.prefix || '').trim());
+  if (prefixes.some((prefix) => !prefix)) {
+    throw new Error('Canonical renderRequest output prefixes must be non-empty.');
+  }
+  return prefixes;
+};
+
+const inferredImplicitBatchPrefixes = (records) => {
+  const recordIds = records.map((record) => (
+    record?.selector?.kind === 'recordId'
+      ? String(record.selector.value || '').trim()
+      : ''
+  ));
+  if (recordIds.some((recordId) => !recordId)) return null;
+  return resolveCircularBatchPrefixes(
+    recordIds.map((recordId) => ({ record_id: recordId })),
+    null
+  );
+};
+
+const projectedOutputPrefix = (renderRequest, grouping, records, prefixes) => {
+  if (grouping !== 'batch') return prefixes[0] || 'out';
+  const implicitPrefixes = inferredImplicitBatchPrefixes(records);
+  if (
+    implicitPrefixes &&
+    implicitPrefixes.every((prefix, index) => prefix === prefixes[index])
+  ) {
+    return '';
+  }
+  if (prefixes.length === 1) return prefixes[0];
+  const firstMatch = prefixes[0]?.match(/^(.*)_1$/);
+  const base = firstMatch?.[1] || '';
+  return base && prefixes.every((prefix, index) => prefix === `${base}_${index + 1}`)
+    ? base
+    : '';
+};
+
 export const projectCanonicalSessionRequest = ({
   renderRequest,
   resources: canonicalResources,
@@ -1159,7 +1291,7 @@ export const projectCanonicalSessionRequest = ({
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false
 }) => {
-  if (!renderRequest || ![1, 2, 3, CANONICAL_REQUEST_SCHEMA].includes(renderRequest.schema)) {
+  if (!renderRequest || !SUPPORTED_CANONICAL_REQUEST_SCHEMAS.has(renderRequest.schema)) {
     throw new Error('Unsupported canonical renderRequest schema.');
   }
   if (!['circular', 'linear'].includes(renderRequest.mode)) {
@@ -1167,6 +1299,8 @@ export const projectCanonicalSessionRequest = ({
   }
   const records = Array.isArray(renderRequest.records) ? renderRequest.records : [];
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
+  const grouping = canonicalGrouping(renderRequest, records);
+  const outputPrefixes = canonicalOutputPrefixes(renderRequest, grouping, records.length);
   const webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
     ? webFiles
     : {};
@@ -1360,10 +1494,17 @@ export const projectCanonicalSessionRequest = ({
       .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null)
       .filter(Boolean);
   }
-  if (renderRequest.mode === 'circular' && Array.isArray(webMetadata.conservationSequenceSources)) {
-    files.c_conservation_sequence_sources = webMetadata.conservationSequenceSources.map((resourceId) => (
-      resourceId ? resourceAsLegacyFile(resources, resourceId) : null
+  if (renderRequest.mode === 'circular' && Array.isArray(options.conservationFastaFiles)) {
+    files.c_conservation_sequence_sources = options.conservationFastaFiles.map((ref) => (
+      ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null
     ));
+  } else if (
+    renderRequest.mode === 'circular'
+    && Array.isArray(webMetadata.conservationSequenceSources)
+  ) {
+    files.c_conservation_sequence_sources = webMetadata.conservationSequenceSources.map(
+      (resourceId) => (resourceId ? resourceAsLegacyFile(resources, resourceId) : null)
+    );
   }
   const explicitOverrides = Object.fromEntries(
     Object.entries(options.configOverrides || {}).filter(
@@ -1492,10 +1633,10 @@ export const projectCanonicalSessionRequest = ({
     tick_font_size: optionalNumber(options.depthTrackTickFontSizes?.[index])
   }));
   const form = {
-    prefix: renderRequest.output?.prefix || 'out',
+    prefix: projectedOutputPrefix(renderRequest, grouping, records, outputPrefixes),
     plot_title: options.plotTitle || '',
     legend: options.output?.legend || 'right',
-    multi_record_canvas: renderRequest.mode === 'circular' && Object.keys(renderRequest.layout || {}).length > 0,
+    multi_record_canvas: renderRequest.mode === 'circular' && grouping === 'grid',
     suppress_gc: renderRequest.mode === 'circular' ? overrides.show_gc === false : false,
     suppress_skew: renderRequest.mode === 'circular' ? overrides.show_skew === false : false,
     show_gc: renderRequest.mode === 'linear' ? Boolean(overrides.show_gc) : false,

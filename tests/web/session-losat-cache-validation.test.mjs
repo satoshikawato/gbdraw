@@ -62,7 +62,7 @@ const session = (rawEntries, derivedEntries) => ({
   }
 });
 
-for (const version of [36, 37]) {
+for (const version of [36, 37, 38]) {
   test(`version-${version} import rejects duplicate raw LOSAT cache keys`, () => {
     assert.throws(
       () => validateSessionLosatArtifacts(

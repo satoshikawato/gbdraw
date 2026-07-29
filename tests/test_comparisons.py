@@ -165,14 +165,15 @@ def test_linear_cli_alignment_length_is_forwarded(
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
 
-    def fake_assemble(*_args, **kwargs):
-        captured["alignment_length"] = kwargs.get("alignment_length")
-        captured["pairwise_match_style"] = kwargs.get("pairwise_match_style")
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render_request(request):
+        captured["canonical_request"] = request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
@@ -189,8 +190,9 @@ def test_linear_cli_alignment_length_is_forwarded(
         ]
     )
 
-    assert captured["alignment_length"] == 123
-    assert captured["pairwise_match_style"] == "curve"
+    options = captured["canonical_request"].options
+    assert options.alignment_length == 123
+    assert options.pairwise_match_style == "curve"
 
 
 @pytest.mark.linear

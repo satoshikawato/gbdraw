@@ -28,7 +28,6 @@ def test_load_gff_fasta_preserves_fasta_record_order(tmp_path: Path) -> None:
     records = load_gff_fasta(
         [str(gff_path)],
         [str(fasta_path)],
-        mode="linear",
         selected_features_set={"gene"},
     )
 
@@ -63,7 +62,6 @@ def test_load_gff_fasta_collapses_same_id_rows_into_compound_location(
     records = load_gff_fasta(
         [str(gff_path)],
         [str(fasta_path)],
-        mode="linear",
         selected_features_set={"CDS"},
     )
 
@@ -105,7 +103,6 @@ def test_load_gff_fasta_orders_negative_multipart_rows_in_transcription_directio
     records = load_gff_fasta(
         [str(gff_path)],
         [str(fasta_path)],
-        mode="linear",
         selected_features_set={"CDS"},
     )
 
@@ -129,7 +126,6 @@ def test_nc_013668_gff3_orf10_matches_genbank_compound_cds(
     gff_records = load_gff_fasta(
         [str(test_inputs_dir / "NC_013668.gff3")],
         [str(test_inputs_dir / "NC_013668.fasta")],
-        mode="circular",
         selected_features_set={"CDS"},
     )
     genbank_record = SeqIO.read(test_inputs_dir / "NC_013668.gb", "genbank")

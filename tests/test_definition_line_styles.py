@@ -124,23 +124,19 @@ def test_linear_cli_definition_line_style_validation(cmd_args: list[str]) -> Non
 def test_linear_cli_definition_line_style_forwards(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     record = _record("Top Label")
     captured: dict[str, Any] = {}
-    real_modify_config_dict = linear_cli_module.modify_config_dict
 
     monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
     monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
-    monkeypatch.setattr(
-        linear_cli_module,
-        "assemble_linear_diagram_from_records",
-        lambda *_args, **_kwargs: Drawing(filename=str(tmp_path / "dummy.svg")),
-    )
 
-    def fake_modify_config_dict(config_dict, **kwargs):
-        captured["line_styles"] = kwargs.get("linear_definition_line_styles")
-        return real_modify_config_dict(config_dict, **kwargs)
+    def fake_render_request(request):
+        captured["canonical_request"] = request
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "modify_config_dict", fake_modify_config_dict)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
@@ -159,10 +155,12 @@ def test_linear_cli_definition_line_style_forwards(monkeypatch: pytest.MonkeyPat
         ]
     )
 
-    assert captured["line_styles"] == {
-        "name": {"font_weight": "bold", "fill": "rgb(1,2,3)"},
-        "length": {"font_size": 9.0},
-    }
+    line_styles = captured["canonical_request"].options.config["objects"][
+        "definition"
+    ]["linear"]["line_styles"]
+    assert line_styles["name"]["font_weight"] == "bold"
+    assert line_styles["name"]["fill"] == "rgb(1,2,3)"
+    assert line_styles["length"]["font_size"] == 9.0
 
 
 def test_definition_line_style_config_defaults_and_legacy_inheritance() -> None:

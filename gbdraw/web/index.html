@@ -1920,8 +1920,8 @@
                     <div class="card-header"><i class="ph ph-sliders"></i> Basic</div>
                     <div class="space-y-2">
                         <div>
-                            <label class="input-label">Output Prefix <help-tip text="Prefix for output files. Leave empty to use the record name (e.g., NC_000xxx)."></help-tip></label>
-                            <input type="text" v-model="form.prefix" class="form-input" placeholder="Optional (Default: Record ID)">
+                            <label class="input-label">Output Prefix <help-tip :text="mode === 'circular' ? 'Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.' : 'Prefix for output files. Leave empty to use out.'"></help-tip></label>
+                            <input type="text" v-model="form.prefix" class="form-input" :placeholder="mode === 'circular' ? 'Optional (Default: Record ID)' : 'Optional (Default: out)'">
                         </div>
 
                         <template v-if="mode === 'circular'">

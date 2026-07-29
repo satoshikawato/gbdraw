@@ -336,10 +336,24 @@ def render_canonical_session_if_present(
         )
 
         if save_session or session_output:
+            from gbdraw.api.requests import CircularBatchRequest
+
+            if isinstance(request, CircularBatchRequest):
+                replay_prefix = (
+                    output_path.name
+                    if output_path is not None
+                    else (
+                        request.outputs[0].output_prefix
+                        if len(request.outputs) == 1
+                        else "gbdraw"
+                    )
+                )
+            else:
+                replay_prefix = request.output.output_prefix
             sidecar_path = (
                 Path(session_output)
                 if session_output
-                else output_directory / f"{request.output.output_prefix}.gbdraw-session.json"
+                else output_directory / f"{replay_prefix}.gbdraw-session.json"
             )
             adjunct = {
                 key: value
@@ -354,14 +368,20 @@ def render_canonical_session_if_present(
                     "files",
                 }
             }
-            if rendered.protein_id_map:
+            protein_id_map = getattr(rendered, "protein_id_map", None) or {}
+            losat_entries = getattr(rendered, "losat_cache_entries", ())
+            derived_entries = getattr(rendered, "losat_derived_cache_entries", ())
+            identity_manifest = getattr(rendered, "protein_identity_manifest", None)
+            legacy_raw = getattr(rendered, "legacy_protein_raw_candidates", ())
+            legacy_derived = getattr(rendered, "legacy_protein_derived_evidence", ())
+            if protein_id_map:
                 from gbdraw.api.request_render import (
                     rewrite_protein_artifact_references,
                 )
 
                 adjunct = rewrite_protein_artifact_references(
                     adjunct,
-                    rendered.protein_id_map,
+                    protein_id_map,
                 )
             for artifact_key in (
                 "losatCache",
@@ -371,15 +391,13 @@ def render_canonical_session_if_present(
             ):
                 adjunct.pop(artifact_key, None)
             adjunct["losatCache"] = {
-                "entries": [dict(entry) for entry in rendered.losat_cache_entries]
+                "entries": [dict(entry) for entry in losat_entries]
             }
             adjunct["losatDerivedCache"] = {
-                "entries": [
-                    dict(entry) for entry in rendered.losat_derived_cache_entries
-                ]
+                "entries": [dict(entry) for entry in derived_entries]
             }
             adjunct["proteinIdentityManifest"] = dict(
-                rendered.protein_identity_manifest
+                identity_manifest
                 or {
                     "schema": 2,
                     "proteinSets": {},
@@ -388,21 +406,15 @@ def render_canonical_session_if_present(
                 }
             )
             legacy_artifacts: dict[str, Any] = {}
-            if rendered.legacy_protein_raw_candidates:
+            if legacy_raw:
                 legacy_artifacts["proteinRawCandidates"] = {
                     "schema": 1,
-                    "entries": [
-                        dict(entry)
-                        for entry in rendered.legacy_protein_raw_candidates
-                    ],
+                    "entries": [dict(entry) for entry in legacy_raw],
                 }
-            if rendered.legacy_protein_derived_evidence:
+            if legacy_derived:
                 legacy_artifacts["proteinDerivedEvidence"] = {
                     "schema": 1,
-                    "entries": [
-                        dict(entry)
-                        for entry in rendered.legacy_protein_derived_evidence
-                    ],
+                    "entries": [dict(entry) for entry in legacy_derived],
                 }
             if legacy_artifacts:
                 adjunct["legacyArtifacts"] = legacy_artifacts
@@ -417,18 +429,31 @@ def render_canonical_session_if_present(
                 )
             if svg_results:
                 adjunct["results"] = svg_results
-            interactive_context = rendered.interactive_context
-            if interactive_context is not None:
+            interactive_contexts = (
+                rendered.interactive_contexts
+                if hasattr(rendered, "interactive_contexts")
+                else (rendered.interactive_context,)
+            )
+            populated_contexts = tuple(
+                context
+                for context in interactive_contexts
+                if context is not None
+            )
+            if populated_contexts:
                 features = adjunct.get("features")
                 features = dict(features) if isinstance(features, Mapping) else {}
                 features["extractedFeatures"] = [
-                    dict(feature) for feature in interactive_context.features
+                    dict(feature)
+                    for context in populated_contexts
+                    for feature in context.features
                 ]
                 features["biologicalFeatures"] = [
-                    dict(feature) for feature in interactive_context.biological_features
+                    dict(feature)
+                    for context in populated_contexts
+                    for feature in context.biological_features
                 ]
                 adjunct["features"] = features
-            if interactive_context is not None:
+            if populated_contexts:
                 orthogroup_state = adjunct.get("orthogroupState")
                 orthogroup_state = (
                     dict(orthogroup_state)
@@ -436,14 +461,32 @@ def render_canonical_session_if_present(
                     else {}
                 )
                 orthogroup_state["groups"] = [
-                    dict(group) for group in interactive_context.orthogroups
+                    dict(group)
+                    for context in populated_contexts
+                    for group in context.orthogroups
                 ]
                 adjunct["orthogroupState"] = orthogroup_state
-            geometry_records = collect_track_slot_geometry_records(
-                rendered.drawing,
-                result_index=0,
-                result_name=str(request.output.output_prefix),
+            drawings = (
+                rendered.drawings
+                if hasattr(rendered, "drawings")
+                else (rendered.drawing,)
             )
+            result_names = (
+                tuple(output.output_prefix for output in request.outputs)
+                if isinstance(request, CircularBatchRequest)
+                else (request.output.output_prefix,)
+            )
+            geometry_records = [
+                record
+                for index, (drawing, result_name) in enumerate(
+                    zip(drawings, result_names, strict=True)
+                )
+                for record in collect_track_slot_geometry_records(
+                    drawing,
+                    result_index=index,
+                    result_name=str(result_name),
+                )
+            ]
             run_metadata = build_track_slot_geometry_run_metadata(
                 mode=mode,
                 records=geometry_records,
@@ -455,7 +498,7 @@ def render_canonical_session_if_present(
             save_session_document(
                 sidecar_path,
                 request,
-                title=str(document.to_dict().get("title") or request.output.output_prefix),
+                title=str(document.to_dict().get("title") or replay_prefix),
                 adjunct=adjunct,
             )
     return True

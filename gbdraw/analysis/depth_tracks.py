@@ -202,6 +202,7 @@ def _tracks_from_record_major_values(
         field_name="depth_track_tick_font_sizes",
     )
     record_tracks: list[list[DepthTrackSpec]] = [[] for _ in range(record_count)]
+    loaded_files: dict[str, DataFrame] = {}
 
     for track_index in range(track_count):
         raw_track_values = [
@@ -217,20 +218,16 @@ def _tracks_from_record_major_values(
         else:
             source_values = list(raw_track_values)
 
-        loaded_table: DataFrame | None = None
-        if values_are_files and len(present) == 1:
-            loaded_table = read_depth_tsv(str(present[0][1]))
-
         for record_index, source_value in enumerate(source_values):
             if source_value is None:
                 continue
-            table = (
-                loaded_table
-                if loaded_table is not None
-                else read_depth_tsv(str(source_value))
-                if values_are_files
-                else source_value
-            )
+            if values_are_files:
+                source_path = str(source_value)
+                if source_path not in loaded_files:
+                    loaded_files[source_path] = read_depth_tsv(source_path)
+                table = loaded_files[source_path]
+            else:
+                table = source_value
             if not isinstance(table, DataFrame):
                 raise ValidationError(f"Depth track {track_index + 1} must contain pandas DataFrame values.")
             record_tracks[record_index].append(

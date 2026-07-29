@@ -115,6 +115,19 @@ Low-level assemblers remain in `gbdraw.api.diagram` for internal engine use.
 Canvas and drawing configurators remain implementation details in their owner
 modules; they are not re-exported from `gbdraw.api`.
 
+Architecture changes should keep these entry points convergent:
+
+- Route the Python API, CLI, Web UI, and both diagram modes through the same
+  typed core/planner; adapters should only translate surface-specific input and output.
+- As a default, add an abstraction only when it unifies at least two real
+  execution paths and removes the superseded paths in the same change. Extend
+  existing boundaries instead of creating parallel pipelines.
+- Prefer a few stable, composable contracts over mode- or surface-specific
+  branches. Add capabilities as data at an existing boundary when practical,
+  so later extension or removal does not multiply change points.
+- Avoid repeated I/O or computation in shared layers, and protect material
+  performance changes with measurements.
+
 ### Data Flow
 
 1. **Input:** GenBank/GFF3+FASTA files

@@ -499,7 +499,6 @@ def calculate_window_step(seq_length: int, cfg, manual_window: Optional[int], ma
 def load_records_table_records(
     records_table: RecordsTable,
     *,
-    mode: str,
     selected_features_set,
     color_table,
     feature_table,
@@ -511,8 +510,6 @@ def load_records_table_records(
         for row in records_table.rows:
             loaded = gbk_loader(
                 [row.gbk],
-                mode,
-                False,
                 record_selectors=[row.record_id],
                 reverse_flags=[row.reverse_complement],
             )
@@ -528,10 +525,8 @@ def load_records_table_records(
         loaded = gff_loader(
             [row.gff],
             [row.fasta],
-            mode,
-            candidate_feature_types,
+            selected_features_set=candidate_feature_types,
             keep_all_features=keep_all_features,
-            load_comparison=False,
             record_selectors=[row.record_id],
             reverse_flags=[row.reverse_complement],
         )

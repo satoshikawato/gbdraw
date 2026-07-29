@@ -129,16 +129,18 @@ Click **Load Session**, then choose the `.gbdraw-session.json` file to restore i
 
 The web app's **Save Session** action downloads a lossless gzip-compressed `.gbdraw-session.json.gz` file. **Load Session** accepts both this compressed form and the uncompressed `.gbdraw-session.json` files written by the CLI.
 
-Current Python and Web writers use session version 37 with canonical
-`renderRequest` schema 4. Readers accept versions 27–33, 36, and 37; public
-typed conversion is available for versions 31–33, 36, and 37, while versions
-27–30 remain CLI replay inputs. Versions 34 and 35 were branch-internal
-development formats and are not supported. Schema 4 keeps the output filename
-prefix only at `renderRequest.output.prefix`; schemas 1–3 may also contain the
-obsolete nested `diagramOptions.output.outputPrefix`, which the compatibility
-reader ignores.
+Current Python and Web writers use session version 38 with canonical
+`renderRequest` schema 5. Readers accept versions 27–33 and 36–38; public typed
+conversion is available for versions 31–33 and 36–38, while versions 27–30
+remain CLI replay inputs. Versions 34 and 35 were branch-internal development
+formats and are not supported. Schema 5 stores explicit `single`, `grid`, or
+`batch` grouping. Its output is one object for a single diagram or grid, and an
+array with one resolved entry per record for a Circular batch. Schema 4
+introduced sole output-prefix ownership at `renderRequest.output.prefix`;
+schemas 1–3 may also contain the obsolete nested
+`diagramOptions.output.outputPrefix`, which the compatibility reader ignores.
 
-For Linear protein comparisons, versions 36 and 37 store the authoritative
+For Linear protein comparisons, versions 36–38 store the authoritative
 feature identity and display metadata in a schema-2 manifest, current protein
 raw cache entries as schema 4, and derived comparison payloads as schema 3.
 Generated protein FASTA, raw QUERY/SUBJECT fields, protein maps, and derived

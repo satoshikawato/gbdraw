@@ -326,6 +326,7 @@ def test_linear_record_selector_source_contract() -> None:
     assert "linearRecordSelectorDisabled(seq)" in index_html
     assert "def list_sequence_records(path, format):" in helper_js
     assert "def list_gff_fasta_records(gff_path, fasta_path):" in helper_js
+    assert 'records = list(SeqIO.parse(fasta_path, "fasta"))' in helper_js
     assert "load_gff_fasta(" in helper_js
     assert 'format_map = {"genbank": "genbank", "fasta": "fasta"}' in helper_js
     assert "def list_genbank_records(" not in helper_js
@@ -2846,6 +2847,19 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "if (form.show_skew) args.push('--skew');" in run_source
     assert "args.push('--show_gc')" not in run_source
     assert "args.push('--show_skew')" not in run_source
+
+
+def test_web_output_prefix_help_is_mode_aware() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+
+    assert "Leave empty to use record IDs" in index_html
+    assert "Leave empty to use out." in index_html
+    assert "Optional (Default: Record ID)" in index_html
+    assert "Optional (Default: out)" in index_html
+    assert ':placeholder="mode === \'circular\' ?' in index_html
+    assert "if (normalizedOutputPrefix) args.push('-o', normalizedOutputPrefix);" in run_source
+    assert "normalizedOutputPrefix !== 'out'" not in run_source
 
 
 def test_web_wires_gc_content_percent_options() -> None:

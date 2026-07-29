@@ -32,18 +32,14 @@ def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
 
 def load_gbks(
     gbk_list: List[str],
-    mode: str,
-    load_comparison: bool = False,
     record_selectors: list[str] | None = None,
     reverse_flags: list[bool] | None = None,
 ) -> list[SeqRecord]:
+    """Parse GenBank files without applying diagram-mode policy."""
+
     record_list: list[SeqRecord] = []
     id_list: list[str] = []
     logger.info("INFO: Loading GenBank file(s)...")
-    if load_comparison:
-        logger.info(
-            "INFO: BLAST results were provided. Only the first entry from each GenBank file will be loaded."
-        )
     for file_idx, gbk_file in enumerate(gbk_list):
         if not os.path.isfile(gbk_file):
             logger.error(f"ERROR: File does not exist or is not accessible: {gbk_file}")
@@ -51,50 +47,29 @@ def load_gbks(
         try:
             logger.info("INFO: Loading GenBank file {}".format(gbk_file))
             records_list = list(SeqIO.parse(gbk_file, "genbank"))
-            if mode in {"linear", "circular"}:
-                selector_raw = record_selectors[file_idx] if record_selectors and file_idx < len(record_selectors) else None
-                selector = parse_record_selector(selector_raw)
-                if selector is not None:
-                    records_list = select_record(records_list, selector, log=logger)
-            if mode == "linear":
-                if len(gbk_list) > 1 and load_comparison and len(records_list) > 1:
-                    records_list = [records_list[0]]
-                reverse_flag = reverse_flags[file_idx] if reverse_flags and file_idx < len(reverse_flags) else False
-                records_list = reverse_records(records_list, reverse_flag, log=logger)
-                if len(gbk_list) == 1 or not load_comparison:
-                    logger.info("INFO: Importing all entries...")
-                for record in records_list:
-                    if record.id in id_list:
-                        logger.warning(
-                            f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!"
-                        )
-                    _attach_source_annotations(record, gbk_file)
-                    record_list.append(record)
-                    id_list.append(record.id)  # type: ignore
-            elif mode == "circular":
-                reverse_flag = reverse_flags[file_idx] if reverse_flags and file_idx < len(reverse_flags) else False
-                records_list = reverse_records(records_list, reverse_flag, log=logger)
-                logger.info("INFO: Importing all entries...")
-                for record in records_list:
-                    if record.id in id_list:
-                        logger.warning(
-                            f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!"
-                        )
-                    if "topology" in record.annotations:
-                        topology: str = record.annotations["topology"]  # type: ignore
-                        if topology == "linear":
-                            logger.warning(
-                                f"WARNING: The annotation indicates that record {record.id} is linear. Are you sure you want to visualize it as circular?"
-                            )
-                        elif topology == "circular":
-                            pass
-                        else:
-                            logger.warning(
-                                f"WARNING: Topology information not available for {record.id}."
-                            )
-                    _attach_source_annotations(record, gbk_file)
-                    record_list.append(record)
-                    id_list.append(record.id)  # type: ignore
+            selector_raw = (
+                record_selectors[file_idx]
+                if record_selectors and file_idx < len(record_selectors)
+                else None
+            )
+            selector = parse_record_selector(selector_raw)
+            if selector is not None:
+                records_list = select_record(records_list, selector, log=logger)
+            reverse_flag = (
+                reverse_flags[file_idx]
+                if reverse_flags and file_idx < len(reverse_flags)
+                else False
+            )
+            records_list = reverse_records(records_list, reverse_flag, log=logger)
+            logger.info("INFO: Importing all entries...")
+            for record in records_list:
+                if record.id in id_list:
+                    logger.warning(
+                        f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!"
+                    )
+                _attach_source_annotations(record, gbk_file)
+                record_list.append(record)
+                id_list.append(record.id)  # type: ignore
         except ValueError as e:  # Catching common exception when parsing GenBank files
             if str(e).startswith("Record selector"):
                 logger.error(f"ERROR: {e}")
@@ -308,20 +283,16 @@ def filter_features_by_type(record: SeqRecord, feature_types_to_keep: Set[str]) 
 def load_gff_fasta(
     gff_list: List[str],
     fasta_list: List[str],
-    mode: str,
     selected_features_set=None,
     keep_all_features: bool = False,
-    load_comparison: bool = False,
     record_selectors: list[str] | None = None,
     reverse_flags: list[bool] | None = None,
 ) -> list[SeqRecord]:
+    """Parse paired GFF3/FASTA files without applying diagram-mode policy."""
+
     record_list: list[SeqRecord] = []
     id_list: list[str] = []
     logger.info("INFO: Loading GFF3/FASTA file(s)...")
-    if load_comparison:
-        logger.info(
-            "INFO: BLAST results were provided. Only the first entry from each GFF3/FASTA pair will be loaded."
-        )
 
     if len(gff_list) != len(fasta_list):
         logger.error("ERROR: Number of GFF3 files does not match number of FASTA files.")
@@ -352,32 +323,20 @@ def load_gff_fasta(
             fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
             merged_records = merge_gff_fasta_records(gff_records, fasta_records)
 
-            if mode in {"linear", "circular"}:
-                selector_raw = record_selectors[file_idx] if record_selectors and file_idx < len(record_selectors) else None
-                selector = parse_record_selector(selector_raw)
-                if selector is not None:
-                    merged_records = select_record(merged_records, selector, log=logger)
-            if mode == "linear":
-                if load_comparison and len(merged_records) > 1:
-                    merged_records = [merged_records[0]]
-                reverse_flag = reverse_flags[file_idx] if reverse_flags and file_idx < len(reverse_flags) else False
-                merged_records = reverse_records(merged_records, reverse_flag, log=logger)
-            elif mode == "circular":
-                reverse_flag = reverse_flags[file_idx] if reverse_flags and file_idx < len(reverse_flags) else False
-                merged_records = reverse_records(merged_records, reverse_flag, log=logger)
-                for record in merged_records:
-                    if "topology" in record.annotations:
-                        topology: str = record.annotations["topology"]  # type: ignore
-                        if topology == "linear":
-                            logger.warning(
-                                f"WARNING: The annotation indicates that record {record.id} is linear. Are you sure you want to visualize it as circular?"
-                            )
-                        elif topology == "circular":
-                            pass
-                        else:
-                            logger.warning(
-                                f"WARNING: Topology information not available for {record.id}."
-                            )
+            selector_raw = (
+                record_selectors[file_idx]
+                if record_selectors and file_idx < len(record_selectors)
+                else None
+            )
+            selector = parse_record_selector(selector_raw)
+            if selector is not None:
+                merged_records = select_record(merged_records, selector, log=logger)
+            reverse_flag = (
+                reverse_flags[file_idx]
+                if reverse_flags and file_idx < len(reverse_flags)
+                else False
+            )
+            merged_records = reverse_records(merged_records, reverse_flag, log=logger)
 
             for record in merged_records:
                 if record.id in id_list:

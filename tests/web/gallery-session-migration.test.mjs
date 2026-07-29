@@ -150,6 +150,8 @@ const syntheticGuiSession = {
 const promotedSyntheticGui = promoteGallerySessionToCanonicalV3(syntheticGuiSession);
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
 assert.equal(promotedSyntheticGui.renderRequest.schema, 3);
+assert.equal(promotedSyntheticGui.renderRequest.grouping, undefined);
+assert.equal(promotedSyntheticGui.renderRequest.output.prefix, 'gui');
 assert.deepEqual(syntheticGuiOptions.output, {
   outputPrefix: 'gui',
   legend: 'left',
