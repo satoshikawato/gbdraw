@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Dict, List, Mapping, Optional
+from typing import List, Mapping, Optional
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
-from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.models import RenderProfile  # type: ignore[reportMissingImports]
 from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
     resolve_directional_feature_types,
@@ -32,11 +32,10 @@ class FeatureDrawingConfigurator:
         color_table: Optional[DataFrame],
         default_colors: DataFrame,
         selected_features_set: List[str],
-        config_dict: Dict,
+        profile: RenderProfile,
         canvas_config,
         feature_table: Optional[DataFrame] = None,
         feature_shapes: Mapping[str, str] | None = None,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         """
         Initializes the FeatureDrawingConfigurator with color settings and feature selection.
@@ -46,7 +45,7 @@ class FeatureDrawingConfigurator:
             default_colors (Optional[DataFrame]): Default colors for features.
             selected_features_set (str): Set identifier for selecting features to display.
         """
-
+        cfg = profile.config
         self.color_table: Optional[DataFrame] = color_table
         self.feature_table: Optional[DataFrame] = feature_table
         self.feature_visibility_rules = compile_feature_visibility_rules(feature_table)
@@ -61,7 +60,6 @@ class FeatureDrawingConfigurator:
         )
         self.canvas_config = canvas_config
         self.length_param = self.canvas_config.length_param
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.block_fill_color: str = default_colors[default_colors["feature_type"] == "default"]["color"].values[0]
         self.block_stroke_color: str = cfg.objects.features.block_stroke_color
         self.block_stroke_width: float = cfg.objects.features.block_stroke_width.for_length_param(self.length_param)

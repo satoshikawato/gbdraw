@@ -158,9 +158,15 @@ assert.deepEqual(syntheticGuiOptions.output, {
   plotTitlePosition: 'none'
 });
 assert.equal(syntheticGuiOptions.output.legend, 'left');
-assert.equal(syntheticGuiOptions.configOverrides.show_labels, true);
-assert.equal(syntheticGuiOptions.configOverrides.circular_definition_font_size, 31);
-assert.equal(syntheticGuiOptions.configOverrides.depth_large_tick_interval, 15);
+assert.equal(syntheticGuiOptions.configOverrides['labels.circular.scope'], 'outer');
+assert.equal(
+  syntheticGuiOptions.configOverrides['objects.definition.circular.font_size'],
+  31
+);
+assert.equal(
+  syntheticGuiOptions.configOverrides['objects.depth.large_tick_interval'],
+  15
+);
 assert.equal(syntheticGuiOptions.colors.defaultColorsPalette, 'applied-palette');
 assert.match(
   resourceText(promotedSyntheticGui, syntheticGuiOptions.colors.defaultColorsFile),
@@ -183,8 +189,8 @@ const hmmt = await loadSession('HmmtDNA_ATskew.gbdraw-session.json');
 const promotedHmmt = promoteGallerySessionToCanonicalV3(hmmt);
 const hmmtOptions = promotedHmmt.renderRequest.diagramOptions;
 assert.equal(promotedHmmt.renderRequest.schema, 3);
-assert.equal(hmmtOptions.configOverrides.show_labels, true);
-assert.equal(hmmtOptions.configOverrides.circular_definition_font_size, 28);
+assert.equal(hmmtOptions.configOverrides['labels.circular.scope'], 'outer');
+assert.equal(hmmtOptions.configOverrides['objects.definition.circular.font_size'], 28);
 assert.equal(hmmtOptions.featureShapes.repeat_region, 'underlay');
 assert.ok(hmmtOptions.tracks.circularTrackSlots.some((slot) => (
   slot.includes('a_skew_2:dinucleotide_skew') &&
@@ -236,7 +242,9 @@ assert.equal(
   'Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.'
 );
 assert.equal(
-  bgcOptions.configOverrides.linear_definition_line_styles.name.font_weight,
+  bgcOptions.configOverrides[
+    'objects.definition.linear.line_styles.name.font_weight'
+  ],
   'bold'
 );
 assert.match(

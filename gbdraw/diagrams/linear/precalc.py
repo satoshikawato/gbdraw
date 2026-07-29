@@ -15,7 +15,10 @@ from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ...config.models import (  # type: ignore[reportMissingImports]
+    GbdrawConfig,
+    LinearRenderProfile,
+)
 from ...configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
 from ...core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
@@ -27,7 +30,7 @@ from ...features.objects import FeatureObject  # type: ignore[reportMissingImpor
 from ...render.groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear  # type: ignore[reportMissingImports]
-from ...layout.linear import LinearFeatureLaneGeometry
+from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
 
 
@@ -37,16 +40,16 @@ FeatureDict = dict[str, FeatureObject]
 def _resolve_linear_diagram_label_font_size(
     records: list[SeqRecord],
     *,
-    show_labels_mode: str,
     canvas_config: LinearCanvasConfigurator,
-    cfg: GbdrawConfig,
+    profile: LinearRenderProfile,
 ) -> float:
     """Resolve one readable auto label size for all labels drawn in a linear diagram."""
 
+    cfg = profile.config
     label_font_sizes: list[float] = []
     threshold = int(cfg.labels.length_threshold.linear)
     for index, record in enumerate(records):
-        if show_labels_mode == "first" and index > 0:
+        if profile.label_scope == "first" and index > 0:
             continue
         length_param = determine_length_parameter(len(record.seq), threshold)
         label_font_sizes.append(cfg.labels.font_size.linear.for_length_param(length_param))
@@ -58,9 +61,8 @@ def _resolve_linear_diagram_label_font_size(
 
 def _precalculate_definition_metrics(
     records: list[SeqRecord],
-    config_dict: dict,
     canvas_config,
-    cfg: GbdrawConfig | None = None,
+    cfg: GbdrawConfig,
     line_kinds_by_record: Sequence[Collection[str] | None] | None = None,
 ) -> tuple[float, list[float], list[float]]:
     """
@@ -72,7 +74,6 @@ def _precalculate_definition_metrics(
     if not records:
         return 0.0, definition_heights, definition_half_heights
 
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
     if line_kinds_by_record is not None and len(line_kinds_by_record) != len(records):
         raise ValueError("line_kinds_by_record must match the number of records")
     for index, record in enumerate(records):
@@ -83,7 +84,6 @@ def _precalculate_definition_metrics(
         )
         def_group = DefinitionGroup(
             record,
-            config_dict,
             canvas_config,
             cfg=cfg,
             line_kinds=line_kinds,
@@ -96,34 +96,17 @@ def _precalculate_definition_metrics(
     return math.ceil(max_definition_width), definition_heights, definition_half_heights
 
 
-def _precalculate_definition_widths(
-    records: list[SeqRecord],
-    config_dict: dict,
-    canvas_config,
-    cfg: GbdrawConfig | None = None,
-) -> float:
-    max_definition_width, _definition_heights, _definition_half_heights = _precalculate_definition_metrics(
-        records,
-        config_dict,
-        canvas_config,
-        cfg=cfg,
-    )
-    return max_definition_width
-
-
 def _precalculate_feature_layers(
     records: list[SeqRecord],
     feature_config: FeatureDrawingConfigurator,
     canvas_config: LinearCanvasConfigurator,
-    config_dict: dict,
-    cfg: GbdrawConfig | None = None,
+    profile: LinearRenderProfile,
     orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
 ) -> list[FeatureBuildResult]:
     """Build feature objects once per record for the linear assembly pipeline."""
 
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
-    raw_show_labels = cfg.canvas.show_labels
-    show_labels_mode = raw_show_labels if isinstance(raw_show_labels, str) else ("all" if raw_show_labels else "none")
+    cfg = profile.config
+    label_scope = profile.label_scope
     color_table, default_colors = preprocess_color_tables(
         feature_config.color_table,
         feature_config.default_colors,
@@ -133,17 +116,17 @@ def _precalculate_feature_layers(
     feature_layers: list[FeatureBuildResult] = []
     for i, record in enumerate(records):
         compute_label_text = (
-            show_labels_mode == "all"
-            or (show_labels_mode == "first" and i == 0)
-            or show_labels_mode == "orthogroup_top"
+            label_scope == "all"
+            or (label_scope == "first" and i == 0)
+            or label_scope == "orthogroup_top"
         )
         result = create_feature_layers(
             record,
             color_table,
             feature_config.selected_features_set,
             default_colors,
-            canvas_config.strandedness,
-            canvas_config.resolve_overlaps,
+            profile.strandedness,
+            profile.resolve_overlaps,
             label_filtering if compute_label_text else {},
             feature_shapes=feature_config.feature_shapes,
             feature_visibility_rules=feature_config.feature_visibility_rules,
@@ -153,35 +136,11 @@ def _precalculate_feature_layers(
     return feature_layers
 
 
-def _precalculate_feature_dicts(
-    records: list[SeqRecord],
-    feature_config: FeatureDrawingConfigurator,
-    canvas_config: LinearCanvasConfigurator,
-    config_dict: dict,
-    cfg: GbdrawConfig | None = None,
-    orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
-) -> list[FeatureDict]:
-    """Compatibility view of the precomputed foreground feature layers."""
-
-    return [
-        result.foreground_features
-        for result in _precalculate_feature_layers(
-            records,
-            feature_config,
-            canvas_config,
-            config_dict,
-            cfg=cfg,
-            orthogroup_label_eligibility=orthogroup_label_eligibility,
-        )
-    ]
-
-
 def _precalculate_label_dimensions(
     records: list[SeqRecord],
     feature_config: FeatureDrawingConfigurator,
     canvas_config: LinearCanvasConfigurator,
-    config_dict: dict,
-    cfg: GbdrawConfig | None = None,
+    render_context: LinearRecordRenderContext,
     precomputed_feature_dicts: list[FeatureDict] | None = None,
     orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
     sequence_widths: Sequence[float] | None = None,
@@ -189,18 +148,17 @@ def _precalculate_label_dimensions(
 ) -> tuple[float, list[list[dict]], list[float]]:
     """Pre-calculates label placements for all records to determine the required canvas height."""
 
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
-    raw_show_labels = cfg.canvas.show_labels
-    show_labels_mode = raw_show_labels if isinstance(raw_show_labels, str) else ("all" if raw_show_labels else "none")
+    profile = render_context.profile
+    cfg = profile.config
+    label_scope = profile.label_scope
 
-    if show_labels_mode == "none":
+    if label_scope == "none":
         return 0, [[] for _ in records], [0.0 for _ in records]
 
     label_font_size = _resolve_linear_diagram_label_font_size(
         records,
-        show_labels_mode=show_labels_mode,
         canvas_config=canvas_config,
-        cfg=cfg,
+        profile=profile,
     )
     max_required_height = 0
     all_labels_by_record: list[list[dict]] = []
@@ -214,12 +172,12 @@ def _precalculate_label_dimensions(
         label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
 
     for i, record in enumerate(records):
-        if show_labels_mode == "first" and i > 0:
+        if label_scope == "first" and i > 0:
             all_labels_by_record.append([])
             record_label_heights.append(0.0)
             continue
         member_ids, top_member_ids = orthogroup_label_sets_for_record(
-            orthogroup_label_eligibility if show_labels_mode == "orthogroup_top" else None,
+            orthogroup_label_eligibility if label_scope == "orthogroup_top" else None,
             i,
         )
 
@@ -231,8 +189,8 @@ def _precalculate_label_dimensions(
                 color_table,
                 feature_config.selected_features_set,
                 default_colors,
-                canvas_config.strandedness,
-                canvas_config.resolve_overlaps,
+                profile.strandedness,
+                profile.resolve_overlaps,
                 label_filtering,
                 feature_shapes=feature_config.feature_shapes,
                 feature_visibility_rules=feature_config.feature_visibility_rules,
@@ -257,11 +215,10 @@ def _precalculate_label_dimensions(
             alignment_width,
             genome_size_normalization_factor,
             canvas_config.cds_height,
-            canvas_config.strandedness,
-            canvas_config.track_layout,
+            profile.strandedness,
+            render_context.feature_track_layout,
             canvas_config.track_axis_gap,
-            config_dict,
-            cfg=cfg,
+            profile=profile,
             label_font_size=label_font_size,
             orthogroup_label_member_ids=member_ids,
             orthogroup_label_top_member_ids=top_member_ids,
@@ -297,8 +254,6 @@ def _precalculate_label_dimensions(
 __all__ = [
     "FeatureDict",
     "_precalculate_definition_metrics",
-    "_precalculate_definition_widths",
-    "_precalculate_feature_dicts",
     "_precalculate_feature_layers",
     "_precalculate_label_dimensions",
     "_resolve_linear_diagram_label_font_size",

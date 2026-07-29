@@ -15,7 +15,7 @@ from svgwrite.container import Group
 
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import FeatureDrawingConfigurator
@@ -39,6 +39,7 @@ from gbdraw.labels.linear import (
     prepare_label_list_linear,
 )
 from gbdraw.render.drawers.linear.labels import LabelDrawer
+from tests.utils.linear_render_context import make_linear_record_render_context
 
 
 def _synthetic_label_record(record_id: str, length: int, label: str, extra_label: str | None = None) -> SeqRecord:
@@ -125,14 +126,19 @@ def _prepare_linear_labels(
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels="all",
-        strandedness=separate_strands,
-        label_blacklist="",
-        label_font_size=label_font_size,
-        linear_label_spacing=linear_label_spacing,
-        label_placement=label_placement,
-        label_rotation=label_rotation,
-        linear_track_layout=track_layout,
+        {
+            "labels.linear.scope": 'all',
+            "canvas.strandedness": separate_strands,
+            "labels.filtering.blacklist_keywords": [],
+            "labels.font_size.short": label_font_size,
+            "labels.font_size.long": label_font_size,
+            "labels.font_size.linear.short": label_font_size,
+            "labels.font_size.linear.long": label_font_size,
+            "labels.linear.placement": label_placement,
+            "labels.linear.rotation": label_rotation,
+            "canvas.linear.track_layout": track_layout,
+            **({'labels.spacing.linear': linear_label_spacing} if linear_label_spacing is not None else {}),
+        },
     )
     if qualifier_priority is not None:
         feature_type, priorities = qualifier_priority
@@ -140,12 +146,12 @@ def _prepare_linear_labels(
             [{"feature_type": feature_type, "priorities": priorities}]
         )
     cfg = GbdrawConfig.from_dict(config_dict)
+    profile = LinearRenderProfile(cfg)
     canvas_cfg = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=len(record.seq),
-        config_dict=config_dict,
+        profile=profile,
         legend="none",
-        cfg=cfg,
     )
 
     default_colors = load_default_colors("", "default")
@@ -171,8 +177,7 @@ def _prepare_linear_labels(
         canvas_cfg.strandedness,
         canvas_cfg.track_layout,
         canvas_cfg.track_axis_gap,
-        config_dict,
-        cfg=cfg,
+        profile,
     )
 
 
@@ -193,13 +198,18 @@ def _prepare_linear_labels_for_records(
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels=show_labels,
-        strandedness=separate_strands,
-        label_blacklist="",
-        label_font_size=label_font_size,
-        label_placement=label_placement,
-        label_rotation=label_rotation,
-        linear_track_layout=track_layout,
+        {
+            "labels.linear.scope": show_labels,
+            "canvas.strandedness": separate_strands,
+            "labels.filtering.blacklist_keywords": [],
+            "labels.font_size.short": label_font_size,
+            "labels.font_size.long": label_font_size,
+            "labels.font_size.linear.short": label_font_size,
+            "labels.font_size.linear.long": label_font_size,
+            "labels.linear.placement": label_placement,
+            "labels.linear.rotation": label_rotation,
+            "canvas.linear.track_layout": track_layout,
+        },
     )
     if qualifier_priority is not None:
         feature_type, priorities = qualifier_priority
@@ -207,28 +217,26 @@ def _prepare_linear_labels_for_records(
             [{"feature_type": feature_type, "priorities": priorities}]
         )
     cfg = GbdrawConfig.from_dict(config_dict)
+    profile = LinearRenderProfile(cfg)
     canvas_cfg = LinearCanvasConfigurator(
         num_of_entries=len(records),
         longest_genome=max(len(record.seq) for record in records),
-        config_dict=config_dict,
+        profile=profile,
         legend="none",
-        cfg=cfg,
     )
     feature_cfg = FeatureDrawingConfigurator(
         color_table=None,
         default_colors=load_default_colors("", "default"),
         selected_features_set=cfg.objects.features.features_drawn,
-        config_dict=config_dict,
+        profile=profile,
         canvas_config=canvas_cfg,
-        cfg=cfg,
     )
 
     _, all_labels_by_record, _ = _precalculate_label_dimensions(
         records,
         feature_cfg,
         canvas_cfg,
-        config_dict,
-        cfg=cfg,
+        render_context=make_linear_record_render_context(profile),
     )
     return all_labels_by_record[0]
 
@@ -372,15 +380,17 @@ def test_linear_orthogroup_top_labels_suppress_only_lower_orthogroup_members() -
         )
     ]
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels="orthogroup_top",
-        label_blacklist="",
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.linear.scope": 'orthogroup_top',
+            "labels.filtering.blacklist_keywords": [],
+        },
     )
 
     svg_content = assemble_linear_diagram_from_records(
         records,
+        cfg=GbdrawConfig.from_dict(config_dict),
         protein_comparisons=comparisons,
-        config_dict=config_dict,
         selected_features_set=["CDS"],
         legend="none",
     ).tostring()
@@ -394,9 +404,11 @@ def test_linear_orthogroup_top_labels_suppress_only_lower_orthogroup_members() -
 @pytest.mark.linear
 def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels="all",
-        label_blacklist="",
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.linear.scope": 'all',
+            "labels.filtering.blacklist_keywords": [],
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     threshold = int(cfg.labels.length_threshold.linear)
@@ -408,9 +420,8 @@ def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=len(records),
         longest_genome=max(len(record.seq) for record in records),
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
     short_font_size = cfg.labels.font_size.linear.for_length_param("short")
     long_font_size = cfg.labels.font_size.linear.for_length_param("long")
@@ -418,7 +429,7 @@ def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
     assert canvas_config.length_param == "long"
     svg_content = assemble_linear_diagram_from_records(
         records,
-        config_dict=config_dict,
+        cfg=cfg,
         selected_features_set=["CDS"],
         legend="none",
     ).tostring()
@@ -526,7 +537,7 @@ def test_linear_label_drawer_applies_rotation_transform() -> None:
     negative_label = next(label for label in labels if label["strand"] == "negative")
 
     group = Group(id="test")
-    drawer = LabelDrawer(config_dict={})
+    drawer = LabelDrawer()
     group = drawer.draw(positive_label, group)
     group = drawer.draw(negative_label, group)
 
@@ -645,36 +656,39 @@ def test_linear_precalc_includes_above_feature_rotated_embedded_labels() -> None
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels="all",
-        strandedness=False,
-        label_blacklist="",
-        label_font_size=14.0,
-        label_placement="above_feature",
-        label_rotation=45.0,
+        {
+            "labels.linear.scope": 'all',
+            "canvas.strandedness": False,
+            "labels.filtering.blacklist_keywords": [],
+            "labels.font_size.short": 14.0,
+            "labels.font_size.long": 14.0,
+            "labels.font_size.linear.short": 14.0,
+            "labels.font_size.linear.long": 14.0,
+            "labels.linear.placement": 'above_feature',
+            "labels.linear.rotation": 45.0,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
+    profile = LinearRenderProfile(cfg)
     canvas_cfg = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=len(record.seq),
-        config_dict=config_dict,
+        profile=profile,
         legend="none",
-        cfg=cfg,
     )
     feature_cfg = FeatureDrawingConfigurator(
         color_table=None,
         default_colors=load_default_colors("", "default"),
         selected_features_set=cfg.objects.features.features_drawn,
-        config_dict=config_dict,
+        profile=profile,
         canvas_config=canvas_cfg,
-        cfg=cfg,
     )
 
     required_label_height, _, record_label_heights = _precalculate_label_dimensions(
         [record],
         feature_cfg,
         canvas_cfg,
-        config_dict,
-        cfg=cfg,
+        render_context=make_linear_record_render_context(profile),
     )
 
     assert required_label_height > 0
@@ -689,12 +703,12 @@ def test_linear_canvas_alignment_width_starts_at_figure_width() -> None:
 
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     cfg = GbdrawConfig.from_dict(config_dict)
+    profile = LinearRenderProfile(cfg)
     canvas_cfg = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=len(record.seq),
-        config_dict=config_dict,
+        profile=profile,
         legend="none",
-        cfg=cfg,
     )
 
     assert canvas_cfg.alignment_width == pytest.approx(canvas_cfg.fig_width)
@@ -708,34 +722,34 @@ def test_linear_precalculated_labels_match_final_alignment_width_positions() -> 
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels="all",
-        strandedness=False,
-        label_blacklist="",
-        linear_track_layout="middle",
+        {
+            "labels.linear.scope": 'all',
+            "canvas.strandedness": False,
+            "labels.filtering.blacklist_keywords": [],
+            "canvas.linear.track_layout": 'middle',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
+    profile = LinearRenderProfile(cfg)
     canvas_cfg = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=len(record.seq),
-        config_dict=config_dict,
+        profile=profile,
         legend="none",
-        cfg=cfg,
     )
     feature_cfg = FeatureDrawingConfigurator(
         color_table=None,
         default_colors=load_default_colors("", "default"),
         selected_features_set=cfg.objects.features.features_drawn,
-        config_dict=config_dict,
+        profile=profile,
         canvas_config=canvas_cfg,
-        cfg=cfg,
     )
 
     _, all_labels, _ = _precalculate_label_dimensions(
         [record],
         feature_cfg,
         canvas_cfg,
-        config_dict,
-        cfg=cfg,
+        render_context=make_linear_record_render_context(profile),
     )
     precalculated_tuples = sorted(
         (
@@ -780,8 +794,7 @@ def test_linear_precalculated_labels_match_final_alignment_width_positions() -> 
             canvas_cfg.strandedness,
             canvas_cfg.track_layout,
             canvas_cfg.track_axis_gap,
-            config_dict,
-            cfg=cfg,
+            profile,
         )
         if label["label_text"] == "tRNA-Phe"
     )
@@ -812,9 +825,11 @@ def test_label_spacing_config_defaults_and_overrides() -> None:
     assert cfg.labels.spacing.linear == pytest.approx(3.0)
 
     modified = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        circular_label_spacing=7.5,
-        linear_label_spacing=9.0,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.spacing.circular": 7.5,
+            "labels.spacing.linear": 9.0,
+        },
     )
     modified_cfg = GbdrawConfig.from_dict(modified)
     assert modified_cfg.labels.spacing.circular == pytest.approx(7.5)

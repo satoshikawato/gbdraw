@@ -7,7 +7,7 @@ from svgwrite.path import Path  # type: ignore[reportMissingImports]
 from svgwrite.text import Text  # type: ignore[reportMissingImports]
 
 from ....canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
 from ....svg.circular_ticks import (  # type: ignore[reportMissingImports]
     get_circular_tick_intervals,
     generate_circular_tick_paths,
@@ -24,7 +24,8 @@ class TickGroup:
         self,
         gb_record: SeqRecord,
         canvas_config: CircularCanvasConfigurator,
-        config_dict: dict,
+        *,
+        profile: CircularRenderProfile,
         radius: float | None = None,
         tick_track_channel_override: str | None = None,
         label_side: str = "legacy",
@@ -33,7 +34,6 @@ class TickGroup:
         track_preset: str | None = None,
         group_id: str | None = None,
         slot_id: str | None = None,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -43,8 +43,7 @@ class TickGroup:
             self.tick_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
             self.tick_group.attribs["data-gbdraw-slot-renderer"] = "ticks"
         self.total_len: int = len(self.gb_record.seq)
-        self.config_dict: dict = config_dict
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
+        cfg = profile.config
         ticks_config = cfg.objects.ticks
         self.tick_width = ticks_config.tick_width
         self.stroke = ticks_config.tick_labels.stroke
@@ -53,11 +52,8 @@ class TickGroup:
         self.font_weight = ticks_config.tick_labels.font_weight
         self.manual_interval = cfg.objects.scale.interval
         self.font_family = cfg.objects.text.font_family
-        self.track_type = str(
-            track_preset
-            or getattr(self.canvas_config, "circular_track_preset", cfg.canvas.circular.track_type)
-        )
-        self.separate_strands = cfg.canvas.strandedness
+        self.track_type = str(track_preset or cfg.canvas.circular.track_type)
+        self.separate_strands = profile.strandedness
         normalized_tick_channel = str(tick_track_channel_override or "").strip().lower()
         self.tick_track_channel_override = (
             normalized_tick_channel if normalized_tick_channel in {"short", "long"} else None
@@ -127,4 +123,3 @@ class TickGroup:
 
 
 __all__ = ["TickGroup"]
-

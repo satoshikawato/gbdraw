@@ -5,7 +5,7 @@ from typing import Literal
 
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
-from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ..config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
 from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 
 
@@ -45,34 +45,26 @@ class CircularCanvasConfigurator:
     def __init__(
         self,
         output_prefix: str,
-        config_dict: dict,
+        profile: CircularRenderProfile,
         legend: str,
         gb_record,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         """
         Initializes the circular canvas configurator with given settings.
 
         Args:
         output_prefix (str): Prefix for the output file.
-        config_dict (dict): Configuration dictionary with canvas settings.
+        profile (CircularRenderProfile): Resolved circular render settings.
         show_gc (bool, optional): Flag to display GC content. Defaults to True.
         strandedness (bool, optional): Flag to display strandedness. Defaults to True.
         show_skew (bool, optional): Flag to display GC skew. Defaults to True.
         """
-
+        cfg = profile.config
         self.output_prefix: str = output_prefix
-        self.config_dict = config_dict
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
+        self._profile = profile
         self._cfg = cfg
 
-        raw_show_labels = cfg.canvas.show_labels
-        if isinstance(raw_show_labels, str):
-            self.show_labels = raw_show_labels != "none"
-        else:
-            self.show_labels = bool(raw_show_labels)
-
-        if self.show_labels:
+        if profile.labels_enabled:
             label_setting = "with_labels"
         else:
             label_setting = "without_labels"
@@ -84,10 +76,6 @@ class CircularCanvasConfigurator:
         self.default_height: int = cfg.canvas.circular.height
         self.radius: float = cfg.canvas.circular.radius
         self.track_ratio: float = cfg.canvas.circular.track_ratio
-        self.show_gc: bool = cfg.canvas.show_gc
-        self.show_skew: bool = cfg.canvas.show_skew
-        self.show_depth: bool = cfg.canvas.show_depth
-        self.strandedness: bool = cfg.canvas.strandedness
         self.dpi: int = cfg.canvas.dpi
         self.length_threshold = cfg.labels.length_threshold.circular
         self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
@@ -97,6 +85,30 @@ class CircularCanvasConfigurator:
 
         self.calculate_dimensions()
         self.get_track_ids()
+
+    @property
+    def profile(self) -> CircularRenderProfile:
+        return self._profile
+
+    @property
+    def show_gc(self) -> bool:
+        return self._profile.show_gc
+
+    @property
+    def show_skew(self) -> bool:
+        return self._profile.show_skew
+
+    @property
+    def show_depth(self) -> bool:
+        return self._profile.show_depth
+
+    @property
+    def strandedness(self) -> bool:
+        return self._profile.strandedness
+
+    @property
+    def resolve_overlaps(self) -> bool:
+        return self._profile.resolve_overlaps
 
     def calculate_dimensions(self) -> None:
         """
@@ -205,5 +217,3 @@ class CircularCanvasConfigurator:
             self.track_ids["skew_track"] = skew_track_id
 
 __all__ = ["CircularCanvasConfigurator", "resolve_circular_side_legend_geometry"]
-
-

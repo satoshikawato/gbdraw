@@ -11,6 +11,7 @@ from Bio.SeqRecord import SeqRecord
 
 import gbdraw.analysis as analysis
 import gbdraw.analysis.collinearity as collinearity
+import gbdraw.api.diagram as diagram_api
 import gbdraw.cli_utils as cli_utils
 import gbdraw.cli_utils.common as cli_common
 import gbdraw.cli_utils.session as cli_session
@@ -24,7 +25,7 @@ from gbdraw.api.diagram import (
     assemble_circular_diagram_from_records,
     assemble_linear_diagram_from_records,
 )
-from gbdraw.api.options import DiagramOptions
+from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
@@ -107,25 +108,52 @@ def test_depth_tick_interval_is_reader_only() -> None:
 
 
 def test_feature_table_aliases_are_removed_from_fresh_python_api() -> None:
-    option_fields = {item.name for item in fields(DiagramOptions)}
+    option_fields = {
+        item.name
+        for options_type in (CircularDiagramOptions, LinearDiagramOptions)
+        for item in fields(options_type)
+    }
     assert {"feature_table", "feature_table_file"}.isdisjoint(option_fields)
 
-    for function in (
+    assemblers = (
         assemble_circular_diagram_from_record,
         assemble_circular_diagram_from_records,
         assemble_linear_diagram_from_records,
-        build_interactive_svg_context,
-    ):
+    )
+    for function in assemblers:
         parameters = inspect.signature(function).parameters
         assert {"feature_table", "feature_table_file"}.isdisjoint(parameters)
+        assert {"config_dict", "config_overrides"}.isdisjoint(parameters)
+        assert parameters["cfg"].annotation == "GbdrawConfig"
+        assert parameters["cfg"].default is inspect.Parameter.empty
+
+    context_parameters = inspect.signature(build_interactive_svg_context).parameters
+    assert {"feature_table", "feature_table_file"}.isdisjoint(context_parameters)
+
+    assert {
+        "build_circular_diagram",
+        "build_circular_multi_diagram",
+        "build_linear_diagram",
+    } <= set(diagram_api.__all__)
+    assert {
+        "assemble_circular_diagram_from_record",
+        "assemble_circular_diagram_from_records",
+        "assemble_linear_diagram_from_records",
+    }.isdisjoint(diagram_api.__all__)
 
 
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
-        ({"label_placement": "on_feature"}, "label_placement"),
-        ({"linear_track_layout": "spreadout"}, "linear_track_layout"),
-        ({"linear_track_layout": "tuckin"}, "linear_track_layout"),
+        ({"labels.linear.placement": "on_feature"}, "labels.linear.placement"),
+        (
+            {"canvas.linear.track_layout": "spreadout"},
+            "canvas.linear.track_layout",
+        ),
+        (
+            {"canvas.linear.track_layout": "tuckin"},
+            "canvas.linear.track_layout",
+        ),
     ],
 )
 def test_fresh_config_overrides_reject_removed_linear_values(
@@ -134,7 +162,7 @@ def test_fresh_config_overrides_reject_removed_linear_values(
 ) -> None:
     current = load_config_toml("gbdraw.data", "config.toml")
     with pytest.raises(ValidationError, match=message):
-        modify_config_dict(current, **kwargs)
+        modify_config_dict(current, kwargs)
 
 
 @pytest.mark.circular
@@ -158,12 +186,12 @@ def test_removed_default_keys_remain_tolerated_in_legacy_config() -> None:
     )
     current_svg = assemble_circular_diagram_from_record(
         record,
-        config_dict=copy.deepcopy(current),
+        cfg=GbdrawConfig.from_dict(copy.deepcopy(current)),
         legend="none",
     ).tostring()
     legacy_svg = assemble_circular_diagram_from_record(
         record,
-        config_dict=legacy,
+        cfg=GbdrawConfig.from_dict(legacy),
         legend="none",
     ).tostring()
     assert legacy_svg == current_svg

@@ -50,13 +50,13 @@ class DefinitionGroup:
     def __init__(
         self,
         record: SeqRecord,
-        config_dict: dict,
         canvas_config: dict,
+        *,
+        cfg: GbdrawConfig,
         title_start_x: float = 0,
         title_start_y: float = -9,
         length_start_x: float = 0,
         length_start_y: float = 9,
-        cfg: GbdrawConfig | None = None,
         text_anchor: str | None = None,
         text_x: float = 0.0,
         group_id: str | None = None,
@@ -84,7 +84,6 @@ class DefinitionGroup:
             if line_kinds is not None
             else None
         )
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         def_cfg = cfg.objects.definition.linear
         self._def_cfg = def_cfg

@@ -1609,6 +1609,7 @@ def regenerate_definition_svgs(
     from Bio import SeqIO
     from gbdraw.render.groups.circular.definition import DefinitionGroup
     from gbdraw.canvas import CircularCanvasConfigurator
+    from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
     from gbdraw.svg.ids import definition_group_svg_id
     from importlib import resources
 
@@ -1622,6 +1623,8 @@ def regenerate_definition_svgs(
             config_dict["objects"]["definition"]["circular"]["font_size"] = float(font_size)
         if not _is_blank_or_js_nullish(plot_title_font_size):
             config_dict["objects"]["definition"]["circular"]["plot_title_font_size"] = float(plot_title_font_size)
+        cfg = GbdrawConfig.from_dict(config_dict)
+        render_profile = CircularRenderProfile(cfg)
 
         # Parse the GenBank file
         records = list(SeqIO.parse(gb_path, "genbank"))
@@ -1645,7 +1648,7 @@ def regenerate_definition_svgs(
             # Create canvas config
             canvas_config = CircularCanvasConfigurator(
                 output_prefix=f"temp_{index}",
-                config_dict=config_dict,
+                profile=render_profile,
                 legend="none",
                 gb_record=record,
             )
@@ -1669,7 +1672,6 @@ def regenerate_definition_svgs(
             def_group = DefinitionGroup(
                 gb_record=record,
                 canvas_config=canvas_config,
-                config_dict=config_dict,
                 species=species if species else None,
                 strain=strain if strain else None,
                 plot_title=None,
@@ -1677,6 +1679,7 @@ def regenerate_definition_svgs(
                 definition_group_id=definition_group_id,
                 record_index=index,
                 record_count=record_count if has_duplicate_record_id else 1,
+                cfg=cfg,
             )
 
             group = def_group.get_group()
@@ -1691,19 +1694,19 @@ def regenerate_definition_svgs(
         if show_plot_title:
             shared_canvas_config = CircularCanvasConfigurator(
                 output_prefix="temp_shared",
-                config_dict=config_dict,
+                profile=render_profile,
                 legend="none",
                 gb_record=records[0],
             )
             shared_group = DefinitionGroup(
                 gb_record=records[0],
                 canvas_config=shared_canvas_config,
-                config_dict=config_dict,
                 species=species if species else None,
                 strain=strain if strain else None,
                 plot_title=normalized_plot_title if normalized_plot_title else None,
                 definition_profile="shared_common",
                 definition_group_id="plot_title",
+                cfg=cfg,
             )
             definitions.append(
                 {

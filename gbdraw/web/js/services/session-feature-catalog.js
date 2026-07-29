@@ -257,7 +257,7 @@ const compactFeatureCatalog = (features) => {
 export const compactSessionFeatureCatalog = (session) => {
   if (
     !isObject(session) ||
-    ![37, 38].includes(session.version) ||
+    ![37, 38, 39].includes(session.version) ||
     !isObject(session.features)
   ) {
     return session;

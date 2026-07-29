@@ -7,6 +7,7 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
@@ -18,6 +19,7 @@ from gbdraw.web_support.feature_metadata import extract_features_from_records_pa
 
 SVG_NS = {"svg": "http://www.w3.org/2000/svg"}
 PRIVATE_SLOT_ID = "__gbdraw_auto_feature_underlay_slot__"
+_DEFAULT_CFG = apply_config_overrides(None, None)
 
 
 def _record(*, compound_repeat: bool = False, include_cds: bool = True) -> SeqRecord:
@@ -67,12 +69,14 @@ def test_default_repeat_underlay_has_feature_identity_and_paints_first(mode: str
     drawing = (
         assemble_circular_diagram_from_record(
             record,
+            cfg=_DEFAULT_CFG,
             selected_features_set=["repeat_region", "CDS"],
             legend="none",
         )
         if mode == "circular"
         else assemble_linear_diagram_from_records(
             [record],
+            cfg=_DEFAULT_CFG,
             selected_features_set=["repeat_region", "CDS"],
             legend="none",
         )
@@ -115,12 +119,14 @@ def test_compound_underlay_preserves_blocks_without_connector(mode: str) -> None
     drawing = (
         assemble_circular_diagram_from_record(
             record,
+            cfg=_DEFAULT_CFG,
             selected_features_set=["repeat_region"],
             legend="none",
         )
         if mode == "circular"
         else assemble_linear_diagram_from_records(
             [record],
+            cfg=_DEFAULT_CFG,
             selected_features_set=["repeat_region"],
             legend="none",
         )
@@ -145,6 +151,7 @@ def test_underlay_uses_actual_custom_feature_slot(mode: str) -> None:
     drawing = (
         assemble_circular_diagram_from_record(
             record,
+            cfg=_DEFAULT_CFG,
             selected_features_set=["repeat_region"],
             circular_track_slots=["genes:features@side=overlay,z=5"],
             legend="none",
@@ -152,6 +159,7 @@ def test_underlay_uses_actual_custom_feature_slot(mode: str) -> None:
         if mode == "circular"
         else assemble_linear_diagram_from_records(
             [record],
+            cfg=_DEFAULT_CFG,
             selected_features_set=["repeat_region"],
             linear_track_slots=["genes:features@side=overlay,z=5"],
             legend="none",
@@ -173,6 +181,7 @@ def test_visible_underlay_requires_enabled_feature_slot(mode: str) -> None:
         if mode == "circular":
             assemble_circular_diagram_from_record(
                 record,
+                cfg=_DEFAULT_CFG,
                 selected_features_set=["repeat_region"],
                 circular_track_slots=["axis:ticks"],
                 legend="none",
@@ -180,6 +189,7 @@ def test_visible_underlay_requires_enabled_feature_slot(mode: str) -> None:
         else:
             assemble_linear_diagram_from_records(
                 [record],
+                cfg=_DEFAULT_CFG,
                 selected_features_set=["repeat_region"],
                 linear_track_slots=["gap:spacer@side=above"],
                 legend="none",
@@ -192,6 +202,7 @@ def test_explicit_repeat_rectangle_disables_private_underlay(mode: str) -> None:
     drawing = (
         assemble_circular_diagram_from_record(
             record,
+            cfg=_DEFAULT_CFG,
             selected_features_set=["repeat_region"],
             feature_shapes={"repeat_region": "rectangle"},
             legend="none",
@@ -199,6 +210,7 @@ def test_explicit_repeat_rectangle_disables_private_underlay(mode: str) -> None:
         if mode == "circular"
         else assemble_linear_diagram_from_records(
             [record],
+            cfg=_DEFAULT_CFG,
             selected_features_set=["repeat_region"],
             feature_shapes={"repeat_region": "rectangle"},
             legend="none",

@@ -382,17 +382,46 @@ assert.equal(
   ),
   false
 );
-assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
+const circularConfigOverrides = canonical.renderRequest.diagramOptions.configOverrides;
+assert.ok(Object.keys(circularConfigOverrides).every((path) => path.includes('.')));
+assert.ok(Object.values(circularConfigOverrides).every((value) => value !== null));
+assert.equal(circularConfigOverrides['labels.circular.scope'], 'none');
+assert.equal(circularConfigOverrides['labels.circular.placement'], 'horizontal');
 assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
 assert.equal(canonical.renderRequest.diagramOptions.evalue, 1e-5);
 assert.equal(canonical.renderRequest.diagramOptions.bitscore, 50);
 assert.equal(canonical.renderRequest.diagramOptions.identity, 70);
 assert.equal(canonical.renderRequest.diagramOptions.alignmentLength, 0);
 assert.equal(
-  canonical.renderRequest.diagramOptions.configOverrides.depth_large_tick_interval,
+  circularConfigOverrides['objects.depth.large_tick_interval'],
   25
 );
 assert.equal(projectCanonicalSessionRequest(canonical).config.adv.depth_large_tick_interval, 25);
+state.form.labels_mode = 'out';
+const outerLabelsCanonical = buildCanonicalSessionRequest({ state, filesData });
+assert.equal(
+  outerLabelsCanonical.renderRequest.diagramOptions.configOverrides[
+    'labels.circular.scope'
+  ],
+  'outer'
+);
+assert.equal(
+  projectCanonicalSessionRequest(outerLabelsCanonical).config.form.labels_mode,
+  'out'
+);
+state.form.labels_mode = 'both';
+const bothLabelsCanonical = buildCanonicalSessionRequest({ state, filesData });
+assert.equal(
+  bothLabelsCanonical.renderRequest.diagramOptions.configOverrides[
+    'labels.circular.scope'
+  ],
+  'both'
+);
+assert.equal(
+  projectCanonicalSessionRequest(bothLabelsCanonical).config.form.labels_mode,
+  'both'
+);
+state.form.labels_mode = 'none';
 
 state.circularRecordList.value = [{ selector: '#1', record_id: 'single.id' }];
 state.form.prefix = '';
@@ -834,8 +863,16 @@ state.adv.outer_label_y_offset = 0.91;
 state.adv.inner_label_x_offset = 0.97;
 state.adv.inner_label_y_offset = 0.98;
 const radialCanonical = buildCanonicalSessionRequest({ state, filesData });
-assert.equal(radialCanonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'radial');
-assert.equal(radialCanonical.renderRequest.diagramOptions.configOverrides.outer_label_x_radius_offset, 0.9);
+assert.equal(
+  radialCanonical.renderRequest.diagramOptions.configOverrides['labels.circular.placement'],
+  'radial'
+);
+assert.equal(
+  radialCanonical.renderRequest.diagramOptions.configOverrides[
+    'labels.unified_adjustment.outer_labels.x_radius_offset'
+  ],
+  0.9
+);
 
 const projection = projectCanonicalSessionRequest(canonical);
 assert.equal(projection.mode, 'circular');
@@ -843,11 +880,32 @@ assert.equal(projection.inputType, 'gb');
 assert.equal(projection.files.c_gb.data, genbank.data);
 assert.equal(projection.files.c_gb.name, 'input.gb');
 assert.equal(projection.config.form.prefix, 'web-session');
+assert.equal(projection.config.form.labels_mode, 'none');
 assert.equal(projection.config.adv.circular_label_placement, 'horizontal');
 assert.equal(projection.config.adv.evalue, '0.00001');
 assert.equal(projection.config.adv.min_bitscore, 50);
 assert.equal(projection.config.adv.identity, 70);
 assert.equal(projection.config.adv.alignment_length, 0);
+const legacyCircularLabelScope = structuredClone(canonical);
+legacyCircularLabelScope.renderRequest.schema = 3;
+legacyCircularLabelScope.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+legacyCircularLabelScope.renderRequest.diagramOptions.configOverrides = {
+  show_labels: true,
+  allow_inner_labels: true
+};
+assert.equal(
+  projectCanonicalSessionRequest(legacyCircularLabelScope).config.form.labels_mode,
+  'both'
+);
+const intermediateCircularLabelScope = structuredClone(canonical);
+intermediateCircularLabelScope.renderRequest.diagramOptions.configOverrides = {
+  'canvas.circular.show_labels': true,
+  'canvas.circular.allow_inner_labels': false
+};
+assert.equal(
+  projectCanonicalSessionRequest(intermediateCircularLabelScope).config.form.labels_mode,
+  'out'
+);
 const legacyOutputCanonical = structuredClone(canonical);
 legacyOutputCanonical.renderRequest.schema = 3;
 legacyOutputCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored-nested';
@@ -1088,11 +1146,66 @@ assert.equal(linearDefaultCanonical.renderRequest.grouping, 'single');
 assert.equal(linearDefaultCanonical.renderRequest.output.prefix, 'out');
 state.form.prefix = 'web-session';
 const linearCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+assert.ok(
+  Object.keys(linearCanonical.renderRequest.diagramOptions.configOverrides)
+    .every((path) => path.includes('.'))
+);
+assert.ok(
+  Object.values(linearCanonical.renderRequest.diagramOptions.configOverrides)
+    .every((value) => value !== null)
+);
+assert.equal(
+  linearCanonical.renderRequest.diagramOptions.configOverrides['labels.linear.scope'],
+  'none'
+);
+state.adv.block_stroke_width = 2;
+state.adv.def_font_size = 16;
+state.adv.label_font_size = 14;
+state.adv.linear_definition_line_styles = {
+  name: { font_size: 13, font_weight: 'bold', fill: '#112233' }
+};
+const styledLinearCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: linearFilesData
+});
+const styledLinearOverrides = styledLinearCanonical.renderRequest.diagramOptions.configOverrides;
+assert.equal(styledLinearOverrides['objects.features.block_stroke_width.short'], 2);
+assert.equal(styledLinearOverrides['objects.features.block_stroke_width.long'], 2);
+assert.equal(styledLinearOverrides['objects.definition.linear.font_size.short'], 16);
+assert.equal(styledLinearOverrides['objects.definition.linear.font_size.long'], 16);
+assert.equal(styledLinearOverrides['labels.font_size.linear.short'], 14);
+assert.equal(styledLinearOverrides['labels.font_size.linear.long'], 14);
+assert.equal(
+  styledLinearOverrides['objects.definition.linear.line_styles.name.font_size'],
+  13
+);
+assert.equal(
+  styledLinearOverrides['objects.definition.linear.line_styles.name.font_weight'],
+  'bold'
+);
+assert.equal(
+  styledLinearOverrides['objects.definition.linear.line_styles.name.fill'],
+  '#112233'
+);
+assert.equal(
+  Object.prototype.hasOwnProperty.call(
+    styledLinearOverrides,
+    'objects.definition.linear.line_styles'
+  ),
+  false
+);
+delete state.adv.block_stroke_width;
+delete state.adv.def_font_size;
+delete state.adv.label_font_size;
+delete state.adv.linear_definition_line_styles;
 const legacyLinearOptions = structuredClone(linearCanonical);
 legacyLinearOptions.renderRequest.schema = 3;
 legacyLinearOptions.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
-legacyLinearOptions.renderRequest.diagramOptions.configOverrides.label_placement = 'on_feature';
-legacyLinearOptions.renderRequest.diagramOptions.configOverrides.linear_track_layout = 'spreadout';
+legacyLinearOptions.renderRequest.diagramOptions.configOverrides = {
+  label_placement: 'on_feature',
+  linear_track_layout: 'spreadout',
+  show_labels: 'first'
+};
 const legacyLinearOptionsProjection = projectCanonicalSessionRequest(
   legacyLinearOptions
 );
@@ -1103,6 +1216,19 @@ assert.equal(
 assert.equal(
   legacyLinearOptionsProjection.config.form.linear_track_layout,
   'above'
+);
+assert.equal(
+  legacyLinearOptionsProjection.config.form.show_labels_linear,
+  'first'
+);
+const intermediateLinearLabelScope = structuredClone(linearCanonical);
+intermediateLinearLabelScope.renderRequest.diagramOptions.configOverrides = {
+  'canvas.linear.show_labels': 'orthogroup_top'
+};
+assert.equal(
+  projectCanonicalSessionRequest(intermediateLinearLabelScope)
+    .config.form.show_labels_linear,
+  'orthogroup_top'
 );
 const currentLinearOptions = structuredClone(linearCanonical);
 currentLinearOptions.renderRequest.diagramOptions.configOverrides.label_placement = 'on_feature';
@@ -1117,13 +1243,17 @@ assert.throws(
   /Linear track layout/
 );
 assert.equal(
-  linearCanonical.renderRequest.diagramOptions.configOverrides.linear_axis_stroke_color,
+  linearCanonical.renderRequest.diagramOptions.configOverrides[
+    'objects.axis.linear.stroke_color'
+  ],
   'lightgray'
 );
 state.form.linear_ruler_on_axis = true;
 const rulerAxisCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
 assert.equal(
-  rulerAxisCanonical.renderRequest.diagramOptions.configOverrides.linear_axis_stroke_color,
+  rulerAxisCanonical.renderRequest.diagramOptions.configOverrides[
+    'objects.axis.linear.stroke_color'
+  ],
   'dimgray'
 );
 state.form.linear_ruler_on_axis = false;
@@ -1135,7 +1265,12 @@ assert.deepEqual(linearCanonical.webFiles.linearRecordMetadata, [
 assert.equal(linearCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots, null);
 assert.equal(linearCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, null);
 state.adv.linear_track_slots_axis_index = null;
-assert.equal(linearCanonical.renderRequest.diagramOptions.configOverrides.comparison_height, 42.5);
+assert.equal(
+  linearCanonical.renderRequest.diagramOptions.configOverrides[
+    'canvas.linear.comparison_height'
+  ],
+  42.5
+);
 assert.equal(linearCanonical.renderRequest.records[0].selector, null);
 assert.deepEqual(linearCanonical.renderRequest.records[1].selector, { kind: 'recordId', value: 'RecA' });
 assert.equal(linearCanonical.renderRequest.records[2].selector, null);
@@ -1180,6 +1315,7 @@ assert.equal(
 
 const linearProjection = projectCanonicalSessionRequest(linearCanonical);
 assert.equal(linearProjection.config.adv.comparison_height, 42.5);
+assert.equal(linearProjection.config.form.show_labels_linear, 'none');
 let sparseLinearCanonical;
 for (const schema of [1, 2, 3]) {
   sparseLinearCanonical = structuredClone(linearCanonical);
@@ -1381,6 +1517,7 @@ delete pythonCircularConfigCanonical.renderRequest.diagramOptions.configOverride
 pythonCircularConfigCanonical.renderRequest.diagramOptions.config = structuredClone(
   pythonConfigCanonical.renderRequest.diagramOptions.config
 );
+pythonCircularConfigCanonical.renderRequest.diagramOptions.config.canvas.show_labels = true;
 const pythonCircularConfigProjection = projectCanonicalSessionRequest(pythonCircularConfigCanonical);
 assert.equal(pythonCircularConfigProjection.config.adv.axis_stroke_width, 3);
 assert.equal(pythonCircularConfigProjection.config.adv.axis_stroke_color, '#333333');
@@ -1400,9 +1537,9 @@ assert.equal(emptyBlacklistProjection.config.blacklistText, '');
 
 const explicitOverrideCanonical = structuredClone(pythonConfigCanonical);
 explicitOverrideCanonical.renderRequest.diagramOptions.configOverrides = {
-  strandedness: false,
-  align_center: false,
-  keep_definition_left_aligned: false
+  'canvas.strandedness': false,
+  'canvas.linear.align_center': false,
+  'canvas.linear.keep_definition_left_aligned': false
 };
 const explicitOverrideProjection = projectCanonicalSessionRequest(explicitOverrideCanonical);
 assert.equal(explicitOverrideProjection.config.form.separate_strands, false);
@@ -1411,7 +1548,13 @@ assert.equal(explicitOverrideProjection.config.form.keep_definition_left_aligned
 
 state.adv.comparison_height = null;
 const autoHeightCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
-assert.equal(autoHeightCanonical.renderRequest.diagramOptions.configOverrides.comparison_height, null);
+assert.equal(
+  Object.prototype.hasOwnProperty.call(
+    autoHeightCanonical.renderRequest.diagramOptions.configOverrides,
+    'canvas.linear.comparison_height'
+  ),
+  false
+);
 assert.equal(projectCanonicalSessionRequest(autoHeightCanonical).config.adv.comparison_height, null);
 state.adv.comparison_height = -2;
 assert.throws(

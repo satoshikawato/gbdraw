@@ -18,7 +18,9 @@ from gbdraw.api import (
     RecordPresentation,
     build_request_diagram,
 )
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
+from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -30,6 +32,7 @@ from gbdraw.layout.linear_multi_record import (
     solve_linear_layout,
 )
 from gbdraw.layout.linear import CollisionBand
+from gbdraw.layout.record_placement import parse_record_row_position
 
 
 def _records(*lengths: int) -> list[SeqRecord]:
@@ -89,6 +92,20 @@ def test_non_contiguous_rows_and_token_column_order_are_normalized() -> None:
     )
     assert ordered == (1, 0, 2)
     assert rows == (0, 0, 1)
+
+
+def test_shared_record_position_grammar_preserves_mode_compatibility() -> None:
+    assert parse_record_row_position(
+        "record@segment@2",
+        _compatibility="circular",
+    ) == ("record@segment", 2)
+    with pytest.raises(ValidationError, match="'<selector>@<row>' format"):
+        parse_record_row_position("record@segment@2")
+
+
+def test_linear_record_selector_error_text_is_preserved() -> None:
+    with pytest.raises(ValidationError, match=r"#0.*out of range for 1 loaded record"):
+        resolve_record_row_positions(_records(100), ("#0@1",))
 
 
 def test_adjacent_row_pairs_exclude_same_row_records() -> None:
@@ -196,14 +213,17 @@ def test_multi_record_solver_reserves_comparison_only_on_active_boundary() -> No
 def test_single_record_rows_publish_boundary_constraints_and_fit_canvas() -> None:
     canvas = assemble_linear_diagram_from_records(
         _records(1000, 1000, 1000),
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "canvas.linear.comparison_height": 200,
+            },
+        ),
         linear_comparisons=[_comparison(0, 1)],
         legend="none",
-        config_overrides={
-            "show_labels": False,
-            "show_gc": False,
-            "show_skew": False,
-            "comparison_height": 200,
-        },
     )
 
     geometry = canvas._gbdraw_track_slot_geometry
@@ -238,16 +258,20 @@ def test_multi_record_local_header_clears_previous_row_body() -> None:
         )
     canvas = assemble_linear_diagram_from_records(
         records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.definition.linear.font_size.short": 80,
+                "objects.definition.linear.font_size.long": 80,
+            },
+        ),
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@2", "#3@2"),
         ),
         legend="none",
-        config_overrides={
-            "show_labels": False,
-            "show_gc": False,
-            "show_skew": False,
-            "linear_definition_font_size": 80,
-        },
     )
 
     geometry = canvas._gbdraw_track_slot_geometry
@@ -285,12 +309,19 @@ def test_api_renders_record_local_widths_and_grid_metadata() -> None:
     records = _records(1000, 500, 800, 700)
     canvas = assemble_linear_diagram_from_records(
         records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+        ),
         layout=LinearMultiRecordOptions(
             record_gap_px=24,
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
         ),
         legend="none",
-        config_overrides={"show_labels": False, "show_gc": False, "show_skew": False},
     )
     svg = canvas.tostring()
     assert svg.count("data-record-row=") == 4
@@ -302,6 +333,14 @@ def test_bottom_legend_follows_last_resolved_row() -> None:
     records = _records(*(1000 for _index in range(10)))
     svg = assemble_linear_diagram_from_records(
         records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+        ),
         layout=LinearMultiRecordOptions(
             multi_record_positions=tuple(
                 f"#{index + 1}@{1 if index < 5 else 2}"
@@ -311,11 +350,6 @@ def test_bottom_legend_follows_last_resolved_row() -> None:
         legend="bottom",
         plot_title="Resolved rows",
         plot_title_position="bottom",
-        config_overrides={
-            "show_labels": False,
-            "show_gc": False,
-            "show_skew": False,
-        },
     ).tostring()
     root = ET.fromstring(svg)
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -357,7 +391,7 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict["canvas"]["show_gc"] = False
     config_dict["canvas"]["show_skew"] = False
-    config_dict["canvas"]["show_labels"] = False
+    config_dict["labels"]["linear"]["scope"] = "none"
     config_dict["canvas"]["linear"]["track_layout"] = "above"
     config_dict["canvas"]["linear"]["keep_definition_left_aligned"] = True
     config_dict["canvas"]["linear"]["ruler_on_axis"] = ruler_on_axis
@@ -368,12 +402,12 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
 
     svg = assemble_linear_diagram_from_records(
         records,
+        cfg=GbdrawConfig.from_dict(config_dict),
         layout=LinearMultiRecordOptions(
             record_gap_px=24,
             multi_record_positions=("#1@1", "#2@1"),
         ),
         legend="bottom",
-        config_dict=config_dict,
     ).tostring()
     root = ET.fromstring(svg)
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -448,11 +482,14 @@ def test_multi_record_layout_rejects_normalize_length() -> None:
     with pytest.raises(ValidationError, match="normalize_length"):
         assemble_linear_diagram_from_records(
             _records(100, 100),
+            cfg=apply_config_overrides(
+                None,
+                {"canvas.linear.normalize_length": True},
+            ),
             layout=LinearMultiRecordOptions(
                 multi_record_positions=("#1@1", "#2@1"),
             ),
             legend="none",
-            config_overrides={"normalize_length": True},
         )
 
 
@@ -470,7 +507,7 @@ def test_final_width_label_band_recomputes_first_row_axis_y() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict["canvas"]["show_gc"] = False
     config_dict["canvas"]["show_skew"] = False
-    config_dict["canvas"]["show_labels"] = "all"
+    config_dict["labels"]["linear"]["scope"] = "all"
     config_dict["labels"]["rendering"] = "external_only"
     definition_cfg = config_dict["objects"]["definition"]["linear"]
     definition_cfg["show_replicon"] = False
@@ -479,12 +516,12 @@ def test_final_width_label_band_recomputes_first_row_axis_y() -> None:
 
     drawing = assemble_linear_diagram_from_records(
         records,
+        cfg=GbdrawConfig.from_dict(config_dict),
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1"),
         ),
         selected_features_set=["CDS"],
         legend="none",
-        config_dict=config_dict,
     )
     first_record = drawing._gbdraw_track_slot_geometry["records"][0]
     canvas_band = first_record["canvasBand"]

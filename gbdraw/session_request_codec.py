@@ -194,13 +194,13 @@ _LEGACY_SPARSE_FEATURE_TYPES = (
 )
 _LEGACY_SPARSE_CONFIG_OVERRIDES = {
     "circular": {
-        "show_gc": True,
-        "show_skew": True,
+        "canvas.show_gc": True,
+        "canvas.show_skew": True,
     },
     "linear": {
-        "show_gc": True,
-        "show_skew": True,
-        "linear_axis_stroke_color": "gray",
+        "canvas.show_gc": True,
+        "canvas.show_skew": True,
+        "objects.axis.linear.stroke_color": "gray",
     },
 }
 _LEGACY_CONFIG_OVERRIDE_KEYS = {
@@ -214,6 +214,142 @@ _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES = {
         "spreadout": "above",
         "tuckin": "below",
     },
+}
+_LEGACY_FLAT_CONFIG_OVERRIDE_PATHS = {
+    "block_stroke_width": (
+        "objects.features.block_stroke_width.short",
+        "objects.features.block_stroke_width.long",
+    ),
+    "block_stroke_color": ("objects.features.block_stroke_color",),
+    "circular_axis_stroke_color": ("objects.axis.circular.stroke_color",),
+    "circular_axis_stroke_width": (
+        "objects.axis.circular.stroke_width.short",
+        "objects.axis.circular.stroke_width.long",
+    ),
+    "linear_axis_stroke_color": ("objects.axis.linear.stroke_color",),
+    "linear_axis_stroke_width": (
+        "objects.axis.linear.stroke_width.short",
+        "objects.axis.linear.stroke_width.long",
+    ),
+    "line_stroke_color": ("objects.features.line_stroke_color",),
+    "line_stroke_width": (
+        "objects.features.line_stroke_width.short",
+        "objects.features.line_stroke_width.long",
+    ),
+    "gc_stroke_color": ("objects.gc_content.stroke_color",),
+    "gc_content_mode": ("objects.gc_content.mode",),
+    "gc_content_min_percent": ("objects.gc_content.min_percent",),
+    "gc_content_max_percent": ("objects.gc_content.max_percent",),
+    "gc_content_show_axis": ("objects.gc_content.show_axis",),
+    "gc_content_show_ticks": ("objects.gc_content.show_ticks",),
+    "gc_content_tick_interval": ("objects.gc_content.large_tick_interval",),
+    "gc_content_large_tick_interval": ("objects.gc_content.large_tick_interval",),
+    "gc_content_small_tick_interval": ("objects.gc_content.small_tick_interval",),
+    "gc_content_tick_font_size": ("objects.gc_content.tick_font_size",),
+    "gc_content_percent_background_color": (
+        "objects.gc_content.percent_background_color",
+    ),
+    "gc_content_percent_background_opacity": (
+        "objects.gc_content.percent_background_opacity",
+    ),
+    "gc_content_percent_border_color": (
+        "objects.gc_content.percent_border_color",
+    ),
+    "gc_content_percent_border_width": (
+        "objects.gc_content.percent_border_width",
+    ),
+    "show_gc": ("canvas.show_gc",),
+    "show_skew": ("canvas.show_skew",),
+    "show_depth": ("canvas.show_depth",),
+    "depth_color": ("objects.depth.fill_color",),
+    "depth_height": ("canvas.linear.depth_height",),
+    "depth_min": ("objects.depth.min_depth",),
+    "depth_max": ("objects.depth.max_depth",),
+    "depth_normalize": ("objects.depth.normalize",),
+    "depth_show_axis": ("objects.depth.show_axis",),
+    "depth_show_ticks": ("objects.depth.show_ticks",),
+    "depth_large_tick_interval": ("objects.depth.large_tick_interval",),
+    "depth_small_tick_interval": ("objects.depth.small_tick_interval",),
+    "depth_tick_font_size": ("objects.depth.tick_font_size",),
+    "depth_share_axis": ("objects.depth.share_axis",),
+    "align_center": ("canvas.linear.align_center",),
+    "keep_definition_left_aligned": (
+        "canvas.linear.keep_definition_left_aligned",
+    ),
+    "linear_track_layout": ("canvas.linear.track_layout",),
+    "linear_track_axis_gap": ("canvas.linear.track_axis_gap",),
+    "linear_ruler_on_axis": ("canvas.linear.ruler_on_axis",),
+    "track_type": ("canvas.circular.track_type",),
+    "strandedness": ("canvas.strandedness",),
+    "resolve_overlaps": ("canvas.resolve_overlaps",),
+    "label_radius_offset": ("labels.radius_factor",),
+    "label_blacklist": ("labels.filtering.blacklist_keywords",),
+    "outer_label_x_radius_offset": (
+        "labels.unified_adjustment.outer_labels.x_radius_offset",
+    ),
+    "outer_label_y_radius_offset": (
+        "labels.unified_adjustment.outer_labels.y_radius_offset",
+    ),
+    "inner_label_x_radius_offset": (
+        "labels.unified_adjustment.inner_labels.x_radius_offset",
+    ),
+    "inner_label_y_radius_offset": (
+        "labels.unified_adjustment.inner_labels.y_radius_offset",
+    ),
+    "comparison_height": ("canvas.linear.comparison_height",),
+    "font_family": ("objects.text.font_family",),
+    "default_cds_height": (
+        "canvas.linear.default_cds_height.short",
+        "canvas.linear.default_cds_height.long",
+    ),
+    "gc_height": ("canvas.linear.default_gc_height",),
+    "scale_style": ("objects.scale.style",),
+    "scale_stroke_color": ("objects.scale.stroke_color",),
+    "scale_label_color": ("objects.scale.label_color",),
+    "scale_stroke_width": ("objects.scale.stroke_width",),
+    "scale_font_size": (
+        "objects.scale.font_size.short",
+        "objects.scale.font_size.long",
+    ),
+    "ruler_label_font_size": (
+        "objects.scale.ruler_label_font_size.short",
+        "objects.scale.ruler_label_font_size.long",
+    ),
+    "scale_interval": ("objects.scale.interval",),
+    "tick_label_font_size": ("objects.ticks.tick_labels.font_size",),
+    "pairwise_match_style": ("objects.blast_match.style",),
+    "legend_box_size": (
+        "objects.legends.color_rect_size.short",
+        "objects.legends.color_rect_size.long",
+    ),
+    "legend_font_size": (
+        "objects.legends.font_size.short",
+        "objects.legends.font_size.long",
+    ),
+    "circular_label_spacing": ("labels.spacing.circular",),
+    "circular_label_placement": ("labels.circular.placement",),
+    "linear_label_spacing": ("labels.spacing.linear",),
+    "label_rendering": ("labels.rendering",),
+    "label_placement": ("labels.linear.placement",),
+    "label_rotation": ("labels.linear.rotation",),
+    "linear_definition_font_size": (
+        "objects.definition.linear.font_size.short",
+        "objects.definition.linear.font_size.long",
+    ),
+    "linear_definition_show_replicon": (
+        "objects.definition.linear.show_replicon",
+    ),
+    "linear_definition_show_accession": (
+        "objects.definition.linear.show_accession",
+    ),
+    "linear_definition_show_length": ("objects.definition.linear.show_length",),
+    "plot_title_font_size": ("objects.definition.circular.plot_title_font_size",),
+    "normalize_length": ("canvas.linear.normalize_length",),
+}
+_LEGACY_FILTERING_RAW_KEYS = {
+    "label_whitelist": "whitelist_df",
+    "qualifier_priority": "qualifier_priority_df",
+    "label_table": "label_override_df",
 }
 
 _COMPARISON_SOURCE_FIELDS = frozenset(
@@ -1046,14 +1182,280 @@ def _decode_config_overrides(
                         raw.strip().lower(),
                         raw,
                     )
-        return overrides
+    else:
+        retired = _retired_config_override(overrides)
+        if retired is not None:
+            raise CanonicalRequestDecodingError(
+                f"{path} contains retired value {retired!r}; schema {schema} "
+                "requires canonical config overrides."
+            )
+    return _migrate_flat_config_overrides(overrides, mode=mode, path=path)
 
-    retired = _retired_config_override(overrides)
-    if retired is not None:
+
+def _migrate_flat_config_overrides(
+    overrides: Mapping[str, Any],
+    *,
+    mode: Literal["circular", "linear"],
+    path: str,
+) -> dict[str, Any]:
+    """Project persisted flat aliases onto schema-derived dotted leaves."""
+
+    legacy_label_paths = {
+        "canvas.show_labels",
+        "canvas.circular.show_labels",
+        "canvas.linear.show_labels",
+        "canvas.circular.allow_inner_labels",
+    }
+    migrated = {
+        name: deepcopy(value)
+        for name, value in overrides.items()
+        if "." in name and name not in legacy_label_paths
+    }
+    migrated_sources = {name: name for name in migrated}
+    consumed: set[str] = set()
+
+    def assign(canonical_path: str, value: object, *, source: str) -> None:
+        existing_source = migrated_sources.get(canonical_path)
+        if existing_source is not None:
+            if (
+                existing_source == "gc_content_tick_interval"
+                and source == "gc_content_large_tick_interval"
+            ):
+                migrated[canonical_path] = deepcopy(value)
+                migrated_sources[canonical_path] = source
+                return
+            if migrated[canonical_path] == value:
+                return
+            raise CanonicalRequestDecodingError(
+                f"{path} cannot contain both {existing_source} and {source}."
+            )
+        migrated[canonical_path] = deepcopy(value)
+        migrated_sources[canonical_path] = source
+
+    active_show_names = (
+        ("show_labels", "canvas.show_labels", "canvas.circular.show_labels")
+        if mode == "circular"
+        else ("show_labels", "canvas.show_labels", "canvas.linear.show_labels")
+    )
+    wrong_show_name = (
+        "canvas.linear.show_labels"
+        if mode == "circular"
+        else "canvas.circular.show_labels"
+    )
+    if overrides.get(wrong_show_name) is not None:
         raise CanonicalRequestDecodingError(
-            f"{path} contains retired value {retired!r}; schema 4 requires canonical config overrides."
+            f"{path}.{wrong_show_name} is for the other drawing mode."
         )
-    return overrides
+    consumed.add(wrong_show_name)
+    legacy_scope: str | None = None
+    legacy_scope_source: str | None = None
+    for legacy_name in active_show_names:
+        if legacy_name not in overrides:
+            continue
+        consumed.add(legacy_name)
+        value = overrides[legacy_name]
+        if value is None:
+            continue
+        circular_scope, linear_scope = _legacy_mode_label_scopes(
+            value,
+            mode=mode,
+            path=f"{path}.{legacy_name}",
+        )
+        scope = circular_scope if mode == "circular" else linear_scope
+        if legacy_scope is not None and legacy_scope != scope:
+            raise CanonicalRequestDecodingError(
+                f"{path} cannot contain conflicting {legacy_scope_source} "
+                f"and {legacy_name} values."
+            )
+        legacy_scope = scope
+        legacy_scope_source = legacy_name
+
+    inner_label_names = (
+        "allow_inner_labels",
+        "canvas.circular.allow_inner_labels",
+    )
+    inner_labels: bool | None = None
+    inner_source: str | None = None
+    for legacy_name in inner_label_names:
+        if legacy_name not in overrides:
+            continue
+        consumed.add(legacy_name)
+        value = overrides[legacy_name]
+        if value is None:
+            continue
+        if not isinstance(value, bool):
+            raise CanonicalRequestDecodingError(
+                f"{path}.{legacy_name} must be a boolean."
+            )
+        if inner_labels is not None and inner_labels != value:
+            raise CanonicalRequestDecodingError(
+                f"{path} cannot contain conflicting {inner_source} "
+                f"and {legacy_name} values."
+            )
+        inner_labels = value
+        inner_source = legacy_name
+
+    if mode == "circular":
+        if legacy_scope == "outer" and inner_labels:
+            legacy_scope = "both"
+        elif legacy_scope is None and inner_labels:
+            legacy_scope = "both"
+        if legacy_scope is not None:
+            assign(
+                "labels.circular.scope",
+                legacy_scope,
+                source=legacy_scope_source or inner_source or "legacy labels",
+            )
+    elif inner_labels:
+        raise CanonicalRequestDecodingError(
+            f"{path}.{inner_source} is Circular-only."
+        )
+    elif legacy_scope is not None:
+        assign(
+            "labels.linear.scope",
+            legacy_scope,
+            source=legacy_scope_source or "legacy labels",
+        )
+
+    for legacy_name, canonical_paths in _LEGACY_FLAT_CONFIG_OVERRIDE_PATHS.items():
+        if legacy_name not in overrides:
+            continue
+        consumed.add(legacy_name)
+        value = overrides[legacy_name]
+        if value is None:
+            continue
+        if legacy_name == "label_blacklist" and isinstance(value, str):
+            value = [item.strip() for item in value.split(",") if item.strip()]
+        for canonical_path in canonical_paths:
+            assign(canonical_path, value, source=legacy_name)
+
+    if "label_font_size" in overrides:
+        consumed.add("label_font_size")
+        value = overrides["label_font_size"]
+        if value is not None:
+            prefix = (
+                "labels.font_size"
+                if mode == "circular"
+                else "labels.font_size.linear"
+            )
+            for suffix in ("short", "long"):
+                assign(
+                    f"{prefix}.{suffix}",
+                    value,
+                    source="label_font_size",
+                )
+
+    if "circular_definition_font_size" in overrides:
+        consumed.add("circular_definition_font_size")
+        value = overrides["circular_definition_font_size"]
+        if value is not None:
+            assign(
+                "objects.definition.circular.font_size",
+                value,
+                source="circular_definition_font_size",
+            )
+            try:
+                interval = int(float(value) + 2)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise CanonicalRequestDecodingError(
+                    f"{path}.circular_definition_font_size must be numeric."
+                ) from exc
+            assign(
+                "objects.definition.circular.interval",
+                interval,
+                source="circular_definition_font_size",
+            )
+
+    if "linear_definition_line_styles" in overrides:
+        consumed.add("linear_definition_line_styles")
+        line_styles = overrides["linear_definition_line_styles"]
+        if line_styles is not None:
+            if not isinstance(line_styles, MappingABC):
+                raise CanonicalRequestDecodingError(
+                    f"{path}.linear_definition_line_styles must be an object."
+                )
+            for line_kind, style in line_styles.items():
+                if not isinstance(style, MappingABC):
+                    raise CanonicalRequestDecodingError(
+                        f"{path}.linear_definition_line_styles.{line_kind} "
+                        "must be an object."
+                    )
+                for property_name, property_value in style.items():
+                    if property_value is None:
+                        continue
+                    assign(
+                        "objects.definition.linear.line_styles."
+                        f"{line_kind}.{property_name}",
+                        property_value,
+                        source=(
+                            "linear_definition_line_styles."
+                            f"{line_kind}.{property_name}"
+                        ),
+                    )
+
+    raw_filtering = {
+        raw_name: deepcopy(overrides[legacy_name])
+        for legacy_name, raw_name in _LEGACY_FILTERING_RAW_KEYS.items()
+        if legacy_name in overrides and overrides[legacy_name] is not None
+    }
+    consumed.update(
+        legacy_name
+        for legacy_name in _LEGACY_FILTERING_RAW_KEYS
+        if legacy_name in overrides
+    )
+    if raw_filtering:
+        assign(
+            "labels.filtering.raw",
+            raw_filtering,
+            source=", ".join(
+                legacy_name
+                for legacy_name in _LEGACY_FILTERING_RAW_KEYS
+                if legacy_name in overrides
+                and overrides[legacy_name] is not None
+            ),
+        )
+
+    for name, value in overrides.items():
+        if name not in consumed and "." not in name:
+            migrated[name] = deepcopy(value)
+    return migrated
+
+
+def _legacy_mode_label_scopes(
+    value: object,
+    *,
+    mode: Literal["circular", "linear"],
+    path: str,
+) -> tuple[
+    Literal["none", "outer"],
+    Literal["none", "all", "first", "orthogroup_top"],
+]:
+    if isinstance(value, bool):
+        return ("outer" if value else "none"), ("all" if value else "none")
+    if not isinstance(value, str):
+        raise CanonicalRequestDecodingError(
+            f"{path} must be a boolean or label policy."
+        )
+    normalized = value.strip().lower()
+    aliases = {
+        "true": "all",
+        "yes": "all",
+        "on": "all",
+        "false": "none",
+        "no": "none",
+        "off": "none",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in {"all", "first", "orthogroup_top", "none"}:
+        raise CanonicalRequestDecodingError(
+            f"{path} contains unsupported label policy {value!r}."
+        )
+    if mode == "circular" and normalized in {"first", "orthogroup_top"}:
+        raise CanonicalRequestDecodingError(
+            f"{path} contains Linear-only label policy {normalized!r}."
+        )
+    circular_scope = "outer" if normalized == "all" else "none"
+    return circular_scope, normalized  # type: ignore[return-value]
 
 
 def _retired_config_override(overrides: Mapping[str, Any]) -> str | None:
@@ -1172,7 +1574,11 @@ def _decode_option_value(
     resource_paths: Mapping[str, str | Path],
 ) -> Any:
     if name == "config":
-        return dict(_object(value, path="renderRequest.diagramOptions.config"))
+        return _migrate_legacy_full_config(
+            _object(value, path="renderRequest.diagramOptions.config"),
+            mode=mode,
+            path="renderRequest.diagramOptions.config",
+        )
     if name == "colors":
         return _decode_colors(value, resource_paths=resource_paths)
     if name == "tracks":
@@ -1226,6 +1632,117 @@ def _decode_option_value(
             value, name=name, table=False, resource_paths=resource_paths
         )
     return value
+
+
+def _migrate_legacy_full_config(
+    value: Mapping[str, Any],
+    *,
+    mode: Literal["circular", "linear"],
+    path: str,
+) -> dict[str, Any]:
+    """Move persisted config aliases onto the current typed schema."""
+
+    migrated = deepcopy(dict(value))
+    canvas = migrated.get("canvas")
+    if not isinstance(canvas, dict):
+        return migrated
+
+    circular_canvas = canvas.get("circular")
+    linear_canvas = canvas.get("linear")
+    if not isinstance(circular_canvas, dict) or not isinstance(linear_canvas, dict):
+        return migrated
+
+    legacy_track_layout = linear_canvas.get("track_layout")
+    if isinstance(legacy_track_layout, str):
+        normalized_track_layout = legacy_track_layout.strip().lower()
+        linear_canvas["track_layout"] = {
+            "spreadout": "above",
+            "tuckin": "below",
+        }.get(normalized_track_layout, legacy_track_layout)
+
+    labels = migrated.get("labels")
+    if isinstance(labels, dict):
+        linear_labels = labels.get("linear")
+        if isinstance(linear_labels, dict):
+            legacy_placement = linear_labels.get("placement")
+            if (
+                isinstance(legacy_placement, str)
+                and legacy_placement.strip().lower() == "on_feature"
+            ):
+                linear_labels["placement"] = "above_feature"
+
+    shared_show = canvas.pop("show_labels", None)
+    circular_show = circular_canvas.pop("show_labels", None)
+    linear_show = linear_canvas.pop("show_labels", None)
+    allow_inner = circular_canvas.pop("allow_inner_labels", None)
+    if all(
+        item is None
+        for item in (shared_show, circular_show, linear_show, allow_inner)
+    ):
+        return migrated
+
+    circular_scope: str | None = None
+    linear_scope: str | None = None
+    if shared_show is not None:
+        circular_scope, linear_scope = _legacy_mode_label_scopes(
+            shared_show,
+            mode=mode,
+            path=f"{path}.canvas.show_labels",
+        )
+    if circular_show is not None:
+        nested_circular_scope, _unused_linear_scope = _legacy_mode_label_scopes(
+            circular_show,
+            mode="circular",
+            path=f"{path}.canvas.circular.show_labels",
+        )
+        if (
+            circular_scope is not None
+            and circular_scope != nested_circular_scope
+        ):
+            raise CanonicalRequestDecodingError(
+                f"{path}.canvas contains conflicting Circular label values."
+            )
+        circular_scope = nested_circular_scope
+    if linear_show is not None:
+        _unused_circular_scope, nested_linear_scope = _legacy_mode_label_scopes(
+            linear_show,
+            mode="linear",
+            path=f"{path}.canvas.linear.show_labels",
+        )
+        if linear_scope is not None and linear_scope != nested_linear_scope:
+            raise CanonicalRequestDecodingError(
+                f"{path}.canvas contains conflicting Linear label values."
+            )
+        linear_scope = nested_linear_scope
+    if allow_inner is not None:
+        if not isinstance(allow_inner, bool):
+            raise CanonicalRequestDecodingError(
+                f"{path}.canvas.circular.allow_inner_labels must be a boolean."
+            )
+        if allow_inner and circular_scope in {None, "outer"}:
+            circular_scope = "both"
+
+    if not isinstance(labels, dict):
+        raise CanonicalRequestDecodingError(f"{path}.labels must be an object.")
+    for section_name, scope in (
+        ("circular", circular_scope),
+        ("linear", linear_scope),
+    ):
+        if scope is None:
+            continue
+        section = labels.get(section_name)
+        if not isinstance(section, dict):
+            raise CanonicalRequestDecodingError(
+                f"{path}.labels.{section_name} must be an object."
+            )
+        existing = section.get("scope")
+        if existing is not None and existing != scope:
+            raise CanonicalRequestDecodingError(
+                f"{path} contains conflicting legacy and current "
+                f"{section_name} label scopes."
+            )
+        section.setdefault("scope", scope)
+    return migrated
 
 
 def _encode_colors(value: object, *, resources: _ResourceBuilder) -> dict[str, Any]:

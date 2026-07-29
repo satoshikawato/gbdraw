@@ -87,9 +87,15 @@ def test_circular_placement_config_default_override_and_validation() -> None:
     old_config = load_default_config()
     old_config["labels"].pop("circular")
     assert apply_config_overrides(old_config, None).labels.circular.placement == "horizontal"
-    assert apply_config_overrides(None, {"circular_label_placement": "radial"}).labels.circular.placement == "radial"
+    assert apply_config_overrides(
+        None,
+        {"labels.circular.placement": "radial"},
+    ).labels.circular.placement == "radial"
     with pytest.raises(ValidationError, match="horizontal.*radial"):
-        apply_config_overrides(None, {"circular_label_placement": "diagonal"})
+        apply_config_overrides(
+            None,
+            {"labels.circular.placement": "diagonal"},
+        )
 
 
 def test_circular_cli_placement_default_and_radial_parse() -> None:

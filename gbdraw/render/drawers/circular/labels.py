@@ -7,7 +7,7 @@ from typing import Literal, Tuple
 from svgwrite.path import Path  # type: ignore[reportMissingImports]
 from svgwrite.text import Text, TextPath  # type: ignore[reportMissingImports]
 
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
 from ....core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 from ....layout.circular import calculate_feature_position_factors_circular  # type: ignore[reportMissingImports]
 from ....layout.common import calculate_cds_ratio  # type: ignore[reportMissingImports]
@@ -17,11 +17,11 @@ from ....core.text import calculate_bbox_dimensions  # type: ignore[reportMissin
 
 
 class LabelDrawer:
-    def __init__(self, config_dict: dict, cfg: GbdrawConfig | None = None) -> None:
-        self.config_dict = config_dict
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    def __init__(self, *, profile: CircularRenderProfile) -> None:
+        cfg = profile.config
+        self._profile = profile
         self._cfg = cfg
-        self.strandedness: bool = cfg.canvas.strandedness
+        self.strandedness = profile.strandedness
 
     def set_feature_label_anchor_value(
         self,
@@ -244,7 +244,7 @@ class LabelDrawer:
         self.font_size = label.get("font_size", fallback_font_size)
         self.font_family = label.get("font_family", cfg.objects.text.font_family)
         self.track_type = str(track_preset or label.get("track_preset") or cfg.canvas.circular.track_type)
-        self.strandedness = cfg.canvas.strandedness
+        self.strandedness = self._profile.strandedness
         if label["is_embedded"] is True:
             group = self.embed_label(
                 group,

@@ -17,11 +17,12 @@ import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
 from gbdraw.analysis.gc import circular_dinucleotide_content_df, gc_content_percent_df
 from gbdraw.analysis.skew import skew_df
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
 )
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.svg.circular_tracks import (
@@ -153,13 +154,13 @@ def test_circular_gc_content_percent_mode_adds_percent_axis_without_depth_axis()
     svg = assemble_circular_diagram_from_record(
         _make_record(),
         legend="none",
-        config_overrides={
-            "show_skew": False,
-            "gc_content_mode": "percent",
-            "gc_content_min_percent": 0,
-            "gc_content_max_percent": 100,
-            "gc_content_large_tick_interval": 50,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_skew": False,
+            "objects.gc_content.mode": "percent",
+            "objects.gc_content.min_percent": 0,
+            "objects.gc_content.max_percent": 100,
+            "objects.gc_content.large_tick_interval": 50,
+        }),
         window=20,
         step=20,
     ).tostring()
@@ -178,14 +179,14 @@ def test_linear_gc_content_percent_mode_adds_percent_axis_without_depth_axis() -
     svg = assemble_linear_diagram_from_records(
         [_make_record()],
         legend="none",
-        config_overrides={
-            "show_gc": True,
-            "show_skew": False,
-            "gc_content_mode": "percent",
-            "gc_content_min_percent": 0,
-            "gc_content_max_percent": 100,
-            "gc_content_large_tick_interval": 50,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": True,
+            "canvas.show_skew": False,
+            "objects.gc_content.mode": "percent",
+            "objects.gc_content.min_percent": 0,
+            "objects.gc_content.max_percent": 100,
+            "objects.gc_content.large_tick_interval": 50,
+        }),
         window=20,
         step=20,
     ).tostring()
@@ -205,18 +206,19 @@ def test_linear_gc_content_percent_mode_reserves_full_height_before_gc_skew() ->
     from gbdraw.config.modify import modify_config_dict
 
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_gc=True,
-        show_skew=True,
-        gc_content_mode="percent",
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "objects.gc_content.mode": 'percent',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=160,
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
 
     gc_bottom = canvas_config.gc_content_track_offset + canvas_config.gc_height
@@ -227,11 +229,11 @@ def test_linear_gc_content_percent_mode_reserves_full_height_before_gc_skew() ->
     canvas = assemble_linear_diagram_from_records(
         [_make_record()],
         legend="none",
-        config_overrides={
-            "show_gc": True,
-            "show_skew": True,
-            "gc_content_mode": "percent",
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "objects.gc_content.mode": "percent",
+        }),
         window=20,
         step=20,
     )
@@ -253,14 +255,16 @@ def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:
     circular_svg = assemble_circular_diagram_from_record(
         _make_record(),
         legend="none",
-        config_overrides={"show_skew": False},
+        cfg=apply_config_overrides(None, {"canvas.show_skew": False}),
         window=20,
         step=20,
     ).tostring()
     linear_svg = assemble_linear_diagram_from_records(
         [_make_record()],
         legend="none",
-        config_overrides={"show_gc": True, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": False}
+        ),
         window=20,
         step=20,
     ).tostring()
@@ -282,10 +286,10 @@ def test_circular_gc_content_percent_container_ids_are_slot_scoped() -> None:
             "gc_content:dinucleotide_content@nt=GC,w=20px",
             "at_content:dinucleotide_content@nt=AT,w=20px",
         ],
-        config_overrides={
-            "gc_content_mode": "percent",
-            "gc_content_show_axis": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "objects.gc_content.mode": "percent",
+            "objects.gc_content.show_axis": False,
+        }),
         window=20,
         step=20,
     ).tostring()
@@ -355,13 +359,13 @@ def test_circular_gc_content_percent_axis_inherits_depth_tick_font_size() -> Non
     svg = assemble_circular_diagram_from_record(
         record,
         legend="none",
-        config_overrides={
-            "show_depth": True,
-            "show_skew": False,
-            "gc_content_mode": "percent",
-            "gc_content_large_tick_interval": 50,
-            "depth_tick_font_size": 11,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_depth": True,
+            "canvas.show_skew": False,
+            "objects.gc_content.mode": "percent",
+            "objects.gc_content.large_tick_interval": 50,
+            "objects.depth.tick_font_size": 11,
+        }),
         depth_table=_make_depth_table(record),
         window=20,
         step=20,
@@ -378,14 +382,14 @@ def test_linear_gc_content_percent_axis_inherits_depth_tick_font_size() -> None:
     svg = assemble_linear_diagram_from_records(
         [record],
         legend="none",
-        config_overrides={
-            "show_depth": True,
-            "show_gc": True,
-            "show_skew": False,
-            "gc_content_mode": "percent",
-            "gc_content_large_tick_interval": 50,
-            "depth_tick_font_size": 11,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_depth": True,
+            "canvas.show_gc": True,
+            "canvas.show_skew": False,
+            "objects.gc_content.mode": "percent",
+            "objects.gc_content.large_tick_interval": 50,
+            "objects.depth.tick_font_size": 11,
+        }),
         depth_table=_make_depth_table(record),
         window=20,
         step=20,
@@ -443,7 +447,8 @@ def test_circular_cli_gc_percent_options_forward_to_api(
         ]
     )
 
-    cfg = GbdrawConfig.from_dict(captured["options"].config)
+    cfg = captured["options"].config
+    assert isinstance(cfg, GbdrawConfig)
     assert cfg.objects.gc_content.mode == "percent"
     assert cfg.objects.gc_content.min_percent == pytest.approx(30)
     assert cfg.objects.gc_content.max_percent == pytest.approx(70)
@@ -499,7 +504,8 @@ def test_linear_cli_gc_percent_options_forward_to_api(
         ]
     )
 
-    cfg = GbdrawConfig.from_dict(captured["canonical_request"].options.config)
+    cfg = captured["canonical_request"].options.config
+    assert isinstance(cfg, GbdrawConfig)
     assert cfg.objects.gc_content.mode == "percent"
     assert cfg.objects.gc_content.min_percent == pytest.approx(35)
     assert cfg.objects.gc_content.max_percent == pytest.approx(65)

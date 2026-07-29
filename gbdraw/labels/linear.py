@@ -6,8 +6,7 @@
 from collections import defaultdict
 
 from .filtering import get_label_text  # type: ignore[reportMissingImports]
-from .policy import normalize_label_rendering
-from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ..config.models import LinearRenderProfile  # type: ignore[reportMissingImports]
 from ..features.coordinates import get_strand  # type: ignore[reportMissingImports]
 from ..features.ids import compute_feature_object_hash
 from ..core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
@@ -351,8 +350,7 @@ def prepare_label_list_linear(
     strandedness,
     track_layout,
     track_axis_gap,
-    config_dict,
-    cfg: GbdrawConfig | None = None,
+    profile: LinearRenderProfile,
     label_font_size: float | None = None,
     orthogroup_label_member_ids: set[str] | None = None,
     orthogroup_label_top_member_ids: set[str] | None = None,
@@ -361,6 +359,7 @@ def prepare_label_list_linear(
     """
     Prepares a list of labels for linear genome visualization with proper track organization.
     """
+    cfg = profile.config
     embedded_labels = []
     external_labels = []
     track_dict = defaultdict(list)
@@ -375,7 +374,6 @@ def prepare_label_list_linear(
     )
 
     # Get configuration values
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
     length_threshold = cfg.labels.length_threshold.linear
     length_param = determine_length_parameter(genome_length, length_threshold)
     font_family = cfg.objects.text.font_family
@@ -384,16 +382,15 @@ def prepare_label_list_linear(
         if label_font_size is not None
         else cfg.labels.font_size.linear.for_length_param(length_param)
     )
-    linear_label_cfg = cfg.labels.linear
-    label_rendering = normalize_label_rendering(cfg.labels.rendering)
+    label_rendering = profile.label_rendering
     label_spacing_px = float(cfg.labels.spacing.linear)
     external_bucket_size = _external_label_bucket_size(alignment_width)
-    force_above_feature = linear_label_cfg.placement == "above_feature"
+    force_above_feature = profile.label_placement == "above_feature"
     if force_above_feature and label_rendering != "auto":
         raise ValueError(
             "label_rendering embedded_only|external_only cannot be used with label_placement above_feature"
         )
-    base_rotation_deg = linear_label_cfg.rotation
+    base_rotation_deg = profile.label_rotation
     interval = cfg.canvas.dpi
     label_filtering = cfg.labels.filtering.as_dict()
     # First pass: Calculate feature track positions

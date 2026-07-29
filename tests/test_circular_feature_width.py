@@ -12,7 +12,7 @@ import gbdraw.circular as circular_cli_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.labels.circular as circular_labels_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.features.colors import preprocess_color_tables
@@ -52,6 +52,24 @@ def _feature_width_slots(width: str) -> list[str]:
     ]
 
 
+def _capture_resolved_radial_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    captured: dict[str, Any],
+) -> None:
+    resolve_layout = circular_assemble_module.resolve_circular_radial_layout
+
+    def capture_layout(*args, **kwargs):
+        layout = resolve_layout(*args, **kwargs)
+        captured["radial_layout"] = layout
+        return layout
+
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "resolve_circular_radial_layout",
+        capture_layout,
+    )
+
+
 def _load_record():
     input_path = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
     return SeqIO.read(str(input_path), "genbank")
@@ -66,11 +84,12 @@ def _make_config_dict(*, show_labels: bool) -> dict:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     return modify_config_dict(
         config_dict,
-        show_labels=show_labels,
-        allow_inner_labels=False,
-        resolve_overlaps=False,
-        strandedness=True,
-        track_type="tuckin",
+        {
+            "labels.circular.scope": "outer" if show_labels else "none",
+            "canvas.resolve_overlaps": False,
+            "canvas.strandedness": True,
+            "canvas.circular.track_type": 'tuckin',
+        },
     )
 
 
@@ -159,7 +178,7 @@ def test_feature_width_override_reaches_feature_drawer(monkeypatch: pytest.Monke
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         circular_track_slots=_feature_width_slots("96px"),
@@ -189,7 +208,7 @@ def test_default_custom_feature_slot_preserves_separate_strand_feature_width(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         circular_track_slots=default_circular_track_slots(
@@ -246,7 +265,7 @@ def test_short_tuckin_separate_strands_default_tracks_do_not_overlap() -> None:
         track_ratio=base_track_ratio,
         length_param=length_param,
         track_ratio_factor=feature_track_ratio_factor,
-        cfg=cfg,
+        profile=CircularRenderProfile(cfg),
     )
     assert feature_band is not None
 
@@ -269,11 +288,11 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
 
     captured: dict[str, Any] = {}
 
-    def fake_add_axis_group_on_canvas(canvas, canvas_config, config_dict, *, radius_override=None, cfg=None):
+    def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
         captured["axis_radius"] = radius_override
         return canvas
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
         captured["ticks_radius"] = radius_override
         return canvas
 
@@ -285,12 +304,9 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         canvas,
         gb_record,
         canvas_config,
-        feature_config,
-        config_dict,
         *,
         outer_arena=None,
-        cfg=None,
-        precomputed_feature_dict=None,
+        feature_layers=None,
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
         feature_anchor_radius_px=None,
@@ -305,10 +321,8 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
         record,
         canvas_config,
         feature_config,
-        config_dict,
         *,
-        cfg=None,
-        precomputed_feature_dict=None,
+        feature_layers=None,
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
         feature_anchor_radius_px=None,
@@ -326,7 +340,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -336,7 +350,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         circular_track_slots=_feature_width_slots("96px"),
@@ -359,11 +373,11 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
     base_radius = float(cfg.canvas.circular.radius)
     captured: dict[str, Any] = {}
 
-    def fake_add_axis_group_on_canvas(canvas, canvas_config, config_dict, *, radius_override=None, cfg=None):
+    def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
         captured["axis_radius"] = radius_override
         return canvas
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
         captured["ticks_radius"] = radius_override
         return canvas
 
@@ -375,12 +389,9 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
         canvas,
         gb_record,
         canvas_config,
-        feature_config,
-        config_dict,
         *,
         outer_arena=None,
-        cfg=None,
-        precomputed_feature_dict=None,
+        feature_layers=None,
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
         **kwargs,
@@ -397,7 +408,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -407,7 +418,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         circular_track_slots=[
@@ -484,18 +495,23 @@ def test_cli_legacy_label_options_are_rejected(legacy_option: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("labels_args", "expected_show_labels", "expected_allow_inner_labels", "expected_show_gc", "expected_show_skew", "expect_gc_warning"),
+    (
+        "labels_args",
+        "expected_scope",
+        "expected_show_gc",
+        "expected_show_skew",
+        "expect_gc_warning",
+    ),
     [
-        ([], False, False, True, True, False),
-        (["--labels"], True, False, True, True, False),
-        (["--labels", "out"], True, False, True, True, False),
-        (["--labels", "both"], True, True, False, False, True),
+        ([], "none", True, True, False),
+        (["--labels"], "outer", True, True, False),
+        (["--labels", "out"], "outer", True, True, False),
+        (["--labels", "both"], "both", False, False, True),
     ],
 )
-def test_cli_labels_mode_maps_to_internal_flags(
+def test_cli_labels_mode_maps_to_circular_scope(
     labels_args: list[str],
-    expected_show_labels: bool,
-    expected_allow_inner_labels: bool,
+    expected_scope: str,
     expected_show_gc: bool,
     expected_show_skew: bool,
     expect_gc_warning: bool,
@@ -512,12 +528,15 @@ def test_cli_labels_mode_maps_to_internal_flags(
     monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
     _stub_typed_request_export(monkeypatch, tmp_path)
 
-    def fake_modify_config_dict(config_dict: dict, **kwargs: Any) -> dict:
-        captured["show_labels"] = kwargs.get("show_labels")
-        captured["allow_inner_labels"] = kwargs.get("allow_inner_labels")
-        captured["show_gc"] = kwargs.get("show_gc")
-        captured["show_skew"] = kwargs.get("show_skew")
-        return real_modify_config_dict(config_dict, **kwargs)
+    def fake_modify_config_dict(
+        config_dict: dict,
+        overrides: dict[str, object] | None = None,
+    ) -> dict:
+        resolved = dict(overrides or {})
+        captured["label_scope"] = resolved.get("labels.circular.scope")
+        captured["show_gc"] = resolved.get("canvas.show_gc")
+        captured["show_skew"] = resolved.get("canvas.show_skew")
+        return real_modify_config_dict(config_dict, resolved)
 
     def fake_assemble(*args: Any, **kwargs: Any) -> Drawing:
         return Drawing(filename=str(tmp_path / "dummy.svg"))
@@ -539,8 +558,7 @@ def test_cli_labels_mode_maps_to_internal_flags(
             ]
         )
 
-    assert captured["show_labels"] is expected_show_labels
-    assert captured["allow_inner_labels"] is expected_allow_inner_labels
+    assert captured["label_scope"] == expected_scope
     assert captured["show_gc"] is expected_show_gc
     assert captured["show_skew"] is expected_show_skew
     gc_warning_present = any(
@@ -548,6 +566,65 @@ def test_cli_labels_mode_maps_to_internal_flags(
         for message in caplog.messages
     )
     assert gc_warning_present is expect_gc_warning
+
+
+def test_cli_fractional_definition_font_size_forwards_derived_interval(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    record = _load_record()
+    captured: dict[str, object] = {}
+    real_modify_config_dict = modify_config_dict
+
+    monkeypatch.setattr(
+        circular_cli_module,
+        "load_gbks",
+        lambda paths, **_kwargs: [record],
+    )
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(
+        circular_cli_module,
+        "load_default_colors",
+        lambda _path, _palette: None,
+    )
+    _stub_typed_request_export(monkeypatch, tmp_path)
+
+    def fake_modify_config_dict(
+        config_dict: dict,
+        overrides: dict[str, object] | None = None,
+    ) -> dict:
+        captured.update(overrides or {})
+        return real_modify_config_dict(config_dict, overrides)
+
+    def fake_assemble(*args: Any, **kwargs: Any) -> Drawing:
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(
+        circular_cli_module,
+        "modify_config_dict",
+        fake_modify_config_dict,
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_circular_diagram",
+        fake_assemble,
+    )
+
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--definition_font_size",
+            "12.5",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert captured["objects.definition.circular.font_size"] == pytest.approx(12.5)
+    assert captured["objects.definition.circular.interval"] == 14
 
 
 def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -664,67 +741,23 @@ def test_cli_gc_track_width_radius_respects_suppress_flags(
     assert all(slot.id not in {"gc_content", "gc_skew"} for slot in slots)
 
 
-def test_radius_mapper_uses_primary_feature_track_for_auto_relayout_with_resolve_overlaps() -> None:
-    record = _load_record()
-    config_dict = _make_config_dict(show_labels=True)
-    config_dict = modify_config_dict(
-        config_dict,
-        resolve_overlaps=True,
-        strandedness=False,
-        track_type="middle",
-    )
-    cfg = GbdrawConfig.from_dict(config_dict)
-
-    color_table, default_colors = preprocess_color_tables(None, load_default_colors("", "default"))
-    label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
-    feature_dict, _ = create_feature_dict(
-        record,
-        color_table,
-        SELECTED_FEATURES,
-        default_colors,
-        cfg.canvas.strandedness,
-        cfg.canvas.resolve_overlaps,
-        label_filtering,
-    )
-
-    class _CanvasStub:
-        radius = cfg.canvas.circular.radius
-        track_ratio = cfg.canvas.circular.track_ratio
-        length_param = "short"
-
-    feature_ratio_override = 75.0 / (float(_CanvasStub.radius) * float(_CanvasStub.track_ratio))
-    _, old_band, new_band = circular_assemble_module._build_feature_radius_mapper(
-        feature_dict,
-        len(record.seq),
-        canvas_config=_CanvasStub,
-        cfg=cfg,
-        feature_track_ratio_factor_override=feature_ratio_override,
-    )
-
-    assert old_band is not None
-    assert new_band is not None
-
-    default_ratio_factor = float(cfg.canvas.circular.track_ratio_factors["short"][0])
-    default_cds_ratio = float(cfg.canvas.circular.track_ratio) * default_ratio_factor
-    expected_old_outer = float(cfg.canvas.circular.radius) * (1.0 + 0.5 * default_cds_ratio)
-    assert math.isclose(float(old_band[1]), expected_old_outer, rel_tol=1e-6, abs_tol=1e-6)
-
-
 def test_feature_width_expand_canvas_when_labels_hidden_with_resolve_overlaps() -> None:
     record = _load_record()
     config_dict = _make_config_dict(show_labels=False)
     config_dict = modify_config_dict(
         config_dict,
-        resolve_overlaps=True,
-        strandedness=False,
-        track_type="middle",
+        {
+            "canvas.resolve_overlaps": True,
+            "canvas.strandedness": False,
+            "canvas.circular.track_type": 'middle',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     expected_base_height = float(cfg.canvas.circular.height)
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="left",
         circular_track_slots=_feature_width_slots("75px"),
@@ -739,9 +772,11 @@ def test_feature_width_75_keeps_outer_labels_outside_local_feature_tracks() -> N
     config_dict = _make_config_dict(show_labels=True)
     config_dict = modify_config_dict(
         config_dict,
-        resolve_overlaps=True,
-        strandedness=False,
-        track_type="middle",
+        {
+            "canvas.resolve_overlaps": True,
+            "canvas.strandedness": False,
+            "canvas.circular.track_type": 'middle',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -767,30 +802,20 @@ def test_feature_width_75_keeps_outer_labels_outside_local_feature_tracks() -> N
             "radius": base_radius,
             "track_ratio": base_track_ratio,
             "length_param": "short",
+            "profile": CircularRenderProfile(cfg),
         },
     )()
-    radius_mapper, _, _ = circular_assemble_module._build_feature_radius_mapper(
-        feature_dict,
-        len(record.seq),
-        canvas_config=canvas_stub,
-        cfg=cfg,
-        feature_track_ratio_factor_override=feature_ratio_override,
-    )
-    assert radius_mapper is not None
-
     default_anchor, default_arc_outer = circular_assemble_module._default_outer_label_arena(
         canvas_config=canvas_stub,
-        cfg=cfg,
     )
-    outer_arena = (float(radius_mapper(default_anchor)), float(radius_mapper(default_arc_outer)))
+    outer_arena = (float(default_anchor), float(default_arc_outer))
 
     labels = circular_labels_module.prepare_label_list(
         feature_dict,
         len(record.seq),
         base_radius,
         base_track_ratio,
-        config_dict,
-        cfg=cfg,
+        CircularRenderProfile(cfg),
         outer_arena=outer_arena,
         feature_track_ratio_factor_override=feature_ratio_override,
     )
@@ -802,7 +827,7 @@ def test_feature_width_75_keeps_outer_labels_outside_local_feature_tracks() -> N
         len(record.seq),
         base_radius,
         base_track_ratio,
-        cfg,
+        CircularRenderProfile(cfg),
         feature_track_ratio_factor_override=feature_ratio_override,
     )
     assert feature_intervals
@@ -823,9 +848,11 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
     config_dict = _make_config_dict(show_labels=False)
     config_dict = modify_config_dict(
         config_dict,
-        resolve_overlaps=True,
-        strandedness=False,
-        track_type="middle",
+        {
+            "canvas.resolve_overlaps": True,
+            "canvas.strandedness": False,
+            "canvas.circular.track_type": 'middle',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     base_radius = float(cfg.canvas.circular.radius)
@@ -851,7 +878,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
         track_ratio=base_track_ratio,
         length_param="short",
         track_ratio_factor=default_ratio_factor,
-        cfg=cfg,
+        profile=CircularRenderProfile(cfg),
         track_id_whitelist={0},
     )
     widened_band = circular_assemble_module._compute_feature_band_bounds_px(
@@ -861,7 +888,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
         track_ratio=base_track_ratio,
         length_param="short",
         track_ratio_factor=feature_ratio_override,
-        cfg=cfg,
+        profile=CircularRenderProfile(cfg),
         track_id_whitelist={0},
     )
     assert default_band is not None
@@ -869,11 +896,11 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
 
     captured: dict[str, Any] = {}
 
-    def fake_add_axis_group_on_canvas(canvas, canvas_config, config_dict, *, radius_override=None, cfg=None):
+    def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
         captured["axis"] = radius_override
         return canvas
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
         captured["ticks"] = radius_override
         captured["tick_label_side"] = kwargs.get("label_side")
         captured["tick_side"] = kwargs.get("tick_side")
@@ -890,7 +917,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -900,7 +927,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         circular_track_slots=_feature_width_slots("75px"),
@@ -925,9 +952,11 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     config_dict = _make_config_dict(show_labels=False)
     config_dict = modify_config_dict(
         config_dict,
-        resolve_overlaps=True,
-        strandedness=False,
-        track_type=track_type,
+        {
+            "canvas.resolve_overlaps": True,
+            "canvas.strandedness": False,
+            "canvas.circular.track_type": track_type,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     base_radius = float(cfg.canvas.circular.radius)
@@ -953,15 +982,15 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         track_ratio=base_track_ratio,
         length_param=length_param,
         track_ratio_factor=default_ratio_factor,
-        cfg=cfg,
+        profile=CircularRenderProfile(cfg),
     )
     assert all_feature_band is not None
 
     captured: dict[str, Any] = {}
+    _capture_resolved_radial_layout(monkeypatch, captured)
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
         captured["ticks"] = radius_override
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         captured["tick_label_side"] = kwargs.get("label_side")
         captured["tick_side"] = kwargs.get("tick_side")
         captured["tick_length_px"] = kwargs.get("tick_length_px")
@@ -981,7 +1010,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -991,7 +1020,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="none",
     )
@@ -1064,20 +1093,21 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
     config_dict = _make_config_dict(show_labels=True)
     config_dict = modify_config_dict(
         config_dict,
-        allow_inner_labels=False,
-        resolve_overlaps=True,
-        strandedness=False,
-        track_type="middle",
+        {
+            "canvas.resolve_overlaps": True,
+            "canvas.strandedness": False,
+            "canvas.circular.track_type": 'middle',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     base_radius = float(cfg.canvas.circular.radius)
     base_track_ratio = float(cfg.canvas.circular.track_ratio)
 
     captured: dict[str, Any] = {}
+    _capture_resolved_radial_layout(monkeypatch, captured)
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
         captured["ticks"] = radius_override
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, width_key='gc_width', norm_key='gc_norm')
@@ -1093,7 +1123,7 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1103,7 +1133,7 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="none",
     )
@@ -1150,10 +1180,11 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
     config_dict = _make_config_dict(show_labels=True)
     config_dict = modify_config_dict(
         config_dict,
-        allow_inner_labels=False,
-        resolve_overlaps=True,
-        strandedness=False,
-        track_type="tuckin",
+        {
+            "canvas.resolve_overlaps": True,
+            "canvas.strandedness": False,
+            "canvas.circular.track_type": 'tuckin',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     base_radius = float(cfg.canvas.circular.radius)
@@ -1179,15 +1210,15 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
         track_ratio=base_track_ratio,
         length_param=length_param,
         track_ratio_factor=default_ratio_factor,
-        cfg=cfg,
+        profile=CircularRenderProfile(cfg),
     )
     assert all_feature_band is not None
 
     captured: dict[str, Any] = {}
+    _capture_resolved_radial_layout(monkeypatch, captured)
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
         captured["ticks"] = radius_override
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     fake_add_gc_content_group_on_canvas = make_numeric_track_capture(captured, width_key='gc_width', norm_key='gc_norm')
@@ -1203,7 +1234,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1213,7 +1244,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="none",
     )
@@ -1281,16 +1312,18 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
     config_dict = _make_config_dict(show_labels=True)
     config_dict = modify_config_dict(
         config_dict,
-        resolve_overlaps=True,
-        strandedness=False,
-        track_type="middle",
+        {
+            "canvas.resolve_overlaps": True,
+            "canvas.strandedness": False,
+            "canvas.circular.track_type": 'middle',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     base_radius = float(cfg.canvas.circular.radius)
 
     captured: dict[str, Any] = {}
 
-    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
+    def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
         captured["ticks"] = radius_override
         return canvas
 
@@ -1307,7 +1340,7 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
     monkeypatch.setattr(
         circular_assemble_module,
         "add_record_definition_group_on_canvas",
-        lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas,
+        lambda canvas, gb_record, canvas_config, species, strain, **kwargs: canvas,
     )
     monkeypatch.setattr(
         circular_assemble_module,
@@ -1317,7 +1350,7 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         circular_track_slots=[
@@ -1343,17 +1376,19 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
         config_dict = _make_config_dict(show_labels=show_labels)
         config_dict = modify_config_dict(
             config_dict,
-            resolve_overlaps=True,
-            strandedness=False,
-            track_type="middle",
+            {
+                "canvas.resolve_overlaps": True,
+                "canvas.strandedness": False,
+                "canvas.circular.track_type": 'middle',
+            },
         )
         captured: dict[str, Any] = {}
 
-        def fake_add_axis_group_on_canvas(canvas, canvas_config, config_dict, *, radius_override=None, cfg=None):
+        def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
             captured["axis"] = radius_override
             return canvas
 
-        def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, config_dict, *, radius_override=None, cfg=None, **kwargs):
+        def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
             captured["ticks"] = radius_override
             return canvas
 
@@ -1365,12 +1400,9 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             canvas,
             gb_record,
             canvas_config,
-            feature_config,
-            config_dict,
             *,
             outer_arena=None,
-            cfg=None,
-            precomputed_feature_dict=None,
+            feature_layers=None,
             precalculated_labels=None,
             feature_track_ratio_factor_override=None,
             **kwargs,
@@ -1393,7 +1425,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
         circular_assemble_module.add_labels_group_on_canvas = fake_add_labels_group_on_canvas
         circular_assemble_module.add_record_group_on_canvas = lambda canvas, *args, **kwargs: canvas
         circular_assemble_module.add_record_definition_group_on_canvas = (
-            lambda canvas, gb_record, canvas_config, species, strain, config_dict, *, cfg=None, **kwargs: canvas
+            lambda canvas, gb_record, canvas_config, species, strain, **kwargs: canvas
         )
         circular_assemble_module.add_legend_group_on_canvas = (
             lambda canvas, canvas_config, legend_config, legend_table: canvas
@@ -1401,7 +1433,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
         try:
             assemble_circular_diagram_from_record(
                 record,
-                config_dict=config_dict,
+                cfg=GbdrawConfig.from_dict(config_dict),
                 selected_features_set=SELECTED_FEATURES,
                 legend="left",
                 circular_track_slots=_feature_width_slots("75px"),
@@ -1435,14 +1467,16 @@ def test_feature_width_keeps_axis_concentric_with_rendered_tracks(track_type: st
     config_dict = _make_config_dict(show_labels=True)
     config_dict = modify_config_dict(
         config_dict,
-        resolve_overlaps=False,
-        strandedness=True,
-        track_type=track_type,
+        {
+            "canvas.resolve_overlaps": False,
+            "canvas.strandedness": True,
+            "canvas.circular.track_type": track_type,
+        },
     )
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=SELECTED_FEATURES,
         legend="left",
         circular_track_slots=_feature_width_slots("75px"),

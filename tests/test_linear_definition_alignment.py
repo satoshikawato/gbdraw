@@ -13,7 +13,7 @@ from svgwrite import Drawing
 
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.core import text as text_module
 from gbdraw.diagrams.linear import precalc as linear_precalc
@@ -33,13 +33,20 @@ def _canvas_config(
     keep_definition_left_aligned: bool,
     definition_gap: float = 20,
     horizontal_offset: float = 120,
+    config_dict: dict | None = None,
 ) -> SimpleNamespace:
+    cfg = GbdrawConfig.from_dict(
+        config_dict
+        if config_dict is not None
+        else load_config_toml("gbdraw.data", "config.toml")
+    )
     return SimpleNamespace(
         canvas_padding=50,
         definition_gap=definition_gap,
         horizontal_offset=horizontal_offset,
         keep_definition_left_aligned=keep_definition_left_aligned,
         length_param="short",
+        profile=LinearRenderProfile(cfg),
     )
 
 
@@ -63,7 +70,11 @@ def _definition_text_anchors(canvas: Drawing) -> set[str]:
 
 
 def _definition_width(record: SeqRecord, config_dict: dict, canvas_config: SimpleNamespace) -> float:
-    return DefinitionGroup(record, config_dict, canvas_config).definition_bounding_box_width
+    return DefinitionGroup(
+        record,
+        canvas_config,
+        cfg=GbdrawConfig.from_dict(config_dict),
+    ).definition_bounding_box_width
 
 
 def _definition_only_config(*, font_weight: str = "normal", definition_gap: float = 20) -> dict:
@@ -71,7 +82,7 @@ def _definition_only_config(*, font_weight: str = "normal", definition_gap: floa
     config_dict["canvas"]["show_gc"] = False
     config_dict["canvas"]["show_skew"] = False
     config_dict["canvas"]["show_depth"] = False
-    config_dict["canvas"]["show_labels"] = False
+    config_dict["labels"]["linear"]["scope"] = "none"
     config_dict["canvas"]["linear"]["keep_definition_left_aligned"] = True
     config_dict["canvas"]["linear"]["definition_gap"] = definition_gap
     definition_cfg = config_dict["objects"]["definition"]["linear"]
@@ -138,12 +149,15 @@ def _linear_definition_canvas(
     output_prefix: str = "linear_definition_gap",
 ) -> Drawing:
     record = _record(label, record_id="record_a")
-    return assemble_linear_diagram_from_records(
-        [record],
-        config_dict=_definition_only_config(
+    cfg = GbdrawConfig.from_dict(
+        _definition_only_config(
             font_weight=font_weight,
             definition_gap=definition_gap,
-        ),
+        )
+    )
+    return assemble_linear_diagram_from_records(
+        [record],
+        cfg=cfg,
         selected_features_set=[],
         output_prefix=output_prefix,
         legend="none",
@@ -152,7 +166,6 @@ def _linear_definition_canvas(
 
 @pytest.mark.linear
 def test_linear_definition_group_follows_record_offset_by_default() -> None:
-    config_dict = load_config_toml("gbdraw.data", "config.toml")
     canvas_a = Drawing()
     canvas_b = Drawing()
 
@@ -162,7 +175,6 @@ def test_linear_definition_group_follows_record_offset_by_default() -> None:
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=_canvas_config(keep_definition_left_aligned=False),
-        config_dict=config_dict,
         max_def_width=0,
     )
     add_record_definition_group(
@@ -171,7 +183,6 @@ def test_linear_definition_group_follows_record_offset_by_default() -> None:
         record_offset_y=10,
         record_offset_x=30,
         canvas_config=_canvas_config(keep_definition_left_aligned=False),
-        config_dict=config_dict,
         max_def_width=0,
     )
 
@@ -197,7 +208,6 @@ def test_linear_definition_group_can_stay_in_left_column() -> None:
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=canvas_config,
-        config_dict=config_dict,
         max_def_width=max_def_width,
     )
     add_record_definition_group(
@@ -206,7 +216,6 @@ def test_linear_definition_group_can_stay_in_left_column() -> None:
         record_offset_y=10,
         record_offset_x=45,
         canvas_config=canvas_config,
-        config_dict=config_dict,
         max_def_width=max_def_width,
     )
 
@@ -245,7 +254,6 @@ def test_locked_linear_definition_column_uses_rendered_svg_text_width(
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=canvas_config,
-        config_dict=config_dict,
         max_def_width=definition_width,
     )
 
@@ -283,7 +291,6 @@ def test_locked_linear_definition_column_uses_configured_definition_gap(
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=canvas_config,
-        config_dict=config_dict,
         max_def_width=definition_width,
     )
 
@@ -309,7 +316,6 @@ def test_locked_linear_definition_column_follows_global_horizontal_shift() -> No
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=base_config,
-        config_dict=config_dict,
         max_def_width=definition_width,
     )
     add_record_definition_group(
@@ -318,7 +324,6 @@ def test_locked_linear_definition_column_follows_global_horizontal_shift() -> No
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=shifted_config,
-        config_dict=config_dict,
         max_def_width=definition_width,
     )
 
@@ -342,7 +347,6 @@ def test_locked_linear_definition_column_gap_uses_records_column_left() -> None:
         record_offset_y=10,
         record_offset_x=0,
         canvas_config=canvas_config,
-        config_dict=config_dict,
         max_def_width=definition_width - leftmost_record_offset_x,
     )
 
@@ -363,10 +367,11 @@ def test_precalculated_max_definition_width_is_ceiled(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(linear_precalc, "DefinitionGroup", FakeDefinitionGroup)
 
+    canvas_config = _canvas_config(keep_definition_left_aligned=True)
     max_width, heights, half_heights = linear_precalc._precalculate_definition_metrics(
         records,
-        load_config_toml("gbdraw.data", "config.toml"),
-        _canvas_config(keep_definition_left_aligned=True),
+        canvas_config,
+        cfg=canvas_config.profile.config,
     )
 
     assert max_width == 13
@@ -411,20 +416,18 @@ def test_linear_definition_band_matches_resolved_feature_center(
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=len(record.seq),
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
     definition_height = DefinitionGroup(
         record,
-        config_dict,
         canvas_config,
         cfg=cfg,
     ).definition_bounding_box_height
 
     drawing = assemble_linear_diagram_from_records(
         [record],
-        config_dict=config_dict,
+        cfg=cfg,
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -507,7 +510,14 @@ def test_definition_plain_lines_use_definition_font_weight(
         fake_bbox,
     )
 
-    DefinitionGroup(_record("", "record_a"), config_dict, _canvas_config(keep_definition_left_aligned=True))
+    DefinitionGroup(
+        _record("", "record_a"),
+        _canvas_config(
+            keep_definition_left_aligned=True,
+            config_dict=config_dict,
+        ),
+        cfg=GbdrawConfig.from_dict(config_dict),
+    )
 
     assert ("record_a", "bold", "normal") in calls
 
@@ -540,8 +550,11 @@ def test_definition_mixed_content_width_sums_style_aware_parts(
 
     definition_group = DefinitionGroup(
         _record("Alpha <i>Beta</i> Gamma"),
-        config_dict,
-        _canvas_config(keep_definition_left_aligned=True),
+        _canvas_config(
+            keep_definition_left_aligned=True,
+            config_dict=config_dict,
+        ),
+        cfg=GbdrawConfig.from_dict(config_dict),
     )
 
     assert definition_group.definition_bounding_box_width == pytest.approx(62.0)

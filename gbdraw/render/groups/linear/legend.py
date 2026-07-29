@@ -20,15 +20,13 @@ class LegendGroup:
 
     def __init__(
         self,
-        config_dict,
         canvas_config,
         legend_config,
         legend_table,
-        cfg: GbdrawConfig | None = None,
+        *,
+        cfg: GbdrawConfig,
     ):
         self.legend_group = Group(id="legend")
-        self.config_dict = config_dict
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         self.canvas_config = canvas_config
         self.legend_config = legend_config
@@ -62,19 +60,6 @@ class LegendGroup:
         start_y_top = -self.rect_size / 2
         start_y_bottom = self.rect_size / 2
         return f"M 0,{start_y_top} L {self.rect_size},{start_y_top} L {self.rect_size},{start_y_bottom} L 0,{start_y_bottom} z"
-
-    def _calculate_entry_widths(self) -> list[float]:
-        """Pre-calculate widths for each legend entry."""
-        entry_widths = []
-        for key, properties in self.legend_table.items():
-            if properties["type"] == "solid":
-                bbox_width, _ = calculate_bbox_dimensions(
-                    str(key), self.font_family, self.font_size, self.dpi
-                )
-                entry_widths.append(
-                    self.rect_size + self.text_x_offset + bbox_width + self.text_x_offset
-                )
-        return entry_widths
 
     def _gradient_entries(self) -> list[tuple[str, dict]]:
         return [

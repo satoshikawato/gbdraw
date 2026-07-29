@@ -37,7 +37,7 @@ Owner codes identify the function or subsystem that consumes the normalized valu
 |---|---|
 | `C` | `apply_config_overrides`, `GbdrawConfig`, canvas/configurator constructors |
 | `F` | feature table readers, `compile_feature_visibility_rules`, `FeatureDrawingConfigurator` |
-| `LB` | `LabelsFilteringConfig` and circular/linear label policy |
+| `LB` | `LabelsFilteringConfig`, mode-specific label scope/placement, and the shared `labels.rendering` policy |
 | `G` | GC content/skew configurators and scalar track renderers |
 | `D` | `normalize_depth_tracks`, `build_depth_track_dataframes`, depth configurator/renderers |
 | `CV` | conservation source loader, record normalization, circular conservation slots |

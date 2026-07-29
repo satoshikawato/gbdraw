@@ -24,7 +24,7 @@ from ....svg.circular_features import (
 from ....svg.arrows import calculate_circular_arrow_length
 
 if TYPE_CHECKING:
-    from ....diagrams.circular.radial_layout import CircularFeatureLayout
+    from ....layout.circular import CircularFeatureLayout
 
 
 class FeatureDrawer:

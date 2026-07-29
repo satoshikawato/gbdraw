@@ -119,9 +119,25 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-const { createDefaultAdv, createDefaultForm } = await import(
+const { createDefaultAdv, createDefaultForm, state } = await import(
   pathToFileURL(join(tempDir, 'js', 'state.js'))
 );
+assert.equal(Object.keys(state.form).includes('legend'), false);
+assert.equal(Object.keys(state.adv).includes('plot_title_position'), false);
+state.form.legend = 'right';
+state.adv.plot_title_position = 'top';
+assert.deepEqual(state.layoutPreferences.circular.single, {
+  legend: 'right',
+  plotTitlePosition: 'top'
+});
+state.mode.value = 'linear';
+state.form.legend = 'left';
+state.adv.plot_title_position = 'center';
+assert.deepEqual(state.layoutPreferences.linear, {
+  legend: 'left',
+  plotTitlePosition: 'center'
+});
+state.mode.value = 'circular';
 const formDefaults = createDefaultForm();
 assert.deepEqual(
   {

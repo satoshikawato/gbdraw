@@ -15,8 +15,9 @@ from gbdraw.analysis.conservation import (
     load_conservation_sources,
     normalize_conservation_tracks_for_record,
 )
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_circular_diagram_from_record, build_circular_diagram
-from gbdraw.api.options import DiagramOptions
+from gbdraw.api.options import CircularDiagramOptions
 from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -309,6 +310,7 @@ def test_sequence_conservation_slot_rejects_overlay_side() -> None:
 def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
+        cfg=apply_config_overrides(None, None),
         conservation_dataframes=[
             _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
         ],
@@ -340,6 +342,7 @@ def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
 def test_circular_api_renders_source_colored_conservation_ring() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
+        cfg=apply_config_overrides(None, None),
         conservation_dataframes=[
             _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
         ],
@@ -623,7 +626,7 @@ def test_circular_api_bottom_multi_conservation_legend_fits_viewbox() -> None:
         conservation_ring_gap=1,
         legend="bottom",
         selected_features_set=[],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
     )
     root = ET.fromstring(canvas.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
@@ -643,6 +646,7 @@ def test_circular_api_bottom_multi_conservation_legend_fits_viewbox() -> None:
 def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
+        cfg=apply_config_overrides(None, None),
         conservation_dataframes=[
             _comparison_frame([_hit(subject="rec1", sstart=1, send=60)]),
             _comparison_frame([_hit(subject="rec1", sstart=61, send=120)]),
@@ -677,6 +681,7 @@ def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
 def test_circular_api_keeps_axis_derived_side_for_conservation_slot() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
+        cfg=apply_config_overrides(None, None),
         conservation_dataframes=[
             _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
         ],
@@ -705,6 +710,7 @@ def test_circular_api_keeps_axis_derived_side_for_conservation_slot() -> None:
 def test_disabled_explicit_conservation_slot_suppresses_auto_insert() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
+        cfg=apply_config_overrides(None, None),
         conservation_dataframes=[
             _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
         ],
@@ -728,7 +734,7 @@ def test_disabled_explicit_conservation_slot_suppresses_auto_insert() -> None:
 def test_circular_diagram_options_forward_conservation_dataframe() -> None:
     canvas = build_circular_diagram(
         _record(),
-        options=DiagramOptions(
+        options=CircularDiagramOptions(
             conservation_dataframes=[
                 _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
             ],
@@ -752,6 +758,7 @@ def test_circular_api_rejects_nonpositive_conservation_geometry() -> None:
     with pytest.raises(ValidationError, match="conservation_ring_gap must be > 0"):
         assemble_circular_diagram_from_record(
             _record(),
+            cfg=apply_config_overrides(None, None),
             conservation_dataframes=[
                 _comparison_frame([_hit(subject="rec1")])
             ],

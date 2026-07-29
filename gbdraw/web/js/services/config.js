@@ -57,6 +57,10 @@ import {
   normalizeLinearPlotTitlePosition
 } from '../app/plot-title-position.js';
 import {
+  migrateLegacyLayoutPreferences,
+  replaceLayoutPreferences
+} from '../app/layout-preferences.js';
+import {
   serializeFeatureVisibilityRules,
   normalizeFeatureVisibilityRule,
   normalizeVisibilityMode,
@@ -113,12 +117,12 @@ import {
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 38;
+const SESSION_VERSION = 39;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 36, 37, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, 36, 37, 38, SESSION_VERSION
 ]);
-const CURRENT_ARTIFACT_SESSION_VERSIONS = new Set([36, 37, SESSION_VERSION]);
+const CURRENT_ARTIFACT_SESSION_VERSIONS = new Set([36, 37, 38, SESSION_VERSION]);
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
@@ -1262,105 +1266,39 @@ const preflightSessionImport = (rawData) => {
   return { data, canonicalProjection, restoredConfig, projectionResult };
 };
 
-const syncActiveCircularLayoutCache = () => {
-  const normalizedLegend = normalizeLegendPosition(state.form.legend, 'left');
-  const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
-
-  state.circularLegendPosition.value = normalizedLegend;
-  state.circularPlotTitlePosition.value = normalizedPlotTitlePosition;
-
-  if (state.form.multi_record_canvas) {
-    state.circularMultiRecordLegendPosition.value = normalizedLegend;
-    state.circularMultiRecordPlotTitlePosition.value = normalizedPlotTitlePosition;
-  } else {
-    state.circularSingleRecordLegendPosition.value = normalizedLegend;
-    state.circularSingleRecordPlotTitlePosition.value = normalizedPlotTitlePosition;
-  }
-
-  return {
-    legend: normalizedLegend,
-    plotTitlePosition: normalizedPlotTitlePosition
+const restoreLayoutPreferences = (ui = {}, { preserveActive = false } = {}) => {
+  const activeBeforeRestore = {
+    legend: state.form.legend,
+    plotTitlePosition: state.adv.plot_title_position
   };
-};
-
-const getStoredCircularLayout = (useMultiRecord) => {
-  const singleLegend = normalizeLegendPosition(state.circularSingleRecordLegendPosition.value, 'left');
-  const singlePlotTitlePosition = normalizeCircularPlotTitlePosition(state.circularSingleRecordPlotTitlePosition.value);
-
-  if (useMultiRecord) {
-    return {
-      legend: hasStoredLayoutValue(state.circularMultiRecordLegendPosition.value)
-        ? normalizeLegendPosition(state.circularMultiRecordLegendPosition.value, singleLegend)
-        : singleLegend,
-      plotTitlePosition: hasStoredLayoutValue(state.circularMultiRecordPlotTitlePosition.value)
-        ? normalizeCircularPlotTitlePosition(state.circularMultiRecordPlotTitlePosition.value)
-        : singlePlotTitlePosition
-    };
+  const migrated = migrateLegacyLayoutPreferences(ui, {
+    mode: state.mode.value,
+    multiRecord: Boolean(state.form.multi_record_canvas),
+    activeLegend: activeBeforeRestore.legend,
+    activePlotTitlePosition: activeBeforeRestore.plotTitlePosition
+  });
+  if (preserveActive) {
+    if (state.mode.value === 'linear') {
+      migrated.linear = {
+        legend: normalizeLegendPosition(activeBeforeRestore.legend, 'bottom'),
+        plotTitlePosition: normalizeLinearPlotTitlePosition(
+          activeBeforeRestore.plotTitlePosition
+        )
+      };
+    } else {
+      const key = state.form.multi_record_canvas ? 'multi' : 'single';
+      migrated.circular[key] = {
+        legend: normalizeLegendPosition(activeBeforeRestore.legend, 'left'),
+        plotTitlePosition: normalizeCircularPlotTitlePosition(
+          activeBeforeRestore.plotTitlePosition
+        )
+      };
+    }
   }
-
-  return {
-    legend: singleLegend,
-    plotTitlePosition: singlePlotTitlePosition
-  };
-};
-
-const resolveActiveCircularLayout = () => getStoredCircularLayout(Boolean(state.form.multi_record_canvas));
-
-const syncActiveModePlotTitlePosition = () => {
-  if (state.mode.value === 'linear') {
-    state.form.legend = normalizeLegendPosition(state.form.legend, 'bottom');
-    state.linearLegendPosition.value = state.form.legend;
-    state.linearPlotTitlePosition.value = normalizeLinearPlotTitlePosition(state.adv.plot_title_position);
-    state.adv.plot_title_position = state.linearPlotTitlePosition.value;
-    return;
-  }
-
-  state.form.legend = normalizeLegendPosition(state.form.legend, 'left');
-  state.adv.plot_title_position = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
-  syncActiveCircularLayoutCache();
-};
-
-const restoreSessionPlotTitlePositions = (ui = {}) => {
-  const activeMode = state.mode.value === 'linear' ? 'linear' : 'circular';
-  const activePosition = normalizeLinearPlotTitlePosition(state.adv.plot_title_position);
-  const hasLinearPlotTitlePosition =
-    typeof ui.linearPlotTitlePosition === 'string' && ui.linearPlotTitlePosition.trim() !== '';
-
-  state.linearPlotTitlePosition.value = hasLinearPlotTitlePosition
-    ? normalizeLinearPlotTitlePosition(ui.linearPlotTitlePosition)
-    : activeMode === 'linear'
-      ? activePosition
-      : 'bottom';
-};
-
-const restoreSessionCircularLayoutCaches = (ui = {}) => {
-  const activeLegend = normalizeLegendPosition(state.form.legend, 'left');
-  const activePlotTitlePosition = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
-  const legacyLegend = hasStoredLayoutValue(ui.circularLegendPosition)
-    ? normalizeLegendPosition(ui.circularLegendPosition, activeLegend)
-    : hasStoredLayoutValue(ui.legend)
-      ? normalizeLegendPosition(ui.legend, activeLegend)
-    : activeLegend;
-  const legacyPlotTitlePosition = hasStoredLayoutValue(ui.circularPlotTitlePosition)
-    ? normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition)
-    : activePlotTitlePosition;
-
-  state.circularSingleRecordLegendPosition.value = hasStoredLayoutValue(ui.circularSingleRecordLegendPosition)
-    ? normalizeLegendPosition(ui.circularSingleRecordLegendPosition, legacyLegend)
-    : (state.form.multi_record_canvas ? legacyLegend : activeLegend);
-  state.circularSingleRecordPlotTitlePosition.value = hasStoredLayoutValue(ui.circularSingleRecordPlotTitlePosition)
-    ? normalizeCircularPlotTitlePosition(ui.circularSingleRecordPlotTitlePosition)
-    : (state.form.multi_record_canvas ? legacyPlotTitlePosition : activePlotTitlePosition);
-  state.circularMultiRecordLegendPosition.value = hasStoredLayoutValue(ui.circularMultiRecordLegendPosition)
-    ? normalizeLegendPosition(ui.circularMultiRecordLegendPosition, legacyLegend)
-    : (state.form.multi_record_canvas ? activeLegend : legacyLegend);
-  state.circularMultiRecordPlotTitlePosition.value = hasStoredLayoutValue(ui.circularMultiRecordPlotTitlePosition)
-    ? normalizeCircularPlotTitlePosition(ui.circularMultiRecordPlotTitlePosition)
-    : (state.form.multi_record_canvas ? activePlotTitlePosition : legacyPlotTitlePosition);
-
-  const activeLayout = resolveActiveCircularLayout();
-  state.circularLegendPosition.value = activeLayout.legend;
-  state.circularPlotTitlePosition.value = activeLayout.plotTitlePosition;
+  replaceLayoutPreferences(
+    state.layoutPreferences,
+    migrated
+  );
 };
 
 export const applyConfigData = (data) => {
@@ -1487,7 +1425,6 @@ export const applyConfigData = (data) => {
   } else {
     state.adv.plot_title_position = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
   }
-  syncActiveModePlotTitlePosition();
   const rawPlotTitleFontSize = state.adv.plot_title_font_size;
   if (
     rawPlotTitleFontSize === null ||
@@ -2605,36 +2542,6 @@ const resetSessionBaseline = () => {
 };
 
 export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
-  const currentLegend = state.form.legend;
-  const isLinear = state.mode.value === 'linear';
-  const currentPlotTitlePosition = state.adv.plot_title_position;
-  const activeCircularLegend = isLinear
-    ? normalizeLegendPosition(state.circularLegendPosition.value, 'left')
-    : normalizeLegendPosition(currentLegend, 'left');
-  const activeCircularPlotTitlePosition = isLinear
-    ? normalizeCircularPlotTitlePosition(state.circularPlotTitlePosition.value)
-    : normalizeCircularPlotTitlePosition(currentPlotTitlePosition);
-  const savedCircularSingleRecordLegendPosition =
-    !isLinear && !state.form.multi_record_canvas
-      ? activeCircularLegend
-      : normalizeLegendPosition(state.circularSingleRecordLegendPosition.value, activeCircularLegend);
-  const savedCircularSingleRecordPlotTitlePosition =
-    !isLinear && !state.form.multi_record_canvas
-      ? activeCircularPlotTitlePosition
-      : normalizeCircularPlotTitlePosition(state.circularSingleRecordPlotTitlePosition.value);
-  const savedCircularMultiRecordLegendPosition =
-    !isLinear && state.form.multi_record_canvas
-      ? activeCircularLegend
-      : hasStoredLayoutValue(state.circularMultiRecordLegendPosition.value)
-        ? normalizeLegendPosition(state.circularMultiRecordLegendPosition.value, savedCircularSingleRecordLegendPosition)
-        : savedCircularSingleRecordLegendPosition;
-  const savedCircularMultiRecordPlotTitlePosition =
-    !isLinear && state.form.multi_record_canvas
-      ? activeCircularPlotTitlePosition
-      : hasStoredLayoutValue(state.circularMultiRecordPlotTitlePosition.value)
-        ? normalizeCircularPlotTitlePosition(state.circularMultiRecordPlotTitlePosition.value)
-        : savedCircularSingleRecordPlotTitlePosition;
-
   const ui = {
     title: String(state.sessionTitle.value || ''),
     mode: state.mode.value,
@@ -2646,19 +2553,7 @@ export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
     generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
       state.generatedCircularPlotTitlePosition.value
     ),
-    legend: currentLegend,
-    circularLegendPosition: activeCircularLegend,
-    linearLegendPosition: isLinear
-      ? normalizeLegendPosition(currentLegend, 'bottom')
-      : normalizeLegendPosition(state.linearLegendPosition.value, 'bottom'),
-    circularPlotTitlePosition: activeCircularPlotTitlePosition,
-    linearPlotTitlePosition: isLinear
-      ? normalizeLinearPlotTitlePosition(currentPlotTitlePosition)
-      : normalizeLinearPlotTitlePosition(state.linearPlotTitlePosition.value),
-    circularSingleRecordLegendPosition: savedCircularSingleRecordLegendPosition,
-    circularSingleRecordPlotTitlePosition: savedCircularSingleRecordPlotTitlePosition,
-    circularMultiRecordLegendPosition: savedCircularMultiRecordLegendPosition,
-    circularMultiRecordPlotTitlePosition: savedCircularMultiRecordPlotTitlePosition,
+    layoutPreferences: cloneJsonData(state.layoutPreferences),
     featurePanelTab: state.featurePanelTab.value,
     cInputType: state.cInputType.value,
     lInputType: state.lInputType.value,
@@ -2724,8 +2619,7 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
   }
 
   restorePaletteStateFromSession(ui);
-  restoreSessionCircularLayoutCaches(ui);
-  restoreSessionPlotTitlePositions(ui);
+  restoreLayoutPreferences(ui);
 
   if (ui.circularBaseConfig && typeof ui.circularBaseConfig === 'object') {
     state.circularBaseConfig.value = cloneJsonData(ui.circularBaseConfig);
@@ -2767,22 +2661,6 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
     if (typeof ui.zoom === 'number') state.zoom.value = ui.zoom;
   }
 
-  if (state.mode.value === 'linear') {
-    const nextLinearLegend = hasStoredLayoutValue(ui.linearLegendPosition)
-      ? normalizeLegendPosition(ui.linearLegendPosition, 'bottom')
-      : hasStoredLayoutValue(ui.legend)
-        ? normalizeLegendPosition(ui.legend, 'bottom')
-        : normalizeLegendPosition(state.form.legend, 'bottom');
-    state.form.legend = nextLinearLegend;
-    state.linearLegendPosition.value = nextLinearLegend;
-    state.adv.plot_title_position = state.linearPlotTitlePosition.value;
-  } else {
-    const activeCircularLayout = resolveActiveCircularLayout();
-    state.form.legend = activeCircularLayout.legend;
-    state.adv.plot_title_position = activeCircularLayout.plotTitlePosition;
-    state.circularLegendPosition.value = activeCircularLayout.legend;
-    state.circularPlotTitlePosition.value = activeCircularLayout.plotTitlePosition;
-  }
 };
 
 export const applyResultsData = (resultsData = [], ui = {}) => {
@@ -2998,43 +2876,6 @@ export const exportSession = async (titleOverride = null) => {
   const losatEntries = serializeLosatCache();
   const losatDerivedEntries = serializeLosatDerivedCache();
   const losatBytes = losatEntries.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
-  const currentLegend = state.form.legend;
-  const isLinear = state.mode.value === 'linear';
-  const currentPlotTitlePosition = state.adv.plot_title_position;
-  const activeCircularLegend = isLinear
-    ? normalizeLegendPosition(state.circularLegendPosition.value, 'left')
-    : normalizeLegendPosition(currentLegend, 'left');
-  const activeCircularPlotTitlePosition = isLinear
-    ? normalizeCircularPlotTitlePosition(state.circularPlotTitlePosition.value)
-    : normalizeCircularPlotTitlePosition(currentPlotTitlePosition);
-  const savedCircularLegend = activeCircularLegend;
-  const savedLinearLegend = isLinear
-    ? normalizeLegendPosition(currentLegend, 'bottom')
-    : normalizeLegendPosition(state.linearLegendPosition.value, 'bottom');
-  const savedCircularPlotTitlePosition = activeCircularPlotTitlePosition;
-  const savedLinearPlotTitlePosition = isLinear
-    ? normalizeLinearPlotTitlePosition(currentPlotTitlePosition)
-    : normalizeLinearPlotTitlePosition(state.linearPlotTitlePosition.value);
-  const savedCircularSingleRecordLegendPosition =
-    !isLinear && !state.form.multi_record_canvas
-      ? activeCircularLegend
-      : normalizeLegendPosition(state.circularSingleRecordLegendPosition.value, activeCircularLegend);
-  const savedCircularSingleRecordPlotTitlePosition =
-    !isLinear && !state.form.multi_record_canvas
-      ? activeCircularPlotTitlePosition
-      : normalizeCircularPlotTitlePosition(state.circularSingleRecordPlotTitlePosition.value);
-  const savedCircularMultiRecordLegendPosition =
-    !isLinear && state.form.multi_record_canvas
-      ? activeCircularLegend
-      : hasStoredLayoutValue(state.circularMultiRecordLegendPosition.value)
-        ? normalizeLegendPosition(state.circularMultiRecordLegendPosition.value, savedCircularSingleRecordLegendPosition)
-        : savedCircularSingleRecordLegendPosition;
-  const savedCircularMultiRecordPlotTitlePosition =
-    !isLinear && state.form.multi_record_canvas
-      ? activeCircularPlotTitlePosition
-      : hasStoredLayoutValue(state.circularMultiRecordPlotTitlePosition.value)
-        ? normalizeCircularPlotTitlePosition(state.circularMultiRecordPlotTitlePosition.value)
-        : savedCircularSingleRecordPlotTitlePosition;
   const resolvedTitle =
     typeof titleOverride === 'string'
       ? titleOverride.trim()
@@ -3112,15 +2953,7 @@ export const exportSession = async (titleOverride = null) => {
       generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
         state.generatedCircularPlotTitlePosition.value
       ),
-      legend: currentLegend,
-      circularLegendPosition: savedCircularLegend,
-      linearLegendPosition: savedLinearLegend,
-      circularPlotTitlePosition: savedCircularPlotTitlePosition,
-      linearPlotTitlePosition: savedLinearPlotTitlePosition,
-      circularSingleRecordLegendPosition: savedCircularSingleRecordLegendPosition,
-      circularSingleRecordPlotTitlePosition: savedCircularSingleRecordPlotTitlePosition,
-      circularMultiRecordLegendPosition: savedCircularMultiRecordLegendPosition,
-      circularMultiRecordPlotTitlePosition: savedCircularMultiRecordPlotTitlePosition,
+      layoutPreferences: cloneJsonData(state.layoutPreferences),
       featurePanelTab: state.featurePanelTab.value,
       cInputType: state.cInputType.value,
       lInputType: state.lInputType.value,
@@ -3257,9 +3090,6 @@ export const importSession = async (e, options = {}) => {
       state.featurePanelTab.value = 'colors';
     }
     state.generatedMode.value = ui.mode === 'linear' ? 'linear' : 'circular';
-    if (ui.linearLegendPosition) {
-      state.linearLegendPosition.value = normalizeLegendPosition(ui.linearLegendPosition, 'bottom');
-    }
     if (ui.generatedLegendPosition) {
       state.generatedLegendPosition.value = normalizeLegendPosition(
         ui.generatedLegendPosition,
@@ -3278,12 +3108,7 @@ export const importSession = async (e, options = {}) => {
       applyConfigData(restoredConfig);
     }
     restorePaletteStateFromSession(ui);
-    if (canonicalSession) {
-      syncActiveModePlotTitlePosition();
-    } else {
-      restoreSessionCircularLayoutCaches(ui);
-      restoreSessionPlotTitlePositions(ui);
-    }
+    restoreLayoutPreferences(ui, { preserveActive: Boolean(canonicalSession) });
 
     const { collapsedLinearSeqs } = applyFiles(
       canonicalSession ? projectionResult.restoredFiles : data.files
@@ -3352,23 +3177,6 @@ export const importSession = async (e, options = {}) => {
       applyEditorStateData(projectionResult.artifactState.editorState);
     } else {
       applyEditorStateData(data.editorState);
-    }
-
-    if (state.mode.value === 'linear') {
-      const nextLinearLegend = hasStoredLayoutValue(ui.linearLegendPosition)
-        ? normalizeLegendPosition(ui.linearLegendPosition, 'bottom')
-        : hasStoredLayoutValue(ui.legend)
-          ? normalizeLegendPosition(ui.legend, 'bottom')
-          : normalizeLegendPosition(state.form.legend, 'bottom');
-      state.form.legend = nextLinearLegend;
-      state.linearLegendPosition.value = nextLinearLegend;
-      state.adv.plot_title_position = state.linearPlotTitlePosition.value;
-    } else {
-      const activeCircularLayout = resolveActiveCircularLayout();
-      state.form.legend = activeCircularLayout.legend;
-      state.adv.plot_title_position = activeCircularLayout.plotTitlePosition;
-      state.circularLegendPosition.value = activeCircularLayout.legend;
-      state.circularPlotTitlePosition.value = activeCircularLayout.plotTitlePosition;
     }
 
     await nextTick();

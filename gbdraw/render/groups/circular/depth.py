@@ -21,19 +21,18 @@ class DepthGroup:
         radius: float,
         track_width: float,
         depth_config: DepthConfigurator,
-        config_dict: dict,
         track_id: str | int,
+        *,
+        cfg: GbdrawConfig,
         norm_factor_override: float | None = None,
         group_id: str | None = None,
         axis_group_id: str | None = None,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         self.depth_group = Group(id=group_id or "depth", debug=False)
         self.radius = float(radius)
         self.depth_config = depth_config
         self.gb_record = gb_record
         self.record_len = len(self.gb_record.seq)
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.depth_df = depth_df
         self.track_width = float(track_width)
         self.axis_group_id = str(axis_group_id or f"{group_id or 'depth'}_axis")

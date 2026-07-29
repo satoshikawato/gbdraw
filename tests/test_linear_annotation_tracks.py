@@ -16,6 +16,7 @@ from gbdraw.api import (
     LinearMultiRecordOptions,
     parse_record_selector,
 )
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records, build_linear_diagram
 from gbdraw.tracks import (
     LinearTrackSlot,
@@ -254,16 +255,19 @@ def test_multi_record_annotation_lanes_use_final_sequence_width() -> None:
 
     drawing = assemble_linear_diagram_from_records(
         records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+        ),
         annotation_options=annotations,
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1"),
         ),
         legend="none",
-        config_overrides={
-            "show_labels": False,
-            "show_gc": False,
-            "show_skew": False,
-        },
     )
     slots = {
         slot["slotId"]: slot

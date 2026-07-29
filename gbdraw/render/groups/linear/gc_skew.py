@@ -24,10 +24,10 @@ class GcSkewGroup:
         track_height: float,
         alignment_width: float,
         skew_config: GcSkewConfigurator,
-        config_dict: dict,
+        *,
+        cfg: GbdrawConfig,
         start_x: float = 0,
         start_y: float = 0,
-        cfg: GbdrawConfig | None = None,
         gc_df: DataFrame | None = None,
         group_id: str = "gc_skew",
         sequence_width: float | None = None,
@@ -46,7 +46,6 @@ class GcSkewGroup:
         self.step: int = self.skew_config.step
         self.dinucleotide: str = self.skew_config.dinucleotide
         self.track_height: float = track_height
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         self.bool_normalize_length = cfg.canvas.linear.normalize_length
         self.sequence_width = sequence_width

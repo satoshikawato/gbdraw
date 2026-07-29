@@ -63,7 +63,7 @@ See [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_
 
 A current protein-search cache hit requires the same amino-acid sequences and protein membership, stable record-instance/feature bindings, query/subject direction, program, and meaningful search arguments. Generated protein FASTA, raw cache rows, and derived comparison data use compact internal IDs such as `h_abcdefghijklmnopqrstuvwxyz`. These IDs do not depend on a display alias. Renaming an upload or session resource, changing its modification time, editing only a protein display name, or saving and loading unchanged biological inputs therefore does not invalidate the raw search cache. A display-only change can still rebuild derived display metadata.
 
-Current session version 38 and supported versions 36 and 37 use protein raw
+Current session version 39 and supported versions 36–39 use protein raw
 schema 4, derived schema 3, and identity manifest schema 2. Sessions 27–33
 remain supported migration sources for schema-2 protein results and derived
 schema-1 evidence. gbdraw quarantines those artifacts separately from current

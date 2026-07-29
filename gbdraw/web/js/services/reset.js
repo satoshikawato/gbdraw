@@ -59,23 +59,19 @@ const resetPaletteState = (state) => {
 };
 
 const resetLayoutPreferenceState = (state) => {
-  state.circularLegendPosition.value = 'left';
-  state.linearLegendPosition.value = 'bottom';
-  state.circularPlotTitlePosition.value = 'none';
-  state.linearPlotTitlePosition.value = 'bottom';
-  state.circularSingleRecordLegendPosition.value = 'left';
-  state.circularSingleRecordPlotTitlePosition.value = 'none';
-  state.circularMultiRecordLegendPosition.value = null;
-  state.circularMultiRecordPlotTitlePosition.value = null;
+  Object.assign(state.layoutPreferences.circular.single, {
+    legend: 'left',
+    plotTitlePosition: 'none'
+  });
+  Object.assign(state.layoutPreferences.circular.multi, {
+    legend: null,
+    plotTitlePosition: null
+  });
+  Object.assign(state.layoutPreferences.linear, {
+    legend: 'bottom',
+    plotTitlePosition: 'bottom'
+  });
   state.suppressCircularMultiRecordDefaults.value = false;
-
-  if (state.mode.value === 'linear') {
-    state.form.legend = 'bottom';
-    state.adv.plot_title_position = 'bottom';
-  } else {
-    state.form.legend = 'left';
-    state.adv.plot_title_position = 'none';
-  }
 };
 
 const resetRuleDraftState = (state) => {

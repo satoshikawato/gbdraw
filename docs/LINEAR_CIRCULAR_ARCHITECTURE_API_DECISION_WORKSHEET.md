@@ -3,7 +3,8 @@
 # Linear/Circular architecture and API decision worksheet
 
 - Date: 2026-07-28
-- Status: owner decisions recorded; Phase 0, approved beta cleanup, and A1/O4 implemented
+- Status: owner decisions recorded; Phase 0–3 and A1/O4 implemented; final
+  full-worktree regression deferred
 - Source: [`LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md`](./LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md)
 
 ## How to respond
@@ -418,8 +419,8 @@ Implemented through 2026-07-29:
   `collinear_max_unit_gap`, Circular `auto`, Linear `above_feature`,
   Linear `above|below`, and explicit `inner_gap_px` / `outer_gap_px`.
 - Under `O3.data=A`, persisted-data compatibility is intentionally separate
-  from executable compatibility. New writers emit session version 38 and
-  canonical request schema 5. Readers accept versions 27–33 and 36–38 and
+  from executable compatibility. New writers emit session version 39 and
+  canonical request schema 5. Readers accept versions 27–33 and 36–39 and
   canonical schemas 1–5, migrate stored legacy names, values, and slot fields
   before replay, and ignore the obsolete nested assembly prefix where it was
   previously accepted. `--annotation-table` and
@@ -460,22 +461,82 @@ Implemented through 2026-07-29:
   `LosslessCollinearityParameters`. Readers for supported canonical request
   schemas 1–5 privately migrate legacy `standard` parameter payloads while
   preserving their effective fields.
-- Local release verification is complete: the full non-slow suite and all 108 Web
-  packaging checks passed, followed on 2026-07-29 by both large-genome slow
-  regressions (`test_nc_010162_large_genome` and
-  `test_majani_full_comparison`). The slow run produced no tracked reference
-  output changes. The LOSAT cache browser acceptance also passed with the Python
-  Playwright fallback (22,570 assertions) after its SVG inspection was moved to
-  semantic record hooks.
+- Before Phase 2 implementation, its code-reduction gate was fixed as a net
+  decrease in production code from the Phase 2 starting point, counting a
+  shared abstraction only when the superseded implementation was removed in
+  the same change. Moving code between modules, retaining a parallel fallback,
+  or reducing tests did not satisfy the target. The concrete deletion set was:
+  the private shared `DiagramOptions` / `TrackOptions` / `OutputOptions`
+  runtime bridge and its mode/default inventories; raw-dictionary and
+  typed-config constructor fallbacks below mode-profile resolution; duplicate
+  record-placement, annotation-planning, and track-slot parsing paths; Circular
+  radial contract definitions above `gbdraw.layout`; raw feature-dictionary
+  render-group fallbacks; mutable canvas layout attributes; and the parallel
+  Web active/per-mode preference fields and synchronization caches.
+- The completed Phase 2 production-file set is 58 physical lines smaller than
+  its pre-implementation state (42,921 to 42,863 lines). Tests, documentation,
+  and tools are excluded from this measurement.
+- Phase 2 now resolves frozen `CircularRenderProfile` and
+  `LinearRenderProfile` values from typed `GbdrawConfig` before constructing
+  canvases and drawing configurators. Those constructors consume the resolved
+  mode profile rather than re-reading a raw configuration dictionary or
+  independently deriving mode-sensitive visibility, label scope, label
+  placement, or the shared `labels.rendering` policy.
+- Schema-derived label override paths are now explicit:
+  `labels.circular.scope` (`none|outer|both`) and
+  `labels.circular.placement` (`horizontal|radial`) for Circular, and
+  `labels.linear.scope` (`none|all|first|orthogroup_top`),
+  `labels.linear.placement` (`auto|above_feature`), and
+  `labels.linear.rotation` for Linear. Fresh configuration and override inputs
+  reject the retired `canvas.show_labels`, mode-nested canvas `show_labels`,
+  and `canvas.circular.allow_inner_labels` fields; supported persisted-data
+  readers migrate them under `O3.data=A`.
+- Record-row placement is owned by `gbdraw.layout.record_placement`, semantic
+  annotation input/slot binding by `gbdraw.annotations.planning`, and common
+  track-slot token parsing by `gbdraw.tracks.parsing`. Circular and Linear retain
+  only their genuinely mode-specific validation messages and geometry.
+- Reusable Circular radial bands, slots, feature lanes, and resolved-layout
+  contracts now live in `gbdraw.layout.circular`; the mode assembler retains
+  the Circular solver. Feature render groups require `FeatureBuildResult`, so
+  all feature render paths use the same prepared foreground and underlay
+  layers, including label data computed during preparation, and no render
+  group reconstructs a raw feature dictionary.
+- Circular record groups receive an immutable `CircularRecordRenderContext`
+  containing the resolved radial layout, track preset, and feature-lane
+  direction. Linear record groups receive an immutable
+  `LinearRecordRenderContext` containing the `LinearRenderProfile`, resolved
+  `LinearTrackLayout`, and Depth availability. Its active feature-track layout,
+  strandedness, and axis-ruler state are read-only values derived from that
+  profile and layout instead of mutable copies on the canvas or render group.
+  The old canvas layout attributes and setters are gone, including the hidden
+  underlay/layout flags that previously changed radial solving.
+- Web layout state now has one `layoutPreferences` tree for Circular
+  single-record, Circular multi-record, and Linear preferences, with
+  `activeLayoutPreferences` computed from mode and grouping. Session version
+  39 persists `ui.layoutPreferences`; supported older sessions migrate the
+  former active and per-mode legend/title fields at import. Canonical request
+  schema 5 is unchanged.
+- The private shared `DiagramOptions`, `TrackOptions`, and `OutputOptions`
+  implementation bridge has been deleted. Builders accept only
+  `CircularDiagramOptions` or `LinearDiagramOptions`, so the typed mode planner
+  remains the only runtime option route below the public adapters.
+- Public builders apply schema-validated overrides and construct
+  `GbdrawConfig` once. Private assemblers require that typed `cfg`; they do not
+  accept raw dictionaries or override maps. Downstream canvases and
+  configurators consume the resulting immutable mode profile and do not reload
+  configuration.
+- The pre-final worktree passed the full non-slow suite, all 108 Web packaging
+  checks, both large-genome slow regressions, and the LOSAT browser acceptance.
+  After the final typed-config/assembler boundary correction, focused profile,
+  config, assembler, and session checks plus Ruff and compile checks passed.
+  Full non-slow, Web packaging, output-comparison, performance, and slow
+  regression runs for this exact worktree are intentionally deferred to the
+  next session.
 
 A1 and O4 are complete under `O6.delivery=A`. Schema 5 persists explicit
 `single` / `grid` / `batch` grouping and uses an output object for one diagram
-or an output array for Circular batch. `DiagramOptions` and the internal
-assembler implementations remain implementation bridges below the planners;
-they are not canonical request options or alternate orchestration paths.
-
-Audit Phase 2 is a separately scoped follow-up, not an A1/O4 completion
-criterion. Define its code-reduction target and concrete deletion set before
-implementation.
+or an output array for Circular batch. Phase 2 completed the separately scoped
+state/planner consolidation and removed the temporary shared option bridge
+below those planners.
 
 [Architecture/API audit](./LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md) | [Python API](./PYTHON_API.md) | [API improvement plan](./PYTHON_API_IMPROVEMENT_PLAN.md)

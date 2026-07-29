@@ -16,12 +16,10 @@ class PlotTitleGroup:
     def __init__(
         self,
         title: str,
-        config_dict: dict,
         *,
+        cfg: GbdrawConfig,
         font_size: float = 32.0,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         self.title = str(title or "").strip()
         self.font_family = cfg.objects.text.font_family
@@ -69,4 +67,3 @@ class PlotTitleGroup:
 
 
 __all__ = ["PlotTitleGroup"]
-

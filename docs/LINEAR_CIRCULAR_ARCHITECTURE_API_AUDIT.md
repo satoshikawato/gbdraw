@@ -3,19 +3,23 @@
 # Linear/Circular architecture and API audit
 
 - Date: 2026-07-28
-- Baseline HEAD: `544c10b`
+- Baseline HEAD: [`544c10b`](https://github.com/satoshikawato/gbdraw/tree/544c10b47bf5b7f38557924a96b2f9759854d9dd)
 - Branch: `2026-07-20`
 - Audited snapshot: current working tree as observed on 2026-07-28
 - Scope: Python public API, lower-level API, CLI, web app, request/session layer, configuration, layout, rendering, and contract tests
+
+All source paths and line numbers in the baseline findings are permalinks to
+that audited commit. They intentionally describe the pre-implementation state,
+not the current files after the completed phases below.
 
 ## Implementation status
 
 This audit describes the 2026-07-28 baseline; the decision worksheet is the
 current implementation record. Phase 0, Phase 1, the compatibility cleanup
-approved under `O3.api=B`, and the A1/O4 delivery are complete. Phase 2 remains
-a separately scoped follow-up. The findings and evidence below retain their
-baseline wording so that the reasons for the completed changes remain
-reviewable.
+approved under `O3.api=B`, the A1/O4 delivery, and Phase 2 are complete. The
+findings and evidence below retain their baseline wording so that the reasons
+for the completed changes remain reviewable. Full-worktree regression after
+the final Phase 2 boundary correction is deferred to the next session.
 
 Typed requests use `CircularDiagramOptions` and
 `LinearDiagramOptions`, with mode-specific `CircularTrackOptions`,
@@ -25,15 +29,26 @@ Typed requests use `CircularDiagramOptions` and
 `CircularRequestPlan`, `CircularBatchRequestPlan`, and `LinearRequestPlan` own
 normalized builder selection; root API, fresh CLI/Web generation, current
 canonical replay, and legacy internal replay reach those planners. A one-record
-grid is valid.
+grid is valid. The temporary shared `DiagramOptions`, `TrackOptions`, and
+`OutputOptions` runtime bridge below the planners has since been deleted;
+builders accept only the mode-specific option contracts.
 
-Session version 38 and canonical request schema 5 persist the explicit Circular
-grouping and batch output array. Record loading is mode-neutral, with topology
-warnings and mode/comparison cardinality policy applied by planners. Active and
-public runtime collinearity configuration uses
+Canonical request schema 5 persists the explicit Circular grouping and batch
+output array. Session version 39 additionally persists one Web
+`ui.layoutPreferences` authority. Record loading is mode-neutral, with
+topology warnings and mode/comparison cardinality policy applied by planners.
+Active and public runtime collinearity configuration uses
 `LosslessCollinearityParameters`; supported canonical request schemas 1–5
 privately migrate legacy `standard` parameter payloads while preserving their
 effective fields.
+
+Phase 2 resolves frozen mode render profiles from typed configuration, shares
+record placement, annotation planning, and track-slot parsing, owns reusable
+Circular radial contracts in `gbdraw.layout`, requires prepared feature layers
+in render groups, passes Circular and Linear resolved layout through explicit
+immutable record contexts, computes active Web layout values from one per-mode
+preference tree, and gives label scope and placement explicit mode-specific
+configuration owners.
 
 ## Executive summary
 
@@ -114,26 +129,26 @@ The BLAST-filter columns apply when a comparison or conservation source is prese
 Evidence:
 
 - The beginner API shares one `Thresholds` default between both modes:
-  [`gbdraw/interface.py`](../gbdraw/interface.py#L89-L96) and
-  [`gbdraw/interface.py`](../gbdraw/interface.py#L211-L226).
+  [`gbdraw/interface.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/interface.py#L89-L96) and
+  [`gbdraw/interface.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/interface.py#L211-L226).
 - The lower-level `DiagramOptions` repeats the same shared values:
-  [`gbdraw/api/options.py`](../gbdraw/api/options.py#L99-L175).
+  [`gbdraw/api/options.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/options.py#L99-L175).
 - The common TOML enables GC and skew globally:
-  [`gbdraw/data/config.toml`](../gbdraw/data/config.toml#L5-L12).
+  [`gbdraw/data/config.toml`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/data/config.toml#L5-L12).
 - Linear API assembly leaves those global values enabled unless explicit slots
   override them:
-  [`gbdraw/api/diagram.py`](../gbdraw/api/diagram.py#L1983-L2063).
+  [`gbdraw/api/diagram.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/diagram.py#L1983-L2063).
 - Linear CLI defines `1e-2`/`50`/`0` and positive `--show_gc`/`--show_skew` flags:
-  [`gbdraw/linear.py`](../gbdraw/linear.py#L778-L850).
+  [`gbdraw/linear.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/linear.py#L778-L850).
 - Circular CLI uses `1e-5`/`50`/`70`:
-  [`gbdraw/cli_utils/common.py`](../gbdraw/cli_utils/common.py#L220-L240).
+  [`gbdraw/cli_utils/common.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/cli_utils/common.py#L220-L240).
 - Web state starts with the Linear threshold values:
-  [`gbdraw/web/js/state.js`](../gbdraw/web/js/state.js#L392-L462).
+  [`gbdraw/web/js/state.js`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/web/js/state.js#L392-L462).
 - The Circular web conservation execution path normalizes against
   `DEFAULT_LINEAR_BLAST_FILTERS` and then compares against Circular defaults. A fresh
   state with a conservation source therefore emits explicit
   `--evalue 1e-2 --identity 0` overrides:
-  [`gbdraw/web/js/app/run-analysis.js`](../gbdraw/web/js/app/run-analysis.js#L3123-L3145).
+  [`gbdraw/web/js/app/run-analysis.js`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/web/js/app/run-analysis.js#L3123-L3145).
 
 The Python/CLI Linear difference changes both the set of accepted matches and the
 presence of two tracks. The web Circular difference changes the comparison filter
@@ -142,20 +157,21 @@ relative to Circular CLI and Python. Both are silent and output-affecting.
 The web app has a smaller instance of the same ownership problem: its default
 feature list omits `misc_RNA`, although the CLI default list and the JavaScript
 default-comparison helper include it
-([`state.js`](../gbdraw/web/js/state.js#L392-L395),
-[`cli-args.js`](../gbdraw/web/js/app/cli-args.js#L1-L9)).
+([`state.js`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/web/js/state.js#L392-L395),
+[`cli-args.js`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/web/js/app/cli-args.js#L1-L9)).
 Linear axis color has another visible drift: the Python path retains the TOML
 `gray`, while CLI/web resolve an unspecified color to `lightgray`, or `dimgray`
 when the ruler is on the axis
-([`gbdraw/data/config.toml`](../gbdraw/data/config.toml#L165-L176),
-[`gbdraw/linear.py`](../gbdraw/linear.py#L1501-L1521)).
+([`gbdraw/data/config.toml`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/data/config.toml#L165-L176),
+[`gbdraw/linear.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/linear.py#L1501-L1521)).
 
 ### Recommended resolution
 
 Create a single declarative schema with explicit `CircularDefaults` and
 `LinearDefaults`. It should own comparison thresholds, visible default tracks,
-feature types, label policy, title position, and output-name policy. Python should
-load it directly; the web app should consume a generated/versioned representation.
+feature types, label scope and placement, the shared `labels.rendering` policy,
+title position, and output-name policy. Python should load it directly; the web
+app should consume a generated/versioned representation.
 
 The least surprising compatibility choice is probably:
 
@@ -172,29 +188,29 @@ At least four overlapping contracts currently reach the renderers:
 
 - The root `gbdraw` facade exposes mode-specific options, manually translates them
   into lower-level options, and calls builders:
-  [`gbdraw/interface.py`](../gbdraw/interface.py#L427-L672).
+  [`gbdraw/interface.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/interface.py#L427-L672).
 - `gbdraw.api` exports builders, very large assemblers, canvases, configurators,
   typed requests, and session helpers together:
-  [`gbdraw/api/__init__.py`](../gbdraw/api/__init__.py#L1-L184).
+  [`gbdraw/api/__init__.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/__init__.py#L1-L184).
 - Circular and Linear CLI handlers assemble and save directly, then reconstruct a
   typed request in request-compatible/session cases:
-  [`gbdraw/circular.py`](../gbdraw/circular.py#L1113-L1374) and
-  [`gbdraw/linear.py`](../gbdraw/linear.py#L1891-L2083).
+  [`gbdraw/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/circular.py#L1113-L1374) and
+  [`gbdraw/linear.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/linear.py#L1891-L2083).
 - Session replay uses the separate `render_request()` route:
-  [`gbdraw/api/request_render.py`](../gbdraw/api/request_render.py#L1092-L1297).
+  [`gbdraw/api/request_render.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/request_render.py#L1092-L1297).
 
 The lower-level public assemblers expose the cost of this structure. The Linear
 assembler has about 70 parameters, while the Circular assembler exposes internal
 parameters such as `_definition_profile`, `_precomputed_depth_df`, and
 `_shared_depth_max`
-([`gbdraw/api/diagram.py`](../gbdraw/api/diagram.py#L1777-L1848),
-[`gbdraw/api/diagram.py`](../gbdraw/api/diagram.py#L2356-L2428)).
+([`gbdraw/api/diagram.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/diagram.py#L1777-L1848),
+[`gbdraw/api/diagram.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/diagram.py#L2356-L2428)).
 
 Output ownership is duplicated as well. `OutputOptions.output_prefix` influences
 the drawing filename, while `RenderOutputRequest.output_prefix` controls saved
 files. CLI request construction writes the same value into both locations
-([`gbdraw/api/options.py`](../gbdraw/api/options.py#L55-L62),
-[`gbdraw/api/requests.py`](../gbdraw/api/requests.py#L174-L233)).
+([`gbdraw/api/options.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/options.py#L55-L62),
+[`gbdraw/api/requests.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/requests.py#L174-L233)).
 
 This architecture requires every new option to be added to several dataclasses,
 translation functions, parsers, serializers, and assembly signatures. D1 is a
@@ -240,39 +256,39 @@ The root API is safer than the legacy options at the top level, but shared neste
 types still advertise invalid combinations:
 
 - `TrackOptions` stores Circular and Linear axes/slots together:
-  [`gbdraw/api/options.py`](../gbdraw/api/options.py#L44-L52).
+  [`gbdraw/api/options.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/options.py#L44-L52).
 - `DiagramOptions` contains shared, Circular-only, and Linear-only fields in one
   dataclass. Its mode validator checks selected top-level fields, not nested track
   and output bundles:
-  [`gbdraw/api/options.py`](../gbdraw/api/options.py#L99-L236).
+  [`gbdraw/api/options.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/options.py#L99-L236).
 - The Circular and Linear builders read only their own nested track fields, so a
   wrong-mode field can be silently ignored:
-  [`gbdraw/api/diagram.py`](../gbdraw/api/diagram.py#L3798-L3800) and
-  [`gbdraw/api/diagram.py`](../gbdraw/api/diagram.py#L3885-L3886).
+  [`gbdraw/api/diagram.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/diagram.py#L3798-L3800) and
+  [`gbdraw/api/diagram.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/diagram.py#L3885-L3886).
 - Shared `TitleOptions.position` accepts `none`, `center`, `top`, and `bottom`, while
   Circular rejects `center` and Linear rejects `none` later during rendering:
-  [`gbdraw/interface.py`](../gbdraw/interface.py#L80-L86) and
-  [`gbdraw/api/diagram.py`](../gbdraw/api/diagram.py#L1358-L1377).
+  [`gbdraw/interface.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/interface.py#L80-L86) and
+  [`gbdraw/api/diagram.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/diagram.py#L1358-L1377).
 - Shared `DepthTrackOptions.height` is meaningful only for Linear and is rejected
   late for Circular:
-  [`gbdraw/interface.py`](../gbdraw/interface.py#L99-L109).
+  [`gbdraw/interface.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/interface.py#L99-L109).
 
 Comparison validation is also asymmetric. Circular CLI validates identity, e-value,
 and bitscore; Linear CLI accepts values such as `identity=101`, `identity=nan`,
 negative e-value, and `bitscore=nan`
-([`gbdraw/circular.py`](../gbdraw/circular.py#L574-L581),
-[`gbdraw/linear.py`](../gbdraw/linear.py#L1138-L1213)).
+([`gbdraw/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/circular.py#L574-L581),
+[`gbdraw/linear.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/linear.py#L1138-L1213)).
 The Python layers validate `alignment_length` but not the other threshold values.
 An identity threshold of `100` can reach Linear gradient normalization with a zero
 denominator
-([`gbdraw/render/groups/linear/pairwise_match.py`](../gbdraw/render/groups/linear/pairwise_match.py#L276-L279)).
+([`gbdraw/render/groups/linear/pairwise_match.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/groups/linear/pairwise_match.py#L276-L279)).
 
 Circular layout validation has a similar timing mismatch.
 `LinearMultiRecordOptions` validates finite, non-negative values in
 `__post_init__`, while `CircularMultiRecordOptions` accepts invalid values until a
 deep builder check
-([`gbdraw/api/options.py`](../gbdraw/api/options.py#L64-L96),
-[`gbdraw/api/diagram.py`](../gbdraw/api/diagram.py#L1557-L1578)).
+([`gbdraw/api/options.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/options.py#L64-L96),
+[`gbdraw/api/diagram.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/diagram.py#L1557-L1578)).
 
 ### Recommended resolution
 
@@ -296,29 +312,29 @@ surfaces.
 
 Linear uses Python's process-randomized `hash()` for GC-skew clip IDs and pairwise
 legend gradient IDs
-([`gbdraw/render/drawers/linear/gc_skew.py`](../gbdraw/render/drawers/linear/gc_skew.py#L42),
-[`gbdraw/render/groups/linear/legend.py`](../gbdraw/render/groups/linear/legend.py#L238-L240)).
+([`gbdraw/render/drawers/linear/gc_skew.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/drawers/linear/gc_skew.py#L42),
+[`gbdraw/render/groups/linear/legend.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/groups/linear/legend.py#L238-L240)).
 The same input produced different hashes with `PYTHONHASHSEED=1` and
 `PYTHONHASHSEED=2` during this audit.
 
 Circular already uses a deterministic digest for skew clips and deterministic
 sanitization for legend gradients
-([`gbdraw/render/drawers/circular/gc_skew.py`](../gbdraw/render/drawers/circular/gc_skew.py#L41-L44),
-[`gbdraw/render/groups/circular/legend.py`](../gbdraw/render/groups/circular/legend.py#L63-L66)).
+([`gbdraw/render/drawers/circular/gc_skew.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/drawers/circular/gc_skew.py#L41-L44),
+[`gbdraw/render/groups/circular/legend.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/groups/circular/legend.py#L63-L66)).
 
 Linear also keeps horizontal and vertical legends in the same SVG so the web app
 can switch orientation. Both copies use `id="pairwise_legend"` and the same gradient
 IDs
-([`gbdraw/render/groups/linear/legend.py`](../gbdraw/render/groups/linear/legend.py#L242-L526)).
+([`gbdraw/render/groups/linear/legend.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/groups/linear/legend.py#L242-L526)).
 The dual layout is intentional; duplicate DOM IDs are not.
 
 Consequences include byte-level non-reproducibility, invalid duplicate IDs, and
 ambiguous CSS/DOM references. Existing SVG comparison utilities normalize dynamic
 IDs, which makes this difficult to detect
-([`tests/utils/svg_compare.py`](../tests/utils/svg_compare.py#L179-L190)).
+([`tests/utils/svg_compare.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/tests/utils/svg_compare.py#L179-L190)).
 The web app already post-processes gradient and clip references during SVG
 repositioning
-([`gbdraw/web/js/app/svg-styles.js`](../gbdraw/web/js/app/svg-styles.js#L59-L159)).
+([`gbdraw/web/js/app/svg-styles.js`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/web/js/app/svg-styles.js#L59-L159)).
 That reduces collisions in the web path, but it does not fix CLI/Python SVGs or the
 duplicate `pairwise_legend` group IDs at the source.
 
@@ -331,13 +347,13 @@ XML-level assertion that every emitted `id` is unique.
 `tests/test_public_contract.py` snapshots the root API and hashes Circular and
 Linear parser metadata independently. That detects accidental signature changes but
 cannot say whether equivalent defaults or validations agree
-([`tests/test_public_contract.py`](../tests/test_public_contract.py#L47-L164)).
+([`tests/test_public_contract.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/tests/test_public_contract.py#L47-L164)).
 
 The web filter helper test demonstrates Linear values relative to Circular defaults,
 but does not run from the real fresh web state. The session test manually supplies
 the correct Circular values, bypassing the state that causes D1
-([`tests/web/cli-args.test.mjs`](../tests/web/cli-args.test.mjs#L117-L135),
-[`tests/web/session-request.test.mjs`](../tests/web/session-request.test.mjs#L283-L373)).
+([`tests/web/cli-args.test.mjs`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/tests/web/cli-args.test.mjs#L117-L135),
+[`tests/web/session-request.test.mjs`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/tests/web/session-request.test.mjs#L283-L373)).
 The beginner Python API test suite has a Circular end-to-end drawing test but no
 paired default Linear test.
 
@@ -359,7 +375,7 @@ within one mode to agree.
 `CanvasConfig` places `show_gc`, `show_skew`, `show_depth`, and `show_labels` at the
 global level. `show_labels` combines Circular's boolean semantics and Linear's
 string policy in one union
-([`gbdraw/config/models/canvas.py`](../gbdraw/config/models/canvas.py#L168-L200)).
+([`gbdraw/config/models/canvas.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/config/models/canvas.py#L168-L200)).
 A typo string is effectively on in Circular and off in Linear.
 
 The same configuration then exists in several representations:
@@ -372,11 +388,11 @@ The same configuration then exists in several representations:
 - resolved layout values dynamically attached to canvas configurators.
 
 Representative dual-input constructors include
-[`gbdraw/canvas/circular.py`](../gbdraw/canvas/circular.py#L45-L73),
-[`gbdraw/canvas/linear.py`](../gbdraw/canvas/linear.py#L114-L143), and
-[`gbdraw/configurators/features.py`](../gbdraw/configurators/features.py#L30-L70).
+[`gbdraw/canvas/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/canvas/circular.py#L45-L73),
+[`gbdraw/canvas/linear.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/canvas/linear.py#L114-L143), and
+[`gbdraw/configurators/features.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/configurators/features.py#L30-L70).
 The flat override schema is maintained separately in
-[`gbdraw/config/modify.py`](../gbdraw/config/modify.py#L51-L340).
+[`gbdraw/config/modify.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/config/modify.py#L51-L340).
 
 There are also dead or suspect mappings:
 
@@ -390,6 +406,18 @@ Resolve raw input once into `GbdrawConfig`, then derive an immutable
 accept that typed profile only. Generate override paths from the typed schema and
 reject unknown keys after a compatibility-warning period.
 
+Phase 2 implemented this resolution with schema-derived dotted leaves. Circular
+uses `labels.circular.scope` (`none`, `outer`, or `both`) and
+`labels.circular.placement` (`horizontal` or `radial`). Linear uses
+`labels.linear.scope` (`none`, `all`, `first`, or `orthogroup_top`),
+`labels.linear.placement` (`auto` or `above_feature`), and
+`labels.linear.rotation`. The shared `labels.rendering` leaf alone owns the
+`auto` / `embedded_only` / `external_only` rendering policy. Fresh
+configuration and override inputs reject `canvas.show_labels`, nested
+`canvas.circular.show_labels` / `canvas.linear.show_labels`, and
+`canvas.circular.allow_inner_labels`; supported persisted-data readers retain
+their migration under `O3.data=A`.
+
 ## L1 — P2: shared planning concepts are duplicated
 
 Several pieces have the same syntax or semantic job but separate implementations:
@@ -397,22 +425,22 @@ Several pieces have the same syntax or semantic job but separate implementations
 - Circular and Linear track-slot parsers duplicate normalization and slot-head
   parsing. Circular's parse error lives in the shared parsing module, while Linear
   defines a separate error:
-  [`gbdraw/tracks/circular.py`](../gbdraw/tracks/circular.py),
-  [`gbdraw/tracks/linear.py`](../gbdraw/tracks/linear.py),
-  [`gbdraw/tracks/parsing.py`](../gbdraw/tracks/parsing.py#L1-L15).
+  [`gbdraw/tracks/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/tracks/circular.py),
+  [`gbdraw/tracks/linear.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/tracks/linear.py),
+  [`gbdraw/tracks/parsing.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/tracks/parsing.py#L1-L15).
 - The `<record-selector>@<row>` placement syntax has three validation paths:
   Circular API, Circular CLI, and the Linear parser reused by Linear API/CLI:
-  [`gbdraw/api/diagram.py`](../gbdraw/api/diagram.py#L1086-L1193),
-  [`gbdraw/circular.py`](../gbdraw/circular.py#L160-L189),
-  [`gbdraw/layout/linear_multi_record.py`](../gbdraw/layout/linear_multi_record.py#L124-L220),
-  [`gbdraw/linear.py`](../gbdraw/linear.py#L469-L474).
+  [`gbdraw/api/diagram.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/diagram.py#L1086-L1193),
+  [`gbdraw/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/circular.py#L160-L189),
+  [`gbdraw/layout/linear_multi_record.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/layout/linear_multi_record.py#L124-L220),
+  [`gbdraw/linear.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/linear.py#L469-L474).
 - Annotation auto-slot and underlay planning is near-duplicated. An unknown
   `set_id` raises `ValidationError` in Circular and `ValueError` in Linear:
-  [`gbdraw/diagrams/circular/assemble.py`](../gbdraw/diagrams/circular/assemble.py#L129-L295),
-  [`gbdraw/diagrams/linear/assemble.py`](../gbdraw/diagrams/linear/assemble.py#L146-L362).
+  [`gbdraw/diagrams/circular/assemble.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/diagrams/circular/assemble.py#L129-L295),
+  [`gbdraw/diagrams/linear/assemble.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/diagrams/linear/assemble.py#L146-L362).
 - Legend dimension calculation dispatches on a configurator class-name string and
   then treats Circular and Linear asymmetrically:
-  [`gbdraw/configurators/legend.py`](../gbdraw/configurators/legend.py#L59-L88).
+  [`gbdraw/configurators/legend.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/configurators/legend.py#L59-L88).
 
 Share the grammar, validated value objects, annotation binding, and immutable legend
 measurement result. Keep radius/band resolution and row/height resolution in their
@@ -421,8 +449,8 @@ respective mode planners.
 Label placement dictionaries also need explicit units before any common contract is
 safe. Circular uses keys such as `middle`, `start`, and `end` for base-pair
 coordinates, while Linear uses the same names for pixel geometry
-([`gbdraw/labels/circular.py`](../gbdraw/labels/circular.py#L4644-L4796),
-[`gbdraw/labels/linear.py`](../gbdraw/labels/linear.py#L490-L545)).
+([`gbdraw/labels/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/labels/circular.py#L4644-L4796),
+[`gbdraw/labels/linear.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/labels/linear.py#L490-L545)).
 Mode-specific typed placed-label objects with `_bp` and `_px` field suffixes would
 remove this ambiguity.
 
@@ -430,17 +458,17 @@ remove this ambiguity.
 
 Reusable Circular geometry types such as `RadialBand` and
 `CircularFeatureLayout` live in `gbdraw.diagrams.circular.radial_layout`
-([`gbdraw/diagrams/circular/radial_layout.py`](../gbdraw/diagrams/circular/radial_layout.py#L49-L205)).
+([`gbdraw/diagrams/circular/radial_layout.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/diagrams/circular/radial_layout.py#L49-L205)).
 Lower rendering and label modules import upward from that package
-([`gbdraw/render/groups/circular/seq_record.py`](../gbdraw/render/groups/circular/seq_record.py#L21),
-[`gbdraw/render/groups/circular/labels.py`](../gbdraw/render/groups/circular/labels.py#L24),
-[`gbdraw/labels/circular.py`](../gbdraw/labels/circular.py#L1243)).
+([`gbdraw/render/groups/circular/seq_record.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/groups/circular/seq_record.py#L21),
+[`gbdraw/render/groups/circular/labels.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/groups/circular/labels.py#L24),
+[`gbdraw/labels/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/labels/circular.py#L1243)).
 
 Linear consumers instead depend on `gbdraw.layout.linear`. Circular's lazy package
 initializer, compared with Linear's eager initializer, suggests possible import
 cycle pressure; the upward imports themselves are the confirmed dependency problem
-([`gbdraw/diagrams/circular/__init__.py`](../gbdraw/diagrams/circular/__init__.py#L1-L16),
-[`gbdraw/diagrams/linear/__init__.py`](../gbdraw/diagrams/linear/__init__.py#L1-L8)).
+([`gbdraw/diagrams/circular/__init__.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/diagrams/circular/__init__.py#L1-L16),
+[`gbdraw/diagrams/linear/__init__.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/diagrams/linear/__init__.py#L1-L8)).
 
 Move radial value types and reusable geometry helpers to
 `gbdraw.layout.circular`; leave diagram orchestration and solver coordination in
@@ -451,15 +479,15 @@ Move radial value types and reusable geometry helpers to
 The modern `FeatureBuildResult` separates foreground features from underlays.
 The compatibility `create_feature_dict` intentionally has no underlay input and
 treats visible features as foreground
-([`gbdraw/features/factory.py`](../gbdraw/features/factory.py#L143-L150),
-[`gbdraw/features/factory.py`](../gbdraw/features/factory.py#L254-L328)).
+([`gbdraw/features/factory.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/features/factory.py#L143-L150),
+[`gbdraw/features/factory.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/features/factory.py#L254-L328)).
 
 Main Circular and Linear assemblers use the modern path. However, render groups
 re-run the legacy function when precomputed features are omitted:
 
-- [`gbdraw/render/groups/circular/seq_record.py`](../gbdraw/render/groups/circular/seq_record.py#L146-L172)
-- [`gbdraw/render/groups/circular/labels.py`](../gbdraw/render/groups/circular/labels.py#L98-L117)
-- [`gbdraw/render/groups/linear/seq_record.py`](../gbdraw/render/groups/linear/seq_record.py#L357-L381)
+- [`gbdraw/render/groups/circular/seq_record.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/groups/circular/seq_record.py#L146-L172)
+- [`gbdraw/render/groups/circular/labels.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/groups/circular/labels.py#L98-L117)
+- [`gbdraw/render/groups/linear/seq_record.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/groups/linear/seq_record.py#L357-L381)
 
 The supported main route is correct, but a direct/internal construction path can
 turn `repeat_region` or another configured underlay into a foreground feature.
@@ -470,9 +498,9 @@ adapter only at a compatibility boundary.
 
 `GcSkewConfigurator` exposes `stroke_width`. Linear skew applies it, while Circular
 skew neither retains it nor sets it on the SVG path
-([`gbdraw/configurators/gc.py`](../gbdraw/configurators/gc.py#L137-L139),
-[`gbdraw/render/drawers/linear/gc_skew.py`](../gbdraw/render/drawers/linear/gc_skew.py#L17-L71),
-[`gbdraw/render/drawers/circular/gc_skew.py`](../gbdraw/render/drawers/circular/gc_skew.py#L17-L61)).
+([`gbdraw/configurators/gc.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/configurators/gc.py#L137-L139),
+[`gbdraw/render/drawers/linear/gc_skew.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/drawers/linear/gc_skew.py#L17-L71),
+[`gbdraw/render/drawers/circular/gc_skew.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/render/drawers/circular/gc_skew.py#L17-L61)).
 GC content drawers in both modes retain a configured path width but do not apply it
 to their main path. The default width of zero conceals the mismatch.
 
@@ -484,13 +512,13 @@ cannot detect this class of issue.
 
 The web app keeps active legend/title values alongside Circular/Linear and
 single/multi preference caches in
-[`gbdraw/web/js/state.js`](../gbdraw/web/js/state.js#L213-L221).
+[`gbdraw/web/js/state.js`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/web/js/state.js#L213-L221).
 Watchers, configuration import/export, and history snapshots each resolve or copy
 overlapping values:
 
-- [`gbdraw/web/js/app/watchers.js`](../gbdraw/web/js/app/watchers.js#L163-L217)
-- [`gbdraw/web/js/services/config.js`](../gbdraw/web/js/services/config.js#L1170-L1268)
-- [`gbdraw/web/js/services/history-snapshot.js`](../gbdraw/web/js/services/history-snapshot.js#L104-L174)
+- [`gbdraw/web/js/app/watchers.js`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/web/js/app/watchers.js#L163-L217)
+- [`gbdraw/web/js/services/config.js`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/web/js/services/config.js#L1170-L1268)
+- [`gbdraw/web/js/services/history-snapshot.js`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/web/js/services/history-snapshot.js#L104-L174)
 
 Preserving per-mode preferences is intentional. Maintain one canonical
 `layoutPreferences` structure and expose the active mode as a computed projection.
@@ -500,17 +528,17 @@ Keep legacy reconciliation only in the import migration layer.
 
 Public loaders take a free-form `mode` string, and the beginner
 `read_genbank`/`read_gff` facade hardcodes `mode="linear"`
-([`gbdraw/api/io.py`](../gbdraw/api/io.py#L48-L105),
-[`gbdraw/interface.py`](../gbdraw/interface.py#L339-L364)).
+([`gbdraw/api/io.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/io.py#L48-L105),
+[`gbdraw/interface.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/interface.py#L339-L364)).
 Parsing records, validating mode-specific cardinality, selecting topology warnings,
 and comparison-aware record selection/truncation therefore share one boundary.
 
 Output policy differs legitimately—Circular often writes one accession-named file
 per record, while Linear combines records into `out`—but the web help states one
 record-name behavior for both modes
-([`gbdraw/web/index.html`](../gbdraw/web/index.html#L1919-L1925),
-[`gbdraw/circular.py`](../gbdraw/circular.py#L224-L228),
-[`gbdraw/linear.py`](../gbdraw/linear.py#L761-L766)).
+([`gbdraw/web/index.html`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/web/index.html#L1919-L1925),
+[`gbdraw/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/circular.py#L224-L228),
+[`gbdraw/linear.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/linear.py#L761-L766)).
 
 Implementation outcome: record loading is neutral, planners apply mode-specific
 input policy, and adapters resolve output policy into typed output requests.
@@ -521,13 +549,13 @@ A sequence of Circular records does not have one cross-surface meaning:
 
 - Root `draw_circular(records)` automatically produces one grid when more than one
   record is passed:
-  [`gbdraw/interface.py`](../gbdraw/interface.py#L608-L641).
+  [`gbdraw/interface.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/interface.py#L608-L641).
 - `CircularDiagramRequest` also inserts an automatic multi-record layout:
-  [`gbdraw/api/requests.py`](../gbdraw/api/requests.py#L309-L335).
+  [`gbdraw/api/requests.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/api/requests.py#L309-L335).
 - Circular CLI writes separate diagrams/files by default and produces one grid only
   with `--multi_record_canvas`:
-  [`gbdraw/circular.py`](../gbdraw/circular.py#L211-L216),
-  [`gbdraw/circular.py`](../gbdraw/circular.py#L1113-L1294).
+  [`gbdraw/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/circular.py#L211-L216),
+  [`gbdraw/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/circular.py#L1113-L1294).
 
 At the audited baseline, the root API rejected a `CircularLayout` for one record
 while the typed request accepted it. The Phase 1 core resolved that mismatch:
@@ -549,14 +577,14 @@ Both modes also retain legacy `--depth` forms with different argument shapes bes
 the normalized repeatable `--depth_track` form. The web app emits only
 `--depth_track`. Deprecate `--depth` and keep one compatibility adapter at the CLI
 boundary
-([`gbdraw/circular.py`](../gbdraw/circular.py#L291-L301),
-[`gbdraw/linear.py`](../gbdraw/linear.py#L787-L798),
-[`gbdraw/cli_utils/common.py`](../gbdraw/cli_utils/common.py#L589-L616)).
+([`gbdraw/circular.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/circular.py#L291-L301),
+[`gbdraw/linear.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/linear.py#L787-L798),
+[`gbdraw/cli_utils/common.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/cli_utils/common.py#L589-L616)).
 
 Several exported parser helpers such as `add_output_args`, `add_stroke_args`, and
 `add_legend_args` have no production callers, while handlers maintain manual
 variants
-([`gbdraw/cli_utils/common.py`](../gbdraw/cli_utils/common.py#L308-L456)).
+([`gbdraw/cli_utils/common.py`](https://github.com/satoshikawato/gbdraw/blob/544c10b47bf5b7f38557924a96b2f9759854d9dd/gbdraw/cli_utils/common.py#L308-L456)).
 After the canonical request migration, generate shared flag spelling and validation
 from declarative option specs and delete unused wrappers.
 
@@ -573,7 +601,8 @@ The following are not redundancies and should remain mode-specific:
 - Circular grid/radius scaling versus Linear shared-base-pair-scale multi-record
   layout.
 - Linear dual-orientation legend support used by the web app.
-- Different label policy vocabularies where the user concepts really differ.
+- Different label scope and placement vocabularies where the user concepts
+  really differ.
 
 The common layer should own semantic value objects, defaults, validation, stable
 IDs, style application, annotation binding, and prepared-data boundaries. It should
@@ -634,8 +663,8 @@ refactor.
 
 1. Route root API, CLI, web/session, and replay through canonical typed requests.
 2. Move output destination ownership to `RenderOutputRequest`.
-3. Keep large assembler signatures and mixed `DiagramOptions` as internal
-   implementation bridges below the planners.
+3. Temporarily keep large assembler signatures and mixed `DiagramOptions` as
+   internal implementation bridges below the planners.
 4. Add mode-specific nested options and eager layout validation.
 
 Phase 1 is complete through `CircularDiagramOptions`, `LinearDiagramOptions`,
@@ -644,7 +673,22 @@ their mode-specific track and output bundles, and `CircularRequestPlan`,
 generation, current canonical replay, and legacy internal replay all reach the
 typed planners.
 
-### Phase 2 — remove duplicated state and planners (separate follow-up)
+The temporary shared option bridge retained by this phase was removed in
+Phase 2; it is not a current alternate route.
+
+### Phase 2 — remove duplicated state and planners (implementation complete)
+
+Before implementation, the reduction target was defined as a net decrease in
+production code from the Phase 2 starting point. A shared abstraction counted
+only when its superseded path was deleted in the same change; code relocation,
+parallel fallbacks, and test deletion did not count. The concrete deletion set
+was the private shared option bridge and mode/default inventories,
+raw-dictionary and typed-config constructor fallbacks below profile resolution,
+per-mode placement/annotation/slot parsers, Circular radial contracts above
+`gbdraw.layout`, raw feature-dictionary render fallbacks, mutable canvas layout
+attributes, and duplicated Web active/per-mode preference state and caches.
+The completed production-file set is a net reduction of 58 physical lines
+(42,921 to 42,863); tests, documentation, and tools are excluded.
 
 1. Resolve one immutable mode render profile from typed configuration.
 2. Consolidate record-placement grammar, annotation planning, and shared track-slot
@@ -655,9 +699,33 @@ typed planners.
 6. Consolidate Web preference state into one per-mode authority with computed
    active values.
 
-Phase 2 is outside the A1/O4 completion criteria. Before implementation, define
-the code-reduction target and the specific superseded paths or contracts to
-delete so that consolidation does not add another parallel layer.
+All six items are complete:
+
+- frozen `CircularRenderProfile` and `LinearRenderProfile` values are resolved
+  from `GbdrawConfig` before downstream canvas/configurator construction. The
+  profiles carry mode-specific label scope and placement plus the shared
+  `labels.rendering` policy;
+- `gbdraw.layout.record_placement`, `gbdraw.annotations.planning`, and
+  `gbdraw.tracks.parsing` own their shared semantics;
+- reusable Circular radial contracts are in `gbdraw.layout.circular`, while the
+  Circular solver remains mode-owned;
+- Circular and Linear feature render groups require `FeatureBuildResult`;
+- `CircularRecordRenderContext` carries the resolved radial layout, track
+  preset, and feature-lane direction instead of storing them on a mutable
+  canvas;
+- `LinearRecordRenderContext` carries the `LinearRenderProfile`, resolved
+  `LinearTrackLayout`, and Depth availability. Feature-track layout,
+  strandedness, and axis-ruler enablement are profile-backed, read-only active
+  values rather than mutable canvas or render-group state; and
+- Web `layoutPreferences` is the sole per-mode authority,
+  `activeLayoutPreferences` is computed, and session version 39 migrates the
+  superseded fields without changing canonical request schema 5.
+
+The shared `DiagramOptions`, `TrackOptions`, and `OutputOptions` runtime bridge
+was deleted as part of the same consolidation. Public builders now construct
+one typed `GbdrawConfig` after applying schema-validated overrides; private
+assemblers accept only that `cfg`, and downstream constructors do not reload or
+reinterpret raw configuration.
 
 ### Phase 3 — compatibility cleanup (complete under `O3.api=B`)
 
@@ -688,6 +756,9 @@ The audit used static call-path tracing and focused executable checks:
 This document preserves the baseline audit and prioritization history. Owner
 decisions, compatibility removals, and current implementation status are
 recorded in the decision worksheet and the Implementation status section above.
-The remaining architecture follow-up identified by this audit is Phase 2.
+All implementation phases identified by this audit are complete. Focused
+boundary checks pass; the full regression suite for the exact final worktree is
+deferred to the next session. Further architecture work requires a separately
+scoped decision.
 
 [Decision worksheet](./LINEAR_CIRCULAR_ARCHITECTURE_API_DECISION_WORKSHEET.md) | [Python API](./PYTHON_API.md) | [DiagramOptions audit](./DIAGRAM_OPTIONS_AUDIT.md) | [API improvement plan](./PYTHON_API_IMPROVEMENT_PLAN.md)

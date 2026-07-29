@@ -7,8 +7,8 @@ from .parsing import (
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
     parse_nonnegative_integer,
+    parse_track_slot_text,
     split_kv_list,
-    strip_inline_comment as _strip_inline_comment,
     validate_overlay_annotation_anchors,
 )
 from .scalars import ScalarSpec
@@ -153,40 +153,14 @@ def _validate_px_scalar(spec: ScalarSpec | None, *, field_name: str, allow_zero:
         raise ValueError(f"{field_name} must be {relation}")
 
 
-def _parse_slot_head(head: str, original: str) -> tuple[str, str]:
-    if ":" not in head:
-        raise LinearTrackSlotParseError(
-            "linear track slots require '<slot_id>:<renderer>@...'",
-            original,
-        )
-    slot_id_raw, renderer_raw = head.split(":", 1)
-    slot_id = slot_id_raw.strip()
-    renderer = renderer_raw.strip()
-    if not slot_id:
-        raise LinearTrackSlotParseError("missing linear track slot id", original)
-    if not renderer:
-        raise LinearTrackSlotParseError("missing linear track renderer", original)
-    return slot_id, renderer
-
-
-
-
 def parse_linear_track_slot(raw: str) -> LinearTrackSlot:
     """Parse `<slot_id>:<renderer>@key=value,...` into a slot input object."""
 
-    original = raw
-    s = str(raw).strip()
-    if not s or s.startswith("#"):
-        raise LinearTrackSlotParseError("empty/comment line", original)
-    s = _strip_inline_comment(s)
-
-    if "@" in s:
-        head, opts = s.split("@", 1)
-        opts = opts.strip()
-    else:
-        head, opts = s, ""
-
-    slot_id, renderer_raw = _parse_slot_head(head.strip(), original)
+    original, slot_id, renderer_raw, opts = parse_track_slot_text(
+        raw,
+        mode="linear",
+        error_type=LinearTrackSlotParseError,
+    )
     renderer = _normalize_renderer(renderer_raw)
     if renderer not in SUPPORTED_LINEAR_TRACK_RENDERERS:
         raise LinearTrackSlotParseError(f"unknown linear track renderer '{renderer}'", original)

@@ -9,6 +9,11 @@ import { createDefaultLinearTrackSlots } from './app/linear-track-slots.js';
 import { collectSpecificColorQualifierSuggestions } from './app/feature-selector.js';
 import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibility.js';
 import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
+import {
+  createDefaultLayoutPreferences,
+  resolveActiveLayoutPreference,
+  updateActiveLayoutPreference
+} from './app/layout-preferences.js';
 import { createSequenceSourceRegistry } from './app/match-sequences.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import {
@@ -220,14 +225,7 @@ const canvasContainerRef = ref(null);
 
 // App State
 const mode = ref('circular');
-const circularLegendPosition = ref('left'); // Separate legend position for circular mode
-const linearLegendPosition = ref('bottom'); // Separate legend position for linear mode
-const circularPlotTitlePosition = ref('none'); // Separate plot title position for circular mode
-const linearPlotTitlePosition = ref('bottom'); // Separate plot title position for linear mode
-const circularSingleRecordLegendPosition = ref('left');
-const circularSingleRecordPlotTitlePosition = ref('none');
-const circularMultiRecordLegendPosition = ref(null);
-const circularMultiRecordPlotTitlePosition = ref(null);
+const layoutPreferences = reactive(createDefaultLayoutPreferences());
 const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
@@ -384,7 +382,6 @@ export const createDefaultForm = () => ({
   plot_title: '',
   track_type: 'tuckin',
   linear_track_layout: 'middle',
-  legend: 'left',
   scale_style: 'bar',
   linear_ruler_on_axis: false,
   labels_mode: 'none',
@@ -482,7 +479,6 @@ export const createDefaultAdv = (profileMode = 'circular') => ({
   multi_record_row_gap_ratio: 0.05,
   multi_record_positions: [],
   tick_label_font_size: null,
-  plot_title_position: 'none',
   plot_title_font_size: null,
   keep_full_definition_with_plot_title: false,
   center_reserved_radius: null,
@@ -591,6 +587,35 @@ const form = reactive(createDefaultForm());
 // Extended Advanced Config
 const adv = reactive(createDefaultAdv(mode.value));
 const modeProfileStateManager = createModeProfileStateManager(mode.value, adv);
+const activeLayoutPreferences = computed(() => resolveActiveLayoutPreference(
+  layoutPreferences,
+  mode.value,
+  form.multi_record_canvas
+));
+Object.defineProperty(form, 'legend', {
+  enumerable: false,
+  get: () => activeLayoutPreferences.value.legend,
+  set: (value) => {
+    updateActiveLayoutPreference(
+      layoutPreferences,
+      mode.value,
+      form.multi_record_canvas,
+      { legend: value }
+    );
+  }
+});
+Object.defineProperty(adv, 'plot_title_position', {
+  enumerable: false,
+  get: () => activeLayoutPreferences.value.plotTitlePosition,
+  set: (value) => {
+    updateActiveLayoutPreference(
+      layoutPreferences,
+      mode.value,
+      form.multi_record_canvas,
+      { plotTitlePosition: value }
+    );
+  }
+});
 
 const losat = reactive(createDefaultLosat());
 
@@ -1146,14 +1171,8 @@ export const state = {
   canvasPan,
   canvasContainerRef,
   mode,
-  circularLegendPosition,
-  linearLegendPosition,
-  circularPlotTitlePosition,
-  linearPlotTitlePosition,
-  circularSingleRecordLegendPosition,
-  circularSingleRecordPlotTitlePosition,
-  circularMultiRecordLegendPosition,
-  circularMultiRecordPlotTitlePosition,
+  layoutPreferences,
+  activeLayoutPreferences,
   suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,

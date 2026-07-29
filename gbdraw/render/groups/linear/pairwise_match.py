@@ -104,7 +104,6 @@ class PairWiseMatchGroup:
         comparison_df (DataFrame): DataFrame containing comparison data.
         comparison_height (float): Height of the comparison track.
         comparison_count (int): Counter for the number of comparisons.
-        config_dict (dict): Configuration dictionary with styling parameters.
     """
 
     def __init__(
@@ -133,7 +132,6 @@ class PairWiseMatchGroup:
             comparison_df (DataFrame): DataFrame containing comparison data.
             comparison_height (float): Height of the comparison track.
             comparison_count (int): Counter for the number of comparisons.
-            config_dict (dict): Configuration dictionary with styling parameters.
         """
         self.canvas_config: LinearCanvasConfigurator = canvas_config
         self.sequence_length_dict: Dict[str, int] = sequence_length_dict

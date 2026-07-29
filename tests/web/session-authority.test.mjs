@@ -53,10 +53,23 @@ const session = {
 };
 validateSessionAuthorityInventory(session, 36);
 assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
+  legend: 'left',
+  linearPlotTitlePosition: 'top',
   zoom: 1.5,
   canvasPan: { x: 3, y: 4 },
   downloadDpi: 300
 });
+const layoutPreferences = {
+  circular: {
+    single: { legend: 'left', plotTitlePosition: 'none' },
+    multi: { legend: 'right', plotTitlePosition: 'bottom' }
+  },
+  linear: { legend: 'bottom', plotTitlePosition: 'top' }
+};
+assert.deepEqual(
+  projectWebOnlyEditorMetadata({ ui: { layoutPreferences } }).ui,
+  { layoutPreferences }
+);
 assert.deepEqual(projectArtifactState(session).features, {
   extractedFeatures: [{ id: 'f1' }]
 });

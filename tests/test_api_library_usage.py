@@ -21,13 +21,22 @@ from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
 )
-from gbdraw.api.options import ColorOptions, DiagramOptions, OutputOptions, TrackOptions
+from gbdraw.api.options import (
+    CircularDiagramOptions,
+    CircularOutputOptions,
+    CircularTrackOptions,
+    ColorOptions,
+    LinearDiagramOptions,
+    LinearOutputOptions,
+    LinearTrackOptions,
+)
 from gbdraw.analysis.collinearity import CollinearityResult
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.io.genome import load_gbks
+from gbdraw.mode_profiles import resolve_mode_profile_overrides
 from gbdraw.render.export import save_figure
 
 
@@ -106,18 +115,18 @@ def test_api_diagram_options_forward_collinearity_search_scope(monkeypatch: pyte
 
     api_diagram_module.build_linear_diagram(
         [],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             protein_blastp_mode="collinear",
             collinearity_anchor_mode="all",
             collinearity_search_scope="all",
-            collinearity_unit_mode="nt",
+            collinearity_unit_mode="cds",
             collinear_max_paralog_links_per_orthogroup=7,
         ),
     )
 
     assert captured["collinearity_anchor_mode"] == "all"
     assert captured["collinearity_search_scope"] == "all"
-    assert captured["collinearity_unit_mode"] == "nt"
+    assert captured["collinearity_unit_mode"] == "cds"
     assert captured["collinear_max_paralog_links_per_orthogroup"] == 7
 
 
@@ -153,6 +162,7 @@ def test_linear_assembler_forwards_normalized_collinearity_anchor_mode(
 
     api_diagram_module.assemble_linear_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         protein_blastp_mode="collinear",
         collinearity_anchor_mode=requested,
         legend="none",
@@ -182,7 +192,10 @@ def test_typed_config_override_preserves_label_filtering_dataframes() -> None:
     filtering["extension_key"] = {"keep": True}
 
     typed = GbdrawConfig.from_dict(config_dict)
-    updated = apply_config_overrides(typed, {"show_labels": True})
+    updated = apply_config_overrides(
+        typed,
+        {"labels.circular.scope": "outer"},
+    )
     updated_filtering = updated.labels.filtering.as_dict()
 
     pd.testing.assert_frame_equal(updated_filtering["whitelist_df"], whitelist)
@@ -222,7 +235,12 @@ def test_diagram_options_attach_explicit_label_tables(
         [["rec1", "CDS", "gene", "pol", "polymerase"]],
         columns=["record_id", "feature_type", "qualifier", "value", "label_text"],
     )
-    options = DiagramOptions(
+    options_type = (
+        LinearDiagramOptions
+        if builder_name == "linear"
+        else CircularDiagramOptions
+    )
+    options = options_type(
         label_whitelist_table=whitelist,
         qualifier_priority_table=priority,
         label_override_table=override,
@@ -286,7 +304,7 @@ def test_diagram_options_attach_explicit_label_files(
     )
     api_diagram_module.build_linear_diagram(
         [],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             label_whitelist_file="whitelist.tsv",
             qualifier_priority_file="priority.tsv",
             label_override_file="override.tsv",
@@ -319,14 +337,24 @@ def test_diagram_options_reject_label_table_and_file_together(
     with pytest.raises(ValidationError, match=table_field.removesuffix("_table")):
         api_diagram_module.build_linear_diagram(
             [],
-            options=DiagramOptions(**{table_field: table, file_field: "labels.tsv"}),
+            options=LinearDiagramOptions(
+                **{table_field: table, file_field: "labels.tsv"}
+            ),
         )
 
 
 _FORWARDING_TABLE = pd.DataFrame({"value": [1]})
+_FORWARDING_CONFIG = load_config_toml("gbdraw.data", "config.toml")
+_FORWARDING_CONFIG["extension"] = {"enabled": True}
+_FORWARDING_TYPED_CONFIG = GbdrawConfig.from_dict(_FORWARDING_CONFIG)
 _SHARED_FORWARDING_CASES = [
-    ("config", {"extension": {"enabled": True}}, "config_dict", {"extension": {"enabled": True}}),
-    ("config_overrides", {"show_labels": True}, "config_overrides", {"show_labels": True}),
+    ("config", _FORWARDING_CONFIG, "cfg", _FORWARDING_TYPED_CONFIG),
+    (
+        "config_overrides",
+        {"canvas.show_gc": False},
+        "cfg",
+        None,
+    ),
     ("selected_features_set", ["gene"], "selected_features_set", ["gene"]),
     ("feature_visibility_table", _FORWARDING_TABLE, "feature_visibility_table", _FORWARDING_TABLE),
     (
@@ -374,7 +402,25 @@ _SHARED_FORWARDING_CASES = [
 ]
 
 
-def _call_high_level_builder(builder_name: str, options: DiagramOptions) -> object:
+ModeDiagramOptions = CircularDiagramOptions | LinearDiagramOptions
+
+
+def _mode_options(
+    builder_name: str,
+    **kwargs: object,
+) -> ModeDiagramOptions:
+    options_type = (
+        LinearDiagramOptions
+        if builder_name == "linear"
+        else CircularDiagramOptions
+    )
+    return options_type(**kwargs)
+
+
+def _call_high_level_builder(
+    builder_name: str,
+    options: ModeDiagramOptions,
+) -> object:
     record = SeqRecord(Seq("ATGC"), id="rec1")
     if builder_name == "circular":
         return api_diagram_module.build_circular_diagram(record, options=options)
@@ -429,9 +475,16 @@ def test_diagram_options_forward_shared_non_default_values(
 
     _call_high_level_builder(
         builder_name,
-        DiagramOptions(**{field_name: value}),
+        _mode_options(builder_name, **{field_name: value}),
     )
 
+    if field_name == "config_overrides":
+        assert isinstance(value, Mapping)
+        mode = "linear" if builder_name == "linear" else "circular"
+        expected = apply_config_overrides(
+            None,
+            resolve_mode_profile_overrides(mode, value),
+        )
     _assert_forwarded_value(captured[assembler_name], expected)
 
 
@@ -456,28 +509,31 @@ def test_diagram_option_bundles_forward_non_default_values(
     monkeypatch.setattr(api_diagram_module, target, fake_assemble)
 
     tracks = (
-        TrackOptions(
+        LinearTrackOptions(
             linear_track_slots=["features:features"],
             linear_track_axis_index=1,
         )
         if builder_name == "linear"
-        else TrackOptions(
+        else CircularTrackOptions(
             circular_track_slots=["features:features"],
             circular_track_axis_index=1,
             center_reserved_radius=0.2,
         )
     )
-    options = DiagramOptions(
+    output = (
+        LinearOutputOptions(legend="left", plot_title_position="top")
+        if builder_name == "linear"
+        else CircularOutputOptions(legend="left", plot_title_position="top")
+    )
+    options = _mode_options(
+        builder_name,
         colors=ColorOptions(
             color_table=color_table,
             default_colors=default_colors,
             default_colors_palette="ajisai",
         ),
         tracks=tracks,
-        output=OutputOptions(
-            legend="left",
-            plot_title_position="top",
-        ),
+        output=output,
     )
     _call_high_level_builder(builder_name, options)
 
@@ -524,7 +580,10 @@ def test_plural_depth_options_forward_with_mode_specific_shape(
         "linear": "assemble_linear_diagram_from_records",
     }[builder_name]
     monkeypatch.setattr(api_diagram_module, target, fake_assemble)
-    _call_high_level_builder(builder_name, DiagramOptions(**{field_name: value}))
+    _call_high_level_builder(
+        builder_name,
+        _mode_options(builder_name, **{field_name: value}),
+    )
 
     if builder_name == "circular":
         singular_name = "depth_table" if field_name == "depth_tables" else "depth_file"
@@ -572,7 +631,10 @@ def test_diagram_options_forward_circular_only_non_default_values(
         else "assemble_circular_diagram_from_records"
     )
     monkeypatch.setattr(api_diagram_module, target, fake_assemble)
-    _call_high_level_builder(builder_name, DiagramOptions(**{field_name: value}))
+    _call_high_level_builder(
+        builder_name,
+        CircularDiagramOptions(**{field_name: value}),
+    )
 
     _assert_forwarded_value(captured[field_name], value)
 
@@ -585,11 +647,15 @@ _LINEAR_ONLY_FORWARDING_CASES = [
     ("protein_blastp_mode", "pairwise", "protein_blastp_mode", "pairwise"),
     ("pairwise_match_style", "curve", "pairwise_match_style", "curve"),
     ("collinearity_blocks", object(), "collinearity_blocks", None),
-    ("collinearity_params", object(), "collinearity_params", None),
-    ("collinearity_unit_mode", "nt", "collinearity_unit_mode", "nt"),
+    ("collinearity_unit_mode", "cds", "collinearity_unit_mode", "cds"),
     ("collinearity_anchor_mode", "top1", "collinearity_anchor_mode", "one_to_one"),
     ("collinearity_search_scope", "all", "collinearity_search_scope", "all"),
-    ("collinearity_color_mode", "identity", "collinearity_color_mode", "identity"),
+    (
+        "collinearity_color_mode",
+        "identity",
+        "collinearity_color_mode",
+        "average_identity",
+    ),
     ("losatp_bin", "custom-losat", "losatp_bin", "custom-losat"),
     ("ncbi_blastp_bin", "custom-blastp", "ncbi_blastp_bin", "custom-blastp"),
     ("losatp_threads", 3, "losatp_threads", 3),
@@ -635,7 +701,10 @@ def test_diagram_options_forward_linear_only_non_default_values(
         "assemble_linear_diagram_from_records",
         fake_assemble,
     )
-    _call_high_level_builder("linear", DiagramOptions(**{field_name: value}))
+    _call_high_level_builder(
+        "linear",
+        LinearDiagramOptions(**{field_name: value}),
+    )
 
     if expected is None:
         assert captured[assembler_name] is value
@@ -643,68 +712,60 @@ def test_diagram_options_forward_linear_only_non_default_values(
         _assert_forwarded_value(captured[assembler_name], expected)
 
 
-_LINEAR_ONLY_WRONG_MODE_CASES = [
-    (
-        field_name,
-        "unsupported" if field_name == "orthogroup_membership_mode" else value,
-    )
-    for field_name, value, _assembler_name, _expected in _LINEAR_ONLY_FORWARDING_CASES
-]
-
-
-@pytest.mark.parametrize("builder_name", ["circular", "circular_multi"])
-@pytest.mark.parametrize(
-    ("field_name", "value"),
-    _LINEAR_ONLY_WRONG_MODE_CASES,
-    ids=[case[0] for case in _LINEAR_ONLY_WRONG_MODE_CASES],
-)
-def test_circular_builders_reject_linear_only_non_default_options(
-    builder_name: str,
-    field_name: str,
-    value: object,
-) -> None:
-    with pytest.raises(ValidationError, match=rf"{builder_name}.*{field_name}"):
-        _call_high_level_builder(builder_name, DiagramOptions(**{field_name: value}))
-
-
-@pytest.mark.parametrize(
-    ("field_name", "value"),
-    _CIRCULAR_ONLY_FORWARDING_CASES,
-    ids=[case[0] for case in _CIRCULAR_ONLY_FORWARDING_CASES],
-)
-def test_linear_builder_rejects_circular_only_non_default_options(
-    field_name: str,
-    value: object,
-) -> None:
-    with pytest.raises(ValidationError, match=rf"linear.*{field_name}"):
-        _call_high_level_builder("linear", DiagramOptions(**{field_name: value}))
-
-
 @pytest.mark.parametrize(
     ("options", "message"),
     [
-        (DiagramOptions(depth_tables=[]), "one depth table"),
-        (DiagramOptions(depth_tables=[_FORWARDING_TABLE, _FORWARDING_TABLE]), "one depth table"),
-        (DiagramOptions(depth_files=[]), "one depth file"),
-        (DiagramOptions(depth_files=["one.tsv", "two.tsv"]), "one depth file"),
+        (CircularDiagramOptions(depth_tables=[]), "one depth table"),
         (
-            DiagramOptions(depth_table=_FORWARDING_TABLE, depth_tables=[_FORWARDING_TABLE]),
+            CircularDiagramOptions(
+                depth_tables=[_FORWARDING_TABLE, _FORWARDING_TABLE]
+            ),
+            "one depth table",
+        ),
+        (CircularDiagramOptions(depth_files=[]), "one depth file"),
+        (
+            CircularDiagramOptions(depth_files=["one.tsv", "two.tsv"]),
+            "one depth file",
+        ),
+        (
+            CircularDiagramOptions(
+                depth_table=_FORWARDING_TABLE,
+                depth_tables=[_FORWARDING_TABLE],
+            ),
             "singular.*plural",
         ),
-        (DiagramOptions(depth_file="one.tsv", depth_files=["two.tsv"]), "singular.*plural"),
         (
-            DiagramOptions(depth_table=_FORWARDING_TABLE, depth_files=["two.tsv"]),
+            CircularDiagramOptions(
+                depth_file="one.tsv",
+                depth_files=["two.tsv"],
+            ),
             "singular.*plural",
         ),
         (
-            DiagramOptions(depth_tables=[_FORWARDING_TABLE], depth_files=["one.tsv"]),
+            CircularDiagramOptions(
+                depth_table=_FORWARDING_TABLE,
+                depth_files=["two.tsv"],
+            ),
+            "singular.*plural",
+        ),
+        (
+            CircularDiagramOptions(
+                depth_tables=[_FORWARDING_TABLE],
+                depth_files=["one.tsv"],
+            ),
             "table.*file",
         ),
-        (DiagramOptions(depth_table=_FORWARDING_TABLE, depth_file="one.tsv"), "table.*file"),
+        (
+            CircularDiagramOptions(
+                depth_table=_FORWARDING_TABLE,
+                depth_file="one.tsv",
+            ),
+            "table.*file",
+        ),
     ],
 )
 def test_single_circular_builder_rejects_ambiguous_or_lossy_depth_options(
-    options: DiagramOptions,
+    options: CircularDiagramOptions,
     message: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -749,7 +810,7 @@ def test_circular_multi_builder_forwards_layout_options(
 
     api_diagram_module.build_circular_multi_diagram(
         records,
-        options=DiagramOptions(plot_title="Two records"),
+        options=CircularDiagramOptions(plot_title="Two records"),
         layout=CircularMultiRecordOptions(
             multi_record_size_mode="equal",
             multi_record_min_radius_ratio=0.7,
@@ -780,7 +841,7 @@ def test_api_circular_minimal(examples_dir: Path, temp_output_dir: Path) -> None
     output_prefix = temp_output_dir / "api_circular_minimal"
     canvas = assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
@@ -814,7 +875,7 @@ def test_api_linear_gene_specific_rule_uses_default_fallback_for_legend(
     canvas = assemble_linear_diagram_from_records(
         [record],
         blast_files=None,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=["gene"],
@@ -845,7 +906,7 @@ def test_api_linear_minimal(examples_dir: Path, temp_output_dir: Path) -> None:
     canvas = assemble_linear_diagram_from_records(
         records,
         blast_files=None,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,

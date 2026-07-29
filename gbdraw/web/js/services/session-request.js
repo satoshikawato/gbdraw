@@ -83,15 +83,116 @@ const HISTORICAL_FEATURE_TYPES = Object.freeze([
 ]);
 const HISTORICAL_CONFIG_OVERRIDES = Object.freeze({
   circular: Object.freeze({
-    show_gc: true,
-    show_skew: true
+    'canvas.show_gc': true,
+    'canvas.show_skew': true
   }),
   linear: Object.freeze({
-    show_gc: true,
-    show_skew: true,
-    linear_axis_stroke_color: 'gray'
+    'canvas.show_gc': true,
+    'canvas.show_skew': true,
+    'objects.axis.linear.stroke_color': 'gray'
   })
 });
+
+// Fresh canonical requests use only these typed GbdrawConfig leaf paths.
+// The snake_case aliases derived below exist solely in the persisted-session
+// reader; they are never emitted by buildConfigOverrides().
+const CONFIG_OVERRIDE_PATHS = Object.freeze({
+  blockStrokeColor: 'objects.features.block_stroke_color',
+  circularAxisStrokeColor: 'objects.axis.circular.stroke_color',
+  linearAxisStrokeColor: 'objects.axis.linear.stroke_color',
+  lineStrokeColor: 'objects.features.line_stroke_color',
+  circularDefinitionFontSize: 'objects.definition.circular.font_size',
+  plotTitleFontSize: 'objects.definition.circular.plot_title_font_size',
+  showGc: 'canvas.show_gc',
+  showSkew: 'canvas.show_skew',
+  showDepth: 'canvas.show_depth',
+  strandedness: 'canvas.strandedness',
+  resolveOverlaps: 'canvas.resolve_overlaps',
+  trackType: 'canvas.circular.track_type',
+  alignCenter: 'canvas.linear.align_center',
+  keepDefinitionLeftAligned: 'canvas.linear.keep_definition_left_aligned',
+  linearTrackLayout: 'canvas.linear.track_layout',
+  linearTrackAxisGap: 'canvas.linear.track_axis_gap',
+  linearRulerOnAxis: 'canvas.linear.ruler_on_axis',
+  comparisonHeight: 'canvas.linear.comparison_height',
+  gcHeight: 'canvas.linear.default_gc_height',
+  depthHeight: 'canvas.linear.depth_height',
+  normalizeLength: 'canvas.linear.normalize_length',
+  labelRendering: 'labels.rendering',
+  circularLabelSpacing: 'labels.spacing.circular',
+  circularLabelPlacement: 'labels.circular.placement',
+  linearLabelSpacing: 'labels.spacing.linear',
+  labelPlacement: 'labels.linear.placement',
+  labelRotation: 'labels.linear.rotation',
+  labelBlacklist: 'labels.filtering.blacklist_keywords',
+  linearDefinitionShowReplicon: 'objects.definition.linear.show_replicon',
+  linearDefinitionShowAccession: 'objects.definition.linear.show_accession',
+  linearDefinitionShowLength: 'objects.definition.linear.show_length',
+  gcContentMode: 'objects.gc_content.mode',
+  gcContentMinPercent: 'objects.gc_content.min_percent',
+  gcContentMaxPercent: 'objects.gc_content.max_percent',
+  gcContentShowAxis: 'objects.gc_content.show_axis',
+  gcContentShowTicks: 'objects.gc_content.show_ticks',
+  gcContentLargeTickInterval: 'objects.gc_content.large_tick_interval',
+  gcContentSmallTickInterval: 'objects.gc_content.small_tick_interval',
+  gcContentTickFontSize: 'objects.gc_content.tick_font_size',
+  depthColor: 'objects.depth.fill_color',
+  depthMin: 'objects.depth.min_depth',
+  depthMax: 'objects.depth.max_depth',
+  depthNormalize: 'objects.depth.normalize',
+  depthShowAxis: 'objects.depth.show_axis',
+  depthShowTicks: 'objects.depth.show_ticks',
+  depthLargeTickInterval: 'objects.depth.large_tick_interval',
+  depthSmallTickInterval: 'objects.depth.small_tick_interval',
+  depthTickFontSize: 'objects.depth.tick_font_size',
+  depthShareAxis: 'objects.depth.share_axis',
+  scaleStyle: 'objects.scale.style',
+  scaleStrokeColor: 'objects.scale.stroke_color',
+  scaleLabelColor: 'objects.scale.label_color',
+  scaleStrokeWidth: 'objects.scale.stroke_width',
+  scaleInterval: 'objects.scale.interval',
+  tickLabelFontSize: 'objects.ticks.tick_labels.font_size',
+  outerLabelXRadiusOffset: 'labels.unified_adjustment.outer_labels.x_radius_offset',
+  outerLabelYRadiusOffset: 'labels.unified_adjustment.outer_labels.y_radius_offset',
+  innerLabelXRadiusOffset: 'labels.unified_adjustment.inner_labels.x_radius_offset',
+  innerLabelYRadiusOffset: 'labels.unified_adjustment.inner_labels.y_radius_offset',
+  pairwiseMatchStyle: 'objects.blast_match.style'
+});
+
+const SHARED_LENGTH_CONFIG_OVERRIDE_PATHS = Object.freeze({
+  blockStrokeWidth: 'objects.features.block_stroke_width',
+  circularAxisStrokeWidth: 'objects.axis.circular.stroke_width',
+  linearAxisStrokeWidth: 'objects.axis.linear.stroke_width',
+  lineStrokeWidth: 'objects.features.line_stroke_width',
+  linearDefinitionFontSize: 'objects.definition.linear.font_size',
+  defaultCdsHeight: 'canvas.linear.default_cds_height',
+  legendBoxSize: 'objects.legends.color_rect_size',
+  legendFontSize: 'objects.legends.font_size',
+  scaleFontSize: 'objects.scale.font_size',
+  rulerLabelFontSize: 'objects.scale.ruler_label_font_size'
+});
+
+const MODE_LABEL_SCOPE_PATHS = Object.freeze({
+  circular: 'labels.circular.scope',
+  linear: 'labels.linear.scope'
+});
+
+const LINEAR_DEFINITION_STYLE_PATHS = Object.freeze(
+  Object.fromEntries(
+    ['name', 'subtitle', 'replicon', 'accession', 'length'].map((kind) => [
+      kind,
+      `objects.definition.linear.line_styles.${kind}`
+    ])
+  )
+);
+const LINEAR_DEFINITION_STYLE_FIELDS = Object.freeze(['font_size', 'font_weight', 'fill']);
+
+const legacyFlatConfigKey = (semanticName) => (
+  semanticName
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+);
 
 const safePrefix = (value, fallback = 'out') => {
   const normalized = String(value || '').trim().replace(/[\\/]+/g, '_');
@@ -349,82 +450,157 @@ const buildConfigOverrides = (state) => {
         rulerOnAxis: Boolean(form.linear_ruler_on_axis),
         managed: linearAxisManaged
       });
-  return {
-    block_stroke_width: optionalNumber(adv.block_stroke_width),
-    block_stroke_color: adv.block_stroke_color || null,
-    circular_axis_stroke_color: circular ? (adv.axis_stroke_color || null) : null,
-    circular_axis_stroke_width: circular ? optionalNumber(adv.axis_stroke_width) : null,
-    linear_axis_stroke_color: linearAxisStrokeColor,
-    linear_axis_stroke_width: circular ? null : optionalNumber(adv.axis_stroke_width),
-    line_stroke_color: adv.line_stroke_color || null,
-    line_stroke_width: optionalNumber(adv.line_stroke_width),
-    circular_definition_font_size: circular ? optionalNumber(adv.def_font_size) : null,
-    linear_definition_font_size: circular ? null : optionalNumber(adv.def_font_size),
-    linear_definition_line_styles: circular ? null : adv.linear_definition_line_styles,
-    linear_definition_show_replicon: circular ? null : Boolean(adv.linear_show_replicon),
-    linear_definition_show_accession: circular ? null : Boolean(adv.linear_show_accession),
-    linear_definition_show_length: circular ? null : Boolean(adv.linear_show_length),
-    plot_title_font_size: optionalNumber(adv.plot_title_font_size),
-    label_font_size: optionalNumber(adv.label_font_size),
-    circular_label_spacing: circular ? optionalNumber(adv.circular_label_spacing) : null,
-    linear_label_spacing: circular ? null : optionalNumber(adv.linear_label_spacing),
-    label_rendering: adv.label_rendering || 'auto',
-    circular_label_placement: circular ? (adv.circular_label_placement || 'horizontal') : null,
-    label_placement: linearLabelPlacement,
-    label_rotation: circular ? null : optionalNumber(adv.label_rotation),
-    show_gc: circular ? !form.suppress_gc : Boolean(form.show_gc),
-    show_skew: circular ? !form.suppress_skew : Boolean(form.show_skew),
-    show_depth: Boolean(form.show_depth),
-    gc_content_mode: adv.gc_content_mode || 'deviation',
-    gc_content_min_percent: optionalNumber(adv.gc_content_min_percent),
-    gc_content_max_percent: optionalNumber(adv.gc_content_max_percent),
-    gc_content_show_axis: Boolean(adv.gc_content_show_axis),
-    gc_content_show_ticks: Boolean(adv.gc_content_show_ticks),
-    gc_content_large_tick_interval: optionalNumber(adv.gc_content_tick_interval),
-    gc_content_small_tick_interval: optionalNumber(adv.gc_content_small_tick_interval),
-    gc_content_tick_font_size: optionalNumber(adv.gc_content_tick_font_size),
-    depth_color: adv.depth_color || null,
-    depth_height: optionalNumber(adv.depth_height),
-    depth_min: optionalNumber(adv.depth_min),
-    depth_max: optionalNumber(adv.depth_max),
-    depth_normalize: Boolean(adv.depth_normalize),
-    depth_show_axis: Boolean(adv.depth_show_axis),
-    depth_show_ticks: Boolean(adv.depth_show_ticks),
-    depth_large_tick_interval: optionalNumber(adv.depth_large_tick_interval),
-    depth_small_tick_interval: optionalNumber(adv.depth_small_tick_interval),
-    depth_tick_font_size: optionalNumber(adv.depth_tick_font_size),
-    depth_share_axis: Boolean(adv.depth_share_axis),
-    show_labels: circular ? form.labels_mode !== 'none' : form.show_labels_linear,
-    align_center: circular ? null : Boolean(form.align_center),
-    keep_definition_left_aligned: circular ? null : Boolean(form.keep_definition_left_aligned),
-    linear_track_layout: linearTrackLayout,
-    linear_track_axis_gap: circular ? null : optionalNumber(adv.track_axis_gap),
-    linear_ruler_on_axis: circular ? null : Boolean(form.linear_ruler_on_axis),
-    track_type: circular ? form.track_type : null,
-    strandedness: Boolean(form.separate_strands),
-    resolve_overlaps: Boolean(adv.resolve_overlaps),
-    allow_inner_labels: circular ? form.labels_mode === 'both' : null,
-    label_blacklist: state.filterMode.value === 'Blacklist' ? state.manualBlacklist.value : null,
-    comparison_height: circular || comparisonHeight.status === 'auto' ? null : comparisonHeight.value,
-    default_cds_height: circular ? null : optionalNumber(adv.feature_height),
-    gc_height: circular ? null : optionalNumber(adv.gc_height),
-    scale_style: circular ? null : form.scale_style,
-    scale_stroke_color: circular ? null : (adv.scale_stroke_color || null),
-    scale_label_color: circular ? null : (adv.ruler_label_color || null),
-    scale_stroke_width: circular ? null : optionalNumber(adv.scale_stroke_width),
-    scale_font_size: circular ? null : optionalNumber(adv.scale_font_size),
-    ruler_label_font_size: circular ? null : optionalNumber(adv.scale_font_size),
-    scale_interval: optionalNumber(adv.scale_interval),
-    tick_label_font_size: circular ? optionalNumber(adv.tick_label_font_size) : null,
-    outer_label_x_radius_offset: circular ? optionalNumber(adv.outer_label_x_offset) : null,
-    outer_label_y_radius_offset: circular ? optionalNumber(adv.outer_label_y_offset) : null,
-    inner_label_x_radius_offset: circular ? optionalNumber(adv.inner_label_x_offset) : null,
-    inner_label_y_radius_offset: circular ? optionalNumber(adv.inner_label_y_offset) : null,
-    pairwise_match_style: circular ? null : adv.pairwise_match_style,
-    legend_box_size: optionalNumber(adv.legend_box_size),
-    legend_font_size: optionalNumber(adv.legend_font_size),
-    normalize_length: circular ? null : Boolean(form.normalize_length)
+  const overrides = {
+    [CONFIG_OVERRIDE_PATHS.blockStrokeColor]: adv.block_stroke_color || null,
+    [CONFIG_OVERRIDE_PATHS.lineStrokeColor]: adv.line_stroke_color || null,
+    [CONFIG_OVERRIDE_PATHS.labelRendering]: adv.label_rendering || 'auto',
+    [CONFIG_OVERRIDE_PATHS.showGc]: circular ? !form.suppress_gc : Boolean(form.show_gc),
+    [CONFIG_OVERRIDE_PATHS.showSkew]: circular
+      ? !form.suppress_skew
+      : Boolean(form.show_skew),
+    [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(form.show_depth),
+    [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: circular
+      ? ({ none: 'none', out: 'outer', both: 'both' }[form.labels_mode] || 'none')
+      : form.show_labels_linear,
+    [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
+    [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
+    [CONFIG_OVERRIDE_PATHS.gcContentMode]: adv.gc_content_mode || 'deviation',
+    [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: optionalNumber(adv.gc_content_min_percent),
+    [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: optionalNumber(adv.gc_content_max_percent),
+    [CONFIG_OVERRIDE_PATHS.gcContentShowAxis]: Boolean(adv.gc_content_show_axis),
+    [CONFIG_OVERRIDE_PATHS.gcContentShowTicks]: Boolean(adv.gc_content_show_ticks),
+    [CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval]:
+      optionalNumber(adv.gc_content_tick_interval),
+    [CONFIG_OVERRIDE_PATHS.gcContentSmallTickInterval]:
+      optionalNumber(adv.gc_content_small_tick_interval),
+    [CONFIG_OVERRIDE_PATHS.gcContentTickFontSize]:
+      optionalNumber(adv.gc_content_tick_font_size),
+    [CONFIG_OVERRIDE_PATHS.depthColor]: adv.depth_color || null,
+    [CONFIG_OVERRIDE_PATHS.depthMin]: optionalNumber(adv.depth_min),
+    [CONFIG_OVERRIDE_PATHS.depthMax]: optionalNumber(adv.depth_max),
+    [CONFIG_OVERRIDE_PATHS.depthNormalize]: Boolean(adv.depth_normalize),
+    [CONFIG_OVERRIDE_PATHS.depthShowAxis]: Boolean(adv.depth_show_axis),
+    [CONFIG_OVERRIDE_PATHS.depthShowTicks]: Boolean(adv.depth_show_ticks),
+    [CONFIG_OVERRIDE_PATHS.depthLargeTickInterval]:
+      optionalNumber(adv.depth_large_tick_interval),
+    [CONFIG_OVERRIDE_PATHS.depthSmallTickInterval]:
+      optionalNumber(adv.depth_small_tick_interval),
+    [CONFIG_OVERRIDE_PATHS.depthTickFontSize]: optionalNumber(adv.depth_tick_font_size),
+    [CONFIG_OVERRIDE_PATHS.depthShareAxis]: Boolean(adv.depth_share_axis),
+    [CONFIG_OVERRIDE_PATHS.scaleInterval]: optionalNumber(adv.scale_interval),
+    ...(state.filterMode.value === 'Blacklist'
+      ? {
+          [CONFIG_OVERRIDE_PATHS.labelBlacklist]:
+            String(state.manualBlacklist.value || '')
+              .split(/[,\n]/)
+              .map((keyword) => keyword.trim())
+              .filter(Boolean)
+        }
+      : {}),
+    ...(circular
+      ? {
+          [CONFIG_OVERRIDE_PATHS.circularAxisStrokeColor]:
+            adv.axis_stroke_color || null,
+          [CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize]:
+            optionalNumber(adv.def_font_size),
+          [CONFIG_OVERRIDE_PATHS.plotTitleFontSize]:
+            optionalNumber(adv.plot_title_font_size),
+          [CONFIG_OVERRIDE_PATHS.circularLabelSpacing]:
+            optionalNumber(adv.circular_label_spacing),
+          [CONFIG_OVERRIDE_PATHS.circularLabelPlacement]:
+            adv.circular_label_placement || 'horizontal',
+          [CONFIG_OVERRIDE_PATHS.trackType]: form.track_type,
+          [CONFIG_OVERRIDE_PATHS.tickLabelFontSize]:
+            optionalNumber(adv.tick_label_font_size),
+          [CONFIG_OVERRIDE_PATHS.outerLabelXRadiusOffset]:
+            optionalNumber(adv.outer_label_x_offset),
+          [CONFIG_OVERRIDE_PATHS.outerLabelYRadiusOffset]:
+            optionalNumber(adv.outer_label_y_offset),
+          [CONFIG_OVERRIDE_PATHS.innerLabelXRadiusOffset]:
+            optionalNumber(adv.inner_label_x_offset),
+          [CONFIG_OVERRIDE_PATHS.innerLabelYRadiusOffset]:
+            optionalNumber(adv.inner_label_y_offset)
+        }
+      : {
+          [CONFIG_OVERRIDE_PATHS.linearAxisStrokeColor]: linearAxisStrokeColor,
+          [CONFIG_OVERRIDE_PATHS.linearDefinitionShowReplicon]:
+            Boolean(adv.linear_show_replicon),
+          [CONFIG_OVERRIDE_PATHS.linearDefinitionShowAccession]:
+            Boolean(adv.linear_show_accession),
+          [CONFIG_OVERRIDE_PATHS.linearDefinitionShowLength]:
+            Boolean(adv.linear_show_length),
+          [CONFIG_OVERRIDE_PATHS.linearLabelSpacing]:
+            optionalNumber(adv.linear_label_spacing),
+          [CONFIG_OVERRIDE_PATHS.labelPlacement]: linearLabelPlacement,
+          [CONFIG_OVERRIDE_PATHS.labelRotation]: optionalNumber(adv.label_rotation),
+          [CONFIG_OVERRIDE_PATHS.alignCenter]: Boolean(form.align_center),
+          [CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned]:
+            Boolean(form.keep_definition_left_aligned),
+          [CONFIG_OVERRIDE_PATHS.linearTrackLayout]: linearTrackLayout,
+          [CONFIG_OVERRIDE_PATHS.linearTrackAxisGap]: optionalNumber(adv.track_axis_gap),
+          [CONFIG_OVERRIDE_PATHS.linearRulerOnAxis]: Boolean(form.linear_ruler_on_axis),
+          [CONFIG_OVERRIDE_PATHS.comparisonHeight]:
+            comparisonHeight.status === 'auto' ? null : comparisonHeight.value,
+          [CONFIG_OVERRIDE_PATHS.gcHeight]: optionalNumber(adv.gc_height),
+          [CONFIG_OVERRIDE_PATHS.depthHeight]: optionalNumber(adv.depth_height),
+          [CONFIG_OVERRIDE_PATHS.scaleStyle]: form.scale_style,
+          [CONFIG_OVERRIDE_PATHS.scaleStrokeColor]: adv.scale_stroke_color || null,
+          [CONFIG_OVERRIDE_PATHS.scaleLabelColor]: adv.ruler_label_color || null,
+          [CONFIG_OVERRIDE_PATHS.scaleStrokeWidth]:
+            optionalNumber(adv.scale_stroke_width),
+          [CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle]: adv.pairwise_match_style,
+          [CONFIG_OVERRIDE_PATHS.normalizeLength]: Boolean(form.normalize_length)
+        })
   };
+  const sharedLengthValues = {
+    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth]:
+      optionalNumber(adv.block_stroke_width),
+    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth]:
+      optionalNumber(adv.line_stroke_width),
+    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize]:
+      optionalNumber(adv.legend_box_size),
+    [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize]:
+      optionalNumber(adv.legend_font_size),
+    ...(circular
+      ? {
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.circularAxisStrokeWidth]:
+            optionalNumber(adv.axis_stroke_width),
+          'labels.font_size': optionalNumber(adv.label_font_size)
+        }
+      : {
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearAxisStrokeWidth]:
+            optionalNumber(adv.axis_stroke_width),
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize]:
+            optionalNumber(adv.def_font_size),
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.defaultCdsHeight]:
+            optionalNumber(adv.feature_height),
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize]:
+            optionalNumber(adv.scale_font_size),
+          [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize]:
+            optionalNumber(adv.scale_font_size),
+          'labels.font_size.linear': optionalNumber(adv.label_font_size)
+        })
+  };
+  for (const [path, value] of Object.entries(sharedLengthValues)) {
+    if (value === null || value === undefined) continue;
+    overrides[`${path}.short`] = value;
+    overrides[`${path}.long`] = value;
+  }
+  if (!circular) {
+    for (const [kind, prefix] of Object.entries(LINEAR_DEFINITION_STYLE_PATHS)) {
+      const style = adv.linear_definition_line_styles?.[kind];
+      if (!style || typeof style !== 'object' || Array.isArray(style)) continue;
+      for (const field of LINEAR_DEFINITION_STYLE_FIELDS) {
+        const value = style[field];
+        if (value !== null && value !== undefined) {
+          overrides[`${prefix}.${field}`] = value;
+        }
+      }
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(overrides).filter(([, value]) => value !== null && value !== undefined)
+  );
 };
 
 const addGeneratedTableResources = (state, resources, diagramOptions) => {
@@ -973,13 +1149,11 @@ const nestedConfigValue = (config, path) => {
   return current;
 };
 
-const sharedLengthConfigValue = (config, path) => {
-  const value = nestedConfigValue(config, path);
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+const sharedLengthOverrideValue = (overrides, path) => {
   // The Web UI has one control for values that Python stores per genome length.
   // Project them only when both variants encode the same explicit setting.
-  const shortValue = value.short;
-  const longValue = value.long;
+  const shortValue = overrides[`${path}.short`];
+  const longValue = overrides[`${path}.long`];
   if (shortValue === undefined || longValue === undefined) return undefined;
   if (Object.is(shortValue, longValue)) return longValue;
   const shortNumber = shortValue === null || String(shortValue).trim() === ''
@@ -991,95 +1165,138 @@ const sharedLengthConfigValue = (config, path) => {
   return Number.isFinite(shortNumber) && shortNumber === longNumber ? longValue : undefined;
 };
 
+const legacyLabelScope = ({ mode, showLabels, allowInnerLabels }) => {
+  let scope;
+  if (showLabels !== undefined) {
+    if (typeof showLabels === 'boolean') {
+      scope = showLabels ? (mode === 'circular' ? 'outer' : 'all') : 'none';
+    } else {
+      const normalized = String(showLabels).trim().toLowerCase();
+      const aliases = {
+        true: 'all', yes: 'all', on: 'all',
+        false: 'none', no: 'none', off: 'none'
+      };
+      const policy = aliases[normalized] || normalized;
+      if (!['all', 'first', 'orthogroup_top', 'none'].includes(policy)) {
+        throw new Error(`Unsupported persisted label policy: ${showLabels}`);
+      }
+      if (mode === 'circular' && ['first', 'orthogroup_top'].includes(policy)) {
+        throw new Error(`Circular labels cannot use Linear-only policy '${policy}'.`);
+      }
+      scope = mode === 'circular' ? (policy === 'all' ? 'outer' : 'none') : policy;
+    }
+  }
+  if (mode === 'circular' && allowInnerLabels === true) {
+    if (scope === undefined || scope === 'outer') scope = 'both';
+  }
+  return scope;
+};
+
 const projectFullConfigOverrides = (config, mode) => {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
-  const paths = {
-    block_stroke_color: 'objects.features.block_stroke_color',
-    circular_axis_stroke_color: 'objects.axis.circular.stroke_color',
-    linear_axis_stroke_color: 'objects.axis.linear.stroke_color',
-    line_stroke_color: 'objects.features.line_stroke_color',
-    circular_definition_font_size: 'objects.definition.circular.font_size',
-    plot_title_font_size: 'objects.definition.circular.plot_title_font_size',
-    show_gc: 'canvas.show_gc',
-    show_skew: 'canvas.show_skew',
-    show_depth: 'canvas.show_depth',
-    show_labels: 'canvas.show_labels',
-    strandedness: 'canvas.strandedness',
-    resolve_overlaps: 'canvas.resolve_overlaps',
-    track_type: 'canvas.circular.track_type',
-    allow_inner_labels: 'canvas.circular.allow_inner_labels',
-    align_center: 'canvas.linear.align_center',
-    keep_definition_left_aligned: 'canvas.linear.keep_definition_left_aligned',
-    linear_track_layout: 'canvas.linear.track_layout',
-    linear_track_axis_gap: 'canvas.linear.track_axis_gap',
-    linear_ruler_on_axis: 'canvas.linear.ruler_on_axis',
-    comparison_height: 'canvas.linear.comparison_height',
-    gc_height: 'canvas.linear.default_gc_height',
-    depth_height: 'canvas.linear.depth_height',
-    normalize_length: 'canvas.linear.normalize_length',
-    label_rendering: 'labels.rendering',
-    circular_label_spacing: 'labels.spacing.circular',
-    circular_label_placement: 'labels.circular.placement',
-    linear_label_spacing: 'labels.spacing.linear',
-    label_placement: 'labels.linear.placement',
-    label_rotation: 'labels.linear.rotation',
-    label_blacklist: 'labels.filtering.blacklist_keywords',
-    linear_definition_line_styles: 'objects.definition.linear.line_styles',
-    linear_definition_show_replicon: 'objects.definition.linear.show_replicon',
-    linear_definition_show_accession: 'objects.definition.linear.show_accession',
-    linear_definition_show_length: 'objects.definition.linear.show_length',
-    gc_content_mode: 'objects.gc_content.mode',
-    gc_content_min_percent: 'objects.gc_content.min_percent',
-    gc_content_max_percent: 'objects.gc_content.max_percent',
-    gc_content_show_axis: 'objects.gc_content.show_axis',
-    gc_content_show_ticks: 'objects.gc_content.show_ticks',
-    gc_content_large_tick_interval: 'objects.gc_content.large_tick_interval',
-    gc_content_small_tick_interval: 'objects.gc_content.small_tick_interval',
-    gc_content_tick_font_size: 'objects.gc_content.tick_font_size',
-    depth_color: 'objects.depth.fill_color',
-    depth_min: 'objects.depth.min_depth',
-    depth_max: 'objects.depth.max_depth',
-    depth_normalize: 'objects.depth.normalize',
-    depth_show_axis: 'objects.depth.show_axis',
-    depth_show_ticks: 'objects.depth.show_ticks',
-    depth_large_tick_interval: 'objects.depth.large_tick_interval',
-    depth_small_tick_interval: 'objects.depth.small_tick_interval',
-    depth_tick_font_size: 'objects.depth.tick_font_size',
-    depth_share_axis: 'objects.depth.share_axis',
-    scale_style: 'objects.scale.style',
-    scale_stroke_color: 'objects.scale.stroke_color',
-    scale_label_color: 'objects.scale.label_color',
-    scale_stroke_width: 'objects.scale.stroke_width',
-    scale_interval: 'objects.scale.interval',
-    tick_label_font_size: 'objects.ticks.tick_labels.font_size',
-    outer_label_x_radius_offset: 'labels.unified_adjustment.outer_labels.x_radius_offset',
-    outer_label_y_radius_offset: 'labels.unified_adjustment.outer_labels.y_radius_offset',
-    inner_label_x_radius_offset: 'labels.unified_adjustment.inner_labels.x_radius_offset',
-    inner_label_y_radius_offset: 'labels.unified_adjustment.inner_labels.y_radius_offset',
-    pairwise_match_style: 'objects.blast_match.style'
-  };
-  const projected = Object.fromEntries(
-    Object.entries(paths)
-      .map(([name, path]) => [name, nestedConfigValue(config, path)])
-      .filter(([, value]) => value !== undefined)
-  );
-  const sharedLengthPaths = {
-    block_stroke_width: 'objects.features.block_stroke_width',
-    circular_axis_stroke_width: 'objects.axis.circular.stroke_width',
-    linear_axis_stroke_width: 'objects.axis.linear.stroke_width',
-    line_stroke_width: 'objects.features.line_stroke_width',
-    linear_definition_font_size: 'objects.definition.linear.font_size',
-    default_cds_height: 'canvas.linear.default_cds_height',
-    legend_box_size: 'objects.legends.color_rect_size',
-    legend_font_size: 'objects.legends.font_size',
-    scale_font_size: 'objects.scale.font_size',
-    ruler_label_font_size: 'objects.scale.ruler_label_font_size',
-    label_font_size: mode === 'linear' ? 'labels.font_size.linear' : 'labels.font_size'
-  };
-  Object.entries(sharedLengthPaths).forEach(([name, path]) => {
-    const value = sharedLengthConfigValue(config, path);
-    if (value !== undefined) projected[name] = value;
+  const paths = new Set(Object.values(CONFIG_OVERRIDE_PATHS));
+  const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
+  paths.add(labelScopePath);
+  Object.values(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS).forEach((path) => {
+    paths.add(`${path}.short`);
+    paths.add(`${path}.long`);
   });
+  const labelFontPath = mode === 'linear' ? 'labels.font_size.linear' : 'labels.font_size';
+  paths.add(`${labelFontPath}.short`);
+  paths.add(`${labelFontPath}.long`);
+  Object.values(LINEAR_DEFINITION_STYLE_PATHS).forEach((prefix) => {
+    LINEAR_DEFINITION_STYLE_FIELDS.forEach((field) => paths.add(`${prefix}.${field}`));
+  });
+  const projected = {};
+  paths.forEach((path) => {
+    const value = nestedConfigValue(config, path);
+    if (value !== undefined) projected[path] = value;
+  });
+  if (!Object.prototype.hasOwnProperty.call(projected, labelScopePath)) {
+    const modeShowLabels = nestedConfigValue(config, `canvas.${mode}.show_labels`);
+    const sharedShowLabels = nestedConfigValue(config, 'canvas.show_labels');
+    const scope = legacyLabelScope({
+      mode,
+      showLabels: modeShowLabels === undefined ? sharedShowLabels : modeShowLabels,
+      allowInnerLabels: mode === 'circular'
+        ? nestedConfigValue(config, 'canvas.circular.allow_inner_labels')
+        : undefined
+    });
+    if (scope !== undefined) projected[labelScopePath] = scope;
+  }
+  return projected;
+};
+
+const projectCanonicalConfigOverrides = (overrides, mode) => {
+  const projected = {};
+  for (const [semanticName, path] of Object.entries(CONFIG_OVERRIDE_PATHS)) {
+    if (Object.prototype.hasOwnProperty.call(overrides, path)) {
+      projected[legacyFlatConfigKey(semanticName)] = overrides[path];
+    }
+  }
+  const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
+  if (Object.prototype.hasOwnProperty.call(overrides, labelScopePath)) {
+    projected.label_scope = overrides[labelScopePath];
+  }
+  for (const [semanticName, path] of Object.entries(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS)) {
+    const value = sharedLengthOverrideValue(overrides, path);
+    if (value !== undefined) projected[legacyFlatConfigKey(semanticName)] = value;
+  }
+  const labelFontPath = mode === 'linear' ? 'labels.font_size.linear' : 'labels.font_size';
+  const labelFontSize = sharedLengthOverrideValue(overrides, labelFontPath);
+  if (labelFontSize !== undefined) projected.label_font_size = labelFontSize;
+
+  const lineStyles = {};
+  for (const [kind, prefix] of Object.entries(LINEAR_DEFINITION_STYLE_PATHS)) {
+    const style = {};
+    for (const field of LINEAR_DEFINITION_STYLE_FIELDS) {
+      const path = `${prefix}.${field}`;
+      if (Object.prototype.hasOwnProperty.call(overrides, path)) {
+        style[field] = overrides[path];
+      }
+    }
+    if (Object.keys(style).length > 0) lineStyles[kind] = style;
+  }
+  if (Object.keys(lineStyles).length > 0) {
+    projected.linear_definition_line_styles = lineStyles;
+  }
+  return projected;
+};
+
+const projectLegacyFlatConfigOverrides = (overrides) => Object.fromEntries(
+  Object.entries(overrides).filter(([key]) => (
+    !key.includes('.') && !['show_labels', 'allow_inner_labels'].includes(key)
+  ))
+);
+
+const projectExplicitConfigOverrides = (overrides, mode) => {
+  const legacyLabelPaths = new Set([
+    'canvas.show_labels',
+    'canvas.circular.show_labels',
+    'canvas.linear.show_labels',
+    'canvas.circular.allow_inner_labels'
+  ]);
+  const projected = Object.fromEntries(
+    Object.entries(overrides).filter(([key]) => (
+      key.includes('.') && !legacyLabelPaths.has(key)
+    ))
+  );
+  const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
+  if (!Object.prototype.hasOwnProperty.call(projected, labelScopePath)) {
+    const modeShowLabels = overrides[`canvas.${mode}.show_labels`];
+    const sharedShowLabels = overrides['canvas.show_labels'];
+    const scope = legacyLabelScope({
+      mode,
+      showLabels: modeShowLabels ?? sharedShowLabels ?? overrides.show_labels,
+      allowInnerLabels: mode === 'circular'
+        ? (
+            overrides['canvas.circular.allow_inner_labels']
+            ?? overrides.allow_inner_labels
+          )
+        : undefined
+    });
+    if (scope !== undefined) projected[labelScopePath] = scope;
+  }
   return projected;
 };
 
@@ -1516,20 +1733,27 @@ export const projectCanonicalSessionRequest = ({
   const sparseConfigDefaults = legacySparseDefaults
     ? HISTORICAL_CONFIG_OVERRIDES[renderRequest.mode]
     : {
-        show_gc: currentTrackDefaults.gc,
-        show_skew: currentTrackDefaults.skew,
+        [CONFIG_OVERRIDE_PATHS.showGc]: currentTrackDefaults.gc,
+        [CONFIG_OVERRIDE_PATHS.showSkew]: currentTrackDefaults.skew,
         ...(renderRequest.mode === 'linear'
-          ? { linear_axis_stroke_color: modeProfile('linear').linearAxisColor }
+          ? {
+              [CONFIG_OVERRIDE_PATHS.linearAxisStrokeColor]:
+                modeProfile('linear').linearAxisColor
+            }
           : {})
       };
-  const overrides = {
+  const canonicalOverrides = {
     ...(
       options.config === null || options.config === undefined
         ? sparseConfigDefaults
         : {}
     ),
     ...projectFullConfigOverrides(options.config, renderRequest.mode),
-    ...explicitOverrides
+    ...projectExplicitConfigOverrides(explicitOverrides, renderRequest.mode)
+  };
+  const overrides = {
+    ...projectCanonicalConfigOverrides(canonicalOverrides, renderRequest.mode),
+    ...projectLegacyFlatConfigOverrides(explicitOverrides)
   };
   const projectedLinearLabelPlacement = renderRequest.mode === 'linear'
     ? (
@@ -1643,8 +1867,12 @@ export const projectCanonicalSessionRequest = ({
     show_skew: renderRequest.mode === 'linear' ? Boolean(overrides.show_skew) : false,
     show_depth: Boolean(overrides.show_depth),
     separate_strands: Boolean(overrides.strandedness),
-    labels_mode: renderRequest.mode === 'circular' ? (overrides.allow_inner_labels ? 'both' : (overrides.show_labels ? 'out' : 'none')) : 'none',
-    show_labels_linear: renderRequest.mode === 'linear' ? (overrides.show_labels || 'none') : 'none',
+    labels_mode: renderRequest.mode === 'circular'
+      ? ({ outer: 'out', both: 'both' }[overrides.label_scope] || 'none')
+      : 'none',
+    show_labels_linear: renderRequest.mode === 'linear'
+      ? (overrides.label_scope || 'none')
+      : 'none',
     track_type: overrides.track_type || 'tuckin',
     linear_track_layout: projectedLinearTrackLayout,
     scale_style: overrides.scale_style || 'bar',

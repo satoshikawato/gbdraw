@@ -5,9 +5,6 @@ from ....svg.text_path import generate_text_path
 
 
 class LabelDrawer:
-    def __init__(self, config_dict: dict) -> None:
-        self.config_dict = config_dict
-
     def add_label(self, label_entry, group):
         feature_label_text = label_entry["label_text"]
         middle_x = label_entry["middle_x"]

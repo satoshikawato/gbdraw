@@ -5,36 +5,13 @@ from typing import Mapping, Sequence
 
 from ...canvas import LinearCanvasConfigurator
 from ...config.models import GbdrawConfig
-from ...layout.linear import VerticalBand, union_vertical_bands
+from ...layout.linear import (
+    LinearResolvedTrack,
+    LinearTrackLayout,
+    VerticalBand,
+    union_vertical_bands,
+)
 from ...tracks import NormalizedLinearTrackSlot
-
-
-@dataclass(frozen=True)
-class LinearResolvedTrack:
-    slot_index: int
-    id: str
-    renderer: str
-    side: str
-    y_offset: float
-    height: float
-    spacing_after_px: float
-    top_extent: float
-    bottom_extent: float
-    z: int
-    params: Mapping[str, object]
-
-
-@dataclass(frozen=True)
-class LinearTrackLayout:
-    slots: tuple[LinearResolvedTrack, ...]
-    top_extent: float
-    bottom_extent: float
-    plot_tracks_height: float
-    plot_tracks_visual_bottom: float
-    depth_track_offsets: tuple[float, ...]
-    depth_track_heights: tuple[float, ...]
-    gc_content_track_offset: float
-    gc_skew_track_offset: float
 
 
 @dataclass(frozen=True)

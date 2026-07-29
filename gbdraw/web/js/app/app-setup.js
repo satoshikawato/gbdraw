@@ -142,8 +142,6 @@ export const createAppSetup = () => {
     canvasPan,
     canvasContainerRef,
     mode,
-    circularLegendPosition,
-    linearLegendPosition,
     cInputType,
     lInputType,
     blastSource,

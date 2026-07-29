@@ -16,7 +16,7 @@ from svgwrite import Drawing
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
@@ -493,11 +493,12 @@ def test_prepare_label_list_hmmtdna_d_loop_hash_override_survives_feature_object
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels=True,
-        strandedness=True,
-        track_type="tuckin",
-        resolve_overlaps=False,
-        allow_inner_labels=False,
+        {
+            "labels.circular.scope": "outer",
+            "canvas.strandedness": True,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.resolve_overlaps": False,
+        },
     )
     override_df = _rules_df(
         [[record.id, "D-loop", "hash", f"^{re.escape(d_loop_hash)}$", "D-loop"]]
@@ -531,8 +532,7 @@ def test_prepare_label_list_hmmtdna_d_loop_hash_override_survives_feature_object
         len(record.seq),
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        config_dict,
-        cfg=cfg,
+        CircularRenderProfile(cfg),
     )
 
     d_loop_label = next((label for label in labels if label.get("label_text") == "D-loop"), None)
@@ -626,10 +626,14 @@ def test_circular_cli_label_table_injects_override_df(
     )
     monkeypatch.setattr(circular_cli_module, "read_label_override_file", lambda _path: override_df)
 
-    def fake_modify(config_dict: dict, **kwargs: Any) -> dict:
-        captured["label_table_arg"] = kwargs.get("label_table")
+    def fake_modify(
+        config_dict: dict,
+        overrides: dict[str, object] | None = None,
+    ) -> dict:
+        resolved = dict(overrides or {})
+        captured["filtering_override"] = resolved.get("labels.filtering.raw")
         captured["label_override_df"] = config_dict["labels"]["filtering"].get("label_override_df")
-        return real_modify_config_dict(config_dict, **kwargs)
+        return real_modify_config_dict(config_dict, resolved)
 
     def fake_assemble(*_args: Any, **_kwargs: Any) -> Drawing:
         return Drawing(filename=str(tmp_path / "dummy.svg"))
@@ -650,7 +654,7 @@ def test_circular_cli_label_table_injects_override_df(
         ]
     )
 
-    assert captured["label_table_arg"] == "table.tsv"
+    assert captured["filtering_override"]["label_override_df"] is override_df
     assert captured["label_override_df"] is override_df
 
 

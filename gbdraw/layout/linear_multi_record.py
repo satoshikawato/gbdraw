@@ -10,6 +10,10 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import AxisGapResolution, CollisionBand, resolve_axis_gap
+from gbdraw.layout.record_placement import (
+    parse_record_row_position,
+    resolve_record_row_positions,
+)
 
 
 RecordKey = NewType("RecordKey", str)
@@ -119,105 +123,6 @@ def stable_record_keys(records: Sequence[SeqRecord]) -> tuple[RecordKey, ...]:
     if len(set(keys)) != len(keys):
         raise ValidationError("Linear record keys must be unique.")
     return keys
-
-
-def parse_record_row_position(value: str) -> tuple[str, int]:
-    """Parse the shared ``<selector>@<row>`` placement syntax."""
-
-    raw = str(value).strip()
-    if not raw:
-        raise ValidationError("multi_record_position does not allow empty entries.")
-    if raw.count("@") != 1:
-        raise ValidationError(
-            f"multi_record_position entry '{raw}' must be in '<selector>@<row>' format."
-        )
-    selector, row_text = (part.strip() for part in raw.rsplit("@", 1))
-    if not selector:
-        raise ValidationError(
-            f"multi_record_position entry '{raw}' must include a selector before '@'."
-        )
-    try:
-        row = int(row_text)
-    except ValueError as exc:
-        raise ValidationError(
-            f"multi_record_position entry '{raw}' must use a positive integer row."
-        ) from exc
-    if row <= 0:
-        raise ValidationError(
-            f"multi_record_position entry '{raw}' must use a positive integer row."
-        )
-    return selector, row
-
-
-def resolve_record_row_positions(
-    records: Sequence[SeqRecord],
-    positions: Sequence[str] | None,
-) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    """Resolve selectors to input indices and contiguous zero-based rows.
-
-    The first returned tuple is the record order after sorting by row and token
-    order.  The second tuple maps each input record index to its normalized row.
-    """
-
-    record_count = len(records)
-    if not positions:
-        indices = tuple(range(record_count))
-        return indices, indices
-    if len(positions) != record_count:
-        raise ValidationError(
-            f"multi_record_position must provide exactly {record_count} entry(ies)."
-        )
-
-    resolved: list[tuple[int, int, int]] = []
-    seen: set[int] = set()
-    ids: dict[str, list[int]] = {}
-    for index, record in enumerate(records):
-        ids.setdefault(str(record.id), []).append(index)
-
-    for token_index, raw in enumerate(positions):
-        selector, row = parse_record_row_position(str(raw))
-        if selector.startswith("#"):
-            try:
-                record_index = int(selector[1:]) - 1
-            except ValueError as exc:
-                raise ValidationError(
-                    f"multi_record_position selector '{selector}' is invalid."
-                ) from exc
-            if record_index < 0 or record_index >= record_count:
-                raise ValidationError(
-                    f"multi_record_position selector '{selector}' is out of range for "
-                    f"{record_count} loaded record(s)."
-                )
-        else:
-            matches = ids.get(selector, [])
-            if not matches:
-                raise ValidationError(
-                    f"multi_record_position selector '{selector}' did not match any record ID."
-                )
-            if len(matches) > 1:
-                raise ValidationError(
-                    f"multi_record_position selector '{selector}' matched multiple records; "
-                    "use a #index selector."
-                )
-            record_index = matches[0]
-        if record_index in seen:
-            raise ValidationError(
-                f"multi_record_position selector '{selector}' was specified more than once."
-            )
-        seen.add(record_index)
-        resolved.append((row, token_index, record_index))
-
-    if len(seen) != record_count:
-        raise ValidationError(
-            "multi_record_position must include each loaded record exactly once."
-        )
-
-    row_map = {value: index for index, value in enumerate(sorted({item[0] for item in resolved}))}
-    ordered = sorted(resolved, key=lambda item: (row_map[item[0]], item[1]))
-    rows_by_index = [0] * record_count
-    for input_row, _token_index, record_index in resolved:
-        rows_by_index[record_index] = row_map[input_row]
-    return tuple(item[2] for item in ordered), tuple(rows_by_index)
 
 
 def record_pairs_between_adjacent_rows(

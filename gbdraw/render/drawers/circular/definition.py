@@ -14,8 +14,7 @@ class DefinitionDrawer:
     Draws the definition section (species/strain/accession/len/GC) on a circular canvas.
     """
 
-    def __init__(self, config_dict: dict, cfg: GbdrawConfig | None = None) -> None:
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    def __init__(self, *, cfg: GbdrawConfig) -> None:
         self.interval = cfg.objects.definition.circular.interval
         self.font_size = cfg.objects.definition.circular.font_size
         self.font_family = cfg.objects.text.font_family

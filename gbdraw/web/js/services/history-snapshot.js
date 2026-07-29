@@ -5,6 +5,7 @@ import {
 } from '../app/feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData } from './json-clone.js';
+import { replaceLayoutPreferences } from '../app/layout-preferences.js';
 
 export { cloneJsonData };
 
@@ -115,14 +116,7 @@ const buildFallbackUiStateData = (state) => ({
   generatedMode: getRef(state.generatedMode, 'circular'),
   generatedMultiRecordCanvas: Boolean(getRef(state.generatedMultiRecordCanvas, false)),
   generatedCircularPlotTitlePosition: getRef(state.generatedCircularPlotTitlePosition, 'none'),
-  circularLegendPosition: getRef(state.circularLegendPosition, 'left'),
-  linearLegendPosition: getRef(state.linearLegendPosition, 'bottom'),
-  circularPlotTitlePosition: getRef(state.circularPlotTitlePosition, 'none'),
-  linearPlotTitlePosition: getRef(state.linearPlotTitlePosition, 'bottom'),
-  circularSingleRecordLegendPosition: getRef(state.circularSingleRecordLegendPosition, 'left'),
-  circularSingleRecordPlotTitlePosition: getRef(state.circularSingleRecordPlotTitlePosition, 'none'),
-  circularMultiRecordLegendPosition: getRef(state.circularMultiRecordLegendPosition, null),
-  circularMultiRecordPlotTitlePosition: getRef(state.circularMultiRecordPlotTitlePosition, null),
+  layoutPreferences: clonePlainObject(state.layoutPreferences),
   autoLabelReflow: Boolean(getRef(state.autoLabelReflowEnabled, false)),
   paletteInstantPreviewEnabled: Boolean(getRef(state.paletteInstantPreviewEnabled, false)),
   appliedPaletteName: getRef(state.appliedPaletteName, 'default'),
@@ -156,22 +150,7 @@ const applyFallbackUiStateData = (state, ui = {}) => {
   if (ui.generatedCircularPlotTitlePosition) {
     setRef(state.generatedCircularPlotTitlePosition, ui.generatedCircularPlotTitlePosition);
   }
-  if (ui.circularLegendPosition) setRef(state.circularLegendPosition, ui.circularLegendPosition);
-  if (ui.linearLegendPosition) setRef(state.linearLegendPosition, ui.linearLegendPosition);
-  if (ui.circularPlotTitlePosition) setRef(state.circularPlotTitlePosition, ui.circularPlotTitlePosition);
-  if (ui.linearPlotTitlePosition) setRef(state.linearPlotTitlePosition, ui.linearPlotTitlePosition);
-  if (Object.prototype.hasOwnProperty.call(ui, 'circularSingleRecordLegendPosition')) {
-    setRef(state.circularSingleRecordLegendPosition, ui.circularSingleRecordLegendPosition);
-  }
-  if (Object.prototype.hasOwnProperty.call(ui, 'circularSingleRecordPlotTitlePosition')) {
-    setRef(state.circularSingleRecordPlotTitlePosition, ui.circularSingleRecordPlotTitlePosition);
-  }
-  if (Object.prototype.hasOwnProperty.call(ui, 'circularMultiRecordLegendPosition')) {
-    setRef(state.circularMultiRecordLegendPosition, ui.circularMultiRecordLegendPosition);
-  }
-  if (Object.prototype.hasOwnProperty.call(ui, 'circularMultiRecordPlotTitlePosition')) {
-    setRef(state.circularMultiRecordPlotTitlePosition, ui.circularMultiRecordPlotTitlePosition);
-  }
+  replaceLayoutPreferences(state.layoutPreferences, ui.layoutPreferences);
   if (state.canvasPadding && ui.canvasPadding) {
     state.canvasPadding.top = Number(ui.canvasPadding.top) || 0;
     state.canvasPadding.right = Number(ui.canvasPadding.right) || 0;

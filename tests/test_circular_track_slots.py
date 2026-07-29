@@ -12,6 +12,7 @@ from svgwrite import Drawing
 import gbdraw.circular as circular_cli_module
 import gbdraw.api.request_render as request_render_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record
+from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
@@ -65,11 +66,13 @@ def _load_mjenmv_record():
 
 def _base_config(*, track_type: str = "middle"):
     return modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type=track_type,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": track_type,
+        },
     )
 
 
@@ -91,7 +94,7 @@ def test_circular_track_slot_geometry_metadata_preserves_factor_width_and_gaps()
     record = _load_record()
     canvas = assemble_circular_diagram_from_record(
         record,
-        config_dict=_base_config(track_type="tuckin"),
+        cfg=GbdrawConfig.from_dict(_base_config(track_type="tuckin")),
         default_colors=load_default_colors("", palette="default"),
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -147,12 +150,14 @@ def _capture_circular_core_geometry(
 
     record = _load_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type=track_type,
-        strandedness=strandedness,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": track_type,
+            "canvas.strandedness": strandedness,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, tuple[float, float]] = {}
@@ -162,16 +167,14 @@ def _capture_circular_core_geometry(
         gb_record,
         canvas_config,
         feature_config,
-        config_dict,
         *,
-        cfg=None,
-        precomputed_feature_dict=None,
+        feature_layers=None,
         precalculated_labels=None,
         feature_track_ratio_factor_override=None,
         feature_anchor_radius_px=None,
         **kwargs,
     ):
-        assert cfg is not None
+        cfg = canvas_config.profile.config
         ratio_factor = (
             float(feature_track_ratio_factor_override)
             if feature_track_ratio_factor_override is not None
@@ -187,7 +190,6 @@ def _capture_circular_core_geometry(
         canvas,
         gb_record,
         canvas_config,
-        config_dict,
         *,
         radius_override=None,
         tick_track_channel_override=None,
@@ -195,7 +197,6 @@ def _capture_circular_core_geometry(
         tick_side="legacy",
         tick_length_px=None,
         track_preset=None,
-        cfg=None,
         **kwargs,
     ):
         center = float(radius_override if radius_override is not None else canvas_config.radius)
@@ -204,8 +205,8 @@ def _capture_circular_core_geometry(
         else:
             tick_min_ratio, tick_max_ratio = get_circular_tick_path_ratio_bounds(
                 len(gb_record.seq),
-                str((cfg or canvas_config._cfg).canvas.circular.track_type),
-                bool((cfg or canvas_config._cfg).canvas.strandedness),
+                str(canvas_config.profile.config.canvas.circular.track_type),
+                bool(canvas_config.profile.strandedness),
                 tick_track_channel_override=tick_track_channel_override,
             )
             width_px = center * (max(float(tick_min_ratio), float(tick_max_ratio)) - min(float(tick_min_ratio), float(tick_max_ratio)))
@@ -223,12 +224,10 @@ def _capture_circular_core_geometry(
         depth_df,
         canvas_config,
         depth_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
-        cfg=None,
     ):
         capture_numeric_slot("depth", canvas_config, track_width_override, norm_factor_override)
         return canvas
@@ -239,12 +238,10 @@ def _capture_circular_core_geometry(
         gc_df,
         canvas_config,
         gc_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
-        cfg=None,
     ):
         capture_numeric_slot("gc_content", canvas_config, track_width_override, norm_factor_override)
         return canvas
@@ -255,12 +252,10 @@ def _capture_circular_core_geometry(
         gc_df,
         canvas_config,
         skew_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
-        cfg=None,
     ):
         capture_numeric_slot("gc_skew", canvas_config, track_width_override, norm_factor_override)
         return canvas
@@ -284,13 +279,32 @@ def _capture_circular_core_geometry(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
         **kwargs,
     )
     return captured
+
+
+def _capture_resolved_radial_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    circular_assemble_module,
+    captured: dict[str, object],
+) -> None:
+    resolve_layout = circular_assemble_module.resolve_circular_radial_layout
+
+    def capture_layout(*args, **kwargs):
+        layout = resolve_layout(*args, **kwargs)
+        captured["radial_layout"] = layout
+        return layout
+
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "resolve_circular_radial_layout",
+        capture_layout,
+    )
 
 
 def _capture_circular_radial_layout(
@@ -306,21 +320,18 @@ def _capture_circular_radial_layout(
     input_path = Path(__file__).parent / "test_inputs" / input_filename
     record = SeqIO.read(str(input_path), "genbank")
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type=track_type,
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": track_type,
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, object] = {}
-
-    def capture_axis(canvas, canvas_config, *args, **kwargs):
-        captured["radial_layout"] = canvas_config.circular_radial_layout
-        return canvas
-
-    monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", capture_axis)
+    _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
     kwargs = {}
     if circular_track_slots is not None:
         kwargs["circular_track_slots"] = circular_track_slots
@@ -329,7 +340,7 @@ def _capture_circular_radial_layout(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -625,24 +636,23 @@ def test_custom_slot_order_places_ticks_axis_side_of_features_when_ordered_befor
 
     record = _load_edl933_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=False,
-        show_skew=False,
-        track_type="tuckin",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, object] = {}
+    _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
 
     def fake_add_record_group_on_canvas(canvas, *args, **kwargs):
-        canvas_config = args[1]
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     def fake_add_tick_group_on_canvas(canvas, *args, **kwargs):
-        canvas_config = args[1]
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
@@ -650,7 +660,7 @@ def test_custom_slot_order_places_ticks_axis_side_of_features_when_ordered_befor
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -802,7 +812,7 @@ def test_tick_overlay_layout_places_anchor_on_axis_and_supports_inverted_sides(
 @pytest.mark.circular
 def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
     from gbdraw.canvas import CircularCanvasConfigurator
-    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
     from gbdraw.diagrams.circular.presets import (
         CircularPresetContext,
         circular_radial_plan_for_preset,
@@ -812,7 +822,9 @@ def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
     record = _load_record()
     config_dict = _base_config(track_type="tuckin")
     cfg = GbdrawConfig.from_dict(config_dict)
-    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    canvas_config = CircularCanvasConfigurator(
+        "test", CircularRenderProfile(cfg), "none", record
+    )
     context = CircularPresetContext(
         cfg=cfg,
         canvas_config=canvas_config,
@@ -838,14 +850,16 @@ def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
 @pytest.mark.circular
 def test_blank_builtin_numeric_slots_reflow_as_movable_stack_without_explicit_radius() -> None:
     from gbdraw.canvas import CircularCanvasConfigurator
-    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
     from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_from_preset_order
     from gbdraw.diagrams.circular.radial_layout import resolve_circular_radial_layout
 
     record = _load_record()
     config_dict = _base_config(track_type="middle")
     cfg = GbdrawConfig.from_dict(config_dict)
-    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    canvas_config = CircularCanvasConfigurator(
+        "test", CircularRenderProfile(cfg), "none", record
+    )
     context = CircularPresetContext(
         cfg=cfg,
         canvas_config=canvas_config,
@@ -882,7 +896,6 @@ def test_blank_builtin_numeric_slots_reflow_as_movable_stack_without_explicit_ra
     layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=plan.slots,
         preferred_anchor_slot_ids=plan.preferred_anchor_slot_ids,
     )
@@ -908,14 +921,16 @@ def test_blank_builtin_numeric_slots_reflow_as_movable_stack_without_explicit_ra
 @pytest.mark.circular
 def test_custom_conservation_slot_keeps_auto_width_for_compression() -> None:
     from gbdraw.canvas import CircularCanvasConfigurator
-    from gbdraw.config.models import GbdrawConfig
+    from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
     from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_from_preset_order
     from gbdraw.diagrams.circular.radial_layout import resolve_circular_radial_layout
 
     record = _load_record()
     config_dict = _base_config(track_type="tuckin")
     cfg = GbdrawConfig.from_dict(config_dict)
-    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    canvas_config = CircularCanvasConfigurator(
+        "test", CircularRenderProfile(cfg), "none", record
+    )
     context = CircularPresetContext(
         cfg=cfg,
         canvas_config=canvas_config,
@@ -964,7 +979,6 @@ def test_custom_conservation_slot_keeps_auto_width_for_compression() -> None:
     layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=plan.slots,
         preferred_anchor_slot_ids=plan.preferred_anchor_slot_ids,
     )
@@ -986,12 +1000,14 @@ def test_default_preset_tick_draw_uses_resolved_tick_options(
 
     record = _load_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=False,
-        show_skew=False,
-        track_type="spreadout",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "canvas.circular.track_type": 'spreadout',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, object] = {}
@@ -1000,7 +1016,6 @@ def test_default_preset_tick_draw_uses_resolved_tick_options(
         canvas,
         gb_record,
         canvas_config,
-        config_dict,
         *,
         radius_override=None,
         tick_track_channel_override=None,
@@ -1008,7 +1023,6 @@ def test_default_preset_tick_draw_uses_resolved_tick_options(
         tick_side="legacy",
         tick_length_px=None,
         track_preset=None,
-        cfg=None,
         **kwargs,
     ):
         captured["label_side"] = label_side
@@ -1021,7 +1035,7 @@ def test_default_preset_tick_draw_uses_resolved_tick_options(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1038,25 +1052,21 @@ def test_default_preset_slots_compress_to_clear_center_definition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
-    from gbdraw.config.models import GbdrawConfig
 
     record = _load_mjenmv_record()
     config_dict = _base_config(track_type="tuckin")
-    cfg = GbdrawConfig.from_dict(config_dict)
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, object] = {}
+    _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
 
     def capture_numeric_slot(
         canvas_config,
     ) -> None:
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         captured["definition_reserved"] = circular_assemble_module._definition_reserved_radius_px(
             record,
             canvas_config,
             None,
             None,
-            config_dict,
-            cfg=cfg,
             plot_title=None,
             definition_profile="full",
         )
@@ -1067,12 +1077,10 @@ def test_default_preset_slots_compress_to_clear_center_definition(
         gc_df,
         canvas_config,
         track_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
-        cfg=None,
     ):
         capture_numeric_slot(canvas_config)
         return canvas
@@ -1082,7 +1090,7 @@ def test_default_preset_slots_compress_to_clear_center_definition(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1104,12 +1112,14 @@ def test_default_custom_slots_tuckin_inherit_preset_when_inside_numeric_tracks_a
 
     record = _load_edl933_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type="tuckin",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, tuple[float, float]] = {}
@@ -1125,7 +1135,7 @@ def test_default_custom_slots_tuckin_inherit_preset_when_inside_numeric_tracks_a
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1144,12 +1154,14 @@ def test_explicit_pure_auto_slots_tuckin_raise_when_inside_numeric_tracks_cannot
 
     record = _load_edl933_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type="tuckin",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
 
@@ -1159,7 +1171,7 @@ def test_explicit_pure_auto_slots_tuckin_raise_when_inside_numeric_tracks_cannot
     with pytest.raises(Exception, match="cannot fit inside"):
         assemble_circular_diagram_from_record(
             record,
-            config_dict=config_dict,
+            cfg=GbdrawConfig.from_dict(config_dict),
             default_colors=default_colors,
             selected_features_set=SELECTED_FEATURES,
             legend="none",
@@ -1208,7 +1220,7 @@ def test_default_custom_slots_use_ordered_legacy_numeric_lanes(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1241,7 +1253,7 @@ def test_reordered_builtin_numeric_slots_follow_slot_order(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1268,19 +1280,20 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
 
     record = _load_edl933_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type="tuckin",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, object] = {}
+    _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
 
     def fake_add_record_group_on_canvas(canvas, *args, **kwargs):
-        canvas_config = args[1]
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     def capture_numeric_slot(
@@ -1288,11 +1301,10 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
         canvas_config,
         track_width_override,
         norm_factor_override,
-        cfg,
     ) -> None:
         assert track_width_override is not None
         assert norm_factor_override is not None
-        assert cfg is not None
+        cfg = canvas_config.profile.config
         captured[slot_id] = (
             float(norm_factor_override) * float(canvas_config.radius),
             float(track_width_override),
@@ -1310,14 +1322,17 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
         gc_df,
         canvas_config,
         gc_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
-        cfg=None,
     ):
-        capture_numeric_slot(str(group_id or "gc_content"), canvas_config, track_width_override, norm_factor_override, cfg)
+        capture_numeric_slot(
+            str(group_id or "gc_content"),
+            canvas_config,
+            track_width_override,
+            norm_factor_override,
+        )
         return canvas
 
     def fake_add_gc_skew_group_on_canvas(
@@ -1326,19 +1341,20 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
         gc_df,
         canvas_config,
         skew_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
-        cfg=None,
     ):
-        capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override, cfg)
+        capture_numeric_slot(
+            str(group_id or "gc_skew"),
+            canvas_config,
+            track_width_override,
+            norm_factor_override,
+        )
         return canvas
 
     def fake_add_tick_group_on_canvas(canvas, *args, **kwargs):
-        canvas_config = args[1]
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", fake_add_record_group_on_canvas)
@@ -1349,7 +1365,7 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1385,18 +1401,20 @@ def test_inside_order_places_axis_side_tracks_before_features(
 
     record = _load_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type="tuckin",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, object] = {}
+    _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
 
     def capture_record_layout(canvas, gb_record, canvas_config, *args, **kwargs):
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", capture_record_layout)
@@ -1406,7 +1424,7 @@ def test_inside_order_places_axis_side_tracks_before_features(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1435,18 +1453,20 @@ def test_order_only_gc_content_moves_feature_inward_instead_of_falling_back_outs
 
     record = _load_mjenmv_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type="tuckin",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, object] = {}
+    _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
 
     def capture_record_layout(canvas, gb_record, canvas_config, *args, **kwargs):
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", capture_record_layout)
@@ -1456,7 +1476,7 @@ def test_order_only_gc_content_moves_feature_inward_instead_of_falling_back_outs
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1483,19 +1503,20 @@ def test_order_only_numeric_before_ticks_reserves_inner_numeric_space(
 
     record = _load_edl933_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type="tuckin",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, object] = {}
+    _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
 
     def capture_layout(canvas, *args, **kwargs):
-        canvas_config = args[1]
-        captured["radial_layout"] = canvas_config.circular_radial_layout
         return canvas
 
     def passthrough(canvas, *args, **kwargs):
@@ -1508,7 +1529,7 @@ def test_order_only_numeric_before_ticks_reserves_inner_numeric_space(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1615,7 +1636,7 @@ def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1655,23 +1676,18 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
         gc_df,
         canvas_config,
         skew_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
-        cfg=None,
     ):
         capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
         if "definition_reserved" not in captured:
-            assert cfg is not None
             captured["definition_reserved"] = circular_assemble_module._definition_reserved_radius_px(
                 gb_record,
                 canvas_config,
                 None,
                 None,
-                config_dict,
-                cfg=cfg,
                 plot_title=None,
                 definition_profile="full",
             )
@@ -1683,7 +1699,7 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1706,16 +1722,18 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
 def test_api_circular_track_slots_render_duplicate_dinucleotide_skew_slots() -> None:
     record = _load_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=False,
-        show_skew=False,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        },
     )
     default_colors = load_default_colors("", palette="default")
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="right",
@@ -1738,16 +1756,18 @@ def test_api_circular_track_slots_render_duplicate_dinucleotide_skew_slots() -> 
 def test_api_circular_dinucleotide_skew_slot_uses_custom_colors_and_legend() -> None:
     record = _load_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="right",
@@ -1777,17 +1797,19 @@ def test_api_circular_dinucleotide_skew_slot_uses_custom_colors_and_legend() -> 
 def test_api_circular_dinucleotide_skew_slot_rejects_invalid_custom_color() -> None:
     record = _load_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
 
     with pytest.raises(ValidationError, match="Unknown color name"):
         assemble_circular_diagram_from_record(
             record,
-            config_dict=config_dict,
+            cfg=GbdrawConfig.from_dict(config_dict),
             default_colors=default_colors,
             selected_features_set=SELECTED_FEATURES,
             legend="none",
@@ -1806,12 +1828,14 @@ def test_api_circular_track_slots_distribute_extra_dinucleotide_slots_evenly(
 
     record = _load_edl933_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type="middle",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": 'middle',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, tuple[float, float]] = {}
@@ -1827,7 +1851,7 @@ def test_api_circular_track_slots_distribute_extra_dinucleotide_slots_evenly(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1867,15 +1891,18 @@ def test_api_explicit_inside_duplicate_dinucleotide_skew_places_when_space_is_re
 
     record = _load_edl933_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type="tuckin",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, object] = {}
+    _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
 
     def capture_numeric_slot(
         slot_id: str,
@@ -1889,7 +1916,6 @@ def test_api_explicit_inside_duplicate_dinucleotide_skew_places_when_space_is_re
             float(norm_factor_override) * float(canvas_config.radius),
             float(track_width_override),
         )
-        captured["radial_layout"] = canvas_config.circular_radial_layout
 
     def fake_add_record_group_on_canvas(canvas, *args, **kwargs):
         return canvas
@@ -1908,7 +1934,7 @@ def test_api_explicit_inside_duplicate_dinucleotide_skew_places_when_space_is_re
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -1942,12 +1968,14 @@ def test_api_circular_track_slots_distribute_repeated_depth_slots_evenly(
 
     record = _load_edl933_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=False,
-        show_skew=False,
-        track_type="middle",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "canvas.circular.track_type": 'middle',
+            "canvas.strandedness": True,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     depth_table = _depth_table(str(record.id))
@@ -1959,12 +1987,10 @@ def test_api_circular_track_slots_distribute_repeated_depth_slots_evenly(
         depth_df,
         canvas_config,
         depth_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
-        cfg=None,
     ):
         assert track_width_override is not None
         assert norm_factor_override is not None
@@ -1978,7 +2004,7 @@ def test_api_circular_track_slots_distribute_repeated_depth_slots_evenly(
 
     assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -2013,16 +2039,18 @@ def test_api_circular_track_slots_distribute_repeated_depth_slots_evenly(
 def test_slot_mode_draws_axis_when_ticks_are_disabled() -> None:
     record = _load_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=False,
-        show_skew=False,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        },
     )
     default_colors = load_default_colors("", palette="default")
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",
@@ -2038,10 +2066,12 @@ def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatc
 
     record = _load_record()
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=False,
-        show_skew=False,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        },
     )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, float | None] = {}
@@ -2050,7 +2080,6 @@ def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatc
         canvas,
         gb_record,
         canvas_config,
-        config_dict,
         *,
         radius_override=None,
         tick_track_channel_override=None,
@@ -2058,7 +2087,6 @@ def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatc
         tick_side="legacy",
         tick_length_px=None,
         track_preset=None,
-        cfg=None,
         **kwargs,
     ):
         captured["tick_radius"] = radius_override
@@ -2068,7 +2096,7 @@ def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatc
 
     canvas = assemble_circular_diagram_from_record(
         record,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
         selected_features_set=SELECTED_FEATURES,
         legend="none",

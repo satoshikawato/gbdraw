@@ -30,9 +30,9 @@ from .api.options import (
     LinearTrackOptions,
 )
 from .linear_comparison import LinearComparison
-from .layout.linear_multi_record import (
+from .layout.linear_multi_record import record_pairs_between_adjacent_rows
+from .layout.record_placement import (
     parse_record_row_position,
-    record_pairs_between_adjacent_rows,
     resolve_record_row_positions,
 )
 from .annotations import read_annotation_table
@@ -1396,73 +1396,134 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         raise ValidationError("plot_title_font_size must be > 0")
     if args.linear_label_spacing is not None and float(args.linear_label_spacing) <= 0:
         raise ValidationError("linear_label_spacing must be > 0")
+    filtering_override = dict(filtering_cfg)
+    if label_blacklist is not None:
+        filtering_override["blacklist_keywords"] = (
+            [keyword.strip() for keyword in label_blacklist.split(",") if keyword.strip()]
+            if isinstance(label_blacklist, str)
+            else label_blacklist
+        )
+    gc_large_tick_interval = (
+        gc_content_large_tick_interval
+        if gc_content_large_tick_interval is not None
+        else gc_content_tick_interval
+    )
+    override_candidates: dict[str, object | None] = {
+        "objects.features.block_stroke_color": block_stroke_color,
+        "objects.axis.linear.stroke_color": axis_stroke_color,
+        "objects.definition.linear.show_replicon": definition_show_replicon,
+        "objects.definition.linear.show_accession": definition_show_accession,
+        "objects.definition.linear.show_length": definition_show_length,
+        "labels.spacing.linear": args.linear_label_spacing,
+        "labels.rendering": label_rendering,
+        "labels.linear.placement": label_placement,
+        "labels.linear.rotation": label_rotation,
+        "objects.features.line_stroke_color": line_stroke_color,
+        "canvas.show_gc": show_gc,
+        "objects.gc_content.mode": gc_content_mode,
+        "objects.gc_content.min_percent": gc_content_min_percent,
+        "objects.gc_content.max_percent": gc_content_max_percent,
+        "objects.gc_content.show_axis": gc_content_show_axis,
+        "objects.gc_content.show_ticks": gc_content_show_ticks,
+        "objects.gc_content.large_tick_interval": gc_large_tick_interval,
+        "objects.gc_content.small_tick_interval": gc_content_small_tick_interval,
+        "objects.gc_content.tick_font_size": gc_content_tick_font_size,
+        "canvas.show_skew": show_skew,
+        "canvas.show_depth": show_depth,
+        "objects.depth.fill_color": depth_color,
+        "canvas.linear.depth_height": depth_height,
+        "objects.depth.min_depth": depth_min,
+        "objects.depth.max_depth": depth_max,
+        "objects.depth.normalize": depth_normalize,
+        "objects.depth.show_axis": depth_show_axis,
+        "objects.depth.show_ticks": depth_show_ticks,
+        "objects.depth.large_tick_interval": depth_large_tick_interval,
+        "objects.depth.small_tick_interval": depth_small_tick_interval,
+        "objects.depth.tick_font_size": depth_tick_font_size,
+        "objects.depth.share_axis": depth_share_axis,
+        "labels.linear.scope": show_labels,
+        "canvas.resolve_overlaps": resolve_overlaps,
+        "canvas.linear.track_layout": track_layout,
+        "canvas.linear.track_axis_gap": track_axis_gap,
+        "canvas.linear.ruler_on_axis": ruler_on_axis,
+        "canvas.linear.align_center": align_center,
+        "canvas.linear.keep_definition_left_aligned": keep_definition_left_aligned,
+        "canvas.strandedness": strandedness,
+        "labels.filtering.raw": filtering_override,
+        "canvas.linear.comparison_height": comparison_height,
+        "canvas.linear.default_gc_height": gc_height,
+        "objects.scale.style": scale_style,
+        "objects.scale.stroke_color": scale_stroke_color,
+        "objects.scale.label_color": scale_label_color,
+        "objects.scale.stroke_width": scale_stroke_width,
+        "objects.scale.interval": scale_interval,
+        "objects.blast_match.style": pairwise_match_style,
+        "canvas.linear.normalize_length": normalize_length,
+    }
+    for line_kind, properties in (definition_line_styles or {}).items():
+        for property_name, value in properties.items():
+            override_candidates[
+                "objects.definition.linear.line_styles."
+                f"{line_kind}.{property_name}"
+            ] = value
+    for width_path in (
+        "objects.features.block_stroke_width.short",
+        "objects.features.block_stroke_width.long",
+    ):
+        override_candidates[width_path] = block_stroke_width
+    for width_path in (
+        "objects.axis.linear.stroke_width.short",
+        "objects.axis.linear.stroke_width.long",
+    ):
+        override_candidates[width_path] = axis_stroke_width
+    for width_path in (
+        "objects.features.line_stroke_width.short",
+        "objects.features.line_stroke_width.long",
+    ):
+        override_candidates[width_path] = line_stroke_width
+    for font_path in (
+        "objects.definition.linear.font_size.short",
+        "objects.definition.linear.font_size.long",
+    ):
+        override_candidates[font_path] = definition_font_size
+    for font_path in (
+        "labels.font_size.linear.short",
+        "labels.font_size.linear.long",
+    ):
+        override_candidates[font_path] = label_font_size
+    for height_path in (
+        "canvas.linear.default_cds_height.short",
+        "canvas.linear.default_cds_height.long",
+    ):
+        override_candidates[height_path] = feature_height
+    for font_path in (
+        "objects.scale.font_size.short",
+        "objects.scale.font_size.long",
+    ):
+        override_candidates[font_path] = scale_font_size
+    for font_path in (
+        "objects.scale.ruler_label_font_size.short",
+        "objects.scale.ruler_label_font_size.long",
+    ):
+        override_candidates[font_path] = effective_ruler_label_font_size
+    for size_path in (
+        "objects.legends.color_rect_size.short",
+        "objects.legends.color_rect_size.long",
+    ):
+        override_candidates[size_path] = legend_box_size
+    for size_path in (
+        "objects.legends.font_size.short",
+        "objects.legends.font_size.long",
+    ):
+        override_candidates[size_path] = legend_font_size
     config_dict = modify_config_dict(
         config_dict,
-        block_stroke_color=block_stroke_color,
-        block_stroke_width=block_stroke_width,
-        linear_axis_stroke_color=axis_stroke_color,
-        linear_axis_stroke_width=axis_stroke_width,
-        linear_definition_font_size=definition_font_size,
-        linear_definition_line_styles=definition_line_styles or None,
-        linear_definition_show_replicon=definition_show_replicon,
-        linear_definition_show_accession=definition_show_accession,
-        linear_definition_show_length=definition_show_length,
-        label_font_size=label_font_size,
-        linear_label_spacing=args.linear_label_spacing,
-        label_rendering=label_rendering,
-        label_placement=label_placement,
-        label_rotation=label_rotation,
-        line_stroke_color=line_stroke_color,
-        line_stroke_width=line_stroke_width,
-        show_gc=show_gc,
-        gc_content_mode=gc_content_mode,
-        gc_content_min_percent=gc_content_min_percent,
-        gc_content_max_percent=gc_content_max_percent,
-        gc_content_show_axis=gc_content_show_axis,
-        gc_content_show_ticks=gc_content_show_ticks,
-        gc_content_tick_interval=gc_content_tick_interval,
-        gc_content_large_tick_interval=gc_content_large_tick_interval,
-        gc_content_small_tick_interval=gc_content_small_tick_interval,
-        gc_content_tick_font_size=gc_content_tick_font_size,
-        show_skew=show_skew,
-        show_depth=show_depth,
-        depth_color=depth_color,
-        depth_height=depth_height,
-        depth_min=depth_min,
-        depth_max=depth_max,
-        depth_normalize=depth_normalize,
-        depth_show_axis=depth_show_axis,
-        depth_show_ticks=depth_show_ticks,
-        depth_large_tick_interval=depth_large_tick_interval,
-        depth_small_tick_interval=depth_small_tick_interval,
-        depth_tick_font_size=depth_tick_font_size,
-        depth_share_axis=depth_share_axis,
-        show_labels=show_labels,
-        resolve_overlaps=resolve_overlaps,
-        linear_track_layout=track_layout,
-        linear_track_axis_gap=track_axis_gap,
-        linear_ruler_on_axis=ruler_on_axis,
-        align_center=align_center,
-        keep_definition_left_aligned=keep_definition_left_aligned,
-        strandedness=strandedness,
-        label_blacklist=label_blacklist,
-        label_whitelist=label_whitelist,
-        label_table=label_table_path,
-        default_cds_height=feature_height,
-        comparison_height=comparison_height,
-        gc_height=gc_height,
-        scale_style=scale_style,
-        scale_stroke_color=scale_stroke_color,
-        scale_label_color=scale_label_color,
-        scale_stroke_width=scale_stroke_width,
-        scale_font_size=scale_font_size,
-        ruler_label_font_size=effective_ruler_label_font_size,
-        scale_interval=scale_interval,
-        legend_box_size=legend_box_size,
-        legend_font_size=legend_font_size,
-        pairwise_match_style=pairwise_match_style,
-        normalize_length=normalize_length
-        )
+        {
+            path: value
+            for path, value in override_candidates.items()
+            if value is not None
+        },
+    )
 
     def _normalize_list(values, target_len, fill_value=""):
         items = list(values or [])

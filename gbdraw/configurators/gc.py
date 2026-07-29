@@ -2,11 +2,10 @@
 # coding: utf-8
 
 import copy
-from typing import Dict
 
 from pandas import DataFrame
 
-from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.models import RenderProfile  # type: ignore[reportMissingImports]
 from gbdraw.io.colors import resolve_color_to_hex
 
 
@@ -48,9 +47,8 @@ class GcContentConfigurator:
         window: int,
         step: int,
         dinucleotide: str,
-        config_dict: Dict,
+        profile: RenderProfile,
         default_colors_df: DataFrame,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         """
         Initializes the GcContentConfigurator with specified settings.
@@ -60,7 +58,7 @@ class GcContentConfigurator:
             step (int): Step size for the moving window.
             dinucleotide (str): Specific dinucleotide sequence to focus on.
         """
-
+        cfg = profile.config
         self.window: int = window
         self.step: int = step
         self.dinucleotide: str = dinucleotide
@@ -73,7 +71,6 @@ class GcContentConfigurator:
         self.fill_color: str = (
             default_colors_df[default_colors_df["feature_type"] == "gc_content"]["color"].values[0]
         )
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.stroke_color: str = cfg.objects.gc_content.stroke_color
         self.stroke_width: float = cfg.objects.gc_content.stroke_width
         self.fill_opacity: float = cfg.objects.gc_content.fill_opacity
@@ -90,8 +87,6 @@ class GcContentConfigurator:
         self.percent_background_opacity: float = cfg.objects.gc_content.percent_background_opacity
         self.percent_border_color: str = cfg.objects.gc_content.percent_border_color
         self.percent_border_width: float = cfg.objects.gc_content.percent_border_width
-        self.show_gc: bool = cfg.canvas.show_gc
-
 
 class GcSkewConfigurator:
     """
@@ -111,9 +106,8 @@ class GcSkewConfigurator:
         window: int,
         step: int,
         dinucleotide: str,
-        config_dict: Dict,
+        profile: RenderProfile,
         default_colors_df: DataFrame,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         """
         Initializes the GcSkewConfigurator with specified settings.
@@ -123,7 +117,7 @@ class GcSkewConfigurator:
             step (int): Step size for the moving window.
             dinucleotide (str): Specific dinucleotide sequence to focus on.
         """
-
+        cfg = profile.config
         self.window: int = window
         self.step: int = step
         self.dinucleotide: str = dinucleotide
@@ -133,16 +127,11 @@ class GcSkewConfigurator:
         self.low_fill_color: str = (
             default_colors_df[default_colors_df["feature_type"] == "skew_low"]["color"].values[0]
         )
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.stroke_color: str = cfg.objects.gc_skew.stroke_color
         self.stroke_width: float = cfg.objects.gc_skew.stroke_width
         self.fill_opacity: float = cfg.objects.gc_skew.fill_opacity
-        self.show_skew: bool = cfg.canvas.show_skew
-
 
 __all__ = [
     "GcContentConfigurator",
     "GcSkewConfigurator",
 ]
-
-

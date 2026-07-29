@@ -10,8 +10,8 @@ import gbdraw.interface as interface
 from gbdraw.api.options import (
     CircularDiagramOptions,
     CircularTrackOptions,
-    DiagramOptions,
-    TrackOptions,
+    LinearDiagramOptions,
+    LinearTrackOptions,
 )
 from gbdraw.api.requests import (
     InMemoryRecordSource,
@@ -71,23 +71,23 @@ def test_circular_track_options_reject_invalid_center_radius(radius: object) -> 
         )
 
 
-def test_shared_track_options_validate_slots_axes_and_radius() -> None:
+def test_request_track_options_validate_slots_axes_and_radius() -> None:
     with pytest.raises(ValidationError, match="unknown linear track renderer"):
-        TrackOptions(
+        LinearTrackOptions(
             linear_track_slots=("conservation:sequence_conservation",)
         )
     with pytest.raises(ValidationError, match="linear_track_axis_index"):
-        TrackOptions(
+        LinearTrackOptions(
             linear_track_slots=("features:features",),
             linear_track_axis_index=-1,
         )
     with pytest.raises(ValidationError, match="circular_track_axis_index"):
-        TrackOptions(
+        CircularTrackOptions(
             circular_track_slots=("features:features",),
             circular_track_axis_index="0",  # type: ignore[arg-type]
         )
     with pytest.raises(ValidationError, match="center_reserved_radius"):
-        TrackOptions(center_reserved_radius=-1)
+        CircularTrackOptions(center_reserved_radius=-1)
 
 
 @pytest.mark.parametrize(
@@ -111,7 +111,7 @@ def test_fresh_track_options_reject_private_circular_transport(
     slot: str | CircularTrackSlot,
 ) -> None:
     with pytest.raises(ValidationError, match="private"):
-        TrackOptions(circular_track_slots=(slot,))
+        CircularTrackOptions(circular_track_slots=(slot,))
 
 
 def test_linear_request_rejects_valid_circular_only_track_bundle() -> None:
@@ -155,4 +155,4 @@ def test_diagram_options_reject_invalid_depth_source_types(
     kwargs: dict[str, object],
 ) -> None:
     with pytest.raises(ValidationError, match="depth"):
-        DiagramOptions(**kwargs)
+        LinearDiagramOptions(**kwargs)

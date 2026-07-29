@@ -207,8 +207,21 @@ def test_low_level_api_owners_are_explicit() -> None:
     assert importlib.util.find_spec("gbdraw.api.canvas") is None
     assert importlib.util.find_spec("gbdraw.api.configurators") is None
 
-    assert removed_diagram_reexports <= set(diagram_api.__all__)
-    assert api_options.OutputOptions is not None
+    assert {
+        "DEFAULT_SELECTED_FEATURES",
+        "build_circular_diagram",
+        "build_circular_multi_diagram",
+        "build_linear_diagram",
+    } <= set(diagram_api.__all__)
+    assert {
+        "assemble_circular_diagram_from_record",
+        "assemble_circular_diagram_from_records",
+        "assemble_linear_diagram_from_records",
+    }.isdisjoint(diagram_api.__all__)
+    assert all(
+        not hasattr(api_options, name)
+        for name in ("DiagramOptions", "OutputOptions", "TrackOptions")
+    )
     assert not hasattr(api_render, "parse_formats")
     assert not hasattr(api_render, "save_figure")
 

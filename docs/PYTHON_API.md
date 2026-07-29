@@ -211,6 +211,65 @@ assert styled_diagram.to_svg().startswith("<svg")
 Use `FeatureOptions.color_table`, `default_colors`, `visibility`, and `shapes` for
 the corresponding feature controls.
 
+### Canonical label configuration overrides
+
+`config_overrides` accepts canonical dotted leaf paths. Label configuration has
+three separate concerns:
+
+| Path | Accepted values | Meaning |
+|---|---|---|
+| `labels.circular.scope` | `none`, `outer`, `both` | Whether Circular labels are hidden, outer-side only, or allowed on both outer and inner sides |
+| `labels.circular.placement` | `horizontal`, `radial` | Orientation of external Circular labels |
+| `labels.linear.scope` | `none`, `all`, `first`, `orthogroup_top` | Which Linear records or orthogroup members are eligible for labels |
+| `labels.linear.placement` | `auto`, `above_feature` | Linear label geometry |
+| `labels.linear.rotation` | float | Linear label rotation in degrees |
+| `labels.rendering` | `auto`, `embedded_only`, `external_only` | Shared policy for embedding labels in feature bodies or routing them externally |
+
+For example, Circular labels can use both outer and inner sides with radial
+external text:
+
+```python
+circular_label_diagram = draw_circular(
+    record,
+    options=CircularOptions(
+        features=FeatureOptions(types=("CDS",)),
+        config_overrides={
+            "labels.circular.scope": "both",
+            "labels.circular.placement": "radial",
+            "labels.rendering": "auto",
+        },
+    ),
+)
+assert circular_label_diagram.to_svg().startswith("<svg")
+```
+
+The Linear equivalents use their own scope vocabulary and also expose
+placement and rotation:
+
+```python
+linear_label_diagram = draw_linear(
+    linear_records,
+    options=LinearOptions(
+        features=FeatureOptions(types=("CDS",)),
+        config_overrides={
+            "labels.linear.scope": "first",
+            "labels.linear.placement": "above_feature",
+            "labels.linear.rotation": 45.0,
+            "labels.rendering": "auto",
+        },
+    ),
+)
+assert linear_label_diagram.to_svg().startswith("<svg")
+```
+
+`scope` selects eligible records or Circular label sides, `placement` controls
+text geometry, and only `labels.rendering` is the embedded/external rendering
+policy. Fresh Python requests reject the retired flat `show_labels` and
+`allow_inner_labels` aliases and the old `canvas.show_labels`,
+`canvas.circular.show_labels`, `canvas.linear.show_labels`, and
+`canvas.circular.allow_inner_labels` paths. Supported persisted-data readers
+migrate those keys; they are not canonical override examples for new code.
+
 ## GFF3 and FASTA
 
 `read_gff` accepts one paired input or equally sized path sequences.

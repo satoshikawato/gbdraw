@@ -21,11 +21,11 @@ class DepthGroup:
         track_height: float,
         alignment_width: float,
         depth_config: DepthConfigurator,
-        config_dict: dict,
+        *,
+        cfg: GbdrawConfig,
         depth_table: DataFrame | None = None,
         start_x: float = 0,
         start_y: float = 0,
-        cfg: GbdrawConfig | None = None,
         depth_df: DataFrame | None = None,
         group_id: str = "depth",
         axis_group_id: str = "depth_axis",
@@ -41,7 +41,6 @@ class DepthGroup:
         self.alignment_width = (
             float(sequence_width) if sequence_width is not None else float(alignment_width)
         )
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.bool_normalize_length = cfg.canvas.linear.normalize_length
         self.record_len = len(self.gb_record.seq)
         self.axis_group_id = str(axis_group_id)

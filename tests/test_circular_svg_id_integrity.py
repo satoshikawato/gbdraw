@@ -16,6 +16,7 @@ from gbdraw.annotations import (
     RegionAnnotation,
     RegionAnnotationStyle,
 )
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
     assemble_circular_diagram_from_records,
@@ -79,11 +80,11 @@ def test_conservation_group_ids_distinguish_lossy_labels_and_fixed_groups() -> N
             conservation_reference="query",
             conservation_labels=labels,
             legend="right",
-            config_overrides={
-                "show_labels": "none",
-                "show_gc": False,
-                "show_skew": False,
-            },
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
         ).tostring()
 
     first = render()
@@ -139,11 +140,11 @@ def test_circular_multi_merge_preserves_and_namespaces_defs_references() -> None
             "ticks:ticks",
         ],
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     ).tostring()
 
     _assert_unique_ids_and_resolved_local_references(svg)

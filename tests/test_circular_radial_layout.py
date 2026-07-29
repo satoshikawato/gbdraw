@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from gbdraw.canvas import CircularCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import DepthConfigurator
@@ -15,13 +15,24 @@ from gbdraw.diagrams.circular.radial_layout import (
     measure_circular_feature_stack,
     resolve_circular_radial_layout,
 )
-from gbdraw.layout.circular import calculate_feature_position_factors_circular
+from gbdraw.layout.circular import (
+    CircularFeatureLayout,
+    CircularRadialLayout,
+    RadialBand,
+    calculate_feature_position_factors_circular,
+)
 from gbdraw.tracks import CircularTrackSlot, ScalarSpec
 
 
 class _Feature:
     def __init__(self, track_id: int) -> None:
         self.feature_track_id = track_id
+
+
+def test_radial_contracts_are_owned_by_layout_layer() -> None:
+    assert RadialBand.__module__ == "gbdraw.layout.circular"
+    assert CircularFeatureLayout.__module__ == "gbdraw.layout.circular"
+    assert CircularRadialLayout.__module__ == "gbdraw.layout.circular"
 
 
 @pytest.mark.parametrize(
@@ -173,7 +184,6 @@ def test_custom_core_slot_order_moves_feature_inward_when_ticks_are_axis_side() 
     layout = resolve_circular_radial_layout(
         total_length=5_500_000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(id="ticks", renderer="ticks"),
             CircularTrackSlot(id="features", renderer="features"),
@@ -194,7 +204,6 @@ def test_custom_core_slot_order_keeps_default_feature_then_ticks_order() -> None
     layout = resolve_circular_radial_layout(
         total_length=5_500_000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(id="features", renderer="features"),
             CircularTrackSlot(id="ticks", renderer="ticks"),
@@ -211,21 +220,23 @@ def test_custom_core_slot_order_keeps_default_feature_then_ticks_order() -> None
 
 def test_pinned_inside_slots_are_reserved_before_auto_feature_slots() -> None:
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        track_type="tuckin",
-        strandedness=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.strandedness": True,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     record = SimpleNamespace(seq="N" * 1000)
-    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    profile = CircularRenderProfile(cfg)
+    canvas_config = CircularCanvasConfigurator("test", profile, "none", record)
     canvas_config.radius = 100.0
 
     with pytest.raises(Exception, match="cannot fit inside"):
         resolve_circular_radial_layout(
             total_length=1000,
             canvas_config=canvas_config,
-            cfg=cfg,
             slots=[
                 CircularTrackSlot(
                     id="upper_spacer",
@@ -248,15 +259,18 @@ def test_pinned_inside_slots_are_reserved_before_auto_feature_slots() -> None:
 
 def _small_radial_canvas() -> tuple[CircularCanvasConfigurator, GbdrawConfig]:
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=True,
-        show_skew=True,
-        track_type="tuckin",
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.circular.track_type": 'tuckin',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     record = SimpleNamespace(seq="N" * 1000)
-    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    profile = CircularRenderProfile(cfg)
+    canvas_config = CircularCanvasConfigurator("test", profile, "none", record)
     canvas_config.radius = 100.0
     return canvas_config, cfg
 
@@ -272,7 +286,6 @@ def test_auto_conservation_stack_compresses_ring_width_and_gap_when_tight() -> N
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(id="features", renderer="features"),
             *conservation_slots,
@@ -306,7 +319,6 @@ def test_outside_physical_gap_uses_facing_radial_sides() -> None:
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(
                 id="outer",
@@ -339,7 +351,6 @@ def test_inside_physical_gap_uses_facing_radial_sides() -> None:
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(
                 id="outer",
@@ -381,7 +392,6 @@ def test_explicit_inside_gaps_are_not_auto_compressed_when_widths_are() -> None:
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(id="features", renderer="features"),
             *conservation_slots,
@@ -411,7 +421,6 @@ def test_explicit_conservation_ring_width_is_not_auto_compressed() -> None:
         resolve_circular_radial_layout(
             total_length=1000,
             canvas_config=canvas_config,
-            cfg=cfg,
             slots=[
                 CircularTrackSlot(id="features", renderer="features"),
                 *[
@@ -434,7 +443,6 @@ def test_radial_numeric_stack_places_default_inside_tracks_when_space_allows() -
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
             CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
@@ -456,7 +464,6 @@ def test_radial_numeric_stack_compresses_group_no_lower_than_readable_minimum() 
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
             CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
@@ -481,7 +488,6 @@ def test_radial_numeric_stack_raises_when_readable_minimum_cannot_fit() -> None:
         resolve_circular_radial_layout(
             total_length=1000,
             canvas_config=canvas_config,
-            cfg=cfg,
             slots=[
                 CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
                 CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
@@ -498,7 +504,6 @@ def test_outside_auto_numeric_width_is_independent_from_inside_compression() -> 
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(id="outer_skew", renderer="dinucleotide_skew", side="outside"),
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
@@ -521,7 +526,6 @@ def test_outside_auto_stack_order_is_outermost_first() -> None:
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(id="outer_content", renderer="dinucleotide_content", side="outside"),
             CircularTrackSlot(id="middle_skew", renderer="dinucleotide_skew", side="outside"),
@@ -551,7 +555,6 @@ def test_user_preset_generated_private_param_is_rejected() -> None:
         resolve_circular_radial_layout(
             total_length=1000,
             canvas_config=canvas_config,
-            cfg=cfg,
             slots=[tagged_slot],
             show_features=False,
             show_ticks=False,
@@ -561,23 +564,25 @@ def test_user_preset_generated_private_param_is_rejected() -> None:
 
 def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -> None:
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels=False,
-        show_gc=False,
-        show_skew=False,
-        show_depth=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "canvas.show_depth": True,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     record = SimpleNamespace(seq="N" * 1000)
-    canvas_config = CircularCanvasConfigurator("test", config_dict, "none", record, cfg=cfg)
+    profile = CircularRenderProfile(cfg)
+    canvas_config = CircularCanvasConfigurator("test", profile, "none", record)
     canvas_config.radius = 100.0
-    depth_config = DepthConfigurator(10, 10, config_dict, cfg=cfg, show_axis=True, show_ticks=True)
+    depth_config = DepthConfigurator(10, 10, profile, show_axis=True, show_ticks=True)
     width_px = 24.0
 
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(
                 id="depth",
@@ -603,11 +608,10 @@ def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -
         depth.draw_band_px.outer_px + footprint.radial_outer_extra_px
     )
 
-    hidden_axis_config = DepthConfigurator(10, 10, config_dict, cfg=cfg, show_axis=False)
+    hidden_axis_config = DepthConfigurator(10, 10, profile, show_axis=False)
     hidden_axis_layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=[
             CircularTrackSlot(
                 id="depth",

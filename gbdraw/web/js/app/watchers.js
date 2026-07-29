@@ -13,9 +13,9 @@ import {
   preserveFeatureVisibilitySelectorCacheForOverrides
 } from './feature-visibility.js';
 import {
-  normalizeCircularPlotTitlePosition,
-  normalizeLinearPlotTitlePosition
+  normalizeCircularPlotTitlePosition
 } from './plot-title-position.js';
+import { resolveCircularLayoutPreference } from './layout-preferences.js';
 
 export const setupWatchers = ({
   state,
@@ -61,14 +61,7 @@ export const setupWatchers = ({
     svgContainer,
     diagramElements,
     linearBaseConfig,
-    circularLegendPosition,
-    linearLegendPosition,
-    circularPlotTitlePosition,
-    linearPlotTitlePosition,
-    circularSingleRecordLegendPosition,
-    circularSingleRecordPlotTitlePosition,
-    circularMultiRecordLegendPosition,
-    circularMultiRecordPlotTitlePosition,
+    layoutPreferences,
     suppressCircularMultiRecordDefaults,
     featureRecordIds,
     selectedFeatureRecordIdx,
@@ -160,70 +153,15 @@ export const setupWatchers = ({
 
   const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
-  const getStoredCircularLayout = (useMultiRecord) => {
-    if (useMultiRecord) {
-      const fallbackLegend = normalizeLegendPosition(circularSingleRecordLegendPosition.value, 'left');
-      const fallbackPlotTitlePosition = normalizeCircularPlotTitlePosition(circularSingleRecordPlotTitlePosition.value);
-      return {
-        legend: hasStoredLayoutValue(circularMultiRecordLegendPosition.value)
-          ? normalizeLegendPosition(circularMultiRecordLegendPosition.value, fallbackLegend)
-          : fallbackLegend,
-        plotTitlePosition: hasStoredLayoutValue(circularMultiRecordPlotTitlePosition.value)
-          ? normalizeCircularPlotTitlePosition(circularMultiRecordPlotTitlePosition.value)
-          : fallbackPlotTitlePosition
-      };
-    }
-
-    return {
-      legend: normalizeLegendPosition(circularSingleRecordLegendPosition.value, 'left'),
-      plotTitlePosition: normalizeCircularPlotTitlePosition(circularSingleRecordPlotTitlePosition.value)
-    };
-  };
-
-  const syncCurrentCircularLayoutCache = () => {
-    const normalizedLegend = normalizeLegendPosition(form.legend, 'left');
-    const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
-
-    circularLegendPosition.value = normalizedLegend;
-    circularPlotTitlePosition.value = normalizedPlotTitlePosition;
-
-    if (form.multi_record_canvas) {
-      circularMultiRecordLegendPosition.value = normalizedLegend;
-      circularMultiRecordPlotTitlePosition.value = normalizedPlotTitlePosition;
-    } else {
-      circularSingleRecordLegendPosition.value = normalizedLegend;
-      circularSingleRecordPlotTitlePosition.value = normalizedPlotTitlePosition;
-    }
-
-    return {
-      legend: normalizedLegend,
-      plotTitlePosition: normalizedPlotTitlePosition
-    };
-  };
-
-  const restoreCircularLayoutCache = (useMultiRecord) => {
-    const nextLayout = getStoredCircularLayout(useMultiRecord);
-    circularLegendPosition.value = nextLayout.legend;
-    circularPlotTitlePosition.value = nextLayout.plotTitlePosition;
-
-    if (form.legend !== nextLayout.legend) {
-      form.legend = nextLayout.legend;
-    }
-    if (state.adv.plot_title_position !== nextLayout.plotTitlePosition) {
-      state.adv.plot_title_position = nextLayout.plotTitlePosition;
-    }
-
-    return nextLayout;
-  };
-
   const hasStoredCircularMultiRecordLayout = () =>
-    hasStoredLayoutValue(circularMultiRecordLegendPosition.value) ||
-    hasStoredLayoutValue(circularMultiRecordPlotTitlePosition.value);
+    hasStoredLayoutValue(layoutPreferences.circular.multi.legend) ||
+    hasStoredLayoutValue(layoutPreferences.circular.multi.plotTitlePosition);
 
   const applyCircularMultiRecordSmartDefaults = () => {
-    const singleLayout = getStoredCircularLayout(false);
-    circularMultiRecordLegendPosition.value = singleLayout.legend === 'left' ? 'bottom' : singleLayout.legend;
-    circularMultiRecordPlotTitlePosition.value =
+    const singleLayout = resolveCircularLayoutPreference(layoutPreferences, false);
+    layoutPreferences.circular.multi.legend =
+      singleLayout.legend === 'left' ? 'bottom' : singleLayout.legend;
+    layoutPreferences.circular.multi.plotTitlePosition =
       singleLayout.plotTitlePosition === 'none' ? 'bottom' : singleLayout.plotTitlePosition;
   };
 
@@ -349,18 +287,6 @@ export const setupWatchers = ({
   watch(
     () => form.legend,
     (newPos, oldPos) => {
-      if (mode.value === 'circular') {
-        const normalizedLegend = normalizeLegendPosition(newPos, 'left');
-        circularLegendPosition.value = normalizedLegend;
-        if (form.multi_record_canvas) {
-          circularMultiRecordLegendPosition.value = normalizedLegend;
-        } else {
-          circularSingleRecordLegendPosition.value = normalizedLegend;
-        }
-      } else if (mode.value === 'linear') {
-        linearLegendPosition.value = normalizeLegendPosition(newPos, 'bottom');
-      }
-
       if (generatedMode.value !== mode.value) return;
       if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (
@@ -386,7 +312,12 @@ export const setupWatchers = ({
 
       if (enabled && !hasStoredCircularMultiRecordLayout()) {
         if (suppressCircularMultiRecordDefaults.value) {
-          syncCurrentCircularLayoutCache();
+          layoutPreferences.circular.multi.legend = normalizeLegendPosition(
+            form.legend,
+            'left'
+          );
+          layoutPreferences.circular.multi.plotTitlePosition =
+            normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
         } else {
           applyCircularMultiRecordSmartDefaults();
         }
@@ -396,7 +327,6 @@ export const setupWatchers = ({
         suppressCircularMultiRecordDefaults.value = false;
       }
 
-      restoreCircularLayoutCache(Boolean(enabled));
     }
   );
 
@@ -578,23 +508,9 @@ export const setupWatchers = ({
 
   watch(
     () => mode.value,
-    (newMode, oldMode) => {
+    () => {
       if (semanticFileWatchersSuppressed.value) return;
       cancelDefinitionUpdate();
-
-      if (oldMode === 'circular') {
-        syncCurrentCircularLayoutCache();
-      } else if (oldMode === 'linear') {
-        linearLegendPosition.value = normalizeLegendPosition(form.legend, 'bottom');
-        linearPlotTitlePosition.value = normalizeLinearPlotTitlePosition(state.adv.plot_title_position);
-      }
-
-      if (newMode === 'circular') {
-        restoreCircularLayoutCache(Boolean(form.multi_record_canvas));
-      } else if (newMode === 'linear') {
-        form.legend = linearLegendPosition.value;
-        state.adv.plot_title_position = linearPlotTitlePosition.value;
-      }
 
       if (typeof resetPreviewViewport === 'function') {
         resetPreviewViewport();
@@ -759,19 +675,7 @@ export const setupWatchers = ({
   watch(() => state.adv.def_font_size, scheduleCircularDefinitionUpdate);
   watch(
     () => state.adv.plot_title_position,
-    (newPos) => {
-      if (mode.value === 'circular') {
-        const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(newPos);
-        circularPlotTitlePosition.value = normalizedPlotTitlePosition;
-        if (form.multi_record_canvas) {
-          circularMultiRecordPlotTitlePosition.value = normalizedPlotTitlePosition;
-        } else {
-          circularSingleRecordPlotTitlePosition.value = normalizedPlotTitlePosition;
-        }
-      } else if (mode.value === 'linear') {
-        linearPlotTitlePosition.value = normalizeLinearPlotTitlePosition(newPos);
-      }
-
+    () => {
       scheduleCircularDefinitionUpdate();
     }
   );

@@ -12,7 +12,12 @@ CircularLabelPlacement: TypeAlias = Literal["horizontal", "radial"]
 
 
 def normalize_circular_label_placement(value: object) -> CircularLabelPlacement:
-    placement = str(value or "horizontal").strip().lower()
+    if not isinstance(value, str):
+        raise ValidationError(
+            "circular label placement must be 'horizontal' or 'radial' "
+            f"(received {value!r})"
+        )
+    placement = value.strip().lower()
     if placement not in {"horizontal", "radial"}:
         raise ValidationError(
             "circular label placement must be 'horizontal' or 'radial' "

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping
 
+from gbdraw.exceptions import ValidationError
 from gbdraw.labels.policy import LabelRenderingPolicy, normalize_label_rendering
 from gbdraw.labels.circular_types import (
     CircularLabelPlacement,
@@ -10,6 +11,9 @@ from gbdraw.labels.circular_types import (
 )
 
 from .common import ShortLongFloatConfig  # type: ignore[reportMissingImports]
+
+CircularLabelScope = Literal["none", "outer", "both"]
+LinearLabelScope = Literal["none", "all", "first", "orthogroup_top"]
 
 
 @dataclass(frozen=True)
@@ -95,18 +99,39 @@ class LabelsUnifiedAdjustmentConfig:
 
 @dataclass(frozen=True)
 class LabelsLinearConfig:
+    scope: LinearLabelScope
     placement: Literal["auto", "above_feature"]
     rotation: float
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsLinearConfig":
         raw = d if isinstance(d, dict) else dict(d)
-        placement_raw = str(raw.get("placement", "auto")).strip().lower()
-        placement: Literal["auto", "above_feature"] = (
-            "above_feature" if placement_raw in {"above_feature", "on_feature"} else "auto"
-        )
+        scope_raw = raw.get("scope")
+        if not isinstance(scope_raw, str):
+            raise ValidationError(
+                "labels.linear.scope must be one of: "
+                "none, all, first, orthogroup_top"
+            )
+        scope = scope_raw.strip().lower()
+        if scope not in {"none", "all", "first", "orthogroup_top"}:
+            raise ValidationError(
+                "labels.linear.scope must be one of: "
+                "none, all, first, orthogroup_top"
+            )
+        placement_value = raw.get("placement", "auto")
+        if not isinstance(placement_value, str):
+            raise ValidationError(
+                "labels.linear.placement must be one of: auto, above_feature"
+            )
+        placement_raw = placement_value.strip().lower()
+        if placement_raw not in {"auto", "above_feature"}:
+            raise ValidationError(
+                "labels.linear.placement must be one of: auto, above_feature"
+            )
+        placement: Literal["auto", "above_feature"] = placement_raw  # type: ignore[assignment]
         rotation = float(raw.get("rotation", 0.0))
         return cls(
+            scope=scope,  # type: ignore[arg-type]
             placement=placement,
             rotation=rotation,
         )
@@ -114,12 +139,24 @@ class LabelsLinearConfig:
 
 @dataclass(frozen=True)
 class LabelsCircularConfig:
+    scope: CircularLabelScope
     placement: CircularLabelPlacement
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LabelsCircularConfig":
         raw = d if isinstance(d, dict) else dict(d)
+        scope_raw = raw.get("scope")
+        if not isinstance(scope_raw, str):
+            raise ValidationError(
+                "labels.circular.scope must be one of: none, outer, both"
+            )
+        scope = scope_raw.strip().lower()
+        if scope not in {"none", "outer", "both"}:
+            raise ValidationError(
+                "labels.circular.scope must be one of: none, outer, both"
+            )
         return cls(
+            scope=scope,  # type: ignore[arg-type]
             placement=normalize_circular_label_placement(raw.get("placement", "horizontal")),
         )
 
@@ -203,6 +240,8 @@ class LabelsConfig:
 
 __all__ = [
     "LabelsConfig",
+    "CircularLabelScope",
+    "LinearLabelScope",
     "LabelsFilteringConfig",
     "LabelsLengthThresholdConfig",
     "LabelsFontSizeConfig",

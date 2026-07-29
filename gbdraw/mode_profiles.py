@@ -96,11 +96,11 @@ class ModeProfile:
     @property
     def config_overrides(self) -> dict[str, object]:
         overrides: dict[str, object] = {
-            "show_gc": self.show_gc,
-            "show_skew": self.show_skew,
+            "canvas.show_gc": self.show_gc,
+            "canvas.show_skew": self.show_skew,
         }
         if self.linear_axis_color is not None:
-            overrides["linear_axis_stroke_color"] = self.linear_axis_color
+            overrides["objects.axis.linear.stroke_color"] = self.linear_axis_color
         return overrides
 
 
@@ -156,21 +156,17 @@ def resolve_mode_profile_overrides(
     mode: DiagramMode | str,
     explicit_overrides: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    """Merge fresh-request profile values with explicit legacy config overrides."""
+    """Merge fresh-request profile values with explicit canonical config overrides."""
 
     profile = get_mode_profile(mode)
     resolved = profile.config_overrides
-    explicit = {
-        key: value
-        for key, value in dict(explicit_overrides or {}).items()
-        if value is not None
-    }
+    explicit = dict(explicit_overrides or {})
     if (
         profile.mode == "linear"
-        and explicit.get("linear_ruler_on_axis") is True
-        and "linear_axis_stroke_color" not in explicit
+        and explicit.get("canvas.linear.ruler_on_axis") is True
+        and "objects.axis.linear.stroke_color" not in explicit
     ):
-        resolved["linear_axis_stroke_color"] = profile.linear_ruler_axis_color
+        resolved["objects.axis.linear.stroke_color"] = profile.linear_ruler_axis_color
     resolved.update(explicit)
     return resolved
 

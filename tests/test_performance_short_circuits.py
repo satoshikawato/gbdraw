@@ -13,9 +13,9 @@ import gbdraw.diagrams.linear.precalc as linear_precalc_module
 import gbdraw.features.factory as factory_module
 import gbdraw.render.groups.linear.gc_content as linear_gc_content_module
 import gbdraw.render.groups.linear.gc_skew as linear_gc_skew_module
-import gbdraw.render.groups.linear.seq_record as linear_seq_record_module
 import gbdraw.render.export as export_module
 from gbdraw.analysis.skew import skew_df as real_skew_df
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
@@ -64,11 +64,11 @@ def test_linear_shared_gc_dataframe_is_computed_once_per_record(
     assemble_linear_diagram_from_records(
         [record],
         legend="none",
-        config_overrides={
-            "show_gc": True,
-            "show_skew": True,
-            "show_labels": "none",
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "labels.linear.scope": "none",
+        }),
     )
 
     assert call_count == 1
@@ -91,11 +91,11 @@ def test_circular_no_labels_skips_label_text_lookup(
     assemble_circular_diagram_from_record(
         record,
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     )
 
     assert call_count == 0
@@ -118,18 +118,18 @@ def test_linear_no_labels_skips_label_text_lookup(
     assemble_linear_diagram_from_records(
         [record],
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.linear.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     )
 
     assert call_count == 0
 
 
 @pytest.mark.linear
-def test_linear_feature_dict_is_built_once_per_record(
+def test_linear_feature_layers_are_built_once_per_record(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = [_make_record("rec1"), _make_record("rec2")]
@@ -141,20 +141,16 @@ def test_linear_feature_dict_is_built_once_per_record(
         call_count += 1
         return real_create_feature_layers(*args, **kwargs)
 
-    def unexpected_create_feature_dict(*_args, **_kwargs):
-        raise AssertionError("Linear assembly should reuse precomputed feature dictionaries.")
-
     monkeypatch.setattr(linear_precalc_module, "create_feature_layers", counting_create_feature_layers)
-    monkeypatch.setattr(linear_seq_record_module, "create_feature_dict", unexpected_create_feature_dict)
 
     assemble_linear_diagram_from_records(
         records,
         legend="none",
-        config_overrides={
-            "show_labels": "all",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.linear.scope": "all",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     )
 
     assert call_count == len(records)
@@ -176,11 +172,11 @@ def test_circular_legend_none_skips_legend_preparation(
     assemble_circular_diagram_from_record(
         record,
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     )
 
 
@@ -200,11 +196,11 @@ def test_linear_legend_none_skips_legend_preparation(
     assemble_linear_diagram_from_records(
         [record],
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.linear.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     )
 
 

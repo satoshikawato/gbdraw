@@ -25,7 +25,7 @@ re-exports and compatibility aliases have been removed.
 
 See the [Python API guide](./PYTHON_API.md) for executable examples.
 
-## Architecture/API Phase 0, Phase 1, and beta cleanup
+## Architecture/API Phase 0–2 and beta cleanup
 
 - Fresh Python, CLI, and Web requests now resolve one versioned mode profile.
   Circular defaults to comparison thresholds `1e-5` / `50` / `70` / `0` and
@@ -65,6 +65,20 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   `feature_visibility_table`, `collinear_max_unit_gap`, Circular `auto`,
   Linear `above_feature`, and Linear `above|below`, respectively. CLI
   spellings add the leading `--`.
+- Label configuration now uses schema-derived, mode-specific leaves. Circular
+  uses `labels.circular.scope` (`none|outer|both`) and
+  `labels.circular.placement` (`horizontal|radial`). Linear uses
+  `labels.linear.scope` (`none|all|first|orthogroup_top`),
+  `labels.linear.placement` (`auto|above_feature`), and
+  `labels.linear.rotation`. The shared `labels.rendering`
+  (`auto|embedded_only|external_only`) setting remains the policy for embedding
+  labels in feature bodies or routing them externally.
+- Fresh configuration and override inputs reject the retired flat
+  `show_labels` / `allow_inner_labels` aliases, `canvas.show_labels`,
+  `canvas.circular.show_labels`, `canvas.linear.show_labels`, and
+  `canvas.circular.allow_inner_labels`. Supported persisted-data readers
+  migrate them to the canonical `labels.*` leaves; current writers do not emit
+  the old forms.
 - Fresh Circular slot specifications reject `spacing`, `strict`, `compress`,
   and `reserve`. Use `inner_gap_px` and `outer_gap_px`; reservation and
   compression are derived from current slot geometry and `side`.
@@ -107,7 +121,7 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   first available `_2`, `_3`, ... suffix. Circular grid output uses the first
   record ID by default and preserves an explicit prefix unchanged. Batch
   sessions preserve the explicit grouping and every resolved output.
-- Session version 38 and canonical request schema 5 persist explicit `single`,
+- Session version 38 introduced canonical request schema 5 and persisted explicit `single`,
   `grid`, or `batch` grouping. Schema 5 stores one output object for a single
   diagram or grid and an output array for Circular batch. Record loading is
   mode-neutral; planners own topology warnings and mode, comparison, and
@@ -118,12 +132,29 @@ Active and public runtime collinearity configuration uses
 privately migrate legacy `standard` parameter payloads while preserving their
 effective fields.
 
+Phase 2 completes the internal state/planner consolidation:
+
+- Frozen `CircularRenderProfile` and `LinearRenderProfile` values resolve the
+  active typed configuration once before canvas and drawing-configurator
+  construction.
+- `CircularRecordRenderContext` carries resolved radial layout state.
+  `LinearRecordRenderContext` carries the Linear profile, resolved track layout,
+  and Depth availability; its active feature-track layout, strandedness, and
+  axis-ruler state are derived read-only values.
+- Record placement, annotation slot planning, and common track-slot parsing now
+  have one shared owner. Reusable Circular radial contracts live in
+  `gbdraw.layout`, and feature render groups require prepared
+  `FeatureBuildResult` layers.
+- The temporary shared `DiagramOptions`, `TrackOptions`, and `OutputOptions`
+  implementation bridge is removed. Builders accept only the mode-specific
+  typed option contracts.
+
 ## Compact LOSATP runtime handles and session version 36
 
 - Session version 36 introduced canonical `renderRequest` schema 3 and compact
   runtime handles. Version 36 remains readable after the version 37/schema 4
   output-ownership cleanup; public typed conversion is available for canonical
-  versions 31–33 and 36–38. Versions 34 and 35 were branch-internal
+  versions 31–33 and 36–39. Versions 34 and 35 were branch-internal
   development formats and are not supported.
 - Generated protein FASTA, raw LOSATP QUERY/SUBJECT fields, protein maps, and derived comparison references now use deterministic session-global handles with the form `h_[a-z2-7]{26}`. The handles bind a record instance to the complete CDS feature identity without repeating long feature hashes or readable aliases in every hit row. Upload filenames, modification times, session resource names, display aliases, and reopen time do not determine the handle or raw-cache identity.
 - Current protein raw cache entries use schema 4, derived comparison payloads use schema 3, and the protein identity manifest uses schema 2. The manifest remains the authority for complete feature identity and display metadata and separates runtime binding from display binding. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
@@ -340,12 +371,15 @@ New drawing code should prefer the top-level interface described above.
 ## Session API boundary
 
 The public session bridge accepts canonical documents from versions 31–33 and
-36–38.
+36–39.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
-Current writers emit version 38 and `renderRequest` schema 5. Schema 5 persists
+Current writers emit version 39 and `renderRequest` schema 5. Version 39 stores
+Circular-single, Circular-multi, and Linear legend/title preferences in one
+canonical `ui.layoutPreferences` tree; supported older fields migrate on load.
+Schema 5 persists
 explicit Circular `single`, `grid`, or `batch` grouping; batch output is an
 array with one resolved entry per record, while other requests use one output
 object. Version 37/schema 4 introduced sole output-prefix ownership at

@@ -14,9 +14,10 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.linear as linear_cli_module
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import load_default_colors
@@ -58,9 +59,8 @@ def _resolve_layout(slot_specs: list[str]) -> tuple[LinearTrackLayout, LinearCan
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=1200,
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
     slots = normalize_linear_track_slots_with_axis(parse_linear_track_slots(slot_specs), None)
     return (
@@ -239,6 +239,7 @@ def test_linear_track_spacing_falls_back_to_zero() -> None:
 def test_linear_track_slot_geometry_metadata_keeps_duplicate_record_instances() -> None:
     canvas = assemble_linear_diagram_from_records(
         [_record("duplicate"), _record("duplicate")],
+        cfg=apply_config_overrides(None, None),
         legend="none",
         linear_track_slots=[
             "features:features@side=overlay",
@@ -280,19 +281,22 @@ def test_linear_record_plans_expand_only_records_with_extra_feature_lanes() -> N
     ]
     canvas = assemble_linear_diagram_from_records(
         [shallow, deep],
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "canvas.strandedness": True,
+                "canvas.resolve_overlaps": True,
+            },
+        ),
         legend="none",
         depth_track_tables=[[_depth_table("shallow")], [_depth_table("deep")]],
         linear_track_slots=[
             "features:features@side=overlay",
             "depth:depth@track_index=0,side=below,h=10px",
         ],
-        config_overrides={
-            "show_labels": False,
-            "show_gc": False,
-            "show_skew": False,
-            "strandedness": True,
-            "resolve_overlaps": True,
-        },
     )
     records = canvas._gbdraw_track_slot_geometry["records"]
     features = [
@@ -311,20 +315,21 @@ def test_linear_record_plans_expand_only_records_with_extra_feature_lanes() -> N
 @pytest.mark.linear
 def test_default_middle_slots_match_explicit_geometry_and_shared_spacing() -> None:
     overrides = {
-        "show_gc": True,
-        "show_skew": True,
-        "show_labels": False,
-        "strandedness": True,
+        "canvas.show_gc": True,
+        "canvas.show_skew": True,
+        "labels.linear.scope": "none",
+        "canvas.strandedness": True,
     }
+    cfg = apply_config_overrides(None, overrides)
     default_canvas = assemble_linear_diagram_from_records(
         [_record()],
+        cfg=cfg,
         legend="none",
-        config_overrides=overrides,
     )
     explicit_canvas = assemble_linear_diagram_from_records(
         [_record()],
+        cfg=cfg,
         legend="none",
-        config_overrides=overrides,
         linear_track_slots=[
             "features:features@side=overlay",
             "gc_content:dinucleotide_content@side=below,nt=GC",
@@ -337,7 +342,6 @@ def test_default_middle_slots_match_explicit_geometry_and_shared_spacing() -> No
     explicit_features = _resolved_slot_geometry(explicit_canvas, "features")
     explicit_gc = _resolved_slot_geometry(explicit_canvas, "gc_content")
     explicit_skew = _resolved_slot_geometry(explicit_canvas, "gc_skew")
-    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
 
     assert default_features["reserveBand"] == pytest.approx(
         explicit_features["reserveBand"]
@@ -543,8 +547,11 @@ def test_resolve_linear_track_layout_clears_numeric_track_below_axis() -> None:
 def test_assemble_linear_custom_slots_places_tracks_above_and_below_axis() -> None:
     svg = assemble_linear_diagram_from_records(
         [_record()],
+        cfg=apply_config_overrides(
+            None,
+            {"canvas.show_gc": True, "canvas.show_skew": True},
+        ),
         legend="none",
-        config_overrides={"show_gc": True, "show_skew": True},
         linear_track_slots=[
             "gc_skew:gc_skew@side=above,h=28px",
             "features:features@side=overlay",
@@ -564,9 +571,12 @@ def test_assemble_linear_dinucleotide_skew_slot_uses_custom_colors_and_legend() 
     default_colors = load_default_colors("", palette="default")
     svg = assemble_linear_diagram_from_records(
         [_record()],
+        cfg=apply_config_overrides(
+            None,
+            {"canvas.show_gc": True, "canvas.show_skew": True},
+        ),
         legend="right",
         default_colors=default_colors,
-        config_overrides={"show_gc": True, "show_skew": True},
         linear_track_slots=[
             "features:features@side=overlay",
             "gc_skew:dinucleotide_skew@nt=GC,h=20px",
@@ -592,8 +602,11 @@ def test_assemble_linear_dinucleotide_skew_slot_rejects_invalid_custom_color() -
     with pytest.raises(ValidationError, match="Unknown color name"):
         assemble_linear_diagram_from_records(
             [_record()],
+            cfg=apply_config_overrides(
+                None,
+                {"canvas.show_gc": True, "canvas.show_skew": True},
+            ),
             legend="none",
-            config_overrides={"show_gc": True, "show_skew": True},
             linear_track_slots=[
                 "features:features@side=overlay",
                 "at_skew:dinucleotide_skew@nt=AT,positive_color=not-a-color",
@@ -604,6 +617,7 @@ def test_assemble_linear_dinucleotide_skew_slot_rejects_invalid_custom_color() -
 def test_assemble_linear_custom_depth_above_axis_keeps_depth_axis_clear() -> None:
     svg = assemble_linear_diagram_from_records(
         [_record()],
+        cfg=apply_config_overrides(None, None),
         legend="none",
         depth_table=_depth_table("rec1"),
         linear_track_slots=[

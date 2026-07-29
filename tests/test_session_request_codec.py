@@ -54,6 +54,7 @@ from gbdraw.api.requests import (
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.config.models import GbdrawConfig
+from gbdraw.exceptions import ValidationError
 from gbdraw.features.shapes import resolve_feature_rendering
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
@@ -1153,7 +1154,7 @@ def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None
         output_directory=tmp_path / "output",
     )
 
-    assert isinstance(decoded.options.config, dict)
+    assert isinstance(decoded.options.config, GbdrawConfig)
     assert decoded.options.feature_visibility_table_file == str(table_file)
     assert decoded.options.depth_track_files == ((str(depth_file), None),)
     assert decoded.options.conservation_blast_files == (str(blast_file),)
@@ -1272,8 +1273,8 @@ def test_decode_requires_caller_owned_output_directory(tmp_path: Path) -> None:
                 "identity": 70.0,
                 "alignmentLength": 0,
                 "configOverrides": {
-                    "show_gc": True,
-                    "show_skew": True,
+                    "canvas.show_gc": True,
+                    "canvas.show_skew": True,
                 },
             },
         ),
@@ -1285,9 +1286,9 @@ def test_decode_requires_caller_owned_output_directory(tmp_path: Path) -> None:
                 "identity": 0.0,
                 "alignmentLength": 0,
                 "configOverrides": {
-                    "show_gc": False,
-                    "show_skew": False,
-                    "linear_axis_stroke_color": "lightgray",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                    "objects.axis.linear.stroke_color": "lightgray",
                 },
             },
         ),
@@ -1314,16 +1315,16 @@ def test_current_writer_serializes_resolved_mode_defaults(
         (
             CircularDiagramRequest,
             {
-                "show_gc": True,
-                "show_skew": True,
+                "canvas.show_gc": True,
+                "canvas.show_skew": True,
             },
         ),
         (
             LinearDiagramRequest,
             {
-                "show_gc": True,
-                "show_skew": True,
-                "linear_axis_stroke_color": "gray",
+                "canvas.show_gc": True,
+                "canvas.show_skew": True,
+                "objects.axis.linear.stroke_color": "gray",
             },
         ),
     ],
@@ -1480,10 +1481,137 @@ def test_supported_schemas_preserve_explicit_serialized_defaults(
     assert decoded.options.identity == 85.0
     assert decoded.options.alignment_length == 123
     assert decoded.options.config_overrides == {
-        "show_gc": False,
-        "show_skew": False,
-        "linear_axis_stroke_color": "hotpink",
+        "canvas.show_gc": False,
+        "canvas.show_skew": False,
+        "objects.axis.linear.stroke_color": "hotpink",
     }
+
+
+@pytest.mark.parametrize("schema", sorted(SUPPORTED_CANONICAL_REQUEST_SCHEMAS))
+@pytest.mark.parametrize(
+    ("request_type", "legacy_overrides", "scope_path", "expected_scope"),
+    [
+        (
+            CircularDiagramRequest,
+            {"show_labels": True, "allow_inner_labels": True},
+            "labels.circular.scope",
+            "both",
+        ),
+        (
+            LinearDiagramRequest,
+            {"show_labels": "orthogroup_top"},
+            "labels.linear.scope",
+            "orthogroup_top",
+        ),
+    ],
+)
+def test_supported_schemas_migrate_legacy_flat_label_settings(
+    tmp_path: Path,
+    schema: int,
+    request_type,
+    legacy_overrides: dict[str, object],
+    scope_path: str,
+    expected_scope: str,
+) -> None:
+    record = SeqRecord(
+        Seq("ATGC"),
+        id="record",
+        annotations={"molecule_type": "DNA"},
+    )
+    encoded = encode_canonical_request(
+        request_type(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+        )
+    )
+    payload = copy.deepcopy(encoded.payload)
+    payload["schema"] = schema
+    if schema < 5:
+        payload.pop("grouping", None)
+    if schema == 1:
+        payload["records"][0].pop("recordKey")
+    payload["diagramOptions"]["configOverrides"] = legacy_overrides
+
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / f"legacy-label-overrides-{request_type.__name__}-{schema}",
+        ),
+        output_directory=tmp_path / "output",
+    )
+
+    overrides = decoded.options.config_overrides
+    assert overrides is not None
+    assert overrides[scope_path] == expected_scope
+    assert not set(legacy_overrides) & set(overrides)
+
+    latest = encode_canonical_request(decoded).payload
+    latest_overrides = latest["diagramOptions"]["configOverrides"]
+    assert latest["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert latest_overrides[scope_path] == expected_scope
+    assert not set(legacy_overrides) & set(latest_overrides)
+
+
+@pytest.mark.parametrize("schema", sorted(SUPPORTED_CANONICAL_REQUEST_SCHEMAS))
+def test_supported_schemas_migrate_legacy_full_config_label_settings(
+    tmp_path: Path,
+    schema: int,
+) -> None:
+    record = SeqRecord(
+        Seq("ATGC"),
+        id="record",
+        annotations={"molecule_type": "DNA"},
+    )
+    config = GbdrawConfig.from_dict(load_default_config())
+    encoded = encode_canonical_request(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(config=config),
+        )
+    )
+    payload = copy.deepcopy(encoded.payload)
+    payload["schema"] = schema
+    if schema < 5:
+        payload.pop("grouping", None)
+    if schema == 1:
+        payload["records"][0].pop("recordKey")
+    legacy_config = payload["diagramOptions"]["config"]
+    legacy_config["canvas"]["show_labels"] = True
+    legacy_config["canvas"]["circular"]["show_labels"] = True
+    legacy_config["canvas"]["linear"]["show_labels"] = True
+    legacy_config["canvas"]["circular"]["allow_inner_labels"] = True
+    legacy_config["canvas"]["linear"]["track_layout"] = "spreadout"
+    legacy_config["labels"]["circular"].pop("scope")
+    legacy_config["labels"]["linear"].pop("scope")
+    legacy_config["labels"]["linear"]["placement"] = "on_feature"
+
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / f"legacy-label-config-{schema}",
+        ),
+        output_directory=tmp_path / "output",
+    )
+
+    decoded_config = decoded.options.config
+    assert isinstance(decoded_config, GbdrawConfig)
+    assert decoded_config.labels.circular.scope == "both"
+    assert decoded_config.labels.linear.scope == "all"
+    assert decoded_config.canvas.linear.track_layout == "above"
+    assert decoded_config.labels.linear.placement == "above_feature"
+
+    latest = encode_canonical_request(decoded).payload
+    latest_config = latest["diagramOptions"]["config"]
+    assert latest["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert latest_config["labels"]["circular"]["scope"] == "both"
+    assert latest_config["labels"]["linear"]["scope"] == "all"
+    assert latest_config["canvas"]["linear"]["track_layout"] == "above"
+    assert latest_config["labels"]["linear"]["placement"] == "above_feature"
+    assert "show_labels" not in latest_config["canvas"]
+    assert "show_labels" not in latest_config["canvas"]["circular"]
+    assert "show_labels" not in latest_config["canvas"]["linear"]
+    assert "allow_inner_labels" not in latest_config["canvas"]["circular"]
 
 
 @pytest.mark.parametrize("schema", [1, 2, 3])
@@ -1537,9 +1665,9 @@ def test_legacy_schemas_migrate_retired_config_overrides(
     overrides = decoded.options.config_overrides
     assert overrides is not None
     assert "depth_tick_interval" not in overrides
-    assert overrides["depth_large_tick_interval"] == 12
-    assert overrides["label_placement"] == "above_feature"
-    assert overrides["linear_track_layout"] == current_layout
+    assert overrides["objects.depth.large_tick_interval"] == 12
+    assert overrides["labels.linear.placement"] == "above_feature"
+    assert overrides["canvas.linear.track_layout"] == current_layout
 
     rendered = render_request(decoded)
     assert rendered.output_paths == (
@@ -1550,18 +1678,18 @@ def test_legacy_schemas_migrate_retired_config_overrides(
     latest_overrides = latest["diagramOptions"]["configOverrides"]
     assert latest["schema"] == CANONICAL_REQUEST_SCHEMA
     assert "depth_tick_interval" not in latest_overrides
-    assert latest_overrides["depth_large_tick_interval"] == 12
-    assert latest_overrides["label_placement"] == "above_feature"
-    assert latest_overrides["linear_track_layout"] == current_layout
+    assert latest_overrides["objects.depth.large_tick_interval"] == 12
+    assert latest_overrides["labels.linear.placement"] == "above_feature"
+    assert latest_overrides["canvas.linear.track_layout"] == current_layout
 
 
 @pytest.mark.parametrize(
     ("overrides", "retired"),
     [
         ({"depth_tick_interval": 12}, "depth_tick_interval"),
-        ({"label_placement": "on_feature"}, "label_placement=on_feature"),
-        ({"linear_track_layout": "spreadout"}, "linear_track_layout=spreadout"),
-        ({"linear_track_layout": "tuckin"}, "linear_track_layout=tuckin"),
+        ({"label_placement": "on_feature"}, "label_placement"),
+        ({"linear_track_layout": "spreadout"}, "linear_track_layout"),
+        ({"linear_track_layout": "tuckin"}, "linear_track_layout"),
     ],
 )
 def test_schema4_rejects_retired_config_overrides(
@@ -1593,9 +1721,9 @@ def test_schema4_rejects_retired_config_overrides(
     ("overrides", "retired"),
     [
         ({"depth_tick_interval": 12}, "depth_tick_interval"),
-        ({"label_placement": "on_feature"}, "label_placement=on_feature"),
-        ({"linear_track_layout": "spreadout"}, "linear_track_layout=spreadout"),
-        ({"linear_track_layout": "tuckin"}, "linear_track_layout=tuckin"),
+        ({"label_placement": "on_feature"}, "label_placement"),
+        ({"linear_track_layout": "spreadout"}, "linear_track_layout"),
+        ({"linear_track_layout": "tuckin"}, "linear_track_layout"),
     ],
 )
 def test_schema4_writer_rejects_retired_config_overrides(
@@ -1603,13 +1731,11 @@ def test_schema4_writer_rejects_retired_config_overrides(
     retired: str,
 ) -> None:
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
-    request = LinearDiagramRequest(
-        records=(RecordInput(source=InMemoryRecordSource(record)),),
-        options=LinearDiagramOptions(config_overrides=overrides),
-    )
-
-    with pytest.raises(CanonicalRequestEncodingError, match=retired):
-        encode_canonical_request(request)
+    with pytest.raises(ValidationError, match=retired):
+        LinearDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=LinearDiagramOptions(config_overrides=overrides),
+        )
 
 
 @pytest.mark.parametrize("schema", [1, 2])
@@ -1751,13 +1877,15 @@ def test_decode_rejects_missing_resource_reference(tmp_path: Path) -> None:
 
 def test_encode_rejects_noncanonical_option_values(tmp_path: Path) -> None:
     source = _source_file(tmp_path / "record.gbk")
+    invalid_config = load_default_config()
+    invalid_config["labels"]["filtering"]["extension"] = object()
     invalid_type = LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),
         options=LinearDiagramOptions(window="10"),
     )
     invalid_json = LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),
-        options=LinearDiagramOptions(config_overrides={"bad": object()}),
+        options=LinearDiagramOptions(config=invalid_config),
     )
     empty_table = LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),

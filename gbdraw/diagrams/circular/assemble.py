@@ -12,7 +12,7 @@ import logging
 import math
 import copy
 from dataclasses import replace
-from typing import Any, Optional, Callable, Mapping, Sequence
+from typing import Any, Optional, Mapping, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -29,7 +29,10 @@ from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     index_depth_track_row,
     sync_depth_track_legend_entries,
 )
-from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ...config.models import (  # type: ignore[reportMissingImports]
+    CircularRenderProfile,
+    GbdrawConfig,
+)
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
     DepthConfigurator,
@@ -42,7 +45,7 @@ from ...core.sequence import check_feature_presence  # type: ignore[reportMissin
 from ...core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 from ...exceptions import ValidationError
 from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
-from ...features.factory import create_feature_layers  # type: ignore[reportMissingImports]
+from ...features.factory import FeatureBuildResult, create_feature_layers  # type: ignore[reportMissingImports]
 from ...labels.circular import (  # type: ignore[reportMissingImports]
     assign_leader_start_points,
     minimum_bbox_gap_px,
@@ -51,7 +54,14 @@ from ...labels.circular import (  # type: ignore[reportMissingImports]
     y_overlap,
 )
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
-from ...layout.circular import calculate_feature_position_factors_circular  # type: ignore[reportMissingImports]
+from ...layout.circular import (  # type: ignore[reportMissingImports]
+    CircularFeatureLaneDirection,
+    CircularRadialLayout,
+    CircularRecordRenderContext,
+    CircularResolvedSlot,
+    CircularTickLayout,
+    calculate_feature_position_factors_circular,
+)
 from ...layout.circular_depth_axis import depth_axis_tick_font_size_px  # type: ignore[reportMissingImports]
 from ...layout.common import calculate_cds_ratio  # type: ignore[reportMissingImports]
 from ...legend.table import _unique_legend_key, prepare_legend_table  # type: ignore[reportMissingImports]
@@ -71,9 +81,9 @@ from ...annotations import (
     feature_underlay_slot_id,
     layout_annotation_track,
     merge_feature_underlays,
-    resolve_annotations,
     sync_annotation_legend_entries,
 )
+from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.circular.annotations import draw_circular_annotation_track
 from ...svg.ids import stable_svg_id, track_slot_svg_id
 from .positioning import center_group_on_canvas
@@ -93,9 +103,6 @@ from .builders import (
 )
 from ...render.groups.circular.definition import DefinitionGroup  # type: ignore[reportMissingImports]
 from .radial_layout import (  # type: ignore[reportMissingImports]
-    CircularRadialLayout,
-    CircularResolvedSlot,
-    CircularTickLayout,
     build_circular_feature_layout,
     resolve_circular_radial_layout,
 )
@@ -210,15 +217,6 @@ def _tag_circular_track_slot_group(
     return canvas
 
 
-def _annotation_marks_for_set(
-    bundle: ResolvedAnnotationBundle,
-    set_id: str,
-) -> tuple[str, ...]:
-    return tuple(
-        dict.fromkeys(item.mark for item in bundle.annotations if item.set_id == set_id)
-    )
-
-
 def _prepare_circular_annotation_tracks(
     gb_record: SeqRecord,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
@@ -227,73 +225,28 @@ def _prepare_circular_annotation_tracks(
     canvas_config: CircularCanvasConfigurator,
     record_index: int,
     show_depth: bool,
+    show_gc: bool,
+    show_skew: bool,
     depth_track_count: int,
 ) -> tuple[list[CircularTrackSlot] | None, ResolvedAnnotationBundle, dict[str, ResolvedAnnotationTrack]]:
-    bundle = (
-        annotations
-        if isinstance(annotations, ResolvedAnnotationBundle)
-        else resolve_annotations(annotations, [gb_record], mode="circular")
-    )
-    if not bundle.set_ids and not bundle.annotations:
-        return slots, bundle, {}
-    relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
-    set_ids = bundle.set_ids or tuple(dict.fromkeys(item.set_id for item in bundle.annotations))
-    if slots is None:
-        slots = default_circular_track_slots(
+    slots, bundle, _auto_slot_ids = prepare_annotation_track_slots(
+        annotations,
+        [gb_record],
+        slots,
+        mode="circular",
+        default_slots=lambda: default_circular_track_slots(
             show_features=True,
             show_ticks=True,
             show_depth=show_depth,
             depth_track_count=depth_track_count,
-            show_gc=bool(canvas_config.show_gc),
-            show_skew=bool(canvas_config.show_skew),
-        )
-        auto_annotation_slots = []
-        for index, set_id in enumerate(set_ids):
-            marks = _annotation_marks_for_set(bundle, set_id)
-            lane_marks = tuple(mark for mark in marks if mark != "highlight")
-            if lane_marks:
-                auto_annotation_slots.append(
-                    CircularTrackSlot(
-                        id=f"annotations_{index + 1}",
-                        renderer="annotations",
-                        side="outside",
-                        params={"set_id": set_id, "marks": lane_marks},
-                    )
-                )
-            if "highlight" in marks:
-                highlight_slot_id = (
-                    f"annotations_{index + 1}_highlight"
-                    if lane_marks
-                    else f"annotations_{index + 1}"
-                )
-                auto_annotation_slots.append(
-                    CircularTrackSlot(
-                        id=highlight_slot_id,
-                        renderer="annotations",
-                        side="overlay",
-                        z=-1,
-                        params={
-                            "set_id": set_id,
-                            "marks": ("highlight",),
-                            "anchor_slot": "features",
-                            "layer": "underlay",
-                            "cover_anchor": True,
-                            "padding_px": 0.0,
-                        },
-                    )
-                )
-        slots = auto_annotation_slots + slots
-    requested = {
-        str(slot.params.get("set_id", "")).strip()
-        for slot in slots
-        if str(slot.renderer).strip().lower() == "annotations"
-    }
-    unknown = requested - set(set_ids)
-    if unknown:
-        raise ValidationError(f"Annotation track references unknown set_id(s): {', '.join(sorted(unknown))}")
-    for set_id in set_ids:
-        if set_id not in requested:
-            logger.warning("Annotation set %s is not referenced by a circular track slot.", set_id)
+            show_gc=show_gc,
+            show_skew=show_skew,
+        ),
+        slot_factory=CircularTrackSlot,
+    )
+    if not bundle.set_ids and not bundle.annotations:
+        return slots, bundle, {}
+    relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
 
     record_lengths = {record_index: len(gb_record.seq)}
     bp_per_px = {
@@ -334,6 +287,8 @@ def _add_circular_feature_underlays(
     canvas_config: CircularCanvasConfigurator,
     record_index: int,
     show_depth: bool,
+    show_gc: bool,
+    show_skew: bool,
     depth_track_count: int,
 ) -> tuple[
     list[CircularTrackSlot],
@@ -374,35 +329,32 @@ def _add_circular_feature_underlays(
         canvas_config=canvas_config,
         record_index=record_index,
         show_depth=show_depth,
+        show_gc=show_gc,
+        show_skew=show_skew,
         depth_track_count=depth_track_count,
     )
     return list(updated or []), merged, layouts
 
 
 def _circular_preset_for_layout(
-    canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
 ) -> str:
-    raw = getattr(canvas_config, "circular_track_preset", None)
-    if raw is None:
-        raw = cfg.canvas.circular.track_type
-    return normalize_circular_track_preset(str(raw))
+    return normalize_circular_track_preset(str(cfg.canvas.circular.track_type))
 
 
 def _lane_direction_for_feature_slot(
     feature_slot: CircularTrackSlot | None,
     *,
-    canvas_config: CircularCanvasConfigurator,
-    cfg: GbdrawConfig,
-) -> str:
+    track_preset: str,
+) -> CircularFeatureLaneDirection:
     if feature_slot is not None:
         raw = feature_slot.params.get("lane_direction", feature_slot.params.get("lanes"))
         if raw is not None:
             direction = str(raw).strip().lower()
             if direction in {"inside", "outside", "split"}:
-                return direction
+                return cast(CircularFeatureLaneDirection, direction)
     return circular_feature_lane_direction_for_preset(
-        _circular_preset_for_layout(canvas_config, cfg)
+        track_preset
     )
 
 
@@ -1038,10 +990,11 @@ def _default_feature_outer_radius_px(
     *,
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
-    cfg: GbdrawConfig,
     feature_track_ratio_factor_override: float | None,
 ) -> float:
     """Return a conservative outer feature radius when no precomputed feature band is available."""
+    profile = canvas_config.profile
+    cfg = profile.config
     length_param = str(canvas_config.length_param)
     track_ratio_factor = (
         float(feature_track_ratio_factor_override)
@@ -1057,8 +1010,8 @@ def _default_feature_outer_radius_px(
         float(canvas_config.track_ratio),
         cds_ratio,
         offset,
-        _circular_preset_for_layout(canvas_config, cfg),
-        bool(cfg.canvas.strandedness),
+        _circular_preset_for_layout(cfg),
+        profile.strandedness,
         0,
     )
     factors_negative = calculate_feature_position_factors_circular(
@@ -1067,8 +1020,8 @@ def _default_feature_outer_radius_px(
         float(canvas_config.track_ratio),
         cds_ratio,
         offset,
-        _circular_preset_for_layout(canvas_config, cfg),
-        bool(cfg.canvas.strandedness),
+        _circular_preset_for_layout(cfg),
+        profile.strandedness,
         0,
     )
     max_factor = max(
@@ -1082,7 +1035,6 @@ def _resolve_content_vertical_bounds_for_single_legend(
     *,
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
-    cfg: GbdrawConfig,
     show_features: bool,
     precomputed_feature_dict: dict | None,
     rendered_feature_band_all_tracks: tuple[float, float] | None,
@@ -1091,6 +1043,7 @@ def _resolve_content_vertical_bounds_for_single_legend(
     external_label_bounds: tuple[float, float, float, float] | None,
 ) -> tuple[float, float]:
     """Return content top/bottom bounds in canvas coordinates for top/bottom legend placement."""
+    cfg = canvas_config.profile.config
     content_outer_radius = float(canvas_config.radius)
 
     feature_band = rendered_feature_band_all_tracks
@@ -1108,13 +1061,12 @@ def _resolve_content_vertical_bounds_for_single_legend(
             track_ratio=float(canvas_config.track_ratio),
             length_param=length_param,
             track_ratio_factor=track_ratio_factor,
-            cfg=cfg,
+            profile=canvas_config.profile,
         )
     if show_features and feature_band is None:
         default_feature_outer = _default_feature_outer_radius_px(
             total_length=total_length,
             canvas_config=canvas_config,
-            cfg=cfg,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         )
         content_outer_radius = max(content_outer_radius, default_feature_outer)
@@ -1265,21 +1217,19 @@ def _definition_reserved_radius_px(
     canvas_config: CircularCanvasConfigurator,
     species: str | None,
     strain: str | None,
-    config_dict: dict,
     *,
-    cfg: GbdrawConfig,
     plot_title: str | None,
     definition_profile: str,
 ) -> float:
+    cfg = canvas_config.profile.config
     definition_group = DefinitionGroup(
         gb_record,
         canvas_config,
-        config_dict,
+        cfg=cfg,
         species=species,
         strain=strain,
         plot_title=plot_title,
         definition_profile=definition_profile,
-        cfg=cfg,
     ).get_group()
 
     max_extent = 0.0
@@ -1535,7 +1485,6 @@ def _draw_resolved_circular_slot(
     gb_record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
     feature_config: FeatureDrawingConfigurator,
-    config_dict: dict,
     gc_df: DataFrame,
     gc_config: GcContentConfigurator,
     skew_config: GcSkewConfigurator,
@@ -1544,12 +1493,12 @@ def _draw_resolved_circular_slot(
     depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
     conservation_tracks: Sequence[ConservationTrack] | None,
     conservation_min_identity: float,
-    cfg: GbdrawConfig,
     dinucleotide_dataframes: dict[str, DataFrame] | None,
     dinucleotide_content_dataframes: dict[str, DataFrame] | None = None,
     dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     gc_content_tick_font_size_override: float | None = None,
-    precomputed_feature_dict: dict | None = None,
+    feature_layers: FeatureBuildResult,
+    render_context: CircularRecordRenderContext,
     precalculated_labels: list[dict] | None = None,
     _tick_track_channel_override: str | None = None,
     use_slot_group_id: bool = True,
@@ -1559,6 +1508,7 @@ def _draw_resolved_circular_slot(
     annotation_record_index: int = 0,
 ) -> Drawing:
     """Draw one resolved circular slot."""
+    cfg = render_context.profile.config
     renderer = str(resolved_slot.renderer)
     norm_factor_override = float(resolved_slot.anchor_radius_px) / float(canvas_config.radius)
     if renderer == "spacer":
@@ -1604,9 +1554,8 @@ def _draw_resolved_circular_slot(
             * float(cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)][0])
         )
         resolved_feature_width = float(resolved_slot.draw_width_px)
-        radial_layout = getattr(canvas_config, "circular_radial_layout", None)
-        if radial_layout is not None and getattr(radial_layout, "features", None) is not None:
-            resolved_feature_width = float(radial_layout.features.width_px)
+        if render_context.feature_layout is not None:
+            resolved_feature_width = float(render_context.feature_layout.width_px)
         ratio_override = None
         if base_width > 0 and resolved_feature_width > 0:
             ratio_override = resolved_feature_width / max(
@@ -1614,8 +1563,8 @@ def _draw_resolved_circular_slot(
                 float(canvas_config.radius) * float(canvas_config.track_ratio),
             )
         feature_kwargs: dict[str, Any] = {
-            "cfg": cfg,
-            "precomputed_feature_dict": precomputed_feature_dict,
+            "feature_layers": feature_layers,
+            "render_context": render_context,
             "precalculated_labels": precalculated_labels,
             "feature_track_ratio_factor_override": ratio_override,
         }
@@ -1643,7 +1592,6 @@ def _draw_resolved_circular_slot(
             gb_record,
             canvas_config,
             feature_config,
-            config_dict,
             **feature_kwargs,
         )
 
@@ -1672,7 +1620,6 @@ def _draw_resolved_circular_slot(
         if label_side != "none" or tick_side != "none":
             tick_group_kwargs: dict[str, Any] = {
                 "radius_override": float(resolved_slot.anchor_radius_px),
-                "cfg": cfg,
             }
             if use_slot_tick_options or tick_layout is not None:
                 tick_group_kwargs["label_side"] = label_side
@@ -1706,7 +1653,6 @@ def _draw_resolved_circular_slot(
                 canvas,
                 gb_record,
                 canvas_config,
-                config_dict,
                 **tick_group_kwargs,
             )
         return canvas
@@ -1733,7 +1679,6 @@ def _draw_resolved_circular_slot(
         depth_kwargs: dict[str, Any] = {
             "track_width_override": float(resolved_slot.draw_width_px),
             "norm_factor_override": norm_factor_override,
-            "cfg": cfg,
         }
         if use_slot_group_id:
             depth_kwargs["group_id"] = depth_group_id
@@ -1743,7 +1688,6 @@ def _draw_resolved_circular_slot(
             selected_depth_df,
             canvas_config,
             selected_depth_config,
-            config_dict,
             **depth_kwargs,
         )
         if use_slot_group_id:
@@ -1792,7 +1736,6 @@ def _draw_resolved_circular_slot(
             inner_radius_px=float(resolved_slot.draw_inner_radius_px),
             outer_radius_px=float(resolved_slot.draw_outer_radius_px),
             min_identity=float(conservation_min_identity),
-            cfg=cfg,
             **conservation_kwargs,
         )
 
@@ -1815,7 +1758,6 @@ def _draw_resolved_circular_slot(
         gc_kwargs: dict[str, Any] = {
             "track_width_override": float(resolved_slot.draw_width_px),
             "norm_factor_override": norm_factor_override,
-            "cfg": cfg,
         }
         if use_slot_group_id:
             gc_kwargs["group_id"] = str(resolved_slot.id)
@@ -1830,7 +1772,6 @@ def _draw_resolved_circular_slot(
             slot_df,
             canvas_config,
             slot_gc_config,
-            config_dict,
             **gc_kwargs,
         )
         if use_slot_group_id:
@@ -1871,7 +1812,6 @@ def _draw_resolved_circular_slot(
         skew_kwargs: dict[str, Any] = {
             "track_width_override": float(resolved_slot.draw_width_px),
             "norm_factor_override": norm_factor_override,
-            "cfg": cfg,
         }
         if use_slot_group_id:
             skew_kwargs["group_id"] = str(resolved_slot.id)
@@ -1881,7 +1821,6 @@ def _draw_resolved_circular_slot(
             slot_df,
             canvas_config,
             _slot_skew_config(skew_config, resolved_slot, nt),
-            config_dict,
             **skew_kwargs,
         )
         if use_slot_group_id:
@@ -1917,11 +1856,12 @@ def _compute_feature_band_bounds_px(
     track_ratio: float,
     length_param: str,
     track_ratio_factor: float,
-    cfg: GbdrawConfig,
+    profile: CircularRenderProfile,
     track_id_whitelist: set[int] | None = None,
     preset: str | None = None,
 ) -> tuple[float, float] | None:
     """Compute (inner_radius_px, outer_radius_px) over all drawn feature blocks."""
+    cfg = profile.config
     if not feature_dict or total_length <= 0:
         return None
 
@@ -1943,116 +1883,23 @@ def _compute_feature_band_bounds_px(
         lane_direction=circular_feature_lane_direction_for_preset(
             normalize_circular_track_preset(preset or cfg.canvas.circular.track_type)
         ),
-        strandedness=bool(cfg.canvas.strandedness),
+        strandedness=profile.strandedness,
     )
     if feature_layout is None:
         return None
     return float(feature_layout.all_band_px.inner_px), float(feature_layout.all_band_px.outer_px)
 
 
-def _map_radius_across_feature_bands(
-    radius_px: float,
-    old_band: tuple[float, float],
-    new_band: tuple[float, float],
-) -> float:
-    """Map radius while preserving distance outside/inside feature band edges."""
-    old_inner, old_outer = old_band
-    new_inner, new_outer = new_band
-
-    if old_outer <= old_inner + FEATURE_BAND_EPSILON:
-        return float(radius_px) + (new_outer - old_outer)
-
-    if radius_px >= old_outer:
-        return new_outer + (float(radius_px) - old_outer)
-    if radius_px <= old_inner:
-        return new_inner - (old_inner - float(radius_px))
-
-    rel = (float(radius_px) - old_inner) / (old_outer - old_inner)
-    return new_inner + rel * (new_outer - new_inner)
-
-
-def _build_feature_radius_mapper(
-    feature_dict: dict | None,
-    total_length: int,
-    *,
-    canvas_config: CircularCanvasConfigurator,
-    cfg: GbdrawConfig,
-    feature_track_ratio_factor_override: float,
-) -> tuple[Callable[[float], float] | None, tuple[float, float] | None, tuple[float, float] | None]:
-    """Create radius mapper from default feature band -> overridden feature band.
-
-    Use primary feature track (track_id=0) as baseline to avoid sparse
-    overlap-resolved outer tracks from disproportionately shifting unrelated
-    auto tracks (labels/ticks/gc/skew).
-    """
-    if feature_dict is None:
-        return None, None, None
-
-    length_param = str(canvas_config.length_param)
-    default_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
-
-    old_band = _compute_feature_band_bounds_px(
-        feature_dict,
-        total_length,
-        base_radius_px=float(canvas_config.radius),
-        track_ratio=float(canvas_config.track_ratio),
-        length_param=str(canvas_config.length_param),
-        track_ratio_factor=default_ratio_factor,
-        cfg=cfg,
-        track_id_whitelist={0},
-    )
-    new_band = _compute_feature_band_bounds_px(
-        feature_dict,
-        total_length,
-        base_radius_px=float(canvas_config.radius),
-        track_ratio=float(canvas_config.track_ratio),
-        length_param=str(canvas_config.length_param),
-        track_ratio_factor=float(feature_track_ratio_factor_override),
-        cfg=cfg,
-        track_id_whitelist={0},
-    )
-
-    if old_band is None or new_band is None:
-        # Fallback for datasets where all features were assigned to non-zero tracks.
-        old_band = _compute_feature_band_bounds_px(
-            feature_dict,
-            total_length,
-            base_radius_px=float(canvas_config.radius),
-            track_ratio=float(canvas_config.track_ratio),
-            length_param=str(canvas_config.length_param),
-            track_ratio_factor=default_ratio_factor,
-            cfg=cfg,
-        )
-        new_band = _compute_feature_band_bounds_px(
-            feature_dict,
-            total_length,
-            base_radius_px=float(canvas_config.radius),
-            track_ratio=float(canvas_config.track_ratio),
-            length_param=str(canvas_config.length_param),
-            track_ratio_factor=float(feature_track_ratio_factor_override),
-            cfg=cfg,
-        )
-
-    if old_band is None or new_band is None:
-        return None, old_band, new_band
-
-    def mapper(radius_px: float) -> float:
-        return _map_radius_across_feature_bands(float(radius_px), old_band, new_band)
-
-    return mapper, old_band, new_band
-
-
-
-
 def _default_outer_label_arena(
     *,
     canvas_config: CircularCanvasConfigurator,
-    cfg: GbdrawConfig,
 ) -> tuple[float, float]:
     """Return default (anchor_radius_px, arc_outer_radius_px) for outer labels."""
+    profile = canvas_config.profile
+    cfg = profile.config
     length_param = str(canvas_config.length_param)
-    track_type = _circular_preset_for_layout(canvas_config, cfg)
-    strands = "separate" if cfg.canvas.strandedness else "single"
+    track_type = _circular_preset_for_layout(cfg)
+    strands = "separate" if profile.strandedness else "single"
     base_radius = float(canvas_config.radius)
 
     anchor_radius = float(cfg.labels.radius_factor[track_type][strands][length_param]) * base_radius
@@ -2087,7 +1934,6 @@ def add_record_on_circular_canvas(
     species: str | None,
     strain: str | None,
     plot_title: str | None,
-    config_dict: dict,
     legend_config,
     legend_table,
     *,
@@ -2097,7 +1943,6 @@ def add_record_on_circular_canvas(
     depth_track_count_value: int | None = None,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float = 0.0,
-    cfg: GbdrawConfig | None = None,
     circular_track_slots: list[CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
     dinucleotide_dataframes: dict[str, DataFrame] | None = None,
@@ -2124,12 +1969,11 @@ def add_record_on_circular_canvas(
     gc_df (DataFrame): DataFrame containing GC content and skew information.
     species (str): Species name.
     strain (str): Strain name.
-    config_dict (dict): Configuration dictionary for drawing parameters.
-
     Returns:
     Drawing: The updated SVG drawing with all record-related groups added.
     """
-    cfg = cfg or canvas_config._cfg
+    profile = canvas_config.profile
+    cfg = profile.config
     depth_tracks_by_index = (
         index_depth_track_row(depth_tracks)
         if depth_tracks is not None
@@ -2141,12 +1985,8 @@ def add_record_on_circular_canvas(
         else depth_track_data_count([depth_tracks or ()])
     )
 
-    raw_show_labels = cfg.canvas.show_labels
-    show_labels_base = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
-    depth_enabled = bool(
-        canvas_config.show_depth
-        and depth_config is not None
-    )
+    show_labels_base = profile.labels_enabled
+    depth_enabled = bool(profile.show_depth and depth_config is not None)
     effective_circular_track_slots, resolved_annotations, annotation_track_layouts = _prepare_circular_annotation_tracks(
         gb_record,
         annotations,
@@ -2154,6 +1994,8 @@ def add_record_on_circular_canvas(
         canvas_config=canvas_config,
         record_index=annotation_record_index,
         show_depth=depth_enabled,
+        show_gc=profile.show_gc,
+        show_skew=profile.show_skew,
         depth_track_count=max(1, resolved_depth_track_count),
     )
     user_slot_mode = effective_circular_track_slots is not None
@@ -2169,11 +2011,10 @@ def add_record_on_circular_canvas(
         show_ticks_track = bool("ticks" in user_active_slot_renderers)
     else:
         show_depth_track = bool(depth_enabled)
-        show_gc_track = bool(canvas_config.show_gc)
-        show_skew_track = bool(canvas_config.show_skew)
+        show_gc_track = profile.show_gc
+        show_skew_track = profile.show_skew
         show_ticks_track = True
     circular_preset = normalize_circular_track_preset(cfg.canvas.circular.track_type)
-    setattr(canvas_config, "circular_track_preset", circular_preset)
 
     if user_slot_mode:
         show_features = "features" in user_active_slot_renderers
@@ -2184,7 +2025,7 @@ def add_record_on_circular_canvas(
                 cfg=cfg,
                 canvas_config=canvas_config,
                 total_length=len(gb_record.seq),
-                strandedness=bool(cfg.canvas.strandedness),
+                strandedness=profile.strandedness,
                 show_features=show_features,
                 show_ticks=show_ticks_track,
                 show_depth=show_depth_track,
@@ -2205,7 +2046,7 @@ def add_record_on_circular_canvas(
                 cfg=cfg,
                 canvas_config=canvas_config,
                 total_length=len(gb_record.seq),
-                strandedness=bool(cfg.canvas.strandedness),
+                strandedness=profile.strandedness,
                 show_features=show_features,
                 show_ticks=show_ticks_track,
                 show_depth=show_depth_track,
@@ -2227,15 +2068,13 @@ def add_record_on_circular_canvas(
     )
     feature_lane_direction = _lane_direction_for_feature_slot(
         feature_slot,
-        canvas_config=canvas_config,
-        cfg=cfg,
+        track_preset=circular_preset,
     )
-    setattr(canvas_config, "circular_feature_lane_direction", feature_lane_direction)
 
     show_external_labels = show_labels_base and show_features
     split_overlaps_by_strand = (
-        bool(cfg.canvas.resolve_overlaps)
-        and (not bool(cfg.canvas.strandedness))
+        profile.resolve_overlaps
+        and (not profile.strandedness)
         and feature_lane_direction == "split"
     )
 
@@ -2262,8 +2101,8 @@ def add_record_on_circular_canvas(
         color_table,
         feature_config.selected_features_set,
         default_colors,
-        cfg.canvas.strandedness,
-        cfg.canvas.resolve_overlaps,
+        profile.strandedness,
+        profile.resolve_overlaps,
         label_filtering,
         split_overlaps_by_strand=split_overlaps_by_strand,
         feature_shapes=feature_config.feature_shapes,
@@ -2271,6 +2110,16 @@ def add_record_on_circular_canvas(
         compute_label_text=compute_label_text,
     )
     precomputed_feature_dict: dict = feature_layers.foreground_features
+    layout_feature_dict = {
+        f"foreground:{feature_id}": feature
+        for feature_id, feature in feature_layers.foreground_features.items()
+    }
+    layout_feature_dict.update(
+        {
+            f"underlay:{feature_index}": feature
+            for feature_index, feature in enumerate(feature_layers.underlay_features)
+        }
+    )
     if feature_layers.underlay_features:
         (
             layout_slots,
@@ -2284,14 +2133,10 @@ def add_record_on_circular_canvas(
             canvas_config=canvas_config,
             record_index=annotation_record_index,
             show_depth=show_depth_track,
+            show_gc=profile.show_gc,
+            show_skew=profile.show_skew,
             depth_track_count=max(1, resolved_depth_track_count),
         )
-    setattr(
-        canvas_config,
-        "_feature_underlay_present",
-        bool(feature_layers.underlay_features),
-    )
-
     tick_label_annulus_for_legend_bounds: tuple[float, float] | None = None
     resolved_track_slots: list[CircularResolvedSlot] = []
     resolved_feature_anchor_radius_px: float | None = None
@@ -2304,17 +2149,14 @@ def add_record_on_circular_canvas(
             canvas_config,
             species,
             strain,
-            config_dict,
-            cfg=cfg,
             plot_title=plot_title,
             definition_profile=definition_profile,
         )
     radial_layout = resolve_circular_radial_layout(
         total_length=len(gb_record.seq),
         canvas_config=canvas_config,
-        cfg=cfg,
         slots=layout_slots,
-        feature_dict=precomputed_feature_dict,
+        feature_dict=layout_feature_dict,
         show_features=show_features,
         show_ticks=show_ticks_track,
         definition_reserved_radius_px=definition_reserved_radius_px,
@@ -2323,8 +2165,6 @@ def add_record_on_circular_canvas(
         preferred_anchor_slot_ids=preferred_anchor_slot_ids,
         depth_config=depth_config if show_depth_track else None,
     )
-    setattr(canvas_config, "circular_radial_layout", radial_layout)
-    setattr(canvas_config, "circular_feature_layout", radial_layout.features)
     resolved_track_slots = list(radial_layout.slots)
     setattr(
         canvas,
@@ -2377,7 +2217,6 @@ def add_record_on_circular_canvas(
     if show_external_labels:
         default_anchor_px, default_arc_outer_px = _default_outer_label_arena(
             canvas_config=canvas_config,
-            cfg=cfg,
         )
         if default_arc_outer_px < default_anchor_px:
             default_anchor_px, default_arc_outer_px = default_arc_outer_px, default_anchor_px
@@ -2397,17 +2236,16 @@ def add_record_on_circular_canvas(
                 else canvas_config.radius
             ),
             canvas_config.track_ratio,
-            config_dict,
-            cfg=cfg,
+            profile,
             outer_arena=outer_arena,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
             feature_layout=radial_layout.features,
             radial_layout=radial_layout,
-            track_preset=_circular_preset_for_layout(canvas_config, cfg),
+            track_preset=_circular_preset_for_layout(cfg),
             feature_lane_direction=feature_lane_direction,
             _candidate_cache=label_candidate_cache,
         )
-        if cfg.labels.circular.placement == "radial":
+        if profile.label_placement == "radial":
             previous_growth: float | None = None
             stagnant_passes = 0
             preflight_tracks_frozen = False
@@ -2486,13 +2324,9 @@ def add_record_on_circular_canvas(
                         None,
                     )
                     if feature_slot is not None:
-                        feature_lane_direction = str(
-                            feature_slot.params.get("lane_direction", feature_lane_direction)
-                        )
-                        setattr(
-                            canvas_config,
-                            "circular_feature_lane_direction",
-                            feature_lane_direction,
+                        feature_lane_direction = _lane_direction_for_feature_slot(
+                            feature_slot,
+                            track_preset=circular_preset,
                         )
                     preflight_tracks_frozen = True
 
@@ -2505,9 +2339,8 @@ def add_record_on_circular_canvas(
                 radial_layout = resolve_circular_radial_layout(
                     total_length=len(gb_record.seq),
                     canvas_config=canvas_config,
-                    cfg=cfg,
                     slots=layout_slots,
-                    feature_dict=precomputed_feature_dict,
+                    feature_dict=layout_feature_dict,
                     show_features=show_features,
                     show_ticks=show_ticks_track,
                     definition_reserved_radius_px=definition_reserved_radius_px,
@@ -2516,8 +2349,6 @@ def add_record_on_circular_canvas(
                     preferred_anchor_slot_ids=preferred_anchor_slot_ids,
                     depth_config=depth_config if show_depth_track else None,
                 )
-                setattr(canvas_config, "circular_radial_layout", radial_layout)
-                setattr(canvas_config, "circular_feature_layout", radial_layout.features)
                 resolved_track_slots = list(radial_layout.slots)
                 setattr(
                     canvas,
@@ -2548,7 +2379,6 @@ def add_record_on_circular_canvas(
 
                 default_anchor_px, default_arc_outer_px = _default_outer_label_arena(
                     canvas_config=canvas_config,
-                    cfg=cfg,
                 )
                 if default_arc_outer_px < default_anchor_px:
                     default_anchor_px, default_arc_outer_px = default_arc_outer_px, default_anchor_px
@@ -2566,13 +2396,12 @@ def add_record_on_circular_canvas(
                         else canvas_config.radius
                     ),
                     canvas_config.track_ratio,
-                    config_dict,
-                    cfg=cfg,
+                    profile,
                     outer_arena=outer_arena,
                     feature_track_ratio_factor_override=feature_track_ratio_factor_override,
                     feature_layout=radial_layout.features,
                     radial_layout=radial_layout,
-                    track_preset=_circular_preset_for_layout(canvas_config, cfg),
+                    track_preset=_circular_preset_for_layout(cfg),
                     feature_lane_direction=feature_lane_direction,
                     _candidate_cache=label_candidate_cache,
                 )
@@ -2603,7 +2432,7 @@ def add_record_on_circular_canvas(
             canvas_config,
             legend_config,
         )
-        if cfg.labels.circular.placement == "horizontal":
+        if profile.label_placement == "horizontal":
             assign_leader_start_points(
                 [label for label in precalculated_labels if not label.get("is_embedded")],
                 len(gb_record.seq),
@@ -2615,19 +2444,24 @@ def add_record_on_circular_canvas(
         )
         _sync_canvas_viewbox(canvas, canvas_config)
 
+    render_context = CircularRecordRenderContext(
+        profile=profile,
+        track_preset=circular_preset,
+        feature_lane_direction=feature_lane_direction,
+        radial_layout=radial_layout,
+    )
+
     canvas = add_axis_group_on_canvas(
         canvas,
         canvas_config,
-        config_dict,
         radius_override=None,
-        cfg=cfg,
     )
 
     if show_external_labels:
         labels_group_kwargs: dict[str, Any] = {
             "outer_arena": outer_arena,
-            "cfg": cfg,
-            "precomputed_feature_dict": precomputed_feature_dict,
+            "feature_layers": feature_layers,
+            "render_context": render_context,
             "precalculated_labels": precalculated_labels,
             "feature_track_ratio_factor_override": feature_track_ratio_factor_override,
         }
@@ -2648,8 +2482,6 @@ def add_record_on_circular_canvas(
             canvas,
             gb_record,
             canvas_config,
-            feature_config,
-            config_dict,
             phase="leaders",
             **labels_group_kwargs,
         )
@@ -2665,7 +2497,6 @@ def add_record_on_circular_canvas(
             gb_record=gb_record,
             canvas_config=canvas_config,
             feature_config=feature_config,
-            config_dict=config_dict,
             gc_df=gc_df,
             gc_config=gc_config,
             skew_config=skew_config,
@@ -2674,12 +2505,12 @@ def add_record_on_circular_canvas(
             depth_tracks_by_index=depth_tracks_by_index,
             conservation_tracks=conservation_tracks,
             conservation_min_identity=conservation_min_identity,
-            cfg=cfg,
             dinucleotide_dataframes=dinucleotide_dataframes,
             dinucleotide_content_dataframes=dinucleotide_content_dataframes,
             dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
             gc_content_tick_font_size_override=gc_content_tick_font_size_override,
-            precomputed_feature_dict=precomputed_feature_dict,
+            feature_layers=feature_layers,
+            render_context=render_context,
             precalculated_labels=precalculated_labels,
             _tick_track_channel_override=_tick_track_channel_override,
             use_slot_group_id=user_slot_mode,
@@ -2694,13 +2525,11 @@ def add_record_on_circular_canvas(
             canvas,
             gb_record,
             canvas_config,
-            feature_config,
-            config_dict,
             phase="text",
             **labels_group_kwargs,
         )
 
-    definition_kwargs: dict[str, Any] = {"cfg": cfg}
+    definition_kwargs: dict[str, Any] = {}
     definition_kwargs["record_index"] = int(annotation_record_index)
     definition_kwargs["record_count"] = int(definition_record_count)
     if plot_title is not None:
@@ -2717,7 +2546,6 @@ def add_record_on_circular_canvas(
         canvas_config,
         species,
         strain,
-        config_dict,
         **definition_kwargs,
     )
 
@@ -2734,7 +2562,6 @@ def add_record_on_circular_canvas(
             content_top, content_bottom = _resolve_content_vertical_bounds_for_single_legend(
                 total_length=len(gb_record.seq),
                 canvas_config=canvas_config,
-                cfg=cfg,
                 show_features=show_features,
                 precomputed_feature_dict=precomputed_feature_dict,
                 rendered_feature_band_all_tracks=rendered_feature_band_all_tracks,
@@ -2764,7 +2591,6 @@ def assemble_circular_diagram(
     species: Optional[str],
     strain: Optional[str],
     plot_title: Optional[str],
-    config_dict: dict,
     legend_config: LegendDrawingConfigurator,
     depth_df: DataFrame | None = None,
     depth_config: DepthConfigurator | None = None,
@@ -2772,7 +2598,6 @@ def assemble_circular_diagram(
     depth_track_count_value: int | None = None,
     conservation_tracks: Sequence[ConservationTrack] | None = None,
     conservation_min_identity: float = 0.0,
-    cfg: GbdrawConfig | None = None,
     circular_track_slots: list[CircularTrackSlot] | None = None,
     circular_track_axis_index: int | None = None,
     dinucleotide_dataframes: dict[str, DataFrame] | None = None,
@@ -2798,7 +2623,6 @@ def assemble_circular_diagram(
     feature_config (FeatureDrawingConfigurator): Configuration for feature drawing.
     species (str): Species name.
     strain (str): Strain name.
-    config_dict (dict): Configuration dictionary for drawing parameters.
     out_formats (list): List of formats to save the output (e.g., ['png', 'svg']).
 
     Returns:
@@ -2806,8 +2630,8 @@ def assemble_circular_diagram(
     """
     # Configure and create canvas
 
-    # Prefer a pre-parsed config model when available to avoid repeated from_dict() calls.
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    profile = canvas_config.profile
+    cfg = profile.config
     resolved_depth_track_count = (
         int(depth_track_count_value)
         if depth_track_count_value is not None
@@ -2819,7 +2643,9 @@ def assemble_circular_diagram(
         circular_track_slots,
         canvas_config=canvas_config,
         record_index=annotation_record_index,
-        show_depth=bool(canvas_config.show_depth and depth_config is not None),
+        show_depth=bool(profile.show_depth and depth_config is not None),
+        show_gc=profile.show_gc,
+        show_skew=profile.show_skew,
         depth_track_count=max(1, resolved_depth_track_count),
     )
 
@@ -2852,6 +2678,13 @@ def assemble_circular_diagram(
                 depth_config is not None
                 and (depth_df is not None or resolved_depth_track_count == 1)
             ) else None,
+            show_gc=profile.show_gc,
+            show_skew=profile.show_skew,
+            show_depth=bool(
+                profile.show_depth
+                and depth_config is not None
+                and (depth_df is not None or resolved_depth_track_count == 1)
+            ),
         )
         if depth_tracks and effective_circular_track_slots is None:
             legend_table = sync_depth_track_legend_entries(legend_table, depth_tracks)
@@ -2891,7 +2724,6 @@ def assemble_circular_diagram(
         species,
         strain,
         plot_title,
-        config_dict,
         legend_config,
         legend_table,
         depth_config=depth_config,
@@ -2900,7 +2732,6 @@ def assemble_circular_diagram(
         depth_track_count_value=resolved_depth_track_count,
         conservation_tracks=conservation_tracks,
         conservation_min_identity=conservation_min_identity,
-        cfg=cfg,
         circular_track_slots=effective_circular_track_slots,
         circular_track_axis_index=circular_track_axis_index,
         dinucleotide_dataframes=dinucleotide_dataframes,

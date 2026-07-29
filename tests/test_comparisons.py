@@ -14,8 +14,9 @@ from svgwrite import Drawing
 
 import gbdraw.api.diagram as api_diagram_module
 import gbdraw.linear as linear_cli_module
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
-from gbdraw.api.options import DiagramOptions
+from gbdraw.api.options import LinearDiagramOptions
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
@@ -108,7 +109,12 @@ def test_blast_match_config_rejects_invalid_curve_tension() -> None:
 def test_modify_config_dict_maps_pairwise_match_style() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
 
-    modified = modify_config_dict(config_dict, pairwise_match_style="curve")
+    modified = modify_config_dict(
+        config_dict,
+        {
+            "objects.blast_match.style": 'curve',
+        },
+    )
 
     assert GbdrawConfig.from_dict(modified).objects.blast_match.style == "curve"
 
@@ -264,7 +270,10 @@ def test_build_linear_diagram_forwards_alignment_length(monkeypatch: pytest.Monk
 
     canvas = api_diagram_module.build_linear_diagram(
         [_build_record()],
-        options=DiagramOptions(alignment_length=321, pairwise_match_style="curve"),
+        options=LinearDiagramOptions(
+            alignment_length=321,
+            pairwise_match_style="curve",
+        ),
     )
 
     assert isinstance(canvas, Drawing)
@@ -277,6 +286,7 @@ def test_assemble_linear_diagram_rejects_negative_alignment_length() -> None:
     with pytest.raises(ValidationError, match="alignment_length must be >= 0"):
         assemble_linear_diagram_from_records(
             [_build_record()],
+            cfg=apply_config_overrides(None, None),
             alignment_length=-1,
         )
 
@@ -286,6 +296,7 @@ def test_assemble_linear_diagram_rejects_invalid_pairwise_match_style() -> None:
     with pytest.raises(ValidationError, match="pairwise_match_style must be one of: ribbon, curve"):
         assemble_linear_diagram_from_records(
             [_build_record()],
+            cfg=apply_config_overrides(None, None),
             pairwise_match_style="line",
         )
 
@@ -362,6 +373,9 @@ def test_identity_100_legend_is_a_safe_zero_span_at_the_maximum_color() -> None:
         [],
         blast_config=blast_config,
         has_blast=True,
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
     gradient = legend["Pairwise match identity"]
 

@@ -13,7 +13,7 @@ from gbdraw.layout.linear import (
     union_vertical_bands,
 )
 from gbdraw.canvas import LinearCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.diagrams.linear.track_slots import (
     LinearSlotFootprint,
@@ -34,9 +34,8 @@ def _base_layout(slot_specs: list[str]):
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=1200,
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
     slots = normalize_linear_track_slots_with_axis(parse_linear_track_slots(slot_specs), None)
     layout = resolve_linear_track_layout(slots, canvas_config=canvas_config, cfg=cfg)

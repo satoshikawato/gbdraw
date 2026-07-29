@@ -13,6 +13,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 from svgwrite.container import Group
 
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
     assemble_circular_diagram_from_records,
@@ -20,6 +21,7 @@ from gbdraw.api.diagram import (
 )
 from gbdraw.annotations import AnnotationSet, CoordinateSpan, RegionAnnotation
 from gbdraw.api.options import AnnotationOptions
+from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -125,10 +127,10 @@ def _linear_legend_svg() -> str:
     drawing = Drawing(debug=False)
     drawing.add(
         LegendGroup(
-            config_dict,
             canvas_config,
             legend_config,
             legend_table,
+            cfg=GbdrawConfig.from_dict(config_dict),
         ).get_group()
     )
     return drawing.tostring()
@@ -193,13 +195,19 @@ def test_single_record_definition_id_and_hooks_handle_unsafe_leading_id(
     mode: str,
 ) -> None:
     record = SeqRecord(Seq("ATGC" * 40), id="123/unsafe id")
+    label_path = (
+        "labels.circular.scope"
+        if mode == "circular"
+        else "labels.linear.scope"
+    )
+    label_value = "none"
     common = {
         "legend": "none",
-        "config_overrides": {
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        "cfg": apply_config_overrides(None, {
+            label_path: label_value,
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     }
 
     def render() -> str:
@@ -240,13 +248,19 @@ def test_multi_record_definition_ids_disambiguate_duplicates_and_safe_aliases(
         SeqRecord(Seq("ATGC" * 40), id=record_id)
         for record_id in raw_record_ids
     ]
+    label_path = (
+        "labels.circular.scope"
+        if mode == "circular"
+        else "labels.linear.scope"
+    )
+    label_value = "none"
     common = {
         "legend": "none",
-        "config_overrides": {
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        "cfg": apply_config_overrides(None, {
+            label_path: label_value,
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     }
 
     def render() -> str:
@@ -388,13 +402,19 @@ def test_identical_semantic_features_keep_stable_hooks_and_unique_dom_ids(
 ) -> None:
     record = _duplicate_feature_record()
     stable_id = compute_feature_hash(record.features[0], record_id=record.id)
+    label_path = (
+        "labels.circular.scope"
+        if mode == "circular"
+        else "labels.linear.scope"
+    )
+    label_value = "none"
     common = {
         "legend": "none",
-        "config_overrides": {
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        "cfg": apply_config_overrides(None, {
+            label_path: label_value,
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     }
     canvas = (
         assemble_circular_diagram_from_record(record, **common)
@@ -427,10 +447,16 @@ def test_identical_underlay_features_keep_stable_hooks_and_unique_dom_ids(
     )
     record.features = [feature, copy.deepcopy(feature)]
     stable_id = compute_feature_hash(feature, record_id=record.id)
+    label_path = (
+        "labels.circular.scope"
+        if mode == "circular"
+        else "labels.linear.scope"
+    )
+    label_value = "none"
     common = {
         "selected_features_set": ["repeat_region"],
         "legend": "none",
-        "config_overrides": {"show_labels": "none"},
+        "cfg": apply_config_overrides(None, {label_path: label_value}),
     }
     canvas = (
         assemble_circular_diagram_from_record(record, **common)
@@ -457,11 +483,11 @@ def test_repeated_circular_record_grid_namespaces_colliding_ids_and_references()
     canvas = assemble_circular_diagram_from_records(
         [record, copy.deepcopy(record)],
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": True,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": True,
+        }),
         window=40,
         step=40,
     )
@@ -479,11 +505,11 @@ def test_circular_multi_record_wrappers_expose_record_identity_hooks() -> None:
     svg = assemble_circular_diagram_from_records(
         records,
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     ).tostring()
 
     wrappers = {
@@ -510,13 +536,19 @@ def test_default_dinucleotide_tracks_expose_canonical_slot_hooks(
     mode: str,
 ) -> None:
     record = _duplicate_feature_record(f"default-{mode}-slots")
+    label_path = (
+        "labels.circular.scope"
+        if mode == "circular"
+        else "labels.linear.scope"
+    )
+    label_value = "none"
     common = {
         "legend": "none",
-        "config_overrides": {
-            "show_labels": "none",
-            "show_gc": True,
-            "show_skew": True,
-        },
+        "cfg": apply_config_overrides(None, {
+            label_path: label_value,
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+        }),
         "window": 40,
         "step": 40,
     }
@@ -550,11 +582,11 @@ def test_default_circular_ticks_expose_slot_hooks_without_renaming_group() -> No
         assemble_circular_diagram_from_record(
             record,
             legend="none",
-            config_overrides={
-                "show_labels": "none",
-                "show_gc": False,
-                "show_skew": False,
-            },
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
         ).tostring()
     )
 
@@ -578,11 +610,11 @@ def test_circular_multi_reserved_record_ids_do_not_collide_with_shared_groups() 
         "legend": "right",
         "plot_title": "Shared title",
         "plot_title_position": "top",
-        "config_overrides": {
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        "cfg": apply_config_overrides(None, {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     }
 
     first = assemble_circular_diagram_from_records(records, **common).tostring()
@@ -627,13 +659,19 @@ def test_record_group_ids_do_not_collide_with_renderer_owned_groups(
     record_id: str,
 ) -> None:
     record = _duplicate_feature_record(record_id)
+    label_path = (
+        "labels.circular.scope"
+        if mode == "circular"
+        else "labels.linear.scope"
+    )
+    label_value = "none"
     common = {
         "legend": "right",
-        "config_overrides": {
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        "cfg": apply_config_overrides(None, {
+            label_path: label_value,
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     }
 
     def render() -> str:
@@ -679,11 +717,11 @@ def test_linear_record_id_does_not_collide_with_comparison_group() -> None:
         records,
         linear_comparisons=[comparison],
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.linear.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     )
     svg = canvas.tostring()
     _assert_unique_ids_and_resolved_references(svg)
@@ -723,11 +761,11 @@ def test_annotation_track_prefix_record_id_is_semantic_only() -> None:
         ),
         linear_track_slots=("regions:annotations@set_id=regions,h=20px",),
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.linear.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     )
     svg = canvas.tostring()
     _assert_unique_ids_and_resolved_references(svg)
@@ -767,11 +805,11 @@ def test_interactive_asset_ids_do_not_replace_record_groups(record_id: str) -> N
     canvas = assemble_linear_diagram_from_records(
         [_duplicate_feature_record(record_id)],
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.linear.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
     )
     static_svg = canvas.tostring()
     static_record_group = next(
@@ -801,11 +839,11 @@ def test_linear_user_slot_ids_are_namespaced_without_safe_fragment_aliases() -> 
     record = _duplicate_feature_record("linear-slot-record")
     common = {
         "legend": "right",
-        "config_overrides": {
-            "show_labels": "none",
-            "show_gc": True,
-            "show_skew": True,
-        },
+        "cfg": apply_config_overrides(None, {
+            "labels.linear.scope": "none",
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+        }),
         "linear_track_slots": [
             LinearTrackSlot("legend", "features", side="overlay"),
             LinearTrackSlot(
@@ -885,11 +923,11 @@ def test_linear_depth_alias_slots_namespace_outer_and_axis_ids() -> None:
             ),
         ],
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.linear.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
         depth_window=40,
         depth_step=40,
     )
@@ -937,11 +975,11 @@ def test_linear_user_slot_ids_are_record_scoped_in_multi_record_svg() -> None:
             ),
         ],
         legend="none",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": True,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.linear.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": True,
+        }),
         window=40,
         step=40,
     )
@@ -983,6 +1021,7 @@ def test_annotation_slot_ids_are_namespaced_without_safe_fragment_aliases(
     if mode == "linear":
         canvas = assemble_linear_diagram_from_records(
             [record],
+            cfg=apply_config_overrides(None, None),
             annotation_options=annotation_options,
             linear_track_slots=[
                 LinearTrackSlot(
@@ -1003,6 +1042,7 @@ def test_annotation_slot_ids_are_namespaced_without_safe_fragment_aliases(
     else:
         canvas = assemble_circular_diagram_from_record(
             record,
+            cfg=apply_config_overrides(None, None),
             annotation_options=annotation_options,
             circular_track_slots=[
                 CircularTrackSlot(
@@ -1060,11 +1100,11 @@ def test_circular_text_paths_are_deterministic_and_slot_scoped() -> None:
     ]
     common = {
         "legend": "none",
-        "config_overrides": {
-            "show_labels": True,
-            "show_gc": False,
-            "show_skew": False,
-        },
+        "cfg": apply_config_overrides(None, {
+            "labels.circular.scope": "outer",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
         "circular_track_slots": [
             CircularTrackSlot("features a", "features", side="inside"),
             CircularTrackSlot("features_a", "features", side="outside"),
@@ -1132,11 +1172,11 @@ def test_circular_numeric_alias_slots_namespace_outer_and_child_ids() -> None:
     record = _duplicate_feature_record("circular-skew-slot-record")
     common = {
         "legend": "none",
-        "config_overrides": {
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": True,
-        },
+        "cfg": apply_config_overrides(None, {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": True,
+        }),
         "circular_track_slots": [
             CircularTrackSlot(
                 "a b",
@@ -1191,11 +1231,11 @@ def test_repeated_circular_feature_and_tick_slots_have_unique_deterministic_ids(
     record = _duplicate_feature_record("slot-record")
     common = {
         "legend": "none",
-        "config_overrides": {
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        "cfg": apply_config_overrides(None, {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
         "circular_track_slots": [
             "features_inner:features@side=inside,w=20px",
             "features_outer:features@side=outside,w=20px",
@@ -1258,11 +1298,11 @@ def test_reserved_circular_slot_names_are_semantic_only_not_dom_ids() -> None:
         legend="right",
         plot_title="Reserved slot names",
         plot_title_position="top",
-        config_overrides={
-            "show_labels": "none",
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.circular.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
         circular_track_slots=[
             "legend:features@side=inside,w=20px",
             "plot_title:features@side=outside,w=20px",

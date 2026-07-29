@@ -29,7 +29,18 @@ const WEB_EDITOR_UI_FIELDS = Object.freeze([
   'featurePanelTab',
   'downloadDpi',
   'autoLabelReflow',
-  'paletteInstantPreviewEnabled'
+  'paletteInstantPreviewEnabled',
+  'layoutPreferences',
+  // Versions through 38 stored the same preference state in parallel fields.
+  'legend',
+  'circularLegendPosition',
+  'linearLegendPosition',
+  'circularPlotTitlePosition',
+  'linearPlotTitlePosition',
+  'circularSingleRecordLegendPosition',
+  'circularSingleRecordPlotTitlePosition',
+  'circularMultiRecordLegendPosition',
+  'circularMultiRecordPlotTitlePosition'
 ]);
 
 const ARTIFACT_UI_FIELDS = Object.freeze([

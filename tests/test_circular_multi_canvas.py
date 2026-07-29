@@ -16,8 +16,11 @@ import gbdraw.api.diagram as diagram_api_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
 import gbdraw.render.groups.circular.ticks as circular_ticks_group_module
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_circular_diagram_from_records
-from gbdraw.api.options import DiagramOptions, OutputOptions
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.toml import load_config_toml
+from gbdraw.api.options import CircularDiagramOptions, CircularOutputOptions
 from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest
 from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.exceptions import ValidationError
@@ -39,7 +42,7 @@ def _build_record(record_id: str, feature_start: int, length: int = 1200) -> Seq
 
 
 def _build_distinct_circular_style_config_dict() -> dict[str, Any]:
-    config_dict = diagram_api_module.load_config_toml("gbdraw.data", "config.toml")
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict["canvas"]["circular"]["track_ratio_factors"]["short"][0] = 0.77
     config_dict["canvas"]["circular"]["track_ratio_factors"]["long"][0] = 0.33
     config_dict["canvas"]["circular"]["track_ratio_factors"]["short"][1] = 0.91
@@ -594,7 +597,7 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
         records,
         selected_features_set=["CDS"],
         legend="right",
-        config_overrides={"show_labels": True},
+        cfg=apply_config_overrides(None, {"labels.circular.scope": "outer"}),
     )
 
     root = ET.fromstring(canvas.tostring())
@@ -703,6 +706,7 @@ def test_assemble_circular_diagram_from_records_default_auto_scaling(
 
     assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -758,7 +762,7 @@ def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
 
     assemble_circular_diagram_from_records(
         records,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -787,11 +791,11 @@ def test_multi_record_mixed_lengths_unify_feature_label_font_sizes() -> None:
             records,
             selected_features_set=["CDS"],
             legend="none",
-            config_overrides={
-                "show_labels": True,
-                "show_gc": False,
-                "show_skew": False,
-            },
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "outer",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
         ).tostring()
     )
     font_sizes = _extract_label_font_sizes_by_text(
@@ -799,7 +803,7 @@ def test_multi_record_mixed_lengths_unify_feature_label_font_sizes() -> None:
         {"protein_long_label", "protein_short_label"},
     )
     cfg = diagram_api_module.GbdrawConfig.from_dict(
-        diagram_api_module.load_config_toml("gbdraw.data", "config.toml")
+        load_config_toml("gbdraw.data", "config.toml")
     )
 
     assert set(font_sizes) == {"protein_long_label", "protein_short_label"}
@@ -853,7 +857,7 @@ def test_multi_record_all_short_keeps_short_feature_axis_style(
 
     assemble_circular_diagram_from_records(
         records,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -932,7 +936,7 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
     )
 
     assert captured_tick_path_channels[20_000] == "long"
@@ -993,11 +997,11 @@ def test_circular_tick_label_font_size_reaches_tick_label_generator(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "tick_label_font_size": 19.0,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.ticks.tick_labels.font_size": 19.0,
+        }),
     )
 
     assert captured_font_sizes[20_000] == pytest.approx(19.0)
@@ -1033,7 +1037,7 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
     monkeypatch.setattr(diagram_api_module, "assemble_circular_diagram", fake_assemble)
 
     expected_cfg = diagram_api_module.GbdrawConfig.from_dict(
-        diagram_api_module.load_config_toml("gbdraw.data", "config.toml")
+        load_config_toml("gbdraw.data", "config.toml")
     )
     expected_short = tuple(expected_cfg.objects.sliding_window.default)
     expected_long = tuple(expected_cfg.objects.sliding_window.up1m)
@@ -1042,7 +1046,7 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
     )
 
     assert captured_gc_window_steps["short_len"] == expected_short
@@ -1091,6 +1095,7 @@ def test_assemble_circular_diagram_from_records_scaling_mode_selection(
 
     assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_size_mode=size_mode,
@@ -1134,6 +1139,7 @@ def test_assemble_circular_diagram_from_records_auto_renormalizes_when_multiple_
 
     assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_size_mode="auto",
@@ -1183,6 +1189,7 @@ def test_assemble_circular_diagram_from_records_auto_keeps_single_clamp_behavior
 
     assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_size_mode="auto",
@@ -1205,6 +1212,7 @@ def test_assemble_circular_diagram_from_records_rejects_removed_sqrt_alias() -> 
     with pytest.raises(ValidationError, match="auto, linear, equal"):
         assemble_circular_diagram_from_records(
             records,
+            cfg=apply_config_overrides(None, None),
             selected_features_set=["CDS"],
             legend="none",
             multi_record_size_mode="sqrt",
@@ -1247,6 +1255,7 @@ def test_multi_record_variable_grid_width_is_tighter_than_fixed_cell_layout(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -1302,6 +1311,7 @@ def test_multi_record_default_column_and_row_gap_ratios_are_ten_and_five_percent
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -1364,6 +1374,7 @@ def test_multi_record_column_gap_ratio_override_controls_horizontal_spacing(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_column_gap_ratio=0.2,
@@ -1410,6 +1421,7 @@ def test_multi_record_column_gap_ratio_zero_removes_gap_between_records_in_same_
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_column_gap_ratio=0.0,
@@ -1460,6 +1472,7 @@ def test_multi_record_row_gap_ratio_override_accepts_legacy_ten_percent(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_row_gap_ratio=0.1,
@@ -1498,6 +1511,7 @@ def test_multi_record_row_gap_ratio_zero_removes_visible_gap_between_row_content
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_row_gap_ratio=0.0,
@@ -1541,6 +1555,7 @@ def test_multi_record_row_gap_ratio_adds_visible_gap_between_row_content(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_row_gap_ratio=0.1,
@@ -1593,6 +1608,7 @@ def test_multi_record_positions_group_rows_and_preserve_within_row_order(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_positions=["#2@2", "#5@1", "#1@1", "#6@2", "#3@1", "#4@2"],
@@ -1653,6 +1669,7 @@ def test_multi_record_positions_compress_row_gaps(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_positions=["#1@1", "#2@1", "#3@3", "#4@3", "#5@3"],
@@ -1698,6 +1715,7 @@ def test_multi_record_positions_default_layout_keeps_auto_square_when_unspecifie
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -1744,6 +1762,7 @@ def test_multi_record_positions_accept_record_id_selectors(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_positions=["order_c@1", "order_a@2", "order_b@2", "order_d@1"],
@@ -1799,6 +1818,7 @@ def test_multi_record_row_outer_margins_equalize_to_larger_side_for_none_top_bot
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend=legend_position,
     )
@@ -1900,6 +1920,7 @@ def test_multi_record_row_margin_symmetry_not_applied_for_right_legend(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="right",
     )
@@ -2536,6 +2557,7 @@ def test_multi_record_positions_invalid_selector_raises_validation_error(
     with pytest.raises(ValidationError):
         assemble_circular_diagram_from_records(
             records,
+            cfg=apply_config_overrides(None, None),
             selected_features_set=["CDS"],
             legend="none",
             multi_record_positions=["none@1", "#2@2"],
@@ -2570,6 +2592,7 @@ def test_multi_record_positions_with_duplicate_selector_raises_validation_error(
     with pytest.raises(ValidationError, match="specified more than once"):
         assemble_circular_diagram_from_records(
             records,
+            cfg=apply_config_overrides(None, None),
             selected_features_set=["CDS"],
             legend="none",
             multi_record_positions=["#1@1", "#1@2", "#3@2"],
@@ -2604,6 +2627,7 @@ def test_multi_record_positions_with_missing_record_raises_validation_error(
     with pytest.raises(ValidationError, match="must include each loaded record exactly once"):
         assemble_circular_diagram_from_records(
             records,
+            cfg=apply_config_overrides(None, None),
             selected_features_set=["CDS"],
             legend="none",
             multi_record_positions=["#1@1", "#2@2"],
@@ -2637,6 +2661,7 @@ def test_multi_record_positions_with_non_positive_row_raises_validation_error(
     with pytest.raises(ValidationError, match="positive integer row"):
         assemble_circular_diagram_from_records(
             records,
+            cfg=apply_config_overrides(None, None),
             selected_features_set=["CDS"],
             legend="none",
             multi_record_positions=["#1@0", "#2@1"],
@@ -2912,6 +2937,7 @@ def test_multi_record_default_hides_plot_title_and_keeps_record_summary_content(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -2964,6 +2990,7 @@ def test_multi_record_shared_record_summary_includes_replicon_when_available() -
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -3015,7 +3042,7 @@ def test_plot_title_font_size_override_only_changes_plot_title() -> None:
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
-        config_overrides={"plot_title_font_size": 30},
+        cfg=apply_config_overrides(None, {"objects.definition.circular.plot_title_font_size": 30}),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -3059,6 +3086,7 @@ def test_plot_title_single_line_with_missing_species_or_strain(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
@@ -3088,18 +3116,21 @@ def test_plot_title_position_moves_shared_group_vertically() -> None:
 
     none_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="none",
     )
     top_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
     )
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="bottom",
@@ -3130,6 +3161,7 @@ def test_single_record_bottom_plot_title_uses_summary_center_definition() -> Non
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="bottom",
@@ -3163,6 +3195,7 @@ def test_single_record_plot_title_can_keep_full_center_definition() -> None:
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
@@ -3195,6 +3228,7 @@ def test_single_record_custom_plot_title_overrides_default_when_visible() -> Non
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title="Custom Circular Title",
@@ -3226,6 +3260,7 @@ def test_single_record_plot_title_keeps_plain_text_around_inline_italics() -> No
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title=plot_title,
@@ -3250,6 +3285,7 @@ def test_single_record_hidden_plot_title_ignores_custom_title_and_keeps_full_def
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title="Hidden Circular Title",
@@ -3301,6 +3337,7 @@ def test_multi_record_center_definition_aligns_with_record_axis(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position=plot_title_position,
@@ -3328,21 +3365,25 @@ def test_single_record_legend_top_bottom_positions_expand_and_move() -> None:
 
     top_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="top",
     )
     left_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="left",
     )
     bottom_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="bottom",
     )
     none_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -3432,10 +3473,10 @@ def test_single_record_top_bottom_legend_centers_between_edge_and_content(
         record,
         selected_features_set=["CDS", "rRNA", "tRNA"],
         legend=legend_position,
-        config_overrides={
-            "show_labels": show_labels,
-            "track_type": track_type,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.circular.scope": "outer" if show_labels else "none",
+            "canvas.circular.track_type": track_type,
+        }),
     )
     root = ET.fromstring(canvas.tostring())
     legend_top, legend_bottom = _extract_legend_vertical_bounds(root)
@@ -3493,21 +3534,25 @@ def test_multi_record_legend_top_bottom_positions_expand_and_move() -> None:
 
     top_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="top",
     )
     left_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="left",
     )
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="bottom",
     )
     none_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -3548,6 +3593,7 @@ def test_multi_record_top_legend_keeps_minimum_top_padding() -> None:
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="top",
     )
@@ -3575,6 +3621,7 @@ def test_multi_record_bottom_plot_title_stays_below_legend() -> None:
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="bottom",
         plot_title_position="bottom",
@@ -3597,6 +3644,7 @@ def test_single_record_bottom_plot_title_stays_below_legend() -> None:
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="bottom",
         plot_title_position="bottom",
@@ -3626,6 +3674,7 @@ def test_multi_record_custom_plot_title_overrides_default_shared_title() -> None
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title="Custom Shared Plot Title",
@@ -3658,6 +3707,7 @@ def test_multi_record_left_right_plot_title_bottom_keeps_margins(
 
     baseline_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend=legend_position,
         plot_title_position="none",
@@ -3667,6 +3717,7 @@ def test_multi_record_left_right_plot_title_bottom_keeps_margins(
 
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend=legend_position,
         plot_title_position="bottom",
@@ -3699,11 +3750,13 @@ def test_single_record_side_legend_matches_upper_corner_edge_margin(
 
     side_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=side_position,
     )
     corner_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=corner_position,
     )
@@ -3748,11 +3801,13 @@ def test_multi_record_side_legend_matches_upper_corner_edge_margin(
 
     side_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=side_position,
     )
     corner_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=corner_position,
     )
@@ -3798,11 +3853,13 @@ def test_circular_top_legend_uses_horizontal_entry_layout() -> None:
 
     top_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS", "tRNA", "rRNA"],
         legend="top",
     )
     right_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS", "tRNA", "rRNA"],
         legend="right",
     )
@@ -3833,6 +3890,7 @@ def test_single_record_top_bottom_legend_centers_each_wrapped_row(
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=legend_position,
     )
@@ -3868,6 +3926,7 @@ def test_multi_record_top_bottom_legend_centers_each_wrapped_row(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=legend_position,
     )
@@ -3899,6 +3958,7 @@ def test_multi_record_visible_plot_title_uses_default_shared_title_when_blank() 
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
@@ -3931,6 +3991,7 @@ def test_multi_record_plot_title_can_keep_full_definitions() -> None:
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
@@ -3964,6 +4025,7 @@ def test_multi_record_hidden_plot_title_keeps_summary_when_keep_full_enabled() -
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="none",
@@ -3996,11 +4058,11 @@ def test_build_circular_diagram_passes_plot_title_position_option(
 
     diagram_api_module.build_circular_diagram(
         record,
-        options=DiagramOptions(
+        options=CircularDiagramOptions(
             plot_title="Build Shared Title",
             plot_title_font_size=28,
             keep_full_definition_with_plot_title=True,
-            output=OutputOptions(plot_title_position="bottom"),
+            output=CircularOutputOptions(plot_title_position="bottom"),
         ),
     )
 

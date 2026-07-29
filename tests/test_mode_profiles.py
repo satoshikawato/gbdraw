@@ -15,11 +15,10 @@ import gbdraw.linear as linear_cli
 from gbdraw.api.options import (
     CircularDiagramOptions,
     CircularMultiRecordOptions,
-    DiagramOptions,
+    CircularTrackOptions,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
-    TrackOptions,
-    resolve_diagram_options_for_mode,
+    resolve_linear_diagram_options,
 )
 from gbdraw.api.requests import (
     CircularDiagramRequest,
@@ -27,6 +26,7 @@ from gbdraw.api.requests import (
     LinearDiagramRequest,
     RecordInput,
 )
+from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
@@ -114,21 +114,21 @@ def test_fresh_python_request_and_cli_threshold_defaults_match(
 
 
 def test_mode_resolution_preserves_explicit_values_and_applies_track_defaults() -> None:
-    explicit = DiagramOptions(
+    explicit = LinearDiagramOptions(
         evalue=0.25,
-        config_overrides={"show_gc": True, "linear_ruler_on_axis": True},
+        config_overrides={"canvas.show_gc": True, "canvas.linear.ruler_on_axis": True},
     )
 
-    resolved = resolve_diagram_options_for_mode(explicit, mode="linear")
+    resolved = resolve_linear_diagram_options(explicit)
 
     assert resolved.evalue == 0.25
     assert resolved.bitscore == 50.0
     assert resolved.identity == 0.0
     assert resolved.config_overrides == {
-        "show_gc": True,
-        "show_skew": False,
-        "linear_axis_stroke_color": "dimgray",
-        "linear_ruler_on_axis": True,
+        "canvas.show_gc": True,
+        "canvas.show_skew": False,
+        "objects.axis.linear.stroke_color": "dimgray",
+        "canvas.linear.ruler_on_axis": True,
     }
 
 
@@ -151,29 +151,15 @@ def test_partial_root_thresholds_resolve_omitted_values_for_the_parent_mode(
     }
 
 
-def test_none_config_overrides_do_not_mask_linear_profile_defaults() -> None:
-    resolved = resolve_diagram_options_for_mode(
-        DiagramOptions(
+def test_none_config_override_is_rejected_for_non_optional_field() -> None:
+    with pytest.raises(ValidationError, match="canvas.show_gc"):
+        LinearDiagramOptions(
             config_overrides={
-                "show_gc": None,
-                "linear_ruler_on_axis": True,
-                "linear_axis_stroke_color": None,
+                "canvas.show_gc": None,
+                "canvas.linear.ruler_on_axis": True,
+                "objects.axis.linear.stroke_color": None,
             }
-        ),
-        mode="linear",
-    )
-
-    assert resolved.config_overrides == {
-        "show_gc": False,
-        "show_skew": False,
-        "linear_axis_stroke_color": "dimgray",
-        "linear_ruler_on_axis": True,
-    }
-    svg = api_diagram.build_linear_diagram(
-        [_record()],
-        options=DiagramOptions(config_overrides={"show_gc": None}),
-    ).tostring()
-    assert 'id="gc_content"' not in svg
+        )
 
 
 def test_builders_forward_resolved_mode_profiles(
@@ -209,15 +195,17 @@ def test_builders_forward_resolved_mode_profiles(
             mode
         ]
         assert kwargs["selected_features_set"] == DEFAULT_FEATURE_TYPES
-    assert captured["circular"]["config_overrides"] == {
-        "show_gc": True,
-        "show_skew": True,
-    }
-    assert captured["linear"]["config_overrides"] == {
-        "show_gc": False,
-        "show_skew": False,
-        "linear_axis_stroke_color": "lightgray",
-    }
+        assert {"config_dict", "config_overrides"}.isdisjoint(kwargs)
+
+    circular_cfg = captured["circular"]["cfg"]
+    linear_cfg = captured["linear"]["cfg"]
+    assert isinstance(circular_cfg, GbdrawConfig)
+    assert isinstance(linear_cfg, GbdrawConfig)
+    assert circular_cfg.canvas.show_gc is True
+    assert circular_cfg.canvas.show_skew is True
+    assert linear_cfg.canvas.show_gc is False
+    assert linear_cfg.canvas.show_skew is False
+    assert linear_cfg.objects.axis.linear.stroke_color == "lightgray"
 
 
 def test_paired_default_renders_apply_mode_track_and_axis_profiles() -> None:
@@ -268,7 +256,7 @@ def test_threshold_models_reject_invalid_public_domains(
     with pytest.raises(ValidationError):
         interface.Thresholds(**values)
     with pytest.raises(ValidationError):
-        DiagramOptions(**kwargs)
+        CircularDiagramOptions(**kwargs)
 
 
 def test_threshold_overflow_is_normalized_to_validation_error() -> None:
@@ -284,14 +272,14 @@ def test_threshold_overflow_is_normalized_to_validation_error() -> None:
 @pytest.mark.parametrize(
     "factory",
     [
-        lambda: DiagramOptions(colors="bad"),  # type: ignore[arg-type]
-        lambda: DiagramOptions(tracks="bad"),  # type: ignore[arg-type]
-        lambda: DiagramOptions(output="bad"),  # type: ignore[arg-type]
-        lambda: DiagramOptions(annotations="bad"),  # type: ignore[arg-type]
-        lambda: DiagramOptions(selected_features_set="CDS"),
-        lambda: DiagramOptions(selected_features_set=("CDS", "")),
-        lambda: DiagramOptions(config_overrides=[]),  # type: ignore[arg-type]
-        lambda: DiagramOptions(feature_shapes=[]),  # type: ignore[arg-type]
+        lambda: CircularDiagramOptions(colors="bad"),  # type: ignore[arg-type]
+        lambda: CircularDiagramOptions(tracks="bad"),  # type: ignore[arg-type]
+        lambda: CircularDiagramOptions(output="bad"),  # type: ignore[arg-type]
+        lambda: CircularDiagramOptions(annotations="bad"),  # type: ignore[arg-type]
+        lambda: CircularDiagramOptions(selected_features_set="CDS"),
+        lambda: CircularDiagramOptions(selected_features_set=("CDS", "")),
+        lambda: CircularDiagramOptions(config_overrides=[]),  # type: ignore[arg-type]
+        lambda: CircularDiagramOptions(feature_shapes=[]),  # type: ignore[arg-type]
     ],
 )
 def test_diagram_options_reject_invalid_nested_structure(factory: object) -> None:
@@ -373,7 +361,7 @@ def test_wrong_mode_nested_values_fail_during_construction() -> None:
             slots=(CircularTrackSlot(id="wrong", renderer="features"),)
         )
     with pytest.raises(ValidationError, match="CircularTrackSlot"):
-        TrackOptions(
+        CircularTrackOptions(
             circular_track_slots=(
                 LinearTrackSlot(id="wrong", renderer="features"),
             )

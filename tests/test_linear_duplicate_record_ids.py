@@ -9,9 +9,10 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import FeatureDrawingConfigurator
@@ -24,6 +25,7 @@ from gbdraw.features.ids import compute_feature_hash, make_linear_rendered_featu
 from gbdraw.io.colors import load_default_colors
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import enrich_svg
+from tests.utils.linear_render_context import make_linear_record_render_context
 
 
 SVG_NS = "{http://www.w3.org/2000/svg}"
@@ -60,29 +62,38 @@ def _depth_table(record_id: str = "duplicate") -> pd.DataFrame:
     )
 
 
-def _linear_feature_config(records: list[SeqRecord]) -> tuple[dict, GbdrawConfig, LinearCanvasConfigurator, FeatureDrawingConfigurator]:
+def _linear_feature_config(
+    records: list[SeqRecord],
+) -> tuple[
+    dict,
+    GbdrawConfig,
+    LinearRenderProfile,
+    LinearCanvasConfigurator,
+    FeatureDrawingConfigurator,
+]:
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_labels="all",
-        label_blacklist="",
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.linear.scope": 'all',
+            "labels.filtering.blacklist_keywords": [],
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
+    profile = LinearRenderProfile(cfg)
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=len(records),
         longest_genome=max(len(record.seq) for record in records),
-        config_dict=config_dict,
+        profile=profile,
         legend="none",
-        cfg=cfg,
     )
     feature_config = FeatureDrawingConfigurator(
         color_table=None,
         default_colors=load_default_colors("", "default"),
         selected_features_set=cfg.objects.features.features_drawn,
-        config_dict=config_dict,
+        profile=profile,
         canvas_config=canvas_config,
-        cfg=cfg,
     )
-    return config_dict, cfg, canvas_config, feature_config
+    return config_dict, cfg, profile, canvas_config, feature_config
 
 
 def _metadata_payload(svg: str) -> dict:
@@ -125,14 +136,13 @@ def _orthogroup_member(record_index: int, feature_svg_id: str) -> SimpleNamespac
 def test_duplicate_record_id_label_precalculation_is_index_aligned_for_reverse_copy() -> None:
     original = _record()
     records = [original, _reverse_record(original)]
-    config_dict, cfg, canvas_config, feature_config = _linear_feature_config(records)
+    config_dict, _cfg, profile, canvas_config, feature_config = _linear_feature_config(records)
 
     _required_height, labels_by_record, label_heights = _precalculate_label_dimensions(
         records,
         feature_config,
         canvas_config,
-        config_dict,
-        cfg=cfg,
+        render_context=make_linear_record_render_context(profile),
     )
 
     assert len(labels_by_record) == 2
@@ -149,8 +159,15 @@ def test_duplicate_record_id_linear_svg_ids_are_instance_safe() -> None:
 
     svg = assemble_linear_diagram_from_records(
         records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "all",
+                "canvas.show_gc": True,
+                "canvas.show_skew": True,
+            },
+        ),
         legend="none",
-        config_overrides={"show_labels": "all", "show_gc": True, "show_skew": True},
         depth_tables=[_depth_table(), _depth_table()],
         window=60,
         step=60,
@@ -202,8 +219,11 @@ def test_duplicate_rendered_feature_payload_entries_do_not_collapse() -> None:
 
     canvas = assemble_linear_diagram_from_records(
         records,
+        cfg=apply_config_overrides(
+            None,
+            {"labels.linear.scope": "all"},
+        ),
         legend="none",
-        config_overrides={"show_labels": "all"},
     )
     enriched = enrich_svg(
         canvas.tostring(),

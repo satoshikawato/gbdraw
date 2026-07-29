@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.models import RenderProfile  # type: ignore[reportMissingImports]
 from gbdraw.core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 from gbdraw.legend.circular_layout import build_circular_legend_layout  # type: ignore[reportMissingImports]
 
@@ -12,23 +12,19 @@ class LegendDrawingConfigurator:
         color_table,
         default_colors,
         selected_features_set,
-        config_dict,
+        profile: RenderProfile,
         gc_config,
         skew_config,
         feature_config,
         legend_table=None,
         blast_config=None,
         canvas_config=None,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
+        cfg = profile.config
         self.color_table = color_table
         self.default_colors = default_colors
         self.selected_features_set = selected_features_set
-        self.config_dict = config_dict
         self.canvas_config = canvas_config
-        self.show_gc = cfg.canvas.show_gc
-        self.show_skew = cfg.canvas.show_skew
         self.gc_config = gc_config
         self.skew_config = skew_config
         self.feature_config = feature_config
@@ -200,5 +196,3 @@ class LegendDrawingConfigurator:
 
 
 __all__ = ["LegendDrawingConfigurator"]
-
-

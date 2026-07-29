@@ -5,23 +5,17 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Dict
+from typing import Literal, Optional
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 from svgwrite.shapes import Line  # type: ignore[reportMissingImports]
 
 from ....canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ....features.objects import FeatureObject  # type: ignore[reportMissingImports]
-from ....features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
-from ....features.factory import create_feature_dict  # type: ignore[reportMissingImports]
-from ....labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
+from ....features.factory import FeatureBuildResult  # type: ignore[reportMissingImports]
 from ....labels.circular import prepare_label_list  # type: ignore[reportMissingImports]
+from ....layout.circular import CircularRecordRenderContext  # type: ignore[reportMissingImports]
 from ...drawers.circular.labels import LabelDrawer  # type: ignore[reportMissingImports]
-from ....configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
-from ....diagrams.circular.radial_layout import CircularFeatureLayout  # type: ignore[reportMissingImports]
 
 
 class LabelsGroup:
@@ -31,12 +25,10 @@ class LabelsGroup:
         self,
         gb_record: SeqRecord,
         canvas_config: CircularCanvasConfigurator,
-        feature_config: FeatureDrawingConfigurator,
-        config_dict: dict,
+        feature_layers: FeatureBuildResult,
+        render_context: CircularRecordRenderContext,
         *,
         outer_arena: tuple[float, float] | None = None,
-        cfg: GbdrawConfig | None = None,
-        precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = None,
         precalculated_labels: Optional[list[dict]] = None,
         feature_track_ratio_factor_override: float | None = None,
         feature_anchor_radius_px: float | None = None,
@@ -44,44 +36,19 @@ class LabelsGroup:
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
-        self.feature_config: FeatureDrawingConfigurator = feature_config
-        self.config_dict: dict = config_dict
+        self.feature_layers = feature_layers
+        self.render_context = render_context
         self.outer_arena = outer_arena
-        self.precomputed_feature_dict: Optional[Dict[str, FeatureObject]] = precomputed_feature_dict
         self.precalculated_labels: Optional[list[dict]] = precalculated_labels
         self.feature_track_ratio_factor_override = feature_track_ratio_factor_override
         self.feature_anchor_radius_px = feature_anchor_radius_px
         self.phase = phase if phase in {"all", "leaders", "text"} else "all"
-        self.feature_layout: CircularFeatureLayout | None = getattr(
-            self.canvas_config,
-            "circular_feature_layout",
-            None,
-        )
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
-        self._cfg = cfg
-        self.track_type = getattr(self.canvas_config, "circular_track_preset", cfg.canvas.circular.track_type)
-        self.feature_lane_direction = getattr(self.canvas_config, "circular_feature_lane_direction", None)
-        if self.feature_lane_direction is None:
-            preset = str(self.track_type).strip().lower()
-            if preset == "middle":
-                self.feature_lane_direction = "split"
-            elif preset == "spreadout":
-                self.feature_lane_direction = "outside"
-            else:
-                self.feature_lane_direction = "inside"
+        cfg = render_context.profile.config
 
-        raw_show_labels = cfg.canvas.show_labels
-        self.show_labels = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
+        self.show_labels = render_context.profile.labels_enabled
 
-        self.resolve_overlaps = cfg.canvas.resolve_overlaps
-        self.split_overlaps_by_strand = (
-            bool(self.resolve_overlaps)
-            and (not bool(self.canvas_config.strandedness))
-            and str(self.feature_lane_direction).strip().lower() == "split"
-        )
         self.label_stroke_width = cfg.labels.stroke_width.for_length_param(self.canvas_config.length_param)
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
-        self.label_filtering = cfg.labels.filtering.as_dict()
 
         self.labels_group: Group = self.setup_labels_group()
 
@@ -95,26 +62,7 @@ class LabelsGroup:
         if not self.show_labels:
             return group
 
-        selected_features_set: str = self.feature_config.selected_features_set
-        color_table: Optional[DataFrame] = self.feature_config.color_table
-        default_colors: Optional[DataFrame] = self.feature_config.default_colors
-        if self.precomputed_feature_dict is not None:
-            feature_dict = self.precomputed_feature_dict
-        else:
-            label_filtering = preprocess_label_filtering(self.label_filtering)
-            color_table, default_colors = preprocess_color_tables(color_table, default_colors)
-            feature_dict, _ = create_feature_dict(
-                self.gb_record,
-                color_table,
-                selected_features_set,
-                default_colors,
-                self.canvas_config.strandedness,
-                self.resolve_overlaps,
-                label_filtering,
-                split_overlaps_by_strand=self.split_overlaps_by_strand,
-                directional_feature_types=self.feature_config.directional_feature_types,
-                feature_visibility_rules=self.feature_config.feature_visibility_rules,
-            )
+        feature_dict = self.feature_layers.foreground_features
 
         record_length: int = len(self.gb_record.seq)
         feature_anchor_radius = (
@@ -130,17 +78,18 @@ class LabelsGroup:
                 record_length,
                 feature_anchor_radius,
                 self.canvas_config.track_ratio,
-                self.config_dict,
-                cfg=self._cfg,
+                self.render_context.profile,
                 outer_arena=self.outer_arena,
                 feature_track_ratio_factor_override=self.feature_track_ratio_factor_override,
-                feature_layout=self.feature_layout,
-                radial_layout=getattr(self.canvas_config, "circular_radial_layout", None),
-                track_preset=self.track_type,
-                feature_lane_direction=str(self.feature_lane_direction),
+                feature_layout=self.render_context.feature_layout,
+                radial_layout=self.render_context.radial_layout,
+                track_preset=self.render_context.track_preset,
+                feature_lane_direction=str(
+                    self.render_context.feature_lane_direction
+                ),
             )
 
-        drawer = LabelDrawer(self.config_dict, cfg=self._cfg)
+        drawer = LabelDrawer(profile=self.render_context.profile)
         for label in label_list:
             if label.get("is_embedded"):
                 continue
@@ -176,5 +125,3 @@ class LabelsGroup:
 
 
 __all__ = ["LabelsGroup"]
-
-

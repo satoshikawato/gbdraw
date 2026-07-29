@@ -5,11 +5,103 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
-from types import MappingProxyType
-from typing import Iterable, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Iterable, Literal, Mapping, Sequence
+
+from ._immutable import freeze_layout_mapping
+
+if TYPE_CHECKING:
+    from ..config.models import LinearRenderProfile
 
 
 CollisionBandKind = Literal["body", "comparison", "definition"]
+LinearFeatureTrackLayout = Literal["above", "middle", "below"]
+
+
+@dataclass(frozen=True)
+class LinearResolvedTrack:
+    """One normalized Linear track resolved into concrete axis-local geometry."""
+
+    slot_index: int
+    id: str
+    renderer: str
+    side: str
+    y_offset: float
+    height: float
+    spacing_after_px: float
+    top_extent: float
+    bottom_extent: float
+    z: int
+    params: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "params", freeze_layout_mapping(self.params))
+
+
+@dataclass(frozen=True)
+class LinearTrackLayout:
+    """Resolved geometry for the complete Linear track stack."""
+
+    slots: tuple[LinearResolvedTrack, ...]
+    top_extent: float
+    bottom_extent: float
+    plot_tracks_height: float
+    plot_tracks_visual_bottom: float
+    depth_track_offsets: tuple[float, ...]
+    depth_track_heights: tuple[float, ...]
+    gc_content_track_offset: float
+    gc_skew_track_offset: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "slots", tuple(self.slots))
+        object.__setattr__(
+            self,
+            "depth_track_offsets",
+            tuple(float(value) for value in self.depth_track_offsets),
+        )
+        object.__setattr__(
+            self,
+            "depth_track_heights",
+            tuple(float(value) for value in self.depth_track_heights),
+        )
+
+
+@dataclass(frozen=True)
+class LinearRecordRenderContext:
+    """Immutable profile and resolved track state used by Linear record rendering."""
+
+    profile: LinearRenderProfile
+    track_layout: LinearTrackLayout
+    depth_available: bool
+    depth_enabled: bool = field(init=False)
+    feature_track_layout: LinearFeatureTrackLayout = field(init=False)
+
+    def __post_init__(self) -> None:
+        configured = str(self.profile.track_layout).strip().lower()
+        resolved = configured
+        for slot in self.track_layout.slots:
+            if slot.renderer != "features":
+                continue
+            resolved = "middle" if slot.side == "overlay" else str(slot.side)
+            break
+        if resolved not in {"above", "middle", "below"}:
+            raise ValueError(
+                "Linear feature track layout must be above, middle, or below"
+            )
+        object.__setattr__(self, "feature_track_layout", resolved)
+        object.__setattr__(
+            self,
+            "depth_enabled",
+            bool(self.profile.show_depth and self.depth_available),
+        )
+
+    @property
+    def axis_ruler_enabled(self) -> bool:
+        cfg = self.profile.config
+        return (
+            bool(self.profile.ruler_on_axis)
+            and str(cfg.objects.scale.style).strip().lower() == "ruler"
+            and self.feature_track_layout in {"above", "below"}
+        )
 
 
 @dataclass(frozen=True)
@@ -307,6 +399,7 @@ class LinearFeatureLaneGeometry:
     )
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "lanes", tuple(self.lanes))
         lanes_by_identity = {
             (lane.strand_pool, lane.track_id): lane
             for lane in self.lanes
@@ -316,7 +409,7 @@ class LinearFeatureLaneGeometry:
         object.__setattr__(
             self,
             "_lanes_by_identity",
-            MappingProxyType(lanes_by_identity),
+            freeze_layout_mapping(lanes_by_identity),
         )
 
     def lane_for(
@@ -583,6 +676,10 @@ __all__ = [
     "CollisionBandKind",
     "LinearFeatureLane",
     "LinearFeatureLaneGeometry",
+    "LinearFeatureTrackLayout",
+    "LinearRecordRenderContext",
+    "LinearResolvedTrack",
+    "LinearTrackLayout",
     "VerticalBand",
     "calculate_feature_position_factors_linear",
     "collision_x_intervals_overlap",

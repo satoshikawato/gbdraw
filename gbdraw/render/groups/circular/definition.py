@@ -80,7 +80,8 @@ class DefinitionGroup:
         self,
         gb_record: SeqRecord,
         canvas_config: CircularCanvasConfigurator,
-        config_dict: dict,
+        *,
+        cfg: GbdrawConfig,
         species: Optional[str] = None,
         strain: Optional[str] = None,
         plot_title: Optional[str] = None,
@@ -88,7 +89,6 @@ class DefinitionGroup:
         definition_group_id: str | None = None,
         record_index: int = 0,
         record_count: int = 1,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -103,8 +103,6 @@ class DefinitionGroup:
         self.replicon: str | None = None
         self.organelle: str | None = None
         self.record_name: str = ""
-        self.config_dict: dict = config_dict
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         self.interval = cfg.objects.definition.circular.interval
         self.font_size = cfg.objects.definition.circular.font_size
@@ -203,7 +201,7 @@ class DefinitionGroup:
         )
         active_name_font_weight = "normal" if self.definition_profile == "shared_common" else "bold"
 
-        self.definition_group: Group = DefinitionDrawer(self.config_dict, cfg=self._cfg).draw(
+        self.definition_group: Group = DefinitionDrawer(cfg=self._cfg).draw(
             self.definition_group,
             self.title_x,
             self.title_y,

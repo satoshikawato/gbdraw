@@ -2,25 +2,19 @@
 # coding: utf-8
 
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Literal
 
 from svgwrite import Drawing
 
-from ..config.models import GbdrawConfig
-from ..config.toml import load_config_toml
+from ..config.models import LinearRenderProfile
 from ..core.sequence import determine_length_parameter
 
 
-@lru_cache(maxsize=1)
-def _get_default_linear_non_stranded_cds_heights() -> dict[str, float]:
-    """Return baseline CDS heights from the unmodified default config."""
-    default_config = load_config_toml("gbdraw.data", "config.toml")
-    default_cfg = GbdrawConfig.from_dict(default_config)
-    return {
-        "short": 0.5 * float(default_cfg.canvas.linear.default_cds_height.short),
-        "long": 0.5 * float(default_cfg.canvas.linear.default_cds_height.long),
-    }
+# The configured arrow coefficients are calibrated to these non-stranded heights.
+_ARROW_LENGTH_REFERENCE_CDS_HEIGHT = {
+    "short": 40.0,
+    "long": 10.0,
+}
 
 
 @dataclass(frozen=True)
@@ -115,10 +109,9 @@ class LinearCanvasConfigurator:
         self,
         num_of_entries: int,
         longest_genome: int,
-        config_dict: dict,
+        profile: LinearRenderProfile,
         legend: str,
         output_prefix="out",
-        cfg: GbdrawConfig | None = None,
         has_comparisons: bool = False,
         depth_track_count: int = 1,
         depth_track_heights: list[float | None] | tuple[float | None, ...] | None = None,
@@ -129,17 +122,16 @@ class LinearCanvasConfigurator:
         Args:
         num_of_entries (int): Number of entries to visualize.
         longest_genome (int): Length of the longest genome in the dataset.
-        config_dict (dict): Configuration dictionary with canvas settings.
+        profile (LinearRenderProfile): Resolved linear render settings.
         output_prefix (str, optional): Prefix for the output file. Defaults to 'out'.
         show_gc (bool, optional): Flag to display GC content. Defaults to False.
         strandedness (bool, optional): Flag to display strandedness. Defaults to False.
         align_center (bool, optional): Flag to align content to the center. Defaults to False.
         has_comparisons (bool, optional): Flag indicating if BLAST comparisons are present. Defaults to False.
         """
-
+        cfg = profile.config
         self.output_prefix: str = output_prefix
-        self.config_dict = config_dict
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
+        self._profile = profile
         self._cfg = cfg
         self.longest_genome: int = longest_genome
         self.fig_width: int = cfg.canvas.linear.width
@@ -161,38 +153,52 @@ class LinearCanvasConfigurator:
         self.length_threshold = cfg.labels.length_threshold.linear
         self.length_param = determine_length_parameter(self.longest_genome, self.length_threshold)
         self.default_cds_height: float = getattr(cfg.canvas.linear.default_cds_height, self.length_param)
-        self.baseline_non_stranded_cds_heights = _get_default_linear_non_stranded_cds_heights()
         self.default_gc_height: float = cfg.canvas.linear.default_gc_height
         self.default_depth_height: float = cfg.canvas.linear.depth_height
         self.configured_depth_padding: float = cfg.canvas.linear.depth_padding
         self.dpi: int = cfg.canvas.dpi
-        self.show_gc: bool = cfg.canvas.show_gc
-        self.show_skew: bool = cfg.canvas.show_skew
-        self.show_depth: bool = cfg.canvas.show_depth
         self.depth_track_count: int = max(1, int(depth_track_count))
         self.configured_depth_track_heights = self._normalize_depth_track_heights(depth_track_heights)
-        self.strandedness: bool = cfg.canvas.strandedness
-        self.resolve_overlaps: bool = cfg.canvas.resolve_overlaps
-        self.track_layout: str = cfg.canvas.linear.track_layout
         self.track_axis_gap: float | None = cfg.canvas.linear.track_axis_gap
-        self.ruler_on_axis: bool = cfg.canvas.linear.ruler_on_axis
         self.align_center: bool = cfg.canvas.linear.align_center
         self.keep_definition_left_aligned: bool = cfg.canvas.linear.keep_definition_left_aligned
         self.normalize_length: bool = cfg.canvas.linear.normalize_length
-        _label_setting = cfg.canvas.show_labels
-        if isinstance(_label_setting, str):
-            self.show_labels = _label_setting in ["all", "first", "orthogroup_top"]
-        else:
-            self.show_labels = bool(_label_setting)
         self.legend_position = legend
         self.num_of_entries: int = num_of_entries
         self.total_height = 0
-        self.linear_track_layout = None
         self.plot_tracks_top_extent = 0.0
         self.plot_tracks_bottom_extent = 0.0
 
         self.calculate_dimensions()
         self.set_arrow_length()
+
+    @property
+    def profile(self) -> LinearRenderProfile:
+        return self._profile
+
+    @property
+    def show_gc(self) -> bool:
+        return self._profile.show_gc
+
+    @property
+    def show_skew(self) -> bool:
+        return self._profile.show_skew
+
+    @property
+    def show_depth(self) -> bool:
+        return self._profile.show_depth
+
+    @property
+    def strandedness(self) -> bool:
+        return self._profile.strandedness
+
+    @property
+    def resolve_overlaps(self) -> bool:
+        return self._profile.resolve_overlaps
+
+    @property
+    def track_layout(self) -> str:
+        return self._profile.track_layout
 
     def _normalize_depth_track_heights(
         self,
@@ -298,30 +304,6 @@ class LinearCanvasConfigurator:
         self.gc_padding: float = padding_segments.get("gc_content", 0.0)
         self.skew_padding: float = padding_segments.get("gc_skew", 0.0)
 
-    def set_linear_track_layout(self, layout) -> None:
-        """Apply a resolved custom linear track layout to legacy canvas fields."""
-
-        self.linear_track_layout = layout
-        self.plot_tracks_top_extent = float(getattr(layout, "top_extent", 0.0))
-        self.plot_tracks_bottom_extent = float(getattr(layout, "bottom_extent", 0.0))
-        self.plot_tracks_height = float(getattr(layout, "plot_tracks_height", self.plot_tracks_bottom_extent))
-        self.plot_tracks_visual_bottom = float(
-            getattr(layout, "plot_tracks_visual_bottom", self.plot_tracks_bottom_extent)
-        )
-        self.depth_track_offsets = list(getattr(layout, "depth_track_offsets", ()))
-        self.depth_track_offset = self.depth_track_offsets[0] if self.depth_track_offsets else 0.0
-        self.depth_track_heights = list(getattr(layout, "depth_track_heights", ()))
-        self.gc_content_track_offset = float(getattr(layout, "gc_content_track_offset", 0.0))
-        self.gc_skew_track_offset = float(getattr(layout, "gc_skew_track_offset", 0.0))
-        self.depth_height = self.depth_track_heights[0] if self.depth_track_heights else (
-            self.default_depth_height if self.show_depth else 0.0
-        )
-        self.gc_height = self.default_gc_height if self.show_gc else 0.0
-        self.skew_height = self.default_gc_height if self.show_skew else 0.0
-        self.depth_padding = max(0.0, self.plot_tracks_bottom_extent)
-        self.gc_padding = 0.0
-        self.skew_padding = 0.0
-
     def set_cds_height_and_cds_padding(self) -> None:
         """
         Sets the height and padding for the coding sequences (CDS) track based on configuration settings.
@@ -343,7 +325,7 @@ class LinearCanvasConfigurator:
 
         self.arrow_length_param = getattr(self._cfg.canvas.linear.arrow_length_parameter, self.length_param)
         base_arrow_length = self.arrow_length_param * self.longest_genome
-        baseline_cds_height = float(self.baseline_non_stranded_cds_heights.get(self.length_param, 0.0))
+        baseline_cds_height = _ARROW_LENGTH_REFERENCE_CDS_HEIGHT[self.length_param]
         if baseline_cds_height <= 0.0:
             self.arrow_length = base_arrow_length
             return
@@ -356,10 +338,7 @@ class LinearCanvasConfigurator:
         considering all the elements and padding. This method updates total_width and total_height attributes.
         """
 
-        if self.linear_track_layout is None:
-            self.set_gc_height_and_gc_padding()
-        else:
-            self.set_linear_track_layout(self.linear_track_layout)
+        self.set_gc_height_and_gc_padding()
         self.set_cds_height_and_cds_padding()
         self.add_margin: float | Literal[0] = (
             2 * self.cds_height if ((self.show_gc or self.show_depth) and not self.strandedness) else 0
@@ -463,5 +442,3 @@ class LinearCanvasConfigurator:
 
 
 __all__ = ["LinearCanvasConfigurator"]
-
-

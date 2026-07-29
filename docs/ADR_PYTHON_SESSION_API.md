@@ -1,6 +1,6 @@
 # ADR: Version 31 session documents in the public Python API
 
-- Status: accepted; version 31 bridge and version 38 grouping amendment implemented
+- Status: accepted; version 31 bridge, version 38 grouping, and version 39 UI-preference amendments implemented
 - Date: 2026-07-14
 - Gate review: 2026-07-15、version 31 `renderRequest` round-trip により公開 gate を開放
 - Related plan: `PYTHON_API_IMPROVEMENT_PLAN.md`, Phase 4
@@ -151,11 +151,20 @@ Canonical request schema 5 makes render cardinality explicit.
 Circular single/grid and Linear requests, and an output array for Circular
 batch requests.
 
-Python and Web writers emit session version 38 with schema 5. Readers accept
-versions 27–33 and 36–38 and canonical request schemas 1–5; public typed
-conversion accepts versions 31–33 and 36–38. For schema 1–4 Circular requests,
+Version 38 Python and Web writers introduced schema 5. Current version 39
+writers retain schema 5. Readers accept versions 27–33 and 36–39 and canonical
+request schemas 1–5; public typed conversion accepts versions 31–33 and 36–39.
+For schema 1–4 Circular requests,
 the reader infers grouping from the stored layout and record count. Fresh CLI
 and Web generation, current canonical replay, and legacy internal replay all
 render through the typed request planners. Record loading is mode-neutral;
 planners own Circular topology warnings and mode, comparison, and cardinality
 policy.
+
+## Version 39 Web layout-preference amendment
+
+Version 39 replaces the parallel Circular, Circular multi-record, and Linear
+legend/title-position UI fields with one `ui.layoutPreferences` tree. The active
+values are computed from the current mode and Circular grouping. Version 38 and
+earlier supported sessions retain their serialized behavior through import-time
+migration of the legacy fields. The canonical render-request schema remains 5.

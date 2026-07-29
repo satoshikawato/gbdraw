@@ -18,7 +18,12 @@ for (const filename of ['history.js', 'history-files.js', 'history-snapshot.js',
     'utf8'
   );
 }
-for (const filename of ['feature-selector.js', 'feature-visibility.js']) {
+for (const filename of [
+  'feature-selector.js',
+  'feature-visibility.js',
+  'layout-preferences.js',
+  'plot-title-position.js'
+]) {
   await writeFile(
     join(tempDir, 'app', filename),
     await readFile(join(appSourceDir, filename), 'utf8'),
@@ -34,6 +39,13 @@ const { createHistorySnapshotService } = await import(
 
 const ref = (value) => ({ value });
 const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastModified: 1 });
+const createLayoutPreferences = () => ({
+  circular: {
+    single: { legend: 'left', plotTitlePosition: 'none' },
+    multi: { legend: null, plotTitlePosition: null }
+  },
+  linear: { legend: 'bottom', plotTitlePosition: 'bottom' }
+});
 
 {
   let value = 0;
@@ -327,6 +339,7 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
     lInputType: ref('gb'),
     downloadDpi: ref(300),
     canvasPadding: { top: 1, right: 2, bottom: 3, left: 4 },
+    layoutPreferences: createLayoutPreferences(),
     extractedFeatures: ref([]),
     featureRecordIds: ref([]),
     selectedFeatureRecordIdx: ref(0),
@@ -416,6 +429,7 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
     lInputType: ref('gb'),
     downloadDpi: ref(300),
     canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 },
+    layoutPreferences: createLayoutPreferences(),
     extractedFeatures: ref([]),
     featureRecordIds: ref([]),
     selectedFeatureRecordIdx: ref(0),

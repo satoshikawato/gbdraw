@@ -25,13 +25,14 @@ from gbdraw.analysis.depth_tracks import (
     normalize_depth_tracks,
     representative_depth_tracks,
 )
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_records,
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
 )
 from gbdraw.config.toml import load_config_toml
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -144,7 +145,7 @@ def test_sparse_depth_shared_axis_and_representatives_are_per_logical_track() ->
     depth_config = DepthConfigurator(
         10,
         10,
-        config_dict,
+        LinearRenderProfile(GbdrawConfig.from_dict(config_dict)),
         normalize=False,
         share_axis=True,
     )
@@ -410,18 +411,19 @@ def test_linear_depth_gc_track_offsets_reserve_visual_gap() -> None:
     from gbdraw.config.toml import load_config_toml
 
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_gc=True,
-        show_skew=True,
-        show_depth=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.show_depth": True,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=120,
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
 
     depth_bottom = canvas_config.depth_track_offset + canvas_config.depth_height
@@ -439,7 +441,9 @@ def test_linear_depth_gc_track_offsets_reserve_visual_gap() -> None:
         [_make_record()],
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={"show_gc": True, "show_skew": True},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        ),
     )
     svg = canvas.tostring()
     depth_y = _svg_group_translate_y(svg, "depth")
@@ -472,13 +476,17 @@ def test_circular_depth_track_is_optional() -> None:
     without_depth = assemble_circular_diagram_from_record(
         record,
         legend="none",
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
     ).tostring()
     with_depth = assemble_circular_diagram_from_record(
         record,
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={"show_gc": True, "show_skew": True},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        ),
     ).tostring()
 
     assert 'id="depth"' not in without_depth
@@ -496,11 +504,11 @@ def test_circular_depth_origin_label_requires_explicit_min() -> None:
         record,
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "depth_min": 5,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.depth.min_depth": 5,
+        }),
         window=10,
         step=10,
         depth_window=10,
@@ -519,11 +527,11 @@ def test_circular_depth_axis_can_be_hidden_without_hiding_depth_track() -> None:
         record,
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "depth_show_axis": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.depth.show_axis": False,
+        }),
         window=10,
         step=10,
     ).tostring()
@@ -550,11 +558,9 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
         gc_df,
         canvas_config,
         gc_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
-        cfg=None,
     ):
         assert track_width_override is not None
         assert norm_factor_override is not None
@@ -568,11 +574,9 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
         gc_df,
         canvas_config,
         skew_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
-        cfg=None,
     ):
         assert track_width_override is not None
         assert norm_factor_override is not None
@@ -586,11 +590,9 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
         depth_df,
         canvas_config,
         depth_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
-        cfg=None,
     ):
         assert track_width_override is not None
         assert norm_factor_override is not None
@@ -618,7 +620,9 @@ def test_circular_depth_compresses_gc_skew_to_preserve_definition_space(
         record,
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={"show_gc": True, "show_skew": True},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        ),
         window=10,
         step=10,
     )
@@ -662,12 +666,10 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
         gc_df,
         canvas_config,
         gc_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
-        cfg=None,
     ):
         captured["gc_width"] = float(track_width_override)
         captured["gc_norm"] = float(norm_factor_override)
@@ -679,12 +681,10 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
         gc_df,
         canvas_config,
         skew_config,
-        config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
-        cfg=None,
     ):
         captured["skew_width"] = float(track_width_override)
         captured["skew_norm"] = float(norm_factor_override)
@@ -705,7 +705,9 @@ def test_circular_depth_preserves_explicit_gc_skew_track_specs(
         record,
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={"show_gc": True, "show_skew": True},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        ),
         circular_track_slots=[
             "gc_content:dinucleotide_content@r=0.44,w=12px",
             "gc_skew:dinucleotide_skew@r=0.24,w=10px",
@@ -727,12 +729,12 @@ def test_circular_depth_axis_uses_record_start_and_tick_options() -> None:
         record,
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "depth_large_tick_interval": 4,
-            "depth_tick_font_size": 11,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.depth.large_tick_interval": 4,
+            "objects.depth.tick_font_size": 11,
+        }),
         window=10,
         step=10,
         depth_window=10,
@@ -752,15 +754,15 @@ def test_circular_depth_ticks_use_right_side_and_small_ticks_are_unlabeled() -> 
         record,
         legend="none",
         depth_table=_constant_depth_table("rec1", 100, length=40),
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "depth_normalize": False,
-            "depth_min": 0,
-            "depth_max": 100,
-            "depth_large_tick_interval": 50,
-            "depth_small_tick_interval": 25,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.depth.normalize": False,
+            "objects.depth.min_depth": 0,
+            "objects.depth.max_depth": 100,
+            "objects.depth.large_tick_interval": 50,
+            "objects.depth.small_tick_interval": 25,
+        }),
         window=10,
         step=10,
     ).tostring()
@@ -781,11 +783,11 @@ def test_depth_ticks_can_be_hidden_without_hiding_axes() -> None:
         [record],
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "depth_show_ticks": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.depth.show_ticks": False,
+        }),
         window=10,
         step=10,
     ).tostring()
@@ -801,11 +803,11 @@ def test_depth_axis_can_be_hidden_without_hiding_depth_track() -> None:
         [record],
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "depth_show_axis": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.depth.show_axis": False,
+        }),
         window=10,
         step=10,
     ).tostring()
@@ -825,12 +827,12 @@ def test_linear_shared_depth_axis_uses_common_auto_max() -> None:
             _constant_depth_table("rec1", 10, length=40),
             _constant_depth_table("rec2", 100, length=40),
         ],
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "depth_share_axis": True,
-            "depth_normalize": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.depth.share_axis": True,
+            "objects.depth.normalize": False,
+        }),
         window=10,
         step=10,
     ).tostring()
@@ -848,12 +850,12 @@ def test_circular_multi_record_shared_depth_axis_uses_common_auto_max() -> None:
             _constant_depth_table("rec1", 10, length=40),
             _constant_depth_table("rec2", 100, length=40),
         ],
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "depth_share_axis": True,
-            "depth_normalize": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.depth.share_axis": True,
+            "objects.depth.normalize": False,
+        }),
         window=10,
         step=10,
     ).tostring()
@@ -868,13 +870,17 @@ def test_linear_depth_track_is_optional() -> None:
     without_depth = assemble_linear_diagram_from_records(
         [record],
         legend="none",
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
     ).tostring()
     with_depth = assemble_linear_diagram_from_records(
         [record],
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={"show_gc": True, "show_skew": True},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        ),
     ).tostring()
 
     assert 'id="depth"' not in without_depth
@@ -904,7 +910,9 @@ def test_linear_multiple_depth_tracks_have_unique_ids() -> None:
         ],
         depth_track_labels=["Sample A", "Sample B"],
         depth_track_colors=["#111111", "#222222"],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -937,7 +945,9 @@ def test_linear_multiple_depth_track_heights_are_per_track() -> None:
             ]
         ],
         depth_track_heights=[12, 28],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -967,7 +977,9 @@ def test_linear_custom_depth_slot_uses_track_height_when_slot_height_is_auto() -
             "depth_a:depth@track_index=0",
             "depth_b:depth@track_index=1",
         ],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -997,7 +1009,9 @@ def test_linear_depth_track_tick_options_are_per_track() -> None:
         depth_track_large_tick_intervals=[5, 20],
         depth_track_small_tick_intervals=["auto", 10],
         depth_track_tick_font_sizes=[8, 14],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -1026,7 +1040,9 @@ def test_circular_multiple_depth_tracks_render_distinct_rings() -> None:
             ]
         ],
         depth_track_labels=["Sample A", "Sample B"],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -1056,7 +1072,9 @@ def test_circular_custom_depth_slot_selects_track_index() -> None:
             "ticks:ticks",
             "selected_depth:depth@track_index=1,label=Sample B",
         ],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -1084,11 +1102,11 @@ def test_depth_share_axis_is_per_logical_track() -> None:
                 _constant_depth_table("rec2", 50, length=40),
             ],
         ],
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "depth_share_axis": True,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.depth.share_axis": True,
+        }),
         window=10,
         step=10,
         depth_window=10,
@@ -1114,7 +1132,9 @@ def test_linear_depth_track_partial_record_rows_are_not_shared() -> None:
             [_constant_depth_table("rec2", 20, length=40)],
             [],
         ],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -1153,7 +1173,9 @@ def test_linear_custom_depth_slot_skips_leading_or_trailing_missing_record(
             f"depth:depth@track_index=0,side={depth_side}",
             f"features:features@side={feature_side}",
         ],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -1206,7 +1228,9 @@ def test_sparse_depth_does_not_separate_pairwise_match_from_missing_record_featu
             "features:features@side=above",
         ],
         linear_comparisons=[comparison],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -1247,7 +1271,9 @@ def test_linear_diagonal_sparse_depth_binding_survives_slot_order_reversal() -> 
                 *(slots[slot_id] for slot_id in depth_slot_ids),
                 "features:features@side=overlay",
             ],
-            config_overrides={"show_gc": False, "show_skew": False},
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
             window=10,
             step=10,
             depth_window=10,
@@ -1301,7 +1327,9 @@ def test_linear_custom_slot_can_select_only_second_logical_depth_track() -> None
             "selected_depth:depth@track_index=1,side=below",
             "features:features@side=overlay",
         ],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -1332,7 +1360,9 @@ def test_linear_custom_depth_slot_legend_uses_only_selected_sparse_logical_track
             f"selected_depth:depth@track_index=1,side=below,legend_label={legend_label}",
             "features:features@side=overlay",
         ],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -1377,7 +1407,9 @@ def test_linear_depth_slot_rejects_globally_out_of_range_logical_index() -> None
                 "missing_depth:depth@track_index=2",
                 "features:features@side=overlay",
             ],
-            config_overrides={"show_gc": False, "show_skew": False},
+            cfg=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
         )
 
 
@@ -1396,7 +1428,9 @@ def test_circular_multi_record_partial_depth_skips_paint_but_reserves_slot(
         records,
         legend="none",
         depth_track_tables=depth_rows,
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -1431,7 +1465,9 @@ def test_circular_multi_record_diagonal_sparse_depth_uses_logical_binding() -> N
         ],
         depth_track_labels=["Sample A", "Sample B"],
         depth_track_colors=["#112233", "#445566"],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": False, "canvas.show_skew": False}
+        ),
         window=10,
         step=10,
         depth_window=10,
@@ -1463,11 +1499,11 @@ def test_linear_depth_origin_label_requires_explicit_min() -> None:
         [record],
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "depth_min": 5,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.depth.min_depth": 5,
+        }),
         window=10,
         step=10,
         depth_window=10,
@@ -1486,10 +1522,10 @@ def test_linear_depth_defaults_to_linear_scale_for_plotting() -> None:
         [record],
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+        }),
         window=10,
         step=10,
         depth_window=10,
@@ -1525,7 +1561,9 @@ def test_linear_depth_window_step_can_differ_from_gc(
         [record],
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={"show_gc": True, "show_skew": True},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        ),
         window=20,
         step=20,
         depth_window=10,
@@ -1556,7 +1594,9 @@ def test_linear_depth_window_step_defaults_to_tenth_of_gc(
         [record],
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={"show_gc": True, "show_skew": True},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        ),
         window=100,
         step=100,
     )
@@ -1585,7 +1625,9 @@ def test_circular_depth_window_step_can_differ_from_gc(
         record,
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={"show_gc": True, "show_skew": True},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        ),
         window=20,
         step=20,
         depth_window=10,
@@ -1616,7 +1658,9 @@ def test_circular_depth_window_step_defaults_to_tenth_of_gc(
         record,
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={"show_gc": True, "show_skew": True},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        ),
         window=100,
         step=100,
     )
@@ -2124,7 +2168,9 @@ def test_linear_depth_dataframe_is_computed_once_per_record(
         [record],
         legend="none",
         depth_table=_depth_table("rec1"),
-        config_overrides={"show_gc": True, "show_skew": True},
+        cfg=apply_config_overrides(
+            None, {"canvas.show_gc": True, "canvas.show_skew": True}
+        ),
         window=10,
         step=10,
         depth_window=10,

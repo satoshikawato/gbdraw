@@ -598,6 +598,9 @@ def test_prepare_legend_table_falls_back_to_default_color_for_gene_other_entry()
         ["gene"],
         used_color_rules={("Gene A", "#b56576")},
         default_used_features={"gene"},
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert legend_table["Gene A"]["fill"] == "#b56576"
@@ -619,6 +622,9 @@ def test_prepare_legend_table_skips_gene_other_entry_without_default_usage() -> 
         ["gene"],
         used_color_rules={("Gene A", "#b56576")},
         default_used_features=set(),
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert legend_table["Gene A"]["fill"] == "#b56576"
@@ -636,6 +642,9 @@ def test_prepare_legend_table_plain_gene_entry_uses_default_fallback_color() -> 
         ["gene"],
         used_color_rules=set(),
         default_used_features={"gene"},
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert legend_table["gene"]["fill"] == "#d3d3d3"

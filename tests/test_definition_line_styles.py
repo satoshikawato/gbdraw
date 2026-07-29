@@ -155,12 +155,12 @@ def test_linear_cli_definition_line_style_forwards(monkeypatch: pytest.MonkeyPat
         ]
     )
 
-    line_styles = captured["canonical_request"].options.config["objects"][
-        "definition"
-    ]["linear"]["line_styles"]
-    assert line_styles["name"]["font_weight"] == "bold"
-    assert line_styles["name"]["fill"] == "rgb(1,2,3)"
-    assert line_styles["length"]["font_size"] == 9.0
+    cfg = captured["canonical_request"].options.config
+    assert isinstance(cfg, GbdrawConfig)
+    line_styles = cfg.objects.definition.linear.line_styles
+    assert line_styles.name.font_weight == "bold"
+    assert line_styles.name.fill == "rgb(1,2,3)"
+    assert line_styles.length.font_size == 9.0
 
 
 def test_definition_line_style_config_defaults_and_legacy_inheritance() -> None:
@@ -196,9 +196,9 @@ def test_modify_config_dict_updates_nested_definition_line_styles() -> None:
 
     modified = modify_config_dict(
         config_dict,
-        linear_definition_line_styles={
-            "name": {"font_weight": "bold"},
-            "accession": {"font_size": 9.0, "fill": None},
+        {
+            "objects.definition.linear.line_styles.name.font_weight": 'bold',
+            "objects.definition.linear.line_styles.accession.font_size": 9.0,
         },
     )
     line_styles = modified["objects"]["definition"]["linear"]["line_styles"]
@@ -282,8 +282,8 @@ def test_definition_group_emits_line_specific_styles_and_data_attrs() -> None:
 
     definition_group = DefinitionGroup(
         record,
-        config_dict,
         _canvas_config(),
+        cfg=GbdrawConfig.from_dict(config_dict),
     )
     svg = definition_group.get_group().tostring()
 
@@ -323,7 +323,11 @@ def test_definition_line_specific_font_size_affects_layout(monkeypatch: pytest.M
         fake_bbox,
     )
 
-    definition_group = DefinitionGroup(_record("AA", "BBBB"), config_dict, _canvas_config())
+    definition_group = DefinitionGroup(
+        _record("AA", "BBBB"),
+        _canvas_config(),
+        cfg=GbdrawConfig.from_dict(config_dict),
+    )
 
     assert definition_group.definition_bounding_box_width == pytest.approx(40.0)
     assert definition_group.definition_bounding_box_height == pytest.approx(30.0)

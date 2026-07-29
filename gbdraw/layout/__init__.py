@@ -4,6 +4,9 @@
 from .linear import (
     AxisGapResolution,
     CollisionBand,
+    LinearRecordRenderContext,
+    LinearResolvedTrack,
+    LinearTrackLayout,
     required_axis_gap,
     resolve_axis_gap,
 )
@@ -12,19 +15,21 @@ from .linear_multi_record import (
     LinearRecordMeasurement,
     LinearRecordPlacement,
     RecordKey,
-    parse_record_row_position,
     record_pairs_between_adjacent_rows,
-    resolve_record_row_positions,
     solve_linear_layout,
     stable_record_keys,
 )
+from .record_placement import parse_record_row_position, resolve_record_row_positions
 
 __all__ = [
     "AxisGapResolution",
     "CollisionBand",
     "LinearLayoutPlan",
+    "LinearRecordRenderContext",
     "LinearRecordMeasurement",
     "LinearRecordPlacement",
+    "LinearResolvedTrack",
+    "LinearTrackLayout",
     "RecordKey",
     "parse_record_row_position",
     "record_pairs_between_adjacent_rows",

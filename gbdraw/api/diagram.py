@@ -1,7 +1,8 @@
-"""Diagram assembly helpers (public API layer).
+"""Typed diagram builders and their internal assembly helpers.
 
-This module provides convenience functions to build diagrams from in-memory objects
-(e.g., already-parsed SeqRecords) without going through the CLI argument parsing.
+The public builders create diagrams from already-parsed in-memory records without
+going through CLI argument parsing. Lower-level assembler functions remain private
+engine boundaries used by those builders.
 
 The functions here return an `svgwrite.Drawing` (SVG canvas). Saving/conversion is
 handled separately (see `gbdraw.render.export.save_figure`).
@@ -78,28 +79,23 @@ from gbdraw.api.options import (  # type: ignore[reportMissingImports]
     AnnotationOptions,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
-    DiagramOptions,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
-    _legacy_diagram_options,
-    _validate_diagram_options_mode,
     resolve_circular_diagram_options,
-    resolve_diagram_options_for_mode,
     resolve_linear_diagram_options,
 )
 from gbdraw.linear_comparison import LinearComparison
-from gbdraw.layout.linear_multi_record import (
-    record_pairs_between_adjacent_rows,
-    resolve_record_row_positions,
-)
+from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
+from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.canvas.circular import resolve_circular_side_legend_geometry  # type: ignore[reportMissingImports]
-from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.models import (  # type: ignore[reportMissingImports]
+    CircularRenderProfile,
+    GbdrawConfig,
+    LinearRenderProfile,
+)
 from gbdraw.config.models.labels import LabelsFilteringConfig  # type: ignore[reportMissingImports]
-from gbdraw.config.modify import modify_config_dict  # type: ignore[reportMissingImports]
-from gbdraw.config.toml import load_config_toml  # type: ignore[reportMissingImports]
 from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
-from gbdraw.io.record_select import parse_record_selector  # type: ignore[reportMissingImports]
 from gbdraw.labels.filtering import (  # type: ignore[reportMissingImports]
     read_filter_list_file,
     read_label_override_file,
@@ -124,7 +120,6 @@ from gbdraw.mode_profiles import (
     ComparisonThresholds,
     DEFAULT_FEATURE_TYPES,
     LINEAR_MODE_PROFILE,
-    resolve_mode_profile_overrides,
 )
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
@@ -179,7 +174,7 @@ _SVG_TRANSLATE_PATTERN = re.compile(
 )
 
 def _resolve_single_circular_depth_options(
-    options: DiagramOptions,
+    options: CircularDiagramOptions,
 ) -> tuple[DataFrame | None, str | None]:
     singular_present = options.depth_table is not None or options.depth_file is not None
     plural_present = options.depth_tables is not None or options.depth_files is not None
@@ -219,21 +214,11 @@ def _resolve_optional_table(
 
 
 def _resolve_diagram_options_config(
-    options: DiagramOptions,
-) -> tuple[dict | None, GbdrawConfig | None, Mapping[str, object] | None]:
-    """Resolve typed/dict config and losslessly attach explicit label tables."""
+    options: CircularDiagramOptions | LinearDiagramOptions,
+) -> GbdrawConfig:
+    """Resolve one typed config and losslessly attach explicit label tables."""
 
-    config_dict: dict | None = None
-    cfg: GbdrawConfig | None = None
-    config_overrides = options.config_overrides
-    if isinstance(options.config, GbdrawConfig):
-        if config_overrides:
-            cfg = apply_config_overrides(options.config, config_overrides)
-            config_overrides = None
-        else:
-            cfg = options.config
-    elif isinstance(options.config, dict):
-        config_dict = options.config
+    cfg = apply_config_overrides(options.config, options.config_overrides)
 
     whitelist_given, whitelist = _resolve_optional_table(
         name="label_whitelist",
@@ -254,10 +239,8 @@ def _resolve_diagram_options_config(
         reader=read_label_override_file,
     )
     if not (whitelist_given or priority_given or override_given):
-        return config_dict, cfg, config_overrides
+        return cfg
 
-    if cfg is None:
-        cfg = apply_config_overrides(options.config, config_overrides)
     filtering = copy.deepcopy(cfg.labels.filtering.as_dict())
     if whitelist_given:
         filtering["whitelist_df"] = whitelist
@@ -272,7 +255,7 @@ def _resolve_diagram_options_config(
             filtering=LabelsFilteringConfig.from_dict(filtering),
         ),
     )
-    return None, cfg, None
+    return cfg
 
 
 def _parse_circular_track_slot_inputs(
@@ -404,9 +387,8 @@ def _build_conservation_blast_config(
     bitscore: float,
     identity: float,
     alignment_length: int,
-    config_dict: dict,
     default_colors: DataFrame,
-    cfg: GbdrawConfig,
+    profile: CircularRenderProfile,
 ) -> BlastMatchConfigurator:
     return BlastMatchConfigurator(
         evalue=float(evalue),
@@ -414,9 +396,8 @@ def _build_conservation_blast_config(
         identity=float(identity),
         alignment_length=int(alignment_length),
         sequence_length_dict=create_dict_for_sequence_lengths(records),
-        config_dict=config_dict,
+        profile=profile,
         default_colors_df=default_colors,
-        cfg=cfg,
     )
 
 
@@ -431,9 +412,8 @@ def _load_conservation_result(
     bitscore: float,
     identity: float,
     alignment_length: int,
-    config_dict: dict,
     default_colors: DataFrame,
-    cfg: GbdrawConfig,
+    profile: CircularRenderProfile,
 ) -> ConservationLoadResult | None:
     if not _has_conservation_inputs(conservation_blast_files, conservation_dataframes):
         return None
@@ -445,9 +425,8 @@ def _load_conservation_result(
         bitscore=bitscore,
         identity=identity,
         alignment_length=alignment_length,
-        config_dict=config_dict,
         default_colors=default_colors,
-        cfg=cfg,
+        profile=profile,
     )
     return load_conservation_sources(
         blast_config=blast_config,
@@ -1079,116 +1058,6 @@ def _resolve_multi_record_default_row_counts(record_count: int) -> list[int]:
     return counts
 
 
-def _resolve_multi_record_selector_index(
-    records: Sequence[SeqRecord],
-    selector_text: str,
-) -> int:
-    """Resolve one record selector to an index in records."""
-    record_count = len(records)
-    try:
-        selector = parse_record_selector(selector_text)
-    except ValueError as exc:
-        raise ValidationError(str(exc)) from exc
-    if selector is None:
-        raise ValidationError(f"multi_record_position selector '{selector_text}' is invalid.")
-
-    if selector.record_index is not None:
-        idx = int(selector.record_index)
-        if idx < 0 or idx >= record_count:
-            raise ValidationError(
-                f"multi_record_position selector '{selector_text}' is out of range for "
-                f"{record_count} record(s)."
-            )
-        return idx
-
-    target_record_id = str(selector.record_id or "")
-    matches = [idx for idx, record in enumerate(records) if str(record.id) == target_record_id]
-    if not matches:
-        raise ValidationError(
-            f"multi_record_position selector '{selector_text}' did not match any record ID."
-        )
-    if len(matches) > 1:
-        raise ValidationError(
-            f"multi_record_position selector '{selector_text}' matched multiple records. "
-            "Use #index to disambiguate."
-        )
-    return int(matches[0])
-
-
-def _parse_multi_record_position(value: str) -> tuple[str, int]:
-    """Parse one <selector>@<row> token."""
-    raw = str(value or "").strip()
-    if not raw:
-        raise ValidationError("multi_record_position does not allow empty entries.")
-    if "@" not in raw:
-        raise ValidationError(
-            f"multi_record_position entry '{raw}' must be in '<selector>@<row>' format."
-        )
-    selector_text, row_text = raw.rsplit("@", 1)
-    selector_text = selector_text.strip()
-    row_text = row_text.strip()
-    if not selector_text:
-        raise ValidationError(
-            f"multi_record_position entry '{raw}' must include a selector before '@'."
-        )
-    if not row_text or not row_text.isdigit() or int(row_text) <= 0:
-        raise ValidationError(
-            f"multi_record_position entry '{raw}' must use a positive integer row."
-        )
-    return selector_text, int(row_text)
-
-
-def _resolve_multi_record_positions(
-    records: Sequence[SeqRecord],
-    positions: Sequence[str] | None,
-) -> tuple[list[int], list[int]]:
-    """Resolve explicit multi-record positions to ordered indices and row counts."""
-    record_count = len(records)
-    if record_count <= 0:
-        return [], []
-    if not positions:
-        return list(range(record_count)), _resolve_multi_record_default_row_counts(record_count)
-
-    seen_indices: set[int] = set()
-    row_entries: dict[int, list[int]] = {}
-    provided_entries = 0
-    for raw_position in positions:
-        selector_text, row_value = _parse_multi_record_position(str(raw_position))
-        resolved_index = _resolve_multi_record_selector_index(records, selector_text)
-        if resolved_index in seen_indices:
-            raise ValidationError(
-                f"multi_record_position selector '{selector_text}' was specified more than once."
-            )
-        seen_indices.add(resolved_index)
-        row_entries.setdefault(int(row_value), []).append(resolved_index)
-        provided_entries += 1
-
-    if len(seen_indices) != record_count:
-        raise ValidationError(
-            f"multi_record_position must include each loaded record exactly once "
-            f"(expected {record_count}, got {len(seen_indices)} unique selector(s))."
-        )
-    if provided_entries != record_count:
-        raise ValidationError(
-            f"multi_record_position must provide exactly {record_count} entry(ies)."
-        )
-
-    ordered_indices: list[int] = []
-    row_counts: list[int] = []
-    for _row_value in sorted(row_entries):
-        indices = row_entries[_row_value]
-        if not indices:
-            continue
-        ordered_indices.extend(indices)
-        row_counts.append(len(indices))
-
-    if len(ordered_indices) != record_count:
-        raise ValidationError(
-            "multi_record_position internal error: failed to resolve all records."
-        )
-    return ordered_indices, row_counts
-
-
 def _group_local_vertical_bounds(group: Group) -> tuple[float, float]:
     """Return local vertical bounds for text elements in a group."""
     min_y: float | None = None
@@ -1508,22 +1377,25 @@ def _normalize_plot_title(plot_title: str | None) -> str:
 
 def _apply_circular_plot_title_font_size_override(
     *,
-    config_dict: dict,
     cfg: GbdrawConfig,
     plot_title_font_size: float | None,
-) -> tuple[dict, GbdrawConfig]:
+) -> GbdrawConfig:
     if plot_title_font_size is None:
-        return config_dict, cfg
+        return cfg
     resolved_font_size = _resolve_plot_title_font_size(plot_title_font_size)
-    updated_config_dict = modify_config_dict(
-        config_dict,
-        plot_title_font_size=resolved_font_size,
-    )
-    updated_cfg = apply_config_overrides(
+    return replace(
         cfg,
-        {"plot_title_font_size": resolved_font_size},
+        objects=replace(
+            cfg.objects,
+            definition=replace(
+                cfg.objects.definition,
+                circular=replace(
+                    cfg.objects.definition.circular,
+                    plot_title_font_size=resolved_font_size,
+                ),
+            ),
+        ),
     )
-    return updated_config_dict, updated_cfg
 
 
 def _sync_drawing_canvas_size(
@@ -1552,23 +1424,21 @@ def _build_circular_plot_title_group(
     *,
     gb_record: SeqRecord,
     output_prefix: str,
-    config_dict: dict,
     cfg: GbdrawConfig,
+    profile: CircularRenderProfile,
     species: str | None,
     strain: str | None,
     plot_title: str | None,
 ) -> tuple[Group, tuple[float, float]]:
     plot_title_canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix,
-        config_dict=config_dict,
+        profile=profile,
         legend="none",
         gb_record=gb_record,
-        cfg=cfg,
     )
     plot_title_group = DefinitionGroup(
         gb_record=gb_record,
         canvas_config=plot_title_canvas_config,
-        config_dict=config_dict,
         species=species,
         strain=strain,
         plot_title=plot_title,
@@ -1586,8 +1456,8 @@ def _add_single_record_plot_title_group(
     legend_config: LegendDrawingConfigurator,
     gb_record: SeqRecord,
     output_prefix: str,
-    config_dict: dict,
     cfg: GbdrawConfig,
+    profile: CircularRenderProfile,
     species: str | None,
     strain: str | None,
     plot_title: str | None,
@@ -1596,8 +1466,8 @@ def _add_single_record_plot_title_group(
     plot_title_group, plot_title_local_bounds = _build_circular_plot_title_group(
         gb_record=gb_record,
         output_prefix=output_prefix,
-        config_dict=config_dict,
         cfg=cfg,
+        profile=profile,
         species=species,
         strain=strain,
         plot_title=plot_title,
@@ -1887,6 +1757,7 @@ def _scale_circular_cfg(cfg: GbdrawConfig, *, scale: float) -> GbdrawConfig:
 def assemble_linear_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
+    cfg: GbdrawConfig,
     blast_files: Optional[Sequence[str]] = None,
     linear_comparisons: Sequence[LinearComparison] | None = None,
     layout: LinearMultiRecordOptions | None = None,
@@ -1912,8 +1783,6 @@ def assemble_linear_diagram_from_records(
     orthogroup_member_max_hits: int = 5,
     collinear_max_paralog_links_per_orthogroup: int = 2,
     align_orthogroup_feature: str | None = None,
-    config_dict: dict | None = None,
-    config_overrides: Mapping[str, object] | None = None,
     color_table: Optional[DataFrame] = None,
     color_table_file: str | None = None,
     default_colors: DataFrame | None = None,
@@ -1952,18 +1821,17 @@ def assemble_linear_diagram_from_records(
     bitscore: float = LINEAR_MODE_PROFILE.comparison.bitscore,
     identity: float = LINEAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = LINEAR_MODE_PROFILE.comparison.alignment_length,
-    cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Builds and assembles a linear diagram for the given records.
 
     This is a convenience wrapper that builds internal configurators/canvas objects and
     returns the assembled SVG canvas.
-    If config_dict is None, it loads gbdraw.data/config.toml.
-    If config_overrides is provided, modify_config_dict is applied.
     If default_colors is None, it loads the built-in default palette.
     If color_table is None and color_table_file is provided, it is loaded.
     If selected_features_set is None, it uses the CLI default feature list.
     """
+    if not isinstance(cfg, GbdrawConfig):
+        raise ValidationError("cfg must be GbdrawConfig")
     if not records:
         raise ValidationError("records is empty")
     thresholds = ComparisonThresholds(
@@ -1976,8 +1844,6 @@ def assemble_linear_diagram_from_records(
     bitscore = thresholds.bitscore
     identity = thresholds.identity
     alignment_length = thresholds.alignment_length
-    if config_dict is None and cfg is None:
-        config_overrides = resolve_mode_profile_overrides("linear", config_overrides)
     if layout is not None and not isinstance(layout, LinearMultiRecordOptions):
         raise ValidationError("layout must be LinearMultiRecordOptions or None")
     if linear_comparisons is not None and not all(
@@ -2094,38 +1960,20 @@ def assemble_linear_diagram_from_records(
             load_comparison=has_comparisons,
         )
 
-    if config_dict is None:
-        config_dict = load_config_toml("gbdraw.data", "config.toml")
-    if config_overrides:
-        if cfg is not None:
-            raise ValueError(
-                "config_overrides cannot be used with cfg; pass cfg=None or apply overrides before."
-            )
-        config_dict = modify_config_dict(config_dict, **config_overrides)
-    pairwise_style_from_overrides = (
-        config_overrides is not None
-        and normalized_pairwise_match_style == "ribbon"
-        and "pairwise_match_style" in config_overrides
-    )
-    if pairwise_style_from_overrides:
+    if normalized_pairwise_match_style == "ribbon":
         normalized_pairwise_match_style = _resolve_pairwise_match_style(
-            str(config_overrides["pairwise_match_style"])
+            str(cfg.objects.blast_match.style)
         )
-    else:
-        config_dict = modify_config_dict(config_dict, pairwise_match_style=normalized_pairwise_match_style)
-    if cfg is not None:
-        cfg = replace(
-            cfg,
-            objects=replace(
-                cfg.objects,
-                blast_match=replace(
-                    cfg.objects.blast_match,
-                    style=normalized_pairwise_match_style,
-                ),
+    cfg = replace(
+        cfg,
+        objects=replace(
+            cfg.objects,
+            blast_match=replace(
+                cfg.objects.blast_match,
+                style=normalized_pairwise_match_style,
             ),
-        )
-    else:
-        cfg = GbdrawConfig.from_dict(config_dict)
+        ),
+    )
     record_depth_tracks = normalize_depth_tracks(
         records,
         depth_table=depth_table,
@@ -2176,6 +2024,7 @@ def assemble_linear_diagram_from_records(
             cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth))
     _validate_gc_content_config(cfg.objects.gc_content)
     _validate_depth_config(cfg.objects.depth)
+    profile = LinearRenderProfile(cfg)
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
@@ -2352,9 +2201,8 @@ def assemble_linear_diagram_from_records(
         identity=identity,
         alignment_length=alignment_length,
         sequence_length_dict=seq_len_dict,
-        config_dict=config_dict,
+        profile=profile,
         default_colors_df=default_colors,
-        cfg=cfg,
     )
     blast_config.collinearity_color_mode = normalized_collinearity_color_mode
     additional_color_modes = (
@@ -2371,10 +2219,9 @@ def assemble_linear_diagram_from_records(
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=len(records),
         longest_genome=longest_genome,
-        config_dict=config_dict,
+        profile=profile,
         legend=legend,
         output_prefix=output_prefix,
-        cfg=cfg,
         has_comparisons=bool(blast_files or resolved_linear_comparisons or resolved_protein_comparisons),
         depth_track_count=max(1, depth_track_count(record_depth_tracks)),
         depth_track_heights=_depth_track_heights_from_specs(record_depth_tracks),
@@ -2383,45 +2230,40 @@ def assemble_linear_diagram_from_records(
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=list(selected_features_set),
+        profile=profile,
         feature_table=feature_table,
         feature_shapes=feature_shapes,
-        config_dict=config_dict,
         canvas_config=canvas_config,
-        cfg=cfg,
     )
     gc_config = GcContentConfigurator(
         window=window,
         step=step,
         dinucleotide=dinucleotide,
-        config_dict=config_dict,
+        profile=profile,
         default_colors_df=default_colors,
-        cfg=cfg,
     )
     skew_config = GcSkewConfigurator(
         window=window,
         step=step,
         dinucleotide=dinucleotide,
-        config_dict=config_dict,
+        profile=profile,
         default_colors_df=default_colors,
-        cfg=cfg,
     )
     depth_config = DepthConfigurator(
         window=resolved_depth_window,
         step=resolved_depth_step,
-        config_dict=config_dict,
-        cfg=cfg,
+        profile=profile,
     ) if show_depth else None
     legend_config = LegendDrawingConfigurator(
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=list(selected_features_set),
-        config_dict=config_dict,
+        profile=profile,
         gc_config=gc_config,
         skew_config=skew_config,
         feature_config=feature_config,
         blast_config=blast_config,
         canvas_config=canvas_config,
-        cfg=cfg,
     )
 
     canvas = assemble_linear_diagram(
@@ -2431,7 +2273,6 @@ def assemble_linear_diagram_from_records(
         blast_config=blast_config,
         feature_config=feature_config,
         gc_config=gc_config,
-        config_dict=config_dict,
         legend_config=legend_config,
         skew_config=skew_config,
         depth_config=depth_config,
@@ -2447,7 +2288,6 @@ def assemble_linear_diagram_from_records(
         linear_layout=layout,
         orthogroups=resolved_orthogroups,
         align_orthogroup_feature=align_orthogroup_feature,
-        cfg=cfg,
     )
     try:
         setattr(canvas, "_gbdraw_orthogroups", resolved_orthogroups)
@@ -2470,6 +2310,7 @@ def assemble_linear_diagram_from_records(
 def assemble_circular_diagram_from_record(
     gb_record: SeqRecord,
     *,
+    cfg: GbdrawConfig,
     conservation_blast_files: Sequence[str] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
@@ -2477,8 +2318,6 @@ def assemble_circular_diagram_from_record(
     conservation_colors: Sequence[str] | None = None,
     conservation_ring_width: float | None = None,
     conservation_ring_gap: float | None = None,
-    config_dict: dict | None = None,
-    config_overrides: Mapping[str, object] | None = None,
     color_table: Optional[DataFrame] = None,
     color_table_file: str | None = None,
     default_colors: DataFrame | None = None,
@@ -2529,16 +2368,15 @@ def assemble_circular_diagram_from_record(
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
     _annotation_record_index: int = 0,
     _definition_group_id: str | None = None,
-    cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
 
-    If config_dict is None, it loads gbdraw.data/config.toml.
-    If config_overrides is provided, modify_config_dict is applied.
     If default_colors is None, it loads the built-in default palette.
     If color_table is None and color_table_file is provided, it is loaded.
     If selected_features_set is None, it uses the CLI default feature list.
     """
+    if not isinstance(cfg, GbdrawConfig):
+        raise ValidationError("cfg must be GbdrawConfig")
     thresholds = ComparisonThresholds(
         evalue=evalue,
         bitscore=bitscore,
@@ -2549,8 +2387,6 @@ def assemble_circular_diagram_from_record(
     bitscore = thresholds.bitscore
     identity = thresholds.identity
     alignment_length = thresholds.alignment_length
-    if config_dict is None and cfg is None:
-        config_overrides = resolve_mode_profile_overrides("circular", config_overrides)
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
     _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
@@ -2570,17 +2406,7 @@ def assemble_circular_diagram_from_record(
             load_comparison=False,
         )
 
-    if config_dict is None:
-        config_dict = load_config_toml("gbdraw.data", "config.toml")
-    if config_overrides:
-        if cfg is not None:
-            raise ValueError(
-                "config_overrides cannot be used with cfg; pass cfg=None or apply overrides before."
-            )
-        config_dict = modify_config_dict(config_dict, **config_overrides)
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
-    config_dict, cfg = _apply_circular_plot_title_font_size_override(
-        config_dict=config_dict,
+    cfg = _apply_circular_plot_title_font_size_override(
         cfg=cfg,
         plot_title_font_size=plot_title_font_size,
     )
@@ -2640,35 +2466,6 @@ def assemble_circular_diagram_from_record(
         else:
             effective_definition_profile = "full"
 
-    conservation_mode = normalize_conservation_reference(conservation_reference)
-    if _precomputed_conservation_tracks is not None:
-        conservation_tracks = tuple(_precomputed_conservation_tracks)
-    else:
-        conservation_load_result = _load_conservation_result(
-            [gb_record],
-            conservation_blast_files=conservation_blast_files,
-            conservation_dataframes=conservation_dataframes,
-            conservation_labels=conservation_labels,
-            conservation_colors=conservation_colors,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-            config_dict=config_dict,
-            default_colors=default_colors,
-            cfg=cfg,
-        )
-        conservation_tracks = (
-            normalize_conservation_tracks_for_record(
-                conservation_load_result,
-                displayed_records=[gb_record],
-                record=gb_record,
-                conservation_reference=conservation_mode,
-            )
-            if conservation_load_result is not None
-            else ()
-        )
-
     parsed_circular_track_slots = _parse_circular_track_slot_inputs(circular_track_slots)
     circular_track_axis_index = _validate_circular_track_axis_index(
         circular_track_axis_index,
@@ -2703,6 +2500,43 @@ def assemble_circular_diagram_from_record(
         show_skew=bool(show_skew),
         dinucleotide=dinucleotide,
     )
+    canvas_cfg = cfg.canvas
+    canvas_cfg = replace(
+        canvas_cfg,
+        show_depth=bool(show_depth and show_depth_from_input),
+        show_gc=bool(show_gc),
+        show_skew=bool(show_skew),
+    )
+    cfg = replace(cfg, canvas=canvas_cfg)
+    profile = CircularRenderProfile(cfg)
+
+    conservation_mode = normalize_conservation_reference(conservation_reference)
+    if _precomputed_conservation_tracks is not None:
+        conservation_tracks = tuple(_precomputed_conservation_tracks)
+    else:
+        conservation_load_result = _load_conservation_result(
+            [gb_record],
+            conservation_blast_files=conservation_blast_files,
+            conservation_dataframes=conservation_dataframes,
+            conservation_labels=conservation_labels,
+            conservation_colors=conservation_colors,
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+            default_colors=default_colors,
+            profile=profile,
+        )
+        conservation_tracks = (
+            normalize_conservation_tracks_for_record(
+                conservation_load_result,
+                displayed_records=[gb_record],
+                record=gb_record,
+                conservation_reference=conservation_mode,
+            )
+            if conservation_load_result is not None
+            else ()
+        )
     if conservation_tracks:
         if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
             parsed_circular_track_slots = _apply_conservation_track_params_to_slots(
@@ -2732,14 +2566,6 @@ def assemble_circular_diagram_from_record(
                 parsed_circular_track_slots,
                 conservation_slots,
             )
-    canvas_cfg = cfg.canvas
-    canvas_cfg = replace(
-        canvas_cfg,
-        show_depth=bool(show_depth and show_depth_from_input),
-        show_gc=bool(show_gc),
-        show_skew=bool(show_skew),
-    )
-    cfg = replace(cfg, canvas=canvas_cfg)
 
     seq_length = len(gb_record.seq)
 
@@ -2770,24 +2596,21 @@ def assemble_circular_diagram_from_record(
         window=window,
         step=step,
         dinucleotide=dinucleotide,
-        config_dict=config_dict,
+        profile=profile,
         default_colors_df=default_colors,
-        cfg=cfg,
     )
     skew_config = GcSkewConfigurator(
         window=window,
         step=step,
         dinucleotide=dinucleotide,
-        config_dict=config_dict,
+        profile=profile,
         default_colors_df=default_colors,
-        cfg=cfg,
     )
     depth_config = (
         DepthConfigurator(
             window=resolved_depth_window,
             step=resolved_depth_step,
-            config_dict=config_dict,
-            cfg=cfg,
+            profile=profile,
         )
         if cfg.canvas.show_depth
         else None
@@ -2852,28 +2675,29 @@ def assemble_circular_diagram_from_record(
     )
 
     canvas_config = CircularCanvasConfigurator(
-        output_prefix=output_prefix, config_dict=config_dict, legend=legend_effective, gb_record=gb_record, cfg=cfg
+        output_prefix=output_prefix,
+        profile=profile,
+        legend=legend_effective,
+        gb_record=gb_record,
     )
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=list(selected_features_set),
+        profile=profile,
         feature_table=feature_table,
         feature_shapes=feature_shapes,
-        config_dict=config_dict,
         canvas_config=canvas_config,
-        cfg=cfg,
     )
     legend_config = LegendDrawingConfigurator(
         color_table=color_table,
         default_colors=default_colors,
         selected_features_set=list(selected_features_set),
-        config_dict=config_dict,
+        profile=profile,
         gc_config=gc_config,
         skew_config=skew_config,
         feature_config=feature_config,
         canvas_config=canvas_config,
-        cfg=cfg,
     )
 
     canvas = assemble_circular_diagram(
@@ -2890,7 +2714,6 @@ def assemble_circular_diagram_from_record(
             if effective_definition_profile == "shared_common"
             else None
         ),
-        config_dict=config_dict,
         legend_config=legend_config,
         depth_df=resolved_depth_df,
         depth_config=depth_config,
@@ -2898,7 +2721,6 @@ def assemble_circular_diagram_from_record(
         depth_track_count_value=available_depth_track_count,
         conservation_tracks=conservation_tracks,
         conservation_min_identity=float(identity),
-        cfg=cfg,
         circular_track_slots=parsed_circular_track_slots,
         circular_track_axis_index=circular_track_axis_index,
         annotations=_resolved_annotations or annotation_options,
@@ -2923,8 +2745,8 @@ def assemble_circular_diagram_from_record(
             legend_config=legend_config,
             gb_record=gb_record,
             output_prefix=output_prefix,
-            config_dict=config_dict,
             cfg=cfg,
+            profile=profile,
             species=species,
             strain=strain,
             plot_title=normalized_plot_title or None,
@@ -2936,6 +2758,7 @@ def assemble_circular_diagram_from_record(
 def assemble_circular_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
+    cfg: GbdrawConfig,
     conservation_blast_files: Sequence[str] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
@@ -2943,8 +2766,6 @@ def assemble_circular_diagram_from_records(
     conservation_colors: Sequence[str] | None = None,
     conservation_ring_width: float | None = None,
     conservation_ring_gap: float | None = None,
-    config_dict: dict | None = None,
-    config_overrides: Mapping[str, object] | None = None,
     color_table: Optional[DataFrame] = None,
     color_table_file: str | None = None,
     default_colors: DataFrame | None = None,
@@ -2991,9 +2812,10 @@ def assemble_circular_diagram_from_records(
     bitscore: float = CIRCULAR_MODE_PROFILE.comparison.bitscore,
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
-    cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
+    if not isinstance(cfg, GbdrawConfig):
+        raise ValidationError("cfg must be GbdrawConfig")
     if not records:
         raise ValidationError("records is empty")
     thresholds = ComparisonThresholds(
@@ -3006,8 +2828,6 @@ def assemble_circular_diagram_from_records(
     bitscore = thresholds.bitscore
     identity = thresholds.identity
     alignment_length = thresholds.alignment_length
-    if config_dict is None and cfg is None:
-        config_overrides = resolve_mode_profile_overrides("circular", config_overrides)
     resolved_annotations = resolve_annotations(annotation_options, records, mode="circular")
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
@@ -3051,6 +2871,7 @@ def assemble_circular_diagram_from_records(
             single_depth_file = depth_files[0]
         return assemble_circular_diagram_from_record(
             records[0],
+            cfg=cfg,
             conservation_blast_files=conservation_blast_files,
             conservation_dataframes=conservation_dataframes,
             conservation_reference=conservation_reference,
@@ -3058,8 +2879,6 @@ def assemble_circular_diagram_from_records(
             conservation_colors=conservation_colors,
             conservation_ring_width=conservation_ring_width,
             conservation_ring_gap=conservation_ring_gap,
-            config_dict=config_dict,
-            config_overrides=config_overrides,
             color_table=color_table,
             color_table_file=color_table_file,
             default_colors=default_colors,
@@ -3100,7 +2919,6 @@ def assemble_circular_diagram_from_records(
             bitscore=bitscore,
             identity=identity,
             alignment_length=alignment_length,
-            cfg=cfg,
         )
 
     if color_table is None and color_table_file is not None:
@@ -3115,17 +2933,7 @@ def assemble_circular_diagram_from_records(
             load_comparison=False,
         )
 
-    if config_dict is None:
-        config_dict = load_config_toml("gbdraw.data", "config.toml")
-    if config_overrides:
-        if cfg is not None:
-            raise ValueError(
-                "config_overrides cannot be used with cfg; pass cfg=None or apply overrides before."
-            )
-        config_dict = modify_config_dict(config_dict, **config_overrides)
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
-    config_dict, cfg = _apply_circular_plot_title_font_size_override(
-        config_dict=config_dict,
+    cfg = _apply_circular_plot_title_font_size_override(
         cfg=cfg,
         plot_title_font_size=plot_title_font_size,
     )
@@ -3156,9 +2964,22 @@ def assemble_circular_diagram_from_records(
     _validate_gc_content_config(cfg.objects.gc_content)
     _validate_depth_config(cfg.objects.depth)
 
-    ordered_indices, row_counts = _resolve_multi_record_positions(
-        records, multi_record_positions
-    )
+    if not records:
+        ordered_indices, row_counts = [], []
+    elif multi_record_positions:
+        resolved_order, rows_by_record = resolve_record_row_positions(
+            records,
+            multi_record_positions,
+            _compatibility="circular",
+        )
+        ordered_indices = list(resolved_order)
+        row_counts = [
+            sum(rows_by_record[index] == row for index in ordered_indices)
+            for row in sorted(set(rows_by_record))
+        ]
+    else:
+        ordered_indices = list(range(len(records)))
+        row_counts = _resolve_multi_record_default_row_counts(len(records))
     records = [records[idx] for idx in ordered_indices]
     if record_depth_tracks is not None:
         record_depth_tracks = [record_depth_tracks[idx] for idx in ordered_indices]
@@ -3177,32 +2998,6 @@ def assemble_circular_diagram_from_records(
                 for annotation in resolved_annotations.annotations
             ),
         )
-
-    conservation_mode = normalize_conservation_reference(conservation_reference)
-    conservation_load_result = _load_conservation_result(
-        records,
-        conservation_blast_files=conservation_blast_files,
-        conservation_dataframes=conservation_dataframes,
-        conservation_labels=conservation_labels,
-        conservation_colors=conservation_colors,
-        evalue=evalue,
-        bitscore=bitscore,
-        identity=identity,
-        alignment_length=alignment_length,
-        config_dict=config_dict,
-        default_colors=default_colors,
-        cfg=cfg,
-    )
-    first_record_conservation_tracks = (
-        normalize_conservation_tracks_for_record(
-            conservation_load_result,
-            displayed_records=records,
-            record=records[0],
-            conservation_reference=conservation_mode,
-        )
-        if conservation_load_result is not None
-        else ()
-    )
 
     parsed_circular_track_slots = _parse_circular_track_slot_inputs(circular_track_slots)
     circular_track_axis_index = _validate_circular_track_axis_index(
@@ -3230,6 +3025,47 @@ def assemble_circular_diagram_from_records(
         show_gc=bool(show_gc),
         show_skew=bool(show_skew),
         dinucleotide=dinucleotide,
+    )
+    canvas_cfg = replace(
+        cfg.canvas,
+        show_depth=bool(show_depth and record_depth_tracks is not None),
+        show_gc=bool(show_gc),
+        show_skew=bool(show_skew),
+    )
+    cfg = replace(cfg, canvas=canvas_cfg)
+    show_plot_title = normalized_plot_title_position != "none"
+    record_definition_profile: Literal["full", "record_summary"] = "record_summary"
+    if show_plot_title and keep_full_definition_with_plot_title:
+        record_definition_profile = "full"
+    record_lengths = [len(record.seq) for record in records]
+    cfg = _harmonize_multi_record_circular_style_cfg(
+        cfg,
+        record_lengths=record_lengths,
+    )
+    profile = CircularRenderProfile(cfg)
+    conservation_mode = normalize_conservation_reference(conservation_reference)
+    conservation_load_result = _load_conservation_result(
+        records,
+        conservation_blast_files=conservation_blast_files,
+        conservation_dataframes=conservation_dataframes,
+        conservation_labels=conservation_labels,
+        conservation_colors=conservation_colors,
+        evalue=evalue,
+        bitscore=bitscore,
+        identity=identity,
+        alignment_length=alignment_length,
+        default_colors=default_colors,
+        profile=profile,
+    )
+    first_record_conservation_tracks = (
+        normalize_conservation_tracks_for_record(
+            conservation_load_result,
+            displayed_records=records,
+            record=records[0],
+            conservation_reference=conservation_mode,
+        )
+        if conservation_load_result is not None
+        else ()
     )
     if first_record_conservation_tracks:
         if _circular_slots_define_renderer(parsed_circular_track_slots, "sequence_conservation"):
@@ -3260,22 +3096,6 @@ def assemble_circular_diagram_from_records(
                 parsed_circular_track_slots,
                 conservation_slots,
             )
-    canvas_cfg = replace(
-        cfg.canvas,
-        show_depth=bool(show_depth and record_depth_tracks is not None),
-        show_gc=bool(show_gc),
-        show_skew=bool(show_skew),
-    )
-    cfg = replace(cfg, canvas=canvas_cfg)
-    show_plot_title = normalized_plot_title_position != "none"
-    record_definition_profile: Literal["full", "record_summary"] = "record_summary"
-    if show_plot_title and keep_full_definition_with_plot_title:
-        record_definition_profile = "full"
-    record_lengths = [len(record.seq) for record in records]
-    cfg = _harmonize_multi_record_circular_style_cfg(
-        cfg,
-        record_lengths=record_lengths,
-    )
     tick_track_channel_override = _resolve_multi_record_tick_track_channel_override(
         record_lengths,
         length_threshold=cfg.labels.length_threshold.circular,
@@ -3306,8 +3126,7 @@ def assemble_circular_diagram_from_records(
         base_depth_config = DepthConfigurator(
             window=first_depth_window,
             step=first_depth_step,
-            config_dict=config_dict,
-            cfg=cfg,
+            profile=profile,
         )
         record_depth_track_data = build_depth_track_dataframes(
             records,
@@ -3355,8 +3174,8 @@ def assemble_circular_diagram_from_records(
         )
         sub_canvas = assemble_circular_diagram_from_record(
             record,
+            cfg=scaled_cfg,
             conservation_reference=conservation_mode,
-            config_dict=config_dict,
             color_table=color_table,
             default_colors=default_colors,
             selected_features_set=list(selected_features_set),
@@ -3388,7 +3207,6 @@ def assemble_circular_diagram_from_records(
             _precomputed_depth_tracks=record_depth_track_data[record_index],
             _precomputed_depth_track_count=available_depth_track_count,
             _precomputed_conservation_tracks=record_conservation_tracks,
-            cfg=scaled_cfg,
         )
         canvases.append(sub_canvas)
         widths.append(_parse_svg_length_px(sub_canvas.attribs.get("width"), default=0.0))
@@ -3588,15 +3406,13 @@ def assemble_circular_diagram_from_records(
     if show_plot_title:
         shared_canvas_config = CircularCanvasConfigurator(
             output_prefix=output_prefix,
-            config_dict=config_dict,
+            profile=profile,
             legend="none",
             gb_record=records[0],
-            cfg=cfg,
         )
         plot_title_group = DefinitionGroup(
             gb_record=records[0],
             canvas_config=shared_canvas_config,
-            config_dict=config_dict,
             species=species,
             strain=strain,
             plot_title=normalized_plot_title or None,
@@ -3609,10 +3425,9 @@ def assemble_circular_diagram_from_records(
     if legend_effective != "none":
         legend_canvas_config = CircularCanvasConfigurator(
             output_prefix=output_prefix,
-            config_dict=config_dict,
+            profile=profile,
             legend=legend_effective,
             gb_record=records[0],
-            cfg=cfg,
         )
         legend_window, legend_step = _resolve_circular_window_step(
             records[0],
@@ -3624,24 +3439,21 @@ def assemble_circular_diagram_from_records(
             window=legend_window,
             step=legend_step,
             dinucleotide=dinucleotide,
-            config_dict=config_dict,
+            profile=profile,
             default_colors_df=default_colors,
-            cfg=cfg,
         )
         skew_config = GcSkewConfigurator(
             window=legend_window,
             step=legend_step,
             dinucleotide=dinucleotide,
-            config_dict=config_dict,
+            profile=profile,
             default_colors_df=default_colors,
-            cfg=cfg,
         )
         depth_config = (
             DepthConfigurator(
                 window=legend_window,
                 step=legend_step,
-                config_dict=config_dict,
-                cfg=cfg,
+                profile=profile,
             )
             if cfg.canvas.show_depth
             else None
@@ -3650,11 +3462,10 @@ def assemble_circular_diagram_from_records(
             color_table=color_table,
             default_colors=default_colors,
             selected_features_set=list(selected_features_set),
+            profile=profile,
             feature_table=feature_table,
             feature_shapes=feature_shapes,
-            config_dict=config_dict,
             canvas_config=legend_canvas_config,
-            cfg=cfg,
         )
         color_map, default_color_map = preprocess_color_tables(
             feature_config.color_table,
@@ -3681,8 +3492,14 @@ def assemble_circular_diagram_from_records(
             used_color_rules=used_color_rules,
             default_used_features=default_used_features,
             depth_config=depth_config if depth_track_data_count(record_depth_track_data) == 1 else None,
+            show_gc=profile.show_gc,
+            show_skew=profile.show_skew,
+            show_depth=bool(
+                profile.show_depth
+                and depth_track_data_count(record_depth_track_data) == 1
+            ),
         )
-        if cfg.canvas.show_depth:
+        if profile.show_depth:
             legend_table = sync_depth_track_legend_entries(
                 legend_table,
                 representative_depth_tracks(record_depth_track_data),
@@ -3717,12 +3534,11 @@ def assemble_circular_diagram_from_records(
                 color_table=color_table,
                 default_colors=default_colors,
                 selected_features_set=list(selected_features_set),
-                config_dict=config_dict,
+                profile=profile,
                 gc_config=gc_config,
                 skew_config=skew_config,
                 feature_config=feature_config,
                 canvas_config=legend_canvas_config,
-                cfg=cfg,
             )
             legend_config = legend_config.recalculate_legend_dimensions(
                 legend_table, legend_canvas_config
@@ -3891,61 +3707,45 @@ def assemble_circular_diagram_from_records(
 
 
 def _circular_builder_options(
-    options: CircularDiagramOptions | DiagramOptions | None,
-) -> DiagramOptions:
+    options: CircularDiagramOptions | None,
+) -> CircularDiagramOptions:
     if options is None:
-        return _legacy_diagram_options(
-            resolve_circular_diagram_options(CircularDiagramOptions())
-        )
+        return resolve_circular_diagram_options(CircularDiagramOptions())
     if isinstance(options, CircularDiagramOptions):
-        return _legacy_diagram_options(
-            resolve_circular_diagram_options(options)
-        )
-    if isinstance(options, DiagramOptions):
-        return resolve_diagram_options_for_mode(options, mode="circular")
-    raise ValidationError(
-        "options must be CircularDiagramOptions or internal DiagramOptions."
-    )
+        return resolve_circular_diagram_options(options)
+    raise ValidationError("options must be CircularDiagramOptions.")
 
 
 def _linear_builder_options(
-    options: LinearDiagramOptions | DiagramOptions | None,
-) -> DiagramOptions:
+    options: LinearDiagramOptions | None,
+) -> LinearDiagramOptions:
     if options is None:
-        return _legacy_diagram_options(
-            resolve_linear_diagram_options(LinearDiagramOptions())
-        )
+        return resolve_linear_diagram_options(LinearDiagramOptions())
     if isinstance(options, LinearDiagramOptions):
-        return _legacy_diagram_options(resolve_linear_diagram_options(options))
-    if isinstance(options, DiagramOptions):
-        return resolve_diagram_options_for_mode(options, mode="linear")
-    raise ValidationError(
-        "options must be LinearDiagramOptions or internal DiagramOptions."
-    )
+        return resolve_linear_diagram_options(options)
+    raise ValidationError("options must be LinearDiagramOptions.")
 
 
 def build_circular_diagram(
     gb_record: SeqRecord,
     *,
-    options: CircularDiagramOptions | DiagramOptions | None = None,
+    options: CircularDiagramOptions | None = None,
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_track_count: int | None = None,
 ) -> Drawing:
-    """Build a circular diagram using strict or internal compatibility options."""
+    """Build a circular diagram using mode-specific typed options."""
 
     options = _circular_builder_options(options)
-    _validate_diagram_options_mode(options, mode="circular")
     depth_table, depth_file = _resolve_single_circular_depth_options(options)
     colors = options.colors
     output = options.output
     tracks = options.tracks
 
-    config_dict, cfg, config_overrides = _resolve_diagram_options_config(options)
+    cfg = _resolve_diagram_options_config(options)
 
     return assemble_circular_diagram_from_record(
         gb_record,
-        config_dict=config_dict,
-        config_overrides=config_overrides,
+        cfg=cfg,
         color_table=colors.color_table if colors else None,
         color_table_file=colors.color_table_file if colors else None,
         default_colors=colors.default_colors if colors else None,
@@ -3998,32 +3798,31 @@ def build_circular_diagram(
         annotation_options=options.annotations,
         _precomputed_depth_track_specs=_precomputed_depth_track_specs,
         _precomputed_depth_track_count=_precomputed_depth_track_count,
-        cfg=cfg,
     )
 
 
 def build_linear_diagram(
     records: Sequence[SeqRecord],
     *,
-    options: LinearDiagramOptions | DiagramOptions | None = None,
+    options: LinearDiagramOptions | None = None,
     layout: LinearMultiRecordOptions | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
 ) -> Drawing:
-    """Build a linear diagram using strict or internal compatibility options."""
+    """Build a linear diagram using mode-specific typed options."""
 
     options = _linear_builder_options(options)
-    _validate_diagram_options_mode(options, mode="linear")
     colors = options.colors
     output = options.output
     tracks = options.tracks
-    config_dict, cfg, config_overrides = _resolve_diagram_options_config(options)
+    cfg = _resolve_diagram_options_config(options)
     normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(
         str(options.collinearity_anchor_mode)
     )
 
     return assemble_linear_diagram_from_records(
         records,
+        cfg=cfg,
         blast_files=options.blast_files,
         linear_comparisons=options.linear_comparisons,
         layout=layout,
@@ -4049,8 +3848,6 @@ def build_linear_diagram(
         orthogroup_member_max_hits=options.orthogroup_member_max_hits,
         collinear_max_paralog_links_per_orthogroup=options.collinear_max_paralog_links_per_orthogroup,
         align_orthogroup_feature=options.align_orthogroup_feature,
-        config_dict=config_dict,
-        config_overrides=config_overrides,
         color_table=colors.color_table if colors else None,
         color_table_file=colors.color_table_file if colors else None,
         default_colors=colors.default_colors if colors else None,
@@ -4093,20 +3890,18 @@ def build_linear_diagram(
         bitscore=options.bitscore,
         identity=options.identity,
         alignment_length=options.alignment_length,
-        cfg=cfg,
     )
 
 
 def build_circular_multi_diagram(
     records: Sequence[SeqRecord],
     *,
-    options: CircularDiagramOptions | DiagramOptions | None = None,
+    options: CircularDiagramOptions | None = None,
     layout: CircularMultiRecordOptions | None = None,
 ) -> Drawing:
-    """Build a circular grid using strict or internal compatibility options."""
+    """Build a circular grid using mode-specific typed options."""
 
     options = _circular_builder_options(options)
-    _validate_diagram_options_mode(options, mode="circular_multi")
     if layout is not None and not isinstance(layout, CircularMultiRecordOptions):
         raise ValidationError(
             "layout must be CircularMultiRecordOptions or None."
@@ -4115,10 +3910,11 @@ def build_circular_multi_diagram(
     colors = options.colors
     output = options.output
     tracks = options.tracks
-    config_dict, cfg, config_overrides = _resolve_diagram_options_config(options)
+    cfg = _resolve_diagram_options_config(options)
 
     return assemble_circular_diagram_from_records(
         records,
+        cfg=cfg,
         conservation_blast_files=options.conservation_blast_files,
         conservation_dataframes=options.conservation_dataframes,
         conservation_reference=options.conservation_reference,
@@ -4126,8 +3922,6 @@ def build_circular_multi_diagram(
         conservation_colors=options.conservation_colors,
         conservation_ring_width=options.conservation_ring_width,
         conservation_ring_gap=options.conservation_ring_gap,
-        config_dict=config_dict,
-        config_overrides=config_overrides,
         color_table=colors.color_table if colors else None,
         color_table_file=colors.color_table_file if colors else None,
         default_colors=colors.default_colors if colors else None,
@@ -4178,15 +3972,11 @@ def build_circular_multi_diagram(
         bitscore=options.bitscore,
         identity=options.identity,
         alignment_length=options.alignment_length,
-        cfg=cfg,
     )
 
 
 __all__ = [
     "DEFAULT_SELECTED_FEATURES",
-    "assemble_circular_diagram_from_record",
-    "assemble_circular_diagram_from_records",
-    "assemble_linear_diagram_from_records",
     "build_circular_diagram",
     "build_circular_multi_diagram",
     "build_linear_diagram",

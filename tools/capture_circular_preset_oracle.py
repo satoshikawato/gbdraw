@@ -15,7 +15,7 @@ from typing import Any
 from Bio import SeqIO
 
 from gbdraw.canvas import CircularCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import DepthConfigurator
@@ -110,12 +110,12 @@ def capture_case(
         strandedness=strandedness,
     )
     cfg = GbdrawConfig.from_dict(config_dict)
+    profile = CircularRenderProfile(cfg)
     canvas_config = CircularCanvasConfigurator(
         input_path.stem,
-        config_dict,
+        profile,
         "none",
         record,
-        cfg=cfg,
     )
     context = CircularPresetContext(
         cfg=cfg,
@@ -134,8 +134,7 @@ def capture_case(
         DepthConfigurator(
             1,
             1,
-            config_dict,
-            cfg=cfg,
+            profile,
         )
         if visibility["show_depth"]
         else None

@@ -100,17 +100,15 @@ class LengthBarGroup:
         fig_width: int,
         alignment_width: float,
         longest_genome: int,
-        config_dict: dict,
         canvas_config: dict,
         group_id="length_bar",
-        cfg: GbdrawConfig | None = None,
         *,
+        cfg: GbdrawConfig,
         ruler_width: float | None = None,
     ) -> None:
         """
         Initializes the LengthBarGroup with the given parameters.
         """
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
 
         # --- 1. Load all settings from the 'scale' section of the config ---

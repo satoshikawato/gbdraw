@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { createReadStream, existsSync, readFileSync } = require('node:fs');
 const { createServer } = require('node:http');
 const { extname, join, normalize, resolve, sep } = require('node:path');
+const { gunzipSync } = require('node:zlib');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionPath = join(repoRoot, 'tests/test_inputs/2026-06-16_wssv.gbdraw-session.json');
@@ -647,6 +648,132 @@ ORIGIN
     legend: 'bottom',
     plotTitlePosition: 'top'
   });
+});
+
+test('v39 layout preferences project by mode and survive export and import', async ({ page }) => {
+  test.setTimeout(120000);
+  const expectedPreferences = {
+    circular: {
+      single: { legend: 'right', plotTitlePosition: 'top' },
+      multi: { legend: 'upper_left', plotTitlePosition: 'bottom' }
+    },
+    linear: { legend: 'top', plotTitlePosition: 'center' }
+  };
+  const recordText = `LOCUS       LAYOUT_PREFS                4 bp    DNA     linear   UNK 01-JAN-1980
+DEFINITION  Layout preference session fixture.
+ACCESSION   LAYOUT_PREFS
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+`;
+  const activeProjection = async (mode, multiRecord) => page.evaluate(
+    async ({ nextMode, nextMultiRecord }) => {
+      const app = window.__GBDRAW_APP__;
+      const { state } = await import('./js/state.js');
+      app.mode = nextMode;
+      if (nextMode === 'circular') app.form.multi_record_canvas = nextMultiRecord;
+      await window.Vue.nextTick();
+      await window.Vue.nextTick();
+      return {
+        active: JSON.parse(JSON.stringify(state.activeLayoutPreferences.value)),
+        formLegend: app.form.legend,
+        plotTitlePosition: app.adv.plot_title_position
+      };
+    },
+    { nextMode: mode, nextMultiRecord: multiRecord }
+  );
+  const expectActiveProjection = async (mode, multiRecord, expected) => {
+    expect(await activeProjection(mode, multiRecord)).toEqual({
+      active: expected,
+      formLegend: expected.legend,
+      plotTitlePosition: expected.plotTitlePosition
+    });
+  };
+  const layoutPreferenceTree = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return JSON.parse(JSON.stringify(state.layoutPreferences));
+  });
+
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.evaluate(async ({ genbankText }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'circular';
+    app.form.multi_record_canvas = false;
+    await window.Vue.nextTick();
+    app.form.legend = 'right';
+    app.adv.plot_title_position = 'top';
+
+    app.form.multi_record_canvas = true;
+    await window.Vue.nextTick();
+    app.form.legend = 'upper_left';
+    app.adv.plot_title_position = 'bottom';
+
+    app.mode = 'linear';
+    await window.Vue.nextTick();
+    app.form.legend = 'top';
+    app.adv.plot_title_position = 'center';
+    await window.Vue.nextTick();
+
+    app.cInputType = 'gb';
+    app.files.c_gb = new File([genbankText], 'layout-preferences.gbk', {
+      type: 'text/plain',
+      lastModified: 1
+    });
+    app.sessionTitle = 'layout-preferences-v39';
+  }, { genbankText: recordText });
+
+  expect(await layoutPreferenceTree()).toEqual(expectedPreferences);
+  await expectActiveProjection('circular', false, expectedPreferences.circular.single);
+  await expectActiveProjection('circular', true, expectedPreferences.circular.multi);
+  await expectActiveProjection('linear', false, expectedPreferences.linear);
+
+  await activeProjection('circular', false);
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.biologicalFeatures.value = [{ nucleotide_sequence: 'ATGC' }];
+  });
+  const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const download = await downloadPromise;
+  const savedSessionPath = await download.path();
+  expect(savedSessionPath).toBeTruthy();
+
+  const exportedSession = JSON.parse(
+    gunzipSync(readFileSync(savedSessionPath)).toString('utf8')
+  );
+  const legacyLayoutFields = [
+    'legend',
+    'circularLegendPosition',
+    'linearLegendPosition',
+    'circularPlotTitlePosition',
+    'linearPlotTitlePosition',
+    'circularSingleRecordLegendPosition',
+    'circularSingleRecordPlotTitlePosition',
+    'circularMultiRecordLegendPosition',
+    'circularMultiRecordPlotTitlePosition'
+  ];
+  expect(exportedSession.version).toBe(39);
+  expect(exportedSession.ui.layoutPreferences).toEqual(expectedPreferences);
+  expect(legacyLayoutFields.filter((field) => (
+    Object.prototype.hasOwnProperty.call(exportedSession.ui, field)
+  ))).toEqual([]);
+  expect(exportedSession.config.form).not.toHaveProperty('legend');
+  expect(exportedSession.config.adv).not.toHaveProperty('plot_title_position');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+
+  expect(await layoutPreferenceTree()).toEqual(expectedPreferences);
+  await expectActiveProjection('circular', false, expectedPreferences.circular.single);
+  await expectActiveProjection('circular', true, expectedPreferences.circular.multi);
+  await expectActiveProjection('linear', false, expectedPreferences.linear);
 });
 
 test('Session commit failure restores the pre-import state', async ({ page }) => {

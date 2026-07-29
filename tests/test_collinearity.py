@@ -34,6 +34,7 @@ from gbdraw.analysis.collinearity import (
     normalize_collinearity_search_scope,
     orthogroup_edges_to_lossless_collinearity_anchors,
 )
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
@@ -41,6 +42,7 @@ from gbdraw.analysis.protein_colinearity import (
     extract_cds_proteins,
     select_rbh_orthogroup_edges_from_directional_hits,
 )
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators.blast import BlastMatchConfigurator
 from gbdraw.core.color import interpolate_color
@@ -2671,7 +2673,9 @@ def test_blast_configurator_reads_collinearity_colors_from_default_colors() -> N
         identity=0,
         alignment_length=0,
         sequence_length_dict={},
-        config_dict=load_config_toml("gbdraw.data", "config.toml"),
+        profile=LinearRenderProfile(
+            GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+        ),
         default_colors_df=default_colors,
     )
 
@@ -2698,7 +2702,9 @@ def test_blast_configurator_accepts_plus_max_collinearity_color_alias() -> None:
         identity=0,
         alignment_length=0,
         sequence_length_dict={},
-        config_dict=load_config_toml("gbdraw.data", "config.toml"),
+        profile=LinearRenderProfile(
+            GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+        ),
         default_colors_df=default_colors,
     )
 
@@ -2742,6 +2748,9 @@ def test_orientation_collinearity_suppresses_pairwise_identity_legend() -> None:
         [],
         blast_config=blast_config,
         has_blast=True,
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert "Pairwise match identity" not in legend_table
@@ -2785,6 +2794,9 @@ def test_average_identity_collinearity_legend_uses_average_identity_label() -> N
         [],
         blast_config=blast_config,
         has_blast=True,
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert "Average identity" in legend_table
@@ -2840,6 +2852,9 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
         [],
         blast_config=blast_config,
         has_blast=True,
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert "Collinear" in legend_table
@@ -2883,7 +2898,12 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
     }
 
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
+    legend_group = LegendGroup(
+        canvas_config,
+        legend_config,
+        legend_table,
+        cfg=GbdrawConfig.from_dict(config_dict),
+    )
     drawing.add(legend_group.get_group())
     svg_text = drawing.tostring()
 
@@ -2942,7 +2962,12 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
     }
 
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
+    legend_group = LegendGroup(
+        canvas_config,
+        legend_config,
+        legend_table,
+        cfg=GbdrawConfig.from_dict(config_dict),
+    )
     drawing.add(legend_group.get_group())
     root = ET.fromstring(drawing.tostring())
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -3029,7 +3054,12 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
     }
 
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
+    legend_group = LegendGroup(
+        canvas_config,
+        legend_config,
+        legend_table,
+        cfg=GbdrawConfig.from_dict(config_dict),
+    )
     drawing.add(legend_group.get_group())
     root = ET.fromstring(drawing.tostring())
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -3085,9 +3115,12 @@ def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(mon
 
     svg_text = assemble_linear_diagram_from_records(
         [_record("record_a", []), _record("record_b", [])],
+        cfg=apply_config_overrides(
+            None,
+            {"canvas.show_gc": False, "canvas.show_skew": False},
+        ),
         blast_files=["/virtual/blast_0.txt"],
         legend="bottom",
-        config_overrides={"show_gc": False, "show_skew": False},
         bitscore=0,
         identity=0,
         evalue=1,

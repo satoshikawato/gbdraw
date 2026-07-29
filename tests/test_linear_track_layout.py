@@ -21,13 +21,15 @@ import gbdraw.layout.linear as linear_layout_module
 import gbdraw.svg.linear_features as linear_svg_features_module
 
 from gbdraw.api import LinearMultiRecordOptions
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import FeatureDrawingConfigurator
 from gbdraw.diagrams.linear.precalc import _precalculate_label_dimensions
+from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import load_default_colors
 from gbdraw.layout.linear import (
     LinearFeatureLaneGeometry,
@@ -36,11 +38,11 @@ from gbdraw.layout.linear import (
 from gbdraw.labels.linear import calculate_label_y_bounds
 from gbdraw.linear import (
     _get_args as get_linear_args,
-    _parse_linear_label_placement,
     _parse_linear_track_axis_gap,
     _parse_linear_track_layout,
 )
 from gbdraw.render.groups.linear.length_bar import LengthBarGroup, RULER_TICK_LENGTH
+from tests.utils.linear_render_context import make_linear_record_render_context
 
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
@@ -171,22 +173,22 @@ def _build_bottom_ruler_fragment(
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        scale_style="ruler",
-        scale_interval=scale_interval,
+        {
+            "objects.scale.style": 'ruler',
+            "objects.scale.interval": scale_interval,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=longest_genome,
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
     return LengthBarGroup(
         canvas_config.fig_width,
         canvas_config.alignment_width,
         longest_genome,
-        config_dict,
         canvas_config,
         cfg=cfg,
         ruler_width=ruler_width,
@@ -200,9 +202,8 @@ def test_linear_side_legend_expands_canvas_with_vertical_padding() -> None:
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=1200,
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="right",
-        cfg=cfg,
     )
     legend_height = float(canvas_config.total_height) + 100.0
     legend_group = SimpleNamespace(
@@ -330,34 +331,34 @@ def _expected_middle_rotated_label_bottom_relative_y() -> float:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels="all",
-        strandedness=True,
-        label_placement="above_feature",
-        label_rotation=45.0,
-        linear_track_layout="middle",
+        {
+            "labels.linear.scope": 'all',
+            "canvas.strandedness": True,
+            "labels.linear.placement": 'above_feature',
+            "labels.linear.rotation": 45.0,
+            "canvas.linear.track_layout": 'middle',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
+    profile = LinearRenderProfile(cfg)
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=len(record.seq),
-        config_dict=config_dict,
+        profile=profile,
         legend="none",
-        cfg=cfg,
     )
     feature_config = FeatureDrawingConfigurator(
         color_table=None,
         default_colors=load_default_colors("", "default"),
         selected_features_set=cfg.objects.features.features_drawn,
-        config_dict=config_dict,
+        profile=profile,
         canvas_config=canvas_config,
-        cfg=cfg,
     )
     _, all_labels, _ = _precalculate_label_dimensions(
         [record],
         feature_config,
         canvas_config,
-        config_dict,
-        cfg=cfg,
+        render_context=make_linear_record_render_context(profile),
     )
     labels = all_labels[0]
     assert labels
@@ -389,23 +390,20 @@ def test_linear_cli_rejects_removed_layout_values(option_args: list[str]) -> Non
 
 
 @pytest.mark.linear
-@pytest.mark.parametrize(
-    ("legacy_layout", "canonical_layout"),
-    [("spreadout", "above"), ("tuckin", "below")],
-)
-def test_legacy_linear_config_reader_migrates_removed_layout_values(
+@pytest.mark.parametrize("legacy_layout", ["spreadout", "tuckin"])
+def test_fresh_linear_config_rejects_removed_layout_values(
     legacy_layout: str,
-    canonical_layout: str,
 ) -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict["canvas"]["linear"]["track_layout"] = legacy_layout
+
+    with pytest.raises(ValidationError, match="canvas.linear.track_layout"):
+        GbdrawConfig.from_dict(config_dict)
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict["labels"]["linear"]["placement"] = "on_feature"
-
-    cfg = GbdrawConfig.from_dict(config_dict)
-
-    assert cfg.canvas.linear.track_layout == canonical_layout
-    assert cfg.labels.linear.placement == "above_feature"
-    assert _parse_linear_label_placement("above_feature") == "above_feature"
+    with pytest.raises(ValidationError, match="labels.linear.placement"):
+        GbdrawConfig.from_dict(config_dict)
 
 
 @pytest.mark.linear
@@ -427,9 +425,8 @@ def test_linear_arrow_length_keeps_legacy_default_for_long_non_stranded() -> Non
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=longest_genome,
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
 
     expected_arrow_length = cfg.canvas.linear.arrow_length_parameter.long * longest_genome
@@ -445,20 +442,24 @@ def test_linear_arrow_length_scales_with_feature_height_override_for_long_record
     default_canvas = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=longest_genome,
-        config_dict=default_config,
+        profile=LinearRenderProfile(default_cfg),
         legend="none",
-        cfg=default_cfg,
     )
 
     overridden_config = load_config_toml("gbdraw.data", "config.toml")
-    overridden_config = modify_config_dict(overridden_config, default_cds_height=50)
+    overridden_config = modify_config_dict(
+        overridden_config,
+        {
+            "canvas.linear.default_cds_height.short": 50,
+            "canvas.linear.default_cds_height.long": 50,
+        },
+    )
     overridden_cfg = GbdrawConfig.from_dict(overridden_config)
     overridden_canvas = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=longest_genome,
-        config_dict=overridden_config,
+        profile=LinearRenderProfile(overridden_cfg),
         legend="none",
-        cfg=overridden_cfg,
     )
 
     assert default_canvas.length_param == "long"
@@ -474,20 +475,23 @@ def test_linear_arrow_length_is_independent_of_strandedness_for_long_records() -
     non_stranded_canvas = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=longest_genome,
-        config_dict=default_config,
+        profile=LinearRenderProfile(default_cfg),
         legend="none",
-        cfg=default_cfg,
     )
 
     stranded_config = load_config_toml("gbdraw.data", "config.toml")
-    stranded_config = modify_config_dict(stranded_config, strandedness=True)
+    stranded_config = modify_config_dict(
+        stranded_config,
+        {
+            "canvas.strandedness": True,
+        },
+    )
     stranded_cfg = GbdrawConfig.from_dict(stranded_config)
     stranded_canvas = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=longest_genome,
-        config_dict=stranded_config,
+        profile=LinearRenderProfile(stranded_cfg),
         legend="none",
-        cfg=stranded_cfg,
     )
 
     assert non_stranded_canvas.length_param == "long"
@@ -499,25 +503,36 @@ def test_linear_arrow_length_is_independent_of_strandedness_for_long_records() -
 def test_linear_arrow_length_with_feature_height_override_is_independent_of_strandedness() -> None:
     longest_genome = 200_000
     non_stranded_config = load_config_toml("gbdraw.data", "config.toml")
-    non_stranded_config = modify_config_dict(non_stranded_config, default_cds_height=50)
+    non_stranded_config = modify_config_dict(
+        non_stranded_config,
+        {
+            "canvas.linear.default_cds_height.short": 50,
+            "canvas.linear.default_cds_height.long": 50,
+        },
+    )
     non_stranded_cfg = GbdrawConfig.from_dict(non_stranded_config)
     non_stranded_canvas = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=longest_genome,
-        config_dict=non_stranded_config,
+        profile=LinearRenderProfile(non_stranded_cfg),
         legend="none",
-        cfg=non_stranded_cfg,
     )
 
     stranded_config = load_config_toml("gbdraw.data", "config.toml")
-    stranded_config = modify_config_dict(stranded_config, default_cds_height=50, strandedness=True)
+    stranded_config = modify_config_dict(
+        stranded_config,
+        {
+            "canvas.linear.default_cds_height.short": 50,
+            "canvas.linear.default_cds_height.long": 50,
+            "canvas.strandedness": True,
+        },
+    )
     stranded_cfg = GbdrawConfig.from_dict(stranded_config)
     stranded_canvas = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=longest_genome,
-        config_dict=stranded_config,
+        profile=LinearRenderProfile(stranded_cfg),
         legend="none",
-        cfg=stranded_cfg,
     )
 
     assert non_stranded_canvas.length_param == "long"
@@ -678,10 +693,12 @@ def test_linear_pairwise_starts_at_percent_gc_skew_stack_bottom(tmp_path: Path) 
     svg_content = output_svg.read_text(encoding="utf-8")
 
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        show_gc=True,
-        show_skew=True,
-        gc_content_mode="percent",
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "objects.gc_content.mode": 'percent',
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     comparison_group_y = _extract_comparison_group_y(svg_content)
@@ -767,19 +784,22 @@ def test_linear_custom_overlay_features_do_not_overlap_depth() -> None:
     )
     canvas = assemble_linear_diagram_from_records(
         [record],
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "canvas.strandedness": True,
+                "canvas.resolve_overlaps": True,
+            },
+        ),
         legend="none",
         depth_table=depth_table,
         linear_track_slots=[
             "features:features@side=overlay",
             "depth:depth@track_index=0,side=below,h=10px",
         ],
-        config_overrides={
-            "show_labels": False,
-            "show_gc": False,
-            "show_skew": False,
-            "strandedness": True,
-            "resolve_overlaps": True,
-        },
         depth_window=100,
         depth_step=100,
     )
@@ -856,13 +876,16 @@ def test_linear_assembly_resolves_feature_lane_once_for_labels_and_renderer(
 
     svg_content = assemble_linear_diagram_from_records(
         [record],
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "all",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+        ),
         selected_features_set=["CDS"],
         legend="none",
-        config_overrides={
-            "show_labels": "all",
-            "show_gc": False,
-            "show_skew": False,
-        },
     ).tostring()
 
     assert factor_calls == 1
@@ -1253,16 +1276,17 @@ def test_linear_bottom_ruler_can_extend_beyond_alignment_width() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        scale_style="ruler",
-        scale_interval=100,
+        {
+            "objects.scale.style": 'ruler',
+            "objects.scale.interval": 100,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=400,
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
     ruler_width = canvas_config.alignment_width * 1.25
     ruler_fragment = _build_bottom_ruler_fragment(
@@ -1280,14 +1304,16 @@ def test_linear_bottom_ruler_legend_title_spacing_is_even() -> None:
     record = SeqRecord(Seq("A" * 60_000), id="rec1", name="rec1", description="rec1")
     record.features = [SeqFeature(FeatureLocation(100, 900, strand=1), type="CDS")]
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        scale_style="ruler",
-        scale_interval=10_000,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "objects.scale.style": 'ruler',
+            "objects.scale.interval": 10000,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
     svg_content = assemble_linear_diagram_from_records(
         [record],
-        config_dict=config_dict,
+        cfg=cfg,
         selected_features_set=["CDS"],
         legend="bottom",
         plot_title="Synthetic title",
@@ -1295,15 +1321,13 @@ def test_linear_bottom_ruler_legend_title_spacing_is_even() -> None:
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=len(record.seq),
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="bottom",
-        cfg=cfg,
     )
     length_bar_height = LengthBarGroup(
         canvas_config.fig_width,
         canvas_config.alignment_width,
         len(record.seq),
-        config_dict,
         canvas_config,
         cfg=cfg,
     ).scale_group_height
@@ -1334,7 +1358,7 @@ def test_linear_multi_record_bottom_legend_title_spacing_is_even() -> None:
     svg_content = assemble_linear_diagram_from_records(
         records,
         layout=LinearMultiRecordOptions(multi_record_positions=("#1@1", "#2@1")),
-        config_dict=config_dict,
+        cfg=cfg,
         selected_features_set=["CDS"],
         legend="bottom",
         plot_title="Synthetic title",
@@ -1342,9 +1366,8 @@ def test_linear_multi_record_bottom_legend_title_spacing_is_even() -> None:
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=len(records),
         longest_genome=len(records[0].seq),
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="bottom",
-        cfg=cfg,
     )
     legend_height = (24 / 14) * cfg.objects.legends.color_rect_size.for_length_param(
         canvas_config.length_param

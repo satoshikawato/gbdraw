@@ -19,6 +19,7 @@ from svgwrite import Drawing
 import gbdraw.api.diagram as api_diagram_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.linear as linear_cli_module
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.analysis.protein_colinearity import (
     PROTEIN_LOSAT_CACHE_SCHEMA,
@@ -53,7 +54,7 @@ from gbdraw.analysis.protein_colinearity import (
     validate_protein_raw_entry_references,
 )
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
-from gbdraw.api.options import DiagramOptions
+from gbdraw.api.options import LinearDiagramOptions
 from gbdraw.diagrams.linear.orthogroup_alignment import (
     calculate_orthogroup_alignment_canvas_adjustment,
     calculate_orthogroup_alignment_canvas_extents,
@@ -3453,6 +3454,7 @@ def test_assemble_linear_diagram_accepts_precomputed_protein_comparisons(
     )
     canvas = assemble_linear_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         protein_comparisons=[comparison],
     )
 
@@ -3477,7 +3479,7 @@ def test_build_linear_diagram_forwards_protein_blastp_options(
 
     canvas = api_diagram_module.build_linear_diagram(
         [_record("record_a"), _record("record_b")],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             protein_blastp_mode="orthogroup",
             losatp_bin="custom-losat",
             losatp_threads=8,
@@ -3510,7 +3512,7 @@ def test_build_linear_diagram_forwards_ncbi_blastp_bin(
 
     canvas = api_diagram_module.build_linear_diagram(
         [_record("record_a"), _record("record_b")],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             protein_blastp_mode="pairwise",
             ncbi_blastp_bin="/opt/ncbi/bin/blastp",
         ),
@@ -3535,7 +3537,7 @@ def test_build_linear_diagram_forwards_orthogroup_alignment_option(
 
     canvas = api_diagram_module.build_linear_diagram(
         [_record("record_a"), _record("record_b")],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             protein_blastp_mode="orthogroup",
             align_orthogroup_feature="fanchor",
         ),

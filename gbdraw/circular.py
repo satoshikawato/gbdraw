@@ -49,7 +49,7 @@ from .labels.filtering import (
     read_label_override_file,
     read_qualifier_priority_file,
 )  # type: ignore[reportMissingImports]
-from .io.record_select import parse_record_selector
+from .layout.record_placement import parse_record_row_position
 from .features.shapes import parse_feature_shape_overrides
 from .features.visibility import (
     read_feature_visibility_file,
@@ -108,35 +108,14 @@ setup_logging()
 
 
 def _parse_multi_record_position_arg(value: str) -> str:
-    raw = str(value or "").strip()
-    if not raw:
-        raise argparse.ArgumentTypeError(
-            "multi_record_position does not allow empty entries."
-        )
-    if "@" not in raw:
-        raise argparse.ArgumentTypeError(
-            f"multi_record_position entry '{raw}' must be in '<selector>@<row>' format."
-        )
-    selector_text, row_text = raw.rsplit("@", 1)
-    selector_text = selector_text.strip()
-    row_text = row_text.strip()
-    if not selector_text:
-        raise argparse.ArgumentTypeError(
-            f"multi_record_position entry '{raw}' must include a selector before '@'."
-        )
-    if not row_text.isdigit() or int(row_text) <= 0:
-        raise argparse.ArgumentTypeError(
-            f"multi_record_position entry '{raw}' must use a positive integer row."
-        )
     try:
-        selector = parse_record_selector(selector_text)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from exc
-    if selector is None:
-        raise argparse.ArgumentTypeError(
-            f"multi_record_position selector '{selector_text}' is invalid."
+        selector_text, row = parse_record_row_position(
+            value,
+            _compatibility="circular",
         )
-    return f"{selector_text}@{int(row_text)}"
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return f"{selector_text}@{row}"
 
 
 def _render_output_request(
@@ -775,9 +754,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     labels_mode: str = args.labels
     label_rendering: str = args.label_rendering
     circular_label_placement: str = args.label_placement
-    show_labels: bool = labels_mode != "none"
     resolve_overlaps: bool = args.resolve_overlaps
-    allow_inner_labels: bool = labels_mode == "both"
+    inner_labels_enabled: bool = labels_mode == "both"
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
@@ -893,7 +871,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
     if (
         circular_label_placement == "horizontal"
-        and allow_inner_labels
+        and inner_labels_enabled
         and (show_gc or show_skew)
     ):
 
@@ -945,58 +923,103 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     default_colors: Optional[DataFrame] = load_default_colors(
         user_defined_default_colors, palette)
 
+    filtering_override = dict(filtering_cfg)
+    if label_blacklist is not None:
+        filtering_override["blacklist_keywords"] = (
+            [keyword.strip() for keyword in label_blacklist.split(",") if keyword.strip()]
+            if isinstance(label_blacklist, str)
+            else label_blacklist
+        )
+    gc_large_tick_interval = (
+        gc_content_large_tick_interval
+        if gc_content_large_tick_interval is not None
+        else gc_content_tick_interval
+    )
+    override_candidates: dict[str, object | None] = {
+        "objects.features.block_stroke_color": block_stroke_color,
+        "objects.axis.circular.stroke_color": axis_stroke_color,
+        "objects.features.line_stroke_color": line_stroke_color,
+        "labels.circular.scope": (
+            "outer" if labels_mode == "out" else labels_mode
+        ),
+        "canvas.circular.track_type": track_type,
+        "canvas.strandedness": strandedness,
+        "canvas.resolve_overlaps": resolve_overlaps,
+        "canvas.show_gc": show_gc,
+        "objects.gc_content.mode": gc_content_mode,
+        "objects.gc_content.min_percent": gc_content_min_percent,
+        "objects.gc_content.max_percent": gc_content_max_percent,
+        "objects.gc_content.show_axis": gc_content_show_axis,
+        "objects.gc_content.show_ticks": gc_content_show_ticks,
+        "objects.gc_content.large_tick_interval": gc_large_tick_interval,
+        "objects.gc_content.small_tick_interval": gc_content_small_tick_interval,
+        "objects.gc_content.tick_font_size": gc_content_tick_font_size,
+        "canvas.show_skew": show_skew,
+        "canvas.show_depth": show_depth,
+        "objects.depth.fill_color": depth_color,
+        "objects.depth.min_depth": depth_min,
+        "objects.depth.max_depth": depth_max,
+        "objects.depth.normalize": depth_normalize,
+        "objects.depth.show_axis": depth_show_axis,
+        "objects.depth.show_ticks": depth_show_ticks,
+        "objects.depth.large_tick_interval": depth_large_tick_interval,
+        "objects.depth.small_tick_interval": depth_small_tick_interval,
+        "objects.depth.tick_font_size": depth_tick_font_size,
+        "objects.depth.share_axis": depth_share_axis,
+        "objects.definition.circular.font_size": definition_font_size,
+        "objects.definition.circular.plot_title_font_size": plot_title_font_size,
+        "labels.rendering": label_rendering,
+        "labels.circular.placement": circular_label_placement,
+        "labels.filtering.raw": filtering_override,
+        "labels.unified_adjustment.outer_labels.x_radius_offset": outer_label_x_radius_offset,
+        "labels.unified_adjustment.outer_labels.y_radius_offset": outer_label_y_radius_offset,
+        "labels.unified_adjustment.inner_labels.x_radius_offset": inner_label_x_radius_offset,
+        "labels.unified_adjustment.inner_labels.y_radius_offset": inner_label_y_radius_offset,
+        "objects.scale.interval": scale_interval,
+        "objects.ticks.tick_labels.font_size": tick_label_font_size,
+        "labels.spacing.circular": circular_label_spacing,
+    }
+    for width_path in (
+        "objects.features.block_stroke_width.short",
+        "objects.features.block_stroke_width.long",
+    ):
+        override_candidates[width_path] = block_stroke_width
+    for width_path in (
+        "objects.axis.circular.stroke_width.short",
+        "objects.axis.circular.stroke_width.long",
+    ):
+        override_candidates[width_path] = axis_stroke_width
+    for width_path in (
+        "objects.features.line_stroke_width.short",
+        "objects.features.line_stroke_width.long",
+    ):
+        override_candidates[width_path] = line_stroke_width
+    for font_path in (
+        "labels.font_size.short",
+        "labels.font_size.long",
+    ):
+        override_candidates[font_path] = label_font_size
+    for size_path in (
+        "objects.legends.color_rect_size.short",
+        "objects.legends.color_rect_size.long",
+    ):
+        override_candidates[size_path] = legend_box_size
+    for size_path in (
+        "objects.legends.font_size.short",
+        "objects.legends.font_size.long",
+    ):
+        override_candidates[size_path] = legend_font_size
+    if definition_font_size is not None:
+        override_candidates["objects.definition.circular.interval"] = (
+            int(float(definition_font_size) + 2.0)
+        )
     config_dict = modify_config_dict(
         config_dict,
-        block_stroke_color=block_stroke_color,
-        block_stroke_width=block_stroke_width,
-        circular_axis_stroke_color=axis_stroke_color,
-        circular_axis_stroke_width=axis_stroke_width,
-        line_stroke_color=line_stroke_color,
-        line_stroke_width=line_stroke_width,
-        show_labels=show_labels,
-        track_type=track_type,
-        strandedness=strandedness,
-        resolve_overlaps=resolve_overlaps,
-        show_gc=show_gc,
-        gc_content_mode=gc_content_mode,
-        gc_content_min_percent=gc_content_min_percent,
-        gc_content_max_percent=gc_content_max_percent,
-        gc_content_show_axis=gc_content_show_axis,
-        gc_content_show_ticks=gc_content_show_ticks,
-        gc_content_tick_interval=gc_content_tick_interval,
-        gc_content_large_tick_interval=gc_content_large_tick_interval,
-        gc_content_small_tick_interval=gc_content_small_tick_interval,
-        gc_content_tick_font_size=gc_content_tick_font_size,
-        show_skew=show_skew,
-        show_depth=show_depth,
-        depth_color=depth_color,
-        depth_min=depth_min,
-        depth_max=depth_max,
-        depth_normalize=depth_normalize,
-        depth_show_axis=depth_show_axis,
-        depth_show_ticks=depth_show_ticks,
-        depth_large_tick_interval=depth_large_tick_interval,
-        depth_small_tick_interval=depth_small_tick_interval,
-        depth_tick_font_size=depth_tick_font_size,
-        depth_share_axis=depth_share_axis,
-        allow_inner_labels=allow_inner_labels,
-        circular_definition_font_size=definition_font_size,
-        plot_title_font_size=plot_title_font_size,
-        label_font_size=label_font_size,
-        label_rendering=label_rendering,
-        circular_label_placement=circular_label_placement,
-        label_blacklist=label_blacklist,
-        label_whitelist=label_whitelist,
-        label_table=label_table_path,
-        outer_label_x_radius_offset=outer_label_x_radius_offset,
-        outer_label_y_radius_offset=outer_label_y_radius_offset,
-        inner_label_x_radius_offset=inner_label_x_radius_offset,
-        inner_label_y_radius_offset=inner_label_y_radius_offset,
-        scale_interval=scale_interval,
-        tick_label_font_size=tick_label_font_size,
-        circular_label_spacing=circular_label_spacing,
-        legend_box_size=legend_box_size,
-        legend_font_size=legend_font_size
+        {
+            path: value
+            for path, value in override_candidates.items()
+            if value is not None
+        },
     )
 
     out_formats: list[str] = parse_formats(args.format)
