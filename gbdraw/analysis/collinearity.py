@@ -43,7 +43,6 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
 CollinearityOrientation = Literal["plus", "minus"]
 CollinearityBlockKind = Literal["syntenic", "cluster", "singleton"]
-CollinearityScoreMode = Literal["constant", "bitscore"]
 CollinearityColorMode = Literal["average_identity", "orientation", "orientation_identity"]
 CollinearityAnchorMode = Literal["all", "one_to_one", "rbh"]
 CollinearitySearchScope = Literal["adjacent", "all"]
@@ -143,58 +142,6 @@ class CollinearityResult:
     blocks: tuple[CollinearityBlock, ...]
     unblocked_anchors: tuple[CollinearityAnchor, ...] = ()
     orthogroups: OrthogroupResult | None = None
-
-
-@dataclass(frozen=True)
-class CollinearityParameters:
-    min_anchors: int = 1
-    max_gene_gap: int = 25
-    block_merge_gap: int = 50
-    singleton_merge_gap: int = 25
-    max_diagonal_drift: int = 25
-    max_conflicts_in_merge_gap: int = 1
-    max_paralog_links_per_orthogroup: int = 2
-    gap_penalty: float = 1.0
-    nearby_duplicate_window: int = 0
-    score_mode: CollinearityScoreMode = "constant"
-    constant_anchor_score: float = 50.0
-    min_block_score: float | None = None
-    block_evalue: float | None = None
-
-    def validate(self) -> None:
-        if int(self.min_anchors) <= 0:
-            raise ValidationError("collinear_min_anchors must be > 0")
-        if int(self.max_gene_gap) < 0:
-            raise ValidationError("collinear_max_gene_gap must be >= 0")
-        if int(self.block_merge_gap) < 0:
-            raise ValidationError("collinear_block_merge_gap must be >= 0")
-        if int(self.singleton_merge_gap) < 0:
-            raise ValidationError("collinear_singleton_merge_gap must be >= 0")
-        if int(self.max_diagonal_drift) < 0:
-            raise ValidationError("collinear_max_diagonal_drift must be >= 0")
-        if int(self.max_conflicts_in_merge_gap) < 0:
-            raise ValidationError("collinear_max_conflicts_in_merge_gap must be >= 0")
-        if int(self.max_paralog_links_per_orthogroup) <= 0:
-            raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
-        if float(self.gap_penalty) < 0:
-            raise ValidationError("collinear_gap_penalty must be >= 0")
-        if int(self.nearby_duplicate_window) < 0:
-            raise ValidationError("collinear_nearby_duplicate_window must be >= 0")
-        if str(self.score_mode) not in {"constant", "bitscore"}:
-            raise ValidationError("collinear_score_mode must be one of: constant, bitscore")
-        if float(self.constant_anchor_score) <= 0:
-            raise ValidationError("collinear_constant_anchor_score must be > 0")
-        if self.block_evalue is not None:
-            block_evalue = float(self.block_evalue)
-            if not math.isfinite(block_evalue) or block_evalue < 0:
-                raise ValidationError("collinear_block_evalue must be a finite value >= 0 or None")
-
-    def effective_min_block_score(self) -> float:
-        if self.min_block_score is not None:
-            return float(self.min_block_score)
-        if self.score_mode == "constant":
-            return float(self.constant_anchor_score) * int(self.min_anchors)
-        return 0.0
 
 
 @dataclass(frozen=True)
@@ -330,12 +277,6 @@ def _anchor_strength_key(anchor: CollinearityAnchor) -> tuple[float, float, floa
         str(anchor.query_protein_id),
         str(anchor.subject_protein_id),
     )
-
-
-def _anchor_score(anchor: CollinearityAnchor, params: CollinearityParameters) -> float:
-    if params.score_mode == "bitscore":
-        return float(anchor.bitscore)
-    return float(params.constant_anchor_score)
 
 
 def _genomic_link_coordinates(protein: CdsProtein) -> tuple[int, int]:
@@ -549,16 +490,6 @@ def collapse_nearby_duplicate_anchors(
     )
 
 
-def _anchor_identity(anchor: CollinearityAnchor) -> tuple[str, str, int, int, str]:
-    return (
-        str(anchor.query_unit_id),
-        str(anchor.subject_unit_id),
-        int(anchor.query_record_index),
-        int(anchor.subject_record_index),
-        str(anchor.orthogroup_id),
-    )
-
-
 def _path_sorted_anchors(
     anchors: Sequence[CollinearityAnchor],
     orientation: CollinearityOrientation,
@@ -638,310 +569,6 @@ def _anchors_are_path_compatible(
         - _orientation_diagonal(previous, orientation)
     )
     return diagonal_drift <= int(max_diagonal_drift)
-
-
-def _chain_density(chain: _Chain) -> float:
-    anchors = _path_sorted_anchors(chain.anchors, chain.orientation)
-    if not anchors:
-        return 0.0
-    query_span = max(anchor.query_order for anchor in anchors) - min(anchor.query_order for anchor in anchors) + 1
-    subject_span = max(anchor.subject_order for anchor in anchors) - min(anchor.subject_order for anchor in anchors) + 1
-    return len(anchors) / max(1, max(int(query_span), int(subject_span)))
-
-
-def _chain_diagonal_drift(chain: _Chain) -> int:
-    values = [
-        _orientation_diagonal(anchor, chain.orientation)
-        for anchor in chain.anchors
-    ]
-    if not values:
-        return 0
-    return max(values) - min(values)
-
-
-def _orthogroup_score(anchors: Sequence[CollinearityAnchor], params: CollinearityParameters) -> float:
-    return float(sum(_anchor_score(anchor, params) for anchor in anchors))
-
-
-def _candidate_run_rank(chain: _Chain) -> tuple[float, float, int, float, int, int, str, str, int]:
-    anchors = _path_sorted_anchors(chain.anchors, chain.orientation)
-    first = anchors[0]
-    orientation_rank = 0 if chain.orientation == "plus" else 1
-    return (
-        -len(anchors),
-        -_chain_density(chain),
-        _chain_diagonal_drift(chain),
-        -float(chain.score),
-        int(first.query_order),
-        _orientation_subject_value(first, chain.orientation),
-        str(first.orthogroup_id),
-        str(first.query_protein_id),
-        orientation_rank,
-    )
-
-
-def _candidate_runs_for_orientation(
-    anchors: Sequence[CollinearityAnchor],
-    *,
-    orientation: CollinearityOrientation,
-    params: CollinearityParameters,
-) -> list[_Chain]:
-    ordered = sorted(
-        anchors,
-        key=lambda anchor: (
-            int(anchor.query_order),
-            _orientation_subject_value(anchor, orientation),
-            str(anchor.orthogroup_id),
-            str(anchor.query_protein_id),
-            str(anchor.subject_protein_id),
-        ),
-    )
-    runs: list[_Chain] = []
-    seen_paths: set[tuple[tuple[str, str, int, int, str], ...]] = set()
-    for start_index, start_anchor in enumerate(ordered):
-        run = [start_anchor]
-        last = start_anchor
-        for candidate in ordered[start_index + 1 :]:
-            if _anchors_are_path_compatible(
-                last,
-                candidate,
-                orientation=orientation,
-                max_gap=int(params.max_gene_gap),
-                max_diagonal_drift=int(params.max_diagonal_drift),
-            ):
-                run.append(candidate)
-                last = candidate
-        path = _path_sorted_anchors(run, orientation)
-        path_key = tuple(_anchor_identity(anchor) for anchor in path)
-        if path_key in seen_paths:
-            continue
-        seen_paths.add(path_key)
-        runs.append(
-            _Chain(
-                orientation=orientation,
-                score=_orthogroup_score(path, params),
-                anchors=path,
-            )
-        )
-    return runs
-
-
-def _resolve_overlapping_runs(
-    runs: Sequence[_Chain],
-    *,
-    params: CollinearityParameters,
-) -> tuple[_Chain, ...]:
-    minimum_syntenic_anchors = max(2, int(params.min_anchors))
-    accepted: list[_Chain] = []
-    consumed: set[tuple[str, str, int, int, str]] = set()
-    for run in sorted(runs, key=_candidate_run_rank):
-        if len(run.anchors) < minimum_syntenic_anchors:
-            continue
-        run_ids = {_anchor_identity(anchor) for anchor in run.anchors}
-        if run_ids & consumed:
-            continue
-        accepted.append(run)
-        consumed.update(run_ids)
-    return tuple(accepted)
-
-
-def _block_from_anchors(
-    *,
-    block_id: str,
-    pair: tuple[int, int],
-    orientation: CollinearityOrientation,
-    kind: CollinearityBlockKind,
-    anchors: Sequence[CollinearityAnchor],
-    params: CollinearityParameters,
-) -> CollinearityBlock:
-    path = _path_sorted_anchors(anchors, orientation)
-    return CollinearityBlock(
-        block_id=block_id,
-        query_record_index=int(pair[0]),
-        subject_record_index=int(pair[1]),
-        orientation=orientation,
-        kind=kind,
-        score=_orthogroup_score(path, params),
-        anchors=path,
-        block_evalue=None,
-    )
-
-
-def _conflicts_between_blocks(
-    left: CollinearityBlock,
-    right: CollinearityBlock,
-    anchors: Sequence[CollinearityAnchor],
-) -> int:
-    left_path = _path_sorted_anchors(left.anchors, left.orientation)
-    right_path = _path_sorted_anchors(right.anchors, right.orientation)
-    if not left_path or not right_path:
-        return 0
-    left_end = left_path[-1]
-    right_start = right_path[0]
-    query_min = min(int(left_end.query_order), int(right_start.query_order))
-    query_max = max(int(left_end.query_order), int(right_start.query_order))
-    subject_min = min(int(left_end.subject_order), int(right_start.subject_order))
-    subject_max = max(int(left_end.subject_order), int(right_start.subject_order))
-    block_ids = {_anchor_identity(anchor) for anchor in (*left.anchors, *right.anchors)}
-    return sum(
-        1
-        for anchor in anchors
-        if _anchor_identity(anchor) not in block_ids
-        and query_min < int(anchor.query_order) < query_max
-        and subject_min < int(anchor.subject_order) < subject_max
-    )
-
-
-def _blocks_can_merge(
-    left: CollinearityBlock,
-    right: CollinearityBlock,
-    *,
-    anchors: Sequence[CollinearityAnchor],
-    params: CollinearityParameters,
-) -> bool:
-    if left.kind != "syntenic" or right.kind != "syntenic":
-        return False
-    if left.orientation != right.orientation:
-        return False
-    if int(left.query_record_index) != int(right.query_record_index):
-        return False
-    if int(left.subject_record_index) != int(right.subject_record_index):
-        return False
-    left_path = _path_sorted_anchors(left.anchors, left.orientation)
-    right_path = _path_sorted_anchors(right.anchors, right.orientation)
-    if not left_path or not right_path:
-        return False
-    if not _anchors_are_path_compatible(
-        left_path[-1],
-        right_path[0],
-        orientation=left.orientation,
-        max_gap=int(params.block_merge_gap),
-        max_diagonal_drift=int(params.max_diagonal_drift),
-    ):
-        return False
-    conflict_count = _conflicts_between_blocks(left, right, anchors)
-    return conflict_count <= int(params.max_conflicts_in_merge_gap)
-
-
-def _merge_syntenic_blocks(
-    blocks: Sequence[CollinearityBlock],
-    *,
-    anchors: Sequence[CollinearityAnchor],
-    params: CollinearityParameters,
-) -> tuple[CollinearityBlock, ...]:
-    merged: list[CollinearityBlock] = []
-    for block in sorted(blocks, key=_final_block_sort_key):
-        if not merged:
-            merged.append(block)
-            continue
-        previous = merged[-1]
-        if _blocks_can_merge(previous, block, anchors=anchors, params=params):
-            merged[-1] = _block_from_anchors(
-                block_id=previous.block_id,
-                pair=(previous.query_record_index, previous.subject_record_index),
-                orientation=previous.orientation,
-                kind="syntenic",
-                anchors=(*previous.anchors, *block.anchors),
-                params=params,
-            )
-        else:
-            merged.append(block)
-    return tuple(merged)
-
-
-def _anchor_singleton_orientation(anchor: CollinearityAnchor) -> CollinearityOrientation:
-    return _anchor_strand_orientation(anchor) or "plus"
-
-
-def _anchor_can_absorb_into_block(
-    anchor: CollinearityAnchor,
-    block: CollinearityBlock,
-    *,
-    params: CollinearityParameters,
-) -> bool:
-    if block.kind != "syntenic":
-        return False
-    if int(anchor.query_record_index) != int(block.query_record_index):
-        return False
-    if int(anchor.subject_record_index) != int(block.subject_record_index):
-        return False
-    anchor_orientation = _anchor_strand_orientation(anchor)
-    if anchor_orientation is not None and anchor_orientation != block.orientation:
-        return False
-    path = list(_path_sorted_anchors((*block.anchors, anchor), block.orientation))
-    try:
-        index = path.index(anchor)
-    except ValueError:
-        return False
-    if index > 0 and not _anchors_are_path_compatible(
-        path[index - 1],
-        anchor,
-        orientation=block.orientation,
-        max_gap=int(params.singleton_merge_gap),
-        max_diagonal_drift=int(params.max_diagonal_drift),
-    ):
-        return False
-    if index + 1 < len(path) and not _anchors_are_path_compatible(
-        anchor,
-        path[index + 1],
-        orientation=block.orientation,
-        max_gap=int(params.singleton_merge_gap),
-        max_diagonal_drift=int(params.max_diagonal_drift),
-    ):
-        return False
-    return True
-
-
-def _absorption_rank(anchor: CollinearityAnchor, block: CollinearityBlock) -> tuple[int, int, int, str]:
-    distances = [
-        max(
-            abs(int(anchor.query_order) - int(block_anchor.query_order)),
-            abs(int(anchor.subject_order) - int(block_anchor.subject_order)),
-        )
-        for block_anchor in block.anchors
-    ]
-    diagonal_distances = [
-        abs(
-            _orientation_diagonal(anchor, block.orientation)
-            - _orientation_diagonal(block_anchor, block.orientation)
-        )
-        for block_anchor in block.anchors
-    ]
-    return (
-        min(distances) if distances else 0,
-        min(diagonal_distances) if diagonal_distances else 0,
-        int(block.query_record_index),
-        str(block.block_id),
-    )
-
-
-def _absorb_singleton_anchors(
-    blocks: Sequence[CollinearityBlock],
-    singletons: Sequence[CollinearityAnchor],
-    *,
-    params: CollinearityParameters,
-) -> tuple[tuple[CollinearityBlock, ...], tuple[CollinearityAnchor, ...]]:
-    updated = list(blocks)
-    remaining: list[CollinearityAnchor] = []
-    for anchor in sorted(singletons, key=_anchor_sort_key):
-        candidates = [
-            (index, block)
-            for index, block in enumerate(updated)
-            if _anchor_can_absorb_into_block(anchor, block, params=params)
-        ]
-        if not candidates:
-            remaining.append(anchor)
-            continue
-        best_index, best_block = min(candidates, key=lambda item: _absorption_rank(anchor, item[1]))
-        updated[best_index] = _block_from_anchors(
-            block_id=best_block.block_id,
-            pair=(best_block.query_record_index, best_block.subject_record_index),
-            orientation=best_block.orientation,
-            kind="syntenic",
-            anchors=(*best_block.anchors, anchor),
-            params=params,
-        )
-    return tuple(updated), tuple(remaining)
 
 
 def _anchor_sort_key(anchor: CollinearityAnchor) -> tuple[int, int, int, int, str, str, str]:
@@ -1172,21 +799,10 @@ def orthogroup_edges_to_lossless_collinearity_anchors(
     return tuple(sorted(anchors, key=_anchor_sort_key))
 
 
-def _lossless_params_from_legacy(
-    params: CollinearityParameters | LosslessCollinearityParameters | None,
+def _resolve_lossless_params(
+    params: LosslessCollinearityParameters | None,
 ) -> LosslessCollinearityParameters:
-    if params is None:
-        resolved = LosslessCollinearityParameters()
-    elif isinstance(params, LosslessCollinearityParameters):
-        resolved = params
-    else:
-        params.validate()
-        resolved = LosslessCollinearityParameters(
-            min_anchors=int(params.min_anchors),
-            max_unit_gap=int(params.max_gene_gap),
-            max_diagonal_drift=int(params.max_diagonal_drift),
-            max_conflicts=int(params.max_conflicts_in_merge_gap),
-        )
+    resolved = params or LosslessCollinearityParameters()
     resolved.validate()
     return resolved
 
@@ -1446,22 +1062,6 @@ def cluster_lossless_collinearity_anchors(
     )
 
 
-def _renumber_blocks(blocks: Sequence[CollinearityBlock], params: CollinearityParameters) -> tuple[CollinearityBlock, ...]:
-    renumbered: list[CollinearityBlock] = []
-    for index, block in enumerate(sorted(blocks, key=_final_block_sort_key), start=1):
-        renumbered.append(
-            _block_from_anchors(
-                block_id=f"block_{index:04d}",
-                pair=(block.query_record_index, block.subject_record_index),
-                orientation=block.orientation,
-                kind=block.kind,
-                anchors=block.anchors,
-                params=params,
-            )
-        )
-    return tuple(renumbered)
-
-
 def _chain_path_anchors(chain: _Chain) -> tuple[CollinearityAnchor, ...]:
     if chain.orientation == "minus":
         return tuple(
@@ -1496,7 +1096,11 @@ def _log_permutation(n: int, m: int) -> float:
     return math.lgamma(n + 1) - math.lgamma(n - m + 1)
 
 
-def _anchor_genomic_position(anchor: CollinearityAnchor, start_attr: str, end_attr: str) -> float:
+def _anchor_genomic_position(
+    anchor: CollinearityAnchor,
+    start_attr: str,
+    end_attr: str,
+) -> float:
     start = float(getattr(anchor, start_attr))
     end = float(getattr(anchor, end_attr))
     return min(start, end)
@@ -1530,8 +1134,12 @@ def calculate_collinearity_block_evalue(
     n = sum(
         1
         for anchor in available_anchors
-        if query_min <= _anchor_genomic_position(anchor, "query_start", "query_end") <= query_max
-        and subject_min <= _anchor_genomic_position(anchor, "subject_start", "subject_end") <= subject_max
+        if query_min
+        <= _anchor_genomic_position(anchor, "query_start", "query_end")
+        <= query_max
+        and subject_min
+        <= _anchor_genomic_position(anchor, "subject_start", "subject_end")
+        <= subject_max
     )
     if n < m:
         return math.inf
@@ -1539,7 +1147,8 @@ def calculate_collinearity_block_evalue(
     log_evalue = (
         math.log(2.0)
         + _log_permutation(n, m)
-        - (m - 1) * (math.log(region_query_length) + math.log(region_subject_length))
+        - (m - 1)
+        * (math.log(region_query_length) + math.log(region_subject_length))
     )
     for previous, current in zip(path_anchors, path_anchors[1:]):
         query_distance = max(
@@ -1565,105 +1174,14 @@ def calculate_collinearity_block_evalue(
     return float(math.exp(log_evalue))
 
 
-
-
-
-
 def call_collinearity_blocks(
     anchors: Sequence[CollinearityAnchor],
     *,
-    params: CollinearityParameters | LosslessCollinearityParameters | None = None,
+    params: LosslessCollinearityParameters | None = None,
 ) -> CollinearityResult:
-    """Call orthogroup-order syntenic blocks and singleton links."""
+    """Cluster collinearity anchors with the lossless parameter contract."""
 
-    params = params or CollinearityParameters()
-    params.validate()
-
-    deduplicated = deduplicate_unit_pair_anchors(anchors)
-    collapsed = collapse_nearby_duplicate_anchors(
-        deduplicated,
-        window=int(params.nearby_duplicate_window),
-    )
-    anchors_by_pair: dict[tuple[int, int], list[CollinearityAnchor]] = {}
-    for anchor in collapsed:
-        anchors_by_pair.setdefault(
-            (int(anchor.query_record_index), int(anchor.subject_record_index)),
-            [],
-        ).append(anchor)
-
-    blocks: list[CollinearityBlock] = []
-
-    for pair_key in sorted(anchors_by_pair):
-        pair_anchors = tuple(sorted(anchors_by_pair[pair_key], key=_anchor_sort_key))
-        candidate_runs = [
-            *_candidate_runs_for_orientation(pair_anchors, orientation="plus", params=params),
-            *_candidate_runs_for_orientation(pair_anchors, orientation="minus", params=params),
-        ]
-        syntenic_runs = _resolve_overlapping_runs(candidate_runs, params=params)
-        syntenic_blocks = [
-            _block_from_anchors(
-                block_id=f"pending_{index:04d}",
-                pair=pair_key,
-                orientation=run.orientation,
-                kind="syntenic",
-                anchors=run.anchors,
-                params=params,
-            )
-            for index, run in enumerate(syntenic_runs, start=1)
-        ]
-        merged_blocks = _merge_syntenic_blocks(
-            syntenic_blocks,
-            anchors=pair_anchors,
-            params=params,
-        )
-        consumed_ids = {
-            _anchor_identity(anchor)
-            for block in merged_blocks
-            for anchor in block.anchors
-        }
-        singleton_candidates = [
-            anchor
-            for anchor in pair_anchors
-            if _anchor_identity(anchor) not in consumed_ids
-        ]
-        absorbed_blocks, _ = _absorb_singleton_anchors(
-            merged_blocks,
-            singleton_candidates,
-            params=params,
-        )
-        blocks.extend(absorbed_blocks)
-        absorbed_ids = {
-            _anchor_identity(anchor)
-            for block in absorbed_blocks
-            for anchor in block.anchors
-        }
-        emit_candidates = [
-            anchor
-            for anchor in pair_anchors
-            if _anchor_identity(anchor) not in absorbed_ids
-        ]
-        for singleton_index, anchor in enumerate(sorted(emit_candidates, key=_anchor_sort_key), start=1):
-            orientation = _anchor_singleton_orientation(anchor)
-            blocks.append(
-                _block_from_anchors(
-                    block_id=f"singleton_{pair_key[0] + 1:04d}_{singleton_index:04d}",
-                    pair=pair_key,
-                    orientation=orientation,
-                    kind="singleton",
-                    anchors=(anchor,),
-                    params=params,
-                )
-            )
-
-    filtered_blocks, filtered_unblocked = _filter_blocks_by_min_anchors(
-        blocks,
-        min_anchors=params.min_anchors,
-    )
-
-    return CollinearityResult(
-        blocks=_renumber_blocks(filtered_blocks, params),
-        unblocked_anchors=filtered_unblocked,
-    )
+    return cluster_lossless_collinearity_anchors(anchors, params=params)
 
 
 def _empty_hits() -> DataFrame:
@@ -1978,7 +1496,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
     extraction: ProteinExtractionResult,
     *,
     records: Sequence[SeqRecord] | None = None,
-    params: CollinearityParameters | LosslessCollinearityParameters | None = None,
+    params: LosslessCollinearityParameters | None = None,
     unit_mode: CollinearityUnitMode | str = "auto",
     edge_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
@@ -1990,7 +1508,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
 ) -> CollinearityResult:
     """Call lossless Orthogroup-sourced collinearity blocks from filtered hits."""
 
-    lossless_params = _lossless_params_from_legacy(params)
+    lossless_params = _resolve_lossless_params(params)
     directional_tables = _normalize_hit_tables(hits_by_pair, reverse_hits_by_pair)
     normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
     normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
@@ -1998,11 +1516,6 @@ def build_orthogroup_collinearity_blocks_from_hits(
     if int(orthogroup_member_max_hits) <= 0:
         raise ValidationError("orthogroup_member_max_hits must be > 0")
     resolved_max_paralog_links = int(max_paralog_links_per_orthogroup)
-    if (
-        isinstance(params, CollinearityParameters)
-        and resolved_max_paralog_links == 2
-    ):
-        resolved_max_paralog_links = int(params.max_paralog_links_per_orthogroup)
     if resolved_max_paralog_links <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
     record_count = len(records) if records is not None else len(extraction.proteins_by_record)
@@ -2113,7 +1626,7 @@ def build_orthogroup_collinearity_blocks(
     bitscore: float = 50.0,
     identity: float = 70.0,
     alignment_length: int = 0,
-    params: CollinearityParameters | LosslessCollinearityParameters | None = None,
+    params: LosslessCollinearityParameters | None = None,
     unit_mode: CollinearityUnitMode | str = "auto",
     edge_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
@@ -2130,18 +1643,13 @@ def build_orthogroup_collinearity_blocks(
         raise ValidationError("protein_blastp_mode='collinear' requires at least two records")
     if losatp_threads is not None and int(losatp_threads) <= 0:
         raise ValidationError("losatp_threads must be > 0 or None")
-    lossless_params = _lossless_params_from_legacy(params)
+    lossless_params = _resolve_lossless_params(params)
     normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
     normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
     normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
     if int(orthogroup_member_max_hits) <= 0:
         raise ValidationError("orthogroup_member_max_hits must be > 0")
     resolved_max_paralog_links = int(max_paralog_links_per_orthogroup)
-    if (
-        isinstance(params, CollinearityParameters)
-        and resolved_max_paralog_links == 2
-    ):
-        resolved_max_paralog_links = int(params.max_paralog_links_per_orthogroup)
     if resolved_max_paralog_links <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
     extraction = protein_extraction or extract_cds_proteins(
@@ -2269,7 +1777,7 @@ def build_collinearity_blocks_from_hits(
     extraction: ProteinExtractionResult,
     *,
     records: Sequence[SeqRecord] | None = None,
-    params: CollinearityParameters | LosslessCollinearityParameters | None = None,
+    params: LosslessCollinearityParameters | None = None,
     unit_mode: CollinearityUnitMode | str = "auto",
     anchor_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
@@ -2482,7 +1990,6 @@ __all__ = [
     "CollinearityBlock",
     "CollinearityBlockKind",
     "CollinearityColorMode",
-    "CollinearityParameters",
     "CollinearityResult",
     "CollinearitySearchScope",
     "LosslessCollinearityParameters",

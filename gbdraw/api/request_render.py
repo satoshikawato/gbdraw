@@ -15,7 +15,6 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.collinearity import (
-    CollinearityParameters,
     LosslessCollinearityParameters,
 )
 from gbdraw.exceptions import ValidationError
@@ -1023,67 +1022,25 @@ def _resolved_protein_pair_payloads(
 
 
 def _collinearity_parameter_identity(
-    params: CollinearityParameters | LosslessCollinearityParameters | None,
+    params: LosslessCollinearityParameters | None,
 ) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
     resolved = params or LosslessCollinearityParameters()
-    if isinstance(resolved, LosslessCollinearityParameters):
-        snapshot = {
-            "model": "lossless",
-            "parameters": {
-                "minAnchors": int(resolved.min_anchors),
-                "maxUnitGap": int(resolved.max_unit_gap),
-                "maxDiagonalDrift": int(resolved.max_diagonal_drift),
-                "maxConflicts": int(resolved.max_conflicts),
-                "mergeOrientation": str(resolved.merge_orientation),
-            },
-        }
-        effective = {
-            "minAnchors": int(resolved.min_anchors),
-            "maxGeneGap": int(resolved.max_unit_gap),
-            "maxDiagonalDrift": int(resolved.max_diagonal_drift),
-            "maxConflictsInMergeGap": int(resolved.max_conflicts),
-            "mergeOrientation": str(resolved.merge_orientation),
-        }
-        return snapshot, effective
-
     snapshot = {
-        "model": "legacy",
+        "model": "lossless",
         "parameters": {
             "minAnchors": int(resolved.min_anchors),
-            "maxGeneGap": int(resolved.max_gene_gap),
-            "blockMergeGap": int(resolved.block_merge_gap),
-            "singletonMergeGap": int(resolved.singleton_merge_gap),
+            "maxUnitGap": int(resolved.max_unit_gap),
             "maxDiagonalDrift": int(resolved.max_diagonal_drift),
-            "maxConflictsInMergeGap": int(
-                resolved.max_conflicts_in_merge_gap
-            ),
-            "maxParalogLinksPerOrthogroup": int(
-                resolved.max_paralog_links_per_orthogroup
-            ),
-            "gapPenalty": float(resolved.gap_penalty),
-            "nearbyDuplicateWindow": int(resolved.nearby_duplicate_window),
-            "scoreMode": str(resolved.score_mode),
-            "constantAnchorScore": float(resolved.constant_anchor_score),
-            "minBlockScore": (
-                None
-                if resolved.min_block_score is None
-                else float(resolved.min_block_score)
-            ),
-            "blockEvalue": (
-                None
-                if resolved.block_evalue is None
-                else float(resolved.block_evalue)
-            ),
+            "maxConflicts": int(resolved.max_conflicts),
+            "mergeOrientation": str(resolved.merge_orientation),
         },
     }
     effective = {
         "minAnchors": int(resolved.min_anchors),
-        "maxGeneGap": int(resolved.max_gene_gap),
+        "maxGeneGap": int(resolved.max_unit_gap),
         "maxDiagonalDrift": int(resolved.max_diagonal_drift),
-        "maxConflictsInMergeGap": int(
-            resolved.max_conflicts_in_merge_gap
-        ),
-        "mergeOrientation": "either",
+        "maxConflictsInMergeGap": int(resolved.max_conflicts),
+        "mergeOrientation": str(resolved.merge_orientation),
     }
     return snapshot, effective
 

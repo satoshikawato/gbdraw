@@ -24,7 +24,6 @@ from pandas import DataFrame, read_csv  # type: ignore[reportMissingImports]
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityAnchor,
     CollinearityBlock,
-    CollinearityParameters,
     CollinearityResult,
     LosslessCollinearityParameters,
 )
@@ -85,6 +84,71 @@ from .api.requests import (
 CANONICAL_REQUEST_SCHEMA = 4
 SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, 3, 4})
 UNKNOWN_FIELD_POLICY = "reject"
+
+
+@dataclass(frozen=True)
+class _LegacyStandardCollinearityPayload:
+    """Reader-only representation of persisted ``kind=standard`` parameters."""
+
+    min_anchors: int
+    max_gene_gap: int
+    block_merge_gap: int
+    singleton_merge_gap: int
+    max_diagonal_drift: int
+    max_conflicts_in_merge_gap: int
+    max_paralog_links_per_orthogroup: int
+    gap_penalty: float
+    nearby_duplicate_window: int
+    score_mode: Literal["constant", "bitscore"]
+    constant_anchor_score: float
+    min_block_score: float | None
+    block_evalue: float | None
+
+    def validate(self) -> None:
+        if self.min_anchors <= 0:
+            raise ValidationError("collinear_min_anchors must be > 0")
+        if self.max_gene_gap < 0:
+            raise ValidationError("collinear_max_gene_gap must be >= 0")
+        if self.block_merge_gap < 0:
+            raise ValidationError("collinear_block_merge_gap must be >= 0")
+        if self.singleton_merge_gap < 0:
+            raise ValidationError("collinear_singleton_merge_gap must be >= 0")
+        if self.max_diagonal_drift < 0:
+            raise ValidationError("collinear_max_diagonal_drift must be >= 0")
+        if self.max_conflicts_in_merge_gap < 0:
+            raise ValidationError(
+                "collinear_max_conflicts_in_merge_gap must be >= 0"
+            )
+        if self.max_paralog_links_per_orthogroup <= 0:
+            raise ValidationError(
+                "collinear_max_paralog_links_per_orthogroup must be > 0"
+            )
+        if self.gap_penalty < 0:
+            raise ValidationError("collinear_gap_penalty must be >= 0")
+        if self.nearby_duplicate_window < 0:
+            raise ValidationError("collinear_nearby_duplicate_window must be >= 0")
+        if str(self.score_mode) not in {"constant", "bitscore"}:
+            raise ValidationError(
+                "collinear_score_mode must be one of: constant, bitscore"
+            )
+        if self.constant_anchor_score <= 0:
+            raise ValidationError("collinear_constant_anchor_score must be > 0")
+        if self.block_evalue is not None:
+            block_evalue = float(self.block_evalue)
+            if not math.isfinite(block_evalue) or block_evalue < 0:
+                raise ValidationError(
+                    "collinear_block_evalue must be a finite value >= 0 or None"
+                )
+
+    def to_lossless(self) -> LosslessCollinearityParameters:
+        return LosslessCollinearityParameters(
+            min_anchors=self.min_anchors,
+            max_unit_gap=self.max_gene_gap,
+            max_diagonal_drift=self.max_diagonal_drift,
+            max_conflicts=self.max_conflicts_in_merge_gap,
+            merge_orientation="either",
+        )
+
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _TOP_LEVEL_FIELDS = frozenset(
@@ -2026,17 +2090,13 @@ def _encode_pipeline_value(name: str, value: object) -> Any:
     if name == "collinearity_params":
         if value is None:
             return None
-        if isinstance(value, CollinearityParameters):
-            kind = "standard"
-        elif isinstance(value, LosslessCollinearityParameters):
-            kind = "lossless"
-        else:
+        if not isinstance(value, LosslessCollinearityParameters):
             raise CanonicalRequestEncodingError(
                 "Unsupported collinearity parameter object."
             )
         value.validate()
         return {
-            "kind": kind,
+            "kind": "lossless",
             "parameters": {
                 _camel(item.name): _json_value(
                     getattr(value, item.name), path=f"collinearityParams.{item.name}"
@@ -2060,6 +2120,7 @@ def _decode_pipeline(
     _require_exact_fields(settings, path=f"{path}.settings", required=set(field_map))
     mode = item["mode"]
     result = {"protein_blastp_mode": mode}
+    legacy_max_paralog_links: int | None = None
     if schema >= 2:
         pairs = _array(item["pairs"], path=f"{path}.pairs")
         decoded_pairs: list[tuple[int, int]] = []
@@ -2088,28 +2149,43 @@ def _decode_pipeline(
         )
     for key, name in field_map.items():
         raw = settings[key]
-        result[name] = (
-            _decode_collinearity_params(raw, path=f"{path}.settings.{key}")
-            if name == "collinearity_params"
-            else raw
+        if name == "collinearity_params":
+            decoded, legacy_max_paralog_links = _decode_collinearity_params(
+                raw,
+                path=f"{path}.settings.{key}",
+            )
+            result[name] = decoded
+        else:
+            result[name] = raw
+    if (
+        mode == "collinear"
+        and legacy_max_paralog_links is not None
+        and result["collinear_max_paralog_links_per_orthogroup"] == 2
+    ):
+        result["collinear_max_paralog_links_per_orthogroup"] = (
+            legacy_max_paralog_links
         )
     return result
 
 
-def _decode_collinearity_params(value: object, *, path: str) -> object:
+def _decode_collinearity_params(
+    value: object,
+    *,
+    path: str,
+) -> tuple[LosslessCollinearityParameters | None, int | None]:
     if value is None:
-        return None
+        return None, None
     payload = _object(value, path=path, required={"kind", "parameters"})
     kind = payload["kind"]
-    cls: type[CollinearityParameters] | type[LosslessCollinearityParameters]
-    if kind == "standard":
-        cls = CollinearityParameters
-    elif kind == "lossless":
-        cls = LosslessCollinearityParameters
-    else:
+    if kind not in {"standard", "lossless"}:
         raise CanonicalRequestDecodingError(
             f"Unsupported collinearity parameter kind at {path}: {kind!r}."
         )
+    cls = (
+        _LegacyStandardCollinearityPayload
+        if kind == "standard"
+        else LosslessCollinearityParameters
+    )
     parameters = _object(payload["parameters"], path=f"{path}.parameters")
     field_map = {_camel(item.name): item.name for item in fields(cls)}
     _require_exact_fields(
@@ -2118,7 +2194,11 @@ def _decode_collinearity_params(value: object, *, path: str) -> object:
     result = cls(**{name: parameters[key] for key, name in field_map.items()})
     _validate_dataclass_contract(result, path=path, error="decode")
     result.validate()
-    return result
+    if isinstance(result, _LegacyStandardCollinearityPayload):
+        lossless = result.to_lossless()
+        lossless.validate()
+        return lossless, result.max_paralog_links_per_orthogroup
+    return result, None
 
 
 def _decode_output(

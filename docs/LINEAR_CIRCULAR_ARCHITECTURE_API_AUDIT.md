@@ -21,8 +21,10 @@ the root drawing facade routes through those planners, and a one-record
 Current canonical session replay reaches the planners through `render_request`.
 Fresh CLI/Web generation and legacy internal replay remain incomplete. Explicit
 Circular grid/batch request forms and persisted grouping, the corresponding
-schema bump, mode-neutral loading, and removal of legacy
-`CollinearityParameters` also remain future work.
+schema bump, and mode-neutral loading remain future work. Active and public
+runtime collinearity configuration now uses `LosslessCollinearityParameters`;
+supported canonical request schemas 1–4 privately migrate legacy `standard`
+parameter payloads while preserving their effective fields.
 
 ## Executive summary
 

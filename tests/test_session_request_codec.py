@@ -106,6 +106,34 @@ def _payload_for_schema(
     return payload
 
 
+def _standard_collinearity_payload(
+    *,
+    min_anchors: int = 1,
+    max_gene_gap: int = 0,
+    max_diagonal_drift: int = 0,
+    max_conflicts: int = 0,
+    max_paralog_links: int = 9,
+) -> dict[str, Any]:
+    return {
+        "kind": "standard",
+        "parameters": {
+            "minAnchors": min_anchors,
+            "maxGeneGap": max_gene_gap,
+            "blockMergeGap": 50,
+            "singletonMergeGap": 25,
+            "maxDiagonalDrift": max_diagonal_drift,
+            "maxConflictsInMergeGap": max_conflicts,
+            "maxParalogLinksPerOrthogroup": max_paralog_links,
+            "gapPenalty": 1.0,
+            "nearbyDuplicateWindow": 0,
+            "scoreMode": "constant",
+            "constantAnchorScore": 50.0,
+            "minBlockScore": None,
+            "blockEvalue": None,
+        },
+    }
+
+
 def _table() -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -528,6 +556,12 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
         "legend": "bottom",
         "plotTitlePosition": "bottom",
     }
+    generated_pipeline = next(
+        item
+        for item in encoded.payload["comparisons"]
+        if item["kind"] == "generatedProteinComparison"
+    )
+    assert generated_pipeline["settings"]["collinearityParams"]["kind"] == "lossless"
 
     resource_paths = _materialize_resources(encoded, tmp_path / "materialized")
     decoded = decode_canonical_request(
@@ -545,6 +579,119 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
     assert decoded.options.output == request.options.output
     assert decoded.output.output_prefix == "canonical-linear"
     assert encode_canonical_request(decoded).payload == encoded.payload
+
+
+@pytest.mark.parametrize("schema", sorted(SUPPORTED_CANONICAL_REQUEST_SCHEMAS))
+def test_supported_schemas_privately_migrate_standard_collinearity_parameters(
+    tmp_path: Path,
+    schema: int,
+) -> None:
+    source = _source_file(tmp_path / f"standard-{schema}.gbk")
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source)),),
+            options=LinearDiagramOptions(protein_blastp_mode="collinear"),
+        )
+    )
+    payload = _payload_for_schema(encoded, schema)
+    pipeline = next(
+        item
+        for item in payload["comparisons"]
+        if item["kind"] == "generatedProteinComparison"
+    )
+    if schema == 1:
+        pipeline.pop("pairs")
+    pipeline["settings"]["collinearityParams"] = _standard_collinearity_payload(
+        min_anchors=3,
+        max_gene_gap=7,
+        max_diagonal_drift=4,
+        max_conflicts=2,
+    )
+
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / f"standard-{schema}-resources",
+        ),
+        output_directory=tmp_path / f"standard-{schema}-output",
+    )
+
+    assert decoded.options.collinearity_params == LosslessCollinearityParameters(
+        min_anchors=3,
+        max_unit_gap=7,
+        max_diagonal_drift=4,
+        max_conflicts=2,
+        merge_orientation="either",
+    )
+    assert decoded.options.collinear_max_paralog_links_per_orthogroup == 9
+    latest_pipeline = next(
+        item
+        for item in encode_canonical_request(decoded).payload["comparisons"]
+        if item["kind"] == "generatedProteinComparison"
+    )
+    assert latest_pipeline["settings"]["collinearityParams"]["kind"] == "lossless"
+
+
+def test_standard_collinearity_embedded_max_paralog_does_not_override_explicit_setting(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path / "standard-explicit.gbk")
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source)),),
+            options=LinearDiagramOptions(
+                protein_blastp_mode="collinear",
+                collinear_max_paralog_links_per_orthogroup=5,
+            ),
+        )
+    )
+    pipeline = next(
+        item
+        for item in encoded.payload["comparisons"]
+        if item["kind"] == "generatedProteinComparison"
+    )
+    pipeline["settings"]["collinearityParams"] = _standard_collinearity_payload()
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / "standard-explicit-resources",
+        ),
+        output_directory=tmp_path / "standard-explicit-output",
+    )
+
+    assert decoded.options.collinear_max_paralog_links_per_orthogroup == 5
+
+
+def test_standard_collinearity_embedded_max_paralog_is_inert_in_orthogroup_mode(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path / "standard-orthogroup.gbk")
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source)),),
+            options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
+        )
+    )
+    pipeline = next(
+        item
+        for item in encoded.payload["comparisons"]
+        if item["kind"] == "generatedProteinComparison"
+    )
+    pipeline["settings"]["collinearityParams"] = _standard_collinearity_payload()
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / "standard-orthogroup-resources",
+        ),
+        output_directory=tmp_path / "standard-orthogroup-output",
+    )
+
+    assert decoded.options.collinear_max_paralog_links_per_orthogroup == 2
 
 
 def test_schema3_nested_output_prefix_is_required_but_ignored(

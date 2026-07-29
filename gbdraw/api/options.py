@@ -17,7 +17,6 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityBlock,
     CollinearityAnchorMode,
     CollinearityColorMode,
-    CollinearityParameters,
     CollinearityResult,
     CollinearitySearchScope,
     LosslessCollinearityParameters,
@@ -509,7 +508,7 @@ class DiagramOptions:
     protein_comparison_pairs: Sequence[tuple[int, int]] | None = None
     pairwise_match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
-    collinearity_params: CollinearityParameters | LosslessCollinearityParameters | None = None
+    collinearity_params: LosslessCollinearityParameters | None = None
     collinearity_unit_mode: CollinearityUnitMode | str = "auto"
     collinearity_anchor_mode: CollinearityAnchorMode | str = "rbh"
     collinearity_search_scope: CollinearitySearchScope | str = "adjacent"
@@ -759,9 +758,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     collinearity_blocks: (
         CollinearityResult | Sequence[CollinearityBlock] | None
     ) = None
-    collinearity_params: (
-        CollinearityParameters | LosslessCollinearityParameters | None
-    ) = None
+    collinearity_params: LosslessCollinearityParameters | None = None
     collinearity_unit_mode: CollinearityUnitMode | str = "auto"
     collinearity_anchor_mode: CollinearityAnchorMode | str = "rbh"
     collinearity_search_scope: CollinearitySearchScope | str = "adjacent"
@@ -806,7 +803,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
         )
         if self.collinearity_params is not None and not isinstance(
             self.collinearity_params,
-            (CollinearityParameters, LosslessCollinearityParameters),
+            LosslessCollinearityParameters,
         ):
             raise ValidationError(
                 "collinearity_params has an unsupported type."

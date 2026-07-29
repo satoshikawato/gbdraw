@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import gbdraw as public_api
+import gbdraw.analysis as analysis_api
 import gbdraw.api as library_api
 import gbdraw.api.diagram as diagram_api
 import gbdraw.api.options as api_options
@@ -219,6 +220,12 @@ def test_low_level_api_owners_are_explicit() -> None:
         is api_options.CircularDiagramOptions
     )
     assert library_api.LinearDiagramOptions is api_options.LinearDiagramOptions
+    assert "CollinearityParameters" not in library_api.__all__
+    assert not hasattr(library_api, "CollinearityParameters")
+    assert "LosslessCollinearityParameters" in library_api.__all__
+    assert "CollinearityParameters" not in analysis_api.__all__
+    assert not hasattr(analysis_api, "CollinearityParameters")
+    assert "LosslessCollinearityParameters" in analysis_api.__all__
     assert {
         "CircularDiagramOptions",
         "CircularOutputOptions",

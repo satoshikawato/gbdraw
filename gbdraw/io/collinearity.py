@@ -17,7 +17,6 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
-    CollinearityParameters,
     CollinearityResult,
     LosslessCollinearityParameters,
     _filter_blocks_by_min_anchors,
@@ -234,7 +233,7 @@ def parse_native_collinearity_tsv(
     source: str | Path,
     records: Sequence[SeqRecord],
     *,
-    params: CollinearityParameters | LosslessCollinearityParameters | None = None,
+    params: LosslessCollinearityParameters | None = None,
     unit_mode: CollinearityUnitMode | str = "auto",
 ) -> CollinearityResult:
     """Parse and validate native headered collinearity TSV."""
@@ -244,7 +243,7 @@ def parse_native_collinearity_tsv(
     params = params or LosslessCollinearityParameters()
     params.validate()
     min_anchors = int(params.min_anchors)
-    default_anchor_score = float(getattr(params, "constant_anchor_score", 50.0))
+    default_anchor_score = 50.0
     rows = _parse_rows(_read_text(source))
     extraction = extract_cds_proteins(records)
     unit_index = build_collinearity_unit_index(

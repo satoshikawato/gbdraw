@@ -16,7 +16,6 @@ from gbdraw.analysis.collinearity import (
     CollinearityAnchorMode,
     CollinearityBlock,
     CollinearityColorMode,
-    CollinearityParameters,
     CollinearityResult,
     CollinearitySearchScope,
     LosslessCollinearityParameters,
@@ -319,7 +318,7 @@ class LinearComparisonOptions:
     pairs: Sequence[tuple[int, int]] | None = None
     match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
-    collinearity_params: CollinearityParameters | LosslessCollinearityParameters | None = None
+    collinearity_params: LosslessCollinearityParameters | None = None
     collinearity_unit: CollinearityUnitMode | str = "auto"
     collinearity_anchor: CollinearityAnchorMode | str = "rbh"
     collinearity_scope: CollinearitySearchScope | str = "adjacent"

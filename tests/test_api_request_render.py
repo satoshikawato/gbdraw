@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,10 +12,7 @@ from pandas import DataFrame
 from svgwrite import Drawing
 
 import gbdraw.api.request_render as request_render_module
-from gbdraw.analysis.collinearity import (
-    CollinearityParameters,
-    LosslessCollinearityParameters,
-)
+from gbdraw.analysis.collinearity import LosslessCollinearityParameters
 from gbdraw.analysis.protein_colinearity import (
     extract_web_stable_cds_proteins,
 )
@@ -190,7 +186,7 @@ def _derived_identity_test_context(
 
 
 def _derived_entry_for_params(
-    params: CollinearityParameters | LosslessCollinearityParameters | None,
+    params: LosslessCollinearityParameters | None,
 ) -> dict[str, object]:
     context = _derived_identity_test_context(
         options=LinearDiagramOptions(collinearity_params=params)
@@ -258,9 +254,9 @@ def test_derived_identity_includes_hidden_reverse_and_self_raw_inputs(
     ),
     ids=(
         "min-anchors",
-        "max-gene-gap",
+        "max-unit-gap",
         "max-diagonal-drift",
-        "max-conflicts-in-merge-gap",
+        "max-conflicts",
         "merge-orientation",
     ),
 )
@@ -306,65 +302,6 @@ def test_derived_identity_changes_with_each_lossless_collinearity_parameter(
     }
     assert unchanged["key"] == baseline["key"]
     assert changed["key"] != baseline["key"]
-
-
-@pytest.mark.parametrize(
-    ("field_name", "changed_value"),
-    (
-        ("min_anchors", 2),
-        ("max_gene_gap", 26),
-        ("block_merge_gap", 51),
-        ("singleton_merge_gap", 26),
-        ("max_diagonal_drift", 26),
-        ("max_conflicts_in_merge_gap", 2),
-        ("max_paralog_links_per_orthogroup", 3),
-        ("gap_penalty", 2.0),
-        ("nearby_duplicate_window", 1),
-        ("score_mode", "bitscore"),
-        ("constant_anchor_score", 51.0),
-        ("min_block_score", 50.0),
-        ("block_evalue", 0.01),
-    ),
-)
-def test_derived_identity_snapshots_every_legacy_collinearity_parameter(
-    monkeypatch: pytest.MonkeyPatch,
-    field_name: str,
-    changed_value: object,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "is_protein_losat_cache_entry",
-        lambda _entry: True,
-    )
-    baseline_params = CollinearityParameters()
-    baseline = _derived_entry_for_params(baseline_params)
-    unchanged = _derived_entry_for_params(CollinearityParameters())
-    changed = _derived_entry_for_params(
-        replace(baseline_params, **{field_name: changed_value})
-    )
-
-    parameter_identity = baseline["payload"]["identity"]["collinear"][
-        "parameterIdentity"
-    ]
-    assert parameter_identity["model"] == "legacy"
-    assert set(parameter_identity["parameters"]) == {
-        "minAnchors",
-        "maxGeneGap",
-        "blockMergeGap",
-        "singletonMergeGap",
-        "maxDiagonalDrift",
-        "maxConflictsInMergeGap",
-        "maxParalogLinksPerOrthogroup",
-        "gapPenalty",
-        "nearbyDuplicateWindow",
-        "scoreMode",
-        "constantAnchorScore",
-        "minBlockScore",
-        "blockEvalue",
-    }
-    assert unchanged["key"] == baseline["key"]
-    assert changed["key"] != baseline["key"]
-
 
 @pytest.mark.parametrize("mode", ("orthogroup", "collinear"))
 def test_empty_api_derived_result_passes_current_session_validation(

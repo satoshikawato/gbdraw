@@ -34,7 +34,6 @@ from .io import (
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityAnchor,
     CollinearityBlock,
-    CollinearityParameters,
     CollinearityResult,
     CollinearitySearchScope,
     LosslessCollinearityParameters,
@@ -181,7 +180,6 @@ __all__ = [
     # collinearity
     "CollinearityAnchor",
     "CollinearityBlock",
-    "CollinearityParameters",
     "CollinearityResult",
     "CollinearitySearchScope",
     "LosslessCollinearityParameters",

@@ -19,7 +19,6 @@ import gbdraw.diagrams.linear.assemble as linear_assemble_module
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
-    CollinearityParameters,
     CollinearityResult,
     LosslessCollinearityParameters,
     build_collinearity_blocks_from_hits,
@@ -222,30 +221,31 @@ def test_deduplicate_unit_pair_anchors_keeps_strongest_hit() -> None:
 
 
 @pytest.mark.linear
-def test_collinearity_parameters_validates_block_evalue() -> None:
-    CollinearityParameters(block_evalue=None).validate()
-    CollinearityParameters(block_evalue=0).validate()
-    CollinearityParameters(block_evalue=1e-3).validate()
+def test_lossless_collinearity_parameters_validate_domains() -> None:
+    LosslessCollinearityParameters().validate()
 
-    with pytest.raises(ValidationError, match="collinear_block_evalue"):
-        CollinearityParameters(block_evalue=-1).validate()
+    with pytest.raises(ValidationError, match="collinear_max_unit_gap"):
+        LosslessCollinearityParameters(max_unit_gap=-1).validate()
+    with pytest.raises(ValidationError, match="collinear_merge_orientation"):
+        LosslessCollinearityParameters(merge_orientation="invalid").validate()  # type: ignore[arg-type]
 
 
 @pytest.mark.linear
-def test_collinearity_blocks_are_called_without_block_evalue_acceptance() -> None:
+def test_collinearity_blocks_are_called_with_lossless_parameters() -> None:
     anchors = [_anchor(index, index) for index in range(8)]
     result = call_collinearity_blocks(
         anchors,
-        params=CollinearityParameters(min_anchors=5, max_gene_gap=1),
+        params=LosslessCollinearityParameters(min_anchors=5, max_unit_gap=1),
     )
 
     assert len(result.blocks) == 1
-    assert result.blocks[0].kind == "syntenic"
+    assert result.blocks[0].kind == "cluster"
     assert result.blocks[0].block_evalue is None
 
 
 @pytest.mark.linear
 def test_collinearity_block_evalue_uses_genomic_coordinates_not_unit_order() -> None:
+    assert "calculate_collinearity_block_evalue" in collinearity_module.__all__
     positions = [100, 110, 120, 130, 1100]
     anchors = [
         _anchor(
@@ -281,7 +281,7 @@ def test_collinearity_block_evalue_uses_genomic_coordinates_not_unit_order() -> 
 def test_pairwise_singleton_anchor_is_emitted_by_default() -> None:
     result = call_collinearity_blocks(
         [_anchor(0, 0)],
-        params=CollinearityParameters(),
+        params=LosslessCollinearityParameters(),
     )
 
     assert len(result.blocks) == 1
@@ -294,7 +294,7 @@ def test_min_anchors_drops_singleton_blocks() -> None:
     anchor = _anchor(0, 0)
     result = call_collinearity_blocks(
         [anchor],
-        params=CollinearityParameters(min_anchors=2),
+        params=LosslessCollinearityParameters(min_anchors=2),
     )
 
     assert result.blocks == ()
@@ -303,7 +303,11 @@ def test_min_anchors_drops_singleton_blocks() -> None:
 
 @pytest.mark.linear
 def test_native_block_caller_detects_plus_and_minus_orientation() -> None:
-    params = CollinearityParameters(min_anchors=3, max_gene_gap=1, block_evalue=None)
+    params = LosslessCollinearityParameters(
+        min_anchors=3,
+        max_unit_gap=1,
+        merge_orientation="order",
+    )
 
     plus = call_collinearity_blocks([_anchor(0, 0), _anchor(1, 1), _anchor(2, 2)], params=params)
     minus = call_collinearity_blocks([_anchor(0, 2), _anchor(1, 1), _anchor(2, 0)], params=params)
@@ -317,7 +321,7 @@ def test_native_block_caller_detects_plus_and_minus_orientation() -> None:
 
 @pytest.mark.linear
 def test_single_anchor_block_orientation_uses_feature_strands() -> None:
-    params = CollinearityParameters(min_anchors=1, max_gene_gap=0, block_evalue=2)
+    params = LosslessCollinearityParameters(min_anchors=1, max_unit_gap=0)
 
     same_strand = call_collinearity_blocks(
         [_anchor(0, 0, query_strand=1, subject_strand=1)],
@@ -407,11 +411,9 @@ def test_build_blocks_from_hits_one_to_one_removes_query_to_many_noise() -> None
         [_hit_row("sb0", "qa0", bitscore=300), _hit_row("sb1", "qa0", bitscore=250)],
         columns=COMPARISON_COLUMNS,
     )
-    params = CollinearityParameters(
+    params = LosslessCollinearityParameters(
         min_anchors=1,
-        max_gene_gap=0,
-        nearby_duplicate_window=0,
-        block_evalue=2,
+        max_unit_gap=0,
     )
 
     all_hits = build_collinearity_blocks_from_hits(
@@ -465,11 +467,9 @@ def test_build_blocks_from_hits_rbh_uses_reverse_best_hits() -> None:
         [_hit_row("sb0", "qa0", bitscore=300), _hit_row("sb1", "qa0", bitscore=400)],
         columns=COMPARISON_COLUMNS,
     )
-    params = CollinearityParameters(
+    params = LosslessCollinearityParameters(
         min_anchors=1,
-        max_gene_gap=0,
-        nearby_duplicate_window=0,
-        block_evalue=2,
+        max_unit_gap=0,
     )
 
     one_to_one = build_collinearity_blocks_from_hits(
@@ -642,7 +642,7 @@ def test_build_blocks_from_hits_maps_proteins_to_units() -> None:
         [hits],
         extraction,
         records=records,
-        params=CollinearityParameters(min_anchors=3, max_gene_gap=1, block_evalue=None),
+        params=LosslessCollinearityParameters(min_anchors=3, max_unit_gap=1),
         anchor_mode="one_to_one",
         reverse_hits_by_pair=[reverse_hits],
     )
@@ -1715,13 +1715,13 @@ def test_native_tsv_parser_resolves_records_and_units_and_writer_round_trips() -
     result = parse_native_collinearity_tsv(
         text,
         records,
-        params=CollinearityParameters(min_anchors=2),
+        params=LosslessCollinearityParameters(min_anchors=2),
     )
     written = write_native_collinearity_tsv(result)
     reparsed = parse_native_collinearity_tsv(
         StringIO(written).getvalue(),
         records,
-        params=CollinearityParameters(min_anchors=2),
+        params=LosslessCollinearityParameters(min_anchors=2),
     )
 
     assert result.blocks[0].block_id == "block_a"
@@ -1817,7 +1817,7 @@ def test_native_tsv_parser_rejects_conflicting_block_evalues() -> None:
         parse_native_collinearity_tsv(
             text,
             records,
-            params=CollinearityParameters(min_anchors=2),
+            params=LosslessCollinearityParameters(min_anchors=2),
         )
 
 

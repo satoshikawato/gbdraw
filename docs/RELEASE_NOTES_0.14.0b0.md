@@ -107,9 +107,10 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 
 The remaining planner work covers fresh CLI/Web generation and legacy internal
 replay. Explicit grid/batch request forms, persisted grouping and its schema
-bump, mode-neutral loading, and removal of the legacy
-`CollinearityParameters` type in favor of `LosslessCollinearityParameters`
-remain future work.
+bump, and mode-neutral loading remain future work. Active and public runtime
+collinearity configuration uses `LosslessCollinearityParameters`; supported
+canonical request schemas 1–4 privately migrate legacy `standard` parameter
+payloads while preserving their effective fields.
 
 ## Compact LOSATP runtime handles and session version 36
 

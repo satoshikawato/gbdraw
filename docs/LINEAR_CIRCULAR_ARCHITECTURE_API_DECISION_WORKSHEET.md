@@ -443,14 +443,16 @@ Implemented through 2026-07-29:
   those planners. Current canonical session replay also reaches the planners
   through `render_request`. A one-record `CircularLayout` is valid and produces
   a 1×1 grid.
+- Active and public runtime collinearity configuration uses
+  `LosslessCollinearityParameters`. Readers for supported canonical request
+  schemas 1–4 privately migrate legacy `standard` parameter payloads while
+  preserving their effective fields.
 
 The remaining A1 and O4 work under `O6.delivery=A` is to route fresh CLI/Web
 generation and legacy internal replay through the planners; add explicit grid
 and batch request forms with persisted grouping and the required schema bump;
-and complete mode-neutral loading. The legacy `CollinearityParameters` type also
-remains to be replaced by `LosslessCollinearityParameters`. `DiagramOptions` and
-the internal assembler implementations remain as an internal compatibility
-bridge while those entry points migrate; they are not the canonical typed
-request options.
+and complete mode-neutral loading. `DiagramOptions` and the internal assembler
+implementations remain as an internal compatibility bridge while those entry
+points migrate; they are not the canonical typed request options.
 
 [Architecture/API audit](./LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md) | [Python API](./PYTHON_API.md) | [API improvement plan](./PYTHON_API_IMPROVEMENT_PLAN.md)

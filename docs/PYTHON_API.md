@@ -290,9 +290,11 @@ reader boundary.
 Current canonical session replay reaches the same planners through
 `render_request`. The remaining migration covers fresh CLI/Web generation and
 legacy internal replay. Explicit grid/batch request forms, persisted grouping
-and its schema bump, mode-neutral loading, and replacement of legacy
-`CollinearityParameters` with `LosslessCollinearityParameters` remain future
-work.
+and its schema bump, and mode-neutral loading remain future work. Active and
+public runtime collinearity configuration uses
+`LosslessCollinearityParameters`; supported canonical request schemas 1–4
+privately migrate legacy `standard` parameter payloads while preserving their
+effective fields.
 
 Pin a gbdraw version in reproducible pipelines and test representative output after
 upgrading. SVG geometry can change intentionally even when the Python call remains
