@@ -10,8 +10,14 @@
 
 ## Implementation status
 
-This audit describes the 2026-07-28 baseline. Phase 0 and Phase 1 are now
-implemented. Typed requests use `CircularDiagramOptions` and
+This audit describes the 2026-07-28 baseline; the decision worksheet is the
+current implementation record. Phase 0, Phase 1, the compatibility cleanup
+approved under `O3.api=B`, and the A1/O4 delivery are complete. Phase 2 remains
+a separately scoped follow-up. The findings and evidence below retain their
+baseline wording so that the reasons for the completed changes remain
+reviewable.
+
+Typed requests use `CircularDiagramOptions` and
 `LinearDiagramOptions`, with mode-specific `CircularTrackOptions`,
 `LinearTrackOptions`, `CircularOutputOptions`, and `LinearOutputOptions`.
 `CircularDiagramRequest` explicitly represents `single` and `grid`, while
@@ -611,9 +617,9 @@ Mode planners should own:
 - comparison/conservation preparation;
 - final mode-specific layout plans.
 
-## Recommended implementation order
+## Implementation status and remaining order
 
-### Phase 0 — restore deterministic semantics
+### Phase 0 — restore deterministic semantics (complete)
 
 1. Fix the web Circular threshold default leak.
 2. Choose and centralize the Linear Python default profile.
@@ -624,12 +630,12 @@ Mode planners should own:
 These changes address current output and reproducibility problems without a broad
 refactor.
 
-### Phase 1 — establish one request boundary
+### Phase 1 — establish one request boundary (complete)
 
 1. Route root API, CLI, web/session, and replay through canonical typed requests.
 2. Move output destination ownership to `RenderOutputRequest`.
-3. Mark large assembler signatures and mixed `DiagramOptions` as advanced/internal
-   compatibility APIs.
+3. Keep large assembler signatures and mixed `DiagramOptions` as internal
+   implementation bridges below the planners.
 4. Add mode-specific nested options and eager layout validation.
 
 Phase 1 is complete through `CircularDiagramOptions`, `LinearDiagramOptions`,
@@ -638,7 +644,7 @@ their mode-specific track and output bundles, and `CircularRequestPlan`,
 generation, current canonical replay, and legacy internal replay all reach the
 typed planners.
 
-### Phase 2 — remove duplicated state and planners
+### Phase 2 — remove duplicated state and planners (separate follow-up)
 
 1. Resolve one immutable mode render profile from typed configuration.
 2. Consolidate record-placement grammar, annotation planning, and shared track-slot
@@ -646,14 +652,24 @@ typed planners.
 3. Move Circular radial contracts into `gbdraw.layout`.
 4. Require prepared feature layers in render groups.
 5. Replace mutable canvas layout attributes with explicit layout/context objects.
+6. Consolidate Web preference state into one per-mode authority with computed
+   active values.
 
-### Phase 3 — compatibility cleanup
+Phase 2 is outside the A1/O4 completion criteria. Before implementation, define
+the code-reduction target and the specific superseded paths or contracts to
+delete so that consolidation does not add another parallel layer.
 
-1. Deprecate legacy `--depth` forms and unused CLI helpers.
-2. Remove dead/typo configuration keys after a warning period.
-3. Make web help and output naming explicitly mode-aware.
-4. Reduce `gbdraw.api.__all__` to a documented stable surface plus an explicitly
-   advanced namespace.
+### Phase 3 — compatibility cleanup (complete under `O3.api=B`)
+
+1. Retired executable legacy GC/skew and Depth spellings and unused CLI/config
+   helpers were removed. Supported persisted session data still migrates under
+   `O3.data=A`.
+2. Dead and typo configuration keys were removed from fresh executable and
+   configuration inputs; supported persisted-data readers retain migration
+   under `O3.data=A`.
+3. Web help and output naming were made explicitly mode-aware.
+4. `gbdraw.api` was reduced to the documented typed integration surface;
+   low-level assemblers remain internal engine APIs.
 
 ## Verification performed
 
@@ -669,8 +685,9 @@ The audit used static call-path tracing and focused executable checks:
 - traced modern and legacy feature preparation through both main assemblers and
   fallback render-group paths.
 
-This document is an audit and prioritization report. It does not change runtime
-behavior or declare compatibility removals; the output-affecting decisions in D1
-require an explicit release decision and migration note.
+This document preserves the baseline audit and prioritization history. Owner
+decisions, compatibility removals, and current implementation status are
+recorded in the decision worksheet and the Implementation status section above.
+The remaining architecture follow-up identified by this audit is Phase 2.
 
 [Decision worksheet](./LINEAR_CIRCULAR_ARCHITECTURE_API_DECISION_WORKSHEET.md) | [Python API](./PYTHON_API.md) | [DiagramOptions audit](./DIAGRAM_OPTIONS_AUDIT.md) | [API improvement plan](./PYTHON_API_IMPROVEMENT_PLAN.md)

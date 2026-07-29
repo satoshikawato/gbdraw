@@ -460,11 +460,22 @@ Implemented through 2026-07-29:
   `LosslessCollinearityParameters`. Readers for supported canonical request
   schemas 1–5 privately migrate legacy `standard` parameter payloads while
   preserving their effective fields.
+- Local release verification is complete: the full non-slow suite and all 108 Web
+  packaging checks passed, followed on 2026-07-29 by both large-genome slow
+  regressions (`test_nc_010162_large_genome` and
+  `test_majani_full_comparison`). The slow run produced no tracked reference
+  output changes. The LOSAT cache browser acceptance also passed with the Python
+  Playwright fallback (22,570 assertions) after its SVG inspection was moved to
+  semantic record hooks.
 
 A1 and O4 are complete under `O6.delivery=A`. Schema 5 persists explicit
 `single` / `grid` / `batch` grouping and uses an output object for one diagram
 or an output array for Circular batch. `DiagramOptions` and the internal
 assembler implementations remain implementation bridges below the planners;
 they are not canonical request options or alternate orchestration paths.
+
+Audit Phase 2 is a separately scoped follow-up, not an A1/O4 completion
+criterion. Define its code-reduction target and concrete deletion set before
+implementation.
 
 [Architecture/API audit](./LINEAR_CIRCULAR_ARCHITECTURE_API_AUDIT.md) | [Python API](./PYTHON_API.md) | [API improvement plan](./PYTHON_API_IMPROVEMENT_PLAN.md)

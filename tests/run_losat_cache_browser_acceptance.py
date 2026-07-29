@@ -94,16 +94,25 @@ _LAYOUT_INSPECTION_SCRIPT = """async () => {
     }
   }
 
-  const indexedGroups = (pattern) => directGroups
+  const indexedSemanticGroups = (predicate) => directGroups
+    .filter(predicate)
     .map((element) => {
-      const match = String(element.id || '').match(pattern);
-      return match ? { element, index: Number(match[1]) - 1 } : null;
+      const rawIndex = element.getAttribute('data-gbdraw-record-index');
+      const index = rawIndex === null || String(rawIndex).trim() === ''
+        ? Number.NaN
+        : Number(rawIndex);
+      return Number.isInteger(index) && index >= 0 ? { element, index } : null;
     })
     .filter(Boolean)
     .sort((left, right) => left.index - right.index);
-  const recordGroups = indexedGroups(/_record_(\\d+)$/)
-    .filter(({ element }) => !String(element.id).includes('_definition_'));
-  const definitionGroups = indexedGroups(/_definition_record_(\\d+)$/);
+  const definitionRoles = new Set(['record-definition', 'record-definition-row']);
+  const recordGroups = indexedSemanticGroups((element) => (
+    element.hasAttribute('data-gbdraw-record-id') &&
+    !definitionRoles.has(String(element.getAttribute('data-gbdraw-role') || '').trim())
+  ));
+  const definitionGroups = indexedSemanticGroups((element) => (
+    String(element.getAttribute('data-gbdraw-role') || '').trim() === 'record-definition'
+  ));
   const screenBox = (element) => {
     const box = element.getBoundingClientRect();
     return {
