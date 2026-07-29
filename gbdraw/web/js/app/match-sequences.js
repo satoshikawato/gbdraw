@@ -1,4 +1,5 @@
 import { formatFastaEntry } from './feature-sequence-fasta.js';
+import { orderedConservationSources } from './conservation-series.js';
 
 const IUPAC_COMPLEMENT = Object.freeze({
   A: 'T', C: 'G', G: 'C', T: 'A', U: 'A',
@@ -246,4 +247,169 @@ export const parseSequenceRecords = (value) => {
   });
   if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
   return records.filter((record) => record.sequence);
+};
+
+const parseGenbankSequenceRecords = (value) => {
+  const records = [];
+  String(value ?? '').split(/^\/\/\s*$/m).forEach((chunk) => {
+    const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
+    if (!originMatch) return;
+    const locus = text(chunk.match(/^LOCUS\s+(\S+)/m)?.[1]);
+    const accession = text(chunk.match(/^ACCESSION\s+(\S+)/m)?.[1]);
+    const version = text(chunk.match(/^VERSION\s+(\S+)/m)?.[1]);
+    const sequence = normalizedSequence(originMatch[1].replace(/[^A-Za-z]/g, ''));
+    if (!sequence) return;
+    const recordId = version || accession || locus || `record_${records.length + 1}`;
+    records.push({
+      recordId,
+      header: recordId,
+      aliases: Array.from(new Set([recordId, version, accession, locus].filter(Boolean))),
+      sequence
+    });
+  });
+  return records;
+};
+
+const parseInputSequenceRecords = (fileText, inputType) => (
+  text(inputType).toLowerCase() === 'gb'
+    ? parseGenbankSequenceRecords(fileText)
+    : parseSequenceRecords(fileText).map((record) => ({
+        ...record,
+        aliases: Array.from(new Set([record.recordId, record.header].filter(Boolean)))
+      }))
+);
+
+const selectInputSequenceRecord = (records, selectorValue) => {
+  if (!records.length) return null;
+  const selector = text(selectorValue);
+  if (!selector) return records[0];
+  if (selector.startsWith('#')) {
+    const recordIndex = Number(selector.slice(1)) - 1;
+    return Number.isInteger(recordIndex) ? records[recordIndex] || null : null;
+  }
+  const matches = records.filter((record) => (
+    record.recordId === selector ||
+    (Array.isArray(record.aliases) && record.aliases.includes(selector))
+  ));
+  return matches.length === 1 ? matches[0] : null;
+};
+
+const materializeLinearSequenceRecord = (record, sequenceState) => {
+  if (!record) return null;
+  const startRaw = sequenceState?.region_start;
+  const endRaw = sequenceState?.region_end;
+  const hasStart = startRaw !== null && startRaw !== undefined && startRaw !== '';
+  const hasEnd = endRaw !== null && endRaw !== undefined && endRaw !== '';
+  if (hasStart !== hasEnd) return null;
+
+  let sequence = normalizedSequence(record.sequence);
+  let reverse = Boolean(sequenceState?.region_reverse);
+  if (hasStart) {
+    const start = Number(startRaw);
+    const end = Number(endRaw);
+    if (
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      start < 1 ||
+      end < 1 ||
+      start > sequence.length ||
+      end > sequence.length
+    ) return null;
+    sequence = sequence.slice(Math.min(start, end) - 1, Math.max(start, end));
+    reverse = reverse || start > end;
+  }
+  return {
+    ...record,
+    sequence: reverse ? reverseComplementNucleotide(sequence) : sequence
+  };
+};
+
+const readInputSequenceRecords = async (file, inputType) => {
+  if (!file || typeof file.text !== 'function') return [];
+  return parseInputSequenceRecords(await file.text(), inputType);
+};
+
+/**
+ * Rebuild the transient match-sequence registry after loading a web session.
+ *
+ * Sessions already contain the source files, so sequence strings do not need a
+ * second persisted copy. Sources that were never supplied (for example, a
+ * BLAST upload without its optional comparison FASTA) remain unavailable.
+ */
+export const buildRestoredMatchSequenceSources = async ({
+  mode,
+  cInputType,
+  lInputType,
+  files,
+  linearSeqs,
+  circularConservation
+} = {}) => {
+  const sources = [];
+  if (text(mode).toLowerCase() === 'linear') {
+    const inputType = text(lInputType).toLowerCase() === 'gff' ? 'fasta' : 'gb';
+    for (let recordIndex = 0; recordIndex < (linearSeqs || []).length; recordIndex += 1) {
+      const sequenceState = linearSeqs[recordIndex] || {};
+      const file = inputType === 'gb' ? sequenceState.gb : sequenceState.fasta;
+      const records = await readInputSequenceRecords(file, inputType);
+      const selected = selectInputSequenceRecord(records, sequenceState.region_record_id);
+      const record = materializeLinearSequenceRecord(selected, sequenceState);
+      if (!record?.sequence) continue;
+      sources.push({
+        key: `linear:record:${recordIndex}`,
+        recordId: record.recordId,
+        aliases: record.aliases,
+        sequence: record.sequence,
+        origin: 'linear-record',
+        recordIndex
+      });
+    }
+    return sources;
+  }
+
+  const circularInputType = text(cInputType).toLowerCase() === 'gff' ? 'fasta' : 'gb';
+  const referenceFile = circularInputType === 'gb' ? files?.c_gb : files?.c_fasta;
+  const referenceRecords = await readInputSequenceRecords(referenceFile, circularInputType);
+  referenceRecords.forEach((record, recordIndex) => {
+    sources.push({
+      key: `circular:record:${recordIndex}`,
+      recordId: record.recordId,
+      aliases: record.aliases,
+      sequence: record.sequence,
+      origin: 'circular-reference',
+      recordIndex
+    });
+  });
+
+  const sourceMode = text(circularConservation?.source).toLowerCase() === 'upload'
+    ? 'upload'
+    : 'losat';
+  const comparisonFiles = sourceMode === 'upload'
+    ? (files?.c_conservation_sequence_sources || [])
+    : (files?.c_conservation_fastas || []);
+  const orderedComparisonFiles = sourceMode === 'upload'
+    ? orderedConservationSources(
+        files?.c_conservation_blasts || [],
+        circularConservation
+      ).map((entry) => comparisonFiles[entry.sourceIndex] || null)
+    : orderedConservationSources(
+        comparisonFiles,
+        circularConservation
+      ).map((entry) => entry.file);
+  for (let displayIndex = 0; displayIndex < orderedComparisonFiles.length; displayIndex += 1) {
+    const records = await readInputSequenceRecords(
+      orderedComparisonFiles[displayIndex],
+      'fasta'
+    );
+    records.forEach((record) => {
+      sources.push({
+        key: `homology:comparison:${displayIndex}:${record.recordId}`,
+        recordId: record.recordId,
+        aliases: record.aliases,
+        sequence: record.sequence,
+        origin: 'homology-comparison',
+        sourceIndex: displayIndex
+      });
+    });
+  }
+  return sources;
 };

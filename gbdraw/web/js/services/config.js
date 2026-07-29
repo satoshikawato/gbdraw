@@ -71,11 +71,12 @@ import {
   classifyFeatureMetadataState,
   hasUsableBiologicalFeatureCatalog
 } from '../app/session-feature-metadata.js';
+import { buildRestoredMatchSequenceSources } from '../app/match-sequences.js';
 import {
   buildCanonicalSessionRequest,
   projectCanonicalSessionRequest
 } from './session-request.js';
-import { promoteGallerySessionToCanonicalV3 } from './gallery-session-migration.js';
+import { promoteGallerySessionToCurrent } from './gallery-session-migration.js';
 import { downloadCompressedSession, readSessionText } from './session-file.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
@@ -120,9 +121,8 @@ const { nextTick } = window.Vue;
 const SESSION_VERSION = 39;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 36, 37, 38, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, SESSION_VERSION
 ]);
-const CURRENT_ARTIFACT_SESSION_VERSIONS = new Set([36, 37, 38, SESSION_VERSION]);
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
@@ -1005,7 +1005,7 @@ const rejectInvalidLosatCacheKeys = (entries, owner, { requireKey = false } = {}
 };
 
 export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
-  if (!CURRENT_ARTIFACT_SESSION_VERSIONS.has(sourceSessionVersion)) return;
+  if (sourceSessionVersion !== SESSION_VERSION) return;
   const rawEntries = sessionArtifactEntries(data, 'losatCache');
   const derivedEntries = sessionArtifactEntries(data, 'losatDerivedCache');
   const manifest = data.proteinIdentityManifest;
@@ -1066,10 +1066,7 @@ export const buildSessionLegacyArtifacts = ({
 };
 
 const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
-  const readsLegacyOptionValues = (
-    sourceSessionVersion < SESSION_VERSION ||
-    Number(data.renderRequest?.schema) <= 3
-  );
+  const readsLegacyOptionValues = sourceSessionVersion < SESSION_VERSION;
   const migratedOptions = readsLegacyOptionValues
     ? migratePersistedWebOptionValues(data.config)
     : data.config;
@@ -1203,7 +1200,7 @@ const preflightSessionImport = (rawData) => {
     sourceSessionVersion >= 31 &&
     Number(normalizedData.renderRequest?.schema) === 2
     )
-    ? promoteGallerySessionToCanonicalV3(normalizedData)
+    ? promoteGallerySessionToCurrent(normalizedData)
     : normalizedData;
   validateSessionLosatArtifacts(promotedData, sourceSessionVersion);
   const data = migrateSessionDataToCurrent(promotedData, sourceSessionVersion);
@@ -1213,6 +1210,7 @@ const preflightSessionImport = (rawData) => {
         resources: data.resources,
         webFiles: data.webFiles,
         legacyFiles: data.files,
+        storedConfig: data.config,
         fileBindings: data.cliInvocation?.fileBindings,
         linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
@@ -2197,6 +2195,9 @@ export const serializeFiles = async () => {
     c_fasta: await serializeFile(state.files.c_fasta),
     c_depth: await serializeDepthFile(state.files.c_depth),
     c_conservation_blasts: await serializeFileArray(state.files.c_conservation_blasts),
+    c_conservation_blasts_source: state.files.c_conservation_blasts_source === 'losat-cache'
+      ? 'losat-cache'
+      : null,
     c_conservation_fastas: await serializeFileArray(state.files.c_conservation_fastas),
     c_conservation_sequence_sources: await Promise.all(
       (Array.isArray(state.files.c_conservation_sequence_sources) ? state.files.c_conservation_sequence_sources : [])
@@ -2219,6 +2220,7 @@ const applyFiles = (filesData) => {
   state.files.c_fasta = null;
   state.files.c_depth = null;
   state.files.c_conservation_blasts = [];
+  state.files.c_conservation_blasts_source = null;
   state.files.c_conservation_fastas = [];
   state.files.c_conservation_sequence_sources = [];
   state.files.d_color = null;
@@ -2242,6 +2244,9 @@ const applyFiles = (filesData) => {
   state.files.c_conservation_blasts = Array.isArray(filesData.c_conservation_blasts)
     ? filesData.c_conservation_blasts.map((entry) => deserializeFile(entry)).filter(Boolean)
     : [];
+  state.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'
+    ? 'losat-cache'
+    : null;
   state.files.c_conservation_fastas = Array.isArray(filesData.c_conservation_fastas)
     ? filesData.c_conservation_fastas.map((entry) => deserializeFile(entry)).filter(Boolean)
     : [];
@@ -3114,6 +3119,19 @@ export const importSession = async (e, options = {}) => {
       canonicalSession ? projectionResult.restoredFiles : data.files
     );
     reconcileDepthTrackStateAfterSessionFiles();
+    try {
+      const sequenceSources = await buildRestoredMatchSequenceSources({
+        mode: state.mode.value,
+        cInputType: state.cInputType.value,
+        lInputType: state.lInputType.value,
+        files: state.files,
+        linearSeqs: state.linearSeqs,
+        circularConservation: state.circularConservation
+      });
+      state.matchSequenceRegistry?.reset?.(sequenceSources);
+    } catch (sequenceError) {
+      console.warn('Session loaded, but match sequence recovery failed.', sequenceError);
+    }
     if (canonicalSession) {
       applyLosatCache(
         projectionResult.artifactState.losatCache?.entries,

@@ -488,14 +488,14 @@ assert.equal(gridCanonical.renderRequest.grouping, 'grid');
 assert.equal(gridCanonical.renderRequest.output.prefix, 'dup');
 assert.equal(projectCanonicalSessionRequest(gridCanonical).config.form.multi_record_canvas, true);
 
-const legacyCountGridCanonical = structuredClone(implicitBatchCanonical);
-legacyCountGridCanonical.renderRequest.schema = 4;
-delete legacyCountGridCanonical.renderRequest.grouping;
-legacyCountGridCanonical.renderRequest.output = implicitBatchCanonical.renderRequest.output[0];
-assert.equal(
-  projectCanonicalSessionRequest(legacyCountGridCanonical).config.form.multi_record_canvas,
-  true
-);
+for (const schema of [3, 4]) {
+  const branchOnlyCanonical = structuredClone(implicitBatchCanonical);
+  branchOnlyCanonical.renderRequest.schema = schema;
+  assert.throws(
+    () => projectCanonicalSessionRequest(branchOnlyCanonical),
+    /Unsupported canonical renderRequest schema/
+  );
+}
 const missingCurrentGrouping = structuredClone(canonical);
 delete missingCurrentGrouping.renderRequest.grouping;
 assert.throws(
@@ -678,8 +678,9 @@ assert.equal(
   'rectangle'
 );
 
-const currentRepeatCanonical = structuredClone(legacyRepeatCanonical);
-currentRepeatCanonical.renderRequest.schema = 3;
+const currentRepeatCanonical = structuredClone(canonical);
+currentRepeatCanonical.renderRequest.diagramOptions.selectedFeaturesSet = ['repeat_region'];
+delete currentRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region;
 assert.equal(
   projectCanonicalSessionRequest(currentRepeatCanonical).config.adv.feature_shapes.repeat_region,
   'underlay'
@@ -784,7 +785,14 @@ assert.throws(
 );
 
 const blastTable = { ...genbank, name: 'hits.tsv', data: btoa('ref\tcmp\t99\t4\t0\t0\t1\t4\t4\t1\t1e-20\t50\n') };
+const blastTableB = { ...genbank, name: 'hits-b.tsv', data: btoa('ref\tcmp_b\t98\t4\t0\t0\t1\t4\t4\t1\t1e-18\t45\n') };
 const comparisonFasta = { ...genbank, name: 'comparison.fna', data: btoa('>cmp\nAACCGG\n') };
+const comparisonFastaB = {
+  ...comparisonFasta,
+  name: 'comparison-b.fna',
+  data: btoa('>cmp_b\nTTGGCC\n')
+};
+state.circularConservation.source = 'upload';
 state.circularConservation.reference = 'subject';
 state.circularConservation.labels = 'Comparison';
 state.circularConservation.series = [{ label: 'Comparison', color: '#E15759' }];
@@ -820,12 +828,135 @@ assert.deepEqual(
     label: entry.label,
     color: entry.color
   })),
-  [{ sourceIndex: 0, label: 'Comparison', color: '#E15759' }]
+  [{ sourceIndex: 0, label: 'Comparison', color: '#e15759' }]
 );
 assert.equal(
   conservationProjection.config.circularConservation.series[0].fileName,
   conservationProjection.files.c_conservation_blasts[0].name
 );
+
+state.circularConservation.labels = 'Stale A,Stale B';
+state.circularConservation.series = [
+  { sourceIndex: 1, label: 'Edited B', color: '#4E79A7' },
+  { sourceIndex: 0, label: 'Edited A', color: '#E15759' }
+];
+const reorderedUploadCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable, blastTableB],
+    c_conservation_sequence_sources: [comparisonFasta, comparisonFastaB]
+  }
+});
+assert.deepEqual(
+  reorderedUploadCanonical.renderRequest.diagramOptions.conservationLabels,
+  ['Edited B', 'Edited A']
+);
+assert.deepEqual(
+  reorderedUploadCanonical.renderRequest.diagramOptions.conservationColors,
+  ['#4e79a7', '#e15759']
+);
+assert.deepEqual(
+  reorderedUploadCanonical.renderRequest.diagramOptions.conservationBlastFiles
+    .map((ref) => reorderedUploadCanonical.resources[ref.resourceId].data),
+  [blastTableB.data, blastTable.data]
+);
+assert.deepEqual(
+  reorderedUploadCanonical.renderRequest.diagramOptions.conservationFastaFiles
+    .map((ref) => reorderedUploadCanonical.resources[ref.resourceId].data),
+  [comparisonFastaB.data, comparisonFasta.data]
+);
+const reorderedUploadProjection = projectCanonicalSessionRequest(reorderedUploadCanonical);
+assert.deepEqual(
+  reorderedUploadProjection.config.circularConservation.series.map((entry) => entry.label),
+  ['Edited B', 'Edited A']
+);
+
+state.circularConservation.source = 'losat';
+state.circularConservation.series = [
+  { sourceIndex: 1, label: 'Comparison B', color: '#4E79A7' },
+  { sourceIndex: 0, label: 'Comparison A', color: '#E15759' }
+];
+const losatConservationCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable],
+    c_conservation_fastas: [comparisonFasta, comparisonFastaB]
+  }
+});
+assert.equal(
+  losatConservationCanonical.renderRequest.diagramOptions.conservationBlastFiles,
+  undefined
+);
+assert.deepEqual(
+  losatConservationCanonical.webFiles.conservationLosatFastaSources,
+  [
+    'conservation-losat-fasta-files-1',
+    'conservation-losat-fasta-files-2'
+  ]
+);
+assert.equal(
+  losatConservationCanonical.resources['conservation-losat-fasta-files-1'].data,
+  comparisonFasta.data
+);
+assert.deepEqual(
+  projectCanonicalSessionRequest(losatConservationCanonical)
+    .files.c_conservation_fastas.map((file) => file.data),
+  [comparisonFasta.data, comparisonFastaB.data]
+);
+const losatReplayCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable, blastTableB],
+    c_conservation_blasts_source: 'losat-cache',
+    c_conservation_fastas: [comparisonFasta, comparisonFastaB]
+  }
+});
+assert.equal(
+  losatReplayCanonical.renderRequest.diagramOptions.conservationBlastFiles.length,
+  2
+);
+assert.deepEqual(
+  losatReplayCanonical.renderRequest.diagramOptions.conservationBlastFiles
+    .map((ref) => losatReplayCanonical.resources[ref.resourceId].data),
+  [blastTableB.data, blastTable.data]
+);
+assert.deepEqual(
+  losatReplayCanonical.renderRequest.diagramOptions.conservationLabels,
+  ['Comparison B', 'Comparison A']
+);
+assert.equal(losatReplayCanonical.webFiles.conservationBlastSource, 'losat-cache');
+assert.deepEqual(
+  losatReplayCanonical.webFiles.conservationLosatFastaSources
+    .map((resourceId) => losatReplayCanonical.resources[resourceId].data),
+  [comparisonFastaB.data, comparisonFasta.data]
+);
+const losatReplayProjection = projectCanonicalSessionRequest(losatReplayCanonical);
+assert.equal(losatReplayProjection.files.c_conservation_blasts_source, 'losat-cache');
+state.circularConservation = {
+  ...losatReplayProjection.config.circularConservation,
+  source: 'losat'
+};
+const losatResavedCanonical = buildCanonicalSessionRequest({
+  state,
+  filesData: losatReplayProjection.files
+});
+assert.equal(
+  losatResavedCanonical.renderRequest.diagramOptions.conservationBlastFiles.length,
+  2
+);
+const oldDerivedSession = structuredClone(losatReplayCanonical);
+delete oldDerivedSession.webFiles.conservationBlastSource;
+assert.equal(
+  projectCanonicalSessionRequest({
+    ...oldDerivedSession,
+    storedConfig: { circularConservation: { source: 'losat' } }
+  }).files.c_conservation_blasts_source,
+  'losat-cache'
+);
+state.circularConservation.source = 'upload';
 state.circularConservation.reference = 'auto';
 state.circularConservation.labels = '';
 state.circularConservation.series = [];
@@ -887,7 +1018,7 @@ assert.equal(projection.config.adv.min_bitscore, 50);
 assert.equal(projection.config.adv.identity, 70);
 assert.equal(projection.config.adv.alignment_length, 0);
 const legacyCircularLabelScope = structuredClone(canonical);
-legacyCircularLabelScope.renderRequest.schema = 3;
+legacyCircularLabelScope.renderRequest.schema = 2;
 legacyCircularLabelScope.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
 legacyCircularLabelScope.renderRequest.diagramOptions.configOverrides = {
   show_labels: true,
@@ -907,7 +1038,7 @@ assert.equal(
   'out'
 );
 const legacyOutputCanonical = structuredClone(canonical);
-legacyOutputCanonical.renderRequest.schema = 3;
+legacyOutputCanonical.renderRequest.schema = 2;
 legacyOutputCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored-nested';
 assert.equal(
   projectCanonicalSessionRequest(legacyOutputCanonical).config.form.prefix,
@@ -937,7 +1068,7 @@ assert.throws(
   () => projectCanonicalSessionRequest(currentCircularOptions),
   /Circular multi-record size mode/
 );
-for (const schema of [1, 2, 3]) {
+for (const schema of [1, 2]) {
   const sparseCircularCanonical = structuredClone(canonical);
   sparseCircularCanonical.renderRequest.schema = schema;
   sparseCircularCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
@@ -1020,7 +1151,7 @@ assert.deepEqual(customTrackProjection.config.adv.circular_track_slots[1], {
 });
 
 const legacyCircularSlotsCanonical = structuredClone(canonical);
-legacyCircularSlotsCanonical.renderRequest.schema = 3;
+legacyCircularSlotsCanonical.renderRequest.schema = 2;
 legacyCircularSlotsCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
 legacyCircularSlotsCanonical.renderRequest.diagramOptions.tracks = {
   circularTrackSlots: [
@@ -1199,7 +1330,7 @@ delete state.adv.def_font_size;
 delete state.adv.label_font_size;
 delete state.adv.linear_definition_line_styles;
 const legacyLinearOptions = structuredClone(linearCanonical);
-legacyLinearOptions.renderRequest.schema = 3;
+legacyLinearOptions.renderRequest.schema = 2;
 legacyLinearOptions.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
 legacyLinearOptions.renderRequest.diagramOptions.configOverrides = {
   label_placement: 'on_feature',
@@ -1317,7 +1448,7 @@ const linearProjection = projectCanonicalSessionRequest(linearCanonical);
 assert.equal(linearProjection.config.adv.comparison_height, 42.5);
 assert.equal(linearProjection.config.form.show_labels_linear, 'none');
 let sparseLinearCanonical;
-for (const schema of [1, 2, 3]) {
+for (const schema of [1, 2]) {
   sparseLinearCanonical = structuredClone(linearCanonical);
   sparseLinearCanonical.renderRequest.schema = schema;
   sparseLinearCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
@@ -1827,6 +1958,7 @@ if (projectSessionIndex >= 0) {
     resources: session.resources,
     webFiles: session.webFiles,
     legacyFiles: session.files,
+    storedConfig: session.config,
     fileBindings: session.cliInvocation?.fileBindings,
     linearTrackSlotSchemaVersion: Number(session.version) <= 32 ? 1 : 2
   });
@@ -1875,6 +2007,11 @@ if (projectSessionIndex >= 0) {
     assert.equal(projectedSession.config.adv.axis_stroke_width, 2);
     assert.equal(projectedSession.config.adv.def_font_size, 16);
     assert.equal(projectedSession.config.filterMode, 'None');
+  }
+  if (sessionPath.includes('WSSV_genome_comparison')) {
+    assert.equal(projectedSession.files.c_conservation_blasts.length, 20);
+    assert.equal(projectedSession.files.c_conservation_blasts_source, 'losat-cache');
+    assert.equal((projectedSession.files.c_conservation_fastas || []).length, 0);
   }
 }
 

@@ -83,13 +83,13 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   and `reserve`. Use `inner_gap_px` and `outer_gap_px`; reservation and
   compression are derived from current slot geometry and `side`.
 - Those retired forms remain readable only through supported persisted-session
-  and canonical request schema 1–3 migration. The active
+  and canonical request schema 1 and 2 migration. The active
   `--annotation-table` alias for `--annotation_table` and
   `--gc_content_tick_interval` alias for
   `--gc_content_large_tick_interval` are unchanged and are not removals.
 - The private `__gbdraw_legacy_spacing` transport is confined to canonical
-  request schema 1–3 and old-session readers and is never emitted by schema 4
-  or 5 writers. Pixel spacing migrates to explicit inner and outer pixel gaps.
+  request schema 1 and 2 readers and is never emitted by the current schema 5
+  writer. Pixel spacing migrates to explicit inner and outer pixel gaps.
   Factor-based spacing can still be replayed, but it cannot be re-saved
   losslessly by the current schema 5 writer; replace it with explicit
   `inner_gap_px` and `outer_gap_px` first.
@@ -121,16 +121,16 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   first available `_2`, `_3`, ... suffix. Circular grid output uses the first
   record ID by default and preserves an explicit prefix unchanged. Batch
   sessions preserve the explicit grouping and every resolved output.
-- Session version 38 introduced canonical request schema 5 and persisted explicit `single`,
-  `grid`, or `batch` grouping. Schema 5 stores one output object for a single
-  diagram or grid and an output array for Circular batch. Record loading is
-  mode-neutral; planners own topology warnings and mode, comparison, and
-  cardinality policy.
+- Current session version 39 uses canonical request schema 5 and persists
+  explicit `single`, `grid`, or `batch` grouping. Schema 5 stores one output
+  object for a single diagram or grid and an output array for Circular batch.
+  Record loading is mode-neutral; planners own topology warnings and mode,
+  comparison, and cardinality policy.
 
 Active and public runtime collinearity configuration uses
-`LosslessCollinearityParameters`; supported canonical request schemas 1–5
-privately migrate legacy `standard` parameter payloads while preserving their
-effective fields.
+`LosslessCollinearityParameters`; canonical request schemas 1 and 2 privately
+migrate legacy `standard` parameter payloads while preserving their effective
+fields. Current schema 5 accepts only the lossless form.
 
 Phase 2 completes the internal state/planner consolidation:
 
@@ -149,13 +149,11 @@ Phase 2 completes the internal state/planner consolidation:
   implementation bridge is removed. Builders accept only the mode-specific
   typed option contracts.
 
-## Compact LOSATP runtime handles and session version 36
+## Compact LOSATP runtime handles
 
-- Session version 36 introduced canonical `renderRequest` schema 3 and compact
-  runtime handles. Version 36 remains readable after the version 37/schema 4
-  output-ownership cleanup; public typed conversion is available for canonical
-  versions 31–33 and 36–39. Versions 34 and 35 were branch-internal
-  development formats and are not supported.
+- Current session version 39 and canonical `renderRequest` schema 5 store
+  compact runtime handles. Public typed conversion is available for canonical
+  session versions 31–33 and 39; versions 27–30 remain CLI replay inputs.
 - Generated protein FASTA, raw LOSATP QUERY/SUBJECT fields, protein maps, and derived comparison references now use deterministic session-global handles with the form `h_[a-z2-7]{26}`. The handles bind a record instance to the complete CDS feature identity without repeating long feature hashes or readable aliases in every hit row. Upload filenames, modification times, session resource names, display aliases, and reopen time do not determine the handle or raw-cache identity.
 - Current protein raw cache entries use schema 4, derived comparison payloads use schema 3, and the protein identity manifest uses schema 2. The manifest remains the authority for complete feature identity and display metadata and separates runtime binding from display binding. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
 - **Save Raw LOSAT TSV** hydrates generated protein results at download time: it resolves every internal handle through the manifest and replaces only QUERY and SUBJECT with readable, percent-encoded protein or feature aliases. Duplicate aliases receive deterministic short ordinals. Row order, columns 3–12, numeric text, comments, and line endings are preserved; an unresolved or wrong-binding handle aborts the download instead of exposing an internal ID. User-uploaded comparison TSV is never rewritten.
@@ -167,8 +165,8 @@ Phase 2 completes the internal state/planner consolidation:
 - New configurations render `repeat_region` as an underlay: the interval covers the full feature band behind foreground glyphs and is excluded from overlap lanes and feature labels. Use `repeat_region=rectangle` to restore the previous appearance.
 - Underlays are generic to any feature type and retain resolved colors, feature legends, interactive metadata, search/edit behavior, and protein-comparison eligibility. Rendering assignments do not change feature visibility.
 - Automatic feature underlays are private render-time highlights, not saved region annotations. Custom track stacks require exactly one enabled feature slot when a visible underlay exists.
-- Session version 36/schema 3 and version 37/schema 4 record the new default.
-  Sessions 27–33 and schema 1/2 requests with no repeat assignment migrate to
+- Current session version 39/schema 5 records the new default. Supported older
+  sessions and schema 1/2 requests with no repeat assignment migrate to
   `repeat_region=rectangle` so visual replay remains stable.
 
 ## Python/Web session version 33
@@ -371,7 +369,7 @@ New drawing code should prefer the top-level interface described above.
 ## Session API boundary
 
 The public session bridge accepts canonical documents from versions 31–33 and
-36–39.
+39.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
@@ -382,15 +380,12 @@ canonical `ui.layoutPreferences` tree; supported older fields migrate on load.
 Schema 5 persists
 explicit Circular `single`, `grid`, or `batch` grouping; batch output is an
 array with one resolved entry per record, while other requests use one output
-object. Version 37/schema 4 introduced sole output-prefix ownership at
-`renderRequest.output.prefix`; readers retain schemas 1–3 and ignore the legacy
-nested prefix. Version 36/schema 3 documents, including the bundled Gallery
-sessions, remain supported inputs. Versions 27 through 30 can be regenerated
-with `gbdraw circular --session` or
+object. `renderRequest.output.prefix` is the sole output-prefix owner; schema 1
+and 2 readers ignore the legacy nested prefix. Versions 27 through 30 can be
+regenerated with `gbdraw circular --session` or
 `gbdraw linear --session`. Public typed conversion rejects them with
 `SessionVersionError` instead of reconstructing a request from `cliInvocation` or
-GUI state. The
-[session API ADR](./ADR_PYTHON_SESSION_API.md) records the version 31 boundary and
-the temporary-resource lifetime contract.
+GUI state. Paths decoded by `materialize_session` remain valid only inside the
+active materialization context.
 
 [Home](./DOCS.md) | [Python API](./PYTHON_API.md) | [Export](./EXPORT.md)

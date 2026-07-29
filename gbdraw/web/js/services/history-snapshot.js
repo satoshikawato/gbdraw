@@ -274,6 +274,9 @@ const buildFilesData = (state, fileStore) => ({
   c_fasta: fileStore.describeValue(state.files?.c_fasta),
   c_depth: fileStore.describeValue(state.files?.c_depth),
   c_conservation_blasts: fileStore.describeValue(state.files?.c_conservation_blasts || []),
+  c_conservation_blasts_source: state.files?.c_conservation_blasts_source === 'losat-cache'
+    ? 'losat-cache'
+    : null,
   c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
   c_conservation_sequence_sources: fileStore.describeValue(state.files?.c_conservation_sequence_sources || []),
   d_color: fileStore.describeValue(state.files?.d_color),
@@ -314,6 +317,9 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
   state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
     ? restore(filesData.c_conservation_blasts).filter(Boolean)
     : [];
+  state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
+    ? 'losat-cache'
+    : null;
   state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
     ? restore(filesData.c_conservation_fastas).filter(Boolean)
     : [];

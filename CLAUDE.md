@@ -128,6 +128,32 @@ Architecture changes should keep these entry points convergent:
 - Avoid repeated I/O or computation in shared layers, and protect material
   performance changes with measurements.
 
+### Persisted-format compatibility
+
+- Compatibility readers and migrators require evidence that the old contract
+  existed in the first-parent history of `main` or in a release tag, plus a
+  representative positive fixture. Track session, request, cache, metadata, and
+  other schema namespaces separately.
+- Keep the current writer format even before it reaches `main`. If an active branch
+  advances that format again, rewrite branch-owned artifacts to the newest format
+  before merge and remove the superseded reader, migrator, fixture, test, and user
+  documentation. Do not chain migrations through or advertise branch-only
+  intermediate versions.
+
+### Working-tree overwrite policy
+
+- Uncommitted state is not a preservation requirement in this repository. When an
+  in-scope fix conflicts with dirty code, tests, documentation, fixtures, or
+  generated artifacts, replace the uncommitted implementation as needed to make
+  the result correct and internally consistent.
+- Inspect the existing diff before editing so the replacement is deliberate.
+  Keep files unrelated to the requested work out of scope; this policy does not
+  authorize broad cleanup or deletion elsewhere in the working tree.
+- Treat Gallery sessions, source SVGs, rendered examples, thumbnails, and
+  `examples.json` as generator-owned outputs. A requested Gallery refresh may
+  overwrite dirty copies directly; regenerate them from the current code and
+  declared inputs instead of merging or preserving their previous bytes.
+
 ### Data Flow
 
 1. **Input:** GenBank/GFF3+FASTA files
@@ -204,7 +230,7 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 ## CI/CD
 
 - **Python versions tested:** 3.10, 3.11, 3.12
-- **Lint job:** Uses ruff for code formatting checks (currently non-blocking with `continue-on-error: true`)
+- **Lint job:** Uses Ruff 0.15.12 and blocks CI on lint failures
 - **CairoSVG job:** Separate test on Python 3.11 requiring system packages (`libcairo2-dev`, `libpango1.0-dev` on Ubuntu)
 - **Slow tests:** Only run on push to main branch
 
@@ -253,6 +279,13 @@ normal test runs do not write to `tests/reference_outputs/`.
 
 ## Documentation
 
+- Always read and apply `.agents/skills/avoid-ai-writing/SKILL.md` when auditing
+  or changing documentation, tutorials, CLI/UI text, release notes, reports, or
+  handoff/commit prose, even when the user does not name the Skill. Start with a
+  detect pass, make only targeted edits, and verify the final text again.
+- Preserve exact technical terms, UI labels, CLI options, identifiers, and
+  scientifically necessary qualifications. Do not make prose less accurate merely
+  to avoid a statistical writing pattern.
 - Main docs: `docs/DOCS.md`
 - Tutorials: `docs/TUTORIALS/`
 - CLI Reference: `docs/CLI_Reference.md`

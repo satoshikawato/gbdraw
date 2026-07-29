@@ -105,7 +105,7 @@ def _payload_for_schema(
     if schema == 1:
         payload["records"][0].pop("recordKey", None)
     nested_output = payload["diagramOptions"].get("output")
-    if schema in {1, 2, 3} and nested_output is not None:
+    if schema in {1, 2} and nested_output is not None:
         nested_output["outputPrefix"] = "ignored-legacy-prefix"
     return payload
 
@@ -188,37 +188,32 @@ def test_schema5_round_trips_circular_batch_grouping_and_outputs(
     ]
 
 
-@pytest.mark.parametrize(
-    ("grouping", "expected"),
-    (("single", "single"), ("grid", "grid")),
-)
-def test_schema4_reader_infers_one_record_circular_grouping(
+@pytest.mark.parametrize("schema", (3, 4))
+def test_branch_only_request_schemas_are_rejected(
     tmp_path: Path,
-    grouping: str,
-    expected: str,
+    schema: int,
 ) -> None:
-    source = _source_file(tmp_path / f"{grouping}.gbk")
+    source = _source_file(tmp_path / "record.gbk")
     encoded = encode_canonical_request(
         CircularDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
-            grouping=grouping,
         )
     )
     payload = copy.deepcopy(encoded.payload)
-    payload["schema"] = 4
-    payload.pop("grouping")
+    payload["schema"] = schema
 
-    decoded = decode_canonical_request(
-        payload,
-        resource_paths=_materialize_resources(
-            encoded,
-            tmp_path / f"{grouping}-resources",
-        ),
-        output_directory=tmp_path / f"{grouping}-output",
-    )
-
-    assert isinstance(decoded, CircularDiagramRequest)
-    assert decoded.grouping == expected
+    with pytest.raises(
+        CanonicalRequestDecodingError,
+        match=f"Unsupported canonical request schema: {schema}",
+    ):
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(
+                encoded,
+                tmp_path / "resources",
+            ),
+            output_directory=tmp_path / "output",
+        )
 
 
 def test_codec_module_does_not_import_cli_or_legacy_session_owners() -> None:
@@ -659,7 +654,7 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 
-@pytest.mark.parametrize("schema", sorted(SUPPORTED_CANONICAL_REQUEST_SCHEMAS))
+@pytest.mark.parametrize("schema", (1, 2))
 def test_supported_schemas_privately_migrate_standard_collinearity_parameters(
     tmp_path: Path,
     schema: int,
@@ -724,15 +719,16 @@ def test_standard_collinearity_embedded_max_paralog_does_not_override_explicit_s
             ),
         )
     )
+    payload = _payload_for_schema(encoded, 2)
     pipeline = next(
         item
-        for item in encoded.payload["comparisons"]
+        for item in payload["comparisons"]
         if item["kind"] == "generatedProteinComparison"
     )
     pipeline["settings"]["collinearityParams"] = _standard_collinearity_payload()
 
     decoded = decode_canonical_request(
-        encoded.payload,
+        payload,
         resource_paths=_materialize_resources(
             encoded,
             tmp_path / "standard-explicit-resources",
@@ -753,15 +749,16 @@ def test_standard_collinearity_embedded_max_paralog_is_inert_in_orthogroup_mode(
             options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
         )
     )
+    payload = _payload_for_schema(encoded, 2)
     pipeline = next(
         item
-        for item in encoded.payload["comparisons"]
+        for item in payload["comparisons"]
         if item["kind"] == "generatedProteinComparison"
     )
     pipeline["settings"]["collinearityParams"] = _standard_collinearity_payload()
 
     decoded = decode_canonical_request(
-        encoded.payload,
+        payload,
         resource_paths=_materialize_resources(
             encoded,
             tmp_path / "standard-orthogroup-resources",
@@ -772,7 +769,38 @@ def test_standard_collinearity_embedded_max_paralog_is_inert_in_orthogroup_mode(
     assert decoded.options.collinear_max_paralog_links_per_orthogroup == 2
 
 
-def test_schema3_nested_output_prefix_is_required_but_ignored(
+def test_current_schema_rejects_standard_collinearity_parameters(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path / "current-standard.gbk")
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source)),),
+            options=LinearDiagramOptions(protein_blastp_mode="collinear"),
+        )
+    )
+    pipeline = next(
+        item
+        for item in encoded.payload["comparisons"]
+        if item["kind"] == "generatedProteinComparison"
+    )
+    pipeline["settings"]["collinearityParams"] = _standard_collinearity_payload()
+
+    with pytest.raises(
+        CanonicalRequestDecodingError,
+        match="Unsupported collinearity parameter kind",
+    ):
+        decode_canonical_request(
+            encoded.payload,
+            resource_paths=_materialize_resources(
+                encoded,
+                tmp_path / "current-standard-resources",
+            ),
+            output_directory=tmp_path / "current-standard-output",
+        )
+
+
+def test_schema2_nested_output_prefix_is_required_but_ignored(
     tmp_path: Path,
 ) -> None:
     source = _source_file(tmp_path / "record.gbk")
@@ -789,7 +817,7 @@ def test_schema3_nested_output_prefix_is_required_but_ignored(
         )
     )
     legacy_payload = copy.deepcopy(encoded.payload)
-    legacy_payload["schema"] = 3
+    legacy_payload["schema"] = 2
     legacy_payload.pop("grouping", None)
     legacy_payload["diagramOptions"]["output"]["outputPrefix"] = "ignored-nested"
 
@@ -841,7 +869,7 @@ def test_current_schema_rejects_legacy_nested_output_prefix(tmp_path: Path) -> N
         )
 
 
-@pytest.mark.parametrize("schema", [1, 2, 3])
+@pytest.mark.parametrize("schema", [1, 2])
 def test_legacy_circular_schemas_migrate_removed_layout_values(
     tmp_path: Path,
     schema: int,
@@ -991,7 +1019,7 @@ def test_legacy_factor_spacing_replays_but_cannot_leak_into_current_schema(
         )
     )
     payload = copy.deepcopy(encoded.payload)
-    payload["schema"] = 3
+    payload["schema"] = 2
     payload.pop("grouping", None)
     payload["diagramOptions"]["tracks"] = {
         "circularTrackSlots": [
@@ -1024,7 +1052,7 @@ def test_legacy_factor_spacing_replays_but_cannot_leak_into_current_schema(
         encode_canonical_request(decoded)
 
 
-def test_schema3_migrates_removed_feature_table_field(
+def test_schema2_migrates_removed_feature_table_field(
     tmp_path: Path,
 ) -> None:
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
@@ -1038,7 +1066,7 @@ def test_schema3_migrates_removed_feature_table_field(
         )
     )
     payload = copy.deepcopy(encoded.payload)
-    payload["schema"] = 3
+    payload["schema"] = 2
     payload.pop("grouping", None)
     diagram_options = payload["diagramOptions"]
     diagram_options["featureTable"] = diagram_options.pop(
@@ -1308,7 +1336,7 @@ def test_current_writer_serializes_resolved_mode_defaults(
         assert encoded.payload["diagramOptions"][name] == expected
 
 
-@pytest.mark.parametrize("schema", [1, 2, 3])
+@pytest.mark.parametrize("schema", [1, 2])
 @pytest.mark.parametrize(
     ("request_type", "expected_overrides"),
     [
@@ -1614,7 +1642,7 @@ def test_supported_schemas_migrate_legacy_full_config_label_settings(
     assert "allow_inner_labels" not in latest_config["canvas"]["circular"]
 
 
-@pytest.mark.parametrize("schema", [1, 2, 3])
+@pytest.mark.parametrize("schema", [1, 2])
 @pytest.mark.parametrize(
     ("legacy_layout", "current_layout"),
     [
@@ -1711,7 +1739,7 @@ def test_current_schema_rejects_retired_config_overrides(
             payload,
             resource_paths=_materialize_resources(
                 encoded,
-                tmp_path / "schema4-retired-overrides",
+                tmp_path / "current-schema-retired-overrides",
             ),
             output_directory=tmp_path / "output",
         )

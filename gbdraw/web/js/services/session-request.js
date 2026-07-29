@@ -37,6 +37,7 @@ import {
   parseDepthTrackIndexIdentity
 } from '../app/depth-track-state.js';
 import { buildDisambiguatedRecordEntries } from '../app/record-options.js';
+import { orderedConservationSources } from '../app/conservation-series.js';
 import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
@@ -62,9 +63,11 @@ import {
 } from '../app/current-option-values.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 5;
-const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([1, 2, 3, 4, 5]);
+const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
+  1, 2, CANONICAL_REQUEST_SCHEMA
+]);
 
-// Canonical schemas 1-3 omitted values that matched the former shared API
+// Canonical schemas 1-2 omitted values that matched the former shared API
 // defaults. Keep those values stable when reading sparse persisted requests.
 const HISTORICAL_COMPARISON_DEFAULTS = Object.freeze({
   bitscore: 50,
@@ -920,18 +923,37 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
     diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(state.adv.keep_full_definition_with_plot_title);
     diagramOptions.species = String(state.form.species || '').trim() || null;
     diagramOptions.strain = String(state.form.strain || '').trim() || null;
-    const conservation = Array.isArray(filesData.c_conservation_blasts)
+    const conservationSource = String(
+      state.circularConservation.source || ''
+    ).trim().toLowerCase();
+    const conservationBlastsAreDerived = (
+      filesData.c_conservation_blasts_source === 'losat-cache'
+    );
+    const conservation = (
+      conservationSource === 'upload' || conservationBlastsAreDerived
+    ) && Array.isArray(filesData.c_conservation_blasts)
       ? filesData.c_conservation_blasts
       : [];
     if (conservation.length > 0) {
-      diagramOptions.conservationBlastFiles = conservation.map((entry, index) => fileRef(
-        resources.addFile(`conservation-blast-files-${index + 1}`, 'conservation-blast-file', entry)
+      const conservationEntries = orderedConservationSources(
+        conservation,
+        state.circularConservation
+      );
+      diagramOptions.conservationBlastFiles = conservationEntries.map((entry, index) => fileRef(
+        resources.addFile(
+          `conservation-blast-files-${index + 1}`,
+          'conservation-blast-file',
+          entry.file
+        )
       ));
       const comparisonSources = Array.isArray(filesData.c_conservation_sequence_sources)
         ? filesData.c_conservation_sequence_sources
         : [];
-      if (comparisonSources.some(Boolean)) {
-        diagramOptions.conservationFastaFiles = comparisonSources.map((entry, index) => (
+      const orderedComparisonSources = conservationEntries.map(
+        (entry) => comparisonSources[entry.sourceIndex] || null
+      );
+      if (orderedComparisonSources.some(Boolean)) {
+        diagramOptions.conservationFastaFiles = orderedComparisonSources.map((entry, index) => (
           entry
             ? fileRef(resources.addFile(
               `conservation-fasta-files-${index + 1}`,
@@ -942,12 +964,33 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
         ));
       }
       diagramOptions.conservationReference = String(state.circularConservation.reference || 'auto');
-      diagramOptions.conservationLabels = String(state.circularConservation.labels || '')
-        .split(',').map((value) => value.trim()).filter(Boolean);
-      diagramOptions.conservationColors = (state.circularConservation.series || [])
-        .map((entry) => String(entry?.color || '').trim()).filter(Boolean);
+      diagramOptions.conservationLabels = conservationEntries.map((entry) => entry.label);
+      diagramOptions.conservationColors = conservationEntries.map((entry) => entry.color);
       diagramOptions.conservationRingWidth = optionalNumber(state.circularConservation.ring_width);
       diagramOptions.conservationRingGap = optionalNumber(state.circularConservation.ring_gap);
+      if (conservationBlastsAreDerived) {
+        webFiles.conservationBlastSource = 'losat-cache';
+      }
+    }
+    if (conservationSource === 'losat') {
+      let comparisonFastas = Array.isArray(filesData.c_conservation_fastas)
+        ? filesData.c_conservation_fastas.filter(Boolean)
+        : [];
+      if (conservationBlastsAreDerived && comparisonFastas.length > 0) {
+        comparisonFastas = orderedConservationSources(
+          comparisonFastas,
+          state.circularConservation
+        ).map((entry) => entry.file);
+      }
+      if (comparisonFastas.length > 0) {
+        webFiles.conservationLosatFastaSources = comparisonFastas.map((entry, index) => (
+          resources.addFile(
+            `conservation-losat-fasta-files-${index + 1}`,
+            'conservation-fasta-file',
+            entry
+          )
+        ));
+      }
     }
   } else {
     diagramOptions.pairwiseMatchStyle = String(state.adv.pairwise_match_style || 'ribbon');
@@ -1399,7 +1442,7 @@ const validateCanonicalAssemblyOutput = (value, schema) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Canonical diagramOptions.output must be an object.');
   }
-  const required = schema <= 3
+  const required = schema <= 2
     ? ['outputPrefix', 'legend', 'plotTitlePosition']
     : ['legend', 'plotTitlePosition'];
   const keys = Object.keys(value);
@@ -1418,7 +1461,7 @@ const validateCanonicalAssemblyOutput = (value, schema) => {
 };
 
 const canonicalGrouping = (renderRequest, records) => {
-  if (renderRequest.schema < 5) {
+  if (renderRequest.schema <= 2) {
     if (renderRequest.mode === 'linear') return 'single';
     return Object.keys(renderRequest.layout || {}).length > 0 || records.length > 1
       ? 'grid'
@@ -1504,6 +1547,7 @@ export const projectCanonicalSessionRequest = ({
   resources: canonicalResources,
   webFiles = {},
   legacyFiles = null,
+  storedConfig = null,
   fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false
@@ -1628,7 +1672,7 @@ export const projectCanonicalSessionRequest = ({
   validateCanonicalAssemblyOutput(options.output, renderRequest.schema);
   const projectedCircularSizeMode = renderRequest.mode === 'circular'
     ? (
-        renderRequest.schema <= 3
+        renderRequest.schema <= 2
           ? migratePersistedCircularMultiRecordSizeMode(
               renderRequest.layout?.multiRecordSizeMode
             )
@@ -1710,6 +1754,15 @@ export const projectCanonicalSessionRequest = ({
     files.c_conservation_blasts = options.conservationBlastFiles
       .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null)
       .filter(Boolean);
+    const storedConservationSource = String(
+      storedConfig?.circularConservation?.source || ''
+    ).trim().toLowerCase();
+    if (
+      webMetadata.conservationBlastSource === 'losat-cache' ||
+      storedConservationSource === 'losat'
+    ) {
+      files.c_conservation_blasts_source = 'losat-cache';
+    }
   }
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationFastaFiles)) {
     files.c_conservation_sequence_sources = options.conservationFastaFiles.map((ref) => (
@@ -1723,12 +1776,22 @@ export const projectCanonicalSessionRequest = ({
       (resourceId) => (resourceId ? resourceAsLegacyFile(resources, resourceId) : null)
     );
   }
+  if (
+    renderRequest.mode === 'circular'
+    && Array.isArray(webMetadata.conservationLosatFastaSources)
+  ) {
+    files.c_conservation_fastas = webMetadata.conservationLosatFastaSources
+      .map((resourceId) => (
+        resourceId ? resourceAsLegacyFile(resources, resourceId) : null
+      ))
+      .filter(Boolean);
+  }
   const explicitOverrides = Object.fromEntries(
     Object.entries(options.configOverrides || {}).filter(
       ([, value]) => value !== null && value !== undefined
     )
   );
-  const legacySparseDefaults = renderRequest.schema <= 3;
+  const legacySparseDefaults = renderRequest.schema <= 2;
   const currentTrackDefaults = trackDefaultsForMode(renderRequest.mode);
   const sparseConfigDefaults = legacySparseDefaults
     ? HISTORICAL_CONFIG_OVERRIDES[renderRequest.mode]
@@ -1757,14 +1820,14 @@ export const projectCanonicalSessionRequest = ({
   };
   const projectedLinearLabelPlacement = renderRequest.mode === 'linear'
     ? (
-        renderRequest.schema <= 3
+        renderRequest.schema <= 2
           ? migratePersistedLinearLabelPlacement(overrides.label_placement)
           : requireCurrentLinearLabelPlacement(overrides.label_placement)
       )
     : 'auto';
   const projectedLinearTrackLayout = renderRequest.mode === 'linear'
     ? (
-        renderRequest.schema <= 3
+        renderRequest.schema <= 2
           ? migratePersistedLinearTrackLayout(overrides.linear_track_layout)
           : requireCurrentLinearTrackLayout(overrides.linear_track_layout)
       )
@@ -1781,7 +1844,7 @@ export const projectCanonicalSessionRequest = ({
         ? tracks.circularTrackSlots.map((slot, index) => (
             slot && typeof slot === 'object' && !Array.isArray(slot)
               ? normalizeCircularTrackSlot(
-                  renderRequest.schema <= 3
+                  renderRequest.schema <= 2
                     ? projectLegacyCanonicalCircularSlot(slot)
                     : projectCanonicalCircularSlot(slot),
                   index,
@@ -1790,7 +1853,7 @@ export const projectCanonicalSessionRequest = ({
                 )
               : parseCircularTrackSlotSpecs(
                   [
-                    renderRequest.schema <= 3
+                    renderRequest.schema <= 2
                       ? migrateLegacyCircularTrackSlotSpec(slot)
                       : slot
                   ],

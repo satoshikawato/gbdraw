@@ -32,10 +32,7 @@ SESSION_FORMAT = "gbdraw-session"
 CURRENT_SESSION_VERSION = 39
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 36, 37, 38, CURRENT_SESSION_VERSION}
-)
-CURRENT_ARTIFACT_SESSION_VERSIONS = frozenset(
-    {36, 37, 38, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, CURRENT_SESSION_VERSION}
 )
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
 NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
@@ -575,6 +572,15 @@ def validate_session(session: Mapping[str, Any]) -> None:
             raise ValidationError(
                 f"Session version {version} requires a canonical renderRequest object."
             )
+        request_schema = render_request.get("schema")
+        if not isinstance(request_schema, int) or isinstance(request_schema, bool):
+            raise ValidationError("renderRequest.schema must be an integer.")
+        from .session_request_codec import SUPPORTED_CANONICAL_REQUEST_SCHEMAS
+
+        if request_schema not in SUPPORTED_CANONICAL_REQUEST_SCHEMAS:
+            raise ValidationError(
+                f"Unsupported canonical renderRequest schema: {request_schema}."
+            )
         if not isinstance(resources, Mapping):
             raise ValidationError(
                 f"Session version {version} requires a canonical resources object."
@@ -586,7 +592,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         files = session.get("files")
         if files is None or not isinstance(files, Mapping):
             raise ValidationError("Session files are required for CLI regeneration.")
-    if version in CURRENT_ARTIFACT_SESSION_VERSIONS:
+    if version == CURRENT_SESSION_VERSION:
         validate_current_session_artifacts(session)
 
 
@@ -634,6 +640,7 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
 def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     """Validate current cache, manifest, and legacy artifact boundaries."""
 
+    _validate_current_web_state_field_names(session.get("config"))
     session_version = session.get("version")
     cache_entries = _artifact_entries(session, "losatCache")
     protein_entries: list[Mapping[str, Any]] = []
@@ -710,6 +717,33 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     derived_evidence = legacy_artifacts.get("proteinDerivedEvidence")
     if derived_evidence is not None:
         _validate_legacy_derived_evidence(derived_evidence)
+
+
+def _validate_current_web_state_field_names(config: object) -> None:
+    if not isinstance(config, Mapping):
+        return
+    adv = config.get("adv")
+    if isinstance(adv, Mapping):
+        if "depth_tick_interval" in adv:
+            raise ValidationError(
+                "Web state field adv.depth_tick_interval is obsolete; "
+                "use adv.depth_large_tick_interval."
+            )
+        depth_tracks = adv.get("depth_tracks")
+        if isinstance(depth_tracks, list):
+            for index, track in enumerate(depth_tracks):
+                if isinstance(track, Mapping) and "tick_interval" in track:
+                    raise ValidationError(
+                        f"Web state field adv.depth_tracks[{index}].tick_interval "
+                        "is obsolete; use large_tick_interval."
+                    )
+    losat = config.get("losat")
+    blastp = losat.get("blastp") if isinstance(losat, Mapping) else None
+    if isinstance(blastp, Mapping) and "collinearMaxGeneGap" in blastp:
+        raise ValidationError(
+            "Web state field losat.blastp.collinearMaxGeneGap is obsolete; "
+            "use losat.blastp.collinearMaxUnitGap."
+        )
 
 
 def normalize_current_session_artifacts(
@@ -1571,8 +1605,7 @@ def write_session_json(path: str | Path, payload: Mapping[str, Any]) -> None:
     """Write plain or ``.gz`` session JSON with an atomic replacement."""
 
     expanded_payload = expand_session_feature_catalog(payload)
-    if expanded_payload.get("version") in CURRENT_ARTIFACT_SESSION_VERSIONS:
-        validate_session(expanded_payload)
+    validate_session(expanded_payload)
     serialized_payload = compact_session_feature_catalog(expanded_payload)
 
     output_path = Path(path)

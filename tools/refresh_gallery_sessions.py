@@ -38,9 +38,11 @@ from gbdraw.session_io import (  # noqa: E402
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
 from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT  # noqa: E402
 from gbdraw.tracks.circular import (  # noqa: E402
+    CircularTrackSlot,
     normalize_circular_track_slots_with_axis,
     parse_circular_track_slots,
 )
+from gbdraw.tracks.scalars import ScalarSpec  # noqa: E402
 
 
 GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
@@ -292,10 +294,10 @@ def _promote_gallery_session(
 ) -> None:
     if source_path.is_file():
         source_session = load_session(source_path)
-        if source_session.get("renderRequest", {}).get("schema") in {
-            3,
-            CANONICAL_REQUEST_SCHEMA,
-        }:
+        if (
+            source_session.get("renderRequest", {}).get("schema")
+            == CANONICAL_REQUEST_SCHEMA
+        ):
             write_session_json(output_path, source_session)
             return
     node = shutil.which("node")
@@ -448,8 +450,12 @@ def _validate_circular_feature_geometry(
     specs = tracks.get("circularTrackSlots")
     if specs is None:
         return
+    decoded_specs = [
+        _canonical_circular_track_slot(spec) if isinstance(spec, Mapping) else spec
+        for spec in specs
+    ]
     expected_slots = normalize_circular_track_slots_with_axis(
-        parse_circular_track_slots(specs),
+        parse_circular_track_slots(decoded_specs),
         tracks.get("circularTrackAxisIndex"),
     )
     expected_lanes = {
@@ -497,6 +503,38 @@ def _validate_circular_feature_geometry(
                     f"Resolved circular Feature lane geometry for {slot_id!r} "
                     f"is inconsistent with lane_direction={lane}"
                 )
+
+
+def _canonical_circular_track_slot(value: Mapping[str, Any]) -> CircularTrackSlot:
+    """Decode the current canonical slot shape for geometry validation."""
+
+    def scalar(raw: object) -> ScalarSpec | None:
+        if raw is None:
+            return None
+        if not isinstance(raw, Mapping):
+            raise ValueError("Canonical Circular track scalar must be an object")
+        unit = raw["unit"]
+        if unit not in {"px", "factor"}:
+            raise ValueError(f"Unsupported circular track scalar unit: {unit}")
+        return ScalarSpec(value=float(raw["value"]), unit=unit)
+
+    if value.get("kind") != "circularTrackSlot":
+        raise ValueError("Canonical Circular track slot has an invalid kind")
+    params = value.get("params")
+    if not isinstance(params, Mapping):
+        raise ValueError("Canonical Circular track slot params must be an object")
+    return CircularTrackSlot(
+        id=str(value.get("id") or ""),
+        renderer=str(value.get("renderer") or ""),
+        enabled=bool(value.get("enabled")),
+        side=value.get("side"),
+        radius=scalar(value.get("radius")),
+        width=scalar(value.get("width")),
+        z=int(value.get("z", 0)),
+        params=dict(params),
+        inner_gap_px=value.get("innerGapPx"),
+        outer_gap_px=value.get("outerGapPx"),
+    )
 
 
 def _validate_linear_side_adjacency(
@@ -614,7 +652,6 @@ def _validate_staged_gallery_session(
     *,
     artifact_path: Path | None = None,
     require_track_geometry: bool = False,
-    allow_compatibility_fixture: bool = False,
 ) -> None:
     from tools.prepare_interactive_gallery_assets import (
         EXAMPLES,
@@ -622,12 +659,8 @@ def _validate_staged_gallery_session(
     )
 
     validate_session(session)
-    expected_session_version = (
-        36 if allow_compatibility_fixture else CURRENT_SESSION_VERSION
-    )
-    expected_request_schema = (
-        3 if allow_compatibility_fixture else CANONICAL_REQUEST_SCHEMA
-    )
+    expected_session_version = CURRENT_SESSION_VERSION
+    expected_request_schema = CANONICAL_REQUEST_SCHEMA
     if session.get("version") != expected_session_version:
         raise ValueError(
             f"{session_path.name} has session version {session.get('version')}; "
@@ -850,7 +883,7 @@ def _refresh_one_session(
     render_request = session.get("renderRequest")
     is_canonical = (
         isinstance(render_request, Mapping)
-        and render_request.get("schema") in {3, CANONICAL_REQUEST_SCHEMA}
+        and render_request.get("schema") == CANONICAL_REQUEST_SCHEMA
     )
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-session-") as tmpdir:
         tmpdir_path = Path(tmpdir)

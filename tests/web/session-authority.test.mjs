@@ -29,7 +29,7 @@ assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
 ].sort());
 
 const session = {
-  format: 'gbdraw-session', version: 36, createdAt: 'now', title: 'Canonical',
+  format: 'gbdraw-session', version: 39, createdAt: 'now', title: 'Canonical',
   renderRequest: {}, resources: {}, webFiles: {}, config: {}, files: {},
   ui: {
     mode: 'linear', legend: 'left', linearPlotTitlePosition: 'top', zoom: 1.5,
@@ -51,7 +51,7 @@ const session = {
   runMetadata: { trackSlotGeometry: { schema: 1, records: [] } },
   cliInvocation: null
 };
-validateSessionAuthorityInventory(session, 36);
+validateSessionAuthorityInventory(session, 39);
 assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
   legend: 'left',
   linearPlotTitlePosition: 'top',
@@ -82,7 +82,7 @@ assert.deepEqual(projectArtifactState(session).legacyArtifacts, session.legacyAr
 assert.deepEqual(projectArtifactState(session).runMetadata, session.runMetadata);
 assert.equal(projectDocumentMetadata(session).title, 'Canonical');
 assert.throws(
-  () => validateSessionAuthorityInventory({ ...session, unknownField: true }, 36),
+  () => validateSessionAuthorityInventory({ ...session, unknownField: true }, 39),
   /unclassified top-level field.*unknownField/
 );
 assert.doesNotThrow(() => validateSessionAuthorityInventory({ ...session, unknownField: true }, 30));

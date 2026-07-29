@@ -11,7 +11,7 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-gallery-session-migration-
 await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
-const { promoteGallerySessionToCanonicalV3 } = await import(
+const { promoteGallerySessionToCurrent } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'gallery-session-migration.js'))
 );
 const { projectCanonicalSessionRequest } = await import(
@@ -59,7 +59,11 @@ const syntheticCliSession = {
     }],
     diagramOptions: {
       config: { form: { legend: 'right' }, marker: 'must-survive' },
-      output: { legend: 'right' },
+      output: {
+        outputPrefix: 'cli',
+        legend: 'right',
+        plotTitlePosition: 'bottom'
+      },
       featureShapes: {}
     },
     layout: {},
@@ -71,10 +75,10 @@ const syntheticCliSession = {
   }
 };
 const originalCliRequest = structuredClone(syntheticCliSession.renderRequest);
-const promotedSyntheticCli = promoteGallerySessionToCanonicalV3(syntheticCliSession);
-assert.equal(promotedSyntheticCli.renderRequest.schema, 3);
+const promotedSyntheticCli = promoteGallerySessionToCurrent(syntheticCliSession);
+assert.equal(promotedSyntheticCli.renderRequest.schema, 5);
+assert.equal(promotedSyntheticCli.renderRequest.grouping, 'single');
 assert.deepEqual(promotedSyntheticCli.renderRequest.diagramOptions.output, {
-  outputPrefix: 'cli',
   legend: 'right',
   plotTitlePosition: 'bottom'
 });
@@ -102,6 +106,11 @@ const syntheticGuiSession = {
       identity: 30,
       alignment_length: 0,
       depth_tick_interval: 15
+    },
+    losat: {
+      blastp: {
+        collinearMaxGeneGap: 4
+      }
     },
     palette: 'pending-palette',
     colors: { CDS: '#111111' }
@@ -147,13 +156,12 @@ const syntheticGuiSession = {
     )
   }
 };
-const promotedSyntheticGui = promoteGallerySessionToCanonicalV3(syntheticGuiSession);
+const promotedSyntheticGui = promoteGallerySessionToCurrent(syntheticGuiSession);
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
-assert.equal(promotedSyntheticGui.renderRequest.schema, 3);
-assert.equal(promotedSyntheticGui.renderRequest.grouping, undefined);
-assert.equal(promotedSyntheticGui.renderRequest.output.prefix, 'gui');
+assert.equal(promotedSyntheticGui.renderRequest.schema, 5);
+assert.equal(promotedSyntheticGui.renderRequest.grouping, 'batch');
+assert.equal(promotedSyntheticGui.renderRequest.output[0].prefix, 'gui');
 assert.deepEqual(syntheticGuiOptions.output, {
-  outputPrefix: 'gui',
   legend: 'left',
   plotTitlePosition: 'none'
 });
@@ -184,22 +192,56 @@ const projectedSyntheticGui = projectCanonicalSessionRequest({
 assert.equal(projectedSyntheticGui.config.form.legend, 'left');
 assert.equal(projectedSyntheticGui.config.adv.def_font_size, 31);
 assert.equal(projectedSyntheticGui.config.colors.CDS, '#abcdef');
+assert.equal(
+  promotedSyntheticGui.config.losat.blastp.collinearMaxUnitGap,
+  4
+);
+assert.equal(
+  Object.hasOwn(
+    promotedSyntheticGui.config.losat.blastp,
+    'collinearMaxGeneGap'
+  ),
+  false
+);
+assert.equal(
+  Object.hasOwn(promotedSyntheticGui.config.adv, 'depth_tick_interval'),
+  false
+);
+
+const staleCurrentConfig = structuredClone(promotedSyntheticGui);
+staleCurrentConfig.config.losat.blastp.collinearMaxGeneGap =
+  staleCurrentConfig.config.losat.blastp.collinearMaxUnitGap;
+delete staleCurrentConfig.config.losat.blastp.collinearMaxUnitGap;
+const repairedCurrentConfig = promoteGallerySessionToCurrent(staleCurrentConfig);
+assert.equal(repairedCurrentConfig.config.losat.blastp.collinearMaxUnitGap, 4);
+assert.equal(
+  Object.hasOwn(repairedCurrentConfig.config.losat.blastp, 'collinearMaxGeneGap'),
+  false
+);
+const currentWithoutWebConfig = structuredClone(promotedSyntheticGui);
+delete currentWithoutWebConfig.config;
+assert.equal(
+  promoteGallerySessionToCurrent(currentWithoutWebConfig).config,
+  undefined
+);
 
 const hmmt = await loadSession('HmmtDNA_ATskew.gbdraw-session.json');
-const promotedHmmt = promoteGallerySessionToCanonicalV3(hmmt);
+const promotedHmmt = promoteGallerySessionToCurrent(hmmt);
 const hmmtOptions = promotedHmmt.renderRequest.diagramOptions;
-assert.equal(promotedHmmt.renderRequest.schema, 3);
+assert.equal(promotedHmmt.renderRequest.schema, 5);
 assert.equal(hmmtOptions.configOverrides['labels.circular.scope'], 'outer');
 assert.equal(hmmtOptions.configOverrides['objects.definition.circular.font_size'], 28);
 assert.equal(hmmtOptions.featureShapes.repeat_region, 'underlay');
 assert.ok(hmmtOptions.tracks.circularTrackSlots.some((slot) => (
-  slot.includes('a_skew_2:dinucleotide_skew') &&
-  slot.includes('nt=AT') &&
-  slot.includes('legend_label=AT skew')
+  slot.id === 'a_skew_2' &&
+  slot.renderer === 'dinucleotide_skew' &&
+  slot.params.nt === 'AT' &&
+  slot.params.legend_label === 'AT skew'
 )));
-assert.match(
-  hmmtOptions.tracks.circularTrackSlots.find((slot) => slot.startsWith('features:features')),
-  /(?:@|,)lane_direction=split(?:,|$)/
+assert.equal(
+  hmmtOptions.tracks.circularTrackSlots.find((slot) => slot.id === 'features')
+    .params.lane_direction,
+  'split'
 );
 assert.match(
   resourceText(promotedHmmt, hmmtOptions.colors.defaultColorsFile),
@@ -211,7 +253,7 @@ assert.match(
 );
 
 const bgc = await loadSession('BGC0000708-BGC0000713.gbdraw-session.json');
-const promotedBgc = promoteGallerySessionToCanonicalV3(bgc);
+const promotedBgc = promoteGallerySessionToCurrent(bgc);
 const bgcOptions = promotedBgc.renderRequest.diagramOptions;
 assert.deepEqual(
   promotedBgc.renderRequest.records.map((record) => record.presentation.reverseComplement),
@@ -257,17 +299,26 @@ assert.deepEqual(
 );
 
 const wssv = await loadSession('WSSV_genome_comparison.gbdraw-session.json');
+const wssvSchema2 = structuredClone(wssv);
+wssvSchema2.version = 33;
+wssvSchema2.renderRequest.schema = 2;
+delete wssvSchema2.renderRequest.grouping;
+wssvSchema2.renderRequest.output = Array.isArray(wssvSchema2.renderRequest.output)
+  ? wssvSchema2.renderRequest.output[0]
+  : wssvSchema2.renderRequest.output;
+wssvSchema2.renderRequest.diagramOptions.output.outputPrefix =
+  wssvSchema2.renderRequest.output.prefix;
 const wssvWithoutCanonicalConservation = {
-  ...wssv,
+  ...wssvSchema2,
   renderRequest: {
-    ...wssv.renderRequest,
+    ...wssvSchema2.renderRequest,
     diagramOptions: {
-      ...wssv.renderRequest.diagramOptions,
+      ...wssvSchema2.renderRequest.diagramOptions,
       conservationBlastFiles: []
     }
   }
 };
-const promotedWssv = promoteGallerySessionToCanonicalV3(wssvWithoutCanonicalConservation);
+const promotedWssv = promoteGallerySessionToCurrent(wssvWithoutCanonicalConservation);
 const wssvOptions = promotedWssv.renderRequest.diagramOptions;
 assert.equal(wssvOptions.conservationBlastFiles.length, 20);
 assert.deepEqual(
@@ -286,7 +337,7 @@ const invalidWssvCacheEntries = wssv.losatCache.entries.map((entry, index) => (
   index === 0 ? { ...entry, flow: 'linear-comparison' } : entry
 ));
 assert.throws(
-  () => promoteGallerySessionToCanonicalV3({
+  () => promoteGallerySessionToCurrent({
     ...wssvWithoutCanonicalConservation,
     losatCache: { ...wssv.losatCache, entries: invalidWssvCacheEntries }
   }),
@@ -294,7 +345,7 @@ assert.throws(
 );
 
 const majani = await loadSession('majanivirus_orthogroup.gbdraw-session.json.gz');
-const promotedMajani = promoteGallerySessionToCanonicalV3(majani);
+const promotedMajani = promoteGallerySessionToCurrent(majani);
 assert.equal(promotedMajani.renderRequest.diagramOptions.output.legend, 'right');
 assert.deepEqual(
   promotedMajani.renderRequest.records.map((record) => record.presentation.label),
@@ -324,7 +375,7 @@ assert.equal(
 );
 
 const vibrio = await loadSession('vibrio-harveyi-group-collinear.gbdraw-session.json.gz');
-const promotedVibrio = promoteGallerySessionToCanonicalV3(vibrio);
+const promotedVibrio = promoteGallerySessionToCurrent(vibrio);
 const promotedVibrioComparison = promotedVibrio.renderRequest.comparisons.find(
   (comparison) => comparison.kind === 'generatedProteinComparison'
 );
@@ -354,7 +405,7 @@ for (const [name, promoted] of [
       `${name} resource ${resourceId} repeats its canonical prefix`
     );
   }
-  const promotedAgain = promoteGallerySessionToCanonicalV3(promoted);
+  const promotedAgain = promoteGallerySessionToCurrent(promoted);
   assert.deepEqual(
     promotedAgain.renderRequest,
     promoted.renderRequest,

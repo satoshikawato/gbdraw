@@ -130,25 +130,23 @@ Click **Load Session**, then choose the `.gbdraw-session.json` file to restore i
 The web app's **Save Session** action downloads a lossless gzip-compressed `.gbdraw-session.json.gz` file. **Load Session** accepts both this compressed form and the uncompressed `.gbdraw-session.json` files written by the CLI.
 
 Current Python and Web writers use session version 39 with canonical
-`renderRequest` schema 5. Readers accept versions 27–33 and 36–39; public typed
-conversion is available for versions 31–33 and 36–39, while versions 27–30
-remain CLI replay inputs. Versions 34 and 35 were branch-internal development
-formats and are not supported. Version 39 replaces the parallel
+`renderRequest` schema 5. Readers accept versions 27–33 and 39; public typed
+conversion is available for versions 31–33 and 39, while versions 27–30 remain
+CLI replay inputs. Version 39 replaces the parallel
 Circular-single, Circular-multi, and Linear legend/title fields with one
 `ui.layoutPreferences` tree; active values are derived from the current mode
-and Circular grouping, and the former fields from supported version 38 and
-earlier sessions migrate when loaded. This editor-state change leaves canonical
-request schema 5 unchanged.
+and Circular grouping, and the former fields from supported older sessions
+migrate when loaded.
 Schema 5 stores explicit `single`, `grid`, or `batch` grouping. Its output is one
 object for a single diagram or grid, and an array with one resolved entry per
-record for a Circular batch. Schema 4 introduced sole output-prefix ownership
-at `renderRequest.output.prefix`; schemas 1–3 may also contain the obsolete
-nested `diagramOptions.output.outputPrefix`, which the compatibility reader
-ignores.
+record for a Circular batch. It also makes
+`renderRequest.output.prefix` the sole output-prefix owner. Schemas 1 and 2 may
+also contain the obsolete nested `diagramOptions.output.outputPrefix`, which
+the compatibility reader ignores.
 
-For Linear protein comparisons, versions 36–39 store the authoritative
-feature identity and display metadata in a schema-2 manifest, current protein
-raw cache entries as schema 4, and derived comparison payloads as schema 3.
+For Linear protein comparisons, version 39 stores the authoritative feature
+identity and display metadata in a schema-2 manifest, current protein raw cache
+entries as schema 4, and derived comparison payloads as schema 3.
 Generated protein FASTA, raw QUERY/SUBJECT fields, protein maps, and derived
 references use compact session-global `h_[a-z2-7]{26}` runtime handles.
 Nucleotide raw cache entries remain schema 2.

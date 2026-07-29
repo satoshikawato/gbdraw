@@ -65,7 +65,7 @@ from gbdraw.session_io import (
     write_session_json,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
-from gbdraw.session import load_session_document
+from gbdraw.session import SessionFormatError, load_session_document
 
 
 def _file_entry(name: str, content: bytes) -> dict:
@@ -353,7 +353,7 @@ def test_current_session_version_matches_web_config() -> None:
     assert match is not None
     assert CURRENT_SESSION_VERSION == 39
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 36, 37, 38, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
 
@@ -545,7 +545,7 @@ def test_feature_catalog_equality_preserves_json_scalar_types() -> None:
     )
 
 
-def test_v36_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
+def test_current_session_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
     payload = build_session_json(
         SessionBuildContext(
             mode="linear",
@@ -592,7 +592,31 @@ def test_v36_validates_mixed_protein_and_nucleotide_raw_cache() -> None:
     assert payload["losatDerivedCache"]["entries"][0]["schema"] == 3
 
 
-def test_version36_schema3_sessions_keep_current_artifact_validation() -> None:
+@pytest.mark.parametrize(
+    ("config", "message"),
+    (
+        (
+            {"adv": {"depth_tick_interval": 10}},
+            "Web state field adv.depth_tick_interval is obsolete; "
+            "use adv.depth_large_tick_interval.",
+        ),
+        (
+            {"adv": {"depth_tracks": [{"tick_interval": 10}]}},
+            "Web state field adv.depth_tracks[0].tick_interval is obsolete; "
+            "use large_tick_interval.",
+        ),
+        (
+            {"losat": {"blastp": {"collinearMaxGeneGap": 2}}},
+            "Web state field losat.blastp.collinearMaxGeneGap is obsolete; "
+            "use losat.blastp.collinearMaxUnitGap.",
+        ),
+    ),
+)
+def test_current_session_rejects_obsolete_web_state_field_names(
+    tmp_path: Path,
+    config: dict,
+    message: str,
+) -> None:
     payload = build_session_json(
         SessionBuildContext(
             mode="linear",
@@ -601,20 +625,21 @@ def test_version36_schema3_sessions_keep_current_artifact_validation() -> None:
         ),
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={"linearSeqs": []},
-        generated_at=datetime(2026, 7, 21),
-        losat_cache_entries=(_current_protein_cache_entry(),),
-        protein_identity_manifest=_protein_identity_manifest(),
+        generated_at=datetime(2026, 7, 30),
         canonical_request=_canonical_request("linear"),
     )
-    payload["version"] = 36
-    payload["renderRequest"]["schema"] = 3
+    payload["config"] = config
 
+    with pytest.raises(ValidationError, match=re.escape(message)):
+        validate_session(payload)
+    output_path = tmp_path / "obsolete-current-session.gbdraw-session.json"
+    with pytest.raises(ValidationError, match=re.escape(message)):
+        write_session_json(output_path, payload)
+    assert not output_path.exists()
+
+    payload["version"] = 33
+    payload["renderRequest"]["schema"] = 2
     validate_session(payload)
-
-    invalid = copy.deepcopy(payload)
-    invalid["losatCache"]["entries"][0]["schema"] = 3
-    with pytest.raises(ValidationError, match="losatCache"):
-        validate_session(invalid)
 
 
 @pytest.mark.parametrize(
@@ -625,7 +650,7 @@ def test_version36_schema3_sessions_keep_current_artifact_validation() -> None:
         ("collinear", False),
     ),
 )
-def test_v36_accepts_strict_zero_hit_derived_results(
+def test_current_session_accepts_strict_zero_hit_derived_results(
     mode: str,
     include_identity: bool,
 ) -> None:
@@ -678,7 +703,7 @@ def test_v36_accepts_strict_zero_hit_derived_results(
         "identity-mode-mismatch",
     ),
 )
-def test_v36_rejects_near_miss_zero_hit_derived_results(mutate) -> None:
+def test_current_session_rejects_near_miss_zero_hit_derived_results(mutate) -> None:
     manifest = _protein_identity_manifest()
     derived_payload = _zero_hit_derived_payload("collinear")
     mutate(derived_payload)
@@ -691,7 +716,7 @@ def test_v36_rejects_near_miss_zero_hit_derived_results(mutate) -> None:
         )
 
 
-def test_v36_derived_cache_accepts_compound_collinear_runtime_references() -> None:
+def test_current_derived_cache_accepts_compound_collinear_runtime_references() -> None:
     manifest = _protein_identity_manifest()
     runtime_handles = [
         runtime_handle
@@ -760,7 +785,7 @@ def test_v36_derived_cache_accepts_compound_collinear_runtime_references() -> No
         "subject_unit_id",
     ),
 )
-def test_v36_derived_cache_validates_runtime_handles_in_unit_ids(
+def test_current_derived_cache_validates_runtime_handles_in_unit_ids(
     field_name: str,
 ) -> None:
     manifest = _protein_identity_manifest()
@@ -790,7 +815,7 @@ def test_v36_derived_cache_validates_runtime_handles_in_unit_ids(
         )
 
 
-def test_v36_derived_cache_allows_non_protein_collinearity_unit_ids() -> None:
+def test_current_derived_cache_allows_non_protein_collinearity_unit_ids() -> None:
     manifest = _protein_identity_manifest()
     runtime_handle = next(
         iter(manifest["recordInstances"]["record-1"]["runtimeIds"].values())
@@ -809,7 +834,7 @@ def test_v36_derived_cache_allows_non_protein_collinearity_unit_ids() -> None:
 
 
 @pytest.mark.parametrize("field_name", ["supportingEdges", "edgeIds"])
-def test_v36_derived_cache_rejects_unresolved_compound_edge_references(
+def test_current_derived_cache_rejects_unresolved_compound_edge_references(
     field_name: str,
 ) -> None:
     manifest = _protein_identity_manifest()
@@ -844,7 +869,7 @@ def test_v36_derived_cache_rejects_unresolved_compound_edge_references(
         ("edge_ids", [None]),
     ],
 )
-def test_v36_derived_cache_rejects_non_string_compound_edge_references(
+def test_current_derived_cache_rejects_non_string_compound_edge_references(
     field_name: str,
     invalid_value: object,
 ) -> None:
@@ -870,7 +895,7 @@ def test_v36_derived_cache_rejects_non_string_compound_edge_references(
         f"f_{'b' * 64}",
     ],
 )
-def test_v36_derived_cache_rejects_embedded_legacy_references(
+def test_current_derived_cache_rejects_embedded_legacy_references(
     legacy_reference: str,
 ) -> None:
     manifest = _protein_identity_manifest()
@@ -888,7 +913,7 @@ def test_v36_derived_cache_rejects_embedded_legacy_references(
         )
 
 
-def test_v36_rejects_legacy_protein_entry_in_current_cache() -> None:
+def test_current_session_rejects_legacy_protein_entry_in_current_cache() -> None:
     payload = build_session_json(
         SessionBuildContext(
             mode="linear",
@@ -918,8 +943,8 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
         generated_at=datetime(2026, 7, 20),
         canonical_request=_canonical_request("linear"),
     )
-    source["version"] = 36
-    source["renderRequest"]["schema"] = 3
+    source["version"] = 33
+    source["renderRequest"]["schema"] = 2
 
     context = SessionBuildContext(
         mode="linear",
@@ -1073,7 +1098,7 @@ def test_future_session_version_fails() -> None:
         validate_session(session)
 
 
-@pytest.mark.parametrize("version", (34, 35))
+@pytest.mark.parametrize("version", (34, 35, 36, 37, 38))
 def test_branch_internal_session_versions_are_rejected_at_read_and_rewrite_boundaries(
     version: int,
 ) -> None:
@@ -1097,6 +1122,50 @@ def test_branch_internal_session_versions_are_rejected_at_read_and_rewrite_bound
             generated_at=datetime(2026, 7, 28),
             canonical_request=_canonical_request("circular"),
         )
+
+
+@pytest.mark.parametrize("schema", (3, 4))
+@pytest.mark.parametrize("session_version", (33, CURRENT_SESSION_VERSION))
+def test_branch_internal_request_schemas_are_rejected_at_session_boundaries(
+    tmp_path: Path,
+    schema: int,
+    session_version: int,
+) -> None:
+    session = build_session_json(
+        SessionBuildContext(
+            mode="circular",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 7, 30),
+        canonical_request=_canonical_request("circular"),
+    )
+    session["version"] = session_version
+    session["renderRequest"]["schema"] = schema
+    message = f"Unsupported canonical renderRequest schema: {schema}"
+
+    with pytest.raises(ValidationError, match=message):
+        validate_session(session)
+    with pytest.raises(SessionFormatError, match=message):
+        load_session_document(session)
+
+    input_path = (
+        tmp_path
+        / f"version-{session_version}-schema-{schema}-input.gbdraw-session.json"
+    )
+    input_path.write_text(json.dumps(session), encoding="utf-8")
+    with pytest.raises(ValidationError, match=message):
+        load_session(input_path)
+
+    output_path = (
+        tmp_path
+        / f"version-{session_version}-schema-{schema}-output.gbdraw-session.json"
+    )
+    with pytest.raises(ValidationError, match=message):
+        write_session_json(output_path, session)
+    assert not output_path.exists()
 
 
 def test_session_version_27_remains_supported() -> None:
@@ -1149,16 +1218,23 @@ def test_legacy_gui_config_migrates_repeat_to_rectangle_without_mutating_source(
     assert "feature_shapes" not in session["config"]["adv"]
 
 
-def test_canonical_session_version_32_remains_supported() -> None:
+@pytest.mark.parametrize(
+    ("version", "request_schema"),
+    ((31, 1), (32, 2), (33, 2), (CURRENT_SESSION_VERSION, CANONICAL_REQUEST_SCHEMA)),
+)
+def test_main_backed_and_current_canonical_session_schemas_remain_supported(
+    version: int,
+    request_schema: int,
+) -> None:
     session = {
         "format": SESSION_FORMAT,
-        "version": 32,
-        "renderRequest": {},
+        "version": version,
+        "renderRequest": {"schema": request_schema},
         "resources": {},
     }
 
     validate_session(session)
-    assert 32 in SUPPORTED_SESSION_VERSIONS
+    assert version in SUPPORTED_SESSION_VERSIONS
 
 
 def test_session_json_gzip_round_trip(tmp_path: Path) -> None:

@@ -324,6 +324,7 @@ const createLayoutPreferences = () => ({
       c_fasta: null,
       c_depth: null,
       c_conservation_blasts: [],
+      c_conservation_blasts_source: 'losat-cache',
       c_conservation_fastas: [],
       d_color: null,
       t_color: null,
@@ -378,6 +379,7 @@ const createLayoutPreferences = () => ({
   const snapshot = await snapshots.buildHistorySnapshot();
   state.form.prefix = 'after';
   state.files.c_gb = null;
+  state.files.c_conservation_blasts_source = null;
   state.results.value = [{ name: 'r2', content: '<svg id="b"></svg>' }];
   state.featureColorOverrides.f1.color = '#222222';
 
@@ -386,6 +388,7 @@ const createLayoutPreferences = () => ({
   await snapshots.applyHistorySnapshot(snapshot);
   assert.equal(state.form.prefix, 'before');
   assert.equal(state.files.c_gb.name, 'restore.gb');
+  assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
   assert.equal(state.results.value[0].name, 'r1');
   assert.equal(state.featureColorOverrides.f1.color, '#111111');
   assert.deepEqual(state.featureVisibilityManualRules, []);

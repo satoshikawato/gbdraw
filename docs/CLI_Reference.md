@@ -15,7 +15,7 @@ aliases noted below, current multiword long option names use the documented
 underscore spelling. Fresh CLI and Python requests reject the retired names
 and values in this table; the CLI spellings are shown with `--`, while Python
 request fields use the same names without it. Supported saved-session and
-canonical request schema 1–3 readers migrate them before replay.
+canonical request schema 1 and 2 readers migrate them before replay.
 
 | Retired input | Current input |
 | --- | --- |
@@ -33,11 +33,10 @@ active alias. `--gc_content_tick_interval` also remains an active alias for
 `--gc_content_large_tick_interval`; neither belongs to the retired list.
 
 The private `__gbdraw_legacy_spacing` key is not a current slot parameter. It is
-used only inside canonical request schema 1–3 and old-session readers and is
-never written to schema 4 or 5. Legacy factor-based spacing can be replayed but
-cannot be re-saved losslessly by the current schema 5 writer; replace it with
-explicit `inner_gap_px` and `outer_gap_px` values before saving a current
-session.
+used only inside canonical request schema 1 and 2 readers and is never written
+by the current schema 5 writer. Legacy factor-based spacing can be replayed but
+cannot be re-saved losslessly; replace it with explicit `inner_gap_px` and
+`outer_gap_px` values before saving a current session.
 
 ## Main command
 

@@ -83,7 +83,7 @@ from .api.requests import (
 
 
 CANONICAL_REQUEST_SCHEMA = 5
-SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, 3, 4, 5})
+SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, CANONICAL_REQUEST_SCHEMA})
 UNKNOWN_FIELD_POLICY = "reject"
 
 
@@ -632,7 +632,9 @@ def _decode_canonical_request(
         top,
         path="renderRequest",
         required=set(
-            _TOP_LEVEL_FIELDS_V5 if schema >= 5 else _TOP_LEVEL_FIELDS
+            _TOP_LEVEL_FIELDS_V5
+            if schema == CANONICAL_REQUEST_SCHEMA
+            else _TOP_LEVEL_FIELDS
         ),
     )
     mode = top["mode"]
@@ -673,7 +675,7 @@ def _decode_canonical_request(
     options = options_type(**options_kwargs, **comparison_kwargs)
     _validate_dataclass_contract(options, path="diagramOptions", error="decode")
     grouping = top.get("grouping")
-    if schema >= 5:
+    if schema == CANONICAL_REQUEST_SCHEMA:
         allowed_groupings = (
             {"single", "grid", "batch"}
             if mode == "circular"
@@ -703,7 +705,7 @@ def _decode_canonical_request(
         )
 
     layout = _decode_circular_layout(top["layout"], schema=schema)
-    if schema < 5:
+    if schema in {1, 2}:
         grouping = "grid" if layout is not None or len(records) > 1 else "single"
     if grouping == "batch":
         if layout is not None:
@@ -1011,7 +1013,7 @@ def _decode_circular_layout(
             "renderRequest.layout.multiRecordPositions must be a string array or null."
         )
     size_mode = layout["multiRecordSizeMode"]
-    if schema in {1, 2, 3} and size_mode == "sqrt":
+    if schema in {1, 2} and size_mode == "sqrt":
         size_mode = "auto"
     result = CircularMultiRecordOptions(
         multi_record_size_mode=size_mode,
@@ -1083,7 +1085,7 @@ def _decode_diagram_options(
     resource_paths: Mapping[str, str | Path],
 ) -> dict[str, Any]:
     payload = _object(value, path="renderRequest.diagramOptions")
-    if schema in {1, 2, 3}:
+    if schema in {1, 2}:
         payload = _migrate_legacy_feature_visibility_fields(payload)
     payload = dict(payload)
     for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
@@ -1125,7 +1127,7 @@ def _decode_diagram_options(
         feature_shapes = dict(decoded.get("feature_shapes") or {})
         feature_shapes.setdefault("repeat_region", "rectangle")
         decoded["feature_shapes"] = feature_shapes
-    if schema in {1, 2, 3}:
+    if schema in {1, 2}:
         _restore_legacy_sparse_defaults(decoded, mode=mode)
     return decoded
 
@@ -1162,7 +1164,7 @@ def _decode_config_overrides(
 ) -> dict[str, Any]:
     path = "renderRequest.diagramOptions.configOverrides"
     overrides = dict(_object(value, path=path))
-    if schema in {1, 2, 3}:
+    if schema in {1, 2}:
         for old_name, current_name in _LEGACY_CONFIG_OVERRIDE_KEYS.items():
             if old_name not in overrides:
                 continue
@@ -1478,7 +1480,7 @@ def _restore_legacy_sparse_defaults(
 ) -> None:
     """Keep supported sparse payloads on the defaults they were saved with.
 
-    Canonical schemas 1 through 3 omitted values equal to the
+    Canonical schemas 1 and 2 omitted values equal to the
     shared Python defaults. Fresh requests now use mode-specific profiles, so
     the compatibility reader materializes the historical values before the
     typed request applies the current profile.
@@ -2229,7 +2231,7 @@ def _decode_track_slots(
     result: list[str | CircularTrackSlot | LinearTrackSlot] = []
     for index, raw in enumerate(raw_slots):
         if isinstance(raw, str):
-            if mode == "circular" and schema in {1, 2, 3}:
+            if mode == "circular" and schema in {1, 2}:
                 migrated = _migrate_legacy_circular_track_slot_spec(raw)
                 try:
                     result.append(
@@ -2248,7 +2250,7 @@ def _decode_track_slots(
         slot_path = f"{path}[{index}]"
         slot = _object(raw, path=slot_path, required={"kind"}, exact=False)
         legacy_spacing: ScalarSpec | None = None
-        if mode == "circular" and schema in {1, 2, 3} and "spacing" in slot:
+        if mode == "circular" and schema in {1, 2} and "spacing" in slot:
             slot = dict(slot)
             raw_legacy_spacing = slot.pop("spacing")
             if raw_legacy_spacing is not None:
@@ -2282,7 +2284,7 @@ def _decode_track_slots(
             )
             for key, name in field_map.items()
         }
-        if mode == "circular" and schema in {1, 2, 3}:
+        if mode == "circular" and schema in {1, 2}:
             params = dict(kwargs.get("params") or {})
             private_spacing = params.pop("__gbdraw_legacy_spacing", None)
             if private_spacing is not None:
@@ -2368,7 +2370,7 @@ def _decode_assembly_output(
     schema: int,
 ) -> CircularOutputOptions | LinearOutputOptions:
     required = {"legend", "plotTitlePosition"}
-    if schema in {1, 2, 3}:
+    if schema in {1, 2}:
         required.add("outputPrefix")
     payload = _object(
         value,
@@ -2772,6 +2774,7 @@ def _decode_pipeline(
             decoded, legacy_max_paralog_links = _decode_collinearity_params(
                 raw,
                 path=f"{path}.settings.{key}",
+                allow_standard=schema in {1, 2},
             )
             result[name] = decoded
         else:
@@ -2791,12 +2794,14 @@ def _decode_collinearity_params(
     value: object,
     *,
     path: str,
+    allow_standard: bool,
 ) -> tuple[LosslessCollinearityParameters | None, int | None]:
     if value is None:
         return None, None
     payload = _object(value, path=path, required={"kind", "parameters"})
     kind = payload["kind"]
-    if kind not in {"standard", "lossless"}:
+    supported_kinds = {"standard", "lossless"} if allow_standard else {"lossless"}
+    if kind not in supported_kinds:
         raise CanonicalRequestDecodingError(
             f"Unsupported collinearity parameter kind at {path}: {kind!r}."
         )

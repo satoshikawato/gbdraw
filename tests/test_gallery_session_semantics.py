@@ -17,6 +17,7 @@ from gbdraw.api import (
     session_to_request,
 )
 from gbdraw.session_io import load_session
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample
 
 
@@ -42,7 +43,7 @@ def _session(example_id: str) -> tuple[GallerySessionExample, dict[str, object]]
 def _request(session: dict[str, object]) -> dict[str, object]:
     request = session["renderRequest"]
     assert isinstance(request, dict)
-    assert request["schema"] == 3
+    assert request["schema"] == CANONICAL_REQUEST_SCHEMA
     return request
 
 
@@ -124,6 +125,40 @@ def _group_translate_y(root: ET.Element, group_id: str) -> float:
     transform = str(group.get("transform") or "")
     match = _TRANSLATE_RE.fullmatch(transform)
     assert match is not None, (group_id, transform)
+    return float(match.group(2))
+
+
+def _record_group_translate_y(
+    root: ET.Element,
+    *,
+    record_id: str,
+    record_index: int,
+) -> float:
+    group = next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.endswith("g")
+            and str(element.get("id") or "").startswith("record_group_")
+            and element.get("data-gbdraw-record-id") == record_id
+            and element.get("data-gbdraw-record-index") == str(record_index)
+        ),
+        None,
+    )
+    if group is None:
+        legacy_group_id = f"{record_id}_record_{record_index + 1}"
+        group = next(
+            (
+                element
+                for element in root.iter()
+                if element.get("id") == legacy_group_id
+            ),
+            None,
+        )
+    assert group is not None, (record_id, record_index)
+    transform = str(group.get("transform") or "")
+    match = _TRANSLATE_RE.fullmatch(transform)
+    assert match is not None, (record_id, record_index, transform)
     return float(match.group(2))
 
 
@@ -221,19 +256,21 @@ def test_hmmt_at_skew_session_keeps_tracks_palette_and_gene_labels() -> None:
     assert isinstance(tracks, dict)
     slots = tracks["circularTrackSlots"]
     assert isinstance(slots, list)
-    assert [str(slot).split(":", 1)[0] for slot in slots] == [
+    assert [slot["id"] for slot in slots] == [
         "features",
         "gc_content",
         "gc_skew",
         "a_skew_2",
         "ticks",
     ]
-    at_skew = next(str(slot) for slot in slots if str(slot).startswith("a_skew_2:"))
-    assert "a_skew_2:dinucleotide_skew" in at_skew
-    assert "nt=AT" in at_skew
-    assert "legend_label=AT skew" in at_skew
-    assert "positive_color=#deaf6e" in at_skew
-    assert "negative_color=#7294e3" in at_skew
+    at_skew = next(slot for slot in slots if slot["id"] == "a_skew_2")
+    assert at_skew["renderer"] == "dinucleotide_skew"
+    assert at_skew["params"] == {
+        "nt": "AT",
+        "positive_color": "#deaf6e",
+        "negative_color": "#7294e3",
+        "legend_label": "AT skew",
+    }
 
     priority_ref = _option_resource_ref(
         options, "qualifierPriorityFile", "qualifierPriorityTable"
@@ -245,10 +282,14 @@ def test_hmmt_at_skew_session_keeps_tracks_palette_and_gene_labels() -> None:
         session,
         include_gallery=True,
     ):
-        group_ids = {element.get("id") for element in root.iter()}
+        slot_ids = {
+            element.get("data-gbdraw-slot-id")
+            for element in root.iter()
+            if element.tag.endswith("g")
+        }
         texts = set(_texts(root))
         fills = {element.get("fill") for element in root.iter()}
-        assert "a_skew_2" in group_ids, location
+        assert "a_skew_2" in slot_ids, location
         assert {"AT skew (+)", "AT skew (-)", "ND1"} <= texts, location
         assert {
             "#84b9ec",
@@ -269,10 +310,9 @@ def test_hmmt_at_skew_session_and_visuals_keep_middle_feature_placement() -> Non
     slots = tracks["circularTrackSlots"]
     assert isinstance(slots, list)
 
-    feature_slot = next(
-        str(slot) for slot in slots if str(slot).startswith("features:features")
-    )
-    assert "lane_direction=split" in feature_slot
+    feature_slot = next(slot for slot in slots if slot["id"] == "features")
+    assert feature_slot["renderer"] == "features"
+    assert feature_slot["params"]["lane_direction"] == "split"
 
     for location, root in _visual_roots(
         example,
@@ -476,15 +516,15 @@ def test_wssv_gallery_session_keeps_all_twenty_conservation_rings() -> None:
     assert palette["defaultColorsPalette"] == "royal_gala"
 
     for location, root in _visual_roots(example, session):
-        group_ids = {
-            element.get("id")
+        group_labels = {
+            element.get("data-track-label")
             for element in root.iter()
-            if (element.get("id") or "").startswith("conservation_")
-            and element.get("id") != "conservation_identity_legend"
+            if element.tag.endswith("g")
+            and element.get("data-track-label")
         }
         texts = set(_texts(root))
         fills = {element.get("fill") for element in root.iter()}
-        assert group_ids == {f"conservation_{label}" for label in labels}, location
+        assert group_labels == set(labels), location
         assert set(labels) <= texts, location
         assert "#dc7078" in fills, location
 
@@ -604,8 +644,15 @@ def test_hepatoplasmataceae_gallery_keeps_shared_track_spacing(
                 str(slot["slotId"]): slot
                 for slot in record["slots"]
             }
+            assert _record_group_translate_y(
+                root,
+                record_id=record_id,
+                record_index=record_index,
+            ) == pytest.approx(float(record["axisYpx"])), (
+                location,
+                record_id,
+            )
             expected_group_y = {
-                f"{record_id}_record_{record_number}": float(record["axisYpx"]),
                 f"gc_content_record_{record_number}": float(
                     slots["gc_content"]["finalYOffsetPx"]
                 ),

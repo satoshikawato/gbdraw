@@ -28,11 +28,24 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./feature-utils.js", "./feature-utils.mjs"),
         encoding="utf-8",
     )
+    color_utils_path = tmp_path / "color-utils.mjs"
+    color_utils_path.write_text(
+        (WEB_ROOT / "js" / "app" / "color-utils.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    conservation_series_path = tmp_path / "conservation-series.mjs"
+    conservation_series_path.write_text(
+        (WEB_ROOT / "js" / "app" / "conservation-series.js")
+        .read_text(encoding="utf-8")
+        .replace("./color-utils.js", "./color-utils.mjs"),
+        encoding="utf-8",
+    )
     match_sequences_path = tmp_path / "match-sequences.mjs"
     match_sequences_path.write_text(
         (WEB_ROOT / "js" / "app" / "match-sequences.js")
         .read_text(encoding="utf-8")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./conservation-series.js", "./conservation-series.mjs"),
         encoding="utf-8",
     )
     losat_normalization_path = tmp_path / "losat-normalization.mjs"

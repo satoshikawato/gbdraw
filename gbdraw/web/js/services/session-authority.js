@@ -31,7 +31,7 @@ const WEB_EDITOR_UI_FIELDS = Object.freeze([
   'autoLabelReflow',
   'paletteInstantPreviewEnabled',
   'layoutPreferences',
-  // Versions through 38 stored the same preference state in parallel fields.
+  // Older editor payloads stored the same preference state in parallel fields.
   'legend',
   'circularLegendPosition',
   'linearLegendPosition',

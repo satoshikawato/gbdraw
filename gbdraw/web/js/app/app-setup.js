@@ -1090,11 +1090,18 @@ export const createAppSetup = () => {
   const syncCircularConservationEnabled = (sourceFiles = getCircularConservationSourceFiles()) => {
     circularConservation.enabled = normalizeFileList(sourceFiles).length > 0;
   };
+  const clearDerivedCircularConservationBlasts = () => {
+    if (files.c_conservation_blasts_source !== 'losat-cache') return;
+    files.c_conservation_blasts = [];
+    files.c_conservation_blasts_source = null;
+  };
   const setCircularConservationSourceFiles = (nextFiles) => {
     const normalized = normalizeFileList(nextFiles);
     if (isCircularConservationUploadSource()) {
       files.c_conservation_blasts = normalized;
+      files.c_conservation_blasts_source = null;
     } else {
+      clearDerivedCircularConservationBlasts();
       files.c_conservation_fastas = normalized;
     }
     losatCacheInfo.value = [];
@@ -1102,12 +1109,26 @@ export const createAppSetup = () => {
   };
   const setCircularConservationUploadFiles = (nextFiles) => {
     files.c_conservation_blasts = normalizeFileList(nextFiles);
+    files.c_conservation_blasts_source = null;
     files.c_conservation_sequence_sources = [];
     losatCacheInfo.value = [];
     syncCircularConservationSeries();
   };
   const syncCircularConservationSeries = () => {
     const sourceFiles = getCircularConservationSourceFiles();
+    const isDerivedReplayWithoutFastas = (
+      !isCircularConservationUploadSource() &&
+      files.c_conservation_blasts_source === 'losat-cache' &&
+      normalizeFileList(files.c_conservation_blasts).length > 0 &&
+      sourceFiles.length === 0
+    );
+    if (isDerivedReplayWithoutFastas) {
+      circularConservation.enabled = true;
+      if (adv.circular_track_slots_enabled === true) {
+        circularTrackSlotEditor.syncCircularConservationSlots();
+      }
+      return;
+    }
     syncCircularConservationEnabled(sourceFiles);
     const legacyLabels = parseConservationLabelText(circularConservation.labels);
     const nextSeries = reconcileConservationSeries({
@@ -1163,6 +1184,7 @@ export const createAppSetup = () => {
     const target = event?.target || null;
     const selectedFile = Array.from(target?.files || []).filter(Boolean)[0] || null;
     if (!selectedFile) return;
+    clearDerivedCircularConservationBlasts();
     files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedFile];
     losatCacheInfo.value = [];
     syncCircularConservationSeries();
@@ -1205,6 +1227,7 @@ export const createAppSetup = () => {
     () => [
       circularConservation.source,
       files.c_conservation_blasts,
+      files.c_conservation_blasts_source,
       files.c_conservation_fastas,
       circularConservation.labels
     ],

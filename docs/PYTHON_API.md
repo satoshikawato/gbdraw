@@ -345,22 +345,20 @@ dots: `sample.v1` produces `sample.v1.svg`. In the Circular CLI, duplicate impli
 record IDs in a separate-diagram batch receive deterministic suffixes. A batch
 session preserves its explicit `batch` grouping and resolved output array.
 
-Canonical request schemas 4 and 5 never write the private
-`__gbdraw_legacy_spacing` migration transport. Schema 1–3 and old-session
-readers can replay factor-based Circular spacing, but the current schema 5
-writer cannot re-save it losslessly. Replace it with explicit `inner_gap_px`
-and `outer_gap_px` values before saving a current session. See the
-[session compatibility matrix](./PYTHON_SESSION_COMPATIBILITY_MATRIX.md) for the
-reader boundary.
+Canonical request schema 5 never writes the private
+`__gbdraw_legacy_spacing` migration transport. Schema 1 and 2 readers can
+replay factor-based Circular spacing, but the current writer cannot re-save it
+losslessly. Replace it with explicit `inner_gap_px` and `outer_gap_px` values
+before saving a current session.
 
 Canonical request schema 5 persists explicit `single`, `grid`, or `batch`
 grouping. Its output is one object for a single diagram or grid and an array
 for Circular batch, with one entry per record. Record loading is mode-neutral;
 planners own topology warnings and mode, comparison, and cardinality policy.
 Active and public runtime collinearity configuration uses
-`LosslessCollinearityParameters`; supported canonical request schemas 1–5
-privately migrate legacy `standard` parameter payloads while preserving their
-effective fields.
+`LosslessCollinearityParameters`; canonical request schemas 1 and 2 privately
+migrate legacy `standard` parameter payloads while preserving their effective
+fields. Current schema 5 accepts only the lossless form.
 
 Pin a gbdraw version in reproducible pipelines and test representative output after
 upgrading. SVG geometry can change intentionally even when the Python call remains

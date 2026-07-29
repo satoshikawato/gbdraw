@@ -135,12 +135,12 @@ Current sessions identify each CDS from its complete location, strand, and stabl
 
 Changing an upload filename, file modification time, resource name, display alias, or saving and loading the same biological inputs does not invalidate a compatible raw protein-search result. A display-only change can rebuild derived display metadata without rerunning LOSAT. Changing an amino-acid sequence, the selected protein set, record-instance binding, feature location or strand, or a search argument does invalidate the affected result. Query/subject direction is significant.
 
-Session versions 36–39 keep current protein raw results in cache schema 4,
-derived protein comparisons in schema 3, and the protein identity manifest in
-schema 2. Nucleotide LOSAT results remain schema 2, so protein and nucleotide
-entries with different schemas may appear in one valid session.
+Current session version 39 keeps protein raw results in cache schema 4, derived
+protein comparisons in schema 3, and the protein identity manifest in schema
+2. Nucleotide LOSAT results remain schema 2, so protein and nucleotide entries
+with different schemas may appear in one valid session.
 
-Sessions 27–33 retain the verified migration path for schema-2 protein candidates and derived schema-1 evidence. On import, gbdraw keeps those artifacts separate from current hits. Generation verifies the complete FASTA content, program and arguments, direction, and one-to-one feature mapping before writing a schema-4 copy and rebuilding derived schema 3 without rerunning LOSAT. A candidate that cannot be verified is ignored only for that pair, and LOSAT runs normally. Session versions 34 and 35 were branch-internal development formats and are not supported.
+Sessions 27–33 retain the verified migration path for schema-2 protein candidates and derived schema-1 evidence. On import, gbdraw keeps those artifacts separate from current hits. Generation verifies the complete FASTA content, program and arguments, direction, and one-to-one feature mapping before writing a schema-4 copy and rebuilding derived schema 3 without rerunning LOSAT. A candidate that cannot be verified is ignored only for that pair, and LOSAT runs normally.
 
 The internal handles do not appear in a normal **Save Raw LOSAT TSV** download. Immediately before download, gbdraw uses the manifest to replace only QUERY and SUBJECT with the readable, percent-encoded form of a `protein_id`, `locus_tag`, GFF `ID`, or location fallback. Duplicate aliases within one record instance receive a deterministic short ordinal. The hydrator preserves comments, row order, columns 3–12, numeric spelling, and line endings, and it aborts the whole download if any handle cannot be resolved. User-uploaded comparison TSV is left unchanged.
 

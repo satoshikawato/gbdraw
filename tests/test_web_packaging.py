@@ -30,6 +30,7 @@ from gbdraw.session_io import (
     SUPPORTED_SESSION_VERSIONS,
     load_session,
 )
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -97,6 +98,57 @@ GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES = {
     "majanivirus_orthogroup.gbdraw-session.json.gz",
     "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
 }
+
+
+def _write_pairwise_popup_test_module(tmp_path: Path) -> Path:
+    feature_utils_path = tmp_path / "feature-utils.mjs"
+    feature_utils_path.write_text(
+        (WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
+    sequence_fasta_path.write_text(
+        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js")
+        .read_text(encoding="utf-8")
+        .replace("./feature-utils.js", "./feature-utils.mjs"),
+        encoding="utf-8",
+    )
+    color_utils_path = tmp_path / "color-utils.mjs"
+    color_utils_path.write_text(
+        (WEB_ROOT / "js" / "app" / "color-utils.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    conservation_series_path = tmp_path / "conservation-series.mjs"
+    conservation_series_path.write_text(
+        (WEB_ROOT / "js" / "app" / "conservation-series.js")
+        .read_text(encoding="utf-8")
+        .replace("./color-utils.js", "./color-utils.mjs"),
+        encoding="utf-8",
+    )
+    normalization_path = tmp_path / "losat-normalization.mjs"
+    normalization_path.write_text(
+        (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    match_sequences_path = tmp_path / "match-sequences.mjs"
+    match_sequences_path.write_text(
+        (WEB_ROOT / "js" / "app" / "match-sequences.js")
+        .read_text(encoding="utf-8")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./conservation-series.js", "./conservation-series.mjs"),
+        encoding="utf-8",
+    )
+    module_path = tmp_path / "pairwise-match-popup.mjs"
+    module_path.write_text(
+        (WEB_ROOT / "js" / "app" / "pairwise-match-popup.js")
+        .read_text(encoding="utf-8")
+        .replace("./feature-utils.js", "./feature-utils.mjs")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./losat-normalization.js", "./losat-normalization.mjs")
+        .replace("./match-sequences.js", "./match-sequences.mjs"),
+        encoding="utf-8",
+    )
+    return module_path
 
 
 def _load_verify_module():
@@ -1413,9 +1465,11 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
         pairwise_ids = set(re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text))
         collinearity_ids = set(re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text))
 
-        # Bundled gallery sessions intentionally remain compatibility fixtures.
-        assert session.get("version") == 36, session_name
-        assert session.get("renderRequest", {}).get("schema") == 3, session_name
+        assert session.get("version") == CURRENT_SESSION_VERSION, session_name
+        assert (
+            session.get("renderRequest", {}).get("schema")
+            == CANONICAL_REQUEST_SCHEMA
+        ), session_name
         assert (
             session.get("proteinIdentityManifest", {}).get("schema")
             == PROTEIN_IDENTITY_MANIFEST_SCHEMA
@@ -2072,32 +2126,7 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
     if node is None:
         pytest.skip("node is not available")
 
-    feature_utils_path = tmp_path / "feature-utils.mjs"
-    feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
-    sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
-    sequence_fasta_path.write_text(
-        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8").replace("./feature-utils.js", "./feature-utils.mjs"),
-        encoding="utf-8",
-    )
-    normalization_path = tmp_path / "losat-normalization.mjs"
-    normalization_path.write_text((WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"), encoding="utf-8")
-    match_sequences_path = tmp_path / "match-sequences.mjs"
-    match_sequences_path.write_text(
-        (WEB_ROOT / "js" / "app" / "match-sequences.js")
-        .read_text(encoding="utf-8")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
-        encoding="utf-8",
-    )
-    source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
-    module_path = tmp_path / "pairwise-match-popup.mjs"
-    module_path.write_text(
-        source_path.read_text(encoding="utf-8")
-        .replace("./feature-utils.js", "./feature-utils.mjs")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("./losat-normalization.js", "./losat-normalization.mjs")
-        .replace("./match-sequences.js", "./match-sequences.mjs"),
-        encoding="utf-8",
-    )
+    module_path = _write_pairwise_popup_test_module(tmp_path)
     check_path = tmp_path / "check-pairwise-popup.mjs"
     check_path.write_text(
         f"""
@@ -2263,32 +2292,7 @@ def test_collinear_adjacent_popup_labels_local_collinear_groups(tmp_path: Path) 
     if node is None:
         pytest.skip("node is not available")
 
-    feature_utils_path = tmp_path / "feature-utils.mjs"
-    feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
-    sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
-    sequence_fasta_path.write_text(
-        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8").replace("./feature-utils.js", "./feature-utils.mjs"),
-        encoding="utf-8",
-    )
-    normalization_path = tmp_path / "losat-normalization.mjs"
-    normalization_path.write_text((WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"), encoding="utf-8")
-    match_sequences_path = tmp_path / "match-sequences.mjs"
-    match_sequences_path.write_text(
-        (WEB_ROOT / "js" / "app" / "match-sequences.js")
-        .read_text(encoding="utf-8")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
-        encoding="utf-8",
-    )
-    source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
-    module_path = tmp_path / "pairwise-match-popup.mjs"
-    module_path.write_text(
-        source_path.read_text(encoding="utf-8")
-        .replace("./feature-utils.js", "./feature-utils.mjs")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("./losat-normalization.js", "./losat-normalization.mjs")
-        .replace("./match-sequences.js", "./match-sequences.mjs"),
-        encoding="utf-8",
-    )
+    module_path = _write_pairwise_popup_test_module(tmp_path)
     check_path = tmp_path / "check-collinear-popup.mjs"
     check_path.write_text(
         f"""
@@ -4607,10 +4611,7 @@ def test_web_session_round_trip_preserves_losat_and_source_names(tmp_path: Path)
     if historical_losat.get("parallelWorkers") is None:
         historical_losat.pop("parallelWorkers", None)
     historical_blastp = historical_losat.get("blastp", {})
-    if "collinearMaxGeneGap" in historical_blastp:
-        historical_blastp["collinearMaxUnitGap"] = historical_blastp.pop(
-            "collinearMaxGeneGap"
-        )
+    assert "collinearMaxGeneGap" not in historical_blastp
     custom_losat = {
         "outfmt": "6",
         "parallelWorkers": "3",
@@ -4898,7 +4899,7 @@ def test_linear_gff_feature_click_and_selection_smoke(tmp_path: Path) -> None:
 
 
 @pytest.mark.slow
-def test_gallery_session_restore_smoke() -> None:
+def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
     playwright_sync_api = pytest.importorskip(
         "playwright.sync_api",
         reason="playwright is not available in this environment",
@@ -4944,17 +4945,27 @@ def test_gallery_session_restore_smoke() -> None:
                 timeout=180_000,
             )
             dialog_message = page.evaluate("() => window.__gbdrawDialogMessages.at(-1)")
-            page.wait_for_function(
-                """() => {
-                    const app = window.__GBDRAW_APP__;
-                    return Array.isArray(app?.results) &&
-                        app.results.length > 0 &&
-                        !app.featureExtractionPending;
-                }""",
-                timeout=180_000,
+            assert dialog_message == "Session loaded successfully!", (
+                session_name,
+                dialog_message,
+                console_errors,
             )
+            try:
+                page.wait_for_function(
+                    """() => {
+                        const app = window.__GBDRAW_APP__;
+                        return Array.isArray(app?.results) &&
+                            app.results.length > 0 &&
+                            !app.featureExtractionPending;
+                    }""",
+                    timeout=180_000,
+                )
+            except playwright_sync_api.TimeoutError:
+                pytest.fail(
+                    f"{session_name} did not restore a completed SVG result; "
+                    f"console errors: {console_errors!r}"
+                )
 
-            assert dialog_message == "Session loaded successfully!"
             summary = page.evaluate(
                 """() => {
                     const app = window.__GBDRAW_APP__;
@@ -4974,6 +4985,45 @@ def test_gallery_session_restore_smoke() -> None:
             assert summary["status"] == "summary-ready", session_name
             assert summary["featureExtractionError"] in (None, ""), session_name
             assert summary["extractedCount"] > 0, session_name
+
+            if session_name == "WSSV_genome_comparison.gbdraw-session.json":
+                conservation_state = page.evaluate(
+                    """() => {
+                        const app = window.__GBDRAW_APP__;
+                        return {
+                            enabled: app.circularConservation?.enabled === true,
+                            source: String(app.circularConservation?.source || ''),
+                            labels: (app.circularConservation?.series || [])
+                                .map((entry) => String(entry?.label || '')),
+                            blastCount: app.files?.c_conservation_blasts?.length || 0,
+                            blastSource: String(
+                                app.files?.c_conservation_blasts_source || ''
+                            ),
+                            comparisonFastaCount:
+                                app.files?.c_conservation_fastas?.length || 0
+                        };
+                    }"""
+                )
+                assert conservation_state["enabled"] is True
+                assert conservation_state["source"] == "losat"
+                assert len(conservation_state["labels"]) == 20
+                assert conservation_state["blastCount"] == 20
+                assert conservation_state["blastSource"] == "losat-cache"
+                assert conservation_state["comparisonFastaCount"] == 0
+
+                round_trip_path = tmp_path / "WSSV-round-trip.gbdraw-session.json.gz"
+                with page.expect_download() as download_info:
+                    page.get_by_role(
+                        "button", name="Save Session", exact=True
+                    ).click()
+                download_info.value.save_as(round_trip_path)
+                round_trip = load_session(round_trip_path)
+                options = round_trip["renderRequest"]["diagramOptions"]
+                assert len(options["conservationBlastFiles"]) == 20
+                assert options["conservationLabels"] == conservation_state["labels"]
+                assert round_trip["webFiles"]["conservationBlastSource"] == "losat-cache"
+                assert "conservationFastaFiles" not in options
+                assert "conservationLosatFastaSources" not in round_trip["webFiles"]
 
             if session_name == "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz":
                 multi_record_positions = page.evaluate(

@@ -851,7 +851,7 @@ def _assert_current_artifacts(
             json.dumps(derived_entries, ensure_ascii=False),
         )
         is None,
-        "A version-35 readable transport ID remains in the derived cache.",
+        "A branch-internal readable transport ID remains in the derived cache.",
     )
 
 

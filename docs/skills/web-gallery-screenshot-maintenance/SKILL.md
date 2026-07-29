@@ -26,6 +26,18 @@ Then inspect the target tutorial JSON and media directory:
 - `gbdraw/web/gallery/tutorials/<example-id>.json`
 - `gbdraw/web/gallery/media/<example-id>/`
 
+## Overwrite Policy
+
+- Treat `gbdraw/web/gallery/sessions/`, `sources/`, `examples/`, `thumbnails/`,
+  and `examples.json` as generator-owned outputs. When a Gallery refresh is in
+  scope, overwrite all dirty or uncommitted copies in those paths with the current
+  generator output; do not preserve, merge, or restore their previous bytes.
+- Inspect the target inventory before running a broad refresh and regenerate from
+  the declared source inputs. If correctness also requires a code, test, or
+  documentation change, replace the dirty in-scope implementation as needed.
+- Keep unrelated working-tree files out of scope. The overwrite rule does not
+  authorize broad cleanup elsewhere in the repository.
+
 ## Audit Workflow
 
 1. Audit screenshots, tutorial writing, and structured content together. Do not treat a screenshot pass as complete until the tutorial also satisfies the Writing Rules and Structured Content Rules below.

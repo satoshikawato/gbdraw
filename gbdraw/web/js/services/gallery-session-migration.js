@@ -11,6 +11,7 @@ import {
   migratePersistedWebStateFieldNames
 } from '../app/current-option-values.js';
 import {
+  CANONICAL_REQUEST_SCHEMA,
   buildCanonicalSessionRequest,
   projectCanonicalSessionRequest
 } from './session-request.js';
@@ -187,6 +188,9 @@ const restoreConservationFiles = (session, filesData, circularConservation) => {
       `${label || `comparison-${seriesIndex + 1}`}.circular_conservation.losatn.tsv`
     );
   });
+  // Preserve these derived tables as typed-render inputs. Ordinary LOSAT saves
+  // must not mistake stale files from the upload mode for current results.
+  filesData.c_conservation_blasts_source = 'losat-cache';
 };
 
 const mergedGuiConfig = (session, projection) => {
@@ -325,50 +329,18 @@ const preserveComparisonResources = (session, promoted) => {
   }
 };
 
-const retainCanonicalV3OutputShape = (renderRequest) => {
-  const diagramOptions = isPlainObject(renderRequest.diagramOptions)
-    ? renderRequest.diagramOptions
-    : {};
-  const output = isPlainObject(diagramOptions.output) ? diagramOptions.output : {};
-  const renderOutput = Array.isArray(renderRequest.output)
-    ? renderRequest.output[0]
-    : renderRequest.output;
-  renderRequest.schema = 3;
-  delete renderRequest.grouping;
-  renderRequest.output = renderOutput;
-  renderRequest.diagramOptions = diagramOptions;
-  diagramOptions.output = {
-    outputPrefix: String(renderOutput?.prefix ?? 'out'),
-    legend: String(output.legend ?? 'right'),
-    plotTitlePosition: String(
-      output.plotTitlePosition ?? (renderRequest.mode === 'linear' ? 'bottom' : 'none')
-    )
-  };
-};
-
 const promoteCliAuthoredSession = (session, args) => {
-  const promoted = {
-    ...session,
-    renderRequest: cloneJson(session.renderRequest),
-    resources: session.resources
-  };
+  const sourceConfig = session.renderRequest.diagramOptions?.config;
+  const promoted = promoteGuiAuthoredSession(session, args);
   const renderRequest = promoted.renderRequest;
-  renderRequest.diagramOptions = isPlainObject(renderRequest.diagramOptions)
-    ? renderRequest.diagramOptions
-    : {};
   const featureShapes = isPlainObject(renderRequest.diagramOptions.featureShapes)
     ? renderRequest.diagramOptions.featureShapes
     : {};
   const explicitRepeat = explicitRepeatRendering(args);
   featureShapes.repeat_region = explicitRepeat || 'underlay';
   renderRequest.diagramOptions.featureShapes = featureShapes;
-  hydrateRecordPresentations(renderRequest, args);
-  retainCanonicalV3OutputShape(renderRequest);
-  for (const comparison of renderRequest.comparisons || []) {
-    const resourceId = String(comparison?.resourceId || '');
-    if (resourceId && !promoted.resources[resourceId]) {
-      throw new Error(`Canonical comparison resource is missing: ${resourceId}`);
-    }
+  if (sourceConfig !== undefined) {
+    renderRequest.diagramOptions.config = cloneJson(sourceConfig);
   }
   return promoted;
 };
@@ -379,6 +351,7 @@ const promoteGuiAuthoredSession = (session, args) => {
     resources: session.resources,
     webFiles: session.webFiles || {},
     legacyFiles: session.files,
+    storedConfig: session.config,
     fileBindings: session.cliInvocation?.fileBindings,
     repairInvalidComparisonHeight: Number(session.version) <= 33
   });
@@ -398,6 +371,7 @@ const promoteGuiAuthoredSession = (session, args) => {
   const promotedCore = buildCanonicalSessionRequest({ state, filesData });
   const promoted = {
     ...session,
+    config: cloneJson(config),
     renderRequest: promotedCore.renderRequest,
     resources: promotedCore.resources,
     webFiles: {
@@ -407,16 +381,26 @@ const promoteGuiAuthoredSession = (session, args) => {
   };
   hydrateRecordPresentations(promoted.renderRequest, args);
   preserveComparisonResources(session, promoted);
-  retainCanonicalV3OutputShape(promoted.renderRequest);
   return promoted;
 };
 
-export const promoteGallerySessionToCanonicalV3 = (session) => {
+export const promoteGallerySessionToCurrent = (session) => {
   if (!isPlainObject(session) || !isPlainObject(session.renderRequest)) {
     throw new Error('Gallery session must contain a canonical renderRequest.');
   }
   if (!isPlainObject(session.resources)) {
     throw new Error('Gallery session must contain canonical resources.');
+  }
+  const schema = Number(session.renderRequest.schema);
+  if (schema === CANONICAL_REQUEST_SCHEMA) {
+    const promoted = cloneJson(session);
+    if (isPlainObject(promoted.config)) {
+      promoted.config = migratePersistedGalleryConfig(promoted.config);
+    }
+    return promoted;
+  }
+  if (![1, 2].includes(schema)) {
+    throw new Error(`Unsupported canonical renderRequest schema: ${schema}.`);
   }
   const args = sessionArgs(session);
   const cliAuthored = isPlainObject(session?.config?.cliOptions);

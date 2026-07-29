@@ -237,6 +237,7 @@ const files = reactive({
   c_fasta: null,
   c_depth: null,
   c_conservation_blasts: [],
+  c_conservation_blasts_source: null,
   c_conservation_fastas: [],
   c_conservation_sequence_sources: [],
   d_color: null,

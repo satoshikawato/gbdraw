@@ -150,7 +150,7 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
   const usedKeys = new Set();
   const entries = [];
   const series = Array.isArray(circularConservation?.series) ? circularConservation.series : [];
-  series.forEach((entry) => {
+  series.forEach((entry, seriesIndex) => {
     if (!entry || typeof entry !== 'object') return;
     const sourceKey = String(entry.sourceKey || '').trim();
     let descriptor = sourceKey ? descriptorByKey.get(sourceKey) : null;
@@ -158,6 +158,12 @@ export const orderedConservationSources = (sourceFiles, circularConservation) =>
       const fileName = String(entry.fileName || '').trim();
       const candidates = descriptorsByFileName.get(fileName) || [];
       descriptor = candidates.find((candidate) => !usedKeys.has(candidate.sourceKey)) || null;
+    }
+    if (!descriptor) {
+      const sourceIndex = Number(entry.sourceIndex);
+      const fallbackIndex = Number.isInteger(sourceIndex) ? sourceIndex : seriesIndex;
+      const indexed = descriptors[fallbackIndex];
+      descriptor = indexed && !usedKeys.has(indexed.sourceKey) ? indexed : null;
     }
     if (!descriptor || usedKeys.has(descriptor.sourceKey)) return;
     usedKeys.add(descriptor.sourceKey);

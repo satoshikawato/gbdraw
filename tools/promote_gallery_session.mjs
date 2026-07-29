@@ -2,7 +2,7 @@
 
 import fs from 'fs';
 import zlib from 'zlib';
-import { promoteGallerySessionToCanonicalV3 } from '../gbdraw/web/js/services/gallery-session-migration.js';
+import { promoteGallerySessionToCurrent } from '../gbdraw/web/js/services/gallery-session-migration.js';
 
 const { readFile, writeFile } = fs.promises;
 const { gunzipSync, gzipSync } = zlib;
@@ -20,7 +20,7 @@ const main = async () => {
     ? gunzipSync(input)
     : input;
   const session = JSON.parse(decoded.toString('utf8'));
-  const promoted = promoteGallerySessionToCanonicalV3(session);
+  const promoted = promoteGallerySessionToCurrent(session);
   const payload = Buffer.from(JSON.stringify(promoted), 'utf8');
   const output = outputPath.toLowerCase().endsWith('.gz')
     ? gzipSync(payload, { level: 6, mtime: 0 })

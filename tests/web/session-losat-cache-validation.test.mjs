@@ -89,7 +89,7 @@ test('legacy standalone config import migrates retired values without a writer e
   ]);
 });
 
-for (const version of [36, 37, 38, 39]) {
+for (const version of [39]) {
   test(`version-${version} import rejects duplicate raw LOSAT cache keys`, () => {
     assert.throws(
       () => validateSessionLosatArtifacts(
@@ -171,7 +171,7 @@ for (const version of [36, 37, 38, 39]) {
   });
 }
 
-for (const unsupportedVersion of [34, 35]) {
+for (const unsupportedVersion of [34, 35, 36, 37, 38]) {
   test(`session import rejects branch-internal version ${unsupportedVersion}`, async () => {
     alerts.length = 0;
     const file = new Blob([JSON.stringify({
