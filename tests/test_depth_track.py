@@ -1837,9 +1837,8 @@ def test_circular_cli_depth_options_forward_to_api(
     depth_file = tmp_path / "depth.tsv"
     depth_file.write_text("rec1\t1\t10\n", encoding="utf-8")
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
@@ -1918,9 +1917,8 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
         return real_read_depth_tsv(path)
 
     monkeypatch.setattr(depth_tracks_module, "read_depth_tsv", counting_read_depth_tsv)
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch)
 
     circular_cli_module.circular_main(
@@ -1949,17 +1947,20 @@ def test_linear_cli_depth_options_forward_to_api(
     depth_file = tmp_path / "depth.tsv"
     depth_file.write_text("rec1\t1\t10\n", encoding="utf-8")
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *args, **kwargs: [record])
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
     _stub_typed_request_export(monkeypatch)
 
     def fake_build(_records, *, options, **_kwargs):
         captured["options"] = options
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(request_render_module, "build_linear_diagram", fake_build)
+    monkeypatch.setattr(
+        request_render_module,
+        "build_linear_diagram_result",
+        fake_build,
+    )
 
     linear_cli_module.linear_main(
         [
@@ -1992,7 +1993,9 @@ def test_linear_cli_depth_options_forward_to_api(
 
     options = captured["options"]
     assert options.depth_files is None
-    assert options.depth_track_files == [[str(depth_file)]]
+    assert options.depth_track_files is None
+    assert options.depth_tracks is not None
+    assert options.depth_tracks[0].source == str(depth_file)
     assert options.depth_window == 10
     assert options.depth_step == 5
     cfg = options.config
@@ -2014,17 +2017,20 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
     records = [_make_record("rec1"), _make_record("rec2")]
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *args, **kwargs: records)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
     _stub_typed_request_export(monkeypatch)
 
     def fake_build(_records, *, options, **_kwargs):
         captured["options"] = options
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(request_render_module, "build_linear_diagram", fake_build)
+    monkeypatch.setattr(
+        request_render_module,
+        "build_linear_diagram_result",
+        fake_build,
+    )
 
     paths = [str(tmp_path / name) for name in ("r1_a.tsv", "r2_a.tsv", "r1_b.tsv", "r2_b.tsv")]
     linear_cli_module.linear_main(
@@ -2065,16 +2071,25 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
 
     options = captured["options"]
     assert options.depth_files is None
-    assert options.depth_track_files == [
-        [paths[0], paths[2]],
-        [paths[1], paths[3]],
+    assert options.depth_track_files is None
+    assert options.depth_tracks is not None
+    assert [track.source for track in options.depth_tracks] == [
+        (paths[0], paths[1]),
+        (paths[2], paths[3]),
     ]
-    assert options.depth_track_labels == ["A", "B"]
-    assert options.depth_track_colors == ["#111111", "#222222"]
-    assert options.depth_track_heights == ["12", "28"]
-    assert options.depth_track_large_tick_intervals == ["10", "20"]
-    assert options.depth_track_small_tick_intervals == ["auto", "5"]
-    assert options.depth_track_tick_font_sizes == ["8", "12"]
+    assert [track.label for track in options.depth_tracks] == ["A", "B"]
+    assert [track.color for track in options.depth_tracks] == [
+        "#111111",
+        "#222222",
+    ]
+    assert [track.height for track in options.depth_tracks] == [12, 28]
+    assert [
+        track.large_tick_interval for track in options.depth_tracks
+    ] == [10, 20]
+    assert [
+        track.small_tick_interval for track in options.depth_tracks
+    ] == [None, 5]
+    assert [track.tick_font_size for track in options.depth_tracks] == [8, 12]
 
 
 def test_linear_cli_depth_track_placeholders_keep_record_slots(
@@ -2084,17 +2099,20 @@ def test_linear_cli_depth_track_placeholders_keep_record_slots(
     records = [_make_record("rec1"), _make_record("rec2")]
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *args, **kwargs: records)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
     _stub_typed_request_export(monkeypatch)
 
     def fake_build(_records, *, options, **_kwargs):
         captured["options"] = options
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(request_render_module, "build_linear_diagram", fake_build)
+    monkeypatch.setattr(
+        request_render_module,
+        "build_linear_diagram_result",
+        fake_build,
+    )
 
     paths = [str(tmp_path / name) for name in ("r1_a.tsv", "r2_b.tsv")]
     linear_cli_module.linear_main(
@@ -2115,9 +2133,12 @@ def test_linear_cli_depth_track_placeholders_keep_record_slots(
         ]
     )
 
-    assert captured["options"].depth_track_files == [
-        [paths[0], None],
-        [None, paths[1]],
+    assert captured["options"].depth_track_files is None
+    assert [
+        track.source for track in captured["options"].depth_tracks
+    ] == [
+        (paths[0], None),
+        (None, paths[1]),
     ]
 
 
@@ -2204,9 +2225,8 @@ def test_circular_cli_repeated_depth_track_forwards_record_major_files(
     records = [_make_record("rec1"), _make_record("rec2")]
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
@@ -2246,13 +2266,19 @@ def test_circular_cli_repeated_depth_track_forwards_record_major_files(
 
     options = captured["options"]
     assert options.depth_table is None
-    assert options.depth_track_files == [
-        [paths[0], paths[2]],
-        [paths[1], paths[3]],
+    assert options.depth_track_files is None
+    assert options.depth_tracks is not None
+    assert [track.source for track in options.depth_tracks] == [
+        (paths[0], paths[1]),
+        (paths[2], paths[3]),
     ]
-    assert options.depth_track_large_tick_intervals == ["10", "20"]
-    assert options.depth_track_small_tick_intervals == ["auto", "5"]
-    assert options.depth_track_tick_font_sizes == ["8", "12"]
+    assert [
+        track.large_tick_interval for track in options.depth_tracks
+    ] == [10, 20]
+    assert [
+        track.small_tick_interval for track in options.depth_tracks
+    ] == [None, 5]
+    assert [track.tick_font_size for track in options.depth_tracks] == [8, 12]
 
 
 @pytest.mark.circular

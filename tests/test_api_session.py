@@ -10,6 +10,12 @@ import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.analysis.collinearity import (
+    CollinearityAnchor,
+    CollinearityBlock,
+    CollinearityResult,
+)
+from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.api import (
     CircularDiagramRequest,
     DepthTrackInput,
@@ -435,6 +441,159 @@ def test_web_depth_writer_payload_decodes_with_python_codec(tmp_path: Path) -> N
     ]
     assert request.options.depth_track_files is None
     assert request.options.depth_track_labels is None
+
+
+def test_web_resolved_protein_writer_preserves_alignment_settings(
+    tmp_path: Path,
+) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+    completed = subprocess.run(
+        [
+            node,
+            "tests/web/session-request.test.mjs",
+            "--print-resolved-protein",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).parents[1],
+    )
+    canonical = json.loads(completed.stdout)
+    document = load_session_document(
+        {
+            "format": "gbdraw-session",
+            "version": CURRENT_SESSION_VERSION,
+            "renderRequest": canonical["renderRequest"],
+            "resources": canonical["resources"],
+        }
+    )
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+
+    assert isinstance(request, LinearDiagramRequest)
+    assert request.options.protein_blastp_mode == "none"
+    assert request.options.linear_comparisons is not None
+    assert len(request.options.linear_comparisons) == 1
+    assert request.options.align_orthogroup_feature == "resolved-feature-anchor"
+
+
+@pytest.mark.parametrize("collinearity_value_kind", ("result", "blocks"))
+def test_python_typed_protein_results_round_trip_through_web_projection(
+    tmp_path: Path,
+    collinearity_value_kind: str,
+) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+    member = OrthogroupMember(
+        orthogroup_id="OG1",
+        protein_id="protein-a",
+        record_index=0,
+        feature_index=1,
+        record_id="record-a",
+        label="Protein A",
+        start=10,
+        end=40,
+        strand=1,
+        feature_svg_id="feature-a",
+        source_protein_id="source-a",
+    )
+    orthogroups = OrthogroupResult(
+        orthogroups={"OG1": [member]},
+        member_by_protein_id={"protein-a": member},
+        names_by_orthogroup_id={"OG1": "Example group"},
+    )
+    anchor = CollinearityAnchor(
+        query_protein_id="protein-a",
+        subject_protein_id="protein-b",
+        query_record_index=0,
+        subject_record_index=1,
+        query_order=0,
+        subject_order=1,
+        query_start=10,
+        query_end=40,
+        subject_start=20,
+        subject_end=50,
+        identity=91.5,
+        evalue=1e-20,
+        bitscore=100.0,
+        alignment_length=30,
+        query_feature_svg_id="feature-a",
+        subject_feature_svg_id="feature-b",
+        source="precomputed",
+        query_unit_id="unit-a",
+        subject_unit_id="unit-b",
+        query_unit_kind="cds",
+        subject_unit_kind="cds",
+        query_locus_id=None,
+        subject_locus_id=None,
+        query_display_name="Protein A",
+        subject_display_name="Protein B",
+    )
+    block = CollinearityBlock(
+        block_id="block-1",
+        query_record_index=0,
+        subject_record_index=1,
+        orientation="plus",
+        score=100.0,
+        anchors=(anchor,),
+    )
+    collinearity = (
+        CollinearityResult(blocks=(block,), orthogroups=orthogroups)
+        if collinearity_value_kind == "result"
+        else (block,)
+    )
+    request = LinearDiagramRequest(
+        records=(_record("record-a"), _record("record-b")),
+        options=LinearDiagramOptions(
+            orthogroups=orthogroups,
+            collinearity_blocks=collinearity,
+        ),
+    )
+    session_path = tmp_path / f"typed-{collinearity_value_kind}.json"
+    save_session_document(session_path, request)
+
+    completed = subprocess.run(
+        [
+            node,
+            "tests/web/session-request.test.mjs",
+            "--round-trip-session",
+            str(session_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).parents[1],
+    )
+    canonical = json.loads(completed.stdout)
+    comparisons = canonical["renderRequest"]["comparisons"]
+    orthogroup_entry = next(
+        item for item in comparisons if item["kind"] == "orthogroupResult"
+    )
+    collinearity_entry = next(
+        item for item in comparisons if item["kind"] == "collinearityResult"
+    )
+    assert orthogroup_entry["encoding"] == "canonicalJson"
+    assert collinearity_entry["encoding"] == "canonicalJson"
+    assert collinearity_entry["valueKind"] == collinearity_value_kind
+
+    document = load_session_document(
+        {
+            "format": "gbdraw-session",
+            "version": CURRENT_SESSION_VERSION,
+            "renderRequest": canonical["renderRequest"],
+            "resources": canonical["resources"],
+        }
+    )
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        decoded = session_to_request(materialized)
+
+    assert isinstance(decoded, LinearDiagramRequest)
+    assert decoded.options.orthogroups == orthogroups
+    assert decoded.options.collinearity_blocks == collinearity
 
 
 def test_python_depth_request_projects_in_web(tmp_path: Path) -> None:

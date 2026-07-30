@@ -2111,9 +2111,8 @@ def test_cli_circular_track_order_forwards_slots(monkeypatch: pytest.MonkeyPatch
     record = _load_record()
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
@@ -2151,9 +2150,8 @@ def test_cli_circular_track_slot_forwards_typed_slots(
     record = _load_record()
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
@@ -2192,9 +2190,8 @@ def test_cli_circular_track_axis_index_forwards_value(monkeypatch: pytest.Monkey
     record = _load_record()
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
@@ -2241,9 +2238,8 @@ def test_cli_center_reserved_radius_forwards_value(monkeypatch: pytest.MonkeyPat
     record = _load_record()
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):

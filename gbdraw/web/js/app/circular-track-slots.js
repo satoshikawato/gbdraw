@@ -1040,11 +1040,19 @@ export const applyCircularSuppressControlsToSlots = (slots, form = {}) => (
   })
 );
 
-const conservationSourceFilesForState = (state) => (
-  String(state?.circularConservation?.source || '').trim().toLowerCase() === 'upload'
-    ? normalizeFileList(state?.files?.c_conservation_blasts)
-    : normalizeFileList(state?.files?.c_conservation_fastas)
-);
+const conservationSourceFilesForState = (state) => {
+  const blasts = normalizeFileList(state?.files?.c_conservation_blasts);
+  if (
+    String(state?.circularConservation?.source || '').trim().toLowerCase() === 'upload' ||
+    (
+      state?.files?.c_conservation_blasts_source === 'losat-cache' &&
+      blasts.length > 0
+    )
+  ) {
+    return blasts;
+  }
+  return normalizeFileList(state?.files?.c_conservation_fastas);
+};
 
 const conservationEntriesForState = (state) => {
   if (state?.circularConservation?.enabled !== true) return [];

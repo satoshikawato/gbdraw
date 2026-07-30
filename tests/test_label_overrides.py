@@ -612,11 +612,9 @@ def test_circular_cli_label_table_injects_override_df(
     record = _make_record()
     override_df = _rules_df([["*", "*", "label", "^enzyme alpha$", "CLI label"]])
     captured: dict[str, Any] = {}
-    real_modify_config_dict = modify_config_dict
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
         request_render_module,
         "save_figure_to",
@@ -624,21 +622,14 @@ def test_circular_cli_label_table_injects_override_df(
             str(Path(output_dir or ".") / f"{output_prefix}.svg")
         ],
     )
-    monkeypatch.setattr(circular_cli_module, "read_label_override_file", lambda _path: override_df)
+    monkeypatch.setattr(request_render_module, "read_label_override_file", lambda _path: override_df)
 
-    def fake_modify(
-        config_dict: dict,
-        overrides: dict[str, object] | None = None,
-    ) -> dict:
-        resolved = dict(overrides or {})
-        captured["filtering_override"] = resolved.get("labels.filtering.raw")
-        captured["label_override_df"] = config_dict["labels"]["filtering"].get("label_override_df")
-        return real_modify_config_dict(config_dict, resolved)
-
-    def fake_assemble(*_args: Any, **_kwargs: Any) -> Drawing:
+    def fake_assemble(*_args: Any, **kwargs: Any) -> Drawing:
+        captured["label_override_df"] = kwargs[
+            "options"
+        ].label_override_table
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "modify_config_dict", fake_modify)
     monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     circular_cli_module.circular_main(
@@ -654,7 +645,6 @@ def test_circular_cli_label_table_injects_override_df(
         ]
     )
 
-    assert captured["filtering_override"]["label_override_df"] is override_df
     assert captured["label_override_df"] is override_df
 
 
@@ -666,16 +656,21 @@ def test_linear_cli_label_table_injects_override_df(
     override_df = _rules_df([["*", "*", "label", "^enzyme alpha$", "CLI label"]])
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_label_override_file", lambda _path: override_df)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_label_override_file", lambda _path: override_df)
 
-    def fake_render_request(request):
-        captured["canonical_request"] = request
+    def fake_render_request(request, **_kwargs):
+        resolved = request_render_module.resolve_request(request)
+        captured["canonical_request"] = resolved
         return SimpleNamespace(
             drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
             interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)

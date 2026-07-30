@@ -6,8 +6,7 @@ import copy
 import hashlib
 import json
 import logging
-import re
-from dataclasses import dataclass, fields, is_dataclass, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence, TypeAlias
 
@@ -16,7 +15,12 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
+from gbdraw.analysis.protein_artifacts import (
+    is_current_derived_protein_artifact,
+    validate_current_derived_protein_artifacts,
+)
 from gbdraw.analysis.collinearity import (
+    CollinearityResult,
     LosslessCollinearityParameters,
 )
 from gbdraw.analysis.depth_tracks import (
@@ -26,25 +30,25 @@ from gbdraw.analysis.depth_tracks import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.analysis.protein_colinearity import (
-    build_legacy_protein_reference_map,
     LosatpCacheManager,
     ProteinExtractionResult,
     extract_web_stable_cds_proteins,
-    is_legacy_protein_losat_cache_entry,
     is_protein_losat_cache_entry,
-    make_legacy_protein_raw_candidate,
-    promote_legacy_protein_raw_cache_entries,
-    proteins_to_fasta,
+    validate_protein_identity_manifest,
     validate_protein_raw_entry_references,
 )
 from gbdraw.features.visibility import (
-    compile_feature_visibility_rules,
     read_feature_visibility_file,
     resolve_candidate_feature_types,
 )
+from gbdraw.annotations import AnnotationOptions, read_annotation_table
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors, read_color_table
-from gbdraw.io.record_select import reverse_records, select_record
+from gbdraw.labels.filtering import (
+    read_filter_list_file,
+    read_label_override_file,
+    read_qualifier_priority_file,
+)
 from gbdraw.render.interactive_context import (
     build_interactive_svg_context,
     require_interactive_svg_metadata,
@@ -55,18 +59,30 @@ from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload
 
 from .diagram import (
     DEFAULT_SELECTED_FEATURES,
+    LinearDiagramBuildResult,
+    LinearDiagramMetadata,
     build_circular_diagram,
     build_circular_multi_diagram,
-    build_linear_diagram,
+    build_linear_diagram_result,
 )
-from .io import apply_region_specs, load_gbks, load_gff_fasta
+from .io import load_gbks, load_gff_fasta
 from .options import (
     CircularDiagramOptions,
     CircularMultiRecordOptions,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
 )
-from .render import save_figure_to
+from .prepared import ResolvedFeatureInputs, resolve_feature_inputs
+from .record_planning import (
+    ResolvedRecordCollection,
+    ResolvedRecordProvenance,
+    resolve_circular_batch_outputs,
+    resolve_circular_options,
+    resolve_implicit_record_output_prefix,
+    resolve_linear_options,
+    resolve_record_inputs,
+)
+from .render import preflight_output_paths, save_figure_to
 from .requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
@@ -75,10 +91,261 @@ from .requests import (
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCardinality,
+    RecordCollectionOptions,
     RecordInput,
+    RecordPresentation,
+    RenderOutputRequest,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_request_option_tables(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+    *,
+    mode: Literal["circular", "linear"],
+    load_comparison_colors: bool,
+) -> CircularDiagramOptions | LinearDiagramOptions:
+    """Resolve file-backed option tables once before record and drawing plans."""
+
+    colors = options.colors
+    changed = False
+    if colors is not None:
+        color_table = colors.color_table
+        if color_table is None and colors.color_table_file is not None:
+            color_table = read_color_table(colors.color_table_file)
+        default_colors = colors.default_colors
+        if default_colors is None and colors.default_colors_file is not None:
+            default_colors = load_default_colors(
+                user_defined_default_colors=colors.default_colors_file,
+                palette=colors.default_colors_palette,
+                load_comparison=load_comparison_colors,
+            )
+        if colors.color_table_file is not None or colors.default_colors_file is not None:
+            colors = replace(
+                colors,
+                color_table=color_table,
+                color_table_file=None,
+                default_colors=default_colors,
+                default_colors_file=None,
+            )
+            changed = True
+
+    feature_visibility_table = options.feature_visibility_table
+    if options.feature_visibility_table_file is not None:
+        if feature_visibility_table is None:
+            feature_visibility_table = read_feature_visibility_file(
+                options.feature_visibility_table_file
+            )
+        changed = True
+    label_whitelist_table = options.label_whitelist_table
+    if options.label_whitelist_file is not None:
+        if label_whitelist_table is not None:
+            raise ValidationError(
+                "Pass either label_whitelist_table or label_whitelist_file, not both."
+            )
+        if label_whitelist_table is None:
+            label_whitelist_table = read_filter_list_file(
+                options.label_whitelist_file
+            )
+        changed = True
+    qualifier_priority_table = options.qualifier_priority_table
+    if options.qualifier_priority_file is not None:
+        if qualifier_priority_table is not None:
+            raise ValidationError(
+                "Pass either qualifier_priority_table or "
+                "qualifier_priority_file, not both."
+            )
+        if qualifier_priority_table is None:
+            qualifier_priority_table = read_qualifier_priority_file(
+                options.qualifier_priority_file
+            )
+        changed = True
+    label_override_table = options.label_override_table
+    if options.label_override_file is not None:
+        if label_override_table is not None:
+            raise ValidationError(
+                "Pass either label_override_table or label_override_file, not both."
+            )
+        if label_override_table is None:
+            label_override_table = read_label_override_file(
+                options.label_override_file
+            )
+        changed = True
+    annotations = options.annotations
+    if annotations is not None and annotations.table_file is not None:
+        annotations = AnnotationOptions(
+            sets=tuple(
+                read_annotation_table(
+                    annotations.table_file,
+                    mode=mode,
+                )
+            )
+        )
+        changed = True
+    if not changed:
+        return options
+    return replace(
+        options,
+        colors=colors,
+        annotations=annotations,
+        feature_visibility_table=feature_visibility_table,
+        feature_visibility_table_file=None,
+        label_whitelist_table=label_whitelist_table,
+        label_whitelist_file=None,
+        qualifier_priority_table=qualifier_priority_table,
+        qualifier_priority_file=None,
+        label_override_table=label_override_table,
+        label_override_file=None,
+    )
+
+
+@dataclass
+class _ComparisonSequenceSources:
+    """Memoized Circular companion FASTA records shared by a request batch."""
+
+    paths: tuple[str | None, ...]
+    _records: tuple[tuple[SeqRecord, ...], ...] | None = None
+
+    def load(self) -> tuple[tuple[SeqRecord, ...], ...]:
+        if self._records is None:
+            self._records = tuple(
+                tuple(SeqIO.parse(path, "fasta")) if path else ()
+                for path in self.paths
+            )
+        return self._records
+
+
+@dataclass(frozen=True)
+class PreparedDiagramInputs:
+    """Resolved values reused by record loading, drawing, and metadata."""
+
+    features: ResolvedFeatureInputs
+    gff_candidate_features: tuple[str, ...]
+    gff_keep_all_features: bool
+    comparison_sequences: _ComparisonSequenceSources | None = None
+
+
+def _is_current_nucleotide_losat_entry(entry: Mapping[str, Any]) -> bool:
+    return (
+        entry.get("schema") == 2
+        and entry.get("kind") == "raw-losat"
+        and entry.get("identityKind") in {None, "nucleotide"}
+        and str(entry.get("program") or "").lower() != "blastp"
+        and isinstance(entry.get("key"), str)
+        and bool(entry.get("key"))
+        and isinstance(entry.get("text"), str)
+    )
+
+
+def _detached_artifact_entries(
+    entries: Sequence[Mapping[str, Any]],
+    *,
+    label: str,
+) -> tuple[Mapping[str, Any], ...]:
+    if isinstance(entries, (str, bytes, bytearray)):
+        raise ValidationError(f"{label} must be a sequence of objects.")
+    if not all(isinstance(entry, Mapping) for entry in entries):
+        raise ValidationError(f"{label} must be a sequence of objects.")
+    try:
+        detached = tuple(copy.deepcopy(dict(entry)) for entry in entries)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(f"{label} must be a sequence of objects.") from exc
+    if len(detached) != len(entries):
+        raise ValidationError(f"{label} must be a sequence of objects.")
+    return detached
+
+
+@dataclass(frozen=True)
+class CurrentRequestArtifacts:
+    """Validated current artifacts accepted by the typed render boundary."""
+
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
+    losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
+    protein_identity_manifest: Mapping[str, Any] | None = None
+    protein_source_mode: Literal[
+        "none", "pairwise", "orthogroup", "collinear"
+    ] | None = None
+
+    def __post_init__(self) -> None:
+        raw_entries = _detached_artifact_entries(
+            self.losat_cache_entries,
+            label="losat_cache_entries",
+        )
+        derived_entries = _detached_artifact_entries(
+            self.losat_derived_cache_entries,
+            label="losat_derived_cache_entries",
+        )
+        protein_entries: list[Mapping[str, Any]] = []
+        raw_keys: set[str] = set()
+        for index, entry in enumerate(raw_entries):
+            if is_protein_losat_cache_entry(entry):
+                protein_entries.append(entry)
+            elif not _is_current_nucleotide_losat_entry(entry):
+                raise ValidationError(
+                    "Unsupported current LOSAT artifact at "
+                    f"losat_cache_entries[{index}]."
+                )
+            key = str(entry["key"])
+            if key in raw_keys:
+                raise ValidationError(f"Duplicate current LOSAT artifact key: {key!r}.")
+            raw_keys.add(key)
+
+        derived_keys: set[str] = set()
+        for index, entry in enumerate(derived_entries):
+            if not is_current_derived_protein_artifact(entry):
+                raise ValidationError(
+                    "Unsupported current derived LOSATP artifact at "
+                    f"losat_derived_cache_entries[{index}]."
+                )
+            key = str(entry["key"])
+            if key in derived_keys:
+                raise ValidationError(
+                    f"Duplicate current derived LOSATP artifact key: {key!r}."
+                )
+            derived_keys.add(key)
+
+        manifest = self.protein_identity_manifest
+        detached_manifest: Mapping[str, Any] | None = None
+        if manifest is not None:
+            if not isinstance(manifest, Mapping):
+                raise ValidationError("protein_identity_manifest must be an object.")
+            detached_manifest = copy.deepcopy(dict(manifest))
+            validate_protein_identity_manifest(detached_manifest)
+        if protein_entries and detached_manifest is None:
+            raise ValidationError(
+                "Current protein LOSATP artifacts require protein_identity_manifest."
+            )
+        if detached_manifest is not None:
+            for index, entry in enumerate(protein_entries):
+                if not validate_protein_raw_entry_references(
+                    entry,
+                    detached_manifest,
+                ):
+                    raise ValidationError(
+                        "Current protein LOSATP artifact does not resolve through "
+                        f"protein_identity_manifest: losat_cache_entries[{index}]."
+                    )
+        if derived_entries:
+            validate_current_derived_protein_artifacts(
+                derived_entries,
+                detached_manifest,
+            )
+        if self.protein_source_mode not in {
+            None,
+            "none",
+            "pairwise",
+            "orthogroup",
+            "collinear",
+        }:
+            raise ValidationError(
+                f"Unsupported protein_source_mode: {self.protein_source_mode!r}."
+            )
+
+        object.__setattr__(self, "losat_cache_entries", raw_entries)
+        object.__setattr__(self, "losat_derived_cache_entries", derived_entries)
+        object.__setattr__(self, "protein_identity_manifest", detached_manifest)
 
 
 @dataclass(frozen=True)
@@ -89,13 +356,11 @@ class PreparedDiagramRequest:
     request: DiagramRequest
     records: tuple[SeqRecord, ...]
     drawing: Drawing
+    inputs: PreparedDiagramInputs | None = None
+    linear_metadata: LinearDiagramMetadata | None = None
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
-    legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] = ()
-    legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] = ()
-    protein_id_map: Mapping[str, str] | None = None
-    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -108,13 +373,10 @@ class RequestRenderResult:
     drawing: Drawing
     output_paths: tuple[Path, ...]
     interactive_context: InteractiveSvgContext | None = None
+    linear_metadata: LinearDiagramMetadata | None = None
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
-    legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] = ()
-    legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] = ()
-    protein_id_map: Mapping[str, str] | None = None
-    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -124,6 +386,7 @@ class PreparedCircularBatchRequest:
     request: CircularBatchRequest
     records: tuple[SeqRecord, ...]
     items: tuple[PreparedDiagramRequest, ...]
+    inputs: PreparedDiagramInputs | None = None
 
     @property
     def mode(self) -> Literal["circular"]:
@@ -190,6 +453,8 @@ class CircularRequestPlan:
     layout: CircularMultiRecordOptions | None
     precomputed_depth_track_specs: tuple[DepthTrackSpec, ...] | None = None
     precomputed_depth_track_count: int | None = None
+    inputs: PreparedDiagramInputs | None = None
+    provenance: tuple[ResolvedRecordProvenance, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularDiagramRequest):
@@ -215,19 +480,33 @@ class CircularRequestPlan:
             raise ValidationError(
                 "CircularRequestPlan layout presence must match the request."
             )
+        if self.provenance and len(self.provenance) != len(self.records):
+            raise ValidationError(
+                "CircularRequestPlan provenance must align with its records."
+            )
 
     @property
     def mode(self) -> Literal["circular"]:
         return "circular"
 
+    def preflight_outputs(self) -> None:
+        """Validate every materialized output before diagram construction."""
+
+        _preflight_render_output(self.request.output)
+
     def build(self) -> Drawing:
+        shared_kwargs = (
+            {"_resolved_feature_inputs": self.inputs.features}
+            if self.inputs is not None
+            else {}
+        )
         if self.layout is None:
-            depth_kwargs = {}
+            depth_kwargs: dict[str, Any] = dict(shared_kwargs)
             if self.precomputed_depth_track_specs is not None:
-                depth_kwargs = {
+                depth_kwargs.update({
                     "_precomputed_depth_track_specs": self.precomputed_depth_track_specs,
                     "_precomputed_depth_track_count": self.precomputed_depth_track_count,
-                }
+                })
             return build_circular_diagram(
                 self.records[0],
                 options=self.request.options,
@@ -237,6 +516,7 @@ class CircularRequestPlan:
             self.records,
             options=self.request.options,
             layout=self.layout,
+            **shared_kwargs,
         )
 
 
@@ -266,6 +546,8 @@ class CircularBatchRequestPlan:
 
     request: CircularBatchRequest
     records: tuple[SeqRecord, ...]
+    inputs: PreparedDiagramInputs | None = None
+    provenance: tuple[ResolvedRecordProvenance, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularBatchRequest):
@@ -280,10 +562,19 @@ class CircularBatchRequestPlan:
                 expected_count=len(self.request.records),
             ),
         )
+        if self.provenance and len(self.provenance) != len(self.records):
+            raise ValidationError(
+                "CircularBatchRequestPlan provenance must align with its records."
+            )
 
     @property
     def mode(self) -> Literal["circular"]:
         return "circular"
+
+    def preflight_outputs(self) -> None:
+        """Validate every materialized batch output before diagram construction."""
+
+        _preflight_circular_batch_outputs(self.request)
 
     def item_plans(self) -> tuple[CircularRequestPlan, ...]:
         plans: list[CircularRequestPlan] = []
@@ -332,6 +623,12 @@ class CircularBatchRequestPlan:
                     precomputed_depth_track_count=(
                         logical_depth_count if normalized_depth is not None else None
                     ),
+                    inputs=self.inputs,
+                    provenance=(
+                        (self.provenance[index],)
+                        if self.provenance
+                        else ()
+                    ),
                 )
             )
         return tuple(plans)
@@ -344,6 +641,8 @@ class LinearRequestPlan:
     request: LinearDiagramRequest
     records: tuple[SeqRecord, ...]
     layout: LinearMultiRecordOptions | None
+    inputs: PreparedDiagramInputs | None = None
+    provenance: tuple[ResolvedRecordProvenance, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, LinearDiagramRequest):
@@ -369,17 +668,26 @@ class LinearRequestPlan:
             raise ValidationError(
                 "LinearRequestPlan layout presence must match the request."
             )
+        if self.provenance and len(self.provenance) != len(self.records):
+            raise ValidationError(
+                "LinearRequestPlan provenance must align with its records."
+            )
 
     @property
     def mode(self) -> Literal["linear"]:
         return "linear"
+
+    def preflight_outputs(self) -> None:
+        """Validate every materialized output before diagram construction."""
+
+        _preflight_render_output(self.request.output)
 
     def build(
         self,
         *,
         losatp_cache: LosatpCacheManager | None = None,
         protein_extraction: ProteinExtractionResult | None = None,
-    ) -> Drawing:
+    ) -> LinearDiagramBuildResult:
         kwargs: dict[str, Any] = {"options": self.request.options}
         if self.layout is not None:
             kwargs["layout"] = self.layout
@@ -387,7 +695,33 @@ class LinearRequestPlan:
             kwargs["losatp_cache"] = losatp_cache
         if protein_extraction is not None:
             kwargs["protein_extraction"] = protein_extraction
-        return build_linear_diagram(self.records, **kwargs)
+        if self.inputs is not None:
+            kwargs["_resolved_feature_inputs"] = self.inputs.features
+        built = build_linear_diagram_result(self.records, **kwargs)
+        if isinstance(built, LinearDiagramBuildResult):
+            return built
+        if not isinstance(built, Drawing):
+            raise ValidationError(
+                "The Linear diagram builder returned an unsupported result."
+            )
+        options = self.request.options
+        return LinearDiagramBuildResult(
+            drawing=built,
+            metadata=LinearDiagramMetadata(
+                protein_comparisons=(
+                    tuple(options.protein_comparisons)
+                    if options.protein_comparisons is not None
+                    else None
+                ),
+                linear_comparisons=tuple(options.linear_comparisons or ()),
+                orthogroups=options.orthogroups,
+                collinearity_result=(
+                    options.collinearity_blocks
+                    if isinstance(options.collinearity_blocks, CollinearityResult)
+                    else None
+                ),
+            ),
+        )
 
 
 DiagramRequestPlan: TypeAlias = (
@@ -397,67 +731,11 @@ DiagramRequestPlan: TypeAlias = (
 
 @dataclass(frozen=True)
 class _PreparedLinearArtifacts:
-    request: LinearDiagramRequest
     cache: LosatpCacheManager | None
     extraction: ProteinExtractionResult | None
     nucleotide_entries: tuple[Mapping[str, Any], ...]
     passthrough_derived_entries: tuple[Mapping[str, Any], ...]
-    legacy_candidates: tuple[Mapping[str, Any], ...]
-    protein_id_map: Mapping[str, str]
     source_mode: str
-    warnings: tuple[str, ...]
-
-
-_LEGACY_PROTEIN_REFERENCE_RE = re.compile(
-    r"p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}"
-    r"(?:_[2-9][0-9]*)?"
-)
-_FEATURE_ANALYSIS_REFERENCE_RE = re.compile(r"f_[0-9a-f]{64}")
-
-
-def _load_record_input(
-    record_input: RecordInput,
-    *,
-    gff_candidate_features: Sequence[str] | None,
-    gff_keep_all_features: bool,
-    color_table: DataFrame | None,
-    feature_visibility_table: DataFrame | None,
-) -> list[SeqRecord]:
-    selector = record_input.selector
-    selector_values = [selector.raw] if selector is not None else None
-    reverse = record_input.presentation.reverse_complement
-    source = record_input.source
-
-    if isinstance(source, GenBankInputSource):
-        records = load_gbks(
-            [str(source.path)],
-            record_selectors=selector_values,
-            reverse_flags=[reverse],
-        )
-    elif isinstance(source, GffFastaInputSource):
-        records = load_gff_fasta(
-            [str(source.gff_path)],
-            [str(source.fasta_path)],
-            selected_features_set=gff_candidate_features,
-            keep_all_features=gff_keep_all_features,
-            record_selectors=selector_values,
-            reverse_flags=[reverse],
-            color_table=color_table,
-            feature_visibility_table=feature_visibility_table,
-        )
-    elif isinstance(source, InMemoryRecordSource):
-        records = [copy.deepcopy(source.record)]
-        try:
-            records = select_record(records, selector)
-            records = reverse_records(records, reverse)
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
-    else:  # pragma: no cover - RecordInput validates this union.
-        raise ValidationError("Unsupported record input source.")
-
-    if record_input.region is not None:
-        records = apply_region_specs(records, [record_input.region])
-    return records
 
 
 def _linear_request_uses_comparisons(request: LinearDiagramRequest) -> bool:
@@ -465,101 +743,201 @@ def _linear_request_uses_comparisons(request: LinearDiagramRequest) -> bool:
     return bool(
         options.blast_files
         or options.linear_comparisons
+        or options.comparison_table_file
         or options.protein_comparisons
         or options.collinearity_blocks
         or options.protein_blastp_mode != "none"
     )
 
 
-def _select_linear_comparison_records(
-    records: Sequence[SeqRecord],
-    *,
-    is_gff_source: bool,
-    input_count: int,
-) -> list[SeqRecord]:
-    """Apply the legacy Linear comparison cardinality rule in the planner."""
-
-    selected = list(records)
-    if len(selected) > 1 and (is_gff_source or input_count > 1):
-        return selected[:1]
-    return selected
-
-
-def _select_planned_record(
-    request: DiagramRequest,
-    record_input: RecordInput,
-    records: Sequence[SeqRecord],
-) -> SeqRecord:
-    selected = list(records)
-    if isinstance(request, LinearDiagramRequest) and _linear_request_uses_comparisons(
-        request
-    ):
-        selected = _select_linear_comparison_records(
-            selected,
-            is_gff_source=isinstance(record_input.source, GffFastaInputSource),
-            input_count=len(request.records),
-        )
-    if len(selected) < len(records):
-        logger.info(
-            "Comparison-aware Linear planning selected the first record from %s.",
-            getattr(record_input.source, "path", None)
-            or getattr(record_input.source, "gff_path", "input"),
-        )
-        selected = selected[:1]
-    if len(selected) != 1:
-        raise ValidationError(
-            "Each RecordInput must resolve to exactly one record; add a selector or region."
-        )
-
-    record = selected[0]
-    presentation = record_input.presentation
-    if getattr(record, "annotations", None) is None:
-        record.annotations = {}
-    if presentation.label:
-        record.annotations["gbdraw_record_label"] = presentation.label
-    if presentation.subtitle:
-        record.annotations["gbdraw_record_subtitle"] = presentation.subtitle
-    if record_input.record_key:
-        record.annotations["gbdraw_record_key"] = record_input.record_key
-    return record
-
-
-def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
-    """Load/copy every RecordInput and return exactly one record per input."""
-
+def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
     if not isinstance(
         request,
         (CircularDiagramRequest, CircularBatchRequest, LinearDiagramRequest),
     ):
         raise ValidationError("Unsupported diagram request type.")
+    options = request.options
+    color_table = _color_table(options)
+    feature_visibility_table = _visibility_table(options)
+    colors = options.colors
+    default_colors = colors.default_colors if colors is not None else None
+    if default_colors is None:
+        default_colors = load_default_colors(
+            user_defined_default_colors=(
+                colors.default_colors_file
+                if colors is not None and colors.default_colors_file
+                else ""
+            ),
+            palette=(
+                colors.default_colors_palette
+                if colors is not None
+                else "default"
+            ),
+            load_comparison=(
+                isinstance(request, LinearDiagramRequest)
+                and _linear_request_uses_comparisons(request)
+            ),
+        )
     has_gff_source = any(
         isinstance(record_input.source, GffFastaInputSource)
         for record_input in request.records
     )
-    color_table = _color_table(request.options) if has_gff_source else None
-    feature_visibility_table = (
-        _visibility_table(request.options) if has_gff_source else None
-    )
     candidate_features, keep_all_features = (
         resolve_candidate_feature_types(
-            request.options.selected_features_set or DEFAULT_SELECTED_FEATURES,
+            options.selected_features_set or DEFAULT_SELECTED_FEATURES,
             color_table=color_table,
             feature_visibility_table=feature_visibility_table,
         )
         if has_gff_source
-        else (set(request.options.selected_features_set or DEFAULT_SELECTED_FEATURES), False)
+        else (set(options.selected_features_set or DEFAULT_SELECTED_FEATURES), False)
     )
-    records: list[SeqRecord] = []
-    for record_input in request.records:
-        loaded = _load_record_input(
-            record_input,
-            gff_candidate_features=tuple(sorted(candidate_features)),
-            gff_keep_all_features=keep_all_features,
-            color_table=color_table,
-            feature_visibility_table=feature_visibility_table,
+    comparison_sequences = (
+        _ComparisonSequenceSources(
+            tuple(options.conservation_fasta_files or ())
         )
-        records.append(_select_planned_record(request, record_input, loaded))
-    return tuple(records)
+        if isinstance(options, CircularDiagramOptions)
+        and options.conservation_fasta_files
+        else None
+    )
+    return PreparedDiagramInputs(
+        features=resolve_feature_inputs(
+            color_table=color_table,
+            default_colors=default_colors,
+            feature_visibility_table=feature_visibility_table,
+        ),
+        gff_candidate_features=tuple(sorted(candidate_features)),
+        gff_keep_all_features=keep_all_features,
+        comparison_sequences=comparison_sequences,
+    )
+
+
+def _normalize_request_records(
+    request: DiagramRequest,
+    inputs: PreparedDiagramInputs,
+) -> ResolvedRecordCollection:
+    return resolve_record_inputs(
+        request.records,
+        record_options=request.record_options,
+        gff_candidate_features=inputs.gff_candidate_features,
+        gff_keep_all_features=inputs.gff_keep_all_features,
+        genbank_loader=load_gbks,
+        gff_loader=load_gff_fasta,
+    )
+
+
+def _coerce_resolved_collection(
+    request: DiagramRequest,
+    value: ResolvedRecordCollection | Sequence[SeqRecord],
+) -> ResolvedRecordCollection:
+    """Keep private test seams compatible while planners consume provenance."""
+
+    if isinstance(value, ResolvedRecordCollection):
+        return value
+    records = tuple(value)
+    if len(records) != len(request.records):
+        raise ValidationError(
+            "A record resolver without provenance must return one record per input."
+        )
+    provenance: list[ResolvedRecordProvenance] = []
+    for index, (record, record_input) in enumerate(
+        zip(records, request.records, strict=True)
+    ):
+        source = record_input.source
+        if isinstance(source, GenBankInputSource):
+            source_kind: Literal["genbank", "gff_fasta", "memory"] = "genbank"
+            source_paths = (str(source.path),)
+        elif isinstance(source, GffFastaInputSource):
+            source_kind = "gff_fasta"
+            source_paths = (str(source.gff_path), str(source.fasta_path))
+        else:
+            source_kind = "memory"
+            source_paths = ()
+        provenance.append(
+            ResolvedRecordProvenance(
+                resolved_index=index,
+                input_index=index,
+                source_record_index=0,
+                source_record_count=1,
+                source_record_id=str(record.id),
+                source_kind=source_kind,
+                source_paths=source_paths,
+                record_key=record_input.record_key or f"record-{index + 1}",
+                cardinality=record_input.cardinality,
+                selector=record_input.selector,
+                region=record_input.region,
+                presentation=record_input.presentation,
+            )
+        )
+    return ResolvedRecordCollection(records, tuple(provenance))
+
+
+def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
+    """Resolve typed record inputs according to their explicit cardinality."""
+
+    inputs = _prepare_diagram_inputs(request)
+    return _coerce_resolved_collection(
+        request,
+        _normalize_request_records(request, inputs),
+    ).records
+
+
+def _materialized_record_inputs(
+    collection: ResolvedRecordCollection,
+) -> tuple[RecordInput, ...]:
+    """Project resolved records to schema-5-compatible exact-one inputs."""
+
+    materialized: list[RecordInput] = []
+    for record, provenance in zip(
+        collection.records,
+        collection.provenance,
+        strict=True,
+    ):
+        annotations = getattr(record, "annotations", {})
+        label = annotations.get("gbdraw_record_label")
+        subtitle = annotations.get("gbdraw_record_subtitle")
+        source_presentation = provenance.presentation
+        materialized.append(
+            RecordInput(
+                source=InMemoryRecordSource(record),
+                presentation=RecordPresentation(
+                    label=str(label) if label is not None else None,
+                    subtitle=str(subtitle) if subtitle is not None else None,
+                    reverse_complement=False,
+                    grid_row=source_presentation.grid_row,
+                    grid_column=source_presentation.grid_column,
+                ),
+                record_key=provenance.record_key,
+            )
+        )
+    return tuple(materialized)
+
+
+def _is_materialized_exact_one_request(request: DiagramRequest) -> bool:
+    return (
+        request.record_options == RecordCollectionOptions()
+        and all(
+            isinstance(record_input.source, InMemoryRecordSource)
+            and record_input.cardinality is RecordCardinality.EXACTLY_ONE
+            and record_input.selector is None
+            and record_input.region is None
+            and not record_input.presentation.reverse_complement
+            for record_input in request.records
+        )
+    )
+
+
+def _resolve_first_record_output(
+    output: RenderOutputRequest,
+    records: Sequence[SeqRecord],
+) -> RenderOutputRequest:
+    if not output.resolve_prefix_from_first_record:
+        return output
+    return replace(
+        output,
+        output_prefix=resolve_implicit_record_output_prefix(records[0].id),
+        output_directory=None,
+        resolve_prefix_from_first_record=False,
+    )
 
 
 def _warn_circular_topologies(records: Sequence[SeqRecord]) -> None:
@@ -643,12 +1021,46 @@ def plan_circular_request(
 
     if not isinstance(request, CircularDiagramRequest):
         raise ValidationError("request must be CircularDiagramRequest.")
-    records = normalize_request_records(request)
+    resolved_options = _resolve_request_option_tables(
+        resolve_circular_options(request.options),
+        mode="circular",
+        load_comparison_colors=False,
+    )
+    unresolved_request = (
+        request
+        if resolved_options is request.options
+        else replace(request, options=resolved_options)
+    )
+    inputs = _prepare_diagram_inputs(unresolved_request)
+    collection = _coerce_resolved_collection(
+        unresolved_request,
+        _normalize_request_records(unresolved_request, inputs),
+    )
+    records = collection.records
+    projected_request = replace(
+        unresolved_request,
+        records=_materialized_record_inputs(collection),
+        output=_resolve_first_record_output(
+            unresolved_request.output,
+            records,
+        ),
+        record_options=RecordCollectionOptions(),
+    )
+    resolved_layout = _layout_with_record_placements(projected_request)
+    materialized_request = (
+        unresolved_request
+        if _is_materialized_exact_one_request(unresolved_request)
+        and not unresolved_request.output.resolve_prefix_from_first_record
+        and resolved_layout == unresolved_request.layout
+        else projected_request
+    )
     _warn_circular_topologies(records)
     return CircularRequestPlan(
-        request=request,
+        request=materialized_request,
         records=records,
-        layout=_layout_with_record_placements(request),
+        layout=resolved_layout,
+        inputs=inputs,
+        provenance=collection.provenance,
     )
 
 
@@ -659,11 +1071,48 @@ def plan_circular_batch_request(
 
     if not isinstance(request, CircularBatchRequest):
         raise ValidationError("request must be CircularBatchRequest.")
-    records = normalize_request_records(request)
+    resolved_options = _resolve_request_option_tables(
+        resolve_circular_options(request.options),
+        mode="circular",
+        load_comparison_colors=False,
+    )
+    unresolved_request = (
+        request
+        if resolved_options is request.options
+        else replace(request, options=resolved_options)
+    )
+    inputs = _prepare_diagram_inputs(unresolved_request)
+    collection = _coerce_resolved_collection(
+        unresolved_request,
+        _normalize_request_records(unresolved_request, inputs),
+    )
+    records = collection.records
+    outputs = (
+        unresolved_request.outputs
+        if unresolved_request.outputs
+        else resolve_circular_batch_outputs(
+            unresolved_request.output_policy,
+            records,
+        )
+    )
+    materialized_request = (
+        unresolved_request
+        if _is_materialized_exact_one_request(unresolved_request)
+        and unresolved_request.output_policy is None
+        else replace(
+            unresolved_request,
+            records=_materialized_record_inputs(collection),
+            outputs=outputs,
+            output_policy=None,
+            record_options=RecordCollectionOptions(),
+        )
+    )
     _warn_circular_topologies(records)
     return CircularBatchRequestPlan(
-        request=request,
+        request=materialized_request,
         records=records,
+        inputs=inputs,
+        provenance=collection.provenance,
     )
 
 
@@ -674,14 +1123,52 @@ def plan_linear_request(
 
     if not isinstance(request, LinearDiagramRequest):
         raise ValidationError("request must be LinearDiagramRequest.")
+    unresolved_request = replace(
+        request,
+        options=_resolve_request_option_tables(
+            request.options,
+            mode="linear",
+            load_comparison_colors=_linear_request_uses_comparisons(request),
+        ),
+    )
+    inputs = _prepare_diagram_inputs(unresolved_request)
+    collection = _coerce_resolved_collection(
+        unresolved_request,
+        _normalize_request_records(unresolved_request, inputs),
+    )
+    projected_request = replace(
+        unresolved_request,
+        records=_materialized_record_inputs(collection),
+        record_options=RecordCollectionOptions(),
+    )
+    resolved_layout = _linear_layout_with_record_placements(projected_request)
+    resolved_options = resolve_linear_options(
+            projected_request.options,
+            records=collection.records,
+            layout=resolved_layout,
+        )
+    materialized_request = (
+        unresolved_request
+        if _is_materialized_exact_one_request(unresolved_request)
+        and resolved_layout == unresolved_request.layout
+        and resolved_options is unresolved_request.options
+        else replace(
+            projected_request,
+            options=resolved_options,
+        )
+    )
     return LinearRequestPlan(
-        request=request,
-        records=normalize_request_records(request),
-        layout=_linear_layout_with_record_placements(request),
+        request=materialized_request,
+        records=collection.records,
+        layout=resolved_layout,
+        inputs=inputs,
+        provenance=collection.provenance,
     )
 
 
-def _plan_request(request: DiagramRequest) -> DiagramRequestPlan:
+def plan_request(request: DiagramRequest) -> DiagramRequestPlan:
+    """Resolve one typed request into a reusable, not-yet-built render plan."""
+
     if isinstance(request, CircularBatchRequest):
         return plan_circular_batch_request(request)
     if isinstance(request, CircularDiagramRequest):
@@ -691,416 +1178,33 @@ def _plan_request(request: DiagramRequest) -> DiagramRequestPlan:
     raise ValidationError("Unsupported diagram request type.")
 
 
-def _empty_protein_identity_manifest() -> dict[str, Any]:
-    return {
-        "schema": 2,
-        "proteinSets": {},
-        "recordAnalyses": {},
-        "recordInstances": {},
-    }
+def resolve_request(request: DiagramRequest) -> DiagramRequest:
+    """Resolve an unresolved typed request to its schema-5-safe projection."""
 
-
-def _artifact_entries(
-    artifacts: Mapping[str, Any] | None,
-    field: str,
-) -> tuple[Mapping[str, Any], ...]:
-    if artifacts is None:
-        return ()
-    container = artifacts.get(field)
-    if container is None:
-        return ()
-    if not isinstance(container, Mapping) or not isinstance(
-        container.get("entries", []), list
-    ):
-        raise ValidationError(f"Session artifact {field}.entries must be an array.")
-    entries = container.get("entries", [])
-    assert isinstance(entries, list)
-    if not all(isinstance(entry, Mapping) for entry in entries):
-        raise ValidationError(f"Session artifact {field}.entries must contain objects.")
-    return tuple(entries)
-
-
-def _is_nucleotide_losat_entry(entry: Mapping[str, Any]) -> bool:
-    return (
-        entry.get("schema") == 2
-        and entry.get("kind") == "raw-losat"
-        and isinstance(entry.get("text"), str)
-        and not is_legacy_protein_losat_cache_entry(entry)
-    )
-
-
-def _legacy_candidate_entries(
-    artifacts: Mapping[str, Any] | None,
-    direct_legacy_entries: Sequence[Mapping[str, Any]],
-) -> tuple[Mapping[str, Any], ...]:
-    candidates: list[Mapping[str, Any]] = []
-    if artifacts is not None:
-        legacy_artifacts = artifacts.get("legacyArtifacts")
-        envelope = (
-            legacy_artifacts.get("proteinRawCandidates")
-            if isinstance(legacy_artifacts, Mapping)
-            else None
-        )
-        if envelope is not None:
-            if not isinstance(envelope, Mapping) or not isinstance(
-                envelope.get("entries"), list
-            ):
-                raise ValidationError(
-                    "legacyArtifacts.proteinRawCandidates must use an entries array."
-                )
-            candidates.extend(
-                candidate
-                for candidate in envelope["entries"]
-                if isinstance(candidate, Mapping)
-            )
-    candidates.extend(
-        make_legacy_protein_raw_candidate(entry) for entry in direct_legacy_entries
-    )
-
-    result: list[Mapping[str, Any]] = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        original = candidate.get("originalEntry")
-        if not isinstance(original, Mapping):
-            raise ValidationError("Legacy protein candidate has no original entry.")
-        fingerprint = json.dumps(
-            original,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        if fingerprint in seen:
-            continue
-        seen.add(fingerprint)
-        result.append(candidate)
-    return tuple(result)
-
-
-def _merge_promoted_tsv_id_map(
-    target: dict[str, str],
-    *,
-    legacy_text: str,
-    current_text: str,
-) -> None:
-    def rows(text: str) -> list[list[str]]:
-        return [
-            line.split("\t")
-            for line in str(text).splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-
-    legacy_rows = rows(legacy_text)
-    current_rows = rows(current_text)
-    if len(legacy_rows) != len(current_rows):
-        raise ValidationError("Promoted LOSATP TSV changed its row count.")
-    for old_row, new_row in zip(legacy_rows, current_rows, strict=True):
-        if len(old_row) < 2 or len(new_row) < 2:
-            raise ValidationError("Promoted LOSATP TSV has an incomplete row.")
-        for old_id, new_id in zip(old_row[:2], new_row[:2], strict=True):
-            previous = target.get(old_id)
-            if previous is not None and previous != new_id:
-                raise ValidationError(
-                    f"Legacy protein ID {old_id!r} resolves to multiple current IDs."
-                )
-            target[old_id] = new_id
-
-
-def _promote_legacy_candidates(
-    candidates: Sequence[Mapping[str, Any]],
-    extraction: ProteinExtractionResult,
-) -> tuple[
-    tuple[Mapping[str, Any], ...],
-    tuple[Mapping[str, Any], ...],
-    Mapping[str, str],
-]:
-    manifest = extraction.identity_manifest
-    if manifest is None:
-        raise ValidationError("Protein cache promotion requires an identity manifest.")
-    fastas = tuple(proteins_to_fasta(items) for items in extraction.proteins_by_record)
-    promoted_entries: list[Mapping[str, Any]] = []
-    unresolved_candidates: list[Mapping[str, Any]] = []
-    id_map: dict[str, str] = {}
-
-    for candidate in candidates:
-        original = candidate.get("originalEntry")
-        if not isinstance(original, Mapping) or not is_legacy_protein_losat_cache_entry(
-            original
-        ):
-            raise ValidationError("Legacy protein candidate is not a schema-2 blastp entry.")
-        raw_args = original.get("args")
-        expected_args = tuple(str(arg) for arg in raw_args) if isinstance(raw_args, list) else ()
-        promotion = None
-        rejection_reasons: list[str] = []
-        for query_index, query_proteins in enumerate(extraction.proteins_by_record):
-            for subject_index, subject_proteins in enumerate(
-                extraction.proteins_by_record
-            ):
-                scan = promote_legacy_protein_raw_cache_entries(
-                    (candidate,),
-                    query_proteins=query_proteins,
-                    subject_proteins=subject_proteins,
-                    query_fasta=fastas[query_index],
-                    subject_fasta=fastas[subject_index],
-                    identity_manifest=manifest,
-                    expected_args=expected_args,
-                    expected_program=str(original.get("program") or "blastp"),
-                    expected_outfmt=str(original.get("outfmt") or "6"),
-                )
-                if scan.promotion is not None:
-                    promotion = scan.promotion
-                    break
-                rejection_reasons.extend(item.reason for item in scan.rejections)
-            if promotion is not None:
-                break
-
-        if promotion is None:
-            reason = next(
-                (
-                    item
-                    for item in reversed(rejection_reasons)
-                    if item and "hash does not match" not in item
-                ),
-                "No current record pair matched the legacy cache identity.",
-            )
-            unresolved_candidates.append(
-                make_legacy_protein_raw_candidate(
-                    original,
-                    state="rejected",
-                    rejection_reason=reason,
-                )
-            )
-            continue
-        if not validate_protein_raw_entry_references(promotion.entry, manifest):
-            raise ValidationError("Promoted protein raw entry failed manifest validation.")
-        promoted_entries.append(promotion.entry)
-        _merge_promoted_tsv_id_map(
-            id_map,
-            legacy_text=str(original.get("text") or ""),
-            current_text=promotion.rewritten_tsv,
-        )
-
-    return tuple(promoted_entries), tuple(unresolved_candidates), id_map
-
-
-def _rewrite_protein_reference_string(value: str, id_map: Mapping[str, str]) -> str:
-    if value in id_map:
-        return str(id_map[value])
-    rewritten = value
-    if "p_r_" in rewritten:
-        rewritten = _LEGACY_PROTEIN_REFERENCE_RE.sub(
-            lambda match: id_map.get(match.group(0), match.group(0)),
-            rewritten,
-        )
-    return rewritten
-
-
-def rewrite_protein_artifact_references(
-    value: Any,
-    id_map: Mapping[str, str],
-) -> Any:
-    """Return a detached value with verified legacy protein IDs rewritten."""
-
-    if isinstance(value, str):
-        return _rewrite_protein_reference_string(value, id_map)
-    if isinstance(value, DataFrame):
-        rewritten = value.copy(deep=True)
-        for column in rewritten.columns:
-            rewritten[column] = rewritten[column].map(
-                lambda item: (
-                    _rewrite_protein_reference_string(item, id_map)
-                    if isinstance(item, str)
-                    else item
-                )
-            )
-        return rewritten
-    if is_dataclass(value) and not isinstance(value, type):
-        return replace(
-            value,
-            **{
-                field.name: rewrite_protein_artifact_references(
-                    getattr(value, field.name), id_map
-                )
-                for field in fields(value)
-            },
-        )
-    if isinstance(value, Mapping):
-        rewritten_mapping: dict[Any, Any] = {}
-        for key, item in value.items():
-            rewritten_key = rewrite_protein_artifact_references(key, id_map)
-            if rewritten_key in rewritten_mapping:
-                raise ValidationError(
-                    f"Protein reference migration produced duplicate key "
-                    f"{rewritten_key!r}."
-                )
-            rewritten_mapping[rewritten_key] = rewrite_protein_artifact_references(
-                item, id_map
-            )
-        return rewritten_mapping
-    if isinstance(value, tuple):
-        return tuple(rewrite_protein_artifact_references(item, id_map) for item in value)
-    if isinstance(value, list):
-        return [rewrite_protein_artifact_references(item, id_map) for item in value]
-    if isinstance(value, frozenset):
-        return frozenset(
-            rewrite_protein_artifact_references(item, id_map) for item in value
-        )
-    if isinstance(value, set):
-        return {rewrite_protein_artifact_references(item, id_map) for item in value}
-    return copy.deepcopy(value)
-
-
-def _contains_legacy_protein_reference(value: Any) -> bool:
-    if isinstance(value, str):
-        return (
-            _LEGACY_PROTEIN_REFERENCE_RE.search(value) is not None
-            or _FEATURE_ANALYSIS_REFERENCE_RE.fullmatch(value) is not None
-        )
-    if isinstance(value, DataFrame):
-        return any(
-            _contains_legacy_protein_reference(item)
-            for item in value.to_numpy().ravel()
-        )
-    if is_dataclass(value) and not isinstance(value, type):
-        return any(
-            _contains_legacy_protein_reference(getattr(value, field.name))
-            for field in fields(value)
-        )
-    if isinstance(value, Mapping):
-        return any(
-            _contains_legacy_protein_reference(key)
-            or _contains_legacy_protein_reference(item)
-            for key, item in value.items()
-        )
-    if isinstance(value, (tuple, list, set, frozenset)):
-        return any(_contains_legacy_protein_reference(item) for item in value)
-    return False
-
-
-def _legacy_protein_reference_ids(value: Any) -> set[str]:
-    references: set[str] = set()
-    if isinstance(value, str):
-        references.update(
-            match.group(0)
-            for match in _LEGACY_PROTEIN_REFERENCE_RE.finditer(value)
-        )
-    elif isinstance(value, DataFrame):
-        for item in value.to_numpy().ravel():
-            references.update(_legacy_protein_reference_ids(item))
-    elif is_dataclass(value) and not isinstance(value, type):
-        for field in fields(value):
-            references.update(
-                _legacy_protein_reference_ids(getattr(value, field.name))
-            )
-    elif isinstance(value, Mapping):
-        for key, item in value.items():
-            references.update(_legacy_protein_reference_ids(key))
-            references.update(_legacy_protein_reference_ids(item))
-    elif isinstance(value, (tuple, list, set, frozenset)):
-        for item in value:
-            references.update(_legacy_protein_reference_ids(item))
-    return references
-
-
-def _rewrite_linear_request_protein_references(
-    request: LinearDiagramRequest,
-    id_map: Mapping[str, str],
-) -> LinearDiagramRequest:
-    if not id_map:
-        return request
-    options = request.options
-    rewritten_options = replace(
-        options,
-        linear_comparisons=rewrite_protein_artifact_references(
-            options.linear_comparisons, id_map
-        ),
-        protein_comparisons=rewrite_protein_artifact_references(
-            options.protein_comparisons, id_map
-        ),
-        orthogroups=rewrite_protein_artifact_references(options.orthogroups, id_map),
-        collinearity_blocks=rewrite_protein_artifact_references(
-            options.collinearity_blocks, id_map
-        ),
-    )
-    for value in (
-        rewritten_options.linear_comparisons,
-        rewritten_options.protein_comparisons,
-        rewritten_options.orthogroups,
-        rewritten_options.collinearity_blocks,
-    ):
-        if _contains_legacy_protein_reference(value):
-            raise ValidationError(
-                "Precomputed protein artifacts contain an ID that no verified raw cache entry resolved."
-            )
-    return replace(request, options=rewritten_options)
+    return plan_request(request).request
 
 
 def _source_protein_mode(
     request: LinearDiagramRequest,
-    artifacts: Mapping[str, Any] | None,
+    artifacts: CurrentRequestArtifacts,
 ) -> str:
     requested = str(request.options.protein_blastp_mode or "none")
     if requested != "none":
         return requested
-    if artifacts is not None:
-        config = artifacts.get("config")
-        losat = config.get("losat") if isinstance(config, Mapping) else None
-        blastp = losat.get("blastp") if isinstance(losat, Mapping) else None
-        configured = blastp.get("mode") if isinstance(blastp, Mapping) else None
-        if str(configured or "") in {"pairwise", "orthogroup", "collinear"}:
-            return str(configured)
-        for entry in _artifact_entries(artifacts, "losatDerivedCache"):
-            mode = str(entry.get("mode") or "")
-            if mode in {"pairwise", "orthogroup", "collinear"}:
-                return mode
+    if artifacts.protein_source_mode in {"pairwise", "orthogroup", "collinear"}:
+        return str(artifacts.protein_source_mode)
+    for entry in artifacts.losat_derived_cache_entries:
+        mode = str(entry.get("mode") or "")
+        if mode in {"pairwise", "orthogroup", "collinear"}:
+            return mode
     return "orthogroup" if request.options.orthogroups is not None else "pairwise"
 
 
-def _prepare_linear_artifacts(
+def _extract_linear_request_proteins(
     request: LinearDiagramRequest,
     records: tuple[SeqRecord, ...],
-    artifacts: Mapping[str, Any] | None,
-) -> _PreparedLinearArtifacts:
-    raw_entries = _artifact_entries(artifacts, "losatCache")
-    current_protein = tuple(
-        entry for entry in raw_entries if is_protein_losat_cache_entry(entry)
-    )
-    direct_legacy = tuple(
-        entry for entry in raw_entries if is_legacy_protein_losat_cache_entry(entry)
-    )
-    nucleotide_entries = tuple(
-        copy.deepcopy(dict(entry))
-        for entry in raw_entries
-        if _is_nucleotide_losat_entry(entry)
-    )
-    candidates = _legacy_candidate_entries(artifacts, direct_legacy)
-    needs_protein_identity = bool(
-        current_protein
-        or candidates
-        or request.options.protein_blastp_mode != "none"
-        or request.options.protein_comparisons is not None
-        or request.options.orthogroups is not None
-        or request.options.collinearity_blocks is not None
-    )
-    passthrough_derived = tuple(
-        copy.deepcopy(dict(entry))
-        for entry in _artifact_entries(artifacts, "losatDerivedCache")
-        if entry.get("schema") == 3
-        and entry.get("kind") == "derived-losatp-payload"
-        and entry.get("idEncoding") == "runtime-handle-v1"
-    )
-    if not needs_protein_identity:
-        return _PreparedLinearArtifacts(
-            request=request,
-            cache=None,
-            extraction=None,
-            nucleotide_entries=nucleotide_entries,
-            passthrough_derived_entries=passthrough_derived,
-            legacy_candidates=(),
-            protein_id_map={},
-            source_mode="none",
-            warnings=(),
-        )
-
+    inputs: PreparedDiagramInputs,
+) -> ProteinExtractionResult:
     record_instance_keys = tuple(
         record_input.record_key or f"record-{index + 1}"
         for index, record_input in enumerate(request.records)
@@ -1117,73 +1221,68 @@ def _prepare_linear_artifacts(
             record_input.region.raw if record_input.region is not None else None
             for record_input in request.records
         ),
-        feature_visibility_rules=compile_feature_visibility_rules(
-            _visibility_table(request.options)
-        ),
+        feature_visibility_rules=inputs.features.feature_visibility_rules,
     )
-    manifest = extraction.identity_manifest
-    if manifest is None:
+    if extraction.identity_manifest is None:
         raise ValidationError("Protein extraction did not produce an identity manifest.")
-    promoted, unresolved, legacy_id_map = _promote_legacy_candidates(
-        candidates, extraction
+    return extraction
+
+
+def _prepare_linear_artifacts(
+    request: LinearDiagramRequest,
+    records: tuple[SeqRecord, ...],
+    artifacts: CurrentRequestArtifacts,
+    inputs: PreparedDiagramInputs,
+) -> _PreparedLinearArtifacts:
+    current_protein = tuple(
+        entry
+        for entry in artifacts.losat_cache_entries
+        if is_protein_losat_cache_entry(entry)
     )
-    id_map = dict(legacy_id_map)
-    artifact_reference_ids: set[str] = set()
-    for value in (
-        request.options.linear_comparisons,
-        request.options.protein_comparisons,
-        request.options.orthogroups,
-        request.options.collinearity_blocks,
-    ):
-        artifact_reference_ids.update(_legacy_protein_reference_ids(value))
-    legacy_artifact_reference_ids = sorted(
-        reference
-        for reference in artifact_reference_ids
-        if _LEGACY_PROTEIN_REFERENCE_RE.fullmatch(reference)
+    nucleotide_entries = tuple(
+        copy.deepcopy(dict(entry))
+        for entry in artifacts.losat_cache_entries
+        if _is_current_nucleotide_losat_entry(entry)
     )
-    if legacy_artifact_reference_ids:
-        artifact_id_map = build_legacy_protein_reference_map(
-            extraction,
-            legacy_artifact_reference_ids,
+    needs_protein_identity = bool(
+        current_protein
+        or request.options.protein_blastp_mode != "none"
+        or request.options.protein_comparisons is not None
+        or request.options.orthogroups is not None
+        or request.options.collinearity_blocks is not None
+    )
+    passthrough_derived = tuple(
+        copy.deepcopy(dict(entry))
+        for entry in artifacts.losat_derived_cache_entries
+    )
+    if not needs_protein_identity:
+        return _PreparedLinearArtifacts(
+            cache=None,
+            extraction=None,
+            nucleotide_entries=nucleotide_entries,
+            passthrough_derived_entries=passthrough_derived,
+            source_mode="none",
         )
-        for old_id, runtime_handle in artifact_id_map.items():
-            previous = id_map.get(old_id)
-            if previous is not None and previous != runtime_handle:
-                raise ValidationError(
-                    f"Protein ID {old_id!r} resolves to multiple runtime handles."
-                )
-            id_map[old_id] = runtime_handle
+
+    extraction = _extract_linear_request_proteins(request, records, inputs)
+    manifest = extraction.identity_manifest
+    assert manifest is not None
     reusable_current = tuple(
         entry
         for entry in current_protein
         if validate_protein_raw_entry_references(entry, manifest)
     )
     cache = LosatpCacheManager(
-        (*reusable_current, *promoted),
+        reusable_current,
         identity_manifest=manifest,
         threads_per_job=request.options.losatp_threads or "auto",
     )
-    rewritten_request = _rewrite_linear_request_protein_references(request, id_map)
-    # A canonical precomputed replay has completed its current conversion once
-    # every referenced protein ID was resolved above.  Unmatched legacy entries
-    # are stale cache history, not candidates for the rendered request.
-    if request.options.protein_comparisons is not None and promoted:
-        unresolved = ()
-    warning_items: list[str] = []
-    if unresolved:
-        warning_items.append(
-            f"{len(unresolved)} legacy protein raw cache candidate(s) could not be promoted."
-        )
     return _PreparedLinearArtifacts(
-        request=rewritten_request,
         cache=cache,
         extraction=extraction,
         nucleotide_entries=nucleotide_entries,
         passthrough_derived_entries=(),
-        legacy_candidates=unresolved,
-        protein_id_map=id_map,
         source_mode=_source_protein_mode(request, artifacts),
-        warnings=tuple(warning_items),
     )
 
 
@@ -1218,13 +1317,13 @@ def _comparison_frame_payload(
 
 
 def _resolved_protein_pair_payloads(
-    drawing: Drawing,
+    metadata: LinearDiagramMetadata | None,
     request: LinearDiagramRequest,
 ) -> list[dict[str, Any]]:
-    direct = getattr(drawing, "_gbdraw_resolved_protein_comparisons", None)
+    direct = metadata.protein_comparisons if metadata is not None else None
     if direct is None:
         direct = request.options.protein_comparisons
-    explicit = getattr(drawing, "_gbdraw_resolved_linear_comparisons", None)
+    explicit = metadata.linear_comparisons if metadata is not None else None
 
     result: list[dict[str, Any]] = []
     for pair_index, frame in enumerate(direct or ()):
@@ -1285,7 +1384,7 @@ def _collinearity_parameter_identity(
 
 
 def _build_current_derived_entries(
-    drawing: Drawing,
+    metadata: LinearDiagramMetadata | None,
     request: LinearDiagramRequest,
     records: tuple[SeqRecord, ...],
     artifacts: _PreparedLinearArtifacts,
@@ -1299,8 +1398,12 @@ def _build_current_derived_entries(
     manifest = artifacts.extraction.identity_manifest
     if manifest is None:
         raise ValidationError("Derived protein payload requires an identity manifest.")
-    pair_payloads = _resolved_protein_pair_payloads(drawing, request)
-    orthogroups = getattr(drawing, "_gbdraw_orthogroups", request.options.orthogroups)
+    pair_payloads = _resolved_protein_pair_payloads(metadata, request)
+    orthogroups = (
+        metadata.orthogroups
+        if metadata is not None
+        else request.options.orthogroups
+    )
     orthogroup_payload = serialize_orthogroups_payload(
         orthogroups,
         records=records,
@@ -1427,45 +1530,28 @@ def _build_current_derived_entries(
             "orthogroups": orthogroup_payload,
         },
     }
-    if _contains_legacy_protein_reference(entry):
-        raise ValidationError("Derived protein payload retained a legacy protein ID.")
     return (entry,)
 
 
-def _legacy_derived_evidence_entries(
-    artifacts: Mapping[str, Any] | None,
-) -> tuple[Mapping[str, Any], ...]:
-    if artifacts is None:
-        return ()
-    legacy = artifacts.get("legacyArtifacts")
-    envelope = (
-        legacy.get("proteinDerivedEvidence")
-        if isinstance(legacy, Mapping)
-        else None
-    )
-    if envelope is None:
-        return ()
-    if not isinstance(envelope, Mapping) or not isinstance(
-        envelope.get("entries"), list
-    ):
-        raise ValidationError(
-            "legacyArtifacts.proteinDerivedEvidence must use an entries array."
-        )
-    return tuple(
-        copy.deepcopy(dict(entry))
-        for entry in envelope["entries"]
-        if isinstance(entry, Mapping)
-    )
-
-
-def build_request_diagram(
-    request: DiagramRequest,
+def build_request_plan_diagram(
+    plan: DiagramRequestPlan,
     *,
-    session_artifacts: Mapping[str, Any] | None = None,
+    artifacts: CurrentRequestArtifacts | None = None,
 ) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
-    """Normalize inputs and build a drawing through the high-level API owners."""
+    """Build a previously resolved plan without loading or planning it again."""
 
-    plan = _plan_request(request)
+    if not isinstance(
+        plan,
+        (CircularRequestPlan, CircularBatchRequestPlan, LinearRequestPlan),
+    ):
+        raise ValidationError("plan must be a DiagramRequestPlan.")
+    current_artifacts = (
+        CurrentRequestArtifacts()
+        if artifacts is None
+        else artifacts
+    )
+    if not isinstance(current_artifacts, CurrentRequestArtifacts):
+        raise ValidationError("artifacts must be CurrentRequestArtifacts.")
     if isinstance(plan, CircularBatchRequestPlan):
         items = tuple(
             PreparedDiagramRequest(
@@ -1473,6 +1559,7 @@ def build_request_diagram(
                 request=item_plan.request,
                 records=item_plan.records,
                 drawing=item_plan.build(),
+                inputs=item_plan.inputs,
             )
             for item_plan in plan.item_plans()
         )
@@ -1480,107 +1567,79 @@ def build_request_diagram(
             request=plan.request,
             records=plan.records,
             items=items,
+            inputs=plan.inputs,
         )
     request = plan.request
     records = plan.records
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
-    legacy_candidates: tuple[Mapping[str, Any], ...] = ()
-    legacy_derived_evidence = _legacy_derived_evidence_entries(session_artifacts)
-    protein_id_map: Mapping[str, str] = {}
-    warnings: tuple[str, ...] = ()
+    linear_metadata: LinearDiagramMetadata | None = None
     if isinstance(plan, CircularRequestPlan):
         drawing = plan.build()
-        if session_artifacts is not None:
-            raw_entries = _artifact_entries(session_artifacts, "losatCache")
-            losat_cache_entries = tuple(
-                copy.deepcopy(dict(entry))
-                for entry in raw_entries
-                if is_protein_losat_cache_entry(entry)
-                or _is_nucleotide_losat_entry(entry)
-            )
-            direct_legacy = tuple(
-                entry
-                for entry in raw_entries
-                if is_legacy_protein_losat_cache_entry(entry)
-            )
-            legacy_candidates = _legacy_candidate_entries(
-                session_artifacts,
-                direct_legacy,
-            )
-            losat_derived_cache_entries = tuple(
-                copy.deepcopy(dict(entry))
-                for entry in _artifact_entries(
-                    session_artifacts,
-                    "losatDerivedCache",
-                )
-                if entry.get("schema") == 3
-                and entry.get("kind") == "derived-losatp-payload"
-                and entry.get("idEncoding") == "runtime-handle-v1"
-            )
-            source_manifest = session_artifacts.get("proteinIdentityManifest")
-            protein_identity_manifest = (
-                copy.deepcopy(dict(source_manifest))
-                if isinstance(source_manifest, Mapping)
-                and source_manifest.get("schema") == 2
-                else _empty_protein_identity_manifest()
-            )
+        losat_cache_entries = current_artifacts.losat_cache_entries
+        losat_derived_cache_entries = current_artifacts.losat_derived_cache_entries
+        protein_identity_manifest = current_artifacts.protein_identity_manifest
     else:
-        artifacts = _prepare_linear_artifacts(request, records, session_artifacts)
-        request = artifacts.request
-        plan = LinearRequestPlan(
-            request=request,
-            records=records,
-            layout=_linear_layout_with_record_placements(request),
+        if plan.inputs is None:  # pragma: no cover - planners always prepare inputs.
+            raise ValidationError("Linear request plan has no prepared diagram inputs.")
+        linear_artifacts = _prepare_linear_artifacts(
+            request,
+            records,
+            current_artifacts,
+            plan.inputs,
         )
-        drawing = plan.build(
-            losatp_cache=artifacts.cache,
-            protein_extraction=artifacts.extraction,
+        linear_build = plan.build(
+            losatp_cache=linear_artifacts.cache,
+            protein_extraction=linear_artifacts.extraction,
         )
+        drawing = linear_build.drawing
+        linear_metadata = linear_build.metadata
         protein_entries = (
-            tuple(artifacts.cache.session_entries())
-            if artifacts.cache is not None
+            tuple(linear_artifacts.cache.session_entries())
+            if linear_artifacts.cache is not None
             else ()
         )
         losat_cache_entries = (
             *protein_entries,
-            *artifacts.nucleotide_entries,
+            *linear_artifacts.nucleotide_entries,
         )
         losat_derived_cache_entries = _build_current_derived_entries(
-            drawing,
+            linear_metadata,
             request,
             records,
-            artifacts,
+            linear_artifacts,
             losat_cache_entries,
         )
-        if losat_derived_cache_entries:
-            legacy_derived_evidence = ()
         protein_identity_manifest = (
-            artifacts.extraction.identity_manifest.to_dict()
-            if artifacts.extraction is not None
-            and artifacts.extraction.identity_manifest is not None
-            else (
-                _empty_protein_identity_manifest()
-                if session_artifacts is not None
-                else None
-            )
+            linear_artifacts.extraction.identity_manifest.to_dict()
+            if linear_artifacts.extraction is not None
+            and linear_artifacts.extraction.identity_manifest is not None
+            else current_artifacts.protein_identity_manifest
         )
-        legacy_candidates = artifacts.legacy_candidates
-        protein_id_map = artifacts.protein_id_map
-        warnings = artifacts.warnings
     return PreparedDiagramRequest(
         mode=plan.mode,
         request=request,
         records=records,
         drawing=drawing,
+        inputs=plan.inputs,
+        linear_metadata=linear_metadata,
         losat_cache_entries=losat_cache_entries,
         losat_derived_cache_entries=losat_derived_cache_entries,
         protein_identity_manifest=protein_identity_manifest,
-        legacy_protein_raw_candidates=legacy_candidates,
-        legacy_protein_derived_evidence=legacy_derived_evidence,
-        protein_id_map=protein_id_map,
-        warnings=warnings,
+    )
+
+
+def build_request_diagram(
+    request: DiagramRequest,
+    *,
+    artifacts: CurrentRequestArtifacts | None = None,
+) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
+    """Normalize inputs and build a drawing from current typed artifacts."""
+
+    return build_request_plan_diagram(
+        plan_request(request),
+        artifacts=artifacts,
     )
 
 
@@ -1605,39 +1664,32 @@ def _color_table(
     return None
 
 
-def _interactive_context(
+def build_prepared_interactive_context(
     prepared: PreparedDiagramRequest,
     *,
     comparison_sequence_records: Sequence[Sequence[SeqRecord]] = (),
-) -> InteractiveSvgContext | None:
-    output = prepared.request.output
-    if "interactive_svg" not in output.formats or output.interactive_metadata_policy == "omit":
-        return None
+) -> InteractiveSvgContext:
+    """Build interactive metadata from the same inputs used for drawing."""
 
     def build() -> InteractiveSvgContext:
         options = prepared.request.options
-        colors = options.colors
-        color_table = _color_table(options)
-        default_colors = colors.default_colors if colors is not None else None
-        if default_colors is None:
-            default_colors = load_default_colors(
-                colors.default_colors_file
-                if colors is not None and colors.default_colors_file
-                else "",
-                colors.default_colors_palette if colors is not None else "default",
-            )
+        inputs = prepared.inputs or _prepare_diagram_inputs(prepared.request)
+        computed_orthogroups = (
+            prepared.linear_metadata.orthogroups
+            if prepared.linear_metadata is not None
+            else None
+        )
+        if computed_orthogroups is None and isinstance(
+            options,
+            LinearDiagramOptions,
+        ):
+            computed_orthogroups = options.orthogroups
         return build_interactive_svg_context(
             prepared.records,
             selected_features_set=options.selected_features_set,
-            feature_visibility_table=_visibility_table(options),
-            color_table=color_table,
-            default_colors=default_colors,
-            orthogroups=(
-                getattr(prepared.drawing, "_gbdraw_orthogroups", None)
-                or options.orthogroups
-                if isinstance(options, LinearDiagramOptions)
-                else None
-            ),
+            feature_visibility_rules=inputs.features.feature_visibility_rules,
+            specific_color_rules=inputs.features.specific_color_rules,
+            orthogroups=computed_orthogroups,
             linear_rendered_feature_ids=prepared.mode == "linear",
             annotations=options.annotations,
             mode=prepared.mode,
@@ -1647,20 +1699,65 @@ def _interactive_context(
     return require_interactive_svg_metadata(build)
 
 
+def _interactive_context(
+    prepared: PreparedDiagramRequest,
+    *,
+    comparison_sequence_records: Sequence[Sequence[SeqRecord]] = (),
+) -> InteractiveSvgContext | None:
+    output = prepared.request.output
+    if (
+        "interactive_svg" not in output.formats
+        or output.interactive_metadata_policy == "omit"
+    ):
+        return None
+    return build_prepared_interactive_context(
+        prepared,
+        comparison_sequence_records=comparison_sequence_records,
+    )
+
+
 def render_request(
     request: DiagramRequest,
     *,
-    session_artifacts: Mapping[str, Any] | None = None,
+    artifacts: CurrentRequestArtifacts | None = None,
 ) -> RequestRenderResult | CircularBatchRenderResult:
-    """Build and save one typed request, returning only paths that were created."""
+    """Build and save one typed request from current typed artifacts."""
 
-    if isinstance(request, CircularBatchRequest):
-        _preflight_circular_batch_outputs(request)
+    plan = plan_request(request)
+    batch_outputs_preflighted = isinstance(plan, CircularBatchRequestPlan)
+    plan.preflight_outputs()
     prepared = (
-        build_request_diagram(request)
-        if session_artifacts is None
-        else build_request_diagram(request, session_artifacts=session_artifacts)
+        build_request_plan_diagram(plan)
+        if artifacts is None
+        else build_request_plan_diagram(plan, artifacts=artifacts)
     )
+    return render_prepared_request(
+        prepared,
+        batch_outputs_preflighted=batch_outputs_preflighted,
+    )
+
+
+def render_prepared_request(
+    prepared: PreparedDiagramRequest | PreparedCircularBatchRequest,
+    *,
+    batch_outputs_preflighted: bool = False,
+) -> RequestRenderResult | CircularBatchRenderResult:
+    """Save an already-built request without planning or loading it again."""
+
+    if not isinstance(
+        prepared,
+        (PreparedDiagramRequest, PreparedCircularBatchRequest),
+    ):
+        raise ValidationError("prepared must be a prepared diagram request.")
+    if isinstance(prepared, PreparedCircularBatchRequest):
+        if not batch_outputs_preflighted:
+            _preflight_circular_batch_outputs(prepared.request)
+    return _render_request_diagram(prepared)
+
+
+def _render_request_diagram(
+    prepared: PreparedDiagramRequest | PreparedCircularBatchRequest,
+) -> RequestRenderResult | CircularBatchRenderResult:
     comparison_sequence_records = _comparison_sequence_records(prepared)
     if isinstance(prepared, PreparedCircularBatchRequest):
         return CircularBatchRenderResult(
@@ -1700,13 +1797,36 @@ def _comparison_sequence_records(
     ):
         return ()
 
-    def load() -> tuple[tuple[SeqRecord, ...], ...]:
+    inputs = prepared.inputs
+    if inputs is not None and inputs.comparison_sequences is not None:
+        return require_interactive_svg_metadata(inputs.comparison_sequences.load)
+
+    def load_unprepared() -> tuple[tuple[SeqRecord, ...], ...]:
         return tuple(
             tuple(SeqIO.parse(path, "fasta")) if path else ()
             for path in options.conservation_fasta_files or ()
         )
 
-    return require_interactive_svg_metadata(load)
+    return require_interactive_svg_metadata(load_unprepared)
+
+
+def _render_output_paths(output: RenderOutputRequest) -> tuple[Path, ...]:
+    base = Path(output.output_directory or ".") / output.output_prefix
+    return tuple(
+        Path(path)
+        for path in resolve_output_paths(
+            str(base),
+            output.formats,
+            include_base_svg=True,
+        )
+    )
+
+
+def _preflight_render_output(output: RenderOutputRequest) -> None:
+    preflight_output_paths(
+        _render_output_paths(output),
+        overwrite=output.overwrite,
+    )
 
 
 def _preflight_circular_batch_outputs(
@@ -1714,30 +1834,25 @@ def _preflight_circular_batch_outputs(
 ) -> None:
     """Reject batch collisions before writing any item."""
 
-    all_paths: list[Path] = []
-    existing: list[Path] = []
-    for output in request.outputs:
-        base = Path(output.output_directory or ".") / output.output_prefix
-        paths = tuple(
-            Path(path)
-            for path in resolve_output_paths(
-                str(base),
-                output.formats,
-                include_base_svg=True,
-            )
-        )
-        all_paths.extend(paths)
-        if not output.overwrite:
-            existing.extend(path for path in paths if path.exists())
-    if len(set(all_paths)) != len(all_paths):
+    path_groups = tuple(
+        (output, _render_output_paths(output))
+        for output in request.outputs
+    )
+    for output, paths in path_groups:
+        preflight_output_paths(paths, overwrite=output.overwrite)
+    try:
+        path_identities = [
+            path.resolve(strict=False)
+            for _output, paths in path_groups
+            for path in paths
+        ]
+    except (OSError, ValueError) as exc:
+        raise ValidationError(
+            "Could not resolve one or more Circular batch output paths."
+        ) from exc
+    if len(set(path_identities)) != len(path_identities):
         raise ValidationError(
             "Circular batch output requests resolve to duplicate file paths."
-        )
-    if existing:
-        raise ValidationError(
-            "Output file(s) already exist: "
-            + ", ".join(str(path) for path in existing)
-            + ". Use overwrite=True to replace."
         )
 
 
@@ -1772,13 +1887,10 @@ def _render_prepared_request(
         drawing=prepared.drawing,
         output_paths=tuple(Path(path) for path in paths),
         interactive_context=interactive_context,
+        linear_metadata=prepared.linear_metadata,
         losat_cache_entries=prepared.losat_cache_entries,
         losat_derived_cache_entries=prepared.losat_derived_cache_entries,
         protein_identity_manifest=prepared.protein_identity_manifest,
-        legacy_protein_raw_candidates=prepared.legacy_protein_raw_candidates,
-        legacy_protein_derived_evidence=prepared.legacy_protein_derived_evidence,
-        protein_id_map=prepared.protein_id_map,
-        warnings=prepared.warnings,
     )
 
 
@@ -1786,16 +1898,22 @@ __all__ = [
     "CircularBatchRenderResult",
     "CircularBatchRequestPlan",
     "CircularRequestPlan",
+    "CurrentRequestArtifacts",
     "DiagramRequestPlan",
     "LinearRequestPlan",
     "PreparedCircularBatchRequest",
+    "PreparedDiagramInputs",
     "PreparedDiagramRequest",
     "RequestRenderResult",
+    "build_request_plan_diagram",
     "build_request_diagram",
+    "build_prepared_interactive_context",
     "normalize_request_records",
+    "plan_request",
     "plan_circular_batch_request",
     "plan_circular_request",
     "plan_linear_request",
     "render_request",
-    "rewrite_protein_artifact_references",
+    "render_prepared_request",
+    "resolve_request",
 ]

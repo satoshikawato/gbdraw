@@ -45,7 +45,7 @@ from ...configurators.gc import _slot_skew_config
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
 from ...core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 from ...exceptions import ValidationError
-from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
+from ...features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import FeatureBuildResult, create_feature_layers  # type: ignore[reportMissingImports]
 from ...labels.circular import (  # type: ignore[reportMissingImports]
     assign_leader_start_points,
@@ -2189,14 +2189,11 @@ def add_record_on_circular_canvas(
         if compute_label_text
         else {}
     )
-    color_table, default_colors = preprocess_color_tables(
-        feature_config.color_table, feature_config.default_colors
-    )
     feature_layers = create_feature_layers(
         gb_record,
-        color_table,
+        feature_config.specific_color_rules,
         feature_config.selected_features_set,
-        default_colors,
+        feature_config.default_color_map,
         profile.strandedness,
         profile.resolve_overlaps,
         label_filtering,
@@ -2754,9 +2751,8 @@ def assemble_circular_diagram(
     legend_table: dict = {}
     legend_measurement = legend_config.measure_legend(legend_table, canvas_config)
     if canvas_config.legend_position != "none":
-        color_map, default_color_map = preprocess_color_tables(
-            feature_config.color_table, feature_config.default_colors
-        )
+        color_map = feature_config.specific_color_rules
+        default_color_map = feature_config.default_color_map
         features_present = check_feature_presence(
             gb_record,
             feature_config.selected_features_set,

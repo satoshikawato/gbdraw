@@ -30,12 +30,6 @@ const {
   WEB_UX_PROFILE,
   WEB_UX_PROFILE_VERSION
 } = await import(pathToFileURL(join(tempDir, 'js', 'web-ux-profile.js')));
-const {
-  DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
-  DEFAULT_LINEAR_BLAST_FILTERS,
-  buildModeBlastFilterArgs,
-  buildModeTrackVisibilityArgs
-} = await import(pathToFileURL(join(tempDir, 'js', 'app', 'cli-args.js')));
 
 const normalizedComparison = (filters) => ({
   evalue: Number(filters.evalue),
@@ -96,11 +90,6 @@ assert.deepEqual(
   }),
   expectedModes.linear.comparison
 );
-assert.deepEqual(
-  DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
-  comparisonFiltersForMode('circular')
-);
-assert.deepEqual(DEFAULT_LINEAR_BLAST_FILTERS, comparisonFiltersForMode('linear'));
 assert.equal(
   comparisonProfileDefault('circular', 'identity'),
   expectedModes.circular.comparison.identity
@@ -257,7 +246,7 @@ assert.deepEqual(
   { evalue: '1e-2', identity: 0, axis_stroke_color: 'lightgray' }
 );
 
-const { buildCanonicalSessionRequest } = await import(
+const { buildCanonicalRenderRequest } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-request.js'))
 );
 const genbankText = `LOCUS       MODEPARITY                  4 bp    DNA     linear   UNK 01-JAN-1980
@@ -291,21 +280,6 @@ for (const modeName of ['circular', 'linear']) {
   state.circularRecordList.value = [];
   state.linearRecordLayoutEnabled.value = false;
 
-  const freshCliArgs = [
-    ...buildModeTrackVisibilityArgs(modeName, state.form),
-    ...buildModeBlastFilterArgs(modeName, {
-      bitscore: state.adv.min_bitscore,
-      evalue: state.adv.evalue,
-      identity: state.adv.identity,
-      alignment_length: state.adv.alignment_length
-    })
-  ];
-  assert.deepEqual(
-    freshCliArgs,
-    [],
-    `Fresh ${modeName} Web state must rely on the reviewed CLI defaults`
-  );
-
   const filesData = modeName === 'circular'
     ? { c_gb: genbank, linearSeqs: [] }
     : {
@@ -319,7 +293,7 @@ for (const modeName of ['circular', 'linear']) {
         }],
         linearComparisons: []
       };
-  const canonical = buildCanonicalSessionRequest({ state, filesData });
+  const canonical = buildCanonicalRenderRequest({ state, filesData });
   const options = canonical.renderRequest.diagramOptions;
   const expected = expectedModes[modeName];
   assert.equal(canonical.renderRequest.mode, modeName);
@@ -350,18 +324,3 @@ for (const modeName of ['circular', 'linear']) {
     );
   }
 }
-
-assert.deepEqual(
-  buildModeTrackVisibilityArgs('circular', {
-    ...createDefaultForm(),
-    suppress_gc: true
-  }),
-  ['--no-gc']
-);
-assert.deepEqual(
-  buildModeTrackVisibilityArgs('linear', {
-    ...createDefaultForm(),
-    show_skew: true
-  }),
-  ['--skew']
-);

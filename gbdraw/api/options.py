@@ -728,6 +728,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     keep_full_definition_with_plot_title: bool = False
     species: str | None = None
     strain: str | None = None
+    conservation_table_file: str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -781,6 +782,33 @@ class CircularDiagramOptions(_ModeDiagramOptions):
             field_name="conservation_colors",
             element_type=str,
         )
+        if self.conservation_table_file is not None:
+            if (
+                not isinstance(self.conservation_table_file, str)
+                or not self.conservation_table_file.strip()
+            ):
+                raise ValidationError(
+                    "conservation_table_file must be a non-empty string or None."
+                )
+            if any(
+                value is not None
+                for value in (
+                    self.conservation_blast_files,
+                    self.conservation_fasta_files,
+                    self.conservation_dataframes,
+                    self.conservation_labels,
+                    self.conservation_colors,
+                )
+            ):
+                raise ValidationError(
+                    "conservation_table_file cannot be combined with direct "
+                    "Circular comparison inputs."
+                )
+            object.__setattr__(
+                self,
+                "conservation_table_file",
+                self.conservation_table_file.strip(),
+            )
         object.__setattr__(
             self,
             "conservation_reference",
@@ -835,6 +863,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     orthogroup_member_max_hits: int = 5
     collinear_max_paralog_links_per_orthogroup: int = 2
     align_orthogroup_feature: str | None = None
+    comparison_table_file: str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -861,6 +890,24 @@ class LinearDiagramOptions(_ModeDiagramOptions):
             field_name="linear_comparisons",
             element_type=LinearComparison,
         )
+        if self.comparison_table_file is not None:
+            if (
+                not isinstance(self.comparison_table_file, str)
+                or not self.comparison_table_file.strip()
+            ):
+                raise ValidationError(
+                    "comparison_table_file must be a non-empty string or None."
+                )
+            if self.blast_files is not None or self.linear_comparisons is not None:
+                raise ValidationError(
+                    "comparison_table_file cannot be combined with blast_files or "
+                    "linear_comparisons."
+                )
+            object.__setattr__(
+                self,
+                "comparison_table_file",
+                self.comparison_table_file.strip(),
+            )
         _validate_sequence_elements(
             self.protein_comparisons,
             field_name="protein_comparisons",

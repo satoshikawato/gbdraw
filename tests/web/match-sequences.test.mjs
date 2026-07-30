@@ -181,6 +181,33 @@ test('restores circular reference and display-ordered conservation sources', asy
   );
 });
 
+test('keeps missing LOSAT comparison FASTA placeholders aligned with displayed series', async () => {
+  const sources = await buildRestoredMatchSequenceSources({
+    mode: 'circular',
+    cInputType: 'gb',
+    files: {
+      c_gb: textFile(`LOCUS       ref\nACCESSION   REF\nVERSION     REF.1\nORIGIN\n        1 aaccggtt\n//\n`),
+      c_conservation_fastas: [
+        null,
+        textFile('>comparison_b\nGGGGTTTT\n')
+      ]
+    },
+    circularConservation: {
+      source: 'losat',
+      series: [{ sourceIndex: 0 }, { sourceIndex: 1 }]
+    }
+  });
+
+  assert.deepEqual(
+    sources
+      .filter((source) => source.origin === 'homology-comparison')
+      .map(({ recordId, sequence, sourceIndex }) => ({ recordId, sequence, sourceIndex })),
+    [
+      { recordId: 'comparison_b', sequence: 'GGGGTTTT', sourceIndex: 1 }
+    ]
+  );
+});
+
 test('uses BLAST identity rather than stale source indexes for upload companions', async () => {
   const sources = await buildRestoredMatchSequenceSources({
     mode: 'circular',

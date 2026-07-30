@@ -10,15 +10,9 @@ from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
 from typing import Optional
-from pandas import DataFrame  # type: ignore[reportMissingImports]
 from .io.cli_tables import (
     read_circular_track_table,
-    read_conservation_table,
-    read_records_table,
 )
-from .io.genome import load_gbks, load_gff_fasta
-from .io.regions import apply_region_specs, parse_region_specs
-from .io.colors import load_default_colors, read_color_table
 from .config.toml import load_config_toml
 from .render.export import parse_formats
 from .api.options import (
@@ -29,32 +23,30 @@ from .api.options import (
     CircularRequestTrackOptions,
     ColorOptions,
 )
-from .annotations import read_annotation_table
 from .api.request_render import (
     CircularBatchRenderResult,
+    CircularBatchRequestPlan,
     RequestRenderResult,
+    build_request_plan_diagram,
+    plan_request,
+    render_prepared_request,
     render_request,
 )
+from .api.record_planning import (
+    depth_track_inputs_from_cli,
+    record_input_manifest_from_paths,
+    record_input_manifest_from_table,
+)
 from .api.requests import (
+    CircularBatchOutputPolicy,
     CircularBatchRequest,
     CircularDiagramRequest,
-    InMemoryRecordSource,
-    RecordInput,
+    RecordCardinality,
     RenderOutputRequest,
 )
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
-from .core.sequence import determine_output_file_prefixes  # type: ignore[reportMissingImports]
-from .labels.filtering import (
-    read_filter_list_file,
-    read_label_override_file,
-    read_qualifier_priority_file,
-)  # type: ignore[reportMissingImports]
 from .layout.record_placement import parse_record_row_position
 from .features.shapes import parse_feature_shape_overrides
-from .features.visibility import (
-    read_feature_visibility_file,
-    resolve_candidate_feature_types,
-)
 from .exceptions import ValidationError
 from .mode_profiles import CIRCULAR_MODE_PROFILE, ComparisonThresholds
 from .tracks import (  # type: ignore[reportMissingImports]
@@ -87,25 +79,34 @@ from .cli_utils.common import (
     validate_input_args,
     validate_label_args,
     handle_output_formats,
-    load_records_table_records as _load_records_table_records,
-    record_major_depth_track_files_from_cli as _record_major_depth_track_files_from_cli,
 )
 from .cli_utils.session import (
     DiagramRunResult,
     RenderedSvg,
     add_session_args,
-    build_track_slot_geometry_run_metadata,
-    collect_track_slot_geometry_records,
+    diagram_request_output_paths,
+    diagram_request_rendered_svgs,
     parse_session_pre_args,
     preflight_session_sidecar_if_requested,
     render_canonical_session_if_present,
+    resolve_session_sidecar_path,
     save_session_sidecar_if_requested,
+)
+from .render.track_slot_metadata import (
+    build_track_slot_geometry_run_metadata,
+    collect_track_slot_geometry_records,
 )
 from .session_io import load_session, session_to_cli_args
 
 # Setup for the logging system
 logger = logging.getLogger()
 setup_logging()
+
+
+def _circular_cli_record_cardinality() -> RecordCardinality:
+    """Preserve the CLI contract that every direct input entry is rendered."""
+
+    return RecordCardinality.ALL
 
 
 
@@ -644,16 +645,12 @@ def circular_main(cmd_args) -> None:
                 _allow_legacy_track_transport=True,
             )
             args.overwrite = session_request.overwrite
+            args.save_session = session_request.save_session
+            args.session_output = session_request.session_output
             args._allow_legacy_track_transport = True
             args._require_canonical_session = bool(
                 session_request.save_session
                 or session_request.session_output
-            )
-            preflight_session_sidecar_if_requested(
-                save_session=session_request.save_session,
-                session_output=session_request.session_output,
-                output_prefix=args.output,
-                overwrite=session_request.overwrite,
             )
             run_result = run_circular_from_namespace(args)
             save_session_sidecar_if_requested(
@@ -669,12 +666,6 @@ def circular_main(cmd_args) -> None:
         return
 
     args: argparse.Namespace = _get_args(cmd_args)
-    preflight_session_sidecar_if_requested(
-        save_session=bool(args.save_session or args.session_output),
-        session_output=args.session_output,
-        output_prefix=args.output,
-        overwrite=bool(args.overwrite),
-    )
     run_result = run_circular_from_namespace(args)
     save_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
@@ -704,10 +695,19 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     multi_record_min_radius_ratio: float = args.multi_record_min_radius_ratio
     multi_record_column_gap_ratio: float = args.multi_record_column_gap_ratio
     multi_record_row_gap_ratio: float = args.multi_record_row_gap_ratio
-    records_table = read_records_table(args.records_table) if args.records_table else None
+    record_manifest = (
+        record_input_manifest_from_table(args.records_table)
+        if args.records_table
+        else record_input_manifest_from_paths(
+            gbk_paths=args.gbk,
+            gff_paths=args.gff,
+            fasta_paths=args.fasta,
+            cardinalities=_circular_cli_record_cardinality(),
+        )
+    )
     multi_record_positions: list[str] = (
-        records_table.multi_record_positions()
-        if records_table
+        []
+        if args.records_table
         else [str(position) for position in (args.multi_record_position or [])]
     )
     plot_title: str = str(args.plot_title or "").strip()
@@ -739,28 +739,11 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     depth_large_tick_interval: Optional[float] = args.depth_large_tick_interval
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
-    conservation_table = read_conservation_table(args.conservation_table) if args.conservation_table else None
-    conservation_blast_files: list[str] | None = (
-        conservation_table.conservation_blast_files
-        if conservation_table
-        else list(args.conservation_blast or []) or None
-    )
-    conservation_sequence_sources: list[str | None] | None = (
-        conservation_table.comparison_fasta_files
-        if conservation_table
-        else list(args.conservation_fasta or []) or None
-    )
+    conservation_blast_files = list(args.conservation_blast or []) or None
+    conservation_sequence_sources = list(args.conservation_fasta or []) or None
     conservation_reference: str = args.conservation_reference
-    conservation_labels: list[str] | None = (
-        conservation_table.labels
-        if conservation_table
-        else list(args.conservation_labels or []) or None
-    )
-    conservation_colors: list[str] | None = (
-        conservation_table.colors
-        if conservation_table
-        else list(args.conservation_colors or []) or None
-    )
+    conservation_labels = list(args.conservation_labels or []) or None
+    conservation_colors = list(args.conservation_colors or []) or None
     conservation_ring_width: Optional[float] = args.conservation_ring_width
     conservation_ring_gap: Optional[float] = args.conservation_ring_gap
     evalue: float = args.evalue
@@ -776,10 +759,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     qualifier_priority_path: str = args.qualifier_priority
     label_table_path: str = args.label_table
     feature_table_path: str = args.feature_table
-    color_table: Optional[DataFrame] = read_color_table(color_table_path)
-    feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
     annotation_options = (
-        AnnotationOptions(sets=read_annotation_table(args.annotation_table, mode="circular"))
+        AnnotationOptions(table_file=args.annotation_table)
         if args.annotation_table
         else None
     )
@@ -829,56 +810,15 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     gc_skew_radius: Optional[float] = args.gc_skew_radius
     if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
         raise ValidationError("plot_title_font_size must be > 0")
-    if records_table:
-        if records_table.input_kind == "gbk":
-            args.gbk = records_table.gbk_files
-            args.gff = None
-            args.fasta = None
-        else:
-            args.gbk = None
-            args.gff = records_table.gff_files
-            args.fasta = records_table.fasta_files
-        gb_records = _load_records_table_records(
-            records_table,
-            selected_features_set=selected_features_set,
-            color_table=color_table,
-            feature_table=feature_table,
-            gbk_loader=load_gbks,
-            gff_loader=load_gff_fasta,
-        )
-        records_table_region_specs = parse_region_specs(records_table.row_scoped_region_specs())
-        if records_table_region_specs:
-            try:
-                gb_records = apply_region_specs(gb_records, records_table_region_specs, log=logger)
-            except ValueError as exc:
-                logger.error(f"ERROR: {exc}")
-                raise ValidationError(str(exc)) from exc
-    elif args.gbk:
-        gb_records = load_gbks(args.gbk)
-    elif args.gff and args.fasta:
-        candidate_feature_types, keep_all_features = resolve_candidate_feature_types(
-            selected_features_set,
-            color_table=color_table,
-            feature_visibility_table=feature_table,
-        )
-        gb_records = load_gff_fasta(
-            args.gff,
-            args.fasta,
-            selected_features_set=candidate_feature_types,
-            keep_all_features=keep_all_features,
-        )
-    else:
-        # This case should not be reached due to arg validation
-        logger.error("Invalid input file configuration.")
-        raise ValidationError("Invalid input file configuration.")
-    depth_track_files = _record_major_depth_track_files_from_cli(
+    depth_tracks = depth_track_inputs_from_cli(
         depth_track_groups,
-        record_count=len(gb_records),
+        labels=depth_track_labels,
+        colors=depth_track_colors,
+        large_tick_intervals=depth_track_large_tick_intervals,
+        small_tick_intervals=depth_track_small_tick_intervals,
+        tick_font_sizes=depth_track_tick_font_sizes,
     )
-    logical_depth_track_count = max(
-        (len(row) for row in (depth_track_files or [])),
-        default=0,
-    )
+    logical_depth_track_count = len(depth_tracks or ())
 
     outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
@@ -910,22 +850,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
-    if qualifier_priority_path:
-        filtering_cfg["qualifier_priority_df"] = read_qualifier_priority_file(qualifier_priority_path)
-    else:
-        filtering_cfg["qualifier_priority_df"] = None
-    if label_whitelist:
-        filtering_cfg["whitelist_df"] = read_filter_list_file(label_whitelist)
-    else:
-        filtering_cfg["whitelist_df"] = None
-    if label_table_path:
-        filtering_cfg["label_override_df"] = read_label_override_file(label_table_path)
-    else:
-        filtering_cfg["label_override_df"] = None
 
     palette: str = args.palette
-    default_colors: Optional[DataFrame] = load_default_colors(
-        user_defined_default_colors, palette)
 
     filtering_override = dict(filtering_cfg)
     if label_blacklist is not None:
@@ -1092,29 +1018,13 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         circular_track_slots_or_none = updated_slots
 
     canonical_config = copy.deepcopy(config_dict)
-    canonical_filtering = canonical_config["labels"]["filtering"]
-    qualifier_priority_table = canonical_filtering.pop("qualifier_priority_df", None)
-    label_whitelist_table = canonical_filtering.pop("whitelist_df", None)
-    label_override_table = canonical_filtering.pop("label_override_df", None)
-
-    request_depth_track_files = depth_track_files
-    if (
-        not multi_record_canvas
-        and request_depth_track_files is not None
-        and len(request_depth_track_files) == 1
-        and len(gb_records) > 1
-    ):
-        request_depth_track_files = [
-            list(request_depth_track_files[0])
-            for _ in gb_records
-        ]
 
     request_options = CircularDiagramOptions(
         config=canonical_config,
         colors=ColorOptions(
-            color_table=color_table,
-            default_colors=default_colors,
+            color_table_file=color_table_path or None,
             default_colors_palette=palette,
+            default_colors_file=user_defined_default_colors or None,
         ),
         tracks=CircularRequestTrackOptions(
             circular_track_slots=circular_track_slots_or_none,
@@ -1127,24 +1037,20 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             plot_title_position=plot_title_position,
         ),
         selected_features_set=tuple(selected_features_set),
-        feature_visibility_table=feature_table,
-        label_whitelist_table=label_whitelist_table,
-        qualifier_priority_table=qualifier_priority_table,
-        label_override_table=label_override_table,
+        feature_visibility_table_file=feature_table_path or None,
+        label_whitelist_file=label_whitelist or None,
+        qualifier_priority_file=qualifier_priority_path or None,
+        label_override_file=label_table_path or None,
         feature_shapes=feature_shapes or None,
         dinucleotide=dinucleotide,
         window=manual_window,
         step=manual_step,
         depth_window=depth_window,
         depth_step=depth_step,
-        depth_track_files=request_depth_track_files,
-        depth_track_labels=depth_track_labels,
-        depth_track_colors=depth_track_colors,
-        depth_track_large_tick_intervals=depth_track_large_tick_intervals,
-        depth_track_small_tick_intervals=depth_track_small_tick_intervals,
-        depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+        depth_tracks=depth_tracks,
         conservation_blast_files=conservation_blast_files,
         conservation_fasta_files=conservation_sequence_sources,
+        conservation_table_file=args.conservation_table,
         conservation_reference=conservation_reference,
         conservation_labels=conservation_labels,
         conservation_colors=conservation_colors,
@@ -1160,13 +1066,9 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         identity=identity,
         alignment_length=alignment_length,
     )
-    request_records = tuple(
-        RecordInput(source=InMemoryRecordSource(record))
-        for record in gb_records
-    )
+    request_records = record_manifest.records
 
     if multi_record_canvas:
-        grid_prefix = output_prefix if output_prefix is not None else gb_records[0].id
         canonical_request = CircularDiagramRequest(
             records=request_records,
             options=request_options,
@@ -1178,62 +1080,72 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 multi_record_positions=multi_record_positions or None,
             ),
             output=_render_output_request(
-                grid_prefix,
+                output_prefix or "out",
                 out_formats,
                 overwrite=args.overwrite,
+            )
+            if output_prefix is not None
+            else replace(
+                _render_output_request(
+                    "out",
+                    out_formats,
+                    overwrite=args.overwrite,
+                ),
+                resolve_prefix_from_first_record=True,
             ),
+            record_options=record_manifest.record_options,
             grouping="grid",
         )
     else:
-        batch_prefixes = tuple(
-            determine_output_file_prefixes(
-                gb_records,
-                output_prefix,
-            )
-        )
         canonical_request = CircularBatchRequest(
             records=request_records,
             options=request_options,
-            outputs=tuple(
-                _render_output_request(
-                    prefix,
-                    out_formats,
-                    overwrite=args.overwrite,
-                )
-                for prefix in batch_prefixes
+            output_policy=CircularBatchOutputPolicy(
+                output_prefix=output_prefix,
+                formats=tuple(out_formats),
+                overwrite=args.overwrite,
             ),
+            record_options=record_manifest.record_options,
         )
 
-    if (
-        bool(args.save_session or args.session_output)
-        and output_prefix is None
-    ):
-        if args.session_output:
-            implicit_sidecar_path = Path(args.session_output)
-        elif isinstance(canonical_request, CircularBatchRequest):
-            implicit_sidecar_path = (
-                Path(f"{batch_prefixes[0]}.gbdraw-session.json")
-                if len(batch_prefixes) == 1
-                else Path("gbdraw.gbdraw-session.json")
-            )
-        else:
-            implicit_sidecar_path = Path(
-                f"{canonical_request.output.output_prefix}.gbdraw-session.json"
-            )
+    needs_sidecar_preflight = bool(args.save_session or args.session_output)
+    if needs_sidecar_preflight:
+        request_plan = plan_request(canonical_request)
+        materialized_request = request_plan.request
+        sidecar_path = resolve_session_sidecar_path(
+            explicit_path=args.session_output,
+            output_prefix=args.output,
+            outputs=diagram_request_rendered_svgs(materialized_request),
+        )
         preflight_session_sidecar_if_requested(
             save_session=True,
-            session_output=str(implicit_sidecar_path),
+            session_output=str(sidecar_path),
             output_prefix=None,
+            diagram_output_paths=diagram_request_output_paths(
+                materialized_request
+            ),
             overwrite=bool(args.overwrite),
         )
-
-    rendered = render_request(canonical_request)
+        batch_outputs_preflighted = isinstance(
+            request_plan,
+            CircularBatchRequestPlan,
+        )
+        request_plan.preflight_outputs()
+        prepared = build_request_plan_diagram(request_plan)
+        rendered = render_prepared_request(
+            prepared,
+            batch_outputs_preflighted=batch_outputs_preflighted,
+        )
+    else:
+        rendered = render_request(canonical_request)
     if isinstance(rendered, CircularBatchRenderResult):
         rendered_items = rendered.items
     elif isinstance(rendered, RequestRenderResult):
         rendered_items = (rendered,)
     else:  # pragma: no cover - render_request exhausts the Circular result union.
         raise ValidationError("Circular request renderer returned an unsupported result.")
+
+    materialized_request = rendered.request
 
     outputs: list[RenderedSvg] = []
     track_slot_geometry_records = []
@@ -1273,7 +1185,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             mode="circular",
             records=track_slot_geometry_records,
         ),
-        canonical_request=canonical_request,
+        canonical_request=materialized_request,
     )
 
 if __name__ == "__main__":

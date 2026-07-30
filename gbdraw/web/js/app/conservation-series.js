@@ -21,6 +21,42 @@ const CONSERVATION_SERIES_COLORS = CONSERVATION_SERIES_BASE_COLORS.map((color) =
 
 export const normalizeFileList = (files) => (Array.isArray(files) ? files.filter(Boolean) : (files ? [files] : []));
 
+export const orderedOptionalConservationFiles = (files, circularConservation) => {
+  const sourceFiles = Array.isArray(files) ? files : [];
+  const series = Array.isArray(circularConservation?.series)
+    ? circularConservation.series
+    : [];
+  if (series.length === 0) return [...sourceFiles];
+
+  const used = new Set();
+  const ordered = [];
+  series.forEach((entry, seriesIndex) => {
+    const fileName = String(entry?.fileName || '').trim();
+    let index = fileName
+      ? sourceFiles.findIndex(
+          (file, candidateIndex) => (
+            !used.has(candidateIndex) &&
+            String(file?.name || '').trim() === fileName
+          )
+        )
+      : -1;
+    if (index < 0) {
+      const sourceIndex = Number(entry?.sourceIndex);
+      index = Number.isInteger(sourceIndex) ? sourceIndex : seriesIndex;
+    }
+    if (index >= 0 && index < sourceFiles.length && !used.has(index)) {
+      used.add(index);
+      ordered.push(sourceFiles[index] || null);
+      return;
+    }
+    ordered.push(null);
+  });
+  sourceFiles.forEach((file, index) => {
+    if (!used.has(index)) ordered.push(file || null);
+  });
+  return ordered;
+};
+
 export const defaultConservationSeriesLabel = (file, index) => {
   const raw = String(file?.name || `Series ${Number(index) + 1}`).trim();
   const withoutExtension = raw.replace(/\.[^.]+$/, '').trim();

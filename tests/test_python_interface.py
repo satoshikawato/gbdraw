@@ -12,6 +12,7 @@ from svgwrite import Drawing
 import gbdraw
 import gbdraw.api.request_render as request_render_module
 import gbdraw.interface as interface
+from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.api.options import (
     CircularDiagramOptions,
     CircularOutputOptions,
@@ -130,11 +131,11 @@ def test_draw_circular_dispatches_from_record_count(
 ) -> None:
     calls: list[tuple[str, object, object]] = []
 
-    def fake_single(record, *, options):
+    def fake_single(record, *, options, **_kwargs):
         calls.append(("single", record, options))
         return Drawing("single.svg")
 
-    def fake_multi(records, *, options, layout):
+    def fake_multi(records, *, options, layout, **_kwargs):
         calls.append(("multi", tuple(records), layout))
         return Drawing("multi.svg")
 
@@ -196,12 +197,54 @@ def test_root_api_builds_metadata_only_for_explicit_interactive_render(
     assert calls == 1
 
 
+def test_root_interactive_svg_uses_orthogroups_computed_by_builder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    member = OrthogroupMember(
+        orthogroup_id="OG-computed",
+        protein_id="protein-computed",
+        record_index=0,
+        feature_index=0,
+        record_id="record",
+        label="Computed protein",
+        start=0,
+        end=12,
+        strand=1,
+        feature_svg_id="feature-computed",
+        source_protein_id="source-computed",
+    )
+    computed = OrthogroupResult(
+        orthogroups={"OG-computed": [member]},
+        member_by_protein_id={member.protein_id: member},
+    )
+
+    def fake_linear(*_args, **_kwargs):
+        drawing = Drawing("linear.svg")
+        return request_render_module.LinearDiagramBuildResult(
+            drawing=drawing,
+            metadata=request_render_module.LinearDiagramMetadata(
+                orthogroups=computed,
+            ),
+        )
+
+    monkeypatch.setattr(
+        request_render_module,
+        "build_linear_diagram_result",
+        fake_linear,
+    )
+
+    diagram = interface.draw_linear(_record())
+    svg = diagram.to_svg(interactive=True)
+
+    assert "OG-computed" in svg
+
+
 def test_draw_circular_one_record_layout_reaches_grid_builder(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_multi(records, *, options, layout):
+    def fake_multi(records, *, options, layout, **_kwargs):
         captured["records"] = tuple(records)
         captured["options"] = options
         captured["layout"] = layout
@@ -243,14 +286,28 @@ def test_grouped_options_compile_to_the_existing_render_engine(
     captured: dict[str, object] = {}
     color_table = pd.DataFrame(
         [["CDS", "product", "polymerase", "#123456"]],
-        columns=["feature_type", "qualifier", "value", "color"],
+        columns=["feature_type", "qualifier_key", "value", "color"],
     )
+    visibility_table = pd.DataFrame(
+        columns=["record_id", "feature_type", "qualifier", "value", "action"]
+    )
+    whitelist_table = pd.DataFrame({"keyword": ["polymerase"]})
 
-    def fake_single(_record, *, options):
+    def fake_single(_record, *, options, **_kwargs):
         captured["options"] = options
         return Drawing("out.svg")
 
     monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(
+        request_render_module,
+        "read_feature_visibility_file",
+        lambda _path: visibility_table,
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "read_filter_list_file",
+        lambda _path: whitelist_table,
+    )
     monkeypatch.setattr(interface, "_interactive_context", lambda *_args, **_kwargs: None)
 
     interface.draw_circular(
@@ -279,12 +336,14 @@ def test_grouped_options_compile_to_the_existing_render_engine(
     assert isinstance(options.output, CircularOutputOptions)
     assert options.selected_features_set == ("CDS",)
     assert options.colors.color_table is color_table
-    assert options.feature_visibility_table_file == "visibility.tsv"
-    assert options.label_whitelist_file == "labels.tsv"
     assert options.plot_title == "Genome"
     assert options.output.plot_title_position == "top"
     assert options.depth_track_files == [["depth.tsv"]]
     assert options.depth_track_labels == ["Coverage"]
+    assert options.feature_visibility_table is visibility_table
+    assert options.feature_visibility_table_file is None
+    assert options.label_whitelist_table is whitelist_table
+    assert options.label_whitelist_file is None
 
 
 def test_draw_linear_routes_through_typed_request_plan(
@@ -298,7 +357,11 @@ def test_draw_linear_routes_through_typed_request_plan(
         captured["layout"] = layout
         return Drawing("linear.svg")
 
-    monkeypatch.setattr(request_render_module, "build_linear_diagram", fake_linear)
+    monkeypatch.setattr(
+        request_render_module,
+        "build_linear_diagram_result",
+        fake_linear,
+    )
     monkeypatch.setattr(interface, "_interactive_context", lambda *_args, **_kwargs: None)
 
     diagram = interface.draw_linear(
@@ -341,12 +404,11 @@ def test_circular_companion_sequence_reaches_interactive_context() -> None:
         )
     )
 
-    context = interface._interactive_context(
-        [reference],
+    context = interface.draw_circular(
+        reference,
         options=options,
-        legacy=interface._circular_options(options, record_count=1),
-        mode="circular",
-    )
+    )._resolve_interactive_context()
+    assert context is not None
 
     assert [(source["origin"], source["recordId"]) for source in context.sequence_sources] == [
         ("circular-reference", "reference"),
@@ -400,6 +462,105 @@ def test_diagram_save_writes_exactly_the_requested_file(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError, match="already exists"):
         diagram.save(output)
+
+
+def test_diagram_save_rejects_dangling_symlink_without_overwrite(
+    tmp_path: Path,
+) -> None:
+    diagram = interface.Diagram(
+        Drawing("internal-name.svg"),
+        mode="circular",
+        records=(_record(),),
+        interactive_context=None,
+    )
+    output = tmp_path / "chosen-name.svg"
+    missing_target = tmp_path / "missing-target.svg"
+    try:
+        output.symlink_to(missing_target)
+    except OSError as exc:
+        pytest.skip(f"file symlinks are unavailable: {exc}")
+
+    with pytest.raises(ValidationError, match="not replaceable files"):
+        diagram.save(output)
+
+    assert output.is_symlink()
+    assert not missing_target.exists()
+
+
+def test_diagram_save_overwrite_replaces_symlink_not_its_target(
+    tmp_path: Path,
+) -> None:
+    diagram = interface.Diagram(
+        Drawing("internal-name.svg"),
+        mode="circular",
+        records=(_record(),),
+        interactive_context=None,
+    )
+    output = tmp_path / "chosen-name.svg"
+    protected_target = tmp_path / "protected.svg"
+    protected_target.write_text("keep", encoding="utf-8")
+    try:
+        output.symlink_to(protected_target)
+    except OSError as exc:
+        pytest.skip(f"file symlinks are unavailable: {exc}")
+
+    diagram.save(output, overwrite=True)
+
+    assert protected_target.read_text(encoding="utf-8") == "keep"
+    assert not output.is_symlink()
+    assert output.read_text(encoding="utf-8").startswith("<svg")
+
+
+def test_diagram_save_does_not_follow_target_created_after_preflight(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    diagram = interface.Diagram(
+        Drawing("internal-name.svg"),
+        mode="circular",
+        records=(_record(),),
+        interactive_context=None,
+    )
+    output = tmp_path / "chosen-name.svg"
+    protected_target = tmp_path / "protected.svg"
+    protected_target.write_text("keep", encoding="utf-8")
+    real_preflight = interface.preflight_output_paths
+
+    def inject_symlink(paths, *, overwrite):
+        result = real_preflight(paths, overwrite=overwrite)
+        try:
+            output.symlink_to(protected_target)
+        except OSError as exc:
+            pytest.skip(f"file symlinks are unavailable: {exc}")
+        return result
+
+    monkeypatch.setattr(interface, "preflight_output_paths", inject_symlink)
+
+    with pytest.raises(ValidationError, match="already exists"):
+        diagram.save(output)
+
+    assert protected_target.read_text(encoding="utf-8") == "keep"
+    assert output.is_symlink()
+
+
+def test_diagram_save_rejects_windows_reserved_output_name(
+    tmp_path: Path,
+) -> None:
+    diagram = interface.Diagram(
+        Drawing("internal-name.svg"),
+        mode="circular",
+        records=(_record(),),
+        interactive_context=None,
+    )
+    output = tmp_path / "NUL.svg"
+
+    with pytest.raises(
+        ValidationError,
+        match="Windows-reserved filename component",
+    ):
+        diagram.save(output)
+
+    assert not output.exists()
 
 
 def test_read_genbank_accepts_one_path(examples_dir: Path) -> None:

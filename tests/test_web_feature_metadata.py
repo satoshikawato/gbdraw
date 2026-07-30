@@ -89,33 +89,22 @@ def test_python_helpers_blank_or_js_nullish_accepts_pyodide_sentinels(
         assert is_blank(value) is False  # type: ignore[operator]
 
 
-def test_run_gbdraw_wrapper_rejects_unknown_mode_before_dispatch_or_cleanup(
+def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatching(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     python_helpers_namespace: dict[str, object],
 ) -> None:
+    from gbdraw.diagrams.linear import assemble
+
     marker = tmp_path / "keep.svg"
     marker.write_text("<svg />", encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
+    original_loader = assemble.load_comparisons
+    wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
 
-    def unexpected_linear_dispatch(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("Unknown modes must not dispatch to Linear.")
+    payload = json.loads(wrapper("{}", "{}", str(tmp_path / "render")))  # type: ignore[operator]
 
-    monkeypatch.setitem(
-        python_helpers_namespace,
-        "run_linear_from_namespace",
-        unexpected_linear_dispatch,
-    )
-    wrapper = python_helpers_namespace["run_gbdraw_wrapper"]
-
-    payload = json.loads(wrapper("radial", []))  # type: ignore[operator]
-
-    assert payload == {
-        "error": {
-            "type": "ValidationError",
-            "message": "Unsupported diagram mode: radial. Expected 'circular' or 'linear'.",
-        }
-    }
+    assert payload["error"]["type"]
+    assert payload["error"]["message"]
+    assert assemble.load_comparisons is original_loader
     assert marker.exists()
 
 

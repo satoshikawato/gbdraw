@@ -20,6 +20,7 @@
       "body": "Open gbdraw.app and select Circular. This workflow uses one annotated GenBank file and does not need Pairwise Comparisons.",
       "operations": [
         {
+          "genericMedia": true,
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-01-01-circular-mode.webp",
             "alt": "Mode selector with Circular selected.",
@@ -29,27 +30,243 @@
       ]
     },
     {
-      "title": "Upload the GenBank record",
-      "body": "Upload HmmtDNA.gbk and set Output prefix to HmmtDNA_basic_circular.",
+      "title": "Upload the record and name the output",
+      "body": "Upload the GenBank record, then enter the output and center-label text.",
+      "table": {
+        "columns": [
+          "Control",
+          "Value"
+        ],
+        "rows": [
+          [
+            "GenBank/DDBJ File",
+            "HmmtDNA.gbk"
+          ],
+          [
+            "Output Prefix",
+            "HmmtDNA_basic_circular"
+          ],
+          [
+            "Species",
+            "<i>Homo sapiens</i>"
+          ]
+        ]
+      },
       "operations": [
         {
+          "dataDependent": true,
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-02-01-genbank-upload.webp",
+            "src": "./media/HmmtDNA_basic_circular/manual-02-01-genbank-upload.webp",
             "alt": "Circular GenBank uploader containing HmmtDNA.gbk.",
-            "caption": "Upload the human mitochondrial GenBank record."
+            "caption": "Upload HmmtDNA.gbk in the Circular input card."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.c_gb; if (!file) throw new Error('HmmtDNA GenBank file was not restored.'); app.files.c_gb = new File([file], 'HmmtDNA.gbk', { type: file.type, lastModified: file.lastModified }); app.form.prefix = 'HmmtDNA_basic_circular'; app.form.species = '<i>Homo sapiens</i>'; app.form.track_type = 'middle'; app.form.separate_strands = true; app.form.suppress_gc = false; app.form.suppress_skew = false; app.form.labels_mode = 'out'; app.adv.circular_track_slots_enabled = false; const label = Array.from(document.querySelectorAll('label')).find((node) => node.textContent.trim() === 'GenBank/DDBJ File'); const uploader = label?.parentElement?.parentElement; if (!uploader) throw new Error('Circular GenBank uploader was not found.'); uploader.dataset.capture = 'hmmt-genbank-upload'; uploader.scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => window.__GBDRAW_APP__?.files?.c_gb?.name === 'HmmtDNA.gbk'"
+              }
+            ],
+            "selector": "[data-capture='hmmt-genbank-upload']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "circular",
+              "files.c_gb.name": "HmmtDNA.gbk"
+            },
+            "visibleText": [
+              "HmmtDNA.gbk"
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/HmmtDNA_basic_circular/manual-02-02-basic-settings.webp",
+            "alt": "Basic settings with the HmmtDNA output prefix and Homo sapiens species text.",
+            "caption": "Set Output Prefix and Species for the mitochondrial figure."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const file = app?.files?.c_gb; if (!file) throw new Error('HmmtDNA GenBank file was not restored.'); app.files.c_gb = new File([file], 'HmmtDNA.gbk', { type: file.type, lastModified: file.lastModified }); app.form.prefix = 'HmmtDNA_basic_circular'; app.form.species = '<i>Homo sapiens</i>'; app.form.track_type = 'middle'; app.form.separate_strands = true; app.form.suppress_gc = false; app.form.suppress_skew = false; app.form.labels_mode = 'out'; app.adv.circular_track_slots_enabled = false;"
+              }
+            ],
+            "cardTitle": "Basic",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "circular",
+              "form.prefix": "HmmtDNA_basic_circular",
+              "form.species": "<i>Homo sapiens</i>"
+            },
+            "visibleControls": [
+              {
+                "label": "Output Prefix",
+                "value": "HmmtDNA_basic_circular"
+              },
+              {
+                "label": "Species",
+                "value": "<i>Homo sapiens</i>"
+              }
+            ]
           }
         }
       ]
     },
     {
-      "title": "Choose the compact layout",
-      "body": "Set Track Preset to Middle, enable Separate Strands, set Label Mode to Out, and enter <i>Homo sapiens</i> in Species. Keep the default GC content and GC skew tracks.",
+      "title": "Choose the compact layout and labels",
+      "body": "Use the compact Middle preset, keep both GC tracks visible, and place feature labels outside the circle.",
+      "table": {
+        "columns": [
+          "Control",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Track Preset",
+            "Middle"
+          ],
+          [
+            "Separate Strands",
+            "On"
+          ],
+          [
+            "Hide GC Content",
+            "Off"
+          ],
+          [
+            "Hide GC Skew",
+            "Off"
+          ],
+          [
+            "Label Mode",
+            "Out"
+          ]
+        ]
+      },
       "operations": [
         {
+          "dataDependent": true,
           "media": {
-            "src": "./media/HmmtDNA_ATskew/manual-03-01-track-preset-middle.webp",
-            "alt": "Circular Track Preset selector with Middle highlighted.",
-            "caption": "Set Track Preset to Middle and keep the default GC tracks enabled."
+            "src": "./media/HmmtDNA_basic_circular/manual-03-01-layout-settings.webp",
+            "alt": "Circular Layout controls with Middle selected, Separate Strands checked, and both Hide GC controls unchecked.",
+            "caption": "Select Middle, enable Separate Strands, and leave both Hide GC controls off."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "openDetails": [
+              "Layout"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.form.track_type = 'middle'; app.form.separate_strands = true; app.form.suppress_gc = false; app.form.suppress_skew = false; app.form.labels_mode = 'out'; app.adv.circular_track_slots_enabled = false; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const preset = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Track Preset'))?.closest('div'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('.grid'); if (!summary || !preset || !options) throw new Error('Circular layout controls were not found.'); summary.dataset.capture = 'hmmt-layout-summary'; preset.dataset.capture = 'hmmt-layout-preset'; options.dataset.capture = 'hmmt-layout-options'; preset.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='hmmt-layout-summary']",
+              "[data-capture='hmmt-layout-preset']",
+              "[data-capture='hmmt-layout-options']"
+            ],
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "circular",
+              "form.track_type": "middle",
+              "form.separate_strands": true,
+              "form.suppress_gc": false,
+              "form.suppress_skew": false,
+              "adv.circular_track_slots_enabled": false
+            },
+            "visibleControls": [
+              {
+                "label": "Track Preset",
+                "value": "Middle"
+              },
+              {
+                "label": "Separate Strands",
+                "checked": true
+              },
+              {
+                "label": "Hide GC Content",
+                "checked": false
+              },
+              {
+                "label": "Hide GC Skew",
+                "checked": false
+              }
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/HmmtDNA_basic_circular/manual-03-02-label-mode-out.webp",
+            "alt": "Circular Label Mode selector with Out highlighted.",
+            "caption": "Set Label Mode to Out."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "openDetails": [
+              "Labels"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.form.labels_mode = 'out';"
+              }
+            ],
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Out",
+              "options": [
+                "None",
+                "Out",
+                "Both (Out + Inner)"
+              ],
+              "label": "Label Mode"
+            },
+            "assertAppState": {
+              "mode": "circular",
+              "form.labels_mode": "out"
+            },
+            "visibleControls": [
+              {
+                "label": "Label Mode",
+                "value": "Out"
+              }
+            ]
           }
         }
       ]

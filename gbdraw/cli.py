@@ -163,12 +163,11 @@ def main() -> None:
             print("Launching gbdraw GUI (Local Mode)...")
             start_local_server(str(web_dir))
         else:
-            print("Oops! It seems like you entered an invalid command.")
-            print("Please use 'circular' or 'linear' followed by the respective options.")
-            print("For example:")
-            print("  gbdraw circular --gbk input.gb")
-            print("  gbdraw linear --gbk input.gb")
-            print("  gbdraw gui")
+            print(
+                f"Unknown command {sys.argv[1]!r}. Choose circular, linear, or gui; "
+                "run gbdraw --help for usage.",
+                file=sys.stderr,
+            )
             sys.exit(1)
     except GbdrawError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

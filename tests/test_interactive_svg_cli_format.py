@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
@@ -965,7 +966,7 @@ def test_save_figure_to_interactive_png_uses_cairosvg_only_for_png(
     class FakeCairoSvg:
         @staticmethod
         def svg2png(*, bytestring, write_to):
-            Path(write_to).write_bytes(bytestring)
+            write_to.write(bytestring)
 
     monkeypatch.setattr(export_module, "get_cairosvg", lambda: FakeCairoSvg)
 
@@ -1015,7 +1016,7 @@ def test_save_figure_to_overwrite_replaces_existing_binary(
     class FakeCairoSvg:
         @staticmethod
         def svg2png(*, bytestring, write_to):
-            Path(write_to).write_bytes(b"new png")
+            write_to.write(b"new png")
 
     monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: FakeCairoSvg)
 
@@ -1030,6 +1031,104 @@ def test_save_figure_to_overwrite_replaces_existing_binary(
     assert paths == [str(svg_path), str(png_path)]
     assert svg_path.read_text(encoding="utf-8").startswith("<?xml")
     assert png_path.read_bytes() == b"new png"
+
+
+@pytest.mark.parametrize("blocked_kind", ("directory", "fifo"))
+def test_save_figure_to_preflights_all_formats_before_overwrite_removal(
+    blocked_kind: str,
+    tmp_path: Path,
+) -> None:
+    drawing = _drawing(tmp_path / "ignored.svg")
+    svg_path = tmp_path / "api-out.svg"
+    svg_path.write_text("keep", encoding="utf-8")
+    blocked_png = tmp_path / "api-out.png"
+    if blocked_kind == "directory":
+        blocked_png.mkdir()
+    else:
+        if not hasattr(os, "mkfifo"):
+            pytest.skip("FIFOs are unavailable on this platform")
+        os.mkfifo(blocked_png)
+
+    with pytest.raises(ValidationError, match="not replaceable files"):
+        api_render.save_figure_to(
+            drawing,
+            "png",
+            output_dir=str(tmp_path),
+            output_prefix="api-out",
+            overwrite=True,
+        )
+
+    assert svg_path.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.parametrize("parent_kind", ("file", "fifo", "dangling-symlink"))
+def test_save_figure_to_rejects_invalid_output_parent_before_writing(
+    parent_kind: str,
+    tmp_path: Path,
+) -> None:
+    drawing = _drawing(tmp_path / "ignored.svg")
+    output_dir = tmp_path / "blocked-parent"
+    if parent_kind == "file":
+        output_dir.write_text("keep", encoding="utf-8")
+    elif parent_kind == "fifo":
+        if not hasattr(os, "mkfifo"):
+            pytest.skip("FIFOs are unavailable on this platform")
+        os.mkfifo(output_dir)
+    else:
+        try:
+            output_dir.symlink_to(
+                tmp_path / "missing-output-directory",
+                target_is_directory=True,
+            )
+        except OSError as exc:
+            pytest.skip(f"directory symlinks are unavailable: {exc}")
+
+    with pytest.raises(ValidationError, match="parent path.*not directories"):
+        api_render.save_figure_to(
+            drawing,
+            "svg",
+            output_dir=str(output_dir),
+            output_prefix="api-out",
+            overwrite=True,
+        )
+
+    assert not (output_dir / "api-out.svg").exists()
+
+
+def test_save_figure_to_does_not_follow_binary_target_created_after_preflight(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    drawing = _drawing(tmp_path / "ignored.svg")
+    png_path = tmp_path / "api-out.png"
+    protected_target = tmp_path / "protected.png"
+    protected_target.write_bytes(b"keep")
+
+    class FakeCairoSvg:
+        @staticmethod
+        def svg2png(*, bytestring, write_to):
+            write_to.write(bytestring)
+
+    def inject_symlink():
+        try:
+            png_path.symlink_to(protected_target)
+        except OSError as exc:
+            pytest.skip(f"file symlinks are unavailable: {exc}")
+        return FakeCairoSvg
+
+    monkeypatch.setattr(api_render._export, "get_cairosvg", inject_symlink)
+
+    with pytest.raises(ValidationError, match="already exists"):
+        api_render.save_figure_to(
+            drawing,
+            "png",
+            output_dir=str(tmp_path),
+            output_prefix="api-out",
+        )
+
+    assert (tmp_path / "api-out.svg").is_file()
+    assert png_path.is_symlink()
+    assert protected_target.read_bytes() == b"keep"
 
 
 def test_render_to_bytes_supports_interactive_svg(monkeypatch, tmp_path: Path) -> None:
@@ -1081,7 +1180,7 @@ def test_save_figure_to_reports_partial_conversion_failure(
     class PartialCairoSvg:
         @staticmethod
         def svg2png(*, bytestring, write_to):
-            Path(write_to).write_bytes(bytestring)
+            write_to.write(bytestring)
 
         @staticmethod
         def svg2pdf(*, bytestring, write_to):

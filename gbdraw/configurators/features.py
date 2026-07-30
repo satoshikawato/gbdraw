@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import List, Mapping, Optional
+from typing import Any, List, Mapping, Optional
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.config.models import RenderProfile  # type: ignore[reportMissingImports]
+from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
     resolve_directional_feature_types,
@@ -36,6 +37,9 @@ class FeatureDrawingConfigurator:
         canvas_config,
         feature_table: Optional[DataFrame] = None,
         feature_shapes: Mapping[str, str] | None = None,
+        feature_visibility_rules: list[dict[str, Any]] | None = None,
+        specific_color_rules: Mapping[str, Any] | None = None,
+        default_color_map: Mapping[str, str] | None = None,
     ) -> None:
         """
         Initializes the FeatureDrawingConfigurator with color settings and feature selection.
@@ -48,8 +52,23 @@ class FeatureDrawingConfigurator:
         cfg = profile.config
         self.color_table: Optional[DataFrame] = color_table
         self.feature_table: Optional[DataFrame] = feature_table
-        self.feature_visibility_rules = compile_feature_visibility_rules(feature_table)
+        self.feature_visibility_rules = (
+            feature_visibility_rules
+            if feature_visibility_rules is not None
+            else compile_feature_visibility_rules(feature_table)
+        )
         self.default_colors: DataFrame = default_colors
+        if (specific_color_rules is None) != (default_color_map is None):
+            raise ValueError(
+                "specific_color_rules and default_color_map must be provided together"
+            )
+        if specific_color_rules is None:
+            specific_color_rules, default_color_map = preprocess_color_tables(
+                color_table,
+                default_colors,
+            )
+        self.specific_color_rules = specific_color_rules
+        self.default_color_map = default_color_map
         self.selected_features_set: List[str] = selected_features_set
         self.feature_shapes = normalize_feature_shape_overrides(feature_shapes)
         self.directional_feature_types: set[str] = resolve_directional_feature_types(
@@ -70,5 +89,4 @@ class FeatureDrawingConfigurator:
 
 
 __all__ = ["FeatureDrawingConfigurator"]
-
 

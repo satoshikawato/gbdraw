@@ -47,6 +47,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     OrthologPath,
     normalize_orthogroup_membership_mode,
 )
+from .diagram import LinearDiagramMetadata
 from .options import (
     AnnotationOptions,
     CircularDiagramOptions,
@@ -85,19 +86,28 @@ from .request_render import (
     CircularBatchRenderResult,
     CircularBatchRequestPlan,
     CircularRequestPlan,
+    CurrentRequestArtifacts,
     DiagramRequestPlan,
     LinearRequestPlan,
     PreparedCircularBatchRequest,
+    PreparedDiagramInputs,
     PreparedDiagramRequest,
     RequestRenderResult,
+    build_request_plan_diagram,
+    build_prepared_interactive_context,
     build_request_diagram,
     normalize_request_records,
+    plan_request,
     plan_circular_batch_request,
     plan_circular_request,
     plan_linear_request,
+    render_prepared_request,
     render_request,
+    resolve_request,
 )
+from .prepared import ResolvedFeatureInputs
 from .requests import (
+    CircularBatchOutputPolicy,
     CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
@@ -105,6 +115,8 @@ from .requests import (
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCardinality,
+    RecordCollectionOptions,
     RecordInput,
     RecordInputSource,
     RecordPresentation,
@@ -112,6 +124,12 @@ from .requests import (
 )
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+from gbdraw.web_support.capabilities import (
+    WEB_RENDER_OPTIONS_SCHEMA,
+    WEB_RENDER_PROTOCOL,
+    WEB_RUNTIME_CAPABILITY_SCHEMA,
+    get_web_runtime_capabilities,
+)
 from gbdraw.session import (
     MaterializedSession,
     SessionConversionError,
@@ -221,6 +239,7 @@ __all__ = [
     "CircularTrackOptions",
     "LinearMultiRecordOptions",
     "LinearDiagramOptions",
+    "LinearDiagramMetadata",
     "LinearOutputOptions",
     "LinearRequestTrackOptions",
     "LinearTrackOptions",
@@ -238,12 +257,15 @@ __all__ = [
     "save_figure_to",
     # typed requests
     "CircularBatchRequest",
+    "CircularBatchOutputPolicy",
     "CircularDiagramRequest",
     "DiagramRequest",
     "GenBankInputSource",
     "GffFastaInputSource",
     "InMemoryRecordSource",
     "LinearDiagramRequest",
+    "RecordCardinality",
+    "RecordCollectionOptions",
     "RecordInput",
     "RecordInputSource",
     "RecordPresentation",
@@ -251,17 +273,30 @@ __all__ = [
     "CircularBatchRenderResult",
     "CircularBatchRequestPlan",
     "CircularRequestPlan",
+    "CurrentRequestArtifacts",
     "DiagramRequestPlan",
     "LinearRequestPlan",
     "PreparedCircularBatchRequest",
+    "PreparedDiagramInputs",
     "PreparedDiagramRequest",
     "RequestRenderResult",
+    "ResolvedFeatureInputs",
+    "build_request_plan_diagram",
+    "build_prepared_interactive_context",
     "build_request_diagram",
     "normalize_request_records",
+    "plan_request",
     "plan_circular_batch_request",
     "plan_circular_request",
     "plan_linear_request",
+    "render_prepared_request",
     "render_request",
+    "resolve_request",
+    # Web runtime capabilities
+    "WEB_RENDER_OPTIONS_SCHEMA",
+    "WEB_RENDER_PROTOCOL",
+    "WEB_RUNTIME_CAPABILITY_SCHEMA",
+    "get_web_runtime_capabilities",
     # canonical sessions
     "MaterializedSession",
     "SessionConversionError",

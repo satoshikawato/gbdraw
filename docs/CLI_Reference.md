@@ -4,44 +4,22 @@
 
 This reference mirrors the current command help from `python -m gbdraw.cli` and lists the available options and defaults.
 
-Both diagram commands refuse to replace an existing output file by default.
-Pass `--overwrite` to replace every output selected by the current command.
-This permission applies only to that invocation and is not restored from a
-saved session.
+Every diagram run writes a base `.svg` and any additional requested formats.
+Both commands validate that complete target set before rendering and refuse to
+replace an existing file by default. Pass `--overwrite` to replace existing
+regular files selected by the current command. Directories, special files,
+dangling symlinks, and invalid parents are rejected even with that flag. Output
+generation is sequential rather than transactional, so formats completed before
+a later conversion error remain. Overwrite permission applies only to the
+current invocation and is not restored from a saved session.
 
 The current boolean spelling is symmetric in both modes:
 `--gc` / `--no-gc` and `--skew` / `--no-skew`. Depth files use repeatable
-`--depth_track`. The former mode-specific GC/skew switches, `--depth`, and the
-no-op `--show_depth` switch are no longer executable CLI aliases. Supported
-saved sessions that contain them are migrated during replay.
+`--depth_track`. Current multiword long options otherwise use the underscore
+spelling shown below.
 
-Apart from the canonical `--no-gc` / `--no-skew` switches and the two active
-aliases noted below, current multiword long option names use the documented
-underscore spelling. Fresh CLI and Python requests reject the retired names
-and values in this table; the CLI spellings are shown with `--`, while Python
-request fields use the same names without it. Supported saved-session and
-canonical request schema 1 and 2 readers migrate them before replay.
-
-| Retired input | Current input |
-| --- | --- |
-| Circular `--multi_record_size_mode sqrt` | `--multi_record_size_mode auto` |
-| Linear `--label_placement on_feature` | `--label_placement above_feature` |
-| Linear `--track_layout spreadout` / `tuckin` | `--track_layout above` / `below` |
-| `--depth_tick_interval` | `--depth_large_tick_interval` |
-| `--feature_table` | `--feature_visibility_table` |
-| `--collinear_max_gene_gap` | `--collinear_max_unit_gap` |
-| Circular slot `spacing` | `inner_gap_px` and `outer_gap_px` |
-| Circular slot `strict`, `compress`, or `reserve` | No direct replacement; geometry and reservation are derived from `side` |
-
-`--annotation_table` remains canonical and `--annotation-table` remains an
-active alias. `--gc_content_tick_interval` also remains an active alias for
-`--gc_content_large_tick_interval`; neither belongs to the retired list.
-
-The private `__gbdraw_legacy_spacing` key is not a current slot parameter. It is
-used only inside canonical request schema 1 and 2 readers and is never written
-by the current schema 5 writer. Legacy factor-based spacing can be replayed but
-cannot be re-saved losslessly; replace it with explicit `inner_gap_px` and
-`outer_gap_px` values before saving a current session.
+For retired options, compatibility aliases, and saved-session migration rules,
+see [Session and request compatibility](./SESSION_COMPATIBILITY.md#retired-inputs).
 
 ## Main command
 
@@ -514,6 +492,13 @@ options:
 ```
 
 <!-- END GENERATED CIRCULAR HELP -->
+
+For fresh Circular input, output names are derived from record IDs when
+`--output` is omitted. An ID used this way must be one filename component:
+directory separators, absolute paths, `.` or `..`, ASCII control characters,
+and Windows-reserved device, stream, or wildcard names are rejected. Pass an
+explicit `--output` path or prefix for such records.
+Session replay keeps its saved prefix unless an output override is supplied.
 
 Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for these rings, so provide precomputed BLAST output.
 

@@ -18,13 +18,25 @@ from gbdraw.io.cli_tables import (
     read_comparisons_table,
     read_records_table,
 )
-from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
+from gbdraw.render.formats import (
+    SVG_FORMAT,
+    resolve_format_output_path,
+    resolve_output_paths,
+)
+from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.track_slot_metadata import (
+    build_track_slot_geometry_run_metadata,
+    collect_track_slot_geometry_records,
+)
 from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
     SessionBuildContext,
     SessionFileBinding,
     build_session_json,
+    migrate_persisted_web_state_field_names,
     safe_embedded_filename,
     serialize_file_entry,
+    validate_current_web_state_field_names,
     write_session_json,
 )
 
@@ -155,9 +167,10 @@ def preflight_session_sidecar_if_requested(
     session_output: str | None,
     output_prefix: str | None,
     outputs: Sequence[RenderedSvg] = (),
+    diagram_output_paths: Sequence[str | Path] = (),
     overwrite: bool = False,
 ) -> Path | None:
-    """Reject an existing session sidecar before rendering when its path is known."""
+    """Reject sidecar collisions before rendering when its path is known."""
 
     if not save_session and not session_output:
         return None
@@ -168,12 +181,81 @@ def preflight_session_sidecar_if_requested(
         output_prefix=output_prefix,
         outputs=outputs,
     )
+    preflight_output_paths((sidecar_path,), overwrite=True)
+    try:
+        sidecar_identity = sidecar_path.resolve(strict=False)
+        diagram_identities = tuple(
+            (Path(path), Path(path).resolve(strict=False))
+            for path in diagram_output_paths
+        )
+    except (OSError, ValueError) as exc:
+        raise ValidationError(
+            f"Could not resolve output path: {sidecar_path}."
+        ) from exc
+    colliding_output = next(
+        (
+            Path(path)
+            for path, identity in diagram_identities
+            if identity == sidecar_identity
+        ),
+        None,
+    )
+    if colliding_output is not None:
+        raise ValidationError(
+            f"Session output path collides with diagram output: {sidecar_path}. "
+            "Choose a distinct --session_output path."
+        )
     if sidecar_path.exists() and not overwrite:
         raise ValidationError(
             f"Session output already exists: {sidecar_path}. "
             "Use --overwrite to replace it."
         )
     return sidecar_path
+
+
+def diagram_request_output_paths(request: DiagramRequest) -> tuple[Path, ...]:
+    """Return every file path one resolved typed request will write."""
+
+    from gbdraw.api.requests import CircularBatchRequest
+
+    outputs = (
+        request.outputs
+        if isinstance(request, CircularBatchRequest)
+        else (request.output,)
+    )
+    return tuple(
+        Path(path)
+        for output in outputs
+        for path in resolve_output_paths(
+            str(
+                Path(output.output_directory or ".")
+                / output.output_prefix
+            ),
+            output.formats,
+            include_base_svg=True,
+        )
+    )
+
+
+def diagram_request_rendered_svgs(
+    request: DiagramRequest,
+) -> tuple[RenderedSvg, ...]:
+    """Project resolved typed outputs to the run-level SVG result contract."""
+
+    from gbdraw.api.requests import CircularBatchRequest
+
+    outputs = (
+        request.outputs
+        if isinstance(request, CircularBatchRequest)
+        else (request.output,)
+    )
+    return tuple(
+        make_rendered_svg(
+            str(Path(output.output_directory or ".") / output.output_prefix),
+            output.output_prefix,
+        )
+        for output in outputs
+    )
 
 
 def make_rendered_svg(output_prefix: str, result_name: str | None = None) -> RenderedSvg:
@@ -185,57 +267,6 @@ def make_rendered_svg(output_prefix: str, result_name: str | None = None) -> Ren
         svg_path=svg_path,
         result_name=result_name or svg_path.stem,
     )
-
-
-def collect_track_slot_geometry_records(
-    canvas: Any,
-    *,
-    result_index: int,
-    result_name: str,
-) -> list[dict[str, Any]]:
-    """Copy track-slot geometry from a canvas and add run-result identity."""
-
-    geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
-    if not isinstance(geometry, Mapping):
-        return []
-    records = geometry.get("records")
-    if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
-        return []
-    copied_records: list[dict[str, Any]] = []
-    for record in records:
-        if not isinstance(record, Mapping):
-            continue
-        copied_record = dict(record)
-        copied_record["resultIndex"] = int(result_index)
-        copied_record["resultName"] = str(result_name)
-        slots = copied_record.get("slots")
-        if isinstance(slots, Sequence) and not isinstance(slots, (str, bytes)):
-            copied_record["slots"] = [
-                dict(slot) for slot in slots if isinstance(slot, Mapping)
-            ]
-        else:
-            copied_record["slots"] = []
-        copied_records.append(copied_record)
-    return copied_records
-
-
-def build_track_slot_geometry_run_metadata(
-    *,
-    mode: Literal["circular", "linear"],
-    records: Sequence[Mapping[str, Any]],
-) -> dict[str, Any]:
-    """Build optional run metadata for resolved track-slot geometry."""
-
-    if not records:
-        return {}
-    return {
-        "trackSlotGeometry": {
-            "schema": 1,
-            "mode": mode,
-            "source": "resolved",
-            "records": [dict(record) for record in records],
-        }
-    }
 
 
 def save_session_sidecar_if_requested(
@@ -259,6 +290,19 @@ def save_session_sidecar_if_requested(
         session_output=session_output,
         output_prefix=output_prefix,
         outputs=run_result.outputs,
+        diagram_output_paths=(
+            diagram_request_output_paths(run_result.canonical_request)
+            if run_result.canonical_request is not None
+            else tuple(
+                Path(path)
+                for output in run_result.outputs
+                for path in resolve_output_paths(
+                    output.output_prefix,
+                    run_result.render_formats,
+                    include_base_svg=True,
+                )
+            )
+        ),
         overwrite=overwrite,
     )
     assert sidecar_path is not None
@@ -317,7 +361,7 @@ def save_session_sidecar_if_requested(
             orthogroup_payload["groups"] = [
                 dict(group) for group in run_result.orthogroup_metadata
             ]
-    write_session_json(sidecar_path, payload)
+    write_session_json(sidecar_path, payload, overwrite=overwrite)
     return sidecar_path
 
 
@@ -368,6 +412,7 @@ def render_canonical_session_if_present(
         )
         replay_prefix: str | None = None
         sidecar_path: Path | None = None
+        adjunct: dict[str, Any] | None = None
         if save_session or session_output:
             from gbdraw.api.requests import CircularBatchRequest
 
@@ -392,28 +437,22 @@ def render_canonical_session_if_present(
                 save_session=True,
                 session_output=str(sidecar_path),
                 output_prefix=None,
+                diagram_output_paths=diagram_request_output_paths(request),
                 overwrite=overwrite,
             )
+            adjunct = _project_session_adjunct_for_current_write(
+                document.to_dict(),
+                source_version=document.version,
+            )
+            validate_current_web_state_field_names(adjunct.get("config"))
 
         rendered = _render_request(
             request,
-            session_artifacts=document.to_dict(),
+            session_document=document.to_dict(),
         )
 
         if sidecar_path is not None:
-            adjunct = {
-                key: value
-                for key, value in document.to_dict().items()
-                if key
-                not in {
-                    "format",
-                    "version",
-                    "createdAt",
-                    "renderRequest",
-                    "resources",
-                    "files",
-                }
-            }
+            assert adjunct is not None
             protein_id_map = getattr(rendered, "protein_id_map", None) or {}
             losat_entries = getattr(rendered, "losat_cache_entries", ())
             derived_entries = getattr(rendered, "losat_derived_cache_entries", ())
@@ -421,7 +460,7 @@ def render_canonical_session_if_present(
             legacy_raw = getattr(rendered, "legacy_protein_raw_candidates", ())
             legacy_derived = getattr(rendered, "legacy_protein_derived_evidence", ())
             if protein_id_map:
-                from gbdraw.api.request_render import (
+                from gbdraw.api.session_compat import (
                     rewrite_protein_artifact_references,
                 )
 
@@ -517,10 +556,11 @@ def render_canonical_session_if_present(
                 if hasattr(rendered, "drawings")
                 else (rendered.drawing,)
             )
+            rendered_request = rendered.request
             result_names = (
-                tuple(output.output_prefix for output in request.outputs)
-                if isinstance(request, CircularBatchRequest)
-                else (request.output.output_prefix,)
+                tuple(output.output_prefix for output in rendered_request.outputs)
+                if isinstance(rendered_request, CircularBatchRequest)
+                else (rendered_request.output.output_prefix,)
             )
             geometry_records = [
                 record
@@ -543,7 +583,7 @@ def render_canonical_session_if_present(
                 adjunct.pop("runMetadata", None)
             save_session_document(
                 sidecar_path,
-                request,
+                rendered_request,
                 title=str(document.to_dict().get("title") or replay_prefix),
                 adjunct=adjunct,
                 overwrite=overwrite,
@@ -551,16 +591,49 @@ def render_canonical_session_if_present(
     return True
 
 
-def _render_request(request, *, session_artifacts=None):
+def _project_session_adjunct_for_current_write(
+    session: Mapping[str, Any],
+    *,
+    source_version: int,
+) -> dict[str, Any]:
+    """Detach non-canonical state and migrate released Web-owned field names."""
+
+    adjunct = {
+        key: value
+        for key, value in session.items()
+        if key
+        not in {
+            "format",
+            "version",
+            "createdAt",
+            "renderRequest",
+            "resources",
+            "files",
+        }
+    }
+    if source_version >= CURRENT_SESSION_VERSION:
+        return adjunct
+
+    config = adjunct.get("config")
+    if isinstance(config, Mapping):
+        adjunct["config"] = migrate_persisted_web_state_field_names(config)
+    else:
+        adjunct.pop("config", None)
+    if not isinstance(adjunct.get("ui"), Mapping):
+        adjunct.pop("ui", None)
+    return adjunct
+
+
+def _render_request(request, *, session_document=None):
     """Import the request renderer lazily to keep CLI session imports lightweight."""
 
-    from gbdraw.api.request_render import render_request
+    if session_document is None:
+        from gbdraw.api.request_render import render_request
 
-    return (
-        render_request(request)
-        if session_artifacts is None
-        else render_request(request, session_artifacts=session_artifacts)
-    )
+        return render_request(request)
+    from gbdraw.api.session_compat import render_session_compatible_request
+
+    return render_session_compatible_request(request, session_document)
 
 
 def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:
@@ -942,6 +1015,8 @@ __all__ = [
     "build_track_slot_geometry_run_metadata",
     "collect_embedded_files_from_cli_args",
     "collect_track_slot_geometry_records",
+    "diagram_request_output_paths",
+    "diagram_request_rendered_svgs",
     "make_rendered_svg",
     "parse_session_pre_args",
     "preflight_session_sidecar_if_requested",

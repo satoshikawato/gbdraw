@@ -16,12 +16,14 @@ from gbdraw.api.options import (
     LinearOutputOptions,
 )
 from gbdraw.api.requests import (
+    CircularBatchOutputPolicy,
     CircularBatchRequest,
     CircularDiagramRequest,
     GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCollectionOptions,
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
@@ -83,6 +85,38 @@ def test_record_source_accepts_an_in_memory_seqrecord() -> None:
     record = SeqRecord(Seq("ATGC"), id="record-a")
 
     assert InMemoryRecordSource(record).record is record
+
+
+def test_new_request_fields_preserve_released_positional_arguments() -> None:
+    selector = parse_record_selector("#1")
+    presentation = RecordPresentation(label="Shown")
+    record = RecordInput(
+        GenBankInputSource("record.gbk"),
+        selector,
+        None,
+        presentation,
+        "record-key",
+    )
+
+    assert record.selector is selector
+    assert record.region is None
+    assert record.presentation is presentation
+    assert record.record_key == "record-key"
+    assert record.cardinality.value == "exactly_one"
+
+    output = RenderOutputRequest()
+    request = CircularDiagramRequest(
+        (record,),
+        CircularDiagramOptions(),
+        None,
+        output,
+        "single",
+    )
+
+    assert request.grouping == "single"
+    assert request.record_options == RecordCollectionOptions()
+    assert fields(CircularDiagramOptions)[-1].name == "conservation_table_file"
+    assert fields(LinearDiagramOptions)[-1].name == "comparison_table_file"
 
 
 def test_in_memory_record_source_rejects_other_objects() -> None:
@@ -386,6 +420,14 @@ def test_render_output_request_normalizes_formats_and_paths() -> None:
         {"output_prefix": ""},
         {"output_prefix": "nested/diagram"},
         {"output_prefix": r"nested\diagram"},
+        {"output_prefix": "diagram\x00hidden"},
+        {"output_prefix": "diagram\nhidden"},
+        {"output_prefix": "NUL"},
+        {"output_prefix": "CON.txt"},
+        {"output_prefix": "COM¹"},
+        {"output_prefix": "diagram:stream"},
+        {"output_prefix": "diagram?draft"},
+        {"output_directory": "results\x00hidden"},
         {"formats": ()},
         {"formats": ("unknown",)},
         {"overwrite": 1},
@@ -396,3 +438,8 @@ def test_render_output_request_normalizes_formats_and_paths() -> None:
 def test_render_output_request_rejects_invalid_values(kwargs: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         RenderOutputRequest(**kwargs)
+
+
+def test_circular_batch_output_policy_rejects_control_characters() -> None:
+    with pytest.raises(ValidationError):
+        CircularBatchOutputPolicy(output_prefix="diagram\x00hidden")

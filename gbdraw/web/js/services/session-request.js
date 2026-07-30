@@ -37,7 +37,10 @@ import {
   parseDepthTrackIndexIdentity
 } from '../app/depth-track-state.js';
 import { buildDisambiguatedRecordEntries } from '../app/record-options.js';
-import { orderedConservationSources } from '../app/conservation-series.js';
+import {
+  orderedConservationSources,
+  orderedOptionalConservationFiles
+} from '../app/conservation-series.js';
 import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
@@ -62,6 +65,11 @@ import {
   requireCurrentLinearTrackLayout,
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
+import {
+  canonicalComparisonResourceKind,
+  isResourceBackedCanonicalComparison,
+  mapResourceBackedCanonicalComparison
+} from './canonical-comparisons.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 5;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
@@ -344,7 +352,68 @@ const createResourceBuilder = () => {
     return resourceId;
   };
 
-  return { resources, resourceOriginalNames, addFile, addText };
+  const addCanonicalTable = (resourceId, rows, columns = null) => {
+    if (resources[resourceId]) return resourceId;
+    const normalizedRows = Array.isArray(rows)
+      ? rows.filter((row) => row && typeof row === 'object' && !Array.isArray(row))
+      : [];
+    const preferredColumns = [
+      'query',
+      'subject',
+      'identity',
+      'alignment_length',
+      'mismatches',
+      'gap_opens',
+      'qstart',
+      'qend',
+      'sstart',
+      'send',
+      'evalue',
+      'bitscore'
+    ];
+    const requestedColumns = Array.isArray(columns)
+      ? columns.map((column) => String(column || '').trim()).filter(Boolean)
+      : [];
+    const discoveredColumns = new Set(
+      normalizedRows.flatMap((row) => Object.keys(row))
+    );
+    const orderedColumns = [
+      ...requestedColumns,
+      ...preferredColumns.filter((column) => discoveredColumns.has(column)),
+      ...Array.from(discoveredColumns)
+        .filter((column) => !requestedColumns.includes(column) && !preferredColumns.includes(column))
+        .sort()
+    ];
+    const uniqueColumns = Array.from(new Set(orderedColumns));
+    if (uniqueColumns.length === 0) {
+      uniqueColumns.push(...preferredColumns);
+    }
+    const escapeCell = (value) => {
+      if (value === null || value === undefined) return '';
+      const text = String(value);
+      return /[\t\n\r"]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+    };
+    const lines = [
+      uniqueColumns.map(escapeCell).join('\t'),
+      ...normalizedRows.map((row) => (
+        uniqueColumns.map((column) => escapeCell(row[column])).join('\t')
+      ))
+    ];
+    return addText(
+      resourceId,
+      'canonical-tsv',
+      `${resourceId}.tsv`,
+      `${lines.join('\n')}\n`
+    );
+  };
+
+  return {
+    resources,
+    resourceOriginalNames,
+    addFile,
+    addText,
+    addCanonicalTable
+  };
 };
 
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
@@ -793,7 +862,57 @@ const buildTracks = (state) => {
   };
 };
 
-const buildComparisons = ({ state, filesData, resources }) => {
+const generatedProteinSettings = (state, baseline = {}) => {
+  const blastp = state.losat.blastp || {};
+  const baselineCollinearity = baseline.collinearityParams &&
+    typeof baseline.collinearityParams === 'object' &&
+    !Array.isArray(baseline.collinearityParams)
+    ? baseline.collinearityParams
+    : {};
+  const baselineParameters = baselineCollinearity.parameters &&
+    typeof baselineCollinearity.parameters === 'object' &&
+    !Array.isArray(baselineCollinearity.parameters)
+    ? baselineCollinearity.parameters
+    : {};
+  return {
+    ...baseline,
+    collinearityParams: {
+      ...baselineCollinearity,
+      kind: baselineCollinearity.kind || 'lossless',
+      parameters: {
+        ...baselineParameters,
+        minAnchors: Number(blastp.collinearMinAnchors) || 1,
+        maxUnitGap: Number(blastp.collinearMaxUnitGap) || 0,
+        maxDiagonalDrift: Number(blastp.collinearMaxDiagonalDrift) || 0,
+        maxConflicts: Number(blastp.collinearMaxConflictsInMergeGap) || 0,
+        mergeOrientation: baselineParameters.mergeOrientation || 'either'
+      }
+    },
+    collinearityUnitMode: String(blastp.collinearUnitMode || 'auto'),
+    collinearityAnchorMode: String(blastp.collinearAnchorMode || 'rbh'),
+    collinearitySearchScope: String(blastp.collinearSearchScope || 'adjacent'),
+    collinearityColorMode: String(blastp.collinearColorMode || 'orientation'),
+    losatpBin: baseline.losatpBin || 'losat',
+    ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
+    losatpThreads: optionalPositiveInteger(state.losat.threadsPerJob),
+    proteinBlastpMaxHits: Number(blastp.maxHits) || 5,
+    proteinBlastpCandidateLimit:
+      baseline.proteinBlastpCandidateLimit ?? optionalPositiveInteger(blastp.candidateLimit),
+    orthogroupMembershipMode: String(blastp.orthogroupMembershipMode || 'anchor_core_v1'),
+    orthogroupMemberMaxHits: Number(blastp.orthogroupMemberMaxHits) || 5,
+    collinearMaxParalogLinksPerOrthogroup:
+      Number(blastp.collinearMaxParalogLinksPerOrthogroup) || 2,
+    alignOrthogroupFeature:
+      String(state.selectedOrthogroupAlignmentFeature.value || '').trim() || null
+  };
+};
+
+const buildComparisons = ({
+  state,
+  filesData,
+  resources,
+  resolvedComparisons = []
+}) => {
   if (state.mode.value !== 'linear') return [];
   const comparisons = [];
   const indexByUid = new Map((filesData.linearSeqs || []).map((seq, index) => [String(seq.uid || ''), index]));
@@ -825,6 +944,123 @@ const buildComparisons = ({ state, filesData, resources }) => {
       });
     });
   }
+  const normalizedResolvedComparisons = Array.isArray(resolvedComparisons)
+    ? resolvedComparisons.filter((comparison) => (
+        comparison &&
+        Number.isInteger(comparison.queryRecordIndex) &&
+        Number.isInteger(comparison.subjectRecordIndex)
+      ))
+    : [];
+  const hasResolvedProteinComparisons = normalizedResolvedComparisons.some(
+    (comparison) => comparison.kind === 'precomputedProteinComparison'
+  );
+  const persistedCanonicalComparisons = Array.isArray(filesData.linearCanonicalComparisons)
+    ? filesData.linearCanonicalComparisons
+    : [];
+  const hasPersistedGeneratedProteinPipeline = persistedCanonicalComparisons.some(
+    (comparison) => comparison?.kind === 'generatedProteinComparison'
+  );
+  const usesCanonicalProteinPipeline = (
+    state.blastSource?.value === 'losat' &&
+    state.losatProgram?.value === 'blastp'
+  );
+  // A generated descriptor marks artifacts owned by the Web protein-analysis
+  // pipeline, so changing to a nucleotide pipeline invalidates that whole set.
+  // Typed Python requests may instead provide orthogroup, collinearity, or
+  // precomputed-protein inputs directly without a generated descriptor; those
+  // remain canonical diagram inputs regardless of the Web analysis controls.
+  const persistedResourceComparisons = (
+    usesCanonicalProteinPipeline || !hasPersistedGeneratedProteinPipeline
+      ? persistedCanonicalComparisons
+      : []
+  )
+    .filter(isResourceBackedCanonicalComparison)
+    .filter((comparison) => (
+      !hasResolvedProteinComparisons ||
+      comparison.kind !== 'precomputedProteinComparison'
+    ));
+  persistedResourceComparisons.forEach((comparison, index) => {
+    if (!comparison.file) return;
+    if (comparison.kind === 'orthogroupResult') {
+      comparisons.push({
+        kind: 'orthogroupResult',
+        resourceId: resources.addFile(
+          `comparison-canonical-orthogroups-${index + 1}`,
+          canonicalComparisonResourceKind(comparison),
+          comparison.file
+        ),
+        encoding: String(comparison.encoding || 'canonicalJson')
+      });
+      return;
+    }
+    if (comparison.kind === 'collinearityResult') {
+      comparisons.push({
+        kind: 'collinearityResult',
+        resourceId: resources.addFile(
+          `comparison-canonical-collinearity-${index + 1}`,
+          canonicalComparisonResourceKind(comparison),
+          comparison.file
+        ),
+        encoding: String(comparison.encoding || 'canonicalJson'),
+        valueKind: String(comparison.valueKind || 'result')
+      });
+      return;
+    }
+    const queryRecordIndex = Number(comparison.queryRecordIndex);
+    const subjectRecordIndex = Number(comparison.subjectRecordIndex);
+    if (
+      !Number.isInteger(queryRecordIndex) ||
+      !Number.isInteger(subjectRecordIndex) ||
+      !filesData.linearSeqs?.[queryRecordIndex] ||
+      !filesData.linearSeqs?.[subjectRecordIndex]
+    ) return;
+    const resourceId = `comparison-canonical-protein-${index + 1}`;
+    comparisons.push({
+      kind: 'precomputedProteinComparison',
+      resourceId: resources.addFile(
+        resourceId,
+        canonicalComparisonResourceKind(comparison),
+        comparison.file
+      ),
+      encoding: String(comparison.encoding || 'canonicalTsv'),
+      queryRecordIndex,
+      subjectRecordIndex
+    });
+  });
+  normalizedResolvedComparisons.forEach((comparison, index) => {
+    const resourceId = `comparison-resolved-${index + 1}`;
+    if (comparison.kind === 'precomputedProteinComparison') {
+      comparisons.push({
+        kind: 'precomputedProteinComparison',
+        resourceId: resources.addCanonicalTable(
+          resourceId,
+          comparison.rows,
+          comparison.columns
+        ),
+        encoding: 'canonicalTsv',
+        queryRecordIndex: comparison.queryRecordIndex,
+        subjectRecordIndex: comparison.subjectRecordIndex
+      });
+      return;
+    }
+    comparisons.push({
+      kind: 'nucleotideBlast',
+      resourceId: resources.addText(
+        resourceId,
+        'nucleotide-blast',
+        `${resourceId}.tsv`,
+        String(comparison.text || '')
+      ),
+      queryRecordIndex: comparison.queryRecordIndex,
+      subjectRecordIndex: comparison.subjectRecordIndex
+    });
+  });
+  const hasPrecomputedProteinComparisons = (
+    hasResolvedProteinComparisons ||
+    persistedResourceComparisons.some(
+      (comparison) => comparison.kind === 'precomputedProteinComparison'
+    )
+  );
   const generatedPairs = explicitComparisons
     .filter((comparison) => comparison?.source === 'losat')
     .map((comparison) => ({
@@ -832,40 +1068,35 @@ const buildComparisons = ({ state, filesData, resources }) => {
       subjectRecordIndex: indexByUid.get(String(comparison.subjectUid || ''))
     }))
     .filter((pair) => Number.isInteger(pair.queryRecordIndex) && Number.isInteger(pair.subjectRecordIndex));
-  if (
+  const shouldGenerateProteinComparisons = (
+    !hasPrecomputedProteinComparisons &&
     state.losatProgram.value === 'blastp' &&
     (generatedPairs.length > 0 || state.blastSource.value === 'losat')
+  );
+  const persistedGeneratedComparison = (usesCanonicalProteinPipeline
+    ? persistedCanonicalComparisons
+    : []
+  ).find(
+    (comparison) => comparison?.kind === 'generatedProteinComparison'
+  );
+  if (
+    hasPrecomputedProteinComparisons ||
+    shouldGenerateProteinComparisons ||
+    persistedGeneratedComparison
   ) {
-    const blastp = state.losat.blastp || {};
+    const mode = hasPrecomputedProteinComparisons
+      ? 'none'
+      : persistedGeneratedComparison?.mode === 'none'
+        ? 'none'
+        : String(state.losat.blastp?.mode || persistedGeneratedComparison?.mode || 'orthogroup');
     comparisons.push({
       kind: 'generatedProteinComparison',
-      mode: String(blastp.mode || 'orthogroup'),
-      pairs: generatedPairs,
-      settings: {
-        collinearityParams: {
-          kind: 'lossless',
-          parameters: {
-            minAnchors: Number(blastp.collinearMinAnchors) || 1,
-            maxUnitGap: Number(blastp.collinearMaxUnitGap) || 0,
-            maxDiagonalDrift: Number(blastp.collinearMaxDiagonalDrift) || 0,
-            maxConflicts: Number(blastp.collinearMaxConflictsInMergeGap) || 0,
-            mergeOrientation: 'either'
-          }
-        },
-        collinearityUnitMode: String(blastp.collinearUnitMode || 'auto'),
-        collinearityAnchorMode: 'rbh',
-        collinearitySearchScope: String(blastp.collinearSearchScope || 'adjacent'),
-        collinearityColorMode: String(blastp.collinearColorMode || 'orientation'),
-        losatpBin: 'losat',
-        ncbiBlastpBin: null,
-        losatpThreads: optionalPositiveInteger(state.losat.threadsPerJob),
-        proteinBlastpMaxHits: Number(blastp.maxHits) || 5,
-        proteinBlastpCandidateLimit: optionalPositiveInteger(blastp.candidateLimit),
-        orthogroupMembershipMode: String(blastp.orthogroupMembershipMode || 'anchor_core_v1'),
-        orthogroupMemberMaxHits: Number(blastp.orthogroupMemberMaxHits) || 5,
-        collinearMaxParalogLinksPerOrthogroup: Number(blastp.collinearMaxParalogLinksPerOrthogroup) || 2,
-        alignOrthogroupFeature: String(state.selectedOrthogroupAlignmentFeature.value || '').trim() || null
-      }
+      mode,
+      pairs: mode === 'none' ? [] : generatedPairs,
+      settings: generatedProteinSettings(
+        state,
+        persistedGeneratedComparison?.settings || {}
+      )
     });
   }
   return comparisons;
@@ -906,7 +1137,12 @@ const buildLayout = (state, filesData) => {
   };
 };
 
-export const buildCanonicalSessionRequest = ({ state, filesData }) => {
+export const buildCanonicalRenderRequest = ({
+  state,
+  filesData,
+  resolvedComparisons = [],
+  resolvedCircularConservation = []
+}) => {
   requireCurrentWebStateFieldNames(state);
   requireCurrentCircularMultiRecordSizeMode(state.adv.multi_record_size_mode);
   requireCurrentLinearTrackLayout(state.form.linear_track_layout);
@@ -1043,24 +1279,66 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
       }
     }
     if (conservationSource === 'losat') {
-      let comparisonFastas = Array.isArray(filesData.c_conservation_fastas)
-        ? filesData.c_conservation_fastas.filter(Boolean)
-        : [];
-      if (conservationBlastsAreDerived && comparisonFastas.length > 0) {
-        comparisonFastas = orderedConservationSources(
-          comparisonFastas,
-          state.circularConservation
-        ).map((entry) => entry.file);
-      }
+      const comparisonFastas = orderedOptionalConservationFiles(
+        filesData.c_conservation_fastas,
+        state.circularConservation
+      );
       if (comparisonFastas.length > 0) {
-        webFiles.conservationLosatFastaSources = comparisonFastas.map((entry, index) => (
-          resources.addFile(
-            `conservation-losat-fasta-files-${index + 1}`,
-            'conservation-fasta-file',
+        webFiles.conservationLosatFastaSources = comparisonFastas.map(
+          (entry, index) => (
             entry
+              ? resources.addFile(
+                  `conservation-losat-fasta-files-${index + 1}`,
+                  'conservation-fasta-file',
+                  entry
+                )
+              : null
           )
-        ));
+        );
       }
+    }
+    if (
+      Array.isArray(resolvedCircularConservation) &&
+      resolvedCircularConservation.length > 0
+    ) {
+      diagramOptions.conservationBlastFiles = resolvedCircularConservation.map(
+        (entry, index) => fileRef(resources.addText(
+          `conservation-resolved-blast-${index + 1}`,
+          'conservation-blast-file',
+          String(entry?.name || `comparison-${index + 1}.tsv`),
+          String(entry?.text || '')
+        ))
+      );
+      const comparisonFastas = resolvedCircularConservation.map(
+        (entry, index) => (
+          entry?.fasta
+            ? fileRef(resources.addFile(
+                `conservation-resolved-fasta-${index + 1}`,
+                'conservation-fasta-file',
+                entry.fasta
+              ))
+            : null
+        )
+      );
+      if (comparisonFastas.some(Boolean)) {
+        diagramOptions.conservationFastaFiles = comparisonFastas;
+      }
+      diagramOptions.conservationReference = String(
+        state.circularConservation.reference || 'subject'
+      );
+      diagramOptions.conservationLabels = resolvedCircularConservation.map(
+        (entry, index) => String(entry?.label || `Comparison ${index + 1}`)
+      );
+      diagramOptions.conservationColors = resolvedCircularConservation.map(
+        (entry) => String(entry?.color || '#D9EAF7')
+      );
+      diagramOptions.conservationRingWidth = optionalNumber(
+        state.circularConservation.ring_width
+      );
+      diagramOptions.conservationRingGap = optionalNumber(
+        state.circularConservation.ring_gap
+      );
+      webFiles.conservationBlastSource = 'losat-cache';
     }
   } else {
     diagramOptions.pairwiseMatchStyle = String(state.adv.pairwise_match_style || 'ribbon');
@@ -1103,7 +1381,12 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
       records,
       diagramOptions,
       layout: buildLayout(state, filesData),
-      comparisons: buildComparisons({ state, filesData, resources }),
+      comparisons: buildComparisons({
+        state,
+        filesData,
+        resources,
+        resolvedComparisons
+      }),
       output
     },
     resources: resources.resources,
@@ -1226,6 +1509,56 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   if (!entry || typeof entry !== 'object') throw new Error(`Missing canonical resource: ${resourceId}`);
   const { kind: _kind, ...file } = entry;
   return file;
+};
+
+const cloneCanonicalJsonValue = (value) => (
+  value === undefined ? undefined : JSON.parse(JSON.stringify(value))
+);
+
+const projectGeneratedProteinPipeline = (comparison) => {
+  if (
+    !comparison ||
+    comparison.kind !== 'generatedProteinComparison' ||
+    !comparison.settings ||
+    typeof comparison.settings !== 'object' ||
+    Array.isArray(comparison.settings)
+  ) return null;
+  const settings = comparison.settings;
+  const parameters = settings.collinearityParams?.parameters || {};
+  const mode = String(comparison.mode || 'orthogroup');
+  return {
+    generatedProteinComparison: cloneCanonicalJsonValue(comparison),
+    selectedOrthogroupAlignmentFeature:
+      String(settings.alignOrthogroupFeature || '').trim(),
+    config: {
+      blastSource: 'losat',
+      losatProgram: 'blastp',
+      losat: {
+        threadsPerJob: settings.losatpThreads ?? 'auto',
+        blastp: {
+          // "none" means that the canonical request is reusing resolved
+          // artifacts. It does not identify the Web generation mode that
+          // should be selected for a future rerun, so leave the saved UI
+          // setting authoritative in that case.
+          ...(mode === 'none' ? {} : { mode }),
+          maxHits: settings.proteinBlastpMaxHits,
+          candidateLimit: settings.proteinBlastpCandidateLimit,
+          orthogroupMembershipMode: settings.orthogroupMembershipMode,
+          orthogroupMemberMaxHits: settings.orthogroupMemberMaxHits,
+          collinearMinAnchors: parameters.minAnchors,
+          collinearMaxUnitGap: parameters.maxUnitGap,
+          collinearMaxDiagonalDrift: parameters.maxDiagonalDrift,
+          collinearMaxConflictsInMergeGap: parameters.maxConflicts,
+          collinearMaxParalogLinksPerOrthogroup:
+            settings.collinearMaxParalogLinksPerOrthogroup,
+          collinearColorMode: settings.collinearityColorMode,
+          collinearUnitMode: settings.collinearityUnitMode,
+          collinearAnchorMode: settings.collinearityAnchorMode,
+          collinearSearchScope: settings.collinearitySearchScope
+        }
+      }
+    }
+  };
 };
 
 const LEGACY_DEPTH_OPTION_FIELDS = Object.freeze([
@@ -1826,6 +2159,11 @@ export const projectCanonicalSessionRequest = ({
   const legacyLinearSequences = Array.isArray(legacyFiles?.linearSeqs)
     ? legacyFiles.linearSeqs
     : [];
+  const projectedProteinPipeline = projectGeneratedProteinPipeline(
+    (renderRequest.comparisons || []).find(
+      (comparison) => comparison?.kind === 'generatedProteinComparison'
+    )
+  );
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     const source = records[0]?.source || {};
@@ -1865,6 +2203,7 @@ export const projectCanonicalSessionRequest = ({
       };
     });
     files.linearComparisons = [];
+    files.linearCanonicalComparisons = [];
     (renderRequest.comparisons || [])
       .filter((comparison) => comparison?.kind === 'nucleotideBlast')
       .forEach((comparison, index) => {
@@ -1887,21 +2226,46 @@ export const projectCanonicalSessionRequest = ({
           file
         });
       });
-    (renderRequest.comparisons || [])
-      .filter((comparison) => comparison?.kind === 'generatedProteinComparison')
-      .flatMap((comparison) => Array.isArray(comparison.pairs) ? comparison.pairs : [])
-      .forEach((pair, index) => {
-        const queryIndex = Number(pair?.queryRecordIndex);
-        const subjectIndex = Number(pair?.subjectRecordIndex);
-        if (!files.linearSeqs[queryIndex] || !files.linearSeqs[subjectIndex]) return;
-        files.linearComparisons.push({
-          id: `linear-comparison-canonical-losat-${index + 1}`,
-          queryUid: files.linearSeqs[queryIndex].uid,
-          subjectUid: files.linearSeqs[subjectIndex].uid,
-          source: 'losat',
-          file: null
-        });
-      });
+    (renderRequest.comparisons || []).forEach((comparison) => {
+      if (isResourceBackedCanonicalComparison(comparison)) {
+        const queryRecordIndex = Number(comparison.queryRecordIndex);
+        const subjectRecordIndex = Number(comparison.subjectRecordIndex);
+        if (
+          comparison.kind === 'precomputedProteinComparison' &&
+          (
+            !Number.isInteger(queryRecordIndex) ||
+            !Number.isInteger(subjectRecordIndex) ||
+            !files.linearSeqs[queryRecordIndex] ||
+            !files.linearSeqs[subjectRecordIndex]
+          )
+        ) return;
+        files.linearCanonicalComparisons.push(
+          mapResourceBackedCanonicalComparison(
+            comparison,
+            () => resourceAsLegacyFile(resources, comparison.resourceId)
+          )
+        );
+        return;
+      }
+      if (comparison?.kind === 'generatedProteinComparison') {
+        files.linearCanonicalComparisons.push(
+          cloneCanonicalJsonValue(comparison)
+        );
+        (Array.isArray(comparison.pairs) ? comparison.pairs : [])
+          .forEach((pair, index) => {
+            const queryIndex = Number(pair?.queryRecordIndex);
+            const subjectIndex = Number(pair?.subjectRecordIndex);
+            if (!files.linearSeqs[queryIndex] || !files.linearSeqs[subjectIndex]) return;
+            files.linearComparisons.push({
+              id: `linear-comparison-canonical-losat-${index + 1}`,
+              queryUid: files.linearSeqs[queryIndex].uid,
+              subjectUid: files.linearSeqs[subjectIndex].uid,
+              source: 'losat',
+              file: null
+            });
+          });
+      }
+    });
   }
 
   const options = renderRequest.diagramOptions || {};
@@ -2027,8 +2391,7 @@ export const projectCanonicalSessionRequest = ({
     files.c_conservation_fastas = webMetadata.conservationLosatFastaSources
       .map((resourceId) => (
         resourceId ? resourceAsLegacyFile(resources, resourceId) : null
-      ))
-      .filter(Boolean);
+      ));
   }
   const explicitOverrides = Object.fromEntries(
     Object.entries(options.configOverrides || {}).filter(
@@ -2379,6 +2742,7 @@ export const projectCanonicalSessionRequest = ({
     config: {
       form,
       adv,
+      ...(projectedProteinPipeline?.config || {}),
       colors: projectedDefaultColors,
       colorsAreOverrides: true,
       palette: options.colors?.defaultColorsPalette || 'default',
@@ -2399,6 +2763,14 @@ export const projectCanonicalSessionRequest = ({
       featureVisibilityManualRules: projectedFeatureVisibilityRules,
       featureVisibilityOverrides: {},
       labelOverrideRows: projectedLabelOverrideRows
-    }
+    },
+    pipelineState: projectedProteinPipeline
+      ? {
+          generatedProteinComparison:
+            projectedProteinPipeline.generatedProteinComparison,
+          selectedOrthogroupAlignmentFeature:
+            projectedProteinPipeline.selectedOrthogroupAlignmentFeature
+        }
+      : null
   };
 };

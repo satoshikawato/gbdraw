@@ -12,7 +12,7 @@ import {
 } from '../app/current-option-values.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
-  buildCanonicalSessionRequest,
+  buildCanonicalRenderRequest,
   projectCanonicalSessionRequest
 } from './session-request.js';
 
@@ -368,7 +368,7 @@ const promoteGuiAuthoredSession = (session, args) => {
   hydrateLinearFilePresentations(filesData, args);
   const state = buildStateFacade(session, projection, config);
   restoreConservationFiles(session, filesData, state.circularConservation);
-  const promotedCore = buildCanonicalSessionRequest({ state, filesData });
+  const promotedCore = buildCanonicalRenderRequest({ state, filesData });
   const promoted = {
     ...session,
     config: cloneJson(config),

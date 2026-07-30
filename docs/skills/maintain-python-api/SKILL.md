@@ -39,8 +39,26 @@ public contracts and default diagrams remain stable.
 - Reuse existing table validators, renderers, and config models instead of copying
   their logic.
 - Add a public option class only when it reduces the combined caller and
-  implementation complexity. Keep low-level `assemble_*` functions as compatibility
-  and advanced-use entry points.
+  implementation complexity. Treat release-backed low-level `assemble_*`
+  functions as compatibility entry points, not as the preferred public workflow.
+
+## Keep one resolution path
+
+- A surface adapter translates input shape only. It must not read domain files,
+  compile rules, select records, or reproduce planner policy.
+- Send unresolved inputs through one planner. The planner owns validation,
+  normalization, and the choice of downstream builder.
+- Carry resolved tables, compiled rules, and other reusable values in the prepared
+  request. Record loading, drawing, analysis, and interactive metadata must consume
+  those same prepared values instead of reopening or recompiling their sources.
+- When output names depend on resolved records, expose a reusable plan boundary.
+  Preflight every diagram and sidecar path from that plan before building, then build
+  the same plan instead of planning twice or assembling a drawing to discover paths.
+- Do not inspect implementation source text to discover capabilities, and do not
+  monkey-patch an internal loader or assembler to inject data. Add an explicit typed
+  boundary owned by the receiving layer.
+- Do not trade away a coherent boundary or required regression coverage to save
+  model tokens. Among complete designs, prefer the smallest durable change.
 
 ## Apply repository-specific patterns
 
@@ -85,6 +103,9 @@ public contracts and default diagrams remain stable.
 - Do not expose session regeneration as CLI argument strings. Require CLI-independent
   typed request models and pure conversion first; otherwise record the non-public
   decision in an ADR.
+- Keep persisted-session migration in the session compatibility adapter. Fresh
+  build/render functions accept typed current artifacts, never raw session mappings;
+  expose migration evidence on a session-specific result wrapper.
 - Treat compatibility as evidence-based. Support the current writer plus persisted
   versions found in the first-parent history of `main` or a release tag; keep
   session, request, cache, and metadata schema namespaces distinct.

@@ -50,7 +50,7 @@ import {
   normalizeGroupMetadataScope,
   normalizeOrthogroupMembershipMode
 } from '../app/losat-normalization.js';
-import { normalizeDefinitionLineStyleState } from '../app/cli-args.js';
+import { normalizeDefinitionLineStyleState } from '../app/definition-line-style-state.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import {
   normalizeCircularPlotTitlePosition,
@@ -73,9 +73,13 @@ import {
 } from '../app/session-feature-metadata.js';
 import { buildRestoredMatchSequenceSources } from '../app/match-sequences.js';
 import {
-  buildCanonicalSessionRequest,
+  buildCanonicalRenderRequest,
   projectCanonicalSessionRequest
 } from './session-request.js';
+import {
+  isResourceBackedCanonicalComparison,
+  mapResourceBackedCanonicalComparison
+} from './canonical-comparisons.js';
 import { promoteGallerySessionToCurrent } from './gallery-session-migration.js';
 import { downloadCompressedSession, readSessionText } from './session-file.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
@@ -118,7 +122,7 @@ import {
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 39;
+export const SESSION_VERSION = 39;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
   27, 28, 29, 30, 31, 32, 33, SESSION_VERSION
@@ -1130,7 +1134,23 @@ const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
   return state.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
 };
 
-const restoreStoredNonCanonicalConfig = (projectedConfig, storedConfig) => {
+const overlayCanonicalObject = (stored, canonical) => {
+  const merged = isPlainObject(stored) ? cloneJsonData(stored) : {};
+  if (!isPlainObject(canonical)) return merged;
+  Object.entries(canonical).forEach(([key, value]) => {
+    if (['__proto__', 'constructor', 'prototype'].includes(key)) return;
+    merged[key] = isPlainObject(value)
+      ? overlayCanonicalObject(merged[key], value)
+      : cloneJsonData(value);
+  });
+  return merged;
+};
+
+const restoreStoredNonCanonicalConfig = (
+  projectedConfig,
+  storedConfig,
+  { hasCanonicalProteinPipeline = false } = {}
+) => {
   const restored = cloneJsonData(projectedConfig);
   if (!isPlainObject(storedConfig)) return restored;
   // Keep canonical drawing values authoritative; only supplement state that the
@@ -1143,6 +1163,21 @@ const restoreStoredNonCanonicalConfig = (projectedConfig, storedConfig) => {
     'paletteInstantPreviewEnabled',
     'webEdits'
   ].forEach((key) => {
+    if (hasCanonicalProteinPipeline && key === 'losat') {
+      if (!isPlainObject(storedConfig.losat)) return;
+      const canonicalLosat = isPlainObject(restored.losat)
+        ? cloneJsonData(restored.losat)
+        : {};
+      restored.losat = overlayCanonicalObject(
+        storedConfig.losat,
+        canonicalLosat
+      );
+      return;
+    }
+    if (
+      hasCanonicalProteinPipeline &&
+      ['blastSource', 'losatProgram'].includes(key)
+    ) return;
     if (Object.prototype.hasOwnProperty.call(storedConfig, key)) {
       restored[key] = cloneJsonData(storedConfig[key]);
     }
@@ -1220,7 +1255,11 @@ const preflightSessionImport = (rawData) => {
     : null;
   const restoredConfig = canonicalProjection
     ? {
-        ...restoreStoredNonCanonicalConfig(canonicalProjection.config, data.config),
+        ...restoreStoredNonCanonicalConfig(
+          canonicalProjection.config,
+          data.config,
+          { hasCanonicalProteinPipeline: Boolean(canonicalProjection.pipelineState) }
+        ),
         rules: applySpecificRuleProvenance(
           canonicalProjection.config.rules,
           data.config?.rules
@@ -1248,18 +1287,28 @@ const preflightSessionImport = (rawData) => {
     });
   }
   const projectionResult = canonicalProjection
-    ? {
-        documentMetadata: projectDocumentMetadata(data),
-        renderState: {
-          mode: canonicalProjection.mode,
-          inputType: canonicalProjection.inputType,
-          config: restoredConfig,
-          semanticFeatureState: canonicalProjection.semanticFeatureState
-        },
-        editorMetadata: projectWebOnlyEditorMetadata(data),
-        artifactState: projectArtifactState(data),
-        restoredFiles: canonicalProjection.files
-      }
+    ? (() => {
+        const artifactState = projectArtifactState(data);
+        if (canonicalProjection.pipelineState) {
+          artifactState.orthogroupState = {
+            ...(artifactState.orthogroupState || {}),
+            selectedOrthogroupAlignmentFeature:
+              canonicalProjection.pipelineState.selectedOrthogroupAlignmentFeature
+          };
+        }
+        return {
+          documentMetadata: projectDocumentMetadata(data),
+          renderState: {
+            mode: canonicalProjection.mode,
+            inputType: canonicalProjection.inputType,
+            config: restoredConfig,
+            semanticFeatureState: canonicalProjection.semanticFeatureState
+          },
+          editorMetadata: projectWebOnlyEditorMetadata(data),
+          artifactState,
+          restoredFiles: canonicalProjection.files
+        };
+      })()
     : null;
   return { data, canonicalProjection, restoredConfig, projectionResult };
 };
@@ -1831,7 +1880,12 @@ const deserializeFile = (entry) => {
   if (Array.isArray(entry)) {
     return entry.map((item) => deserializeFile(item));
   }
-  if (!entry || !entry.data) return null;
+  if (
+    !entry ||
+    !Object.prototype.hasOwnProperty.call(entry, 'data') ||
+    entry.data === null ||
+    entry.data === undefined
+  ) return null;
   if (isEncodedDepthFileEntry(entry)) {
     const text = decodeDepthText(entry.data);
     return new File([text], entry.name || 'depth.tsv', {
@@ -2188,6 +2242,19 @@ export const serializeFiles = async () => {
       file: await serializeFile(comparison?.file)
     }))
   );
+  const linearCanonicalComparisons = await Promise.all(
+    (Array.isArray(state.files.linearCanonicalComparisons)
+      ? state.files.linearCanonicalComparisons
+      : []
+    ).map(async (comparison) => (
+      isResourceBackedCanonicalComparison(comparison)
+        ? {
+            ...mapResourceBackedCanonicalComparison(comparison),
+            file: await serializeFile(comparison.file)
+          }
+        : cloneJsonData(comparison)
+    ))
+  );
 
   return {
     c_gb: await serializeFile(state.files.c_gb),
@@ -2198,7 +2265,12 @@ export const serializeFiles = async () => {
     c_conservation_blasts_source: state.files.c_conservation_blasts_source === 'losat-cache'
       ? 'losat-cache'
       : null,
-    c_conservation_fastas: await serializeFileArray(state.files.c_conservation_fastas),
+    c_conservation_fastas: await Promise.all(
+      (Array.isArray(state.files.c_conservation_fastas)
+        ? state.files.c_conservation_fastas
+        : []
+      ).map((file) => serializeFile(file))
+    ),
     c_conservation_sequence_sources: await Promise.all(
       (Array.isArray(state.files.c_conservation_sequence_sources) ? state.files.c_conservation_sequence_sources : [])
         .map((file) => serializeFile(file))
@@ -2209,8 +2281,71 @@ export const serializeFiles = async () => {
     whitelist: await serializeFile(state.files.whitelist),
     qualifier_priority: await serializeFile(state.files.qualifier_priority),
     linearSeqs,
-    linearComparisons
+    linearComparisons,
+    linearCanonicalComparisons
   };
+};
+
+const deserializeCanonicalComparisons = (comparisons) => (
+  Array.isArray(comparisons)
+    ? comparisons.map((comparison) => (
+        isResourceBackedCanonicalComparison(comparison)
+          ? mapResourceBackedCanonicalComparison(comparison, deserializeFile)
+          : cloneJsonData(comparison)
+      ))
+    : []
+);
+
+export const adoptCanonicalRenderArtifacts = (canonical) => {
+  const projection = projectCanonicalSessionRequest(canonical);
+  if (projection.mode === 'linear') {
+    const comparisons = deserializeCanonicalComparisons(
+      projection.files.linearCanonicalComparisons
+    );
+    state.files.linearCanonicalComparisons = comparisons;
+    return;
+  }
+  if (projection.files.c_conservation_blasts_source !== 'losat-cache') return;
+
+  const blastFiles = (projection.files.c_conservation_blasts || [])
+    .map((entry) => deserializeFile(entry))
+    .filter(Boolean);
+  const fastaFiles = (projection.files.c_conservation_fastas || [])
+    .map((entry) => deserializeFile(entry));
+  const sequenceSources = (projection.files.c_conservation_sequence_sources || [])
+    .map((entry) => deserializeFile(entry));
+  const projectedConservation = projection.config.circularConservation;
+  const currentSeries = Array.isArray(state.circularConservation.series)
+    ? state.circularConservation.series.map((entry) => cloneJsonData(entry))
+    : [];
+  const series = Array.isArray(projectedConservation?.series)
+    ? projectedConservation.series.map((entry, index) => ({
+        ...entry,
+        ...(currentSeries[index] || {}),
+        sourceIndex: index,
+        fileName: entry.fileName,
+        label: entry.label,
+        color: entry.color
+      }))
+    : [];
+
+  state.files.c_conservation_blasts = blastFiles;
+  state.files.c_conservation_blasts_source = 'losat-cache';
+  state.files.c_conservation_fastas = fastaFiles;
+  state.files.c_conservation_sequence_sources = sequenceSources;
+  if (projectedConservation) {
+    state.circularConservation.enabled = true;
+    state.circularConservation.source = 'losat';
+    state.circularConservation.reference = projectedConservation.reference;
+    state.circularConservation.labels = series.map((entry) => entry.label).join(',');
+    state.circularConservation.ring_width = projectedConservation.ring_width;
+    state.circularConservation.ring_gap = projectedConservation.ring_gap;
+    state.circularConservation.series.splice(
+      0,
+      state.circularConservation.series.length,
+      ...series
+    );
+  }
 };
 
 const applyFiles = (filesData) => {
@@ -2223,6 +2358,7 @@ const applyFiles = (filesData) => {
   state.files.c_conservation_blasts_source = null;
   state.files.c_conservation_fastas = [];
   state.files.c_conservation_sequence_sources = [];
+  state.files.linearCanonicalComparisons = [];
   state.files.d_color = null;
   state.files.t_color = null;
   state.files.blacklist = null;
@@ -2248,11 +2384,14 @@ const applyFiles = (filesData) => {
     ? 'losat-cache'
     : null;
   state.files.c_conservation_fastas = Array.isArray(filesData.c_conservation_fastas)
-    ? filesData.c_conservation_fastas.map((entry) => deserializeFile(entry)).filter(Boolean)
+    ? filesData.c_conservation_fastas.map((entry) => deserializeFile(entry))
     : [];
   state.files.c_conservation_sequence_sources = Array.isArray(filesData.c_conservation_sequence_sources)
     ? filesData.c_conservation_sequence_sources.map((entry) => deserializeFile(entry))
     : [];
+  state.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
+    filesData.linearCanonicalComparisons
+  );
   state.files.d_color = deserializeFile(filesData.d_color);
   state.files.t_color = deserializeFile(filesData.t_color);
   state.files.blacklist = deserializeFile(filesData.blacklist);
@@ -2424,7 +2563,16 @@ const cloneLiveFileState = () => ({
       : [],
     c_conservation_sequence_sources: Array.isArray(state.files.c_conservation_sequence_sources)
       ? [...state.files.c_conservation_sequence_sources]
-      : []
+      : [],
+    linearCanonicalComparisons: (
+      Array.isArray(state.files.linearCanonicalComparisons)
+        ? state.files.linearCanonicalComparisons
+        : []
+    ).map((comparison) => (
+      isResourceBackedCanonicalComparison(comparison)
+        ? mapResourceBackedCanonicalComparison(comparison)
+        : cloneJsonData(comparison)
+    ))
   },
   linearSeqs: state.linearSeqs.map((seq) => ({
     ...seq,
@@ -2908,6 +3056,12 @@ export const exportSession = async (titleOverride = null) => {
     (state.files.blacklist?.size || 0) +
     (state.files.whitelist?.size || 0) +
     (state.files.qualifier_priority?.size || 0) +
+    (Array.isArray(state.files.linearCanonicalComparisons)
+      ? state.files.linearCanonicalComparisons.reduce(
+          (sum, comparison) => sum + (comparison?.file?.size || 0),
+          0
+        )
+      : 0) +
     state.linearSeqs.reduce((sum, seq) => {
       return (
         sum +
@@ -2934,7 +3088,7 @@ export const exportSession = async (titleOverride = null) => {
     ? cloneJsonData(lastRunInvocation)
     : undefined;
   const serializedFiles = await serializeFiles();
-  const canonical = buildCanonicalSessionRequest({ state, filesData: serializedFiles });
+  const canonical = buildCanonicalRenderRequest({ state, filesData: serializedFiles });
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
     state.legacyProteinRawCandidates.value
   );

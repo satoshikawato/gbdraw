@@ -15,15 +15,22 @@ import json
 import math
 import os
 import re
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePath, PureWindowsPath
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
+from .analysis.protein_artifacts import (
+    CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
+    is_current_derived_protein_artifact,
+    validate_current_derived_protein_artifacts,
+)
 from .definition_line_styles import DEFINITION_LINE_KINDS, parse_definition_line_style_overrides
 from .exceptions import ValidationError
 from .io.regions import RegionSpec, parse_region_specs
 from .render.formats import normalize_format_token
+from .render.output_paths import commit_staged_output_file
 
 if TYPE_CHECKING:
     from .api.requests import DiagramRequest
@@ -36,7 +43,7 @@ SUPPORTED_SESSION_VERSIONS = frozenset(
 )
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
 NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
-LOSAT_DERIVED_CACHE_SCHEMA = 3
+LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
 LEGACY_LOSAT_DERIVED_CACHE_SCHEMA = 1
 PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
@@ -49,64 +56,6 @@ JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _DEPTH_COLUMNS = ("reference_name", "position", "depth")
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _SLOT_PART_RE = re.compile(r"([^\[\]]+)|\[(\d+)\]")
-_RUNTIME_HANDLE_RE = re.compile(r"h_[a-z2-7]{26}")
-_FEATURE_ANALYSIS_ID_RE = re.compile(
-    r"(?<![A-Za-z0-9_])f_[0-9a-f]{64}(?![A-Za-z0-9_])"
-)
-_LEGACY_PROTEIN_REFERENCE_RE = re.compile(
-    r"(?<![A-Za-z0-9._%+-])"
-    r"p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}"
-    r"(?:_[2-9][0-9]*)?"
-    r"(?![A-Za-z0-9._%+-])"
-)
-_DERIVED_SCALAR_PROTEIN_REFERENCE_KEYS = frozenset(
-    {
-        "proteinId",
-        "queryProteinId",
-        "subjectProteinId",
-        "protein_id",
-        "query_protein_id",
-        "subject_protein_id",
-    }
-)
-_DERIVED_UNIT_PROTEIN_REFERENCE_KEYS = frozenset(
-    {
-        "queryUnitId",
-        "subjectUnitId",
-        "query_unit_id",
-        "subject_unit_id",
-    }
-)
-_DERIVED_ARRAY_PROTEIN_REFERENCE_KEYS = frozenset(
-    {
-        "proteinIds",
-        "sharedProteinIds",
-        "protein_ids",
-        "shared_protein_ids",
-    }
-)
-_DERIVED_COMPOUND_EDGE_REFERENCE_KEYS = frozenset(
-    {
-        "supportingEdge",
-        "supportingEdges",
-        "supporting_edge",
-        "supporting_edges",
-        "edgeId",
-        "edgeIds",
-        "edge_id",
-        "edge_ids",
-    }
-)
-_COMPOUND_SUPPORTING_EDGE_RE = re.compile(
-    rf"^(?P<query>{_RUNTIME_HANDLE_RE.pattern})->"
-    rf"(?P<subject>{_RUNTIME_HANDLE_RE.pattern}):"
-    r"[A-Za-z][A-Za-z0-9._-]*$"
-)
-_COMPOUND_PATH_EDGE_RE = re.compile(
-    rf"^[^:\s]+:\d+:(?P<query>{_RUNTIME_HANDLE_RE.pattern})->"
-    rf"\d+:(?P<subject>{_RUNTIME_HANDLE_RE.pattern}):"
-    r"[A-Za-z][A-Za-z0-9._-]*$"
-)
 
 
 @dataclass(frozen=True)
@@ -640,7 +589,7 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
 def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     """Validate current cache, manifest, and legacy artifact boundaries."""
 
-    _validate_current_web_state_field_names(session.get("config"))
+    validate_current_web_state_field_names(session.get("config"))
     session_version = session.get("version")
     cache_entries = _artifact_entries(session, "losatCache")
     protein_entries: list[Mapping[str, Any]] = []
@@ -699,12 +648,15 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
                     f"losatCache.entries[{index}]."
                 )
     if derived_entries:
-        if manifest is None or not _derived_entries_match_manifest(
-            derived_entries, manifest
-        ):
+        try:
+            validate_current_derived_protein_artifacts(
+                derived_entries,
+                manifest,
+            )
+        except ValidationError as exc:
             raise ValidationError(
                 "Current derived LOSATP cache contains unresolved protein references."
-            )
+            ) from exc
 
     legacy_artifacts = session.get("legacyArtifacts")
     if legacy_artifacts is None:
@@ -719,7 +671,58 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
         _validate_legacy_derived_evidence(derived_evidence)
 
 
-def _validate_current_web_state_field_names(config: object) -> None:
+def migrate_persisted_web_state_field_names(config: object) -> object:
+    """Project released Web config field names without mutating persisted data."""
+
+    if not isinstance(config, Mapping):
+        return config
+
+    migrated = dict(config)
+    adv = config.get("adv")
+    if isinstance(adv, Mapping):
+        migrated_adv = dict(adv)
+        if "depth_tick_interval" in migrated_adv:
+            migrated_adv.setdefault(
+                "depth_large_tick_interval",
+                migrated_adv["depth_tick_interval"],
+            )
+            migrated_adv.pop("depth_tick_interval")
+        depth_tracks = migrated_adv.get("depth_tracks")
+        if isinstance(depth_tracks, list):
+            migrated_tracks: list[Any] = []
+            for track in depth_tracks:
+                if not isinstance(track, Mapping) or "tick_interval" not in track:
+                    migrated_tracks.append(track)
+                    continue
+                migrated_track = dict(track)
+                migrated_track.setdefault(
+                    "large_tick_interval",
+                    migrated_track["tick_interval"],
+                )
+                migrated_track.pop("tick_interval")
+                migrated_tracks.append(migrated_track)
+            migrated_adv["depth_tracks"] = migrated_tracks
+        migrated["adv"] = migrated_adv
+
+    losat = config.get("losat")
+    if isinstance(losat, Mapping):
+        blastp = losat.get("blastp")
+        if isinstance(blastp, Mapping) and "collinearMaxGeneGap" in blastp:
+            migrated_blastp = dict(blastp)
+            migrated_blastp.setdefault(
+                "collinearMaxUnitGap",
+                migrated_blastp["collinearMaxGeneGap"],
+            )
+            migrated_blastp.pop("collinearMaxGeneGap")
+            migrated_losat = dict(losat)
+            migrated_losat["blastp"] = migrated_blastp
+            migrated["losat"] = migrated_losat
+    return migrated
+
+
+def validate_current_web_state_field_names(config: object) -> None:
+    """Reject obsolete Web config names at current session write boundaries."""
+
     if not isinstance(config, Mapping):
         return
     adv = config.get("adv")
@@ -892,11 +895,7 @@ def _is_derived_cache_entry(entry: object, *, schema: int) -> bool:
 
 
 def _is_current_derived_cache_entry(entry: object) -> bool:
-    return (
-        _is_derived_cache_entry(entry, schema=LOSAT_DERIVED_CACHE_SCHEMA)
-        and isinstance(entry, Mapping)
-        and entry.get("idEncoding") == "runtime-handle-v1"
-    )
+    return is_current_derived_protein_artifact(entry)
 
 
 def _is_valid_protein_identity_manifest(manifest: object) -> bool:
@@ -912,233 +911,6 @@ def _is_valid_protein_identity_manifest(manifest: object) -> bool:
         validate_protein_identity_manifest(manifest)
     except (ImportError, ValidationError, TypeError, ValueError):
         return False
-    return True
-
-
-def _is_nonnegative_integer(value: object) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
-
-
-def _is_strict_empty_derived_result(entry: Mapping[str, Any]) -> bool:
-    mode = entry.get("mode")
-    if mode not in {"orthogroup", "collinear"}:
-        return False
-    payload = entry.get("payload")
-    if not isinstance(payload, Mapping):
-        return False
-
-    allowed_keys = {"identity", "pairs", "orthogroups"}
-    if mode == "collinear":
-        allowed_keys.update(
-            {
-                "collinearGroups",
-                "collinearGroupScope",
-                "collinearityBlocks",
-            }
-        )
-    if not set(payload).issubset(allowed_keys):
-        return False
-
-    if "identity" in payload:
-        identity = payload["identity"]
-        if (
-            not isinstance(identity, Mapping)
-            or identity.get("cacheSchema") != LOSAT_DERIVED_CACHE_SCHEMA
-            or identity.get("idEncoding") != "runtime-handle-v1"
-            or identity.get("mode") != mode
-        ):
-            return False
-        raw_cache_keys = identity.get("rawCacheKeys")
-        if not isinstance(raw_cache_keys, list) or not all(
-            isinstance(key, str) and bool(key) for key in raw_cache_keys
-        ):
-            return False
-
-    pairs = payload.get("pairs")
-    orthogroups = payload.get("orthogroups")
-    if not isinstance(pairs, list) or not pairs or orthogroups != []:
-        return False
-    pair_indices: set[int] = set()
-    for pair in pairs:
-        if not isinstance(pair, Mapping) or set(pair).difference(
-            {
-                "pair_index",
-                "query_index",
-                "subject_index",
-                "tsv",
-                "rows",
-                "hit_count",
-            }
-        ):
-            return False
-        pair_index = pair.get("pair_index")
-        if (
-            not _is_nonnegative_integer(pair_index)
-            or pair_index in pair_indices
-            or pair.get("tsv") != ""
-            or pair.get("rows") != []
-            or not _is_nonnegative_integer(pair.get("hit_count"))
-            or pair.get("hit_count") != 0
-        ):
-            return False
-        pair_indices.add(pair_index)
-        has_query_index = "query_index" in pair
-        has_subject_index = "subject_index" in pair
-        if has_query_index != has_subject_index:
-            return False
-        if has_query_index and (
-            not _is_nonnegative_integer(pair.get("query_index"))
-            or not _is_nonnegative_integer(pair.get("subject_index"))
-        ):
-            return False
-
-    if mode == "collinear":
-        for collection_key in ("collinearGroups", "collinearityBlocks"):
-            if collection_key in payload and payload[collection_key] != []:
-                return False
-        if (
-            "collinearGroupScope" in payload
-            and payload["collinearGroupScope"]
-            not in {"adjacent_local", "global_collinear"}
-        ):
-            return False
-    return True
-
-
-def _derived_entries_match_manifest(
-    entries: Sequence[Mapping[str, Any]],
-    manifest: Mapping[str, Any],
-) -> bool:
-    try:
-        from .analysis.protein_colinearity import (
-            validate_protein_identity_manifest,
-        )
-
-        authority = validate_protein_identity_manifest(manifest)
-    except (ImportError, ValidationError, TypeError, ValueError):
-        return False
-
-    runtime_handles = {
-        str(handle)
-        for binding in authority.record_instances.values()
-        for handle in (
-            binding.get("runtimeIds", {}).values()
-            if isinstance(binding.get("runtimeIds"), Mapping)
-            else ()
-        )
-    }
-
-    def forbidden_reference(value: str) -> bool:
-        return (
-            _LEGACY_PROTEIN_REFERENCE_RE.search(value) is not None
-            or _FEATURE_ANALYSIS_ID_RE.search(value) is not None
-        )
-
-    def compound_edge_references(value: str) -> tuple[str, str] | None:
-        match = _COMPOUND_SUPPORTING_EDGE_RE.fullmatch(
-            value
-        ) or _COMPOUND_PATH_EDGE_RE.fullmatch(value)
-        if match is None:
-            return None
-        return match.group("query"), match.group("subject")
-
-    def visit(value: object, owner_key: str = "") -> tuple[bool, bool]:
-        if (
-            owner_key in _DERIVED_COMPOUND_EDGE_REFERENCE_KEYS
-            and not isinstance(value, (str, list))
-        ):
-            return False, False
-        if isinstance(value, str):
-            if forbidden_reference(value):
-                return False, False
-            if owner_key in _DERIVED_COMPOUND_EDGE_REFERENCE_KEYS:
-                references = compound_edge_references(value)
-                return (
-                    references is not None
-                    and all(reference in runtime_handles for reference in references),
-                    references is not None,
-                )
-            if owner_key in _DERIVED_SCALAR_PROTEIN_REFERENCE_KEYS and value:
-                references = [reference.strip() for reference in value.split(";")]
-                return (
-                    bool(references)
-                    and all(references)
-                    and all(reference in runtime_handles for reference in references),
-                    True,
-                )
-            if owner_key in _DERIVED_UNIT_PROTEIN_REFERENCE_KEYS and value:
-                references = [reference.strip() for reference in value.split(";")]
-                runtime_references = [
-                    reference
-                    for reference in references
-                    if reference.startswith("h_")
-                ]
-                if not runtime_references:
-                    return True, False
-                return (
-                    all(references)
-                    and all(
-                        _RUNTIME_HANDLE_RE.fullmatch(reference) is not None
-                        and reference in runtime_handles
-                        for reference in runtime_references
-                    ),
-                    True,
-                )
-            return True, False
-        if isinstance(value, list):
-            if owner_key in _DERIVED_COMPOUND_EDGE_REFERENCE_KEYS:
-                saw_reference = False
-                for item in value:
-                    if not isinstance(item, str):
-                        return False, False
-                    valid, saw_item = visit(item, owner_key)
-                    if not valid:
-                        return False, False
-                    saw_reference = saw_reference or saw_item
-                return True, saw_reference
-            if owner_key in _DERIVED_ARRAY_PROTEIN_REFERENCE_KEYS:
-                if not all(
-                    isinstance(item, str) and item in runtime_handles
-                    for item in value
-                ):
-                    return False, False
-                return True, bool(value)
-            saw_reference = False
-            for item in value:
-                valid, saw_item = visit(item)
-                if not valid:
-                    return False, False
-                saw_reference = saw_reference or saw_item
-            return True, saw_reference
-        if isinstance(value, Mapping):
-            saw_reference = False
-            for raw_key, item in value.items():
-                key = str(raw_key)
-                if forbidden_reference(key):
-                    return False, False
-                if _RUNTIME_HANDLE_RE.fullmatch(key):
-                    if key not in runtime_handles:
-                        return False, False
-                    saw_reference = True
-                valid, saw_item = visit(item, key)
-                if not valid:
-                    return False, False
-                saw_reference = saw_reference or saw_item
-            return True, saw_reference
-        return True, False
-
-    for entry in entries:
-        if not _is_current_derived_cache_entry(entry):
-            return False
-        payload = entry.get("payload")
-        assert isinstance(payload, Mapping)
-        valid, saw_reference = visit(payload)
-        if not valid or (
-            payload
-            and not saw_reference
-            and not _is_strict_empty_derived_result(entry)
-        ):
-            return False
     return True
 
 
@@ -1525,8 +1297,10 @@ def build_session_json(
 ) -> dict[str, Any]:
     """Build a GUI-loadable session JSON payload from a CLI run."""
 
+    source_version: int | None = None
     if context.source_session is not None:
         validate_session(context.source_session)
+        source_version = int(context.source_session["version"])
         payload: dict[str, Any] = _json_clone(context.source_session)
     else:
         payload = {}
@@ -1542,6 +1316,11 @@ def build_session_json(
     config = payload.get("config")
     if not isinstance(config, dict):
         config = _minimal_config_from_cli_args(context)
+        payload["config"] = config
+    elif source_version is not None and source_version < CURRENT_SESSION_VERSION:
+        migrated_config = migrate_persisted_web_state_field_names(config)
+        assert isinstance(migrated_config, dict)
+        config = migrated_config
         payload["config"] = config
     _update_config_prefix(config, context.output_prefix)
 
@@ -1601,19 +1380,33 @@ def build_session_json(
     return payload
 
 
-def write_session_json(path: str | Path, payload: Mapping[str, Any]) -> None:
-    """Write plain or ``.gz`` session JSON with an atomic replacement."""
+def write_session_json(
+    path: str | Path,
+    payload: Mapping[str, Any],
+    *,
+    overwrite: bool = True,
+) -> None:
+    """Write plain or ``.gz`` session JSON through a same-directory stage."""
 
     expanded_payload = expand_session_feature_catalog(payload)
     validate_session(expanded_payload)
     serialized_payload = compact_session_feature_catalog(expanded_payload)
 
     output_path = Path(path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
+    temp_path: Path | None = None
+    temp_fd: int | None = None
     try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_fd, temp_name = tempfile.mkstemp(
+            prefix=f".{output_path.name}.",
+            suffix=".tmp",
+            dir=output_path.parent,
+        )
+        temp_path = Path(temp_name)
         if output_path.suffix.lower() == ".gz":
-            with temp_path.open("wb") as raw_file:
+            raw_file = os.fdopen(temp_fd, "wb")
+            temp_fd = None
+            with raw_file:
                 with gzip.GzipFile(
                     filename="",
                     mode="wb",
@@ -1628,22 +1421,41 @@ def write_session_json(path: str | Path, payload: Mapping[str, Any]) -> None:
                             ensure_ascii=False,
                             separators=(",", ":"),
                         )
+                raw_file.flush()
+                os.fsync(raw_file.fileno())
         else:
-            temp_path.write_text(
-                json.dumps(
+            text_file = os.fdopen(temp_fd, "w", encoding="utf-8")
+            temp_fd = None
+            with text_file:
+                json.dump(
                     serialized_payload,
+                    text_file,
                     ensure_ascii=False,
                     separators=(",", ":"),
-                ),
-                encoding="utf-8",
-            )
-        temp_path.replace(output_path)
+                )
+                text_file.flush()
+                os.fsync(text_file.fileno())
+        commit_staged_output_file(
+            temp_path,
+            output_path,
+            overwrite=overwrite,
+        )
+    except FileExistsError as exc:
+        raise ValidationError(
+            f"Session output already exists: {output_path}. "
+            "Pass overwrite=True to replace it."
+        ) from exc
     except OSError as exc:
         raise ValidationError(f"Could not write session sidecar: {output_path}") from exc
     finally:
+        if temp_fd is not None:
+            try:
+                os.close(temp_fd)
+            except OSError:
+                pass
         try:
-            if temp_path.exists():
-                temp_path.unlink()
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
         except OSError:
             pass
 
@@ -4002,6 +3814,7 @@ __all__ = [
     "get_session_slot",
     "load_session",
     "materialize_embedded_file",
+    "migrate_persisted_web_state_field_names",
     "migrate_legacy_repeat_feature_shape_args",
     "normalize_current_session_artifacts",
     "safe_embedded_filename",
@@ -4010,5 +3823,6 @@ __all__ = [
     "session_to_cli_args",
     "validate_session",
     "validate_current_session_artifacts",
+    "validate_current_web_state_field_names",
     "write_session_json",
 ]

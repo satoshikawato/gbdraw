@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import copy
 import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +14,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 import gbdraw.circular as circular_cli_module
+import gbdraw.session_io as session_io_module
 from gbdraw.analysis.protein_colinearity import (
     build_protein_losat_cache_key,
     build_protein_losat_pair_identity,
@@ -22,8 +24,6 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.circular import circular_main
 from gbdraw.linear import (
     _get_args as get_linear_args,
-    _record_instance_keys_for_web_losat,
-    _source_session_losat_entries,
 )
 from gbdraw.cli_utils.session import (
     DiagramRunResult,
@@ -60,7 +60,9 @@ from gbdraw.session_io import (
     load_session,
     materialize_embedded_file,
     migrate_legacy_repeat_feature_shape_args,
+    migrate_persisted_web_state_field_names,
     session_to_cli_args,
+    validate_current_web_state_field_names,
     validate_session,
     write_session_json,
 )
@@ -95,6 +97,60 @@ def _canonical_request(mode: str):
     if mode == "linear":
         return LinearDiagramRequest(records=(record_input,))
     return CircularDiagramRequest(records=(record_input,))
+
+
+def test_write_session_json_does_not_use_predictable_temp_path(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "saved.gbdraw-session.json"
+    old_temp_path = output_path.with_name(
+        f".{output_path.name}.{os.getpid()}.tmp"
+    )
+    protected_path = tmp_path / "protected.txt"
+    protected_path.write_text("keep", encoding="utf-8")
+    try:
+        old_temp_path.symlink_to(protected_path)
+    except OSError as exc:
+        pytest.skip(f"file symlinks are unavailable: {exc}")
+
+    write_session_json(output_path, _minimal_session({}))
+
+    assert protected_path.read_text(encoding="utf-8") == "keep"
+    assert old_temp_path.is_symlink()
+    assert output_path.is_file()
+
+
+def test_write_session_json_no_replace_commit_preserves_late_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_path = tmp_path / "saved.gbdraw-session.json"
+    real_commit = session_io_module.commit_staged_output_file
+
+    def create_target_immediately_before_commit(
+        staged_path: Path,
+        target_path: Path,
+        *,
+        overwrite: bool,
+    ) -> None:
+        target_path.write_text("keep", encoding="utf-8")
+        real_commit(staged_path, target_path, overwrite=overwrite)
+
+    monkeypatch.setattr(
+        session_io_module,
+        "commit_staged_output_file",
+        create_target_immediately_before_commit,
+    )
+
+    with pytest.raises(ValidationError, match="overwrite=True"):
+        write_session_json(
+            output_path,
+            _minimal_session({}),
+            overwrite=False,
+        )
+
+    assert output_path.read_text(encoding="utf-8") == "keep"
+    assert not tuple(tmp_path.glob(f".{output_path.name}.*.tmp"))
 
 
 def _protein_identity_manifest() -> dict:
@@ -663,6 +719,41 @@ def test_current_session_rejects_obsolete_web_state_field_names(
     validate_session(payload)
 
 
+def test_released_web_state_field_names_migrate_copy_on_write() -> None:
+    source = {
+        "adv": {
+            "depth_tick_interval": 10,
+            "depth_large_tick_interval": 20,
+            "depth_tracks": [
+                {"tick_interval": 5},
+                {"tick_interval": 6, "large_tick_interval": 7},
+            ],
+        },
+        "losat": {
+            "blastp": {
+                "collinearMaxGeneGap": 2,
+                "collinearMaxUnitGap": 3,
+            }
+        },
+    }
+
+    migrated = migrate_persisted_web_state_field_names(source)
+
+    assert isinstance(migrated, dict)
+    assert migrated["adv"]["depth_large_tick_interval"] == 20
+    assert "depth_tick_interval" not in migrated["adv"]
+    assert migrated["adv"]["depth_tracks"] == [
+        {"large_tick_interval": 5},
+        {"large_tick_interval": 7},
+    ]
+    assert migrated["losat"]["blastp"]["collinearMaxUnitGap"] == 3
+    assert "collinearMaxGeneGap" not in migrated["losat"]["blastp"]
+    assert source["adv"]["depth_tick_interval"] == 10
+    assert source["adv"]["depth_tracks"][0]["tick_interval"] == 5
+    assert source["losat"]["blastp"]["collinearMaxGeneGap"] == 2
+    validate_current_web_state_field_names(migrated)
+
+
 @pytest.mark.parametrize(
     ("mode", "include_identity"),
     (
@@ -966,6 +1057,11 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
     )
     source["version"] = 33
     source["renderRequest"]["schema"] = 2
+    source["config"]["adv"]["depth_tick_interval"] = 10
+    source["config"]["adv"]["depth_tracks"] = [{"tick_interval": 5}]
+    source["config"]["losat"] = {
+        "blastp": {"collinearMaxGeneGap": 2}
+    }
 
     context = SessionBuildContext(
         mode="linear",
@@ -993,6 +1089,14 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
 
     assert promoted["version"] == CURRENT_SESSION_VERSION
     assert promoted["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert promoted["config"]["adv"]["depth_large_tick_interval"] == 10
+    assert promoted["config"]["adv"]["depth_tracks"] == [
+        {"large_tick_interval": 5}
+    ]
+    assert (
+        promoted["config"]["losat"]["blastp"]["collinearMaxUnitGap"]
+        == 2
+    )
 
 
 def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
@@ -1058,57 +1162,6 @@ def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
     session_path = tmp_path / "promoted.gbdraw-session.json.gz"
     write_session_json(session_path, promoted)
     assert load_session(session_path) == promoted
-
-
-def test_linear_protein_instance_keys_use_canonical_record_keys_not_file_metadata() -> None:
-    source = {
-        "renderRequest": {
-            "records": [
-                {"recordKey": "stable-left"},
-                {"recordKey": "stable-right"},
-            ]
-        },
-        "files": {
-            "linearSeqs": [
-                {"gb": {"name": "renamed-a.gb", "lastModified": 999}},
-                {"gb": {"name": "renamed-b.gb", "lastModified": 123}},
-            ]
-        },
-    }
-
-    assert _record_instance_keys_for_web_losat(
-        source_session=source,
-        record_count=2,
-    ) == ("stable-left", "stable-right")
-    assert _record_instance_keys_for_web_losat(
-        source_session=None,
-        record_count=2,
-    ) == ("record-1", "record-2")
-
-
-def test_linear_source_cache_restores_legacy_candidate_original_entries() -> None:
-    current = {
-        **_current_protein_cache_entry(),
-        "key": "current-protein-key",
-    }
-    legacy = _legacy_protein_cache_entry()
-    session = {
-        "losatCache": {"entries": [current]},
-        "legacyArtifacts": {
-            "proteinRawCandidates": {
-                "schema": 1,
-                "entries": [
-                    {
-                        "state": "pending",
-                        "originalEntry": legacy,
-                        "rejectionReason": None,
-                    }
-                ],
-            }
-        },
-    }
-
-    assert _source_session_losat_entries(session) == (current, legacy)
 
 
 def test_future_session_version_fails() -> None:

@@ -2861,7 +2861,7 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The CLI uses the selected palette directly; a -d override file is generated only for colors changed from that palette."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The selected palette supplies unchanged colors; colors you edit override it."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline">Reset</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
@@ -3012,7 +3012,7 @@
 
                             <div>
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <label class="input-label adv-section-title mb-0">Feature Visibility <help-tip text="Rules are written as the CLI feature visibility table. The row order is the matching priority. Off hides and removes a feature from protein comparison inputs; Exclude from matching only removes it from protein comparison inputs."></help-tip></label>
+                                    <label class="input-label adv-section-title mb-0">Feature Visibility <help-tip text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></label>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
@@ -3151,7 +3151,7 @@
                                 </select>
                             </div>
                             <div v-else>
-                                <label class="input-label text-[10px] mb-1">Label Mode <help-tip text="Set circular label placement. 'Out' places labels outside, 'Both' places labels outside and inside (GC/skew are auto-suppressed by CLI in this mode)."></help-tip></label>
+                                <label class="input-label text-[10px] mb-1">Label Mode <help-tip text="Set circular label placement. 'Out' places labels outside; 'Both' places labels outside and inside. With horizontal inner labels, implicit GC content and GC skew tracks are hidden to avoid overlap."></help-tip></label>
                                 <select v-model="form.labels_mode" class="form-input text-xs py-1">
                                     <option value="none">None</option>
                                     <option value="out">Out</option>
@@ -3404,7 +3404,7 @@
                                 </label>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for the scale label text. Used by bar style and by ruler labels unless the CLI-only ruler override is used."></help-tip></label>
+                                        <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for scale label text. Used by bar style and ruler labels."></help-tip></label>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_font_size, 'scaleFontSize')" :text="autoValueText('scaleFontSize')">
                                             <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>

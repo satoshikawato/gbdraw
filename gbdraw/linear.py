@@ -6,21 +6,19 @@ import argparse
 import copy
 import logging
 import math
-import re
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Mapping, Optional, Sequence
-import pandas as pd
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from .io.colors import load_default_colors, read_color_table
-from .io.cli_tables import read_comparisons_table, read_records_table
-from .io.comparisons import COMPARISON_COLUMNS
-from .io.genome import load_gbks, load_gff_fasta
-from .io.regions import apply_region_specs, parse_region_specs
+from typing import Mapping, Optional, Sequence
 from .config.toml import load_config_toml
 from .render.export import parse_formats
-from .api.request_render import _select_linear_comparison_records, render_request
+from .api.request_render import CurrentRequestArtifacts, render_request
+from .api.session_compat import render_session_compatible_request
+from .api.record_planning import (
+    depth_track_inputs_from_cli,
+    record_input_manifest_from_paths,
+    record_input_manifest_from_table,
+)
 from .api.options import (
     AnnotationOptions,
     ColorOptions,
@@ -29,17 +27,12 @@ from .api.options import (
     LinearOutputOptions,
     LinearRequestTrackOptions,
 )
-from .linear_comparison import LinearComparison
-from .layout.linear_multi_record import record_pairs_between_adjacent_rows
 from .layout.record_placement import (
     parse_record_row_position,
-    resolve_record_row_positions,
 )
-from .annotations import read_annotation_table
 from .api.requests import (
-    InMemoryRecordSource,
     LinearDiagramRequest,
-    RecordInput,
+    RecordCardinality,
     RenderOutputRequest,
 )
 from .definition_line_styles import (
@@ -48,32 +41,14 @@ from .definition_line_styles import (
 )
 from .analysis.collinearity import (
     LosslessCollinearityParameters,
-    build_orthogroup_collinearity_blocks,
-    convert_collinearity_blocks_to_comparisons,
-    convert_collinearity_blocks_to_pair_comparisons,
     normalize_collinearity_search_scope,
 )
 from .analysis.protein_colinearity import (
-    LosatpCacheManager,
     ORTHOGROUP_INFERENCE_VERSION,
     PROTEIN_BLASTP_MODES,
-    build_pairwise_protein_blastp_comparisons,
-    build_rbh_orthogroup_protein_blastp_comparisons,
-    extract_web_stable_cds_proteins,
 )
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
-from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from .labels.filtering import (
-    read_filter_list_file,
-    read_label_override_file,
-    read_qualifier_priority_file,
-)  # type: ignore[reportMissingImports]
 from .features.shapes import parse_feature_shape_overrides
-from .features.visibility import (
-    compile_feature_visibility_rules,
-    read_feature_visibility_file,
-    resolve_candidate_feature_types,
-)
 from .exceptions import ValidationError
 from .mode_profiles import ComparisonThresholds, LINEAR_MODE_PROFILE
 from .tracks import (
@@ -103,58 +78,22 @@ from .cli_utils.common import (
     validate_input_args,
     validate_label_args,
     handle_output_formats,
-    calculate_window_step,
-    load_records_table_records as _load_records_table_records,
-    record_major_depth_track_files_from_cli as _record_major_depth_track_files_from_cli,
 )
 from .cli_utils.session import (
     DiagramRunResult,
     add_session_args,
-    build_track_slot_geometry_run_metadata,
-    collect_track_slot_geometry_records,
+    diagram_request_output_paths,
     make_rendered_svg,
     parse_session_pre_args,
     preflight_session_sidecar_if_requested,
     render_canonical_session_if_present,
     save_session_sidecar_if_requested,
 )
+from .render.track_slot_metadata import (
+    build_track_slot_geometry_run_metadata,
+    collect_track_slot_geometry_records,
+)
 from .session_io import load_session, session_to_cli_args
-
-
-def _web_safe_filename(name: object, fallback: str = "losat") -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name or ""))
-    cleaned = cleaned.strip("_")
-    return cleaned or fallback
-
-
-def _web_normalize_label(label: object, fallback: str) -> str:
-    base = str(label or "").strip() or str(fallback or "")
-    dotted = re.sub(r"\.+", ".", re.sub(r"[\s/]+", ".", base)).strip(".")
-    return _web_safe_filename(dotted, _web_safe_filename(fallback, "losat"))
-
-
-def _record_cache_label(record: object, fallback: str) -> str:
-    annotations = getattr(record, "annotations", {}) or {}
-    label = str(annotations.get("gbdraw_record_label") or "").strip()
-    if label:
-        return label
-    record_id = str(getattr(record, "id", "") or "").strip()
-    return record_id or fallback
-
-
-def _linear_losat_cache_filenames(records: Sequence[object]) -> tuple[str, ...]:
-    filenames: list[str] = []
-    for index in range(max(0, len(records) - 1)):
-        left = _web_normalize_label(
-            _record_cache_label(records[index], f"seq_{index + 1}"),
-            f"seq_{index + 1}",
-        )
-        right = _web_normalize_label(
-            _record_cache_label(records[index + 1], f"seq_{index + 2}"),
-            f"seq_{index + 2}",
-        )
-        filenames.append(f"{left}.{right}.losatp.tsv")
-    return tuple(filenames)
 
 
 def _linear_session_record_metadata(
@@ -210,6 +149,13 @@ def _linear_record_source_index(
     fallback_index: int | None,
 ) -> int:
     annotations = getattr(record, "annotations", {}) or {}
+    provenance_index = annotations.get("gbdraw_input_index")
+    if (
+        isinstance(provenance_index, int)
+        and not isinstance(provenance_index, bool)
+        and 0 <= provenance_index < len(input_paths)
+    ):
+        return provenance_index
     source_file = str(annotations.get("gbdraw_source_file") or "")
     source_basename = str(annotations.get("gbdraw_source_basename") or "")
     if source_file:
@@ -239,80 +185,6 @@ def _linear_record_source_index(
     return -1
 
 
-def _source_session_losat_entries(
-    source_session: Mapping[str, Any] | None,
-) -> tuple[Mapping[str, object], ...]:
-    if not isinstance(source_session, Mapping):
-        return ()
-    collected: list[Mapping[str, object]] = []
-    losat_cache = source_session.get("losatCache")
-    if isinstance(losat_cache, Mapping):
-        entries = losat_cache.get("entries")
-        if isinstance(entries, list):
-            collected.extend(entry for entry in entries if isinstance(entry, Mapping))
-    legacy_artifacts = source_session.get("legacyArtifacts")
-    if isinstance(legacy_artifacts, Mapping):
-        envelope = legacy_artifacts.get("proteinRawCandidates")
-        candidates = envelope.get("entries") if isinstance(envelope, Mapping) else None
-        if isinstance(candidates, list):
-            collected.extend(
-                original
-                for candidate in candidates
-                if isinstance(candidate, Mapping)
-                and isinstance(
-                    original := candidate.get("originalEntry"), Mapping
-                )
-            )
-    return tuple(collected)
-
-
-def _source_session_losat_config(source_session: Mapping[str, Any] | None) -> Mapping[str, Any]:
-    if not isinstance(source_session, Mapping):
-        return {}
-    config = source_session.get("config")
-    if not isinstance(config, Mapping):
-        return {}
-    losat = config.get("losat")
-    return losat if isinstance(losat, Mapping) else {}
-
-
-def _source_session_threads_per_job(source_session: Mapping[str, Any] | None) -> str | int:
-    losat = _source_session_losat_config(source_session)
-    raw = str(losat.get("threadsPerJob") or "auto").strip().lower()
-    if raw == "auto":
-        return "auto"
-    try:
-        parsed = int(raw)
-    except ValueError:
-        return "auto"
-    return parsed if parsed >= 1 else "auto"
-
-
-def _source_session_runtime_compatibility(source_session: Mapping[str, Any] | None) -> str:
-    losat = _source_session_losat_config(source_session)
-    execution_mode = str(losat.get("executionMode") or "auto").strip().lower()
-    return "serial-v1" if execution_mode == "serial" else "threaded-compatible-v1"
-
-
-def _record_instance_keys_for_web_losat(
-    *,
-    source_session: Mapping[str, Any] | None,
-    record_count: int,
-) -> tuple[str, ...]:
-    if isinstance(source_session, Mapping):
-        request = source_session.get("renderRequest")
-        records = request.get("records") if isinstance(request, Mapping) else None
-        if isinstance(records, list) and len(records) == record_count:
-            keys = tuple(
-                str(record.get("recordKey") or "").strip()
-                for record in records
-                if isinstance(record, Mapping)
-            )
-            if len(keys) == record_count and all(keys) and len(set(keys)) == record_count:
-                return keys
-    return tuple(f"record-{index + 1}" for index in range(record_count))
-
-
 def _parse_optional_positive_int(value: str) -> int | None:
     normalized = str(value or "").strip().lower()
     if normalized in {"", "none", "auto", "null"}:
@@ -329,6 +201,19 @@ def _parse_optional_positive_int(value: str) -> int | None:
 # Setup for the logging system
 logger = logging.getLogger()
 setup_logging()
+
+
+def _linear_cli_record_cardinality(
+    *,
+    is_gff_source: bool,
+    source_count: int,
+    load_comparison: bool,
+) -> RecordCardinality:
+    """State the legacy CLI multi-entry selection rule as typed policy."""
+
+    if load_comparison and (is_gff_source or source_count > 1):
+        return RecordCardinality.FIRST
+    return RecordCardinality.ALL
 
 
 def _parse_linear_label_placement(value: str) -> str:
@@ -405,89 +290,6 @@ def _parse_linear_multi_record_position(value: str) -> str:
     except ValidationError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
     return str(value).strip()
-
-
-def _resolve_linear_comparison_selector(
-    records: Sequence,
-    selector: str,
-    *,
-    table_path: str,
-    row_number: int,
-    column: str,
-) -> int:
-    if selector.startswith("#"):
-        try:
-            index = int(selector[1:]) - 1
-        except ValueError as exc:
-            raise ValidationError(
-                f"{table_path}: row {row_number}, column {column!r}: "
-                f"invalid record selector {selector!r}."
-            ) from exc
-        if 0 <= index < len(records):
-            return index
-    else:
-        matches = [index for index, record in enumerate(records) if str(record.id) == selector]
-        if len(matches) == 1:
-            return matches[0]
-        if len(matches) > 1:
-            raise ValidationError(
-                f"{table_path}: row {row_number}, column {column!r}: selector "
-                f"{selector!r} matched multiple record IDs; use #index."
-            )
-    raise ValidationError(
-        f"{table_path}: row {row_number}, column {column!r}: unresolved record "
-        f"selector {selector!r}."
-    )
-
-
-def _linear_comparisons_from_table(table, records, rows_by_record) -> list[LinearComparison]:
-    comparisons: list[LinearComparison] = []
-    for row in table.rows:
-        query_index = _resolve_linear_comparison_selector(
-            records,
-            row.query,
-            table_path=table.table_path,
-            row_number=row.row_number,
-            column="query",
-        )
-        subject_index = _resolve_linear_comparison_selector(
-            records,
-            row.subject,
-            table_path=table.table_path,
-            row_number=row.row_number,
-            column="subject",
-        )
-        query_row = int(rows_by_record[query_index])
-        subject_row = int(rows_by_record[subject_index])
-        if query_index == subject_index:
-            raise ValidationError(
-                f"{table.table_path}: row {row.row_number}, column 'subject': "
-                "query and subject resolved to the same record."
-            )
-        if query_row == subject_row or abs(query_row - subject_row) != 1:
-            topology = "different rows" if query_row == subject_row else "adjacent rows"
-            raise ValidationError(
-                f"{table.table_path}: row {row.row_number}, column 'subject': query "
-                f"row {query_row + 1} and subject row {subject_row + 1} must be in {topology}."
-            )
-        try:
-            matches = pd.read_csv(
-                row.blast,
-                sep="\t",
-                comment="#",
-                names=COMPARISON_COLUMNS,
-            )
-        except Exception as exc:
-            raise ValidationError(
-                f"{table.table_path}: row {row.row_number}, column 'blast': "
-                f"could not parse {row.blast}."
-            ) from exc
-        comparisons.append(LinearComparison(query_index, subject_index, matches))
-    return comparisons
-
-
-
-
 
 
 def _get_args(args) -> argparse.Namespace:
@@ -1177,18 +979,9 @@ def linear_main(cmd_args) -> None:
             )
             args = _get_args(list(run_spec.args))
             args.overwrite = session_request.overwrite
+            args.save_session = session_request.save_session
+            args.session_output = session_request.session_output
             args._gbdraw_source_session = session
-            args._gbdraw_collect_losat_cache = bool(
-                session_request.save_session
-                or session_request.session_output
-                or _source_session_losat_entries(session)
-            )
-            preflight_session_sidecar_if_requested(
-                save_session=session_request.save_session,
-                session_output=session_request.session_output,
-                output_prefix=args.output,
-                overwrite=session_request.overwrite,
-            )
             run_result = run_linear_from_namespace(args)
             save_session_sidecar_if_requested(
                 save_session=session_request.save_session,
@@ -1203,12 +996,6 @@ def linear_main(cmd_args) -> None:
         return
 
     args: argparse.Namespace = _get_args(cmd_args)
-    preflight_session_sidecar_if_requested(
-        save_session=bool(args.save_session or args.session_output),
-        session_output=args.session_output,
-        output_prefix=args.output,
-        overwrite=bool(args.overwrite),
-    )
     run_result = run_linear_from_namespace(args)
     save_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
@@ -1226,20 +1013,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     source_session = getattr(args, "_gbdraw_source_session", None)
     if not isinstance(source_session, Mapping):
         source_session = None
-    source_losat_entries = _source_session_losat_entries(source_session)
-    collect_losat_cache = bool(
-        getattr(args, "_gbdraw_collect_losat_cache", False)
-        or getattr(args, "save_session", False)
-        or getattr(args, "session_output", None)
-        or source_losat_entries
-    )
     out_file_prefix: str = args.output
     blast_files: list[str] | None = args.blast
-    comparisons_table = (
-        read_comparisons_table(args.comparisons_table)
-        if args.comparisons_table
-        else None
-    )
     protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
     losatp_bin: str = args.losatp_bin
     ncbi_blastp_bin: str | None = getattr(args, "ncbi_blastp_bin", None)
@@ -1335,36 +1110,19 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     normalize_length = args.normalize_length
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
-    if blast_files or comparisons_table is not None or protein_blastp_mode != "none":
+    if blast_files or args.comparisons_table or protein_blastp_mode != "none":
         load_comparison = True
     else:
         load_comparison = False
     palette: str = args.palette
-    default_colors: Optional[DataFrame] = load_default_colors(
-        user_defined_default_colors, palette, load_comparison)
-    color_table: Optional[DataFrame] = read_color_table(color_table_path)
-    feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
     annotation_options = (
-        AnnotationOptions(sets=read_annotation_table(args.annotation_table, mode="linear"))
+        AnnotationOptions(table_file=args.annotation_table)
         if args.annotation_table
         else None
     )
-    feature_visibility_rules = compile_feature_visibility_rules(feature_table)
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
-    if qualifier_priority_path:
-        filtering_cfg["qualifier_priority_df"] = read_qualifier_priority_file(qualifier_priority_path)
-    else:
-        filtering_cfg["qualifier_priority_df"] = None
-    if label_whitelist:
-        filtering_cfg["whitelist_df"] = read_filter_list_file(label_whitelist)
-    else:
-        filtering_cfg["whitelist_df"] = None
-    if label_table_path:
-        filtering_cfg["label_override_df"] = read_label_override_file(label_table_path)
-    else:
-        filtering_cfg["label_override_df"] = None
 
     block_stroke_color: Optional[str] = args.block_stroke_color
     block_stroke_width: Optional[float] = args.block_stroke_width
@@ -1539,359 +1297,67 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         },
     )
 
-    def _normalize_list(values, target_len, fill_value=""):
-        items = list(values or [])
-        if len(items) > target_len:
-            logger.error(
-                "ERROR: Too many --record_id/--reverse_complement values (expected at most %s).", target_len
-            )
-            raise ValidationError(
-                f"Too many --record_id/--reverse_complement values (expected at most {target_len})."
-            )
-        while len(items) < target_len:
-            items.append(fill_value)
-        return items
-
-    def _parse_bool(value: str | None) -> bool:
-        if value is None:
-            return False
-        text = str(value).strip().lower()
-        if text in {"1", "true", "yes", "y", "on"}:
-            return True
-        if text in {"0", "false", "no", "n", "off", "", "none", "null", "-"}:
-            return False
-        logger.error("ERROR: Invalid reverse_complement value: %s", value)
-        raise ValidationError(f"Invalid reverse_complement value: {value}")
-
-    records_table = read_records_table(args.records_table) if args.records_table else None
-    linear_source_paths: list[str]
-    record_label_values: list[str]
-    record_subtitle_values: list[str]
-    region_arg_values: list[str]
-    if records_table:
-        if records_table.input_kind == "gbk":
-            args.gbk = records_table.gbk_files
-            args.gff = None
-            args.fasta = None
-            linear_source_paths = records_table.gbk_files
-        else:
-            args.gbk = None
-            args.gff = records_table.gff_files
-            args.fasta = records_table.fasta_files
-            linear_source_paths = records_table.gff_files
-        args.record_id = records_table.record_ids
-        args.reverse_complement = [
-            "1" if flag else "0" for flag in records_table.reverse_flags
-        ]
-        args.region = records_table.row_scoped_region_specs()
-        records = _load_records_table_records(
-            records_table,
-            selected_features_set=selected_features_set,
-            color_table=color_table,
-            feature_table=feature_table,
-            gbk_loader=load_gbks,
-            gff_loader=load_gff_fasta,
-        )
-        record_label_values = records_table.record_labels
-        record_subtitle_values = records_table.record_subtitles
-        region_arg_values = args.region
-    elif args.gbk:
-        file_count = len(args.gbk)
-        linear_source_paths = list(args.gbk)
-        record_selectors = _normalize_list(args.record_id, file_count, "")
-        reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
-        reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
-        if load_comparison and file_count > 1:
-            records = [
-                record
-                for index, path in enumerate(args.gbk)
-                for record in _select_linear_comparison_records(
-                    load_gbks(
-                        [path],
-                        record_selectors=[record_selectors[index]],
-                        reverse_flags=[reverse_flags[index]],
-                    ),
-                    is_gff_source=False,
-                    input_count=file_count,
-                )
-            ]
-        else:
-            records = load_gbks(
-                args.gbk,
-                record_selectors=record_selectors,
-                reverse_flags=reverse_flags,
-            )
-        record_label_values = list(args.record_label or [])
-        record_subtitle_values = list(args.record_subtitle or [])
-        region_arg_values = list(args.region or [])
-    elif args.gff and args.fasta:
-        file_count = len(args.gff)
-        linear_source_paths = list(args.gff)
-        record_selectors = _normalize_list(args.record_id, file_count, "")
-        reverse_flags_raw = _normalize_list(args.reverse_complement, file_count, "")
-        reverse_flags = [_parse_bool(v) for v in reverse_flags_raw]
-        candidate_feature_types, keep_all_features = resolve_candidate_feature_types(
-            selected_features_set,
-            color_table=color_table,
-            feature_visibility_table=feature_table,
-        )
-        if load_comparison:
-            records = [
-                record
-                for index, gff_path in enumerate(args.gff)
-                for record in _select_linear_comparison_records(
-                    load_gff_fasta(
-                        [gff_path],
-                        [args.fasta[index]],
-                        selected_features_set=candidate_feature_types,
-                        keep_all_features=keep_all_features,
-                        record_selectors=[record_selectors[index]],
-                        reverse_flags=[reverse_flags[index]],
-                    ),
-                    is_gff_source=True,
-                    input_count=file_count,
-                )
-            ]
-        else:
-            records = load_gff_fasta(
-                args.gff,
-                args.fasta,
-                selected_features_set=candidate_feature_types,
-                keep_all_features=keep_all_features,
-                record_selectors=record_selectors,
-                reverse_flags=reverse_flags,
-            )
-        record_label_values = list(args.record_label or [])
-        record_subtitle_values = list(args.record_subtitle or [])
-        region_arg_values = list(args.region or [])
+    if args.records_table:
+        record_manifest = record_input_manifest_from_table(args.records_table)
+        linear_positions: list[str] = []
     else:
-        logger.error("A critical error occurred with input file arguments.")
-        raise ValidationError("Invalid input file arguments.")
-    record_labels = record_label_values
-    if record_labels:
-        if len(record_labels) > len(records):
-            logger.warning(
-                "WARNING: More --record_label values were provided than records loaded; extra labels will be ignored."
-            )
-        for idx, label in enumerate(record_labels[: len(records)]):
-            if label is None:
-                continue
-            label = str(label).strip()
-            if not label:
-                continue
-            if getattr(records[idx], "annotations", None) is None:
-                records[idx].annotations = {}
-            records[idx].annotations["gbdraw_record_label"] = label
-    record_subtitles = record_subtitle_values
-    if record_subtitles:
-        if len(record_subtitles) > len(records):
-            logger.warning(
-                "WARNING: More --record_subtitle values were provided than records loaded; extra subtitles will be ignored."
-            )
-        for idx, subtitle in enumerate(record_subtitles[: len(records)]):
-            if subtitle is None:
-                continue
-            subtitle = str(subtitle).strip()
-            if not subtitle:
-                continue
-            if getattr(records[idx], "annotations", None) is None:
-                records[idx].annotations = {}
-            records[idx].annotations["gbdraw_record_subtitle"] = subtitle
-    region_specs = parse_region_specs(region_arg_values)
-    if region_specs:
-        try:
-            records = apply_region_specs(records, region_specs, log=logger)
-        except ValueError as exc:
-            logger.error(f"ERROR: {exc}")
-            raise ValidationError(str(exc)) from exc
-        if blast_files:
-            logger.warning(
-                "WARNING: Region cropping is enabled; ensure BLAST coordinates match the cropped regions (and reverse complements if specified)."
-            )
-    linear_positions = (
-        records_table.multi_record_positions()
-        if records_table is not None and records_table.has_multi_record_placement
-        else list(args.multi_record_position or [])
-    )
-    _ordered_record_indices, rows_by_record = resolve_record_row_positions(
-        records,
-        linear_positions or None,
-    )
-    multi_record_rows = len(set(rows_by_record)) < len(records)
-    if multi_record_rows and blast_files:
-        raise ValidationError(
-            "-b/--blast is ambiguous when a Linear row contains multiple records; "
-            "use --comparisons_table with explicit query and subject selectors."
+        source_count = len(args.gbk or args.gff or ())
+        cardinality = _linear_cli_record_cardinality(
+            is_gff_source=not bool(args.gbk),
+            source_count=source_count,
+            load_comparison=load_comparison,
         )
-    explicit_linear_comparisons = (
-        _linear_comparisons_from_table(comparisons_table, records, rows_by_record)
-        if comparisons_table is not None
-        else None
+        record_manifest = record_input_manifest_from_paths(
+            gbk_paths=args.gbk,
+            gff_paths=args.gff,
+            fasta_paths=args.fasta,
+            cardinalities=cardinality,
+            selectors=args.record_id,
+            reverse_flags=args.reverse_complement,
+            labels=args.record_label,
+            subtitles=args.record_subtitle,
+            regions=args.region,
+        )
+        linear_positions = list(args.multi_record_position or [])
+    if record_manifest.record_options.regions and blast_files:
+        logger.warning(
+            "WARNING: Region cropping is enabled; ensure BLAST coordinates "
+            "match the cropped regions (and reverse complements if specified)."
+        )
+    has_table_placement = any(
+        record.presentation.grid_row is not None
+        for record in record_manifest.records
     )
     linear_layout = (
         LinearMultiRecordOptions(
             record_gap_px=float(args.linear_record_gap),
-            multi_record_positions=tuple(linear_positions) if linear_positions else None,
+            multi_record_positions=(
+                tuple(linear_positions) if linear_positions else None
+            ),
         )
-        if linear_positions
+        if linear_positions or has_table_placement
         else None
     )
-    linear_record_metadata = _linear_session_record_metadata(records, linear_source_paths)
-    if protein_blastp_mode != "none" and len(records) < 2:
-        raise ValidationError("--protein_blastp_mode requires at least two linear records.")
-    depth_track_files = _record_major_depth_track_files_from_cli(
+    depth_tracks = depth_track_inputs_from_cli(
         depth_track_groups,
-        record_count=len(records),
+        labels=depth_track_labels,
+        colors=depth_track_colors,
+        heights=depth_track_heights,
+        large_tick_intervals=depth_track_large_tick_intervals,
+        small_tick_intervals=depth_track_small_tick_intervals,
+        tick_font_sizes=depth_track_tick_font_sizes,
     )
-    losatp_cache: LosatpCacheManager | None = None
-    losatp_cache_entries: tuple[dict[str, object], ...] | None = None
-    legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] | None = None
-    protein_identity_manifest: Mapping[str, Any] | None = None
-    protein_extraction = None
-    losat_cache_filenames: tuple[str, ...] = ()
-    if protein_blastp_mode != "none" and collect_losat_cache:
-        losatp_cache = LosatpCacheManager(
-            source_losat_entries,
-            threads_per_job=(
-                losatp_threads
-                if losatp_threads is not None
-                else _source_session_threads_per_job(source_session)
-            ),
-            runtime_compatibility=_source_session_runtime_compatibility(source_session),
-        )
-        record_instance_keys = _record_instance_keys_for_web_losat(
-            source_session=source_session,
-            record_count=len(records),
-        )
-        protein_extraction = extract_web_stable_cds_proteins(
-            records,
-            record_instance_keys=record_instance_keys,
-            feature_visibility_rules=feature_visibility_rules,
-        )
-        if protein_extraction.identity_manifest is None:
-            raise ValidationError(
-                "Protein cache collection requires a protein identity manifest."
-            )
-        losatp_cache.set_protein_extraction(protein_extraction)
-        protein_identity_manifest = protein_extraction.identity_manifest.to_dict()
-        losat_cache_filenames = _linear_losat_cache_filenames(records)
-    collinearity_comparisons: list[DataFrame] | None = None
-    collinearity_linear_comparisons: list[LinearComparison] | None = None
-    collinearity_orthogroups = None
-    collinearity_comparison_pairs = None
-    if protein_blastp_mode == "collinear" and multi_record_rows:
-        collinearity_comparison_pairs = record_pairs_between_adjacent_rows(rows_by_record)
-    if protein_blastp_mode == "pairwise" and losatp_cache is not None:
-        protein_blastp_result = build_pairwise_protein_blastp_comparisons(
-            records,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            max_hits=protein_blastp_max_hits,
-            candidate_limit=protein_blastp_candidate_limit,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-            losatp_cache=losatp_cache,
-            protein_extraction=protein_extraction,
-            feature_visibility_rules=feature_visibility_rules,
-            cache_filenames=losat_cache_filenames,
-        )
-        collinearity_comparisons = protein_blastp_result.comparisons
-        collinearity_orthogroups = protein_blastp_result.orthogroups
-    elif protein_blastp_mode == "orthogroup" and losatp_cache is not None:
-        protein_blastp_result = build_rbh_orthogroup_protein_blastp_comparisons(
-            records,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            candidate_limit=protein_blastp_candidate_limit,
-            orthogroup_membership_mode=orthogroup_membership_mode,
-            orthogroup_member_max_hits=orthogroup_member_max_hits,
-            max_related_edges_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-            losatp_cache=losatp_cache,
-            protein_extraction=protein_extraction,
-            feature_visibility_rules=feature_visibility_rules,
-            cache_filenames=losat_cache_filenames,
-        )
-        collinearity_comparisons = protein_blastp_result.comparisons
-        collinearity_orthogroups = protein_blastp_result.orthogroups
-    elif protein_blastp_mode == "collinear":
-        collinearity_result = build_orthogroup_collinearity_blocks(
-            records,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            candidate_limit=protein_blastp_candidate_limit,
-            orthogroup_membership_mode=orthogroup_membership_mode,
-            orthogroup_member_max_hits=orthogroup_member_max_hits,
-            max_paralog_links_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-            params=collinearity_params,
-            unit_mode=collinear_unit_mode,
-            edge_mode=collinear_anchor_mode,
-            search_scope=collinear_search_scope,
-            comparison_pairs=collinearity_comparison_pairs,
-            losatp_cache=losatp_cache,
-            protein_extraction=protein_extraction,
-            feature_visibility_rules=feature_visibility_rules,
-            cache_filenames=losat_cache_filenames,
-        )
-        collinearity_orthogroups = collinearity_result.orthogroups
-        if collinearity_comparison_pairs is not None:
-            pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
-                collinearity_result,
-                records=records,
-                color_mode=collinear_color_mode,
-            )
-            collinearity_linear_comparisons = [
-                LinearComparison(query_index, subject_index, matches)
-                for (query_index, subject_index), matches in pair_comparisons.items()
-            ]
-        else:
-            collinearity_comparisons = convert_collinearity_blocks_to_comparisons(
-                collinearity_result,
-                records=records,
-                color_mode=collinear_color_mode,
-            )
-    active_linear_comparisons = (
-        [*(explicit_linear_comparisons or []), *collinearity_linear_comparisons]
-        if collinearity_linear_comparisons is not None
-        else explicit_linear_comparisons
-    )
-    # Use raw records to avoid collapsing lengths when IDs are duplicated.
-    longest_genome: int = max(len(record.seq) for record in records)
-    cfg = GbdrawConfig.from_dict(config_dict)
-    window, step = calculate_window_step(longest_genome, cfg, manual_window, manual_step)
 
     canonical_config = copy.deepcopy(config_dict)
-    canonical_filtering = canonical_config["labels"]["filtering"]
-    qualifier_priority_table = canonical_filtering.pop("qualifier_priority_df", None)
-    label_whitelist_table = canonical_filtering.pop("whitelist_df", None)
-    label_override_table = canonical_filtering.pop("label_override_df", None)
     request_path = Path(str(out_file_prefix))
     canonical_request = LinearDiagramRequest(
-        records=tuple(
-            RecordInput(
-                source=InMemoryRecordSource(record),
-                record_key=f"record-{index + 1}",
-            )
-            for index, record in enumerate(records)
-        ),
+        records=record_manifest.records,
         options=LinearDiagramOptions(
             config=canonical_config,
             colors=ColorOptions(
-                color_table=color_table,
-                default_colors=default_colors,
+                color_table_file=color_table_path or None,
                 default_colors_palette=palette,
+                default_colors_file=user_defined_default_colors or None,
             ),
             tracks=LinearRequestTrackOptions(
                 linear_track_slots=linear_track_slot_specs,
@@ -1903,43 +1369,22 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 plot_title_position=plot_title_position,
             ),
             selected_features_set=tuple(selected_features_set),
-            feature_visibility_table=feature_table,
-            label_whitelist_table=label_whitelist_table,
-            qualifier_priority_table=qualifier_priority_table,
-            label_override_table=label_override_table,
+            feature_visibility_table_file=feature_table_path or None,
+            label_whitelist_file=label_whitelist or None,
+            qualifier_priority_file=qualifier_priority_path or None,
+            label_override_file=label_table_path or None,
             feature_shapes=feature_shapes or None,
             dinucleotide=dinucleotide,
-            window=window,
-            step=step,
+            window=manual_window,
+            step=manual_step,
             depth_window=depth_window,
             depth_step=depth_step,
-            depth_track_files=depth_track_files,
-            depth_track_labels=depth_track_labels,
-            depth_track_colors=depth_track_colors,
-            depth_track_heights=depth_track_heights,
-            depth_track_large_tick_intervals=depth_track_large_tick_intervals,
-            depth_track_small_tick_intervals=depth_track_small_tick_intervals,
-            depth_track_tick_font_sizes=depth_track_tick_font_sizes,
+            depth_tracks=depth_tracks,
             plot_title=plot_title or None,
             plot_title_font_size=plot_title_font_size,
             blast_files=tuple(blast_files) if blast_files else None,
-            linear_comparisons=(
-                tuple(active_linear_comparisons)
-                if active_linear_comparisons is not None
-                else None
-            ),
-            protein_comparisons=(
-                tuple(collinearity_comparisons)
-                if collinearity_comparisons is not None
-                else None
-            ),
-            orthogroups=collinearity_orthogroups,
-            protein_blastp_mode=(
-                "none"
-                if collinearity_comparisons is not None
-                or collinearity_linear_comparisons is not None
-                else protein_blastp_mode
-            ),
+            comparison_table_file=args.comparisons_table,
+            protein_blastp_mode=protein_blastp_mode,
             pairwise_match_style=pairwise_match_style,
             collinearity_params=collinearity_params,
             collinearity_unit_mode=collinear_unit_mode,
@@ -1961,6 +1406,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             alignment_length=alignment_length,
         ),
         layout=linear_layout,
+        record_options=record_manifest.record_options,
         output=RenderOutputRequest(
             output_prefix=request_path.name,
             output_directory=(
@@ -1970,23 +1416,37 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             overwrite=args.overwrite,
         ),
     )
-    render_result = render_request(canonical_request)
+    preflight_session_sidecar_if_requested(
+        save_session=bool(args.save_session or args.session_output),
+        session_output=args.session_output,
+        output_prefix=args.output,
+        diagram_output_paths=diagram_request_output_paths(canonical_request),
+        overwrite=bool(args.overwrite),
+    )
+    legacy_protein_raw_candidates = None
+    legacy_protein_derived_evidence = None
+    if source_session is not None:
+        render_result = render_session_compatible_request(
+            canonical_request,
+            source_session,
+        )
+        legacy_protein_raw_candidates = (
+            render_result.legacy_protein_raw_candidates
+        )
+        legacy_protein_derived_evidence = (
+            render_result.legacy_protein_derived_evidence
+        )
+    else:
+        render_result = render_request(
+            canonical_request,
+            artifacts=CurrentRequestArtifacts(),
+        )
     canvas = render_result.drawing
     interactive_context = render_result.interactive_context
-
-    if losatp_cache is not None:
-        losatp_cache_entries = losatp_cache.session_entries()
-        legacy_envelope = losatp_cache.legacy_candidate_envelope()
-        legacy_entries = legacy_envelope.get("entries")
-        legacy_protein_raw_candidates = (
-            tuple(
-                dict(entry)
-                for entry in legacy_entries
-                if isinstance(entry, Mapping)
-            )
-            if isinstance(legacy_entries, list)
-            else ()
-        )
+    linear_record_metadata = _linear_session_record_metadata(
+        render_result.records,
+        record_manifest.source_paths,
+    )
 
     rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)
     track_slot_geometry_records = collect_track_slot_geometry_records(
@@ -2010,15 +1470,17 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             if interactive_context is not None
             else None
         ),
-        losat_cache_entries=losatp_cache_entries,
-        protein_identity_manifest=protein_identity_manifest,
+        losat_cache_entries=render_result.losat_cache_entries,
+        losat_derived_cache_entries=render_result.losat_derived_cache_entries,
+        protein_identity_manifest=render_result.protein_identity_manifest,
         legacy_protein_raw_candidates=legacy_protein_raw_candidates,
+        legacy_protein_derived_evidence=legacy_protein_derived_evidence,
         linear_record_metadata=linear_record_metadata,
         run_metadata=build_track_slot_geometry_run_metadata(
             mode="linear",
             records=track_slot_geometry_records,
         ),
-        canonical_request=canonical_request,
+        canonical_request=render_result.request,
     )
 
 

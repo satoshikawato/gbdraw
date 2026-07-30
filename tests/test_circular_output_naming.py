@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.circular import circular_main
-from gbdraw.core.sequence import determine_output_file_prefixes
+from gbdraw.exceptions import ValidationError
 
 
 def _record(record_id: str) -> SeqRecord:
@@ -16,21 +17,6 @@ def _record(record_id: str) -> SeqRecord:
         id=record_id,
         annotations={"molecule_type": "DNA"},
     )
-
-
-def test_implicit_circular_batch_prefixes_avoid_existing_suffix_collisions() -> None:
-    records = [_record("record"), _record("record_2"), _record("record")]
-
-    assert determine_output_file_prefixes(records, None) == [
-        "record",
-        "record_2",
-        "record_3",
-    ]
-    assert determine_output_file_prefixes(records, "diagram") == [
-        "diagram_1",
-        "diagram_2",
-        "diagram_3",
-    ]
 
 
 def test_circular_cli_duplicate_record_ids_do_not_overwrite(
@@ -53,6 +39,32 @@ def test_circular_cli_duplicate_record_ids_do_not_overwrite(
 
     assert (tmp_path / "duplicate.svg").is_file()
     assert (tmp_path / "duplicate_2.svg").is_file()
+
+
+def test_circular_cli_requires_explicit_output_for_path_like_record_id(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    input_path = tmp_path / "input.gb"
+    SeqIO.write(_record("../escaped"), input_path, "genbank")
+    working_directory = tmp_path / "work"
+    working_directory.mkdir()
+    monkeypatch.chdir(working_directory)
+
+    with pytest.raises(
+        ValidationError,
+        match="cannot be used as an implicit output filename prefix",
+    ):
+        circular_main(
+            [
+                "--gbk",
+                str(input_path),
+                "--format",
+                "svg",
+            ]
+        )
+
+    assert not (tmp_path / "escaped.svg").exists()
 
 
 def test_circular_cli_batch_splits_dotted_path_prefix(

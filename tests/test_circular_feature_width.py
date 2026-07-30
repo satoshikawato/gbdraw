@@ -524,9 +524,8 @@ def test_cli_labels_mode_maps_to_circular_scope(
     captured: dict[str, Any] = {}
     real_modify_config_dict = modify_config_dict
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_modify_config_dict(
@@ -578,16 +577,11 @@ def test_cli_fractional_definition_font_size_forwards_derived_interval(
     real_modify_config_dict = modify_config_dict
 
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
         "load_gbks",
         lambda paths, **_kwargs: [record],
     )
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(
-        circular_cli_module,
-        "load_default_colors",
-        lambda _path, _palette: None,
-    )
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_modify_config_dict(
@@ -632,9 +626,8 @@ def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pyt
     record = _load_record()
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):
@@ -671,9 +664,8 @@ def test_cli_geometry_shortcuts_reject_explicit_slot_geometry(
 ) -> None:
     record = _load_record()
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch, tmp_path)
 
     with pytest.raises(
@@ -703,9 +695,8 @@ def test_cli_gc_track_width_radius_forwards_internal_track_specs(
     record = _load_record()
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):
@@ -749,9 +740,8 @@ def test_cli_gc_track_width_radius_respects_suppress_flags(
     record = _load_record()
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):

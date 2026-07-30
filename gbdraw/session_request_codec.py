@@ -77,6 +77,8 @@ from .api.requests import (
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCardinality,
+    RecordCollectionOptions,
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
@@ -559,6 +561,37 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
         (CircularDiagramRequest, CircularBatchRequest, LinearDiagramRequest),
     ):
         raise CanonicalRequestEncodingError("Unsupported typed diagram request.")
+    unresolved_reasons: list[str] = []
+    if any(
+        record.cardinality is not RecordCardinality.EXACTLY_ONE
+        for record in request.records
+    ):
+        unresolved_reasons.append("record cardinality")
+    if request.record_options != RecordCollectionOptions():
+        unresolved_reasons.append("collection-level record transforms")
+    if isinstance(request, CircularBatchRequest) and request.output_policy is not None:
+        unresolved_reasons.append("Circular batch output policy")
+    if isinstance(request, CircularBatchRequest) and any(
+        output.resolve_prefix_from_first_record for output in request.outputs
+    ):
+        unresolved_reasons.append("record-derived output prefix")
+    if isinstance(request, CircularDiagramRequest):
+        if request.output.resolve_prefix_from_first_record:
+            unresolved_reasons.append("record-derived output prefix")
+        if request.options.conservation_table_file is not None:
+            unresolved_reasons.append("Circular comparison table")
+    if isinstance(request, LinearDiagramRequest):
+        if request.output.resolve_prefix_from_first_record:
+            unresolved_reasons.append("record-derived output prefix")
+        if request.options.comparison_table_file is not None:
+            unresolved_reasons.append("Linear comparison table")
+    if unresolved_reasons:
+        raise CanonicalRequestEncodingError(
+            "Canonical schema 5 requires a materialized exact-one request; "
+            "call gbdraw.api.resolve_request() before encoding (unresolved: "
+            + ", ".join(unresolved_reasons)
+            + ")."
+        )
     _validate_dataclass_contract(request.options, path="diagramOptions", error="encode")
     if isinstance(request, CircularBatchRequest):
         for index, output in enumerate(request.outputs, start=1):

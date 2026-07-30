@@ -23,6 +23,7 @@ await copyModule('gbdraw/web/js/app/feature-metadata-extraction.js', 'app/featur
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
 await copyModule('gbdraw/web/js/services/json-clone.js', 'services/json-clone.js');
 await copyModule('gbdraw/web/js/services/pyodide-assets.js', 'services/pyodide-assets.js');
+await copyModule('gbdraw/web/js/services/runtime-capabilities.js', 'services/runtime-capabilities.js');
 await copyModule('gbdraw/web/js/config.js', 'config.js');
 
 const {

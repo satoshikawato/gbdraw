@@ -3,7 +3,7 @@ import {
   normalizePaletteColors,
   normalizePaletteDefinitions
 } from './app/color-utils.js';
-import { createDefaultLinearDefinitionLineStyles } from './app/cli-args.js';
+import { createDefaultLinearDefinitionLineStyles } from './app/definition-line-style-state.js';
 import { createDefaultCircularTrackSlots } from './app/circular-track-slots.js';
 import { createDefaultLinearTrackSlots } from './app/linear-track-slots.js';
 import { collectSpecificColorQualifierSuggestions } from './app/feature-selector.js';
@@ -241,6 +241,7 @@ const files = reactive({
   c_conservation_blasts_source: null,
   c_conservation_fastas: [],
   c_conservation_sequence_sources: [],
+  linearCanonicalComparisons: [],
   d_color: null,
   t_color: null,
   blacklist: null,

@@ -4,6 +4,7 @@ import {
   resolveLocalDependencyWheelUrls,
   resolvePyodideIndexUrl
 } from '../services/pyodide-assets.js';
+import { DIAGRAM_ENGINE_STARTUP_MESSAGE } from '../services/runtime-capabilities.js';
 import { COMPARISON_COLOR_KEYS } from './color-utils.js';
 import { PYTHON_HELPERS } from './python-helpers.js';
 
@@ -115,9 +116,8 @@ export const createPyodideManager = ({ state }) => {
         pyodideReady.value = true;
         return pyodide;
       } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        loadingStatus.value = 'Startup Error: ' + message;
-        console.error(e);
+        loadingStatus.value = `Startup Error: ${DIAGRAM_ENGINE_STARTUP_MESSAGE}`;
+        console.error('Main-thread Pyodide startup failed.', e);
         return null;
       } finally {
         initPromise = null;

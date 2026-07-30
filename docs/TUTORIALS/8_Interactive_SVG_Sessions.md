@@ -129,31 +129,13 @@ Click **Load Session**, then choose the `.gbdraw-session.json` file to restore i
 
 The web app's **Save Session** action downloads a lossless gzip-compressed `.gbdraw-session.json.gz` file. **Load Session** accepts both this compressed form and the uncompressed `.gbdraw-session.json` files written by the CLI.
 
-Current Python and Web writers use session version 39 with canonical
-`renderRequest` schema 5. Readers accept versions 27–33 and 39; public typed
-conversion is available for versions 31–33 and 39, while versions 27–30 remain
-CLI replay inputs. Version 39 replaces the parallel
-Circular-single, Circular-multi, and Linear legend/title fields with one
-`ui.layoutPreferences` tree; active values are derived from the current mode
-and Circular grouping, and the former fields from supported older sessions
-migrate when loaded.
-Schema 5 stores explicit `single`, `grid`, or `batch` grouping. Its output is one
-object for a single diagram or grid, and an array with one resolved entry per
-record for a Circular batch. It also makes
-`renderRequest.output.prefix` the sole output-prefix owner. Schemas 1 and 2 may
-also contain the obsolete nested `diagramOptions.output.outputPrefix`, which
-the compatibility reader ignores.
+Supported older sessions can be loaded and replayed in the same diagram mode.
+Some older sessions remain CLI-replay inputs rather than typed API inputs.
+Current sessions preserve canonical inputs, settings, output ownership, and
+saved protein-search results without parallel legacy fields.
 
-For Linear protein comparisons, version 39 stores the authoritative feature
-identity and display metadata in a schema-2 manifest, current protein raw cache
-entries as schema 4, and derived comparison payloads as schema 3.
-Generated protein FASTA, raw QUERY/SUBJECT fields, protein maps, and derived
-references use compact session-global `h_[a-z2-7]{26}` runtime handles.
-Nucleotide raw cache entries remain schema 2.
-
-Versions 27–33 retain their schema-2 protein candidate path and derived schema-1 evidence. Saving immediately after loading one of these sessions preserves the candidates, even before **Generate Diagram**; generation promotes only raw candidates that can be verified against the restored proteins and search settings, then rebuilds current derived data.
-
-The compact handles stay internal. **Save Raw LOSAT TSV** hydrates generated protein results through the manifest and downloads readable protein or feature aliases while preserving row order and columns 3–12. An unresolved or wrong-binding handle fails the download; it is never emitted as a fallback. User-uploaded comparison TSV is not rewritten.
+For the exact accepted versions and migration boundaries, see
+[Session and request compatibility](../SESSION_COMPATIBILITY.md).
 
 If you add CSS or JavaScript around an exported SVG, use the documented
 [`data-gbdraw-*` semantic hooks](../SVG_SEMANTIC_HOOKS.md). Internal SVG `id`

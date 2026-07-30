@@ -11,12 +11,22 @@ globalThis.window = {
   DOMPurify: { sanitize: (value) => value }
 };
 globalThis.document = {};
+globalThis.File = class File extends Blob {
+  constructor(parts, name, options = {}) {
+    super(parts, options);
+    this.name = String(name || 'file');
+    this.lastModified = options.lastModified ?? Date.now();
+  }
+};
 const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 
-const { importSession, validateSessionLosatArtifacts } = await import(
-  '../../gbdraw/web/js/services/config.js'
-);
+const {
+  adoptCanonicalRenderArtifacts,
+  importSession,
+  serializeFiles,
+  validateSessionLosatArtifacts
+} = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 
 const rawEntry = (key) => ({
@@ -61,6 +71,394 @@ const session = (rawEntries, derivedEntries) => ({
     recordAnalyses: {},
     recordInstances: {}
   }
+});
+
+const canonicalResource = (kind, name, text) => ({
+  kind,
+  name,
+  type: 'text/plain',
+  size: new TextEncoder().encode(text).byteLength,
+  lastModified: 0,
+  encoding: 'base64',
+  data: btoa(text)
+});
+
+test('canonical protein comparisons rehydrate typed files and pipeline state', async () => {
+  alerts.length = 0;
+  const genbank = `LOCUS       TEST                        4 bp    DNA     linear   UNK 01-JAN-1980
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+`;
+  const proteinTable = `query\tsubject\tidentity\talignment_length\tmismatches\tgap_opens\tqstart\tqend\tsstart\tsend\tevalue\tbitscore
+protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
+`;
+  const orthogroupsJson = JSON.stringify({
+    schema: 1,
+    valueKind: 'orthogroupResult',
+    value: { orthogroups: {} }
+  });
+  const collinearityJson = JSON.stringify({
+    schema: 1,
+    valueKind: 'blocks',
+    value: []
+  });
+  const generatedProteinComparison = {
+    kind: 'generatedProteinComparison',
+    mode: 'none',
+    pairs: [],
+    settings: {
+      collinearityParams: {
+        kind: 'lossless',
+        parameters: {
+          minAnchors: 3,
+          maxUnitGap: 4,
+          maxDiagonalDrift: 5,
+          maxConflicts: 6,
+          mergeOrientation: 'either'
+        }
+      },
+      collinearityUnitMode: 'cds',
+      collinearityAnchorMode: 'rbh',
+      collinearitySearchScope: 'all',
+      collinearityColorMode: 'average_identity',
+      losatpBin: '/custom/losat',
+      ncbiBlastpBin: '/custom/blastp',
+      losatpThreads: 2,
+      proteinBlastpMaxHits: 9,
+      proteinBlastpCandidateLimit: 17,
+      orthogroupMembershipMode: 'anchor_core_v1',
+      orthogroupMemberMaxHits: 7,
+      collinearMaxParalogLinksPerOrthogroup: 8,
+      alignOrthogroupFeature: 'feature-anchor'
+    }
+  };
+  const renderRequest = {
+    schema: 5,
+    mode: 'linear',
+    grouping: 'single',
+    records: [0, 1, 2].map((index) => ({
+      recordKey: `record-${index + 1}`,
+      source: { kind: 'genbank', resourceId: `record-${index + 1}` },
+      selector: null,
+      region: null,
+      presentation: {
+        label: null,
+        subtitle: null,
+        reverseComplement: false,
+        gridRow: null,
+        gridColumn: null
+      }
+    })),
+    diagramOptions: {
+      configOverrides: {},
+      colors: {
+        colorTable: null,
+        colorTableFile: null,
+        defaultColors: null,
+        defaultColorsPalette: 'default',
+        defaultColorsFile: null
+      },
+      selectedFeaturesSet: ['CDS'],
+      featureShapes: { CDS: 'arrow' },
+      plotTitle: '',
+      evalue: 1e-5,
+      bitscore: 50,
+      identity: 70,
+      alignmentLength: 0,
+      tracks: {
+        circularTrackSlots: null,
+        circularTrackAxisIndex: null,
+        linearTrackSlots: null,
+        linearTrackAxisIndex: null,
+        centerReservedRadius: null
+      },
+      output: { legend: 'bottom', plotTitlePosition: 'bottom' },
+      pairwiseMatchStyle: 'ribbon'
+    },
+    layout: {},
+    comparisons: [
+      {
+        kind: 'precomputedProteinComparison',
+        resourceId: 'resolved-protein',
+        encoding: 'canonicalTsv',
+        queryRecordIndex: 0,
+        subjectRecordIndex: 2
+      },
+      {
+        kind: 'orthogroupResult',
+        resourceId: 'orthogroups',
+        encoding: 'canonicalJson'
+      },
+      {
+        kind: 'collinearityResult',
+        resourceId: 'collinearity',
+        encoding: 'canonicalJson',
+        valueKind: 'blocks'
+      },
+      generatedProteinComparison
+    ],
+    output: {
+      prefix: 'typed-round-trip',
+      formats: ['interactive_svg'],
+      overwrite: false,
+      interactiveMetadataPolicy: 'auto'
+    }
+  };
+  const resources = {
+    'record-1': canonicalResource('genbank', 'record-1.gb', genbank),
+    'record-2': canonicalResource('genbank', 'record-2.gb', genbank),
+    'record-3': canonicalResource('genbank', 'record-3.gb', genbank),
+    'resolved-protein': canonicalResource(
+      'canonical-tsv',
+      'resolved-protein.tsv',
+      proteinTable
+    ),
+    orthogroups: canonicalResource(
+      'orthogroup-result',
+      'orthogroups.json',
+      orthogroupsJson
+    ),
+    collinearity: canonicalResource(
+      'collinearity-result',
+      'collinearity.json',
+      collinearityJson
+    )
+  };
+  const payload = {
+    format: 'gbdraw-session',
+    version: 39,
+    renderRequest,
+    resources,
+    config: {
+      losatProgram: 'blastn',
+      losat: {
+        outfmt: '6',
+        parallelWorkers: '3',
+        executionMode: 'threaded',
+        totalThreadBudget: '12',
+        threadsPerJob: '4',
+        blastn: { task: 'dc-megablast' },
+        blastp: { mode: 'collinear', maxHits: 1 }
+      }
+    },
+    losatCache: { entries: [] },
+    losatDerivedCache: { entries: [] },
+    proteinIdentityManifest: {
+      schema: 2,
+      proteinSets: {},
+      recordAnalyses: {},
+      recordInstances: {}
+    }
+  };
+  const file = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const event = { target: { files: [file], value: 'selected' } };
+
+  const result = await importSession(event);
+
+  assert.equal(result.status, 'ok');
+  assert.deepEqual(
+    state.files.linearCanonicalComparisons.map((comparison) => comparison.kind),
+    [
+      'precomputedProteinComparison',
+      'orthogroupResult',
+      'collinearityResult',
+      'generatedProteinComparison'
+    ]
+  );
+  assert.equal(state.linearComparisons.length, 0);
+  assert.equal(
+    state.files.linearCanonicalComparisons[0].file.name,
+    'resolved-protein.tsv'
+  );
+  assert.deepEqual(
+    state.files.linearCanonicalComparisons[3],
+    generatedProteinComparison
+  );
+  assert.equal(
+    state.files.linearCanonicalComparisons[1].file.name,
+    'orthogroups.json'
+  );
+  assert.equal(
+    state.files.linearCanonicalComparisons[2].valueKind,
+    'blocks'
+  );
+  assert.equal(state.losatProgram.value, 'blastp');
+  assert.equal(state.losat.executionMode, 'threaded');
+  assert.equal(state.losat.parallelWorkers, '3');
+  assert.equal(state.losat.totalThreadBudget, '12');
+  assert.equal(state.losat.blastn.task, 'dc-megablast');
+  assert.equal(state.losat.blastp.mode, 'collinear');
+  assert.equal(state.losat.blastp.maxHits, 9);
+  assert.equal(state.losat.blastp.collinearSearchScope, 'all');
+  assert.equal(state.selectedOrthogroupAlignmentFeature.value, 'feature-anchor');
+
+  state.files.linearCanonicalComparisons = [];
+  adoptCanonicalRenderArtifacts({ renderRequest, resources });
+  assert.deepEqual(
+    state.files.linearCanonicalComparisons.map((comparison) => comparison.kind),
+    [
+      'precomputedProteinComparison',
+      'orthogroupResult',
+      'collinearityResult',
+      'generatedProteinComparison'
+    ]
+  );
+
+  const serialized = await serializeFiles();
+  assert.equal(serialized.linearCanonicalComparisons[0].file.data, btoa(proteinTable));
+  assert.equal(
+    serialized.linearCanonicalComparisons[1].file.data,
+    btoa(orthogroupsJson)
+  );
+  assert.equal(
+    serialized.linearCanonicalComparisons[2].file.data,
+    btoa(collinearityJson)
+  );
+  assert.equal(serialized.linearCanonicalComparisons[2].valueKind, 'blocks');
+  assert.deepEqual(
+    serialized.linearCanonicalComparisons[3],
+    generatedProteinComparison
+  );
+});
+
+test('fresh Circular LOSAT resources become session-owned live files', async () => {
+  const genbank = `LOCUS       TEST                        4 bp    DNA     linear   UNK 01-JAN-1980
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+`;
+  const fasta = '>comparison\natgc\n';
+  const resources = {
+    record: canonicalResource('genbank', 'record.gb', genbank),
+    'blast-a': canonicalResource('conservation-blast-file', 'comparison-a.tsv', ''),
+    'blast-b': canonicalResource(
+      'conservation-blast-file',
+      'comparison-b.tsv',
+      'record\tcomparison\t99\t4\t0\t0\t1\t4\t1\t4\t1e-20\t50\n'
+    ),
+    fasta: canonicalResource('conservation-fasta-file', 'comparison.fna', fasta)
+  };
+  const renderRequest = {
+    schema: 5,
+    mode: 'circular',
+    grouping: 'single',
+    records: [{
+      recordKey: 'record',
+      source: { kind: 'genbank', resourceId: 'record' },
+      selector: null,
+      region: null,
+      presentation: {
+        label: null,
+        subtitle: null,
+        reverseComplement: false,
+        gridRow: null,
+        gridColumn: null
+      }
+    }],
+    diagramOptions: {
+      configOverrides: {},
+      colors: {
+        colorTable: null,
+        colorTableFile: null,
+        defaultColors: null,
+        defaultColorsPalette: 'default',
+        defaultColorsFile: null
+      },
+      selectedFeaturesSet: ['CDS'],
+      featureShapes: { CDS: 'arrow' },
+      plotTitle: '',
+      evalue: 1e-5,
+      bitscore: 50,
+      identity: 70,
+      alignmentLength: 0,
+      tracks: {
+        circularTrackSlots: null,
+        circularTrackAxisIndex: null,
+        linearTrackSlots: null,
+        linearTrackAxisIndex: null,
+        centerReservedRadius: null
+      },
+      output: { legend: 'left', plotTitlePosition: 'none' },
+      conservationBlastFiles: [
+        { resourceId: 'blast-a', representation: 'file' },
+        { resourceId: 'blast-b', representation: 'file' }
+      ],
+      conservationFastaFiles: [
+        null,
+        { resourceId: 'fasta', representation: 'file' }
+      ],
+      conservationReference: 'subject',
+      conservationLabels: ['Missing FASTA', 'Saved comparison'],
+      conservationColors: ['#e15759', '#4e79a7'],
+      conservationRingWidth: 14,
+      conservationRingGap: 3
+    },
+    layout: {},
+    comparisons: [],
+    output: {
+      prefix: 'circular-losat',
+      formats: ['interactive_svg'],
+      overwrite: false,
+      interactiveMetadataPolicy: 'auto'
+    }
+  };
+  state.circularConservation.series.splice(
+    0,
+    state.circularConservation.series.length,
+    {
+      sourceIndex: 4,
+      label: 'Old label',
+      color: '#000000',
+      losat_gencode: 11
+    },
+    {
+      sourceIndex: 9,
+      label: 'Second old label',
+      color: '#111111',
+      losat_gencode: 4
+    }
+  );
+
+  adoptCanonicalRenderArtifacts({
+    renderRequest,
+    resources,
+    webFiles: {
+      conservationBlastSource: 'losat-cache',
+      conservationLosatFastaSources: [null, 'fasta']
+    }
+  });
+
+  assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
+  assert.equal(state.files.c_conservation_blasts.length, 2);
+  assert.equal(state.files.c_conservation_blasts[0].size, 0);
+  assert.equal(state.files.c_conservation_fastas.length, 2);
+  assert.equal(state.files.c_conservation_fastas[0], null);
+  assert.equal(state.files.c_conservation_fastas[1].name, 'comparison.fna');
+  assert.equal(state.circularConservation.source, 'losat');
+  assert.deepEqual(
+    {
+      sourceIndex: state.circularConservation.series[0].sourceIndex,
+      label: state.circularConservation.series[0].label,
+      color: state.circularConservation.series[0].color,
+      losatGencode: state.circularConservation.series[0].losat_gencode
+    },
+    {
+      sourceIndex: 0,
+      label: 'Missing FASTA',
+      color: '#e15759',
+      losatGencode: 11
+    }
+  );
+  assert.equal(state.circularConservation.series[1].sourceIndex, 1);
+  assert.equal(state.circularConservation.series[1].losat_gencode, 4);
+
+  const serialized = await serializeFiles();
+  assert.equal(serialized.c_conservation_blasts[0].data, '');
+  assert.equal(serialized.c_conservation_fastas[0], null);
+  assert.equal(serialized.c_conservation_fastas[1].data, btoa(fasta));
 });
 
 test('legacy standalone config import migrates retired values without a writer envelope', async () => {

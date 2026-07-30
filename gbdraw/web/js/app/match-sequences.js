@@ -1,5 +1,8 @@
 import { formatFastaEntry } from './feature-sequence-fasta.js';
-import { orderedConservationSources } from './conservation-series.js';
+import {
+  orderedConservationSources,
+  orderedOptionalConservationFiles
+} from './conservation-series.js';
 
 const IUPAC_COMPLEMENT = Object.freeze({
   A: 'T', C: 'G', G: 'C', T: 'A', U: 'A',
@@ -391,10 +394,10 @@ export const buildRestoredMatchSequenceSources = async ({
         files?.c_conservation_blasts || [],
         circularConservation
       ).map((entry) => comparisonFiles[entry.sourceIndex] || null)
-    : orderedConservationSources(
+    : orderedOptionalConservationFiles(
         comparisonFiles,
         circularConservation
-      ).map((entry) => entry.file);
+      );
   for (let displayIndex = 0; displayIndex < orderedComparisonFiles.length; displayIndex += 1) {
     const records = await readInputSequenceRecords(
       orderedComparisonFiles[displayIndex],

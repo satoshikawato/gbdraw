@@ -1966,10 +1966,9 @@ def test_circular_cli_multi_record_canvas_opt_in_saves_once(
     calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
     captured_kwargs: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["single"] += 1
@@ -2032,20 +2031,15 @@ def test_circular_cli_one_record_grid_uses_typed_multi_planner(
     calls = {"single": 0, "multi": 0}
 
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
         "load_gbks",
         lambda *_args, **_kwargs: [record],
     )
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
         "read_feature_visibility_file",
         lambda _path: None,
-    )
-    monkeypatch.setattr(
-        circular_cli_module,
-        "load_default_colors",
-        lambda *_args, **_kwargs: None,
     )
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
@@ -2095,20 +2089,15 @@ def test_circular_cli_one_record_without_grid_uses_typed_batch(
     record = _build_record("one_batch", 20)
 
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
         "load_gbks",
         lambda *_args, **_kwargs: [record],
     )
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
         "read_feature_visibility_file",
         lambda _path: None,
-    )
-    monkeypatch.setattr(
-        circular_cli_module,
-        "load_default_colors",
-        lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
         request_render_module,
@@ -2167,10 +2156,9 @@ def test_circular_cli_records_table_regions_follow_sorted_rows(
         captured.update(kwargs)
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", fake_load)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", fake_load)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
     monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
     monkeypatch.setattr(
         request_render_module,
@@ -2248,13 +2236,12 @@ def test_circular_cli_track_table_validates_params_and_forwards_axis(
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
         "load_gbks",
         lambda *_args, **_kwargs: [_build_record("record", 20)],
     )
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
     monkeypatch.setattr(
         request_render_module,
         "save_figure_to",
@@ -2301,10 +2288,9 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
     calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
     captured_kwargs: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["single"] += 1
@@ -2374,10 +2360,9 @@ def test_circular_cli_multi_record_canvas_rejects_removed_sqrt_alias(
     calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
     captured_kwargs: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["single"] += 1
@@ -2433,10 +2418,9 @@ def test_circular_cli_multi_record_canvas_passes_positions(
     calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
     captured_kwargs: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["single"] += 1
@@ -2497,7 +2481,7 @@ def test_circular_cli_rejects_invalid_multi_record_position(
     monkeypatch: pytest.MonkeyPatch,
     position: str,
 ) -> None:
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
     with pytest.raises(SystemExit):
         circular_cli_module.circular_main(
             [
@@ -2521,7 +2505,7 @@ def test_circular_cli_rejects_removed_multi_record_layout_options(
     removed_option: str,
     value: str,
 ) -> None:
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
     with pytest.raises(SystemExit):
         circular_cli_module.circular_main(
             [
@@ -2678,10 +2662,9 @@ def test_circular_cli_without_multi_record_canvas_keeps_per_record_saves(
     calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
     single_kwargs: list[dict[str, Any]] = []
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["single"] += 1
@@ -2752,10 +2735,9 @@ def test_circular_cli_multi_record_canvas_passes_keep_full_definition_option(
     records = [_build_record("cli_a", 20), _build_record("cli_b", 220)]
     captured_kwargs: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
     monkeypatch.setattr(
         request_render_module,
         "build_circular_diagram",

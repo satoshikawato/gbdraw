@@ -8,18 +8,12 @@ except ImportError:
 from importlib import resources
 import json
 import traceback
-import glob
-import os
-import io
-import contextlib
-import logging
-from gbdraw.circular import _get_args as _get_circular_args, run_circular_from_namespace
-from gbdraw.linear import _get_args as _get_linear_args, run_linear_from_namespace
 from gbdraw.web_support.feature_metadata import (
     extract_features_from_genbank_json,
     extract_features_from_gff_fasta_json,
 )
 from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload as _serialize_shared_orthogroups_payload
+from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -89,166 +83,24 @@ def get_palettes_json():
     except:
         return "{}"
 
-def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
-    if mode not in {"circular", "linear"}:
+def run_canonical_request_wrapper(request_json, resources_json, workspace):
+    try:
+        payload = json.loads(str(request_json))
+        resources = json.loads(str(resources_json))
+        result = render_embedded_canonical_web_request(
+            payload,
+            resources=resources,
+            workspace=str(workspace),
+        )
+        return json.dumps(result)
+    except Exception as e:
         return json.dumps({
             "error": {
-                "type": "ValidationError",
-                "message": f"Unsupported diagram mode: {mode}. Expected 'circular' or 'linear'.",
+                "type": e.__class__.__name__,
+                "message": str(e) if str(e) else "Unhandled exception",
+                "traceback": traceback.format_exc(),
             }
         })
-
-    for f in glob.glob("*.svg"):
-        try:
-            os.remove(f)
-        except:
-            pass
-
-    full_args = args + ["-f", "svg", "--overwrite"]
-    stdout_buf = io.StringIO()
-    stderr_buf = io.StringIO()
-    original_load_comparisons = None
-    assemble_module = None
-    run_result = None
-
-    def _collect_output():
-        stdout_text = stdout_buf.getvalue()
-        stderr_text = stderr_buf.getvalue()
-        stdout_text = stdout_text.strip() if stdout_text else ""
-        stderr_text = stderr_text.strip() if stderr_text else ""
-        return stdout_text, stderr_text
-
-    def _build_error(err_type, message, traceback_text=None, code=None):
-        stdout_text, stderr_text = _collect_output()
-        payload = {"type": err_type, "message": message}
-        if code is not None:
-            payload["code"] = code
-        if traceback_text:
-            payload["traceback"] = traceback_text
-        if stderr_text:
-            payload["stderr"] = stderr_text
-        if stdout_text:
-            payload["stdout"] = stdout_text
-        return {"error": payload}
-
-    def _install_virtual_blast_loader():
-        nonlocal original_load_comparisons, assemble_module
-        if not virtual_blast_files_json:
-            return
-        try:
-            payload = json.loads(str(virtual_blast_files_json))
-        except Exception:
-            payload = []
-        virtual_files = {
-            str(item.get("path", "")): item
-            for item in payload
-            if isinstance(item, dict) and str(item.get("path", ""))
-        }
-        if not virtual_files:
-            return
-
-        import pandas as pd
-        from io import StringIO
-        from gbdraw.diagrams.linear import assemble as _assemble_module
-        from gbdraw.io.comparisons import COMPARISON_COLUMNS, filter_comparison_dataframe
-
-        assemble_module = _assemble_module
-        original_load_comparisons = _assemble_module.load_comparisons
-
-        def _load_comparisons_from_virtual_files(comparison_files, blast_config):
-            comparison_list = []
-            fallback_files = []
-            for comparison_file in comparison_files:
-                comparison_path = str(comparison_file)
-                if comparison_path not in virtual_files:
-                    fallback_files.append(comparison_file)
-                    continue
-                try:
-                    virtual_entry = virtual_files[comparison_path]
-                    comparison_rows = virtual_entry.get("rows") if isinstance(virtual_entry, dict) else None
-                    comparison_text = str(virtual_entry.get("text", "")) if isinstance(virtual_entry, dict) else str(virtual_entry)
-                    if isinstance(comparison_rows, list):
-                        if comparison_rows:
-                            df = pd.DataFrame.from_records(comparison_rows)
-                        else:
-                            df = pd.DataFrame(columns=COMPARISON_COLUMNS)
-                    elif not comparison_text.strip():
-                        comparison_list.append(pd.DataFrame(columns=COMPARISON_COLUMNS))
-                        continue
-                    else:
-                        df = pd.read_csv(
-                            StringIO(comparison_text),
-                            sep=chr(9),
-                            comment="#",
-                            names=COMPARISON_COLUMNS,
-                        )
-                    comparison_list.append(filter_comparison_dataframe(df, blast_config))
-                except ValueError as e:
-                    logging.getLogger(__name__).warning(
-                        f"WARNING: Error parsing comparison file {comparison_path}. It may be corrupt or in the wrong format. Error: {e}"
-                    )
-                except Exception as e:
-                    logging.getLogger(__name__).error(
-                        f"ERROR: An unexpected error occurred while processing {comparison_path}: {e}"
-                    )
-            if fallback_files:
-                comparison_list.extend(original_load_comparisons(fallback_files, blast_config))
-            return comparison_list
-
-        _assemble_module.load_comparisons = _load_comparisons_from_virtual_files
-
-    original_streams = []
-    try:
-        _install_virtual_blast_loader()
-        for handler in logging.getLogger().handlers:
-            if isinstance(handler, logging.StreamHandler):
-                original_streams.append((handler, handler.stream))
-                handler.setStream(stdout_buf)
-        with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
-            if mode == 'circular':
-                run_result = run_circular_from_namespace(_get_circular_args(full_args))
-            else:
-                run_result = run_linear_from_namespace(_get_linear_args(full_args))
-    except SystemExit as e:
-        code = getattr(e, "code", None)
-        if code != 0:
-            if isinstance(code, int):
-                message = f"Exit with status {code}"
-            elif code is None:
-                message = "SystemExit"
-            else:
-                message = str(code)
-            return json.dumps(_build_error("SystemExit", message, code=code))
-    except Exception as e:
-        err_type = e.__class__.__name__
-        message = str(e) if str(e) else "Unhandled exception"
-        return json.dumps(_build_error(err_type, message, traceback_text=traceback.format_exc()))
-    finally:
-        for handler, stream in original_streams:
-            handler.setStream(stream)
-        if assemble_module is not None and original_load_comparisons is not None:
-            assemble_module.load_comparisons = original_load_comparisons
-
-    files = []
-    if run_result is not None:
-        for output in getattr(run_result, "outputs", ()) or ():
-            svg_path = str(getattr(output, "svg_path", ""))
-            if svg_path:
-                files.append(svg_path)
-    if not files:
-        files = sorted(glob.glob("*.svg"))
-    if not files:
-        return json.dumps(_build_error("OutputError", "No output files generated."))
-    results = []
-    for fname in files:
-        with open(fname, "r") as f:
-            results.append({"name": os.path.basename(fname), "content": f.read()})
-    metadata = {}
-    if run_result is not None:
-        raw_metadata = getattr(run_result, "run_metadata", {}) or {}
-        if isinstance(raw_metadata, dict):
-            metadata.update(raw_metadata)
-    return json.dumps({"results": results, "metadata": metadata})
 
 def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
     """Extract the first record as FASTA for LOSAT input."""

@@ -405,9 +405,8 @@ def test_circular_cli_gc_percent_options_forward_to_api(
 ) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [_make_record()])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [_make_record()])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
         request_render_module,
         "save_figure_to",
@@ -465,15 +464,20 @@ def test_linear_cli_gc_percent_options_forward_to_api(
 ) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *args, **kwargs: [_make_record()])
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *args, **kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: [_make_record()])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
 
-    def fake_render_request(request):
-        captured["canonical_request"] = request
+    def fake_render_request(request, **_kwargs):
+        resolved = request_render_module.resolve_request(request)
+        captured["canonical_request"] = resolved
         return SimpleNamespace(
             drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
             interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)

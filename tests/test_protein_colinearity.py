@@ -17,6 +17,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.diagram as api_diagram_module
+import gbdraw.api.request_render as request_render_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.linear as linear_cli_module
 from gbdraw.api.config import apply_config_overrides
@@ -1929,18 +1930,16 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
     def fake_load_gbks(paths, **_kwargs):
         return [records_by_path[str(path)] for path in paths]
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", fake_load_gbks)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", fake_load_gbks)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
-    def fake_render(canonical_request):
-        captured["canonical_request"] = canonical_request
-        output_prefix.with_suffix(".svg").write_text("<svg></svg>", encoding="utf-8")
-        return SimpleNamespace(
-            drawing=Drawing(filename=str(output_prefix.with_suffix(".svg"))),
-            interactive_context=None,
-        )
+    real_render = linear_cli_module.render_request
+
+    def capture_render(canonical_request, **kwargs):
+        result = real_render(canonical_request, **kwargs)
+        captured["canonical_request"] = result.request
+        return result
 
     def fake_losatp(query_fasta: str, subject_fasta: str, **kwargs) -> pd.DataFrame:
         query_id = query_fasta.splitlines()[0][1:].split()[0]
@@ -1953,7 +1952,7 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
             callback(raw_text)
         return parse_losatp_outfmt6(raw_text)
 
-    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
+    monkeypatch.setattr(linear_cli_module, "render_request", capture_render)
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_losatp)
 
     linear_cli_module.linear_main(
@@ -1985,8 +1984,7 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
     assert payload["proteinIdentityManifest"]["schema"] == 2
     canonical_request = captured["canonical_request"]
     assert isinstance(canonical_request, LinearDiagramRequest)
-    assert canonical_request.options.protein_blastp_mode == "none"
-    assert canonical_request.options.protein_comparisons is not None
+    assert canonical_request.options.protein_blastp_mode == "pairwise"
 
 
 @pytest.mark.linear
@@ -3567,10 +3565,9 @@ def test_linear_cli_rejects_blast_with_protein_blastp_mode() -> None:
 def test_linear_cli_requires_two_records_for_protein_blastp_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [_record("only")])
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [_record("only")])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     with pytest.raises(ValidationError, match="requires at least two"):
         linear_cli_module.linear_main(
@@ -3593,16 +3590,21 @@ def test_linear_cli_forwards_protein_blastp_options(
     records = [_record("record_a"), _record("record_b")]
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
-    def fake_render(canonical_request):
-        captured["canonical_request"] = canonical_request
+    def fake_render(canonical_request, **_kwargs):
+        resolved = request_render_module.resolve_request(canonical_request)
+        captured["canonical_request"] = resolved
         return SimpleNamespace(
             drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
             interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -3649,16 +3651,21 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
     records = [_record("record_a"), _record("record_b")]
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
-    def fake_render(canonical_request):
-        captured["canonical_request"] = canonical_request
+    def fake_render(canonical_request, **_kwargs):
+        resolved = request_render_module.resolve_request(canonical_request)
+        captured["canonical_request"] = resolved
         return SimpleNamespace(
             drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
             interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -3694,16 +3701,21 @@ def test_linear_cli_forwards_orthogroup_alignment_option(
     records = [_record("record_a"), _record("record_b")]
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
-    def fake_render(canonical_request):
-        captured["canonical_request"] = canonical_request
+    def fake_render(canonical_request, **_kwargs):
+        resolved = request_render_module.resolve_request(canonical_request)
+        captured["canonical_request"] = resolved
         return SimpleNamespace(
             drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
             interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)

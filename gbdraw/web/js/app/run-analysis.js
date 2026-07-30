@@ -5,6 +5,7 @@ import {
   isDiagramGenerationCanceled,
   runDiagramGeneration
 } from '../services/diagram-generation.js';
+import { buildCanonicalRenderRequest } from '../services/session-request.js';
 import {
   buildLabelOverrideTsv,
   serializeLabelOverrideRows
@@ -12,7 +13,6 @@ import {
 import {
   applyCircularSuppressControlsToSlots,
   applyCircularTrackOrderPlacements,
-  buildCircularTrackSlotSpec,
   clampCircularTrackAxisIndex,
   hasEnabledCircularTrackRenderer,
   inferLegacyAxisIndexFromFeature
@@ -23,16 +23,11 @@ import {
 } from './conservation-series.js';
 import {
   applyLinearTrackOrderPlacements,
-  buildLinearTrackSlotSpec,
   clampLinearTrackAxisIndex,
-  linearTrackAxisIndexForEnabledSlots,
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
 } from './linear-track-slots.js';
-import {
-  getDepthTrackFallbackLabel,
-  getDepthTrackLabelFromFile
-} from './depth-tracks.js';
+import { getDepthTrackFallbackLabel } from './depth-tracks.js';
 import {
   depthFileSlotsFromValue,
   depthSlotTrackIndex,
@@ -52,7 +47,7 @@ import {
   normalizeGroupMetadataScope
 } from './losat-normalization.js';
 import { buildRunInfo } from './run-info.js';
-import { linearRecordPositionTokens, reconcileLinearRecordLayout } from './linear-record-layout.js';
+import { reconcileLinearRecordLayout } from './linear-record-layout.js';
 import { validateLinearComparisons } from './linear-comparisons.js';
 import {
   buildDefaultColorOverrideTsv,
@@ -67,17 +62,8 @@ import {
 import { serializeSpecificRules } from './file-imports.js';
 import { serializeFeatureVisibilityRules } from './feature-visibility.js';
 import {
-  DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
-  DEFAULT_LINEAR_BLAST_FILTERS,
-  buildDefinitionLineStyleAssignments,
-  buildFeatureShapeAssignments,
-  buildModeBlastFilterArgs,
-  buildModeTrackVisibilityArgs,
-  buildRecordSelectorArgs,
-  buildReverseComplementArgs,
-  isCliDefaultFeatureList,
   normalizeDefinitionLineStyleState
-} from './cli-args.js';
+} from './definition-line-style-state.js';
 import { downloadZipFile } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
@@ -109,6 +95,14 @@ import {
   validateDerivedProteinReferences,
   validateProteinIdentityManifest
 } from './losat-cache.js';
+import { comparisonFiltersForMode } from '../mode-profiles.js';
+
+const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
+  comparisonFiltersForMode('circular')
+);
+const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
+  comparisonFiltersForMode('linear')
+);
 
 const hashText = async (text) => {
   if (globalThis.crypto?.subtle) {
@@ -761,17 +755,13 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
     normalizeMultiRecordPositions(nextPositions, { maxRow: availableSelectors.length })
   );
 };
-const buildMultiRecordPositionToken = (entry) => {
-  if (!entry || typeof entry !== 'object') return '';
-  const selector = String(entry.selector || '').trim();
-  const row = Number(entry.row);
-  if (!selector || !Number.isInteger(row) || row <= 0) return '';
-  return `${selector}@${row}`;
-};
 export const createRunAnalysis = ({
   state,
   getPyodide,
   writeFileToFs,
+  serializeCanonicalFiles,
+  canonicalSessionVersion,
+  adoptCanonicalRenderArtifacts,
   refreshFeatureOverrides,
   resetPreviewViewport,
   validateAnnotationTargets = null,
@@ -815,7 +805,6 @@ export const createRunAnalysis = ({
     filterMode,
     manualSpecificRules,
     manualWhitelist,
-    manualBlacklist,
     manualPriorityRules,
     form,
     adv,
@@ -845,7 +834,6 @@ export const createRunAnalysis = ({
     files,
     linearSeqs,
     linearRecordLayoutEnabled,
-    linearRecordGap,
     linearRecordRows,
     linearComparisons,
     generatedLegendPosition,
@@ -873,14 +861,10 @@ export const createRunAnalysis = ({
     labelReflowProcessing,
     labelReflowLastError
   } = state;
-  let linearLabelSupportCache = null;
-  let featureShapeSupportCache = null;
   const executeLosatJobs = (...args) => {
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     return (typeof override === 'function' ? override : losatExecutor)(...args);
   };
-  let circularMultiRecordCanvasSupportCache = null;
-  let linearTrackSlotSupportCache = null;
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   let pendingReflowReason = 'label-edit';
@@ -1352,96 +1336,6 @@ export const createRunAnalysis = ({
     return Math.min(parsed, hardwareBudget);
   };
 
-  const getLinearLabelOptionSupport = () => {
-    if (linearLabelSupportCache) return linearLabelSupportCache;
-    const pyodide = getPyodide();
-    if (!pyodide) {
-      linearLabelSupportCache = {
-        placement: false,
-        rotation: false,
-        linear_label_spacing: false,
-        label_rendering: false,
-        track_layout: false,
-        track_axis_gap: false,
-        ruler_on_axis: false,
-        scale_font_size: true,
-        ruler_label_font_size: false,
-        ruler_label_color: false,
-        plot_title: false,
-        plot_title_position: false,
-        plot_title_font_size: false,
-        show_replicon: false,
-        hide_accession: false,
-        hide_length: false,
-        record_subtitle: false,
-        records_table: false,
-        orthogroup_alignment: false,
-        pairwise_match_style: false,
-        keep_definition_left_aligned: false,
-        definition_line_style: false
-      };
-      return linearLabelSupportCache;
-    }
-    try {
-      const raw = pyodide.runPython(`
-import inspect, json
-import gbdraw.linear as _gbdraw_linear
-_source = inspect.getsource(_gbdraw_linear._get_args)
-json.dumps({
-  "placement": "--label_placement" in _source,
-  "rotation": "--label_rotation" in _source,
-  "linear_label_spacing": "--linear_label_spacing" in _source,
-  "label_rendering": "--label_rendering" in _source,
-  "track_layout": "--track_layout" in _source,
-  "track_axis_gap": "--track_axis_gap" in _source,
-  "ruler_on_axis": "--ruler_on_axis" in _source,
-  "scale_font_size": "--scale_font_size" in _source,
-  "ruler_label_font_size": "--ruler_label_font_size" in _source,
-  "ruler_label_color": "--ruler_label_color" in _source,
-  "plot_title": "--plot_title" in _source,
-  "plot_title_position": "--plot_title_position" in _source,
-  "plot_title_font_size": "--plot_title_font_size" in _source,
-  "show_replicon": "--show_replicon" in _source,
-  "hide_accession": "--hide_accession" in _source,
-  "hide_length": "--hide_length" in _source,
-  "record_subtitle": "--record_subtitle" in _source,
-  "records_table": "--records_table" in _source,
-  "orthogroup_alignment": "--align_orthogroup_feature" in _source,
-  "pairwise_match_style": "--pairwise_match_style" in _source,
-  "keep_definition_left_aligned": "--keep_definition_left_aligned" in _source,
-  "definition_line_style": "--definition_line_style" in _source,
-})
-      `);
-      linearLabelSupportCache = JSON.parse(String(raw));
-    } catch (_err) {
-      linearLabelSupportCache = {
-        placement: false,
-        rotation: false,
-        linear_label_spacing: false,
-        label_rendering: false,
-        track_layout: false,
-        track_axis_gap: false,
-        ruler_on_axis: false,
-        scale_font_size: true,
-        ruler_label_font_size: false,
-        ruler_label_color: false,
-        plot_title: false,
-        plot_title_position: false,
-        plot_title_font_size: false,
-        show_replicon: false,
-        hide_accession: false,
-        hide_length: false,
-        record_subtitle: false,
-        records_table: false,
-        orthogroup_alignment: false,
-        pairwise_match_style: false,
-        keep_definition_left_aligned: false,
-        definition_line_style: false
-      };
-    }
-    return linearLabelSupportCache;
-  };
-
   const normalizeLabelRendering = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     return ['embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
@@ -1457,205 +1351,6 @@ json.dumps({
     if (value === null || value === undefined || value === '') return null;
     const numeric = Number(value);
     return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
-  };
-
-  const getFeatureShapeOptionSupport = () => {
-    if (featureShapeSupportCache) return featureShapeSupportCache;
-    const pyodide = getPyodide();
-    if (!pyodide) {
-      featureShapeSupportCache = { circular: false, linear: false, underlay: false };
-      return featureShapeSupportCache;
-    }
-    try {
-      const raw = pyodide.runPython(`
-import contextlib, io, json
-import gbdraw.circular as _gbdraw_circular
-import gbdraw.linear as _gbdraw_linear
-from gbdraw.features.shapes import normalize_feature_shape as _normalize_feature_shape
-
-def _cli_help(_get_args):
-  _output = io.StringIO()
-  try:
-    with contextlib.redirect_stdout(_output), contextlib.redirect_stderr(_output):
-      _get_args(["--help"])
-  except SystemExit as _exc:
-    if _exc.code not in (None, 0):
-      return ""
-  return _output.getvalue()
-
-_circular_help = _cli_help(_gbdraw_circular._get_args)
-_linear_help = _cli_help(_gbdraw_linear._get_args)
-json.dumps({
-  "circular": "--feature_shape" in _circular_help,
-  "linear": "--feature_shape" in _linear_help,
-  "underlay": _normalize_feature_shape("underlay") == "underlay",
-})
-      `);
-      featureShapeSupportCache = JSON.parse(String(raw));
-    } catch (_err) {
-      featureShapeSupportCache = { circular: false, linear: false, underlay: false };
-    }
-    return featureShapeSupportCache;
-  };
-
-  const getCircularMultiRecordCanvasOptionSupport = () => {
-    if (circularMultiRecordCanvasSupportCache) return circularMultiRecordCanvasSupportCache;
-    const pyodide = getPyodide();
-    if (!pyodide) {
-      circularMultiRecordCanvasSupportCache = {
-        circular: false,
-        multi_record_size_mode: false,
-        multi_record_min_radius_ratio: false,
-        multi_record_column_gap_ratio: false,
-        multi_record_row_gap_ratio: false,
-        multi_record_position: false,
-        plot_title: false,
-        plot_title_position: false,
-        plot_title_font_size: false,
-        keep_full_definition_with_plot_title: false,
-        center_reserved_radius: false,
-        tick_label_font_size: false,
-        circular_label_spacing: false,
-        circular_label_placement: false,
-        label_rendering: false,
-        circular_track_slot: false,
-        circular_track_axis_index: false,
-        annotation_table: false,
-        annotations_renderer: false,
-        records_table: false,
-        conservation_blast: false,
-        conservation_table: false,
-        conservation_reference: false,
-        conservation_labels: false,
-        conservation_colors: false,
-        conservation_ring_width: false,
-        conservation_ring_gap: false,
-        circular_track_table: false
-      };
-      return circularMultiRecordCanvasSupportCache;
-    }
-    try {
-      const raw = pyodide.runPython(`
-import inspect, json
-import gbdraw.circular as _gbdraw_circular
-from gbdraw.tracks.circular import SUPPORTED_CIRCULAR_TRACK_RENDERERS as _circular_renderers
-_source = inspect.getsource(_gbdraw_circular._get_args)
-json.dumps({
-  "circular": "--multi_record_canvas" in _source,
-  "multi_record_size_mode": "--multi_record_size_mode" in _source,
-  "multi_record_min_radius_ratio": "--multi_record_min_radius_ratio" in _source,
-  "multi_record_column_gap_ratio": "--multi_record_column_gap_ratio" in _source,
-  "multi_record_row_gap_ratio": "--multi_record_row_gap_ratio" in _source,
-  "multi_record_position": "--multi_record_position" in _source,
-  "plot_title": "--plot_title" in _source,
-  "plot_title_position": "--plot_title_position" in _source,
-  "plot_title_font_size": "--plot_title_font_size" in _source,
-  "keep_full_definition_with_plot_title": "--keep_full_definition_with_plot_title" in _source,
-  "center_reserved_radius": "--center_reserved_radius" in _source,
-  "tick_label_font_size": "--tick_label_font_size" in _source,
-  "circular_label_spacing": "--circular_label_spacing" in _source,
-  "circular_label_placement": "--label_placement" in _source,
-  "label_rendering": "--label_rendering" in _source,
-  "circular_track_slot": "--circular_track_slot" in _source,
-  "circular_track_axis_index": "--circular_track_axis_index" in _source,
-  "annotation_table": "--annotation_table" in _source,
-  "annotations_renderer": "annotations" in _circular_renderers,
-  "records_table": "--records_table" in _source,
-  "conservation_blast": "--conservation_blast" in _source,
-  "conservation_table": "--conservation_table" in _source,
-  "conservation_reference": "--conservation_reference" in _source,
-  "conservation_labels": "--conservation_labels" in _source,
-  "conservation_colors": "--conservation_colors" in _source,
-  "conservation_ring_width": "--conservation_ring_width" in _source,
-  "conservation_ring_gap": "--conservation_ring_gap" in _source,
-  "circular_track_table": "--circular_track_table" in _source,
-})
-      `);
-      circularMultiRecordCanvasSupportCache = JSON.parse(String(raw));
-    } catch (_err) {
-      circularMultiRecordCanvasSupportCache = {
-        circular: false,
-        multi_record_size_mode: false,
-        multi_record_min_radius_ratio: false,
-        multi_record_column_gap_ratio: false,
-        multi_record_row_gap_ratio: false,
-        multi_record_position: false,
-        plot_title: false,
-        plot_title_position: false,
-        plot_title_font_size: false,
-        keep_full_definition_with_plot_title: false,
-        center_reserved_radius: false,
-        tick_label_font_size: false,
-        circular_label_spacing: false,
-        circular_label_placement: false,
-        label_rendering: false,
-        circular_track_slot: false,
-        circular_track_axis_index: false,
-        annotation_table: false,
-        annotations_renderer: false,
-        records_table: false,
-        conservation_blast: false,
-        conservation_table: false,
-        conservation_reference: false,
-        conservation_labels: false,
-        conservation_colors: false,
-        conservation_ring_width: false,
-        conservation_ring_gap: false,
-        circular_track_table: false
-      };
-    }
-    return circularMultiRecordCanvasSupportCache;
-  };
-
-  const getLinearTrackSlotOptionSupport = () => {
-    if (linearTrackSlotSupportCache) return linearTrackSlotSupportCache;
-    const pyodide = getPyodide();
-    if (!pyodide) {
-      linearTrackSlotSupportCache = {
-        linear_track_slot: false,
-        linear_track_axis_index: false,
-        annotation_table: false,
-        annotations_renderer: false
-      };
-      return linearTrackSlotSupportCache;
-    }
-    try {
-      const raw = pyodide.runPython(`
-import inspect, json
-import gbdraw.linear as _gbdraw_linear
-from gbdraw.tracks.linear import SUPPORTED_LINEAR_TRACK_RENDERERS as _linear_renderers
-_source = inspect.getsource(_gbdraw_linear._get_args)
-json.dumps({
-  "linear_track_slot": "--linear_track_slot" in _source,
-  "linear_track_axis_index": "--linear_track_axis_index" in _source,
-  "annotation_table": "--annotation_table" in _source,
-  "annotations_renderer": "annotations" in _linear_renderers,
-})
-      `);
-      linearTrackSlotSupportCache = JSON.parse(String(raw));
-    } catch (_err) {
-      linearTrackSlotSupportCache = {
-        linear_track_slot: false,
-        linear_track_axis_index: false,
-        annotation_table: false,
-        annotations_renderer: false
-      };
-    }
-    return linearTrackSlotSupportCache;
-  };
-
-  const runCircularLayoutPreflight = (preflightArgs) => {
-    const pyodide = getPyodide();
-    if (!pyodide) return null;
-    const runWrapper = pyodide.globals.get('run_gbdraw_wrapper');
-    const pyArgs = pyodide.toPy((preflightArgs || []).map((arg) => String(arg)));
-    try {
-      const resultJson = runWrapper('circular', pyArgs, null);
-      return JSON.parse(String(resultJson || 'null'));
-    } finally {
-      pyArgs.destroy?.();
-      runWrapper.destroy?.();
-    }
   };
 
   const hydrateLosatDownloadText = (cacheKey, cached) => {
@@ -2131,7 +1826,6 @@ json.dumps({
     labelOverrideBuildWarning.value = '';
 
     try {
-      let args = [];
       let annotationLoadComparison = false;
       const pendingMatchSequenceSources = [];
       const queueMatchSequenceSource = (source) => {
@@ -2141,8 +1835,8 @@ json.dumps({
       let regionSpecs = [];
       let recordSelectors = [];
       let reverseFlags = [];
-      let virtualBlastFiles = [];
-      const generationFileMap = new Map();
+      const resolvedComparisons = [];
+      let resolvedCircularConservation = [];
       const runInfoFileMap = new Map();
       const generatedCliFileMap = new Map();
       const textEncoder = new TextEncoder();
@@ -2189,31 +1883,12 @@ json.dumps({
           data: String(data ?? '')
         });
       };
-      const toTransferableBuffer = (bytes) => {
-        if (bytes instanceof ArrayBuffer) return bytes;
-        if (ArrayBuffer.isView(bytes)) {
-          const { buffer, byteOffset, byteLength } = bytes;
-          if (byteOffset === 0 && byteLength === buffer.byteLength) return buffer;
-          return buffer.slice(byteOffset, byteOffset + byteLength);
-        }
-        return new Uint8Array(bytes || []).buffer;
-      };
-      const stageGenerationBytes = (path, name, bytes) => {
-        const normalizedPath = String(path || '').trim();
-        if (!normalizedPath) return;
-        generationFileMap.set(normalizedPath, {
-          path: normalizedPath,
-          name: name || getPayloadName(normalizedPath),
-          bytes: toTransferableBuffer(bytes)
-        });
-      };
       const stageTextFile = (path, text, { name = '', slot = '' } = {}) => {
         throwIfGenerationCanceled();
         const bytes = textEncoder.encode(String(text ?? ''));
         pyodide.FS.writeFile(path, bytes);
         const displayName = name || getPayloadName(path);
         const resolvedSlot = slot || generatedSlotForPath(path);
-        stageGenerationBytes(path, displayName, bytes);
         registerRunInfoFile(path, {
           name: displayName,
           slot: resolvedSlot,
@@ -2238,7 +1913,6 @@ json.dumps({
         if (cacheText && textCache) {
           textCache.set(fileObj, textDecoder.decode(bytes));
         }
-        stageGenerationBytes(path, fileObj.name || getPayloadName(path), buffer);
         registerRunInfoFile(path, {
           name: fileObj.name || getPayloadName(path),
           slot,
@@ -2248,43 +1922,10 @@ json.dumps({
       };
 
       const normalizedOutputPrefix = String(form.prefix || '').trim();
-      if (normalizedOutputPrefix) args.push('-o', normalizedOutputPrefix);
-      if (mode.value === 'circular') {
-        if (form.species) args.push('--species', form.species);
-        if (form.strain) args.push('--strain', form.strain);
-      }
-      if (form.separate_strands) args.push('--separate_strands');
-
-      if (adv.features.length && !isCliDefaultFeatureList(adv.features)) args.push('-k', adv.features.join(','));
-      if (adv.window_size) args.push('--window', adv.window_size);
-      if (adv.step_size) args.push('--step', adv.step_size);
-      if (adv.nt && adv.nt !== 'GC') args.push('--nt', adv.nt);
-
-      if (adv.def_font_size) args.push('--definition_font_size', adv.def_font_size);
-      if (adv.label_font_size) args.push('--label_font_size', adv.label_font_size);
-
-      if (adv.block_stroke_width !== null) args.push('--block_stroke_width', adv.block_stroke_width);
-      if (adv.block_stroke_color) args.push('--block_stroke_color', adv.block_stroke_color);
-      if (adv.line_stroke_width !== null) args.push('--line_stroke_width', adv.line_stroke_width);
-      if (adv.line_stroke_color) args.push('--line_stroke_color', adv.line_stroke_color);
-      if (adv.axis_stroke_width !== null) args.push('--axis_stroke_width', adv.axis_stroke_width);
-      const usesManagedLinearAxisColor =
-        mode.value === 'linear' &&
-        state.modeProfileStateManager?.isManaged?.(adv, 'axis_stroke_color') === true;
-      if (adv.axis_stroke_color && !usesManagedLinearAxisColor) {
-        args.push('--axis_stroke_color', adv.axis_stroke_color);
-      }
-
-      if (adv.legend_box_size) args.push('--legend_box_size', adv.legend_box_size);
-      if (adv.legend_font_size) args.push('--legend_font_size', adv.legend_font_size);
-      if (adv.resolve_overlaps && !(mode.value === 'circular' && form.separate_strands)) {
-        args.push('--resolve_overlaps');
-      }
 
       const activePaletteName = String(
         isReflow ? appliedPaletteName.value : (selectedPalette?.value || appliedPaletteName.value || 'default')
       ).trim() || 'default';
-      if (activePaletteName !== 'default') args.push('-p', activePaletteName);
       const paletteBaseColors = normalizePaletteColors(
         paletteDefinitions.value?.[activePaletteName] ||
         paletteDefinitions.value?.default ||
@@ -2296,13 +1937,11 @@ json.dumps({
       });
       if (dContent.trim() !== '') {
         stageTextFile('/combined_d.tsv', `${dContent}\n`);
-        args.push('-d', '/combined_d.tsv');
       }
 
       const tContent = serializeSpecificRules(manualSpecificRules);
       if (tContent.trim() !== '') {
         stageTextFile('/combined_t.tsv', tContent);
-        args.push('-t', '/combined_t.tsv');
       }
 
       if (Array.isArray(annotationSets) && annotationSets.length > 0) {
@@ -2310,21 +1949,15 @@ json.dumps({
           name: 'annotations.tsv',
           slot: 'generatedFiles.web_annotations'
         });
-        args.push('--annotation_table', '/web_annotations.tsv');
       }
 
-      if (filterMode.value === 'Blacklist') {
-        if (manualBlacklist.value) {
-          args.push('--label_blacklist', manualBlacklist.value.replace(/\n/g, ','));
-        }
-      } else if (filterMode.value === 'Whitelist') {
+      if (filterMode.value === 'Whitelist') {
         if (manualWhitelist.length > 0) {
           let wlContent = '';
           manualWhitelist.forEach((r) => {
             if (r.feat && r.qual) wlContent += `${r.feat}\t${r.qual}\t${r.key}\n`;
           });
           stageTextFile('/manual_wl.tsv', wlContent);
-          args.push('--label_whitelist', '/manual_wl.tsv');
         }
       }
 
@@ -2334,7 +1967,6 @@ json.dumps({
       });
       if (pContent.trim() !== '') {
         stageTextFile('/priority.tsv', pContent);
-        args.push('--qualifier_priority', '/priority.tsv');
       }
 
       const labelOverride = buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
@@ -2349,7 +1981,6 @@ json.dumps({
       }
       if (effectiveLabelOverrideTsv) {
         stageTextFile('/web_label_table.tsv', effectiveLabelOverrideTsv);
-        args.push('--label_table', '/web_label_table.tsv');
       }
       let featureVisibilityTablePath = null;
       let featureVisibilityCacheKey = '';
@@ -2358,21 +1989,12 @@ json.dumps({
         featureVisibilityTablePath = '/web_feature_visibility_table.tsv';
         featureVisibilityCacheKey = featureVisibilityTsv;
         stageTextFile(featureVisibilityTablePath, featureVisibilityCacheKey);
-        args.push('--feature_visibility_table', featureVisibilityTablePath);
       }
       if (!isReflow) {
         editableLabels.value = [];
       }
 
-      const selectedFeatureShapes = buildFeatureShapeAssignments(adv.features, adv.feature_shapes);
-      const appendDepthStyleArgs = () => {
-        if (adv.depth_color) args.push('--depth_color', adv.depth_color);
-        if (adv.depth_min !== null && adv.depth_min !== undefined && adv.depth_min !== '') {
-          args.push('--depth_min', adv.depth_min);
-        }
-        if (adv.depth_max !== null && adv.depth_max !== undefined && adv.depth_max !== '') {
-          args.push('--depth_max', adv.depth_max);
-        }
+      const validateDepthStyleSettings = () => {
         if (
           adv.depth_min !== null &&
           adv.depth_min !== undefined &&
@@ -2384,16 +2006,12 @@ json.dumps({
         ) {
           throw new Error('Depth minimum must be less than or equal to depth maximum.');
         }
-        if (adv.depth_normalize === true) args.push('--depth_log_scale');
-        if (adv.depth_share_axis === true) args.push('--share_depth_axis');
-        if (adv.depth_show_axis === false) args.push('--hide_depth_axis');
         if (
           adv.depth_window_size !== null &&
           adv.depth_window_size !== undefined &&
           adv.depth_window_size !== ''
         ) {
           if (Number(adv.depth_window_size) <= 0) throw new Error('Depth window must be greater than 0.');
-          args.push('--depth_window', adv.depth_window_size);
         }
         if (
           adv.depth_step_size !== null &&
@@ -2401,16 +2019,13 @@ json.dumps({
           adv.depth_step_size !== ''
         ) {
           if (Number(adv.depth_step_size) <= 0) throw new Error('Depth step must be greater than 0.');
-          args.push('--depth_step', adv.depth_step_size);
         }
-        if (adv.depth_show_ticks === false) args.push('--hide_depth_ticks');
         if (
           adv.depth_large_tick_interval !== null &&
           adv.depth_large_tick_interval !== undefined &&
           adv.depth_large_tick_interval !== ''
         ) {
           if (Number(adv.depth_large_tick_interval) <= 0) throw new Error('Depth large tick interval must be greater than 0.');
-          args.push('--depth_large_tick_interval', adv.depth_large_tick_interval);
         }
         if (
           mode.value === 'circular' &&
@@ -2419,7 +2034,6 @@ json.dumps({
           adv.depth_small_tick_interval !== ''
         ) {
           if (Number(adv.depth_small_tick_interval) <= 0) throw new Error('Depth small tick interval must be greater than 0.');
-          args.push('--depth_small_tick_interval', adv.depth_small_tick_interval);
         }
         if (
           adv.depth_tick_font_size !== null &&
@@ -2427,26 +2041,12 @@ json.dumps({
           adv.depth_tick_font_size !== ''
         ) {
           if (Number(adv.depth_tick_font_size) <= 0) throw new Error('Depth tick font size must be greater than 0.');
-          args.push('--depth_tick_font_size', adv.depth_tick_font_size);
         }
       };
       const normalizeDepthTrackValue = (value) => {
         if (value === null || value === undefined || value === '') return null;
         const numeric = Number(value);
         return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : null;
-      };
-      const depthTrackConfigAt = (index, file = null) => {
-        const tracks = Array.isArray(adv.depth_tracks) ? adv.depth_tracks : [];
-        const source = tracks[index] && typeof tracks[index] === 'object' ? tracks[index] : {};
-        const rawLabel = source.label ?? '';
-        return {
-          label: String(rawLabel).trim() ? String(rawLabel) : getDepthTrackLabelFromFile(file, index),
-          color: String(source.color || (index === 0 ? adv.depth_color : '')),
-          height: normalizeDepthTrackValue(source.height),
-          largeTick: normalizeDepthTrackValue(source.large_tick_interval),
-          smallTick: normalizeDepthTrackValue(source.small_tick_interval),
-          tickFontSize: normalizeDepthTrackValue(source.tick_font_size)
-        };
       };
       const depthTrackEntriesFromRows = (rows) => Array.from(
         { length: depthTrackMatrixWidth(rows) },
@@ -2456,44 +2056,10 @@ json.dumps({
           return {
             file,
             files: filesForRecords,
-            index,
-            config: depthTrackConfigAt(index, file)
+            index
           };
         }
       );
-      const appendDepthTrackMetadataArgs = (trackEntries) => {
-        if (!Array.isArray(trackEntries) || trackEntries.length === 0) return;
-        const labels = trackEntries.map((entry) => (
-          String(entry.config.label || getDepthTrackFallbackLabel(entry.index))
-        ));
-        if (labels.some((label) => label.trim())) {
-          args.push('--depth_track_label', ...labels);
-        }
-        const colors = trackEntries.map((entry) => (
-          String(entry.config.color || (entry.index === 0 ? adv.depth_color : '') || '#4A90E2')
-        ));
-        if (colors.some((color) => color.trim())) {
-          args.push('--depth_track_color', ...colors);
-        }
-        if (mode.value === 'linear') {
-          const heights = trackEntries.map((entry) => entry.config.height || 'auto');
-          if (heights.some((value) => value !== 'auto')) {
-            args.push('--depth_track_height', ...heights);
-          }
-        }
-        const largeTicks = trackEntries.map((entry) => entry.config.largeTick || 'auto');
-        if (largeTicks.some((value) => value !== 'auto')) {
-          args.push('--depth_track_large_tick_interval', ...largeTicks);
-        }
-        const smallTicks = trackEntries.map((entry) => entry.config.smallTick || 'auto');
-        if (smallTicks.some((value) => value !== 'auto')) {
-          args.push('--depth_track_small_tick_interval', ...smallTicks);
-        }
-        const tickFontSizes = trackEntries.map((entry) => entry.config.tickFontSize || 'auto');
-        if (tickFontSizes.some((value) => value !== 'auto')) {
-          args.push('--depth_track_tick_font_size', ...tickFontSizes);
-        }
-      };
       const ensureDepthTrackConfigAt = (index) => {
         const idx = Math.max(0, Number(index) || 0);
         if (!Array.isArray(adv.depth_tracks)) adv.depth_tracks = [];
@@ -2572,13 +2138,12 @@ json.dumps({
           config.height = Number(slotHeight);
         }
       };
-      const appendGcContentPercentArgs = () => {
+      const normalizeGcContentPercentState = () => {
         adv.gc_content_mode = String(adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
           ? 'percent'
           : 'deviation';
         if (adv.gc_content_mode !== 'percent') return;
 
-        args.push('--gc_content_mode', 'percent');
         const minPercent = Number(adv.gc_content_min_percent);
         const maxPercent = Number(adv.gc_content_max_percent);
         if (!Number.isFinite(minPercent)) {
@@ -2592,18 +2157,13 @@ json.dumps({
         }
         adv.gc_content_min_percent = minPercent;
         adv.gc_content_max_percent = maxPercent;
-        args.push('--gc_content_min_percent', String(minPercent));
-        args.push('--gc_content_max_percent', String(maxPercent));
 
-        if (adv.gc_content_show_axis === false) args.push('--hide_gc_content_axis');
-        if (adv.gc_content_show_ticks === false) args.push('--hide_gc_content_ticks');
         if (
           adv.gc_content_tick_interval !== null &&
           adv.gc_content_tick_interval !== undefined &&
           adv.gc_content_tick_interval !== ''
         ) {
           if (Number(adv.gc_content_tick_interval) <= 0) throw new Error('GC content large tick interval must be greater than 0.');
-          args.push('--gc_content_large_tick_interval', adv.gc_content_tick_interval);
         }
         if (
           adv.gc_content_small_tick_interval !== null &&
@@ -2611,7 +2171,6 @@ json.dumps({
           adv.gc_content_small_tick_interval !== ''
         ) {
           if (Number(adv.gc_content_small_tick_interval) <= 0) throw new Error('GC content small tick interval must be greater than 0.');
-          args.push('--gc_content_small_tick_interval', adv.gc_content_small_tick_interval);
         }
         if (
           adv.gc_content_tick_font_size !== null &&
@@ -2619,21 +2178,11 @@ json.dumps({
           adv.gc_content_tick_font_size !== ''
         ) {
           if (Number(adv.gc_content_tick_font_size) <= 0) throw new Error('GC content tick font size must be greater than 0.');
-          args.push('--gc_content_tick_font_size', adv.gc_content_tick_font_size);
         }
       };
-      appendGcContentPercentArgs();
+      normalizeGcContentPercentState();
 
       if (mode.value === 'circular') {
-        const multiCanvasSupport = getCircularMultiRecordCanvasOptionSupport();
-        if (
-          annotationSets.length > 0 &&
-          (!multiCanvasSupport.annotation_table || !multiCanvasSupport.annotations_renderer)
-        ) {
-          throw new Error(
-            'Current gbdraw wheel does not support region annotations. Rebuild and redeploy the web wheel.'
-          );
-        }
         const normalizedCircularPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(adv.plot_title_position);
         const useCircularTrackSlots = adv.circular_track_slots_enabled === true;
@@ -2653,11 +2202,6 @@ json.dumps({
             )
           : [];
         if (useCircularTrackSlots) {
-          if (!multiCanvasSupport.circular_track_slot || !multiCanvasSupport.circular_track_axis_index) {
-            throw new Error(
-              'Current gbdraw wheel does not support --circular_track_slot and --circular_track_axis_index. Rebuild and redeploy the web wheel.'
-            );
-          }
           adv.circular_track_slots.splice(0, adv.circular_track_slots.length, ...circularTrackSlots);
           const circularTrackOnAxisIndex = circularTrackSlots.findIndex((slot) => slot?.side === 'overlay');
           const normalizedCircularTrackAxisIndex = circularTrackOnAxisIndex >= 0
@@ -2693,127 +2237,23 @@ json.dumps({
         adv.keep_full_definition_with_plot_title = keepFullDefinitionWithPlotTitle;
         adv.center_reserved_radius = normalizedCenterReservedRadius;
 
-        if (selectedFeatureShapes.length > 0) {
-          const shapeOptionSupport = getFeatureShapeOptionSupport();
-          if (!shapeOptionSupport.circular || (
-            selectedFeatureShapes.some((assignment) => assignment.endsWith('=underlay')) &&
-            !shapeOptionSupport.underlay
-          )) {
-            throw new Error(
-              'Current gbdraw wheel does not support the selected feature rendering. Rebuild and redeploy the web wheel.'
-            );
-          }
-          selectedFeatureShapes.forEach((assignment) => {
-            args.push('--feature_shape', assignment);
-          });
-        }
-        args.push('--track_type', form.track_type);
-        args.push('-l', form.legend);
-        const wantsCircularPlotTitleOption = normalizedCircularPlotTitle.length > 0;
-        if (wantsCircularPlotTitleOption) {
-          if (!multiCanvasSupport.plot_title) {
-            throw new Error(
-              'Current gbdraw wheel does not support --plot_title for circular diagrams. Rebuild and redeploy the web wheel.'
-            );
-          }
-          args.push('--plot_title', normalizedCircularPlotTitle);
-        }
-        if (!multiCanvasSupport.plot_title_position) {
-          throw new Error(
-            'Current gbdraw wheel does not support circular plot title layout options. Rebuild and redeploy the web wheel.'
-          );
-        }
-        args.push('--plot_title_position', normalizedPlotTitlePosition);
-        if (
-          normalizedPlotTitlePosition !== 'none' &&
-          normalizedPlotTitleFontSize !== null &&
-          Number.isFinite(normalizedPlotTitleFontSize)
-        ) {
-          if (!multiCanvasSupport.plot_title_font_size) {
-            throw new Error(
-              'Current gbdraw wheel does not support --plot_title_font_size. Rebuild and redeploy the web wheel.'
-            );
-          }
-          args.push('--plot_title_font_size', String(normalizedPlotTitleFontSize));
-        }
-        if (keepFullDefinitionWithPlotTitle) {
-          if (!multiCanvasSupport.keep_full_definition_with_plot_title) {
-            throw new Error(
-              'Current gbdraw wheel does not support --keep_full_definition_with_plot_title. Rebuild and redeploy the web wheel.'
-            );
-          }
-          args.push('--keep_full_definition_with_plot_title');
-        }
-        if (useCircularTrackSlots && normalizedCenterReservedRadius !== null) {
-          if (!multiCanvasSupport.center_reserved_radius) {
-            throw new Error(
-              'Current gbdraw wheel does not support --center_reserved_radius. Rebuild and redeploy the web wheel.'
-            );
-          }
-          args.push('--center_reserved_radius', String(normalizedCenterReservedRadius));
-        }
         const labelsModeRaw =
           typeof form.labels_mode === 'string'
             ? form.labels_mode
             : (form.allow_inner_labels ? 'both' : (form.show_labels ? 'out' : 'none'));
         const labelsMode = String(labelsModeRaw || 'none').trim().toLowerCase();
-        if (labelsMode === 'out') args.push('--labels');
-        if (labelsMode === 'both') args.push('--labels', 'both');
         const normalizedLabelRendering = labelsMode === 'none' ? 'auto' : normalizeLabelRendering(adv.label_rendering);
         adv.label_rendering = normalizedLabelRendering;
-        if (normalizedLabelRendering !== 'auto') {
-          if (!multiCanvasSupport.label_rendering) {
-            throw new Error(
-              'Current gbdraw wheel does not support --label_rendering. Rebuild and redeploy the web wheel.'
-            );
-          }
-          args.push('--label_rendering', normalizedLabelRendering);
-        }
         const normalizedCircularLabelPlacement =
           String(adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
             ? 'radial'
             : 'horizontal';
         adv.circular_label_placement = normalizedCircularLabelPlacement;
-        if (labelsMode !== 'none' && normalizedCircularLabelPlacement === 'radial') {
-          if (!multiCanvasSupport.circular_label_placement) {
-            throw new Error(
-              'Current gbdraw wheel does not support Circular --label_placement. Rebuild and redeploy the web wheel.'
-            );
-          }
-          args.push('--label_placement', normalizedCircularLabelPlacement);
-        }
-        args.push(...buildModeTrackVisibilityArgs('circular', form));
         if (form.multi_record_canvas) {
-          if (!multiCanvasSupport.circular) {
-            throw new Error(
-              'Current gbdraw wheel does not support --multi_record_canvas. Rebuild and redeploy the web wheel.'
-            );
-          }
-          if (
-            !multiCanvasSupport.multi_record_size_mode ||
-            !multiCanvasSupport.multi_record_min_radius_ratio ||
-            !multiCanvasSupport.multi_record_column_gap_ratio ||
-            !multiCanvasSupport.multi_record_row_gap_ratio
-          ) {
-            throw new Error(
-              'Current gbdraw wheel does not support multi-record size/grid spacing options. Rebuild and redeploy the web wheel.'
-            );
-          }
-          if (!multiCanvasSupport.plot_title_position) {
-            throw new Error(
-              'Current gbdraw wheel does not support multi-record plot-title layout options. Rebuild and redeploy the web wheel.'
-            );
-          }
           const effectiveRecordPositions = mergeCircularRecordPositions(
             circularRecordList.value,
             adv.multi_record_positions
           );
-          const shouldPassRecordPositions = effectiveRecordPositions.length > 0;
-          if (shouldPassRecordPositions && !multiCanvasSupport.multi_record_position) {
-            throw new Error(
-              'Current gbdraw wheel does not support --multi_record_position. Rebuild and redeploy the web wheel.'
-            );
-          }
           const normalizedSizeMode = requireCurrentCircularMultiRecordSizeMode(
             adv.multi_record_size_mode
           );
@@ -2831,79 +2271,10 @@ json.dumps({
           );
           adv.plot_title_position = normalizedPlotTitlePosition;
           adv.plot_title_font_size = normalizedPlotTitleFontSize;
-          args.push('--multi_record_canvas');
-          args.push('--multi_record_size_mode', normalizedSizeMode);
-          args.push('--multi_record_min_radius_ratio', String(normalizedMinRatio));
-          args.push('--multi_record_column_gap_ratio', String(normalizedColumnGapRatio));
-          args.push('--multi_record_row_gap_ratio', String(normalizedRowGapRatio));
-          if (shouldPassRecordPositions) {
-            effectiveRecordPositions.forEach((entry) => {
-              const token = buildMultiRecordPositionToken(entry);
-              if (!token) return;
-              args.push('--multi_record_position', token);
-            });
-          }
         }
 
-        if (adv.outer_label_x_offset) args.push('--outer_label_x_radius_offset', adv.outer_label_x_offset);
-        if (adv.outer_label_y_offset) args.push('--outer_label_y_radius_offset', adv.outer_label_y_offset);
-        if (adv.inner_label_x_offset) args.push('--inner_label_x_radius_offset', adv.inner_label_x_offset);
-        if (adv.inner_label_y_offset) args.push('--inner_label_y_radius_offset', adv.inner_label_y_offset);
         const normalizedCircularLabelSpacing = normalizePositiveNumberOrNull(adv.circular_label_spacing);
         adv.circular_label_spacing = normalizedCircularLabelSpacing;
-        if (normalizedCircularLabelSpacing !== null) {
-          if (!multiCanvasSupport.circular_label_spacing) {
-            throw new Error(
-              'Current gbdraw wheel does not support --circular_label_spacing. Rebuild and redeploy the web wheel.'
-            );
-          }
-          args.push('--circular_label_spacing', normalizedCircularLabelSpacing);
-        }
-        if (
-          !useCircularTrackSlots &&
-          adv.feature_width_circular !== null &&
-          adv.feature_width_circular !== undefined &&
-          adv.feature_width_circular !== '' &&
-          Number(adv.feature_width_circular) > 0
-        ) {
-          args.push('--feature_width', adv.feature_width_circular);
-        }
-        if (!useCircularTrackSlots && !form.suppress_gc) {
-          if (
-            adv.gc_content_width_circular !== null &&
-            adv.gc_content_width_circular !== undefined &&
-            adv.gc_content_width_circular !== '' &&
-            Number(adv.gc_content_width_circular) > 0
-          ) {
-            args.push('--gc_content_width', adv.gc_content_width_circular);
-          }
-          if (
-            adv.gc_content_radius_circular !== null &&
-            adv.gc_content_radius_circular !== undefined &&
-            adv.gc_content_radius_circular !== '' &&
-            Number(adv.gc_content_radius_circular) > 0
-          ) {
-            args.push('--gc_content_radius', adv.gc_content_radius_circular);
-          }
-        }
-        if (!useCircularTrackSlots && !form.suppress_skew) {
-          if (
-            adv.gc_skew_width_circular !== null &&
-            adv.gc_skew_width_circular !== undefined &&
-            adv.gc_skew_width_circular !== '' &&
-            Number(adv.gc_skew_width_circular) > 0
-          ) {
-            args.push('--gc_skew_width', adv.gc_skew_width_circular);
-          }
-          if (
-            adv.gc_skew_radius_circular !== null &&
-            adv.gc_skew_radius_circular !== undefined &&
-            adv.gc_skew_radius_circular !== '' &&
-            Number(adv.gc_skew_radius_circular) > 0
-          ) {
-            args.push('--gc_skew_radius', adv.gc_skew_radius_circular);
-          }
-        }
         const discoveredCircularRecordCount = Array.isArray(circularRecordList.value)
           ? circularRecordList.value.length
           : 0;
@@ -2920,8 +2291,6 @@ json.dumps({
         );
         const circularDepthEntries = depthTrackEntriesFromRows(circularDepthRows);
         if (useCircularTrackSlots) {
-          args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));
-          const circularDepthSlotIndexes = new Set();
           let circularDepthSlotOrdinal = 0;
           circularTrackSlots.forEach((slot) => {
             if (slot?.enabled === false || String(slot?.renderer || '') !== 'depth') return;
@@ -2939,33 +2308,6 @@ json.dumps({
             representativeDepthFiles(circularDepthRows)
           );
           validateEnabledDepthSlots(circularTrackSlots, circularDepthEntries.length, 'Circular');
-          circularTrackSlots.forEach((slot, slotIndex) => {
-            if (slot?.enabled === false || String(slot?.renderer || '') !== 'depth') return;
-            const trackIndex = depthSlotTrackIndex(slot, slotIndex);
-            if (trackIndex !== null) circularDepthSlotIndexes.add(trackIndex);
-          });
-          const usedCircularSlotIds = new Set(
-            circularTrackSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean)
-          );
-          circularTrackSlots.forEach((slot) => {
-            args.push(
-              '--circular_track_slot',
-              buildCircularTrackSlotSpec(slot, adv.nt, form.track_type)
-            );
-          });
-          if (circularDepthEntries.length > 1) {
-            for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
-              if (circularDepthSlotIndexes.has(depthIndex)) continue;
-              let slotId = `depth_${depthIndex + 1}`;
-              let suffix = 2;
-              while (usedCircularSlotIds.has(slotId)) {
-                slotId = `depth_${depthIndex + 1}_${suffix}`;
-                suffix += 1;
-              }
-              usedCircularSlotIds.add(slotId);
-              args.push('--circular_track_slot', `${slotId}:depth@track_index=${depthIndex}`);
-            }
-          }
         }
         const hasCircularDepthFile = circularDepthEntries.length > 0;
         const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
@@ -2978,56 +2320,25 @@ json.dumps({
                 `Depth series #${depthIndex + 1} (logical track index ${depthIndex}) has no TSV source in any record.`
               );
             }
-            const depthPaths = [];
             for (let recordIndex = 0; recordIndex < entry.files.length; recordIndex += 1) {
               const depthFile = entry.files[recordIndex];
-              if (!depthFile) {
-                depthPaths.push('');
-                continue;
-              }
+              if (!depthFile) continue;
               const depthPath = `/depth_track_${depthIndex + 1}_record_${recordIndex + 1}.tsv`;
               await stageUploadedFile(depthFile, depthPath, {
                 slot: `files.c_depth[${recordIndex}][${depthIndex}]`
               });
-              depthPaths.push(depthPath);
             }
-            args.push('--depth_track', ...depthPaths);
           }
-          appendDepthTrackMetadataArgs(circularDepthEntries);
-          appendDepthStyleArgs();
-          if (
-            !useCircularTrackSlots &&
-            adv.depth_width_circular !== null &&
-            adv.depth_width_circular !== undefined &&
-            adv.depth_width_circular !== '' &&
-            Number(adv.depth_width_circular) > 0
-          ) {
-            args.push('--depth_width', adv.depth_width_circular);
-          }
-        }
-        if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
-        if (
-          adv.tick_label_font_size !== null &&
-          adv.tick_label_font_size !== undefined &&
-          adv.tick_label_font_size !== ''
-        ) {
-          if (!multiCanvasSupport.tick_label_font_size) {
-            throw new Error(
-              'Current gbdraw wheel does not support --tick_label_font_size. Rebuild and redeploy the web wheel.'
-            );
-          }
-          args.push('--tick_label_font_size', adv.tick_label_font_size);
+          validateDepthStyleSettings();
         }
 
         if (cInputType.value === 'gb') {
           if (!files.c_gb) throw new Error('Please upload a GenBank file.');
           await stageUploadedFile(files.c_gb, '/input.gb', { slot: 'files.c_gb' });
-          args.push('--gbk', '/input.gb');
         } else {
           if (!files.c_gff || !files.c_fasta) throw new Error('GFF3 and FASTA are required.');
           await stageUploadedFile(files.c_gff, '/input.gff', { slot: 'files.c_gff' });
           await stageUploadedFile(files.c_fasta, '/input.fasta', { slot: 'files.c_fasta' });
-          args.push('--gff', '/input.gff', '--fasta', '/input.fasta');
         }
 
         if (!isReflow) {
@@ -3056,78 +2367,13 @@ json.dumps({
         circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
 
         if (shouldDrawCircularPairwiseComparisons) {
-          if (!multiCanvasSupport.conservation_blast || !multiCanvasSupport.conservation_reference) {
-            throw new Error(
-              'Current gbdraw wheel does not support circular pairwise comparison rings. Rebuild and redeploy the web wheel.'
-            );
-          }
-          const width = normalizePositiveNumberOrNull(circularConservation.ring_width);
-          const gap = normalizePositiveNumberOrNull(circularConservation.ring_gap);
-          const writeEmptyConservationPreflightFiles = (count) => {
-            const paths = [];
-            for (let index = 0; index < count; index += 1) {
-              const path = `/conservation_preflight_${index}.txt`;
-              pyodide.FS.writeFile(path, new Uint8Array());
-              paths.push(path);
-            }
-            return paths;
-          };
-          const runConservationLayoutPreflight = (blastPaths, reference) => {
-            if (isReflow || !Array.isArray(blastPaths) || blastPaths.length === 0) return true;
-            throwIfGenerationCanceled();
-            setProcessingStatus('Checking circular track layout...');
-            const preflightArgs = [
-              ...args,
-              '--conservation_blast',
-              ...blastPaths,
-              '--conservation_reference',
-              reference
-            ];
-            const preflight = runCircularLayoutPreflight(preflightArgs);
-            if (!preflight?.error) return true;
-            const formatted = formatPythonError(preflight.error);
-            if (isReflow) {
-              labelReflowLastError.value = formatted?.summary || 'Auto reflow failed';
-            } else {
-              errorLog.value = formatted;
-            }
-            return false;
-          };
-          const appendConservationStyleArgs = (series) => {
-            const labels = series.map((entry) => entry.label);
-            const colors = series.map((entry) => entry.color);
-            if (labels.length > 0) {
-              if (!multiCanvasSupport.conservation_labels) {
-                throw new Error(
-                  'Current gbdraw wheel does not support --conservation_labels. Rebuild and redeploy the web wheel.'
-                );
-              }
-              args.push('--conservation_labels', ...labels);
-            }
-            if (colors.length > 0) {
-              if (!multiCanvasSupport.conservation_colors) {
-                throw new Error(
-                  'Current gbdraw wheel does not support --conservation_colors. Rebuild and redeploy the web wheel.'
-                );
-              }
-              args.push('--conservation_colors', ...colors);
-            }
-            if (width !== null) {
-              if (!multiCanvasSupport.conservation_ring_width) {
-                throw new Error(
-                  'Current gbdraw wheel does not support --conservation_ring_width. Rebuild and redeploy the web wheel.'
-                );
-              }
-              args.push('--conservation_ring_width', String(width));
-            }
-            if (gap !== null) {
-              if (!multiCanvasSupport.conservation_ring_gap) {
-                throw new Error(
-                  'Current gbdraw wheel does not support --conservation_ring_gap. Rebuild and redeploy the web wheel.'
-                );
-              }
-              args.push('--conservation_ring_gap', String(gap));
-            }
+          circularConservation.ring_width = normalizePositiveNumberOrNull(
+            circularConservation.ring_width
+          );
+          circularConservation.ring_gap = normalizePositiveNumberOrNull(
+            circularConservation.ring_gap
+          );
+          const normalizeConservationState = () => {
             adv.min_bitscore = normalizeBlastThresholdNumber(
               adv.min_bitscore,
               DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.bitscore
@@ -3145,15 +2391,6 @@ json.dumps({
               DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.alignment_length,
               { integer: true }
             );
-            args.push(...buildModeBlastFilterArgs(
-              'circular',
-              {
-                bitscore: adv.min_bitscore,
-                evalue: adv.evalue,
-                identity: adv.identity,
-                alignment_length: adv.alignment_length
-              }
-            ));
           };
 
           const runCircularLosatConservation = async (comparisonEntries) => {
@@ -3300,7 +2537,7 @@ json.dumps({
               setProcessingStatus('Using cached LOSAT conservation results...');
             }
 
-            const paths = [];
+            const resolved = [];
             for (const pair of losatPairs) {
               const cached = cacheMap.get(pair.cacheKey);
               const blastText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
@@ -3309,29 +2546,29 @@ json.dumps({
                 name: pair.filename,
                 slot: `generatedFiles.circular_conservation_blasts[${pair.sourceIndex}]`
               });
-              paths.push(blastPath);
+              resolved.push({
+                path: blastPath,
+                name: pair.filename,
+                text: blastText
+              });
             }
             losatCacheInfo.value = cacheInfo;
             losatCache.value = cacheMap;
-            return paths;
+            return resolved;
           };
 
-          let conservationBlastPaths = [];
-          let conservationReference = 'auto';
-          let conservationSeries = [];
+          normalizeConservationState();
           if (sourceMode === 'upload') {
             const blastFiles = circularConservationSourceFiles;
             if (blastFiles.length === 0) {
               throw new Error('Please upload at least one BLAST outfmt 6/7 file for Pairwise Comparisons.');
             }
             const conservationEntries = orderedConservationSources(blastFiles, circularConservation);
-            conservationSeries = buildConservationSeries(blastFiles, circularConservation);
             for (let index = 0; index < conservationEntries.length; index += 1) {
               const blastPath = `/conservation_blast_${index}.txt`;
               await stageUploadedFile(conservationEntries[index].file, blastPath, {
                 slot: `files.c_conservation_blasts[${conservationEntries[index].sourceIndex}]`
               });
-              conservationBlastPaths.push(blastPath);
               if (!isReflow) {
                 const comparisonFile = files.c_conservation_sequence_sources?.[
                   conservationEntries[index].sourceIndex
@@ -3350,78 +2587,43 @@ json.dumps({
               }
             }
             const rawReference = String(circularConservation.reference || 'auto').trim().toLowerCase();
-            conservationReference = ['query', 'subject'].includes(rawReference) ? rawReference : 'auto';
+            circularConservation.reference = ['query', 'subject'].includes(rawReference)
+              ? rawReference
+              : 'auto';
             losatCacheInfo.value = [];
-            appendConservationStyleArgs(conservationSeries);
-            if (!runConservationLayoutPreflight(conservationBlastPaths, conservationReference)) {
-              if (!isReflow) restoreManualMigrationSnapshot();
-              return { status: 'error' };
-            }
           } else {
             const comparisonFiles = circularConservationSourceFiles;
             if (comparisonFiles.length === 0) {
               throw new Error('Please upload at least one comparison FASTA file for Pairwise Comparisons.');
             }
             const conservationEntries = orderedConservationSources(comparisonFiles, circularConservation);
-            const orderedComparisonFiles = conservationEntries.map((entry) => entry.file);
-            conservationSeries = buildConservationSeries(comparisonFiles, circularConservation);
-            appendConservationStyleArgs(conservationSeries);
-            const preflightBlastPaths = writeEmptyConservationPreflightFiles(orderedComparisonFiles.length);
-            if (!runConservationLayoutPreflight(preflightBlastPaths, 'subject')) {
-              if (!isReflow) restoreManualMigrationSnapshot();
-              return { status: 'error' };
-            }
-            conservationBlastPaths = await runCircularLosatConservation(conservationEntries);
-            conservationReference = 'subject';
+            const conservationSeries = buildConservationSeries(comparisonFiles, circularConservation);
+            const conservationResults = await runCircularLosatConservation(conservationEntries);
+            circularConservation.reference = 'subject';
+            resolvedCircularConservation = conservationResults.map((result, index) => {
+              const source = conservationEntries[index] || {};
+              const style = conservationSeries[index] || {};
+              return {
+                name: result.name || getPayloadName(result.path),
+                text: result.text,
+                sourceIndex: Number(source.sourceIndex ?? index),
+                label: String(style.label || `Comparison ${index + 1}`),
+                color: String(style.color || '#D9EAF7')
+              };
+            });
           }
-
-          args.push('--conservation_blast', ...conservationBlastPaths);
-          args.push('--conservation_reference', conservationReference);
         } else {
           losatCacheInfo.value = [];
         }
       } else {
-        const linearTrackSupport = getLinearTrackSlotOptionSupport();
-        if (
-          annotationSets.length > 0 &&
-          (!linearTrackSupport.annotation_table || !linearTrackSupport.annotations_renderer)
-        ) {
-          throw new Error(
-            'Current gbdraw wheel does not support region annotations. Rebuild and redeploy the web wheel.'
-          );
-        }
-        if (selectedFeatureShapes.length > 0) {
-          const shapeOptionSupport = getFeatureShapeOptionSupport();
-          if (!shapeOptionSupport.linear || (
-            selectedFeatureShapes.some((assignment) => assignment.endsWith('=underlay')) &&
-            !shapeOptionSupport.underlay
-          )) {
-            throw new Error(
-              'Current gbdraw wheel does not support the selected feature rendering. Rebuild and redeploy the web wheel.'
-            );
-          }
-          selectedFeatureShapes.forEach((assignment) => {
-            args.push('--feature_shape', assignment);
-          });
-        }
-        if (form.scale_style && form.scale_style !== 'bar') args.push('--scale_style', form.scale_style);
-        const normalizedTrackLayout = requireCurrentLinearTrackLayout(
-          form.linear_track_layout
-        );
+        requireCurrentLinearTrackLayout(form.linear_track_layout);
         const normalizedPairwiseMatchStyle = normalizePairwiseMatchStyle(adv.pairwise_match_style);
         adv.pairwise_match_style = normalizedPairwiseMatchStyle;
-        if (form.align_center) args.push('--align_center');
         const useLinearTrackSlots = adv.linear_track_slots_enabled === true;
         let linearTrackSlots = [];
         let linearTrackSlotAxisIndex = null;
         let linearSlotNeedsDepth = false;
         if (useLinearTrackSlots) {
-          const support = linearTrackSupport;
-          if (!support.linear_track_slot || !support.linear_track_axis_index) {
-            throw new Error(
-              'Current gbdraw wheel does not support --linear_track_slot and --linear_track_axis_index. Rebuild and redeploy the web wheel.'
-            );
-          }
           linearTrackSlots = normalizeLinearTrackSlots(
             adv.linear_track_slots,
             adv.nt,
@@ -3469,11 +2671,7 @@ json.dumps({
           );
           adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
           adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
-        } else {
-          args.push(...buildModeTrackVisibilityArgs('linear', form));
         }
-        if (form.normalize_length) args.push('--normalize_length');
-        if (form.legend !== 'right') args.push('-l', form.legend);
         const explicitLosatPairs = linearRecordLayoutEnabled.value
           ? linearComparisons.filter((comparison) => comparison.source === 'losat')
           : [];
@@ -3489,9 +2687,6 @@ json.dumps({
           : normalizeBlastpMode(losat.blastp?.mode);
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
-        const selectedOrthogroupTarget = String(selectedOrthogroupAlignmentFeature.value || '').trim();
-        const wantsOrthogroupAlignmentOption =
-          useOrthogroupBlastp && lInputType.value === 'gb' && selectedOrthogroupTarget !== '';
         adv.min_bitscore = normalizeBlastThresholdNumber(
           adv.min_bitscore,
           DEFAULT_LINEAR_BLAST_FILTERS.bitscore
@@ -3555,12 +2750,6 @@ json.dumps({
         const orthogroupMembershipMode = losat.blastp.orthogroupMembershipMode;
         const orthogroupMemberMaxHits = Math.max(1, losat.blastp.orthogroupMemberMaxHits);
         const collinearSearchScope = losat.blastp.collinearSearchScope;
-        args.push(...buildModeBlastFilterArgs('linear', {
-          bitscore: adv.min_bitscore,
-          evalue: adv.evalue,
-          identity: adv.identity,
-          alignment_length: adv.alignment_length
-        }));
 
         const normalizedPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);
@@ -3579,18 +2768,10 @@ json.dumps({
         adv.linear_show_accession = adv.linear_show_accession !== false;
         adv.linear_show_length = adv.linear_show_length !== false;
         adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(adv.linear_definition_line_styles);
-        const definitionLineStyleAssignments = buildDefinitionLineStyleAssignments(
-          adv.linear_definition_line_styles
-        );
         form.plot_title = normalizedPlotTitle;
         adv.plot_title_position = normalizedPlotTitlePosition;
         adv.plot_title_font_size = normalizedPlotTitleFontSize;
 
-        if (form.show_labels_linear !== 'none') {
-          args.push('--show_labels');
-          if (form.show_labels_linear === 'first') args.push('first');
-          if (form.show_labels_linear === 'orthogroup_top') args.push('orthogroup_top');
-        }
         const normalizedLabelPlacement = requireCurrentLinearLabelPlacement(
           adv.label_placement
         );
@@ -3601,198 +2782,9 @@ json.dumps({
         adv.label_rendering = normalizedLabelRendering;
         const normalizedLinearLabelSpacing = normalizePositiveNumberOrNull(adv.linear_label_spacing);
         adv.linear_label_spacing = normalizedLinearLabelSpacing;
-        const wantsPlacementOption = normalizedLabelPlacement && normalizedLabelPlacement !== 'auto';
-        const wantsLabelRenderingOption = normalizedLabelRendering !== 'auto';
-        const wantsRotationOption = adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '';
-        const wantsLinearLabelSpacingOption = normalizedLinearLabelSpacing !== null;
-        const wantsTrackLayoutOption = normalizedTrackLayout !== 'middle';
-        const wantsTrackAxisGapOption =
-          adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '';
-        const wantsRulerLabelFontOption =
-          adv.scale_font_size !== null && adv.scale_font_size !== undefined && adv.scale_font_size !== '';
-        const wantsRulerLabelColorOption =
-          adv.ruler_label_color !== null &&
-          adv.ruler_label_color !== undefined &&
-          String(adv.ruler_label_color).trim() !== '';
-        const wantsPlotTitleOption = normalizedPlotTitle !== '';
-        const wantsPlotTitlePositionOption = normalizedPlotTitlePosition !== 'bottom';
-        const wantsPlotTitleFontSizeOption = normalizedPlotTitleFontSize !== null;
-        const wantsShowRepliconOption = adv.linear_show_replicon === true;
-        const wantsHideAccessionOption = adv.linear_show_accession === false;
-        const wantsHideLengthOption = adv.linear_show_length === false;
-        const wantsDefinitionLineStyleOption = definitionLineStyleAssignments.length > 0;
-        const recordSubtitles = linearSeqs.map((seq) => (seq.record_subtitle ?? '').toString());
-        const wantsRecordSubtitleOption = recordSubtitles.some((subtitle) => subtitle.trim() !== '');
-        const wantsPairwiseMatchStyleOption = normalizedPairwiseMatchStyle !== 'ribbon';
-        const wantsKeepDefinitionLeftAlignedOption = form.keep_definition_left_aligned === true;
-        const wantsRulerOnAxisOption =
-          Boolean(form.linear_ruler_on_axis) &&
-          form.scale_style === 'ruler' &&
-          (normalizedTrackLayout === 'above' || normalizedTrackLayout === 'below');
-        const linearLabelSupport = getLinearLabelOptionSupport();
-        if (
-          wantsPlacementOption ||
-          wantsLabelRenderingOption ||
-          wantsRotationOption ||
-          wantsLinearLabelSpacingOption ||
-          wantsTrackLayoutOption ||
-          wantsTrackAxisGapOption ||
-          wantsRulerOnAxisOption ||
-          wantsRulerLabelColorOption ||
-          wantsPlotTitleOption ||
-          wantsPlotTitlePositionOption ||
-          wantsPlotTitleFontSizeOption ||
-          wantsShowRepliconOption ||
-          wantsHideAccessionOption ||
-          wantsHideLengthOption ||
-          wantsDefinitionLineStyleOption ||
-          wantsPairwiseMatchStyleOption ||
-          wantsOrthogroupAlignmentOption ||
-          wantsKeepDefinitionLeftAlignedOption
-        ) {
-          if (wantsPlacementOption && !linearLabelSupport.placement) {
-            throw new Error("Current gbdraw wheel does not support --label_placement. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsLabelRenderingOption && !linearLabelSupport.label_rendering) {
-            throw new Error("Current gbdraw wheel does not support --label_rendering. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsRotationOption && !linearLabelSupport.rotation) {
-            throw new Error("Current gbdraw wheel does not support --label_rotation. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsLinearLabelSpacingOption && !linearLabelSupport.linear_label_spacing) {
-            throw new Error("Current gbdraw wheel does not support --linear_label_spacing. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsTrackLayoutOption && !linearLabelSupport.track_layout) {
-            throw new Error("Current gbdraw wheel does not support --track_layout. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsTrackAxisGapOption && !linearLabelSupport.track_axis_gap) {
-            throw new Error("Current gbdraw wheel does not support --track_axis_gap. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsRulerOnAxisOption && !linearLabelSupport.ruler_on_axis) {
-            throw new Error("Current gbdraw wheel does not support --ruler_on_axis. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsRulerLabelColorOption && !linearLabelSupport.ruler_label_color) {
-            throw new Error("Current gbdraw wheel does not support --ruler_label_color. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsPlotTitleOption && !linearLabelSupport.plot_title) {
-            throw new Error("Current gbdraw wheel does not support --plot_title. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsPlotTitlePositionOption && !linearLabelSupport.plot_title_position) {
-            throw new Error("Current gbdraw wheel does not support --plot_title_position. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsPlotTitleFontSizeOption && !linearLabelSupport.plot_title_font_size) {
-            throw new Error("Current gbdraw wheel does not support --plot_title_font_size. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsShowRepliconOption && !linearLabelSupport.show_replicon) {
-            throw new Error("Current gbdraw wheel does not support --show_replicon. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsHideAccessionOption && !linearLabelSupport.hide_accession) {
-            throw new Error("Current gbdraw wheel does not support --hide_accession. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsHideLengthOption && !linearLabelSupport.hide_length) {
-            throw new Error("Current gbdraw wheel does not support --hide_length. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsRecordSubtitleOption && !linearLabelSupport.record_subtitle) {
-            throw new Error("Current gbdraw wheel does not support --record_subtitle. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsDefinitionLineStyleOption && !linearLabelSupport.definition_line_style) {
-            console.warn("Current gbdraw wheel does not support --definition_line_style; definition line style overrides will be ignored.");
-          }
-          if (wantsPairwiseMatchStyleOption && !linearLabelSupport.pairwise_match_style) {
-            throw new Error("Current gbdraw wheel does not support --pairwise_match_style. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsOrthogroupAlignmentOption && !linearLabelSupport.orthogroup_alignment) {
-            throw new Error("Current gbdraw wheel does not support --align_orthogroup_feature. Rebuild and redeploy the web wheel.");
-          }
-          if (wantsKeepDefinitionLeftAlignedOption && !linearLabelSupport.keep_definition_left_aligned) {
-            throw new Error("Current gbdraw wheel does not support --keep_definition_left_aligned. Rebuild and redeploy the web wheel.");
-          }
-        }
-        if (wantsPlotTitleOption) args.push('--plot_title', normalizedPlotTitle);
-        if (wantsPlotTitlePositionOption) args.push('--plot_title_position', normalizedPlotTitlePosition);
-        if (wantsPlotTitleFontSizeOption) args.push('--plot_title_font_size', String(normalizedPlotTitleFontSize));
-        if (wantsShowRepliconOption) args.push('--show_replicon');
-        if (wantsHideAccessionOption) args.push('--hide_accession');
-        if (wantsHideLengthOption) args.push('--hide_length');
-        if (linearLabelSupport.definition_line_style) {
-          definitionLineStyleAssignments.forEach((assignment) => {
-            args.push('--definition_line_style', assignment);
-          });
-        }
-        if (wantsPairwiseMatchStyleOption) args.push('--pairwise_match_style', normalizedPairwiseMatchStyle);
-        if (wantsOrthogroupAlignmentOption) {
-          args.push('--align_orthogroup_feature', selectedOrthogroupTarget);
-        }
-        if (wantsKeepDefinitionLeftAlignedOption) {
-          args.push('--keep_definition_left_aligned');
-        }
-        if (normalizedLabelPlacement && normalizedLabelPlacement !== 'auto') {
-          args.push('--label_placement', normalizedLabelPlacement);
-        }
-        if (normalizedLabelRendering !== 'auto') {
-          args.push('--label_rendering', normalizedLabelRendering);
-        }
-        if (adv.label_rotation !== null && adv.label_rotation !== undefined && adv.label_rotation !== '') {
-          args.push('--label_rotation', adv.label_rotation);
-        }
-        if (normalizedLinearLabelSpacing !== null) {
-          args.push('--linear_label_spacing', normalizedLinearLabelSpacing);
-        }
-        if (normalizedTrackLayout !== 'middle') {
-          args.push('--track_layout', normalizedTrackLayout);
-        }
-        if (adv.track_axis_gap !== null && adv.track_axis_gap !== undefined && adv.track_axis_gap !== '') {
-          args.push('--track_axis_gap', adv.track_axis_gap);
-        }
-        if (
-          Boolean(form.linear_ruler_on_axis) &&
-          form.scale_style === 'ruler' &&
-          (normalizedTrackLayout === 'above' || normalizedTrackLayout === 'below')
-        ) {
-          args.push('--ruler_on_axis');
-        }
-
-        if (adv.feature_height) args.push('--feature_height', adv.feature_height);
-        if (adv.gc_height) args.push('--gc_height', adv.gc_height);
         const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
         if (comparisonHeight.status === 'invalid') {
           throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
-        }
-        if (comparisonHeight.status === 'valid') {
-          args.push('--comparison_height', comparisonHeight.value);
-        }
-
-        if (adv.scale_interval) args.push('--scale_interval', adv.scale_interval);
-        if (wantsRulerLabelFontOption) {
-          if (form.scale_style === 'ruler') {
-            if (linearLabelSupport.ruler_label_font_size) {
-              args.push('--ruler_label_font_size', adv.scale_font_size);
-            } else if (linearLabelSupport.scale_font_size) {
-              args.push('--scale_font_size', adv.scale_font_size);
-            } else {
-              throw new Error("Current gbdraw wheel does not support ruler label font options. Rebuild and redeploy the web wheel.");
-            }
-          } else if (linearLabelSupport.scale_font_size) {
-            args.push('--scale_font_size', adv.scale_font_size);
-          } else {
-            throw new Error("Current gbdraw wheel does not support --scale_font_size. Rebuild and redeploy the web wheel.");
-          }
-        }
-        if (wantsRulerLabelColorOption) args.push('--ruler_label_color', adv.ruler_label_color);
-        if (adv.scale_stroke_width) args.push('--scale_stroke_width', adv.scale_stroke_width);
-        if (adv.scale_stroke_color) args.push('--scale_stroke_color', adv.scale_stroke_color);
-
-        const recordLabels = linearSeqs.map((seq) => (seq.definition ?? '').toString());
-        const hasRecordLabels = recordLabels.some((label) => label.trim() !== '');
-        if (hasRecordLabels) {
-          recordLabels.forEach((label) => {
-            args.push('--record_label', label);
-          });
-        }
-        if (wantsRecordSubtitleOption) {
-          recordSubtitles.forEach((subtitle) => {
-            args.push('--record_subtitle', subtitle);
-          });
         }
 
         const viewTransformSpecs = [];
@@ -3825,12 +2817,9 @@ json.dumps({
             const displayReverse = wantsReverse || coordinateReverse;
             const specBody = `${start}-${end}${wantsReverse ? ':rc' : ''}`;
             const canonicalSpecBody = `${canonicalStart}-${canonicalEnd}`;
-            const fileLabel = lInputType.value === 'gb' ? `seq_${idx}.gb` : `seq_${idx}.gff`;
-            const cliSpec = recordIdRaw ? `${fileLabel}:${recordIdRaw}:${specBody}` : `#${idx + 1}:${specBody}`;
-            const fileSpec = canonicalSpecBody;
             reverseFlags.push(false);
             viewTransformSpecs.push({ reverse: displayReverse });
-            return { cli: cliSpec, file: fileSpec, displayFile: specBody };
+            return { file: canonicalSpecBody, displayFile: specBody };
           }
 
           reverseFlags.push(wantsReverse);
@@ -3838,8 +2827,7 @@ json.dumps({
           return null;
         };
 
-        let inputArgs = [];
-        let blastArgs = [];
+        let hasLinearComparisonData = false;
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
@@ -4116,7 +3104,9 @@ json.dumps({
         const buildCacheKey = async (metadata) => {
           if (metadata?.identityKind === 'protein') {
             if (!buildProteinLosatCacheKey) {
-              throw new Error('Current gbdraw wheel does not provide the schema-4 protein cache key helper.');
+              throw new Error(
+                'Protein comparison cache validation is unavailable. Reload the page and try again.'
+              );
             }
             const rawResult = buildProteinLosatCacheKey(
               JSON.stringify(proteinIdentityManifest.value),
@@ -4282,7 +3272,6 @@ json.dumps({
                 cacheText: useLosat,
                 slot: `files.linearSeqs[${i}].gb`
               });
-              inputArgs.push(`/seq_${i}.gb`);
             } else {
               if (!seq.gff || !seq.fasta) throw new Error(`Sequence #${i + 1}: GFF3 and FASTA are required.`);
               await writeLinearFileToFs(seq.gff, `/seq_${i}.gff`, {
@@ -4332,7 +3321,7 @@ json.dumps({
           const manifests = proteinEntries.map((entry) => entry.identityManifest);
           if (manifests.some((manifest) => !validateProteinIdentityManifest(manifest))) {
             throw new Error(
-              'Current gbdraw wheel does not provide protein identity manifest schema 2. Rebuild and redeploy the web wheel.'
+              'Protein comparison metadata could not be validated. Reload the page and try again.'
             );
           }
           proteinIdentityManifest.value = mergeProteinIdentityManifests(manifests);
@@ -4345,7 +3334,7 @@ json.dumps({
           if (legacyReferenceIds.length > 0) {
             if (!resolveLegacyProteinReferences) {
               throw new Error(
-                'Current gbdraw wheel does not provide legacy protein reference migration.'
+                'Saved protein comparison references could not be updated. Clear the comparison cache and run the analysis again.'
               );
             }
             const rawResult = resolveLegacyProteinReferences(
@@ -4389,18 +3378,8 @@ json.dumps({
             ).length > 0) {
               throw new Error('Legacy protein UI references remain after migration.');
             }
-            const alignmentFlagIndex = args.lastIndexOf('--align_orthogroup_feature');
-            if (alignmentFlagIndex >= 0) {
-              args[alignmentFlagIndex + 1] = selectedOrthogroupAlignmentFeature.value;
-            }
           }
         }
-        regionSpecs.forEach((spec) => {
-          if (spec?.cli) args.push('--region', spec.cli);
-        });
-
-        args.push(...buildRecordSelectorArgs(recordSelectors));
-        args.push(...buildReverseComplementArgs(reverseFlags));
 
         if (useLosat) {
           setProcessingStatus('Preparing LOSAT jobs...');
@@ -4598,7 +3577,9 @@ json.dumps({
           throwIfGenerationCanceled();
           if (useProteinBlastp) {
             if (!convertProteinBlast) {
-              throw new Error('Current gbdraw wheel does not support LOSATP similarity-group metadata. Rebuild and redeploy the web wheel.');
+              throw new Error(
+                'Protein comparison results could not be prepared. Reload the page and try again.'
+              );
             }
             const recordPayloads = [];
             for (let i = 0; i < linearSeqs.length; i += 1) {
@@ -4734,16 +3715,19 @@ json.dumps({
                 name: blastName,
                 slot: blastSlot
               });
-              virtualBlastFiles.push({
-                path: blastPath,
-                text: converted.tsv || '',
+              resolvedComparisons.push({
+                kind: 'precomputedProteinComparison',
+                queryRecordIndex: Number(sourcePair?.queryIndex),
+                subjectRecordIndex: Number(sourcePair?.subjectIndex),
                 rows: Array.isArray(converted.rows) ? converted.rows : []
               });
-              blastArgs.push(blastPath);
+              hasLinearComparisonData = true;
             }
           } else {
             if (!convertNucleotideBlast) {
-              throw new Error('Current gbdraw wheel does not support LOSAT display coordinate conversion. Rebuild and redeploy the web wheel.');
+              throw new Error(
+                'Nucleotide comparison results could not be prepared. Reload the page and try again.'
+              );
             }
             for (const pair of losatPairs) {
               throwIfGenerationCanceled();
@@ -4769,12 +3753,13 @@ json.dumps({
                 name: blastName,
                 slot: blastSlot
               });
-              virtualBlastFiles.push({
-                path: blastPath,
+              resolvedComparisons.push({
+                kind: 'nucleotideBlast',
+                queryRecordIndex: pair.queryIndex,
+                subjectRecordIndex: pair.subjectIndex,
                 text: converted.tsv || '',
-                rows: Array.isArray(converted.rows) ? converted.rows : []
               });
-              blastArgs.push(blastPath);
+              hasLinearComparisonData = true;
             }
           }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
@@ -4821,10 +3806,6 @@ json.dumps({
                     biologicalFeatures.value,
                     promotedProteinIdMap
                   );
-                }
-                const alignmentFlagIndex = args.lastIndexOf('--align_orthogroup_feature');
-                if (alignmentFlagIndex >= 0) {
-                  args[alignmentFlagIndex + 1] = selectedOrthogroupAlignmentFeature.value;
                 }
               }
               legacyPromotionCommitted = true;
@@ -4875,11 +3856,10 @@ json.dumps({
               await stageUploadedFile(seq.blast, `/blast_${i}.txt`, {
                 slot: `files.linearSeqs[${i}].blast`
               });
-              blastArgs.push(`/blast_${i}.txt`);
+              hasLinearComparisonData = true;
             }
           }
         }
-        let explicitComparisonsTablePath = '';
         if (linearRecordLayoutEnabled.value && linearComparisons.length > 0) {
           const layoutRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
           const comparisonError = validateLinearComparisons(
@@ -4888,27 +3868,7 @@ json.dumps({
             linearComparisons
           );
           if (comparisonError) throw new Error(comparisonError);
-          const indexByUid = new Map(linearSeqs.map((sequence, index) => [sequence.uid, index]));
-          const tableLines = ['blast\tquery\tsubject'];
-          for (let index = 0; index < linearComparisons.length; index += 1) {
-            const comparison = linearComparisons[index];
-            const blastPath = comparison.source === 'losat'
-              ? `/blast_${index}.txt`
-              : `/explicit_blast_${index + 1}.txt`;
-            if (comparison.source === 'upload') {
-              await stageUploadedFile(comparison.file, blastPath, {
-                slot: `files.linearComparisons[${index}].blast`
-              });
-            }
-            tableLines.push(
-              `${blastPath}\t#${indexByUid.get(comparison.queryUid) + 1}\t#${indexByUid.get(comparison.subjectUid) + 1}`
-            );
-          }
-          explicitComparisonsTablePath = '/comparisons.tsv';
-          stageTextFile(explicitComparisonsTablePath, `${tableLines.join('\n')}\n`, {
-            name: 'comparisons.tsv',
-            slot: 'generatedFiles.comparisons_table'
-          });
+          hasLinearComparisonData = true;
         }
         if (extractFirstFasta) {
           extractFirstFasta.destroy();
@@ -4942,7 +3902,6 @@ json.dumps({
             throw new Error('Please upload at least one Depth TSV file or disable the depth track.');
           }
           const maxDepthTracks = depthTrackMatrixWidth(depthRows);
-          const depthTrackEntries = [];
           for (let depthTrackIndex = 0; depthTrackIndex < maxDepthTracks; depthTrackIndex += 1) {
             const entries = depthRows.map((row, idx) => ({ file: row[depthTrackIndex] || null, idx }));
             const presentEntries = entries.filter((entry) => Boolean(entry.file));
@@ -4951,7 +3910,6 @@ json.dumps({
                 `Depth series #${depthTrackIndex + 1} (logical track index ${depthTrackIndex}) has no TSV source in any record. Add a TSV or remove the series.`
               );
             }
-            const depthPaths = [];
             for (const entry of entries) {
               if (entry.file) {
                 const depthPath = `/seq_${entry.idx}.depth_${depthTrackIndex + 1}.tsv`;
@@ -4961,60 +3919,13 @@ json.dumps({
                     ? `files.linearSeqs[${entry.idx}].depth[${depthTrackIndex}]`
                     : `files.linearSeqs[${entry.idx}].depth`
                 });
-                depthPaths.push(depthPath);
-              } else {
-                depthPaths.push('');
               }
             }
-            args.push('--depth_track', ...depthPaths);
-            depthTrackEntries.push({
-              index: depthTrackIndex,
-              config: depthTrackConfigAt(depthTrackIndex, presentEntries[0]?.file)
-            });
           }
-          appendDepthTrackMetadataArgs(depthTrackEntries);
-          appendDepthStyleArgs();
-          if (
-            adv.depth_height !== null &&
-            adv.depth_height !== undefined &&
-            adv.depth_height !== '' &&
-            Number(adv.depth_height) > 0
-          ) {
-            args.push('--depth_height', adv.depth_height);
-          }
+          validateDepthStyleSettings();
+          adv.depth_height = normalizePositiveNumberOrNull(adv.depth_height);
         }
-        if (useLinearTrackSlots) {
-          const emittedAxisIndex = linearTrackAxisIndexForEnabledSlots(
-            linearTrackSlots,
-            linearTrackSlotAxisIndex
-          );
-          args.push('--linear_track_axis_index', String(emittedAxisIndex));
-          linearTrackSlots
-            .filter((slot) => slot.enabled !== false)
-            .forEach((slot) => {
-              const spec = buildLinearTrackSlotSpec(slot, { includeSide: false });
-              if (spec) args.push('--linear_track_slot', spec);
-            });
-        }
-        if (lInputType.value === 'gb') args.push('--gbk', ...inputArgs);
-        else {
-          let gffs = [];
-          let fastas = [];
-          for (let i = 0; i < linearSeqs.length; i++) {
-            gffs.push(`/seq_${i}.gff`);
-            fastas.push(`/seq_${i}.fasta`);
-          }
-          args.push('--gff', ...gffs, '--fasta', ...fastas);
-        }
-        if (linearRecordLayoutEnabled.value) {
-          linearRecordPositionTokens(linearSeqs, linearRecordRows).forEach((token) => {
-            args.push('--multi_record_position', token);
-          });
-          args.push('--linear_record_gap', String(Math.max(0, Number(linearRecordGap.value) || 0)));
-        }
-        if (explicitComparisonsTablePath) args.push('--comparisons_table', explicitComparisonsTablePath);
-        else if (blastArgs.length) args.push('-b', ...blastArgs);
-        annotationLoadComparison = Boolean(explicitComparisonsTablePath || blastArgs.length);
+        annotationLoadComparison = hasLinearComparisonData;
       }
 
       if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
@@ -5028,17 +3939,54 @@ json.dumps({
         });
       }
 
-      console.log('CMD:', args.join(' '));
       throwIfGenerationCanceled();
       setProcessingStatus(diagramGenerationWorkerReady.value ? 'Rendering SVG...' : 'Starting diagram engine...');
+      if (typeof serializeCanonicalFiles !== 'function') {
+        throw new Error('Canonical input serialization is unavailable.');
+      }
+      const serializedFiles = await serializeCanonicalFiles();
+      const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
+        ...entry,
+        fasta: serializedFiles.c_conservation_fastas?.[entry.sourceIndex] || null
+      }));
+      const canonical = buildCanonicalRenderRequest({
+        state,
+        filesData: serializedFiles,
+        resolvedComparisons,
+        resolvedCircularConservation: canonicalCircularConservation
+      });
+      if (!Number.isInteger(canonicalSessionVersion)) {
+        throw new Error('Canonical session version is unavailable.');
+      }
+      const canonicalReplayPath = '/canonical-render-session.gbdraw-session.json';
+      const canonicalReplayName = makeSafeFilename(
+        `${normalizedOutputPrefix || 'out'}.gbdraw-session.json`
+      );
+      const canonicalReplayText = JSON.stringify({
+          format: 'gbdraw-session',
+          version: canonicalSessionVersion,
+          createdAt: manualRunStartedAtIso || new Date().toISOString(),
+          renderRequest: canonical.renderRequest,
+          resources: canonical.resources,
+          losatCache: { entries: [] },
+          losatDerivedCache: { entries: [] },
+          proteinIdentityManifest: emptyProteinIdentityManifest()
+        });
+      registerRunInfoFile(canonicalReplayPath, {
+        name: canonicalReplayName,
+        slot: 'generatedFiles.canonical_render_session',
+        kind: 'generated'
+      });
+      recordGeneratedCliFile(canonicalReplayPath, canonicalReplayText, {
+        name: canonicalReplayName,
+        slot: 'generatedFiles.canonical_render_session'
+      });
       const gbdrawStartedAt = getNow();
       const generationResponse = await runDiagramGeneration({
-        mode: mode.value,
-        args: args.map(String),
-        files: Array.from(generationFileMap.values()),
-        virtualBlastFiles
+        request: canonical.renderRequest,
+        resources: canonical.resources
       });
-      console.info(`gbdraw ${mode.value} wrapper execution: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
+      console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
       const postGbdrawTimingEntries = [];
       const res = generationResponse.results;
       const generationMetadata = (
@@ -5090,7 +4038,7 @@ json.dumps({
       if (!isReflow && manualRunStartedAt !== null) {
         const runInfo = buildRunInfo({
           mode: mode.value,
-          args: args.map(String),
+          args: ['--session', canonicalReplayPath],
           fileMetadata: runInfoFileMap,
           elapsedMs: getNow() - manualRunStartedAt,
           resultCount: results.value.length,
@@ -5177,6 +4125,9 @@ json.dumps({
         pendingPaletteColors.value = {};
       }
       commitProteinMigration?.();
+      if (!isReflow && typeof adoptCanonicalRenderArtifacts === 'function') {
+        adoptCanonicalRenderArtifacts(canonical);
+      }
       return { status: 'ok' };
     } catch (e) {
       if (!legacyPromotionCommitted) {

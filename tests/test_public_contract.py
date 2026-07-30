@@ -209,6 +209,7 @@ def test_low_level_api_owners_are_explicit() -> None:
 
     assert {
         "DEFAULT_SELECTED_FEATURES",
+        "LinearDiagramMetadata",
         "build_circular_diagram",
         "build_circular_multi_diagram",
         "build_linear_diagram",
@@ -248,8 +249,16 @@ def test_low_level_api_owners_are_explicit() -> None:
         "LinearOutputOptions",
         "LinearRequestTrackOptions",
         "LinearTrackOptions",
+        "LinearDiagramMetadata",
+        "build_request_plan_diagram",
+        "plan_request",
         "plan_circular_request",
         "plan_linear_request",
     } <= set(library_api.__all__)
+    assert library_api.LinearDiagramMetadata is diagram_api.LinearDiagramMetadata
+    assert {
+        "LinearDiagramBuildResult",
+        "build_linear_diagram_result",
+    }.isdisjoint(library_api.__all__)
     assert library_api.render_to_bytes is api_render.render_to_bytes
     assert library_api.save_figure_to is api_render.save_figure_to

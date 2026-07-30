@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,33 +13,50 @@ from pandas import DataFrame
 from svgwrite import Drawing
 
 import gbdraw.api.request_render as request_render_module
+import gbdraw.api.diagram as diagram_module
+import gbdraw.api.io as api_io_module
+import gbdraw.api.prepared as prepared_module
+import gbdraw.configurators.features as feature_configurator_module
+import gbdraw.render.interactive_context as interactive_context_module
 from gbdraw.analysis.collinearity import LosslessCollinearityParameters
 from gbdraw.analysis.protein_colinearity import (
+    OrthogroupMember,
+    OrthogroupResult,
+    ProteinBlastpResult,
     extract_web_stable_cds_proteins,
 )
 from gbdraw.api.options import (
     CircularDiagramOptions,
     CircularMultiRecordOptions,
+    ColorOptions,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
 )
 from gbdraw.api.request_render import (
     CircularBatchRenderResult,
+    CurrentRequestArtifacts,
+    PreparedCircularBatchRequest,
     CircularRequestPlan,
     LinearRequestPlan,
     PreparedDiagramRequest,
+    build_request_plan_diagram,
+    build_prepared_interactive_context,
     build_request_diagram,
     normalize_request_records,
+    plan_request,
     plan_circular_request,
+    plan_circular_batch_request,
     plan_linear_request,
     render_request,
 )
 from gbdraw.api.requests import (
+    CircularBatchOutputPolicy,
     CircularBatchRequest,
     CircularDiagramRequest,
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCardinality,
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
@@ -83,39 +101,6 @@ def _protein_record(record_id: str, protein_id: str) -> SeqRecord:
     return record
 
 
-def test_rewrite_protein_artifact_references_rejects_key_collisions() -> None:
-    with pytest.raises(ValidationError, match="duplicate key"):
-        request_render_module.rewrite_protein_artifact_references(
-            {"legacy-a": 1, "legacy-b": 2},
-            {"legacy-a": "h_same", "legacy-b": "h_same"},
-        )
-
-
-def test_rewrite_protein_artifact_references_updates_compound_legacy_ids() -> None:
-    query_id = "p_r_old_0_9_1_deadbeefdead"
-    subject_id = "p_r_other_10_19_1_cafebabecafe"
-
-    rewritten = request_render_module.rewrite_protein_artifact_references(
-        {
-            "query_protein_id": f"{query_id};{subject_id}",
-            "supporting_edge": f"{query_id}->{subject_id}:rbh",
-        },
-        {
-            query_id: "h_aaaaaaaaaaaaaaaaaaaaaaaaaa",
-            subject_id: "h_bbbbbbbbbbbbbbbbbbbbbbbbbb",
-        },
-    )
-
-    assert rewritten == {
-        "query_protein_id": (
-            "h_aaaaaaaaaaaaaaaaaaaaaaaaaa;h_bbbbbbbbbbbbbbbbbbbbbbbbbb"
-        ),
-        "supporting_edge": (
-            "h_aaaaaaaaaaaaaaaaaaaaaaaaaa->h_bbbbbbbbbbbbbbbbbbbbbbbbbb:rbh"
-        ),
-    }
-
-
 def _derived_identity_test_context(
     *,
     options: LinearDiagramOptions | None = None,
@@ -134,10 +119,11 @@ def _derived_identity_test_context(
         ),
         options=options or LinearDiagramOptions(),
     )
-    drawing = Drawing("out.svg")
-    drawing._gbdraw_resolved_protein_comparisons = [  # type: ignore[attr-defined]
-        DataFrame(columns=request_render_module.COMPARISON_COLUMNS)
-    ]
+    metadata = diagram_module.LinearDiagramMetadata(
+        protein_comparisons=(
+            DataFrame(columns=request_render_module.COMPARISON_COLUMNS),
+        )
+    )
     manifest = SimpleNamespace(
         record_instances={
             "record-1": {
@@ -151,15 +137,11 @@ def _derived_identity_test_context(
         }
     )
     artifacts = request_render_module._PreparedLinearArtifacts(
-        request=request,
         cache=None,
         extraction=SimpleNamespace(identity_manifest=manifest),
         nucleotide_entries=(),
         passthrough_derived_entries=(),
-        legacy_candidates=(),
-        protein_id_map={},
         source_mode="collinear",
-        warnings=(),
     )
     raw_entries = (
         {
@@ -181,7 +163,7 @@ def _derived_identity_test_context(
     return SimpleNamespace(
         records=records,
         request=request,
-        drawing=drawing,
+        metadata=metadata,
         artifacts=artifacts,
         raw_entries=raw_entries,
     )
@@ -194,7 +176,7 @@ def _derived_entry_for_params(
         options=LinearDiagramOptions(collinearity_params=params)
     )
     (entry,) = request_render_module._build_current_derived_entries(
-        context.drawing,
+        context.metadata,
         context.request,
         context.records,
         context.artifacts,
@@ -214,7 +196,7 @@ def test_derived_identity_includes_hidden_reverse_and_self_raw_inputs(
     )
 
     (entry,) = request_render_module._build_current_derived_entries(
-        context.drawing,
+        context.metadata,
         context.request,
         context.records,
         context.artifacts,
@@ -236,7 +218,7 @@ def test_derived_identity_includes_hidden_reverse_and_self_raw_inputs(
         for raw_entry in context.raw_entries
     )
     (changed,) = request_render_module._build_current_derived_entries(
-        context.drawing,
+        context.metadata,
         context.request,
         context.records,
         context.artifacts,
@@ -329,24 +311,21 @@ def test_empty_api_derived_result_passes_current_session_validation(
         ),
         options=LinearDiagramOptions(protein_blastp_mode=mode),
     )
-    drawing = Drawing("out.svg")
-    drawing._gbdraw_resolved_protein_comparisons = [  # type: ignore[attr-defined]
-        DataFrame(columns=request_render_module.COMPARISON_COLUMNS)
-    ]
+    metadata = diagram_module.LinearDiagramMetadata(
+        protein_comparisons=(
+            DataFrame(columns=request_render_module.COMPARISON_COLUMNS),
+        )
+    )
     artifacts = request_render_module._PreparedLinearArtifacts(
-        request=request,
         cache=None,
         extraction=extraction,
         nucleotide_entries=(),
         passthrough_derived_entries=(),
-        legacy_candidates=(),
-        protein_id_map={},
         source_mode=mode,
-        warnings=(),
     )
 
     (entry,) = request_render_module._build_current_derived_entries(
-        drawing,
+        metadata,
         request,
         records,
         artifacts,
@@ -366,6 +345,78 @@ def test_empty_api_derived_result_passes_current_session_validation(
             "proteinIdentityManifest": manifest.to_dict(),
         }
     )
+    artifacts = CurrentRequestArtifacts(
+        losat_derived_cache_entries=(entry,),
+        protein_identity_manifest=manifest.to_dict(),
+    )
+    assert artifacts.losat_derived_cache_entries == (entry,)
+
+
+def test_current_derived_artifacts_require_resolved_manifest_handles() -> None:
+    record = _protein_record("source", "protein")
+    extraction = extract_web_stable_cds_proteins(
+        (record,),
+        record_instance_keys=("record-1",),
+        record_source_ids=(record.id,),
+    )
+    manifest = extraction.identity_manifest
+    assert manifest is not None
+    unresolved_handle = "h_" + ("a" * 26)
+    assert all(
+        unresolved_handle not in binding["runtimeIds"].values()
+        for binding in manifest.record_instances.values()
+    )
+    entry = {
+        "schema": 3,
+        "kind": "derived-losatp-payload",
+        "idEncoding": "runtime-handle-v1",
+        "key": "unresolved-derived",
+        "mode": "orthogroup",
+        "payload": {
+            "orthogroups": [
+                {
+                    "proteinIds": [unresolved_handle],
+                }
+            ]
+        },
+    }
+
+    with pytest.raises(
+        ValidationError,
+        match="require protein_identity_manifest",
+    ):
+        CurrentRequestArtifacts(
+            losat_derived_cache_entries=(entry,),
+        )
+    with pytest.raises(
+        ValidationError,
+        match="unresolved protein references",
+    ):
+        validate_current_session_artifacts(
+            {
+                "losatCache": {"entries": []},
+                "losatDerivedCache": {"entries": [entry]},
+            }
+        )
+    with pytest.raises(
+        ValidationError,
+        match="unresolved protein references",
+    ):
+        CurrentRequestArtifacts(
+            losat_derived_cache_entries=(entry,),
+            protein_identity_manifest=manifest.to_dict(),
+        )
+    with pytest.raises(
+        ValidationError,
+        match="unresolved protein references",
+    ):
+        validate_current_session_artifacts(
+            {
+                "losatCache": {"entries": []},
+                "losatDerivedCache": {"entries": [entry]},
+                "proteinIdentityManifest": manifest.to_dict(),
+            }
+        )
 
 
 def test_request_render_module_does_not_import_cli_or_session_owners() -> None:
@@ -394,6 +445,92 @@ def test_request_render_module_does_not_import_cli_or_session_owners() -> None:
         for module in imported_modules
         for prefix in forbidden_prefixes
     )
+
+
+def test_fresh_request_render_has_no_session_compatibility_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import gbdraw.api.session_compat as session_compat
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("fresh rendering entered session compatibility")
+
+    monkeypatch.setattr(
+        session_compat,
+        "_read_session_artifact_source",
+        fail_if_called,
+    )
+    request = CircularDiagramRequest(records=(_memory_input("fresh"),))
+
+    prepared = build_request_diagram(
+        request,
+        artifacts=CurrentRequestArtifacts(),
+    )
+
+    assert prepared.mode == "circular"
+    source = Path(request_render_module.__file__).read_text(encoding="utf-8").lower()
+    assert "legacy" not in source
+    assert "session_artifacts" not in source
+    assert "session_compat" not in source
+    assert "protein_id_map" not in source
+    assert "session_artifacts" not in inspect.signature(build_request_diagram).parameters
+    assert "session_artifacts" not in inspect.signature(render_request).parameters
+    fresh_adapter_paths = (
+        Path(request_render_module.__file__).parents[1] / "circular.py",
+        Path(request_render_module.__file__).parents[1] / "interface.py",
+    )
+    for adapter_path in fresh_adapter_paths:
+        adapter_source = adapter_path.read_text(encoding="utf-8")
+        assert "legacy_protein_raw_candidates" not in adapter_source
+        assert "legacy_protein_derived_evidence" not in adapter_source
+        assert "session_artifacts" not in adapter_source
+    linear_source = (
+        Path(request_render_module.__file__).parents[1] / "linear.py"
+    ).read_text(encoding="utf-8")
+    assert 'getattr(render_result, "legacy_protein_raw_candidates"' not in linear_source
+    assert (
+        'getattr(render_result, "legacy_protein_derived_evidence"'
+        not in linear_source
+    )
+    assert "session_artifacts" not in linear_source
+
+
+def test_current_request_artifacts_reject_unsupported_schema() -> None:
+    from gbdraw.api import CurrentRequestArtifacts as ExportedCurrentRequestArtifacts
+
+    assert ExportedCurrentRequestArtifacts is CurrentRequestArtifacts
+    with pytest.raises(ValidationError, match="Unsupported current LOSAT artifact"):
+        CurrentRequestArtifacts(
+            losat_cache_entries=(
+                {
+                    "schema": 99,
+                    "kind": "raw-losat",
+                    "key": "future",
+                    "text": "",
+                },
+            )
+        )
+    with pytest.raises(
+        ValidationError,
+        match="Unsupported current derived LOSATP artifact",
+    ):
+        CurrentRequestArtifacts(
+            losat_derived_cache_entries=(
+                {
+                    "schema": 99,
+                    "kind": "derived-losatp-payload",
+                    "key": "future",
+                    "payload": {},
+                },
+            )
+        )
+
+
+def test_build_request_diagram_rejects_falsey_untyped_artifacts() -> None:
+    request = CircularDiagramRequest(records=(_memory_input("fresh"),))
+
+    with pytest.raises(ValidationError, match="CurrentRequestArtifacts"):
+        build_request_diagram(request, artifacts={})  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("module_name", ("circular.py", "linear.py"))
@@ -487,7 +624,7 @@ def test_normalize_record_input_requires_one_resolved_record() -> None:
         normalize_request_records(request)
 
 
-def test_linear_planner_applies_comparison_selection_after_neutral_gff_load() -> None:
+def test_linear_record_first_cardinality_is_explicit_with_comparisons() -> None:
     fixture_dir = Path(__file__).parents[1] / "examples" / "gff3_lambda"
     request = LinearDiagramRequest(
         records=(
@@ -495,13 +632,187 @@ def test_linear_planner_applies_comparison_selection_after_neutral_gff_load() ->
                 source=GffFastaInputSource(
                     fixture_dir / "lambda_two_contigs.gff3",
                     fixture_dir / "lambda_two_contigs.fna",
-                )
+                ),
+                cardinality=RecordCardinality.FIRST,
             ),
         ),
         options=LinearDiagramOptions(blast_files=("comparison.tsv",)),
     )
 
     assert normalize_request_records(request)[0].id == "lambda_left"
+
+
+@pytest.mark.linear
+def test_prepared_request_resolves_feature_inputs_once_for_gff_and_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture_dir = Path(__file__).parents[1] / "examples" / "gff3_lambda"
+    color_file = tmp_path / "colors.tsv"
+    color_file.write_text(
+        "CDS\tproduct\t.*\t#123456\tCoding sequence\n",
+        encoding="utf-8",
+    )
+    visibility_file = tmp_path / "visibility.tsv"
+    visibility_file.write_text(
+        "*\tCDS\tproduct\t.*\tshow\n",
+        encoding="utf-8",
+    )
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(
+                source=GffFastaInputSource(
+                    fixture_dir / "lambda_two_contigs.gff3",
+                    fixture_dir / "lambda_two_contigs.fna",
+                ),
+                selector=parse_record_selector("lambda_left"),
+            ),
+        ),
+        options=LinearDiagramOptions(
+            colors=ColorOptions(color_table_file=str(color_file)),
+            feature_visibility_table_file=str(visibility_file),
+            selected_features_set=("CDS",),
+        ),
+    )
+    calls = {
+        "color_reader": 0,
+        "visibility_reader": 0,
+        "default_colors": 0,
+        "candidate_resolver": 0,
+        "visibility_compiler": 0,
+        "color_compiler": 0,
+    }
+    real_color_reader = request_render_module.read_color_table
+    real_visibility_reader = request_render_module.read_feature_visibility_file
+    real_default_colors = request_render_module.load_default_colors
+    real_candidate_resolver = request_render_module.resolve_candidate_feature_types
+    real_visibility_compiler = prepared_module.compile_feature_visibility_rules
+    real_color_compiler = prepared_module.preprocess_color_tables
+
+    def count(name, function):
+        def wrapped(*args, **kwargs):
+            calls[name] += 1
+            return function(*args, **kwargs)
+
+        return wrapped
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("resolved feature input was recomputed downstream")
+
+    monkeypatch.setattr(
+        request_render_module,
+        "read_color_table",
+        count("color_reader", real_color_reader),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "read_feature_visibility_file",
+        count("visibility_reader", real_visibility_reader),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "load_default_colors",
+        count("default_colors", real_default_colors),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "resolve_candidate_feature_types",
+        count("candidate_resolver", real_candidate_resolver),
+    )
+    monkeypatch.setattr(
+        prepared_module,
+        "compile_feature_visibility_rules",
+        count("visibility_compiler", real_visibility_compiler),
+    )
+    monkeypatch.setattr(
+        prepared_module,
+        "preprocess_color_tables",
+        count("color_compiler", real_color_compiler),
+    )
+    monkeypatch.setattr(diagram_module, "read_color_table", unexpected)
+    monkeypatch.setattr(diagram_module, "read_feature_visibility_file", unexpected)
+    monkeypatch.setattr(diagram_module, "load_default_colors", unexpected)
+    monkeypatch.setattr(
+        feature_configurator_module,
+        "compile_feature_visibility_rules",
+        unexpected,
+    )
+    monkeypatch.setattr(
+        feature_configurator_module,
+        "preprocess_color_tables",
+        unexpected,
+    )
+    monkeypatch.setattr(
+        interactive_context_module,
+        "compile_feature_visibility_rules",
+        unexpected,
+    )
+    monkeypatch.setattr(
+        interactive_context_module,
+        "preprocess_color_tables",
+        unexpected,
+    )
+    monkeypatch.setattr(
+        api_io_module,
+        "resolve_candidate_feature_types",
+        unexpected,
+    )
+
+    prepared = build_request_diagram(request)
+    assert isinstance(prepared, PreparedDiagramRequest)
+    context = build_prepared_interactive_context(prepared)
+
+    assert context is not None
+    assert calls == {
+        "color_reader": 1,
+        "visibility_reader": 1,
+        "default_colors": 1,
+        "candidate_resolver": 1,
+        "visibility_compiler": 1,
+        "color_compiler": 1,
+    }
+
+
+def test_option_resolution_clears_shadowed_file_inputs_without_reading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    direct = DataFrame()
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("an in-memory table must take precedence over its file fallback")
+
+    for name in (
+        "read_color_table",
+        "load_default_colors",
+        "read_feature_visibility_file",
+        "read_filter_list_file",
+        "read_qualifier_priority_file",
+        "read_label_override_file",
+    ):
+        monkeypatch.setattr(request_render_module, name, unexpected)
+
+    resolved = request_render_module._resolve_request_option_tables(
+        LinearDiagramOptions(
+            colors=ColorOptions(
+                color_table=direct,
+                color_table_file="unused-colors.tsv",
+                default_colors=direct,
+                default_colors_file="unused-defaults.tsv",
+            ),
+            feature_visibility_table=direct,
+            feature_visibility_table_file="unused-visibility.tsv",
+        ),
+        mode="linear",
+        load_comparison_colors=False,
+    )
+
+    assert resolved.colors is not None
+    assert resolved.colors.color_table is direct
+    assert resolved.colors.color_table_file is None
+    assert resolved.colors.default_colors is direct
+    assert resolved.colors.default_colors_file is None
+    assert resolved.feature_visibility_table is direct
+    assert resolved.feature_visibility_table_file is None
 
 
 @pytest.mark.parametrize(
@@ -546,8 +857,8 @@ def test_mode_planners_return_validated_plan_types(
 
     monkeypatch.setattr(
         request_render_module,
-        "normalize_request_records",
-        lambda request: (
+        "_normalize_request_records",
+        lambda request, _inputs: (
             circular_record
             if isinstance(request, CircularDiagramRequest)
             else linear_record,
@@ -606,9 +917,13 @@ def test_build_circular_request_derives_row_and_column_order(
     captured: dict[str, object] = {}
     drawing = Drawing("out.svg")
 
-    monkeypatch.setattr(request_render_module, "normalize_request_records", lambda _: records)
+    monkeypatch.setattr(
+        request_render_module,
+        "_normalize_request_records",
+        lambda _request, _inputs: records,
+    )
 
-    def fake_build(loaded_records, *, options, layout):
+    def fake_build(loaded_records, *, options, layout, **_kwargs):
         captured["records"] = loaded_records
         captured["options"] = options
         captured["layout"] = layout
@@ -624,7 +939,7 @@ def test_build_circular_request_derives_row_and_column_order(
     assert captured["layout"].multi_record_positions == ("#3@1", "#2@1", "#1@2")
 
 
-def test_build_linear_request_uses_high_level_builder(
+def test_build_linear_request_uses_typed_result_builder(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = (_seqrecord("a"), _seqrecord("b"))
@@ -632,20 +947,159 @@ def test_build_linear_request_uses_high_level_builder(
     drawing = Drawing("out.svg")
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(request_render_module, "normalize_request_records", lambda _: records)
+    monkeypatch.setattr(
+        request_render_module,
+        "_normalize_request_records",
+        lambda _request, _inputs: records,
+    )
 
-    def fake_build(loaded_records, *, options):
+    def fake_build(loaded_records, *, options, **_kwargs):
         captured["records"] = loaded_records
         captured["options"] = options
         return drawing
 
-    monkeypatch.setattr(request_render_module, "build_linear_diagram", fake_build)
+    monkeypatch.setattr(
+        request_render_module,
+        "build_linear_diagram_result",
+        fake_build,
+    )
 
     prepared = build_request_diagram(request)
 
     assert prepared.mode == "linear"
     assert prepared.drawing is drawing
     assert captured == {"records": records, "options": request.options}
+
+
+def test_resolved_plan_can_be_built_without_planning_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = CircularDiagramRequest(records=(_memory_input("planned"),))
+    plan = plan_request(request)
+
+    def unexpected_replan(*_args, **_kwargs):
+        raise AssertionError("resolved plan was planned again")
+
+    monkeypatch.setattr(
+        request_render_module,
+        "plan_circular_request",
+        unexpected_replan,
+    )
+
+    prepared = build_request_plan_diagram(plan)
+
+    assert isinstance(prepared, PreparedDiagramRequest)
+    assert prepared.request is plan.request
+    assert prepared.records is plan.records
+
+
+def test_computed_orthogroups_flow_through_typed_metadata_to_interactive_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = (
+        _protein_record("source-a", "protein-a"),
+        _protein_record("source-b", "protein-b"),
+    )
+    request = LinearDiagramRequest(
+        records=tuple(
+            RecordInput(
+                source=InMemoryRecordSource(record),
+                record_key=f"record-{index + 1}",
+            )
+            for index, record in enumerate(records)
+        ),
+        options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
+    )
+    computed: dict[str, OrthogroupResult] = {}
+
+    def fake_analysis(
+        _records,
+        *,
+        protein_extraction,
+        **_kwargs,
+    ) -> ProteinBlastpResult:
+        members = [
+            OrthogroupMember(
+                orthogroup_id="OG0001",
+                protein_id=protein.protein_id,
+                record_index=protein.record_index,
+                feature_index=protein.feature_index,
+                record_id=protein.record_id,
+                label=protein.label,
+                start=protein.start,
+                end=protein.end,
+                strand=protein.strand,
+                feature_svg_id=protein.feature_svg_id,
+                source_protein_id=protein.source_protein_id,
+            )
+            for record_proteins in protein_extraction.proteins_by_record
+            for protein in record_proteins
+        ]
+        orthogroups = OrthogroupResult(
+            orthogroups={"OG0001": members},
+            member_by_protein_id={
+                member.protein_id: member
+                for member in members
+            },
+        )
+        computed["value"] = orthogroups
+        return ProteinBlastpResult(
+            comparisons=[
+                DataFrame(columns=request_render_module.COMPARISON_COLUMNS)
+            ],
+            orthogroups=orthogroups,
+        )
+
+    monkeypatch.setattr(
+        diagram_module,
+        "build_rbh_orthogroup_protein_blastp_comparisons",
+        fake_analysis,
+    )
+
+    prepared = build_request_diagram(request)
+    assert isinstance(prepared, PreparedDiagramRequest)
+    context = build_prepared_interactive_context(prepared)
+
+    assert prepared.linear_metadata is not None
+    assert prepared.linear_metadata.orthogroups is computed["value"]
+    assert [group["id"] for group in context.orthogroups] == ["OG0001"]
+    assert {
+        member["recordIndex"]
+        for member in context.orthogroups[0]["members"]
+    } == {0, 1}
+    assert not hasattr(prepared.drawing, "_gbdraw_orthogroups")
+
+
+def test_circular_batch_items_share_prepared_feature_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = CircularBatchRequest(
+        records=(_memory_input("batch-a"), _memory_input("batch-b")),
+        outputs=(
+            RenderOutputRequest(output_prefix="batch-a"),
+            RenderOutputRequest(output_prefix="batch-b"),
+        ),
+    )
+    received = []
+
+    def fake_build(_record, **kwargs):
+        received.append(kwargs["_resolved_feature_inputs"])
+        return Drawing("out.svg")
+
+    monkeypatch.setattr(
+        request_render_module,
+        "build_circular_diagram",
+        fake_build,
+    )
+
+    plan = plan_circular_batch_request(request)
+    item_plans = plan.item_plans()
+    prepared = build_request_diagram(request)
+
+    assert all(item.inputs is plan.inputs for item in item_plans)
+    assert isinstance(prepared, PreparedCircularBatchRequest)
+    assert all(item.inputs is prepared.inputs for item in prepared.items)
+    assert received == [prepared.inputs.features, prepared.inputs.features]
 
 
 def test_render_request_passes_output_policy_and_returns_existing_paths(
@@ -673,7 +1127,11 @@ def test_render_request_passes_output_policy_and_returns_existing_paths(
     captured: dict[str, object] = {}
     context = object()
 
-    monkeypatch.setattr(request_render_module, "build_request_diagram", lambda _: prepared)
+    monkeypatch.setattr(
+        request_render_module,
+        "build_request_plan_diagram",
+        lambda _: prepared,
+    )
     monkeypatch.setattr(
         request_render_module,
         "_interactive_context",
@@ -723,7 +1181,7 @@ def test_render_request_fails_when_interactive_metadata_generation_fails(
     )
     monkeypatch.setattr(
         request_render_module,
-        "build_request_diagram",
+        "build_request_plan_diagram",
         lambda _: prepared,
     )
 
@@ -858,6 +1316,37 @@ def test_render_request_circular_batch_loads_comparison_fasta_once(
     )
 
 
+def test_prepared_request_memoizes_comparison_fasta_records(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    comparison_fasta = tmp_path / "comparison.fna"
+    comparison_fasta.write_text(">comparison\nAACCGG\n", encoding="utf-8")
+    parse_calls: list[object] = []
+    parse = request_render_module.SeqIO.parse
+
+    def counting_parse(source, format_name):
+        parse_calls.append(source)
+        return parse(source, format_name)
+
+    monkeypatch.setattr(request_render_module.SeqIO, "parse", counting_parse)
+    request = CircularDiagramRequest(
+        records=(_memory_input("record"),),
+        options=CircularDiagramOptions(
+            conservation_fasta_files=(str(comparison_fasta),),
+        ),
+        output=RenderOutputRequest(formats=("interactive_svg",)),
+    )
+    prepared = build_request_diagram(request)
+    assert isinstance(prepared, PreparedDiagramRequest)
+
+    first = request_render_module._comparison_sequence_records(prepared)
+    second = request_render_module._comparison_sequence_records(prepared)
+
+    assert first is second
+    assert parse_calls == [str(comparison_fasta)]
+
+
 @pytest.mark.parametrize(
     "formats",
     [("svg",), ("interactive_svg",)],
@@ -909,8 +1398,10 @@ def test_render_request_circular_batch_preflights_existing_outputs(
     )
     monkeypatch.setattr(
         request_render_module,
-        "build_request_diagram",
-        lambda _request: pytest.fail("batch outputs must be preflighted before building"),
+        "build_request_plan_diagram",
+        lambda _plan: pytest.fail(
+            "batch outputs must be preflighted before building"
+        ),
     )
 
     with pytest.raises(ValidationError, match="already exist"):
@@ -918,3 +1409,190 @@ def test_render_request_circular_batch_preflights_existing_outputs(
 
     assert not (tmp_path / "batch-a.svg").exists()
     assert existing.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.circular
+def test_render_request_circular_batch_rejects_aliased_output_paths_before_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    nested = tmp_path / "nested"
+    request = CircularBatchRequest(
+        records=(_memory_input("batch-a"), _memory_input("batch-b")),
+        outputs=(
+            RenderOutputRequest(
+                output_prefix="diagram",
+                output_directory=nested / "..",
+            ),
+            RenderOutputRequest(
+                output_prefix="diagram",
+                output_directory=tmp_path,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_request_plan_diagram",
+        lambda _plan: pytest.fail(
+            "aliased batch outputs must be rejected before building"
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="duplicate file paths"):
+        render_request(request)
+
+    assert not (tmp_path / "diagram.svg").exists()
+
+
+@pytest.mark.circular
+def test_render_request_preflights_resolved_batch_policy_before_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    occupied = tmp_path / "diagram_2.svg"
+    occupied.write_text("keep", encoding="utf-8")
+    request = CircularBatchRequest(
+        records=(_memory_input("batch-a"), _memory_input("batch-b")),
+        output_policy=CircularBatchOutputPolicy(
+            output_prefix=tmp_path / "diagram",
+        ),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_request_plan_diagram",
+        lambda _plan: pytest.fail(
+            "resolved batch policy outputs must be preflighted before building"
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="already exist"):
+        render_request(request)
+
+    assert not (tmp_path / "diagram_1.svg").exists()
+    assert occupied.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("target_kind", ("directory", "file-parent"))
+def test_render_request_rejects_nonreplaceable_batch_target_before_build(
+    target_kind: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if target_kind == "directory":
+        blocked_directory = tmp_path / "blocked.svg"
+        blocked_directory.mkdir()
+        blocked_output = RenderOutputRequest(
+            output_prefix="blocked",
+            output_directory=tmp_path,
+            overwrite=True,
+        )
+        expected = "not replaceable files"
+    else:
+        blocked_parent = tmp_path / "blocked-parent"
+        blocked_parent.write_text("not a directory", encoding="utf-8")
+        blocked_output = RenderOutputRequest(
+            output_prefix="blocked",
+            output_directory=blocked_parent,
+            overwrite=True,
+        )
+        expected = "parent path.*not directories"
+    request = CircularBatchRequest(
+        records=(_memory_input("batch-a"), _memory_input("batch-b")),
+        outputs=(
+            RenderOutputRequest(
+                output_prefix="first",
+                output_directory=tmp_path,
+                overwrite=True,
+            ),
+            blocked_output,
+        ),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_request_plan_diagram",
+        lambda _plan: pytest.fail(
+            "nonreplaceable batch targets must be rejected before building"
+        ),
+    )
+
+    with pytest.raises(ValidationError, match=expected):
+        render_request(request)
+
+    assert not (tmp_path / "first.svg").exists()
+
+
+@pytest.mark.circular
+def test_render_request_rejects_implicit_record_path_through_symlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    linked_parent = tmp_path / "linked"
+    try:
+        linked_parent.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"directory symlinks are unavailable: {exc}")
+    monkeypatch.chdir(tmp_path)
+    request = CircularBatchRequest(
+        records=(_memory_input("linked/escaped"),),
+        output_policy=CircularBatchOutputPolicy(),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_request_plan_diagram",
+        lambda _plan: pytest.fail(
+            "unsafe implicit output must be rejected before building"
+        ),
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="cannot be used as an implicit output filename prefix",
+    ):
+        render_request(request)
+
+    assert not (outside / "escaped.svg").exists()
+
+
+@pytest.mark.parametrize("mode", ("circular", "linear"))
+def test_render_request_preflights_every_single_request_format_before_build(
+    mode: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svg_path = tmp_path / "diagram.svg"
+    svg_path.write_text("keep", encoding="utf-8")
+    blocked_png = tmp_path / "diagram.png"
+    blocked_png.mkdir()
+    output = RenderOutputRequest(
+        output_prefix="diagram",
+        output_directory=tmp_path,
+        formats=("png",),
+        overwrite=True,
+    )
+    request = (
+        CircularDiagramRequest(
+            records=(_memory_input("record"),),
+            output=output,
+        )
+        if mode == "circular"
+        else LinearDiagramRequest(
+            records=(_memory_input("record"),),
+            output=output,
+        )
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_request_plan_diagram",
+        lambda _plan: pytest.fail(
+            "single-request outputs must be preflighted before building"
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="not replaceable files"):
+        render_request(request)
+
+    assert svg_path.read_text(encoding="utf-8") == "keep"
+    assert blocked_png.is_dir()

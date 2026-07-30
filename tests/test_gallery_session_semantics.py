@@ -11,11 +11,11 @@ from xml.etree import ElementTree as ET
 import pytest
 
 from gbdraw.api import (
-    build_request_diagram,
     load_session_document,
     materialize_session,
     session_to_request,
 )
+from gbdraw.api.session_compat import build_session_compatible_request_diagram
 from gbdraw.session_io import load_session
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample
@@ -215,9 +215,9 @@ def _materialized_track_geometry(example_id: str) -> dict[str, Any]:
             document,
             output_directory=output_dir,
         ) as materialized:
-            prepared = build_request_diagram(
+            prepared = build_session_compatible_request_diagram(
                 session_to_request(materialized),
-                session_artifacts=document.to_dict(),
+                document.to_dict(),
             )
     geometry = getattr(prepared.drawing, "_gbdraw_track_slot_geometry", None)
     assert isinstance(geometry, dict)

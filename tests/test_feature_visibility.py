@@ -657,9 +657,8 @@ def test_circular_cli_feature_visibility_table_is_forwarded(
     feature_table_df = _visibility_df([["*", "*", "gene", "^geneA$", "off"]])
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
         request_render_module,
         "save_figure_to",
@@ -668,7 +667,7 @@ def test_circular_cli_feature_visibility_table_is_forwarded(
         ],
     )
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
         "read_feature_visibility_file",
         lambda _path: feature_table_df,
     )
@@ -704,20 +703,25 @@ def test_linear_cli_feature_visibility_table_is_forwarded(
     feature_table_df = _visibility_df([["*", "*", "gene", "^geneA$", "off"]])
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
-        linear_cli_module,
+        request_render_module,
         "read_feature_visibility_file",
         lambda _path: feature_table_df,
     )
 
-    def fake_render(canonical_request):
-        captured["canonical_request"] = canonical_request
+    def fake_render(canonical_request, **_kwargs):
+        resolved = request_render_module.resolve_request(canonical_request)
+        captured["canonical_request"] = resolved
         return SimpleNamespace(
             drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
             interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -751,9 +755,8 @@ def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_tab
         captured["keep_all_features"] = kwargs.get("keep_all_features")
         return [record]
 
-    monkeypatch.setattr(circular_cli_module, "load_gff_fasta", fake_load_gff_fasta)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
         request_render_module,
         "save_figure_to",
@@ -762,7 +765,7 @@ def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_tab
         ],
     )
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
         "read_feature_visibility_file",
         lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "off"]]),
     )
@@ -806,20 +809,25 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
         captured["keep_all_features"] = kwargs.get("keep_all_features")
         return [record]
 
-    monkeypatch.setattr(linear_cli_module, "load_gff_fasta", fake_load_gff_fasta)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
-        linear_cli_module,
+        request_render_module,
         "read_feature_visibility_file",
         lambda _path: feature_table_df,
     )
 
-    def fake_render(canonical_request):
-        captured["canonical_request"] = canonical_request
+    def fake_render(canonical_request, **_kwargs):
+        resolved = request_render_module.resolve_request(canonical_request)
+        captured["canonical_request"] = resolved
         return SimpleNamespace(
             drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
             interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)

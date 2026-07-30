@@ -73,6 +73,7 @@ export const formatElapsedMs = (elapsedMs) => {
 
 export const reproducibilityLabel = (level) => {
   const normalized = String(level || '').trim();
+  if (normalized === 'canonical-request') return 'Exact typed request';
   if (normalized === 'exact-uploaded-files') return 'Ready to rerun';
   if (normalized === 'requires-helper-files') return 'Raw CLI needs files';
   if (normalized === 'session-recommended') return 'Raw CLI needs files';
@@ -158,9 +159,18 @@ export const buildRunInfo = ({
   };
 
   const hasLosatHelpers = helperFiles.some((helper) => /losat|blast/i.test(`${helper.slot} ${helper.name}`));
+  const hasCanonicalRequest = helperFiles.some(
+    (helper) => helper.slot === 'generatedFiles.canonical_render_session'
+  );
   const notes = [];
   let level = 'exact-uploaded-files';
-  if (helperFiles.length > 0) {
+  if (hasCanonicalRequest) {
+    level = 'canonical-request';
+    notes.push(
+      'This command replays the exact typed request used for the render. ' +
+      'Use "Download CLI Files" to save its session file before running the command.'
+    );
+  } else if (helperFiles.length > 0) {
     level = hasLosatHelpers ? 'session-recommended' : 'requires-helper-files';
     notes.push(
       `The plain command references browser-generated file(s): ${formatHelperFileList(helperFiles)}. ` +

@@ -9,6 +9,10 @@ handles both single and multi-record input. Typed request/session and table
 contracts remain available from `gbdraw.api`; obsolete low-level convenience
 re-exports have been removed.
 
+These notes record what changed in this release. For the currently supported
+persisted versions and migration boundaries, see
+[Session and request compatibility](./SESSION_COMPATIBILITY.md).
+
 ## New top-level Python interface
 
 - Import the main drawing workflow from `gbdraw`, not `gbdraw.api`.
@@ -126,7 +130,18 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   a prefix, each record ID is used and duplicate implicit names receive the
   first available `_2`, `_3`, ... suffix. Circular grid output uses the first
   record ID by default and preserves an explicit prefix unchanged. Batch
-  sessions preserve the explicit grouping and every resolved output.
+  sessions preserve the explicit grouping and every resolved output. A record
+  ID used as an implicit output name must be one filename component; path-like
+  IDs, IDs containing ASCII control characters, and Windows-reserved device,
+  stream, or wildcard names require an explicit output prefix.
+- Diagram, multi-format, batch, and sidecar targets are preflighted as complete
+  sets before rendering. Existing regular files require current overwrite
+  permission; directories, special files, dangling symlinks, invalid parents,
+  and targets that appear after preflight fail closed. Package-root
+  `Diagram.save()` and strict typed exports create final files exclusively, and
+  session sidecars use a same-directory staged commit. Multi-format generation
+  remains sequential rather than transactional, so completed formats survive a
+  later conversion failure.
 - Current session version 39 uses canonical request schema 5 and persists
   explicit `single`, `grid`, or `batch` grouping. Schema 5 stores one output
   object for a single diagram or grid and an output array for Circular batch.

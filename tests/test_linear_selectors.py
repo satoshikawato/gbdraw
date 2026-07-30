@@ -175,11 +175,14 @@ def test_linear_cli_records_table_regions_follow_sorted_rows(
         captured["records"] = records
         return Drawing(filename=str(tmp_path / "linear.svg"))
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", fake_load)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(request_render_module, "build_linear_diagram", fake_build)
+    monkeypatch.setattr(request_render_module, "load_gbks", fake_load)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "build_linear_diagram_result",
+        fake_build,
+    )
     monkeypatch.setattr(
         request_render_module,
         "save_figure_to",

@@ -131,7 +131,7 @@ from .precalc import (
     _precalculate_label_dimensions,
     _resolve_linear_diagram_label_font_size,
 )
-from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
+from ...features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.ids import make_linear_dom_id
 from ...svg.ids import (
     definition_group_svg_id,
@@ -1511,9 +1511,8 @@ def assemble_linear_diagram(
     legend_measurement: LegendMeasurement | None = None
     required_legend_height = 0.0
     if canvas_config.legend_position != "none":
-        color_map, default_color_map = preprocess_color_tables(
-            feature_config.color_table, feature_config.default_colors
-        )
+        color_map = feature_config.specific_color_rules
+        default_color_map = feature_config.default_color_map
         features_present = check_feature_presence(
             records,
             feature_config.selected_features_set,

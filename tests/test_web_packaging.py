@@ -54,9 +54,13 @@ BROWSER_WHEEL_FORBIDDEN_FILES = {
     "gbdraw/web/index.html",
     "gbdraw/web/open-source-notices.html",
 }
+BROWSER_WHEEL_ALLOWED_FILES = {
+    "gbdraw/web/js/services/standalone-interactivity-assets.js",
+}
 BROWSER_WHEEL_REQUIRED_RUNTIME_DATA = {
     "gbdraw/data/color_palettes.toml",
     "gbdraw/data/config.toml",
+    "gbdraw/web/js/services/standalone-interactivity-assets.js",
 }
 GALLERY_SESSION_FILES = [
     "BGC0000708-BGC0000713.gbdraw-session.json",
@@ -331,7 +335,10 @@ def test_browser_wheel_excludes_hosted_web_assets() -> None:
         name
         for name in names
         if name in BROWSER_WHEEL_FORBIDDEN_FILES
-        or any(name.startswith(prefix) for prefix in BROWSER_WHEEL_FORBIDDEN_PREFIXES)
+        or (
+            name not in BROWSER_WHEEL_ALLOWED_FILES
+            and any(name.startswith(prefix) for prefix in BROWSER_WHEEL_FORBIDDEN_PREFIXES)
+        )
         or (name.startswith("gbdraw/web/gbdraw-") and name.endswith(".whl"))
     )
     assert forbidden == []
@@ -344,6 +351,8 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     package_data_patterns = build_support.get_package_data_patterns(include_browser_wheel=True)
 
     assert all("web/gallery" not in pattern for pattern in package_data_patterns)
+    assert "web/js/services/*.js" in package_data_patterns
+    assert (WEB_ROOT / "js" / "services" / "canonical-comparisons.js").is_file()
     assert "gbdraw/web/gallery" not in (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
     assert "gbdraw/web/gallery/" in build_support._BROWSER_WHEEL_FORBIDDEN_PREFIXES
 
@@ -402,7 +411,9 @@ def test_web_run_info_tab_source_contract() -> None:
     assert "const lastRunInfo = ref(null);" in state_js
     assert "buildRunInfo({" in run_analysis_js
     assert "resultPanelTab.value = 'preview';" in run_analysis_js
-    assert "if (activePaletteName !== 'default') args.push('-p', activePaletteName);" in run_analysis_js
+    assert "args: ['--session', canonicalReplayPath]" in run_analysis_js
+    assert "request: canonical.renderRequest" in run_analysis_js
+    assert "args.push(" not in run_analysis_js
     assert "const dContent = buildDefaultColorOverrideTsv({" in run_analysis_js
     assert "if (dContent.trim() !== '') {" in run_analysis_js
     assert "cliInvocation: exportableCliInvocation" in config_js
@@ -416,12 +427,16 @@ def test_web_run_info_helper_builds_display_commands() -> None:
     subprocess.run([node, "tests/web/run-info.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
-def test_web_cli_arg_helpers_omit_default_values() -> None:
+def test_web_definition_line_style_state_normalization() -> None:
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not available")
 
-    subprocess.run([node, "tests/web/cli-args.test.mjs"], check=True, cwd=REPO_ROOT)
+    subprocess.run(
+        [node, "tests/web/definition-line-style-state.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
 
 
 def test_web_feature_rendering_contract() -> None:
@@ -432,28 +447,106 @@ def test_web_feature_rendering_contract() -> None:
     subprocess.run([node, "tests/web/feature-shapes.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
-def test_web_feature_shape_support_probe_matches_cli_behavior() -> None:
-    source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(
+def test_web_runtime_capabilities_replace_source_probes() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(
         encoding="utf-8"
     )
-    match = re.search(
-        r"const getFeatureShapeOptionSupport = \(\) => \{.*?"
-        r"const raw = pyodide\.runPython\(`\n(?P<probe>.*?)\n      `\);",
-        source,
-        re.DOTALL,
-    )
-    assert match is not None
-    probe = match.group("probe").replace(
-        "\njson.dumps({", "\n_probe_result = json.dumps({", 1
-    )
-    namespace: dict[str, object] = {}
-    exec(probe, namespace)
+    worker_source = (
+        WEB_ROOT / "js" / "workers" / "diagram-generation-worker.js"
+    ).read_text(encoding="utf-8")
+    generation_source = (
+        WEB_ROOT / "js" / "services" / "diagram-generation.js"
+    ).read_text(encoding="utf-8")
+    index_source = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
-    assert json.loads(str(namespace["_probe_result"])) == {
-        "circular": True,
-        "linear": True,
-        "underlay": True,
-    }
+    assert "inspect.getsource" not in run_source
+    assert '_get_args(["--help"])' not in run_source
+    assert "getLinearLabelOptionSupport" not in run_source
+    assert "getFeatureShapeOptionSupport" not in run_source
+    assert "getCircularMultiRecordCanvasOptionSupport" not in run_source
+    assert "getLinearTrackSlotOptionSupport" not in run_source
+    assert "get_web_runtime_capabilities" in worker_source
+    assert "capabilities: initialized.capabilities" in worker_source
+    assert "validateWebRuntimeCapabilities(data.capabilities)" in generation_source
+
+    user_facing_source = f"{run_source}\n{index_source}"
+    for internal_phrase in (
+        "Current gbdraw wheel",
+        "Rebuild and redeploy",
+        "CLI feature visibility table",
+        "suppressed by CLI",
+        "CLI uses the selected palette",
+        "CLI-only ruler override",
+        "override file is generated",
+    ):
+        assert internal_phrase not in user_facing_source
+
+
+def test_web_generation_uses_the_canonical_typed_request_transport() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(
+        encoding="utf-8"
+    )
+    worker_source = (
+        WEB_ROOT / "js" / "workers" / "diagram-generation-worker.js"
+    ).read_text(encoding="utf-8")
+    helper_source = (
+        WEB_ROOT / "js" / "app" / "python-helpers.js"
+    ).read_text(encoding="utf-8")
+
+    assert "buildCanonicalRenderRequest({" in run_source
+    assert "request: canonical.renderRequest" in run_source
+    assert "resources: canonical.resources" in run_source
+    assert "args: ['--session', canonicalReplayPath]" in run_source
+    assert "let args = [];" not in run_source
+    assert "args.push(" not in run_source
+    assert "args.lastIndexOf(" not in run_source
+    assert "generationFileMap" not in run_source
+    for retired_builder in (
+        "selectedFeatureShapes",
+        "appendDepthStyleArgs",
+        "appendDepthTrackMetadataArgs",
+        "buildModeTrackVisibilityArgs",
+        "buildModeBlastFilterArgs",
+        "buildRecordSelectorArgs",
+        "buildReverseComplementArgs",
+    ):
+        assert retired_builder not in run_source
+    assert not (WEB_ROOT / "js" / "app" / "cli-args.js").exists()
+    assert "run_canonical_request_wrapper" in worker_source
+    assert "render_embedded_canonical_web_request" in helper_source
+    for retired_transport in (
+        "run_gbdraw_wrapper",
+        "virtualBlastFiles",
+        "_get_circular_args",
+        "_get_linear_args",
+        "_install_virtual_blast_loader",
+        "_assemble_module.load_comparisons =",
+    ):
+        assert retired_transport not in f"{run_source}\n{worker_source}\n{helper_source}"
+
+
+def test_web_runtime_capability_validation() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/runtime-capabilities.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+
+def test_web_pyodide_startup_failure_is_user_safe() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/pyodide-startup.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
 
 
 def test_web_canonical_session_request_codec() -> None:
@@ -608,6 +701,7 @@ def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    session_request_js = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     helper_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
     worker_js = (WEB_ROOT / "js" / "workers" / "diagram-generation-worker.js").read_text(encoding="utf-8")
     svg_actions_js = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
@@ -620,8 +714,9 @@ def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     assert "'transcript'" in state_js
     assert "{svg_id: 'on' | 'off' | 'exclude_matching'}" in state_js
     assert "/web_feature_visibility_table.tsv" in run_analysis_js
-    assert "args.push('--feature_visibility_table', featureVisibilityTablePath);" in run_analysis_js
     assert "serializeFeatureVisibilityRules(featureVisibilityRules?.value || [])" in run_analysis_js
+    assert "serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || [])" in session_request_js
+    assert "diagramOptions.featureVisibilityTableFile = fileRef(resources.addText(" in session_request_js
     assert "featureVisibility: featureVisibilityCacheKey" in run_analysis_js
     assert "featureVisibilityTsv: featureVisibilityCacheKey" in run_analysis_js
     assert "featureVisibilityTablePath || null" in worker_js
@@ -653,7 +748,10 @@ def test_web_linear_definition_line_styles_contract() -> None:
     app_setup_js = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
-    cli_args_js = (WEB_ROOT / "js" / "app" / "cli-args.js").read_text(encoding="utf-8")
+    session_request_js = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
+    definition_style_js = (
+        WEB_ROOT / "js" / "app" / "definition-line-style-state.js"
+    ).read_text(encoding="utf-8")
 
     assert "Definition Line Styles" in index_html
     assert "Subtitle / title (optional)" in index_html
@@ -667,12 +765,11 @@ def test_web_linear_definition_line_styles_contract() -> None:
     assert "linear_definition_line_styles: createDefaultLinearDefinitionLineStyles()" in state_js
     assert "record_subtitle: seq.record_subtitle ?? ''" in config_js
     assert "normalizeDefinitionLineStyleState" in config_js
-    assert "buildDefinitionLineStyleAssignments" in run_analysis_js
-    assert "args.push('--record_subtitle', subtitle);" in run_analysis_js
-    assert "definition_line_style" in run_analysis_js
-    assert "args.push('--definition_line_style', assignment);" in run_analysis_js
-    assert "'subtitle'" in cli_args_js
-    assert "color=${style.fill}" in cli_args_js
+    assert "normalizeDefinitionLineStyleState" in run_analysis_js
+    assert "presentationPayload({ label: seq.definition, subtitle: seq.record_subtitle })" in session_request_js
+    assert "Object.entries(LINEAR_DEFINITION_STYLE_PATHS)" in session_request_js
+    assert "'subtitle'" in definition_style_js
+    assert "fill: normalizeDefinitionLineFill(entry.fill)" in definition_style_js
 
 
 def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
@@ -851,11 +948,14 @@ def test_web_run_analysis_orthogroup_top_label_mode_is_wired() -> None:
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    session_request_js = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
 
     assert '<option value="orthogroup_top"' in index_html
     assert "Top Similarity Group Record" in index_html
     assert "losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear'" in index_html
-    assert "if (form.show_labels_linear === 'orthogroup_top') args.push('orthogroup_top');" in run_analysis_js
+    assert "[MODE_LABEL_SCOPE_PATHS[state.mode.value]]" in session_request_js
+    assert "form.show_labels_linear" in session_request_js
+    assert "args.push(" not in run_analysis_js
     assert "show_labels_linear: 'none'" in state_js
     assert "form: state.form" in config_js
 
@@ -2749,23 +2849,22 @@ def test_project_docs_and_citation_metadata_include_preprint_doi() -> None:
     assert "preferred-citation:" in citation_cff
 
 
-def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
-    source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
-    assert "tick_label_font_size" in source
-    assert '"tick_label_font_size": "--tick_label_font_size" in _source' in source
-    assert "args.push('--tick_label_font_size', adv.tick_label_font_size);" in source
-    assert "if (form.scale_style === 'ruler')" in source
+def test_web_typed_request_wires_scale_and_tick_font_size_options() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
+    assert "[CONFIG_OVERRIDE_PATHS.tickLabelFontSize]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.scaleStyle]: form.scale_style" in request_source
+    assert "inspect.getsource" not in run_source
+    assert "args.push(" not in run_source
 
 
-def test_web_linear_run_ignores_hidden_circular_species_strain_args() -> None:
-    source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
-    assert (
-        "if (mode.value === 'circular') {\n"
-        "        if (form.species) args.push('--species', form.species);\n"
-        "        if (form.strain) args.push('--strain', form.strain);\n"
-        "      }"
-    ) in source
-    assert "if (form.species) args.push('--species', form.species);\n      if (form.strain)" not in source
+def test_web_species_and_strain_are_projected_only_for_circular_requests() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
+    circular_branch = request_source.split("if (state.mode.value === 'circular') {", 1)[1]
+    assert "diagramOptions.species = String(state.form.species || '').trim() || null;" in circular_branch
+    assert "diagramOptions.strain = String(state.form.strain || '').trim() || null;" in circular_branch
+    assert "args.push(" not in run_source
 
 
 def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() -> None:
@@ -2809,6 +2908,7 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     module_source = (WEB_ROOT / "js" / "app" / "linear-track-slots.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
@@ -2832,8 +2932,8 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "Auto values vary by record" in index_html
     assert ':disabled="adv.linear_track_slots_enabled"' in index_html
     assert 'v-model.number="entry.slot.params.track_index"' in index_html
-    assert "--linear_track_slot" in run_source
-    assert "buildLinearTrackSlotSpec" in run_source
+    assert "buildLinearTrackSlotSpec(slot)" in request_source
+    assert "linearTrackAxisIndexForEnabledSlots(" in request_source
     assert "linearSlotNeedsDepth" in run_source
     assert "validateImportedLinearTrackSlots" in config_source
     assert "LINEAR_TRACK_SLOT_SCHEMA_VERSION = 2" in module_source
@@ -2845,32 +2945,33 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "linearTrackSlotEditor.reconcileLinearTrackSlotsFromSimpleControls" not in app_setup_source
     assert "linearTrackSlotUsesPresetGeometry(entry.slot)" in index_html
     assert "linearTrackSlotUsesPresetGeometry: linearTrackSlotEditor.linearTrackSlotUsesPresetGeometry" in app_setup_source
-    assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in run_source
-    assert "args.push('--scale_font_size', adv.scale_font_size);" in run_source
-    assert "args.push(...buildModeTrackVisibilityArgs('linear', form));" in run_source
-    assert "if (form.show_gc) args.push('--gc');" not in run_source
-    assert "if (form.show_skew) args.push('--skew');" not in run_source
-    assert "args.push('--show_gc')" not in run_source
-    assert "args.push('--show_skew')" not in run_source
+    assert "[SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize]" in request_source
+    assert "[SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.showGc]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.showSkew]" in request_source
+    assert "args.push(" not in run_source
 
 
 def test_web_output_prefix_help_is_mode_aware() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
 
     assert "Leave empty to use record IDs" in index_html
     assert "Leave empty to use out." in index_html
     assert "Optional (Default: Record ID)" in index_html
     assert "Optional (Default: out)" in index_html
     assert ':placeholder="mode === \'circular\' ?' in index_html
-    assert "if (normalizedOutputPrefix) args.push('-o', normalizedOutputPrefix);" in run_source
-    assert "normalizedOutputPrefix !== 'out'" not in run_source
+    assert "const explicitPrefix = explicitOutputPrefix(state.form.prefix);" in request_source
+    assert "resolveCircularBatchPrefixes(circularOutputRecords, explicitPrefix)" in request_source
+    assert "args.push(" not in run_source
 
 
 def test_web_wires_gc_content_percent_options() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "gc_content_mode: 'deviation'" in state_source
@@ -2880,14 +2981,13 @@ def test_web_wires_gc_content_percent_options() -> None:
     assert "state.adv.gc_content_mode" in config_source
     assert "state.adv.gc_content_min_percent" in config_source
     assert "state.adv.gc_content_max_percent" in config_source
-    assert "appendGcContentPercentArgs" in run_source
+    assert "normalizeGcContentPercentState" in run_source
     assert "if (adv.gc_content_mode !== 'percent') return;" in run_source
-    assert "args.push('--gc_content_mode', 'percent');" in run_source
-    assert "args.push('--gc_content_min_percent', String(minPercent));" in run_source
-    assert "args.push('--gc_content_max_percent', String(maxPercent));" in run_source
-    assert "args.push('--gc_content_large_tick_interval', adv.gc_content_tick_interval);" in run_source
-    assert "args.push('--hide_gc_content_axis');" in run_source
-    assert "args.push('--hide_gc_content_ticks');" in run_source
+    assert "[CONFIG_OVERRIDE_PATHS.gcContentMode]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.gcContentMinPercent]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval]" in request_source
+    assert "args.push(" not in run_source
     assert 'v-model="adv.gc_content_mode"' in index_html
     assert "GC Content Mode" in index_html
     assert "adv.gc_content_mode === 'percent'" in index_html
@@ -2896,6 +2996,7 @@ def test_web_wires_gc_content_percent_options() -> None:
 
 def test_web_wires_addable_depth_tracks() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
@@ -2958,25 +3059,22 @@ def test_web_wires_addable_depth_tracks() -> None:
     )[0]
     assert "setOptionalNumberInputValue" in definition_size_block
     assert "Number(value)" not in definition_size_block
-    assert "depthTrackConfigAt(index, file)" in run_source
     assert "syncDepthSlotLegendLabelsFromTrackConfigs" in run_source
     assert "syncDepthSlotLabels({" in run_source
     assert "slot.params.legend_label = label;" in depth_state_source
-    assert "args.push('--depth_track_label', ...labels);" in run_source
-    assert "args.push('--depth_track_color', ...colors);" in run_source
-    assert "args.push('--depth_track_height', ...heights);" in run_source
-    assert "args.push('--depth_track_large_tick_interval', ...largeTicks);" in run_source
-    assert "args.push('--depth_track_small_tick_interval', ...smallTicks);" in run_source
-    assert "args.push('--depth_track_tick_font_size', ...tickFontSizes);" in run_source
-    assert "depthPaths.push('');" in run_source
+    assert "const buildDepthResources" in request_source
+    assert "const sources = rows.map((row) => row[trackIndex] || null);" in request_source
+    assert "diagramOptions.depthTracks = Array.from" in request_source
+    assert "canonicalOptionalPositiveNumber(" in request_source
     assert "source.large_tick_interval ?? source.tick_interval" not in run_source
     assert "source.large_tick_interval ?? source.tick_interval" not in depth_state_source
-    assert "args.push('--depth_large_tick_interval', adv.depth_large_tick_interval);" in run_source
-    assert "args.push('--show_depth');" not in run_source
+    assert "validateDepthStyleSettings" in run_source
+    assert "args.push(" not in run_source
 
 
 def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     slot_source = (WEB_ROOT / "js" / "app" / "circular-track-slots.js").read_text(encoding="utf-8")
@@ -2989,19 +3087,17 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "createDefaultCircularTrackSlots()" in state_source
     assert "state.adv.center_reserved_radius = normalizeNonNegativeNumberOrNull(state.adv.center_reserved_radius);" in config_source
     assert "inferLegacyAxisIndexFromFeature(normalizedSlots, state.form.track_type)" in config_source
-    assert '"circular_track_slot": "--circular_track_slot" in _source' in run_source
-    assert '"circular_track_axis_index": "--circular_track_axis_index" in _source' in run_source
-    assert '"center_reserved_radius": "--center_reserved_radius" in _source' in run_source
-    assert "args.push('--track_type', form.track_type);" in run_source
-    assert "args.push('--center_reserved_radius', String(normalizedCenterReservedRadius));" in run_source
+    assert "buildCanonicalRenderRequest({" in run_source
+    assert "request: canonical.renderRequest" in run_source
+    assert "resources: canonical.resources" in run_source
+    assert "[CONFIG_OVERRIDE_PATHS.trackType]: form.track_type" in request_source
+    assert "centerReservedRadius: circular ? optionalNumber(state.adv.center_reserved_radius) : null" in request_source
     assert "applyCircularSuppressControlsToSlots" in run_source
-    assert "args.push(...buildModeTrackVisibilityArgs('circular', form));" in run_source
-    assert "if (form.suppress_gc) args.push('--no-gc');" not in run_source
-    assert "if (form.suppress_skew) args.push('--no-skew');" not in run_source
-    assert "args.push('--suppress_gc')" not in run_source
-    assert "args.push('--suppress_skew')" not in run_source
-    assert "args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));" in run_source
-    assert "buildCircularTrackSlotSpec(slot, adv.nt, form.track_type)" in run_source
+    assert "[CONFIG_OVERRIDE_PATHS.showGc]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.showSkew]" in request_source
+    assert "circularTrackAxisIndex: circular && state.adv.circular_track_slots_enabled" in request_source
+    assert "buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type)" in request_source
+    assert "args.push(" not in run_source
     assert "forceSplitLane" not in run_source
     assert "applyCircularTrackOrderPlacements(" in run_source
     assert "if (useCircularTrackSlots)" in run_source
@@ -3067,6 +3163,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
 
 def test_web_wires_circular_conservation_options() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     slot_source = (WEB_ROOT / "js" / "app" / "circular-track-slots.js").read_text(encoding="utf-8")
@@ -3111,20 +3208,18 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "type=\"color\" v-model=\"circularConservation.series[row.index].color\"" in index_html
     assert ":multiple=\"true\"" in index_html
     assert "props: ['label', 'accept', 'modelValue', 'small', 'multiple']" in components_source
-    assert '"conservation_blast": "--conservation_blast" in _source' in run_source
-    assert '"records_table": "--records_table" in _source' in run_source
-    assert '"conservation_table": "--conservation_table" in _source' in run_source
-    assert '"circular_track_table": "--circular_track_table" in _source' in run_source
-    assert '"conservation_colors": "--conservation_colors" in _source' in run_source
+    assert "inspect.getsource" not in run_source
+    assert "resolvedCircularConservation" in run_source
     assert "runCircularLosatConservation" in run_source
     assert "buildConservationSeries" in run_source
     assert "program: circularLosatProgram" in run_source
     assert "circularLosatProgram === 'tblastx'" in run_source
-    assert "args.push('--conservation_colors', ...colors);" in run_source
-    assert "args.push('--conservation_blast', ...conservationBlastPaths);" in run_source
-    assert "args.push('--conservation_reference', conservationReference);" in run_source
+    assert "diagramOptions.conservationBlastFiles = resolvedCircularConservation.map" in request_source
+    assert "diagramOptions.conservationColors = resolvedCircularConservation.map" in request_source
+    assert "diagramOptions.conservationReference = String(" in request_source
+    assert "args.push(" not in run_source
     assert "flow: 'circular-conservation'" in run_source
-    assert "conservationReference = 'subject';" in run_source
+    assert "circularConservation.reference = 'subject';" in run_source
     assert "'sequence_conservation'" in slot_source
 
 
@@ -4440,6 +4535,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         assert "gbdraw/web/js/app/record-discovery.js" in outer_names
         assert "gbdraw/web/js/app/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
+        assert "gbdraw/web/js/services/canonical-comparisons.js" in outer_names
         assert "gbdraw/web/js/app/annotations/record-catalog.js" in outer_names
         assert "gbdraw/web/js/app/annotations/record-selector.js" in outer_names
         assert "gbdraw/web/js/app/annotations/validation.js" in outer_names
@@ -4453,6 +4549,10 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
     )
     if not _can_bind_loopback():
         pytest.skip("loopback sockets are not permitted in this environment")
+    worker_source = (
+        WEB_ROOT / "js" / "workers" / "diagram-generation-worker.js"
+    ).read_text(encoding="utf-8")
+    assert "pyodide.FS.analyzePath(workspace).exists" in worker_source
 
     from Bio import SeqIO
     from Bio.Seq import Seq
@@ -4523,7 +4623,16 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
         assert page.evaluate("() => window.__GBDRAW_APP__.linearSeqs[0].region_record_id") == "RecB"
 
         result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
-        assert result["status"] == "ok"
+        assert result["status"] == "ok", page.evaluate(
+            """() => ({
+                result: window.__GBDRAW_APP__.errorLog,
+                dialogs: window.__gbdrawDialogMessages,
+                workerStatus: window.__GBDRAW_APP__.diagramGenerationWorkerStatus
+            })"""
+        )
+        assert page.evaluate(
+            "() => window.__GBDRAW_APP__.diagramGenerationWorkerReady"
+        )
         svg_content = page.evaluate("() => String(window.__GBDRAW_APP__.results[0]?.content || '')")
         assert "567 bp" in svg_content
         assert "1,234 bp" not in svg_content
@@ -4536,7 +4645,10 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
             }"""
         )
         region_result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
-        assert region_result["status"] == "ok"
+        assert region_result["status"] == "ok", region_result
+        assert page.evaluate(
+            "() => window.__GBDRAW_APP__.diagramGenerationWorkerReady"
+        )
         region_svg = page.evaluate("() => String(window.__GBDRAW_APP__.results[0]?.content || '')")
         assert "10-20" in region_svg
 
@@ -4926,7 +5038,10 @@ def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
         )
         page.on("pageerror", lambda error: console_errors.append(str(error)))
 
-        for session_name in GALLERY_SESSION_FILES:
+        def import_session_in_fresh_page(
+            session_path: Path,
+            session_label: str,
+        ) -> None:
             page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
             page.wait_for_function("() => window.__GBDRAW_APP__")
             page.evaluate(
@@ -4938,7 +5053,7 @@ def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
                 }"""
             )
             page.locator('input[accept^=".json,"]').first.set_input_files(
-                str(GALLERY_ROOT / "sessions" / session_name)
+                str(session_path)
             )
             page.wait_for_function(
                 "() => Array.isArray(window.__gbdrawDialogMessages) && window.__gbdrawDialogMessages.length > 0",
@@ -4946,7 +5061,7 @@ def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
             )
             dialog_message = page.evaluate("() => window.__gbdrawDialogMessages.at(-1)")
             assert dialog_message == "Session loaded successfully!", (
-                session_name,
+                session_label,
                 dialog_message,
                 console_errors,
             )
@@ -4962,9 +5077,15 @@ def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
                 )
             except playwright_sync_api.TimeoutError:
                 pytest.fail(
-                    f"{session_name} did not restore a completed SVG result; "
+                    f"{session_label} did not restore a completed SVG result; "
                     f"console errors: {console_errors!r}"
                 )
+
+        for session_name in GALLERY_SESSION_FILES:
+            import_session_in_fresh_page(
+                GALLERY_ROOT / "sessions" / session_name,
+                session_name,
+            )
 
             summary = page.evaluate(
                 """() => {
@@ -4988,28 +5109,68 @@ def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
 
             if session_name == "WSSV_genome_comparison.gbdraw-session.json":
                 conservation_state = page.evaluate(
-                    """() => {
+                    """async () => {
                         const app = window.__GBDRAW_APP__;
+                        const fastaFiles = Array.isArray(
+                            app.files?.c_conservation_fastas
+                        )
+                            ? app.files.c_conservation_fastas
+                            : [];
+                        const fastaHeaders = await Promise.all(
+                            fastaFiles.map(async (file) => {
+                                if (!file || typeof file.text !== 'function') return null;
+                                const firstHeader = String(await file.text())
+                                    .split(/\\r?\\n/)
+                                    .find((line) => line.startsWith('>')) || '';
+                                return firstHeader
+                                    .slice(1)
+                                    .trim()
+                                    .split(/\\s+/)[0] || null;
+                            })
+                        );
                         return {
                             enabled: app.circularConservation?.enabled === true,
                             source: String(app.circularConservation?.source || ''),
-                            labels: (app.circularConservation?.series || [])
-                                .map((entry) => String(entry?.label || '')),
+                            series: (app.circularConservation?.series || []).map(
+                                (entry) => ({
+                                    sourceIndex: Number(entry?.sourceIndex),
+                                    fileName: String(entry?.fileName || ''),
+                                    label: String(entry?.label || '')
+                                })
+                            ),
                             blastCount: app.files?.c_conservation_blasts?.length || 0,
+                            blastNames: (app.files?.c_conservation_blasts || [])
+                                .map((file) => String(file?.name || '')),
                             blastSource: String(
                                 app.files?.c_conservation_blasts_source || ''
                             ),
                             comparisonFastaCount:
-                                app.files?.c_conservation_fastas?.length || 0
+                                fastaFiles.length,
+                            fastaNames: fastaFiles.map(
+                                (file) => file ? String(file.name || '') : null
+                            ),
+                            fastaHeaders
                         };
                     }"""
                 )
                 assert conservation_state["enabled"] is True
                 assert conservation_state["source"] == "losat"
-                assert len(conservation_state["labels"]) == 20
+                assert len(conservation_state["series"]) == 20
                 assert conservation_state["blastCount"] == 20
                 assert conservation_state["blastSource"] == "losat-cache"
                 assert conservation_state["comparisonFastaCount"] == 20
+                assert conservation_state["fastaNames"] == [
+                    name for name in conservation_state["fastaNames"] if name
+                ]
+                assert conservation_state["fastaHeaders"] == [
+                    header for header in conservation_state["fastaHeaders"] if header
+                ]
+                assert [
+                    entry["sourceIndex"] for entry in conservation_state["series"]
+                ] == list(range(20))
+                assert [
+                    entry["fileName"] for entry in conservation_state["series"]
+                ] == conservation_state["blastNames"]
 
                 round_trip_path = tmp_path / "WSSV-round-trip.gbdraw-session.json.gz"
                 with page.expect_download() as download_info:
@@ -5020,12 +5181,182 @@ def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
                 round_trip = load_session(round_trip_path)
                 options = round_trip["renderRequest"]["diagramOptions"]
                 assert len(options["conservationBlastFiles"]) == 20
-                assert options["conservationLabels"] == conservation_state["labels"]
+                assert options["conservationLabels"] == [
+                    entry["label"] for entry in conservation_state["series"]
+                ]
                 assert round_trip["webFiles"]["conservationBlastSource"] == "losat-cache"
                 assert "conservationFastaFiles" not in options
-                assert len(
-                    round_trip["webFiles"]["conservationLosatFastaSources"]
-                ) == 20
+                fasta_resource_ids = round_trip["webFiles"][
+                    "conservationLosatFastaSources"
+                ]
+                assert len(fasta_resource_ids) == 20
+                assert all(fasta_resource_ids)
+                original_names = round_trip["webFiles"].get(
+                    "resourceOriginalNames",
+                    {},
+                )
+                expected_fasta_names = [
+                    original_names.get(
+                        resource_id,
+                        round_trip["resources"][resource_id]["name"],
+                    )
+                    for resource_id in fasta_resource_ids
+                ]
+                assert expected_fasta_names == conservation_state["fastaNames"]
+
+                import_session_in_fresh_page(
+                    round_trip_path,
+                    "fresh WSSV round trip",
+                )
+                restored_conservation = page.evaluate(
+                    """async () => {
+                        const app = window.__GBDRAW_APP__;
+                        const fastaFiles = Array.isArray(
+                            app.files?.c_conservation_fastas
+                        )
+                            ? app.files.c_conservation_fastas
+                            : [];
+                        const fastaHeaders = await Promise.all(
+                            fastaFiles.map(async (file) => {
+                                if (!file || typeof file.text !== 'function') return null;
+                                const firstHeader = String(await file.text())
+                                    .split(/\\r?\\n/)
+                                    .find((line) => line.startsWith('>')) || '';
+                                return firstHeader
+                                    .slice(1)
+                                    .trim()
+                                    .split(/\\s+/)[0] || null;
+                            })
+                        );
+                        const matchBySource = new Map();
+                        document.querySelectorAll(
+                            'path[data-match-kind="homology"][data-source-index]'
+                        ).forEach((element) => {
+                            const sourceIndex = Number(
+                                element.getAttribute('data-source-index')
+                            );
+                            if (
+                                Number.isInteger(sourceIndex) &&
+                                !matchBySource.has(sourceIndex)
+                            ) {
+                                matchBySource.set(sourceIndex, element);
+                            }
+                        });
+                        const popupLookups = [];
+                        for (let sourceIndex = 0; sourceIndex < 20; sourceIndex += 1) {
+                            const element = matchBySource.get(sourceIndex);
+                            if (!element) {
+                                popupLookups.push({
+                                    sourceIndex,
+                                    found: false
+                                });
+                                continue;
+                            }
+                            const rect = element.getBoundingClientRect();
+                            element.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window,
+                                clientX: rect.left + (rect.width / 2),
+                                clientY: rect.top + (rect.height / 2)
+                            }));
+                            await new Promise((resolve) => requestAnimationFrame(resolve));
+                            const payload = app.clickedPairwiseMatch;
+                            const entries = Array.isArray(
+                                payload?.sequenceBundle?.entries
+                            )
+                                ? payload.sequenceBundle.entries
+                                : [];
+                            const comparison = entries.find(
+                                (entry) => entry?.span?.displayRole === 'Comparison'
+                            );
+                            const reference = entries.find(
+                                (entry) => entry?.span?.displayRole === 'Reference'
+                            );
+                            popupLookups.push({
+                                sourceIndex,
+                                found: true,
+                                matchId: String(
+                                    payload?.id || payload?.matchId || ''
+                                ),
+                                entryCount: entries.length,
+                                comparisonRecordId: String(
+                                    comparison?.span?.recordId || ''
+                                ),
+                                comparisonAvailable:
+                                    comparison?.available === true,
+                                referenceAvailable:
+                                    reference?.available === true,
+                                combinedAvailable: Boolean(
+                                    payload?.sequenceBundle?.combinedFasta
+                                )
+                            });
+                        }
+                        return {
+                            series: (app.circularConservation?.series || []).map(
+                                (entry) => ({
+                                    sourceIndex: Number(entry?.sourceIndex),
+                                    fileName: String(entry?.fileName || ''),
+                                    label: String(entry?.label || '')
+                                })
+                            ),
+                            blastNames: (app.files?.c_conservation_blasts || [])
+                                .map((file) => String(file?.name || '')),
+                            fastaNames: fastaFiles.map(
+                                (file) => file ? String(file.name || '') : null
+                            ),
+                            fastaHeaders,
+                            popupLookups
+                        };
+                    }"""
+                )
+                assert restored_conservation["fastaNames"] == expected_fasta_names
+                assert (
+                    restored_conservation["fastaHeaders"]
+                    == conservation_state["fastaHeaders"]
+                )
+                assert [
+                    entry["sourceIndex"]
+                    for entry in restored_conservation["series"]
+                ] == list(range(20))
+                assert [
+                    entry["fileName"] for entry in restored_conservation["series"]
+                ] == restored_conservation["blastNames"]
+                assert len(restored_conservation["popupLookups"]) == 20
+                for source_index, lookup in enumerate(
+                    restored_conservation["popupLookups"]
+                ):
+                    assert lookup["sourceIndex"] == source_index
+                    assert lookup["found"] is True
+                    assert lookup["matchId"]
+                    assert lookup["entryCount"] == 2
+                    assert lookup["comparisonAvailable"] is True
+                    assert lookup["referenceAvailable"] is True
+                    assert lookup["combinedAvailable"] is True
+                    assert (
+                        lookup["comparisonRecordId"]
+                        == restored_conservation["fastaHeaders"][source_index]
+                    )
+
+                comparison_download_path = (
+                    tmp_path / "WSSV-restored-comparison-span.fna"
+                )
+                comparison_download_button = page.locator(
+                    '.pairwise-match-popup '
+                    'button[title="Download comparison span FASTA"]'
+                )
+                assert comparison_download_button.is_enabled()
+                with page.expect_download() as comparison_download_info:
+                    comparison_download_button.click()
+                comparison_download_info.value.save_as(comparison_download_path)
+                downloaded_fasta = comparison_download_path.read_text(
+                    encoding="utf-8"
+                )
+                assert downloaded_fasta.startswith(">")
+                assert (
+                    restored_conservation["fastaHeaders"][-1]
+                    in downloaded_fasta.splitlines()[0]
+                )
 
             if session_name == "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz":
                 multi_record_positions = page.evaluate(

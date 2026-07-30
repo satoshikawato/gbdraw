@@ -2,6 +2,7 @@ import { state, createLinearSeq, normalizeLinearSeqList, reconcileLinearSeqPairD
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import {
+  adoptCanonicalRenderArtifacts,
   applyConfigData,
   applyEditorStateData,
   applyFeatureStateData,
@@ -17,6 +18,8 @@ import {
   buildUiStateData,
   exportSession,
   importSession as importSessionFromFile,
+  SESSION_VERSION,
+  serializeFiles,
   serializeResults,
   setPreviewRuntime
 } from '../services/config.js';
@@ -30,6 +33,10 @@ import {
   disposeDiagramGenerationWorker,
   preinitializeDiagramGenerationWorker
 } from '../services/diagram-generation.js';
+import {
+  DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE,
+  DIAGRAM_ENGINE_STARTUP_MESSAGE
+} from '../services/runtime-capabilities.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
@@ -83,6 +90,8 @@ import {
   defaultConservationSeriesLabel,
   moveConservationSeriesEntry,
   normalizeFileList,
+  orderedConservationSources,
+  orderedOptionalConservationFiles,
   parseConservationLabelText,
   reconcileConservationSeries
 } from './conservation-series.js';
@@ -1082,8 +1091,13 @@ export const createAppSetup = () => {
   const isCircularConservationUploadSource = () => (
     String(circularConservation.source || '').trim().toLowerCase() === 'upload'
   );
+  const isDerivedCircularConservationReplay = () => (
+    !isCircularConservationUploadSource() &&
+    files.c_conservation_blasts_source === 'losat-cache' &&
+    normalizeFileList(files.c_conservation_blasts).length > 0
+  );
   const getCircularConservationSourceFiles = () => (
-    isCircularConservationUploadSource()
+    isCircularConservationUploadSource() || isDerivedCircularConservationReplay()
       ? normalizeFileList(files.c_conservation_blasts)
       : normalizeFileList(files.c_conservation_fastas)
   );
@@ -1116,13 +1130,7 @@ export const createAppSetup = () => {
   };
   const syncCircularConservationSeries = () => {
     const sourceFiles = getCircularConservationSourceFiles();
-    const isDerivedReplayWithoutFastas = (
-      !isCircularConservationUploadSource() &&
-      files.c_conservation_blasts_source === 'losat-cache' &&
-      normalizeFileList(files.c_conservation_blasts).length > 0 &&
-      sourceFiles.length === 0
-    );
-    if (isDerivedReplayWithoutFastas) {
+    if (isDerivedCircularConservationReplay()) {
       circularConservation.enabled = true;
       if (adv.circular_track_slots_enabled === true) {
         circularTrackSlotEditor.syncCircularConservationSlots();
@@ -1205,6 +1213,42 @@ export const createAppSetup = () => {
   const removeCircularConservationSource = (index) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= circularConservation.series.length) return;
+    if (isDerivedCircularConservationReplay()) {
+      const orderedBlasts = orderedConservationSources(
+        files.c_conservation_blasts,
+        circularConservation
+      ).map((entry) => entry.file);
+      const orderedFastas = orderedOptionalConservationFiles(
+        files.c_conservation_fastas,
+        circularConservation
+      );
+      const orderedSequenceSources = orderedOptionalConservationFiles(
+        files.c_conservation_sequence_sources,
+        circularConservation
+      );
+      orderedBlasts.splice(idx, 1);
+      orderedFastas.splice(idx, 1);
+      orderedSequenceSources.splice(idx, 1);
+      circularConservation.series.splice(idx, 1);
+      circularConservation.series.forEach((seriesEntry, seriesIndex) => {
+        seriesEntry.sourceIndex = seriesIndex;
+      });
+      circularConservation.labels = circularConservation.series
+        .map((seriesEntry) => seriesEntry.label)
+        .join(',');
+      files.c_conservation_blasts = orderedBlasts;
+      files.c_conservation_fastas = orderedFastas;
+      files.c_conservation_sequence_sources = orderedSequenceSources;
+      files.c_conservation_blasts_source = orderedBlasts.length > 0
+        ? 'losat-cache'
+        : null;
+      circularConservation.enabled = orderedBlasts.length > 0;
+      losatCacheInfo.value = [];
+      if (adv.circular_track_slots_enabled === true) {
+        circularTrackSlotEditor.syncCircularConservationSlots();
+      }
+      return;
+    }
     const entry = circularConservation.series[idx];
     const sourceFiles = getCircularConservationSourceFiles();
     const descriptors = conservationSourceDescriptors(sourceFiles);
@@ -1283,6 +1327,9 @@ export const createAppSetup = () => {
     state,
     getPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
+    serializeCanonicalFiles: serializeFiles,
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts,
     refreshFeatureOverrides: featureActions.refreshFeatureOverrides,
     resetPreviewViewport,
     validateAnnotationTargets: ({ loadComparison }) => {
@@ -1324,10 +1371,12 @@ export const createAppSetup = () => {
         diagramGenerationWorkerReady.value = true;
         diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        diagramGenerationWorkerError.value = message;
-        diagramGenerationWorkerStatus.value = `Diagram engine failed to start: ${message}`;
-        console.error(error);
+        const userMessage = error?.name === 'DiagramRuntimeCompatibilityError'
+          ? DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE
+          : DIAGRAM_ENGINE_STARTUP_MESSAGE;
+        diagramGenerationWorkerError.value = userMessage;
+        diagramGenerationWorkerStatus.value = userMessage;
+        console.error('Diagram engine startup failed.', error);
       }
     }
   });
@@ -2376,6 +2425,7 @@ export const createAppSetup = () => {
       });
     }
     linearSeqs.splice(0, linearSeqs.length, ...next);
+    files.linearCanonicalComparisons = [];
     losatCacheInfo.value = [];
     linearReorderNotice.value = buildLinearReorderNotice({ clearedBlastSlots, clearedLosatNames, actionLabel });
   };
@@ -2411,6 +2461,7 @@ export const createAppSetup = () => {
         return;
       }
       seq.gb = nextValue;
+      files.linearCanonicalComparisons = [];
       losatCacheInfo.value = [];
       linearReorderNotice.value = '';
       return;
@@ -2423,6 +2474,7 @@ export const createAppSetup = () => {
     }
 
     seq[field] = nextValue;
+    files.linearCanonicalComparisons = [];
     losatCacheInfo.value = [];
     linearReorderNotice.value = '';
   };

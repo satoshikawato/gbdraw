@@ -43,7 +43,12 @@ from gbdraw.api.options import (
     _validate_center_reserved_radius,
     _validate_track_configuration,
 )
-from gbdraw.api.request_render import build_request_diagram as _build_request_diagram
+from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.api.request_render import (
+    PreparedDiagramRequest as _PreparedDiagramRequest,
+    build_prepared_interactive_context as _build_prepared_interactive_context,
+    build_request_diagram as _build_request_diagram,
+)
 from gbdraw.api.requests import (
     CircularDiagramRequest as _CircularDiagramRequest,
     InMemoryRecordSource as _InMemoryRecordSource,
@@ -52,8 +57,6 @@ from gbdraw.api.requests import (
 )
 from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
-from gbdraw.features.visibility import read_feature_visibility_file
-from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.mode_profiles import (
@@ -63,10 +66,7 @@ from gbdraw.mode_profiles import (
     LINEAR_MODE_PROFILE,
 )
 from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT, normalize_format_token
-from gbdraw.render.interactive_context import (
-    build_interactive_svg_context,
-    require_interactive_svg_metadata,
-)
+from gbdraw.render.interactive_context import require_interactive_svg_metadata
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
 
@@ -564,14 +564,40 @@ class Diagram:
 
         output_path = Path(path)
         resolved_format = format or _format_from_path(output_path)
+        preflight_output_paths((output_path,), overwrite=True)
         if output_path.exists() and not overwrite:
             raise ValidationError(
-                f"Output file already exists: {output_path}. Use overwrite=True to replace it."
+                f"Output file already exists: {output_path}. "
+                "Use overwrite=True to replace it."
             )
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = self.to_bytes(resolved_format)
         try:
-            output_path.write_bytes(payload)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ExportError(
+                f"Could not prepare output directory: {output_path.parent}"
+            ) from exc
+        payload = self.to_bytes(resolved_format)
+        if overwrite and (output_path.exists() or output_path.is_symlink()):
+            try:
+                output_path.unlink()
+            except OSError as exc:
+                raise ExportError(
+                    f"Could not replace existing output file: {output_path}"
+                ) from exc
+        try:
+            with output_path.open("xb") as output_file:
+                output_file.write(payload)
+        except FileExistsError as exc:
+            message = (
+                f"Output target appeared during export: {output_path}. "
+                "Refusing to replace it."
+                if overwrite
+                else (
+                    f"Output file already exists: {output_path}. "
+                    "Use overwrite=True to replace it."
+                )
+            )
+            raise ValidationError(message) from exc
         except OSError as exc:
             raise ExportError(f"Could not write output file: {output_path}") from exc
         return output_path
@@ -852,27 +878,10 @@ def _linear_options(
 
 
 def _interactive_context(
-    records: Sequence[SeqRecord],
+    prepared: _PreparedDiagramRequest,
     *,
     options: _CommonOptions,
-    legacy: _CircularDiagramOptions | _LinearDiagramOptions,
-    mode: Literal["circular", "linear"],
 ) -> InteractiveSvgContext:
-    visibility_table, visibility_file = _source(
-        options.features.visibility,
-        name="feature visibility",
-    )
-    if visibility_table is None and visibility_file is not None:
-        visibility_table = read_feature_visibility_file(visibility_file)
-    color_table, color_file = _source(options.features.color_table, name="feature color table")
-    if color_table is None and color_file is not None:
-        color_table = read_color_table(color_file)
-    default_colors, default_file = _source(
-        options.features.default_colors,
-        name="default color table",
-    )
-    if default_colors is None:
-        default_colors = load_default_colors(default_file or "", options.features.palette)
     comparison_sequence_records: list[list[SeqRecord]] = []
     if isinstance(options, CircularOptions):
         comparison_rings = options.comparison_rings
@@ -887,22 +896,11 @@ def _interactive_context(
                 comparison_sequence_records.append(list(source))
             else:
                 comparison_sequence_records.append(list(SeqIO.parse(str(source), "fasta")))
-    return build_interactive_svg_context(
-        records,
-        selected_features_set=options.features.types,
-        feature_visibility_table=visibility_table,
-        color_table=color_table,
-        default_colors=default_colors,
-        orthogroups=(
-            legacy.orthogroups
-            if isinstance(legacy, _LinearDiagramOptions)
-            else None
-        ),
-        linear_rendered_feature_ids=mode == "linear",
-        annotations=options.annotations,
-        mode=mode,
+    context = _build_prepared_interactive_context(
+        prepared,
         comparison_sequence_records=comparison_sequence_records,
     )
+    return context
 
 
 def draw_circular(
@@ -935,10 +933,8 @@ def draw_circular(
         mode="circular",
         records=normalized,
         interactive_context=lambda: _interactive_context(
-            prepared.records,
+            prepared,
             options=options,
-            legacy=prepared.request.options,
-            mode="circular",
         ),
     )
 
@@ -973,10 +969,8 @@ def draw_linear(
         mode="linear",
         records=normalized,
         interactive_context=lambda: _interactive_context(
-            prepared.records,
+            prepared,
             options=options,
-            legacy=prepared.request.options,
-            mode="linear",
         ),
     )
 

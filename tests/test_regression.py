@@ -120,6 +120,19 @@ class TestBasicFunctionality:
         assert result.returncode == 0
         assert "linear" in result.stdout.lower() or "gbk" in result.stdout.lower()
 
+    def test_unknown_command_lists_every_surface(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "gbdraw.cli", "unknown"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert "circular, linear, or gui" in result.stderr
+        assert "--help" in result.stderr
+
 
 # ============================================================================
 # Circular Diagram Regression Tests

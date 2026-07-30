@@ -16,7 +16,7 @@ import math
 import re
 import xml.etree.ElementTree as ET
 from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any, Optional, Sequence, Mapping, Literal, cast
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -102,7 +102,7 @@ from gbdraw.labels.filtering import (  # type: ignore[reportMissingImports]
     read_label_override_file,
     read_qualifier_priority_file,
 )
-from gbdraw.features.visibility import compile_feature_visibility_rules, read_feature_visibility_file  # type: ignore[reportMissingImports]
+from gbdraw.features.visibility import read_feature_visibility_file  # type: ignore[reportMissingImports]
 from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     BlastMatchConfigurator,
     DepthConfigurator,
@@ -124,7 +124,7 @@ from gbdraw.mode_profiles import (
     LINEAR_MODE_PROFILE,
 )
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
-from gbdraw.features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
+from gbdraw.features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
 from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
     configure_pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
@@ -144,9 +144,30 @@ from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     parse_nonnegative_integer,
 )
 
+from .prepared import ResolvedFeatureInputs, resolve_feature_inputs
+
 DEFAULT_SELECTED_FEATURES = DEFAULT_FEATURE_TYPES
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LinearDiagramMetadata:
+    """Computed Linear analysis values consumed after diagram assembly."""
+
+    protein_comparisons: tuple[DataFrame, ...] | None = None
+    linear_comparisons: tuple[LinearComparison, ...] = ()
+    orthogroups: OrthogroupResult | None = None
+    collinearity_result: CollinearityResult | None = None
+
+
+@dataclass(frozen=True)
+class LinearDiagramBuildResult:
+    """A Linear drawing paired with the analysis values that produced it."""
+
+    drawing: Drawing
+    metadata: LinearDiagramMetadata
+
 
 _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {
     "Axis",
@@ -1778,6 +1799,83 @@ def _scale_circular_cfg(cfg: GbdrawConfig, *, scale: float) -> GbdrawConfig:
     return replace(cfg, canvas=scaled_canvas)
 
 
+def _resolve_feature_render_inputs(
+    *,
+    color_table: DataFrame | None,
+    color_table_file: str | None,
+    default_colors: DataFrame | None,
+    default_colors_palette: str,
+    default_colors_file: str | None,
+    feature_visibility_table: DataFrame | None,
+    feature_visibility_table_file: str | None,
+    load_comparison_colors: bool,
+    resolved_inputs: ResolvedFeatureInputs | None,
+) -> ResolvedFeatureInputs:
+    """Resolve direct-builder feature inputs or reuse a request planner result."""
+
+    if resolved_inputs is not None:
+        if not isinstance(resolved_inputs, ResolvedFeatureInputs):
+            raise ValidationError(
+                "_resolved_feature_inputs must be ResolvedFeatureInputs or None"
+            )
+        return resolved_inputs
+    if color_table is None and color_table_file is not None:
+        color_table = read_color_table(color_table_file)
+    if (
+        feature_visibility_table is None
+        and feature_visibility_table_file is not None
+    ):
+        feature_visibility_table = read_feature_visibility_file(
+            feature_visibility_table_file
+        )
+    if default_colors is None:
+        default_colors = load_default_colors(
+            user_defined_default_colors=default_colors_file or "",
+            palette=default_colors_palette or "default",
+            load_comparison=load_comparison_colors,
+        )
+    return resolve_feature_inputs(
+        color_table=color_table,
+        default_colors=default_colors,
+        feature_visibility_table=feature_visibility_table,
+    )
+
+
+def _web_safe_cache_filename(name: object, fallback: str = "losat") -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name or "")).strip("_")
+    return cleaned or fallback
+
+
+def _web_normalize_cache_label(label: object, fallback: str) -> str:
+    base = str(label or "").strip() or str(fallback or "")
+    dotted = re.sub(r"\.+", ".", re.sub(r"[\s/]+", ".", base)).strip(".")
+    return _web_safe_cache_filename(
+        dotted,
+        _web_safe_cache_filename(fallback, "losat"),
+    )
+
+
+def _linear_losat_cache_filenames(
+    records: Sequence[SeqRecord],
+) -> tuple[str, ...]:
+    def label(record: SeqRecord, fallback: str) -> str:
+        annotations = getattr(record, "annotations", {}) or {}
+        return (
+            str(annotations.get("gbdraw_record_label") or "").strip()
+            or str(record.id or "").strip()
+            or fallback
+        )
+
+    return tuple(
+        (
+            f"{_web_normalize_cache_label(label(records[index], f'seq_{index + 1}'), f'seq_{index + 1}')}"
+            f".{_web_normalize_cache_label(label(records[index + 1], f'seq_{index + 2}'), f'seq_{index + 2}')}"
+            ".losatp.tsv"
+        )
+        for index in range(max(0, len(records) - 1))
+    )
+
+
 def assemble_linear_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
@@ -1846,7 +1944,9 @@ def assemble_linear_diagram_from_records(
     bitscore: float = LINEAR_MODE_PROFILE.comparison.bitscore,
     identity: float = LINEAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = LINEAR_MODE_PROFILE.comparison.alignment_length,
-) -> Drawing:
+    _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _return_build_result: bool = False,
+) -> Drawing | LinearDiagramBuildResult:
     """Builds and assembles a linear diagram for the given records.
 
     This is a convenience wrapper that builds internal configurators/canvas objects and
@@ -1963,27 +2063,28 @@ def assemble_linear_diagram_from_records(
         )
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
-    feature_table = feature_visibility_table
-    feature_table_file = feature_visibility_table_file
-    if color_table is None and color_table_file is not None:
-        color_table = read_color_table(color_table_file)
-    if feature_table is None and feature_table_file is not None:
-        feature_table = read_feature_visibility_file(feature_table_file)
-    feature_visibility_rules = compile_feature_visibility_rules(feature_table)
-
-    if default_colors is None:
-        has_comparisons = bool(
-            blast_files
-            or linear_comparisons
-            or protein_comparisons
-            or collinearity_blocks
-            or normalized_protein_blastp_mode != "none"
-        )
-        default_colors = load_default_colors(
-            user_defined_default_colors=default_colors_file or "",
-            palette=default_colors_palette or "default",
-            load_comparison=has_comparisons,
-        )
+    has_comparisons = bool(
+        blast_files
+        or linear_comparisons
+        or protein_comparisons
+        or collinearity_blocks
+        or normalized_protein_blastp_mode != "none"
+    )
+    resolved_feature_inputs = _resolve_feature_render_inputs(
+        color_table=color_table,
+        color_table_file=color_table_file,
+        default_colors=default_colors,
+        default_colors_palette=default_colors_palette,
+        default_colors_file=default_colors_file,
+        feature_visibility_table=feature_visibility_table,
+        feature_visibility_table_file=feature_visibility_table_file,
+        load_comparison_colors=has_comparisons,
+        resolved_inputs=_resolved_feature_inputs,
+    )
+    color_table = resolved_feature_inputs.color_table
+    default_colors = resolved_feature_inputs.default_colors
+    feature_table = resolved_feature_inputs.feature_visibility_table
+    feature_visibility_rules = resolved_feature_inputs.feature_visibility_rules
 
     if normalized_pairwise_match_style == "ribbon":
         normalized_pairwise_match_style = _resolve_pairwise_match_style(
@@ -2058,6 +2159,7 @@ def assemble_linear_diagram_from_records(
     resolved_linear_comparisons: list[LinearComparison] = list(linear_comparisons or ())
     resolved_orthogroups: OrthogroupResult | None = orthogroups
     resolved_collinearity_result: CollinearityResult | None = None
+    losat_cache_filenames = _linear_losat_cache_filenames(records)
     if protein_comparisons is not None:
         resolved_protein_comparisons = list(protein_comparisons)
     elif collinearity_blocks is not None:
@@ -2102,6 +2204,9 @@ def assemble_linear_diagram_from_records(
                     losatp_cache=losatp_cache,
                     protein_extraction=pair_extraction,
                     feature_visibility_rules=feature_visibility_rules,
+                    cache_filenames=_linear_losat_cache_filenames(
+                        (records[query_index], records[subject_index])
+                    ),
                 )
                 resolved_linear_comparisons.append(
                     LinearComparison(
@@ -2125,6 +2230,7 @@ def assemble_linear_diagram_from_records(
                 losatp_cache=losatp_cache,
                 protein_extraction=protein_extraction,
                 feature_visibility_rules=feature_visibility_rules,
+                cache_filenames=losat_cache_filenames,
             )
             resolved_protein_comparisons = protein_blastp_result.comparisons
     elif normalized_protein_blastp_mode == "orthogroup":
@@ -2144,6 +2250,7 @@ def assemble_linear_diagram_from_records(
             losatp_cache=losatp_cache,
             protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
+            cache_filenames=losat_cache_filenames,
         )
         resolved_protein_comparisons = protein_blastp_result.comparisons
         resolved_orthogroups = protein_blastp_result.orthogroups
@@ -2169,6 +2276,7 @@ def assemble_linear_diagram_from_records(
             losatp_cache=losatp_cache,
             protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
+            cache_filenames=losat_cache_filenames,
         )
         resolved_collinearity_result = collinearity_result
         resolved_orthogroups = collinearity_result.orthogroups
@@ -2259,6 +2367,9 @@ def assemble_linear_diagram_from_records(
         profile=profile,
         feature_table=feature_table,
         feature_shapes=feature_shapes,
+        feature_visibility_rules=feature_visibility_rules,
+        specific_color_rules=resolved_feature_inputs.specific_color_rules,
+        default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=canvas_config,
     )
     gc_config = GcContentConfigurator(
@@ -2315,22 +2426,20 @@ def assemble_linear_diagram_from_records(
         orthogroups=resolved_orthogroups,
         align_orthogroup_feature=align_orthogroup_feature,
     )
-    try:
-        setattr(canvas, "_gbdraw_orthogroups", resolved_orthogroups)
-        setattr(
-            canvas,
-            "_gbdraw_resolved_protein_comparisons",
-            tuple(resolved_protein_comparisons or ()),
-        )
-        setattr(
-            canvas,
-            "_gbdraw_resolved_linear_comparisons",
-            tuple(resolved_linear_comparisons),
-        )
-        setattr(canvas, "_gbdraw_collinearity_result", resolved_collinearity_result)
-    except Exception:
-        pass
-    return canvas
+    build_result = LinearDiagramBuildResult(
+        drawing=canvas,
+        metadata=LinearDiagramMetadata(
+            protein_comparisons=(
+                tuple(resolved_protein_comparisons)
+                if resolved_protein_comparisons is not None
+                else None
+            ),
+            linear_comparisons=tuple(resolved_linear_comparisons),
+            orthogroups=resolved_orthogroups,
+            collinearity_result=resolved_collinearity_result,
+        ),
+    )
+    return build_result if _return_build_result else canvas
 
 
 def assemble_circular_diagram_from_record(
@@ -2395,6 +2504,7 @@ def assemble_circular_diagram_from_record(
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
     _annotation_record_index: int = 0,
     _definition_group_id: str | None = None,
+    _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
 
@@ -2419,19 +2529,20 @@ def assemble_circular_diagram_from_record(
     _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
     _validate_positive_float_optional("conservation_ring_gap", conservation_ring_gap)
     _validate_nonnegative_float_optional("center_reserved_radius", center_reserved_radius)
-    feature_table = feature_visibility_table
-    feature_table_file = feature_visibility_table_file
-    if color_table is None and color_table_file is not None:
-        color_table = read_color_table(color_table_file)
-    if feature_table is None and feature_table_file is not None:
-        feature_table = read_feature_visibility_file(feature_table_file)
-
-    if default_colors is None:
-        default_colors = load_default_colors(
-            user_defined_default_colors=default_colors_file or "",
-            palette=default_colors_palette or "default",
-            load_comparison=False,
-        )
+    resolved_feature_inputs = _resolve_feature_render_inputs(
+        color_table=color_table,
+        color_table_file=color_table_file,
+        default_colors=default_colors,
+        default_colors_palette=default_colors_palette,
+        default_colors_file=default_colors_file,
+        feature_visibility_table=feature_visibility_table,
+        feature_visibility_table_file=feature_visibility_table_file,
+        load_comparison_colors=False,
+        resolved_inputs=_resolved_feature_inputs,
+    )
+    color_table = resolved_feature_inputs.color_table
+    default_colors = resolved_feature_inputs.default_colors
+    feature_table = resolved_feature_inputs.feature_visibility_table
 
     cfg = _apply_circular_plot_title_font_size_override(
         cfg=cfg,
@@ -2715,6 +2826,9 @@ def assemble_circular_diagram_from_record(
         profile=profile,
         feature_table=feature_table,
         feature_shapes=feature_shapes,
+        feature_visibility_rules=resolved_feature_inputs.feature_visibility_rules,
+        specific_color_rules=resolved_feature_inputs.specific_color_rules,
+        default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=canvas_config,
     )
     legend_config = LegendDrawingConfigurator(
@@ -2841,6 +2955,7 @@ def assemble_circular_diagram_from_records(
     bitscore: float = CIRCULAR_MODE_PROFILE.comparison.bitscore,
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
+    _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
     if not isinstance(cfg, GbdrawConfig):
@@ -2880,8 +2995,20 @@ def assemble_circular_diagram_from_records(
         str(plot_title_position)
     )
     normalized_plot_title = _normalize_plot_title(plot_title)
-    feature_table = feature_visibility_table
-    feature_table_file = feature_visibility_table_file
+    resolved_feature_inputs = _resolve_feature_render_inputs(
+        color_table=color_table,
+        color_table_file=color_table_file,
+        default_colors=default_colors,
+        default_colors_palette=default_colors_palette,
+        default_colors_file=default_colors_file,
+        feature_visibility_table=feature_visibility_table,
+        feature_visibility_table_file=feature_visibility_table_file,
+        load_comparison_colors=False,
+        resolved_inputs=_resolved_feature_inputs,
+    )
+    color_table = resolved_feature_inputs.color_table
+    default_colors = resolved_feature_inputs.default_colors
+    feature_table = resolved_feature_inputs.feature_visibility_table
 
     if len(records) == 1:
         if (depth_table is not None or depth_file is not None) and (
@@ -2915,7 +3042,7 @@ def assemble_circular_diagram_from_records(
             default_colors_file=default_colors_file,
             selected_features_set=selected_features_set,
             feature_visibility_table=feature_table,
-            feature_visibility_table_file=feature_table_file,
+            feature_visibility_table_file=feature_visibility_table_file,
             feature_shapes=feature_shapes,
             output_prefix=output_prefix,
             legend=legend,
@@ -2949,18 +3076,7 @@ def assemble_circular_diagram_from_records(
             bitscore=bitscore,
             identity=identity,
             alignment_length=alignment_length,
-        )
-
-    if color_table is None and color_table_file is not None:
-        color_table = read_color_table(color_table_file)
-    if feature_table is None and feature_table_file is not None:
-        feature_table = read_feature_visibility_file(feature_table_file)
-
-    if default_colors is None:
-        default_colors = load_default_colors(
-            user_defined_default_colors=default_colors_file or "",
-            palette=default_colors_palette or "default",
-            load_comparison=False,
+            _resolved_feature_inputs=resolved_feature_inputs,
         )
 
     cfg = _apply_circular_plot_title_font_size_override(
@@ -3238,6 +3354,7 @@ def assemble_circular_diagram_from_records(
             _precomputed_depth_tracks=record_depth_track_data[record_index],
             _precomputed_depth_track_count=available_depth_track_count,
             _precomputed_conservation_tracks=record_conservation_tracks,
+            _resolved_feature_inputs=resolved_feature_inputs,
         )
         canvases.append(sub_canvas)
         widths.append(_parse_svg_length_px(sub_canvas.attribs.get("width"), default=0.0))
@@ -3497,12 +3614,13 @@ def assemble_circular_diagram_from_records(
             profile=profile,
             feature_table=feature_table,
             feature_shapes=feature_shapes,
+            feature_visibility_rules=resolved_feature_inputs.feature_visibility_rules,
+            specific_color_rules=resolved_feature_inputs.specific_color_rules,
+            default_color_map=resolved_feature_inputs.default_color_map,
             canvas_config=legend_canvas_config,
         )
-        color_map, default_color_map = preprocess_color_tables(
-            feature_config.color_table,
-            feature_config.default_colors,
-        )
+        color_map = feature_config.specific_color_rules
+        default_color_map = feature_config.default_color_map
         features_present = check_feature_presence(
             list(records),
             list(selected_features_set),
@@ -3776,6 +3894,7 @@ def build_circular_diagram(
     options: CircularDiagramOptions | None = None,
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_track_count: int | None = None,
+    _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
 ) -> Drawing:
     """Build a circular diagram using mode-specific typed options."""
 
@@ -3843,17 +3962,20 @@ def build_circular_diagram(
         annotation_options=options.annotations,
         _precomputed_depth_track_specs=_precomputed_depth_track_specs,
         _precomputed_depth_track_count=_precomputed_depth_track_count,
+        _resolved_feature_inputs=_resolved_feature_inputs,
     )
 
 
-def build_linear_diagram(
+def _build_linear_diagram(
     records: Sequence[SeqRecord],
     *,
     options: LinearDiagramOptions | None = None,
     layout: LinearMultiRecordOptions | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
-) -> Drawing:
+    _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _return_build_result: bool = False,
+) -> Drawing | LinearDiagramBuildResult:
     """Build a linear diagram using mode-specific typed options."""
 
     options = _linear_builder_options(options)
@@ -3936,7 +4058,56 @@ def build_linear_diagram(
         bitscore=options.bitscore,
         identity=options.identity,
         alignment_length=options.alignment_length,
+        _resolved_feature_inputs=_resolved_feature_inputs,
+        _return_build_result=_return_build_result,
     )
+
+
+def build_linear_diagram(
+    records: Sequence[SeqRecord],
+    *,
+    options: LinearDiagramOptions | None = None,
+    layout: LinearMultiRecordOptions | None = None,
+    losatp_cache: LosatpCacheManager | None = None,
+    protein_extraction: ProteinExtractionResult | None = None,
+    _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+) -> Drawing:
+    """Build a linear diagram using mode-specific typed options."""
+
+    result = _build_linear_diagram(
+        records,
+        options=options,
+        layout=layout,
+        losatp_cache=losatp_cache,
+        protein_extraction=protein_extraction,
+        _resolved_feature_inputs=_resolved_feature_inputs,
+    )
+    return cast(Drawing, result)
+
+
+def build_linear_diagram_result(
+    records: Sequence[SeqRecord],
+    *,
+    options: LinearDiagramOptions | None = None,
+    layout: LinearMultiRecordOptions | None = None,
+    losatp_cache: LosatpCacheManager | None = None,
+    protein_extraction: ProteinExtractionResult | None = None,
+    _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+) -> LinearDiagramBuildResult:
+    """Build a Linear drawing with its computed analysis metadata."""
+
+    result = _build_linear_diagram(
+        records,
+        options=options,
+        layout=layout,
+        losatp_cache=losatp_cache,
+        protein_extraction=protein_extraction,
+        _resolved_feature_inputs=_resolved_feature_inputs,
+        _return_build_result=True,
+    )
+    if not isinstance(result, LinearDiagramBuildResult):  # pragma: no cover
+        raise ValidationError("The Linear diagram builder did not return metadata.")
+    return result
 
 
 def build_circular_multi_diagram(
@@ -3944,6 +4115,7 @@ def build_circular_multi_diagram(
     *,
     options: CircularDiagramOptions | None = None,
     layout: CircularMultiRecordOptions | None = None,
+    _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
 ) -> Drawing:
     """Build a circular grid using mode-specific typed options."""
 
@@ -4019,11 +4191,13 @@ def build_circular_multi_diagram(
         bitscore=options.bitscore,
         identity=options.identity,
         alignment_length=options.alignment_length,
+        _resolved_feature_inputs=_resolved_feature_inputs,
     )
 
 
 __all__ = [
     "DEFAULT_SELECTED_FEATURES",
+    "LinearDiagramMetadata",
     "build_circular_diagram",
     "build_circular_multi_diagram",
     "build_linear_diagram",

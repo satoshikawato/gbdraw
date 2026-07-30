@@ -131,18 +131,21 @@ For Python workflows with multi-record rows, use `LinearComparisonOptions(protei
 
 ## 7. When a saved protein search is reused
 
-Current sessions identify each CDS from its complete location, strand, and stable record-instance binding. The protein identity manifest keeps that full machine identity and its display metadata once. Generated protein FASTA, the raw LOSAT QUERY and SUBJECT fields, protein maps, and derived comparison references use deterministic session-global runtime handles with the form `h_[a-z2-7]{26}`. These compact IDs avoid repeating a long feature hash and alias in every hit row.
+A saved protein search is reused when the amino-acid sequences, selected
+proteins, record and feature bindings, query/subject direction, program, and
+meaningful search arguments still match. Renaming an upload or resource,
+changing a display-only label, or saving and loading the same biological inputs
+does not invalidate the raw result. Display metadata may still be rebuilt.
 
-Changing an upload filename, file modification time, resource name, display alias, or saving and loading the same biological inputs does not invalidate a compatible raw protein-search result. A display-only change can rebuild derived display metadata without rerunning LOSAT. Changing an amino-acid sequence, the selected protein set, record-instance binding, feature location or strand, or a search argument does invalidate the affected result. Query/subject direction is significant.
+Changing a sequence, protein set, binding, feature location or strand, or search
+setting invalidates the affected record pair. gbdraw reruns only that pair.
 
-Current session version 39 keeps protein raw results in cache schema 4, derived
-protein comparisons in schema 3, and the protein identity manifest in schema
-2. Nucleotide LOSAT results remain schema 2, so protein and nucleotide entries
-with different schemas may appear in one valid session.
+**Save Raw LOSAT TSV** writes readable protein or feature aliases rather than
+session-internal identifiers. It fails instead of producing a partially resolved
+download. User-uploaded comparison TSV is left unchanged.
 
-Sessions 27–33 retain the verified migration path for schema-2 protein candidates and derived schema-1 evidence. On import, gbdraw keeps those artifacts separate from current hits. Generation verifies the complete FASTA content, program and arguments, direction, and one-to-one feature mapping before writing a schema-4 copy and rebuilding derived schema 3 without rerunning LOSAT. A candidate that cannot be verified is ignored only for that pair, and LOSAT runs normally.
-
-The internal handles do not appear in a normal **Save Raw LOSAT TSV** download. Immediately before download, gbdraw uses the manifest to replace only QUERY and SUBJECT with the readable, percent-encoded form of a `protein_id`, `locus_tag`, GFF `ID`, or location fallback. Duplicate aliases within one record instance receive a deterministic short ordinal. The hydrator preserves comments, row order, columns 3–12, numeric spelling, and line endings, and it aborts the whole download if any handle cannot be resolved. User-uploaded comparison TSV is left unchanged.
+For exact version, cache-schema, identity, and migration rules, see
+[Session and request compatibility](../SESSION_COMPATIBILITY.md#saved-protein-comparison-results).
 
 [< Back to the guide index](./TUTORIALS.md)
 [< Previous: Set feature colors and labels](./3_Advanced_Customization.md) | [Next: Use TSV manifests >](./5_Table_Driven_Inputs.md)

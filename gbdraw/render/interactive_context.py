@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, Sequence, TypeVar
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -47,6 +47,7 @@ def build_interactive_svg_context(
     feature_visibility_rules: list[dict[str, Any]] | None = None,
     color_table: DataFrame | None = None,
     default_colors: DataFrame | None = None,
+    specific_color_rules: Mapping[str, Any] | None = None,
     orthogroups: object | None = None,
     linear_rendered_feature_ids: bool = False,
     annotations: AnnotationOptions | None = None,
@@ -66,21 +67,25 @@ def build_interactive_svg_context(
         raise ValidationError(
             "Pass either feature_visibility_table or feature_visibility_rules, not both."
         )
+    if color_table is not None and specific_color_rules is not None:
+        raise ValidationError(
+            "Pass either color_table or specific_color_rules, not both."
+        )
     resolved_visibility_rules = (
         feature_visibility_rules
         if feature_visibility_rules is not None
         else compile_feature_visibility_rules(feature_visibility_table)
     )
-    specific_color_rules = None
-    if color_table is not None and default_colors is not None:
-        specific_color_rules, _ = preprocess_color_tables(color_table, default_colors)
+    resolved_color_rules = specific_color_rules
+    if resolved_color_rules is None and color_table is not None and default_colors is not None:
+        resolved_color_rules, _ = preprocess_color_tables(color_table, default_colors)
 
     record_list = list(records)
     payload = extract_features_from_records_payload(
         record_list,
         selected_features=selected_features_set,
         feature_visibility_rules=resolved_visibility_rules,
-        specific_color_rules=specific_color_rules,
+        specific_color_rules=resolved_color_rules,
         linear_rendered_feature_ids=linear_rendered_feature_ids,
         include_biological_features=True,
     )

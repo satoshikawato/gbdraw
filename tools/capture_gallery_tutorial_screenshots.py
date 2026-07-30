@@ -48,6 +48,7 @@ GENERIC_OPERATION_MEDIA_RE = re.compile(
     r"operation screenshot",
     re.IGNORECASE,
 )
+GALLERY_MEDIA_REFERENCE_RE = re.compile(r"^\./media/([^/]+)/")
 
 DEFAULT_MAX_IMAGE_WIDTH = 4200
 DEFAULT_MAX_IMAGE_HEIGHT = 4200
@@ -296,6 +297,134 @@ def add_operation_text_validation(
                 )
 
 
+def add_capture_contract_validation(
+    result: ValidationResult,
+    context: TutorialContext,
+    sample: dict[str, Any],
+    operation: dict[str, Any],
+) -> None:
+    data_dependent = operation.get("dataDependent") is True
+    generic_media = operation.get("genericMedia") is True
+    capture = operation.get("capture")
+
+    if "dataDependent" in operation and not isinstance(operation.get("dataDependent"), bool):
+        result.errors.append(f"{context.label}: dataDependent must be a boolean.")
+    if "genericMedia" in operation and not isinstance(operation.get("genericMedia"), bool):
+        result.errors.append(f"{context.label}: genericMedia must be a boolean.")
+    if data_dependent and generic_media:
+        result.errors.append(
+            f"{context.label}: data-dependent media cannot be declared generic."
+        )
+
+    for entry in media_entries(operation.get("media")):
+        source = as_text(entry.get("src")) or as_text(entry.get("href"))
+        match = GALLERY_MEDIA_REFERENCE_RE.match(source)
+        if not match or match.group(1) == context.example_id:
+            continue
+        owner = match.group(1)
+        if data_dependent:
+            result.errors.append(
+                f"{context.label}: data-dependent media must be owned by "
+                f"{context.example_id}, not {owner}: {source}"
+            )
+        elif not generic_media:
+            result.errors.append(
+                f"{context.label}: cross-example media requires genericMedia=true: {source}"
+            )
+
+    if not isinstance(capture, dict):
+        if data_dependent:
+            result.errors.append(
+                f"{context.label}: data-dependent media requires capture metadata."
+            )
+        return
+
+    assert_app_state = capture.get("assertAppState")
+    visible_controls = capture.get("visibleControls")
+    visible_text = capture.get("visibleText")
+
+    if assert_app_state is not None and not isinstance(assert_app_state, dict):
+        result.errors.append(f"{context.label}: capture.assertAppState must be an object.")
+    elif isinstance(assert_app_state, dict):
+        for state_path in assert_app_state:
+            if not as_text(state_path):
+                result.errors.append(
+                    f"{context.label}: capture.assertAppState paths must be non-empty strings."
+                )
+
+    if visible_controls is not None and not isinstance(visible_controls, list):
+        result.errors.append(f"{context.label}: capture.visibleControls must be an array.")
+    elif isinstance(visible_controls, list):
+        for index, spec in enumerate(visible_controls, start=1):
+            if not isinstance(spec, dict):
+                result.errors.append(
+                    f"{context.label}: visibleControls entry {index} must be an object."
+                )
+                continue
+            if not (as_text(spec.get("label")) or as_text(spec.get("selector"))):
+                result.errors.append(
+                    f"{context.label}: visibleControls entry {index} needs label or selector."
+                )
+            if data_dependent and "value" not in spec and "checked" not in spec:
+                result.errors.append(
+                    f"{context.label}: visibleControls entry {index} needs value or checked."
+                )
+
+    if visible_text is not None and not isinstance(visible_text, list):
+        result.errors.append(f"{context.label}: capture.visibleText must be an array.")
+    elif isinstance(visible_text, list):
+        for index, text in enumerate(visible_text, start=1):
+            if not as_text(text):
+                result.errors.append(
+                    f"{context.label}: visibleText entry {index} must be a non-empty string."
+                )
+
+    if not data_dependent:
+        return
+
+    source = as_text(capture.get("source")).lower()
+    if source not in {"webapp", "web-app", "app"}:
+        result.errors.append(
+            f"{context.label}: data-dependent capture source must be webapp."
+        )
+
+    capture_session_ref = as_text(capture.get("session"))
+    sample_session_ref = as_text(sample.get("session"))
+    if not capture_session_ref:
+        result.errors.append(
+            f"{context.label}: data-dependent capture must name its session explicitly."
+        )
+    elif not sample_session_ref:
+        result.errors.append(
+            f"{context.label}: Gallery example is missing its session reference."
+        )
+    else:
+        capture_session = resolve_gallery_reference(capture_session_ref)
+        sample_session = resolve_gallery_reference(sample_session_ref)
+        if capture_session is None or not capture_session.is_file():
+            result.errors.append(
+                f"{context.label}: capture session does not exist: {capture_session_ref}"
+            )
+        elif capture_session != sample_session:
+            result.errors.append(
+                f"{context.label}: capture session must match the Gallery example session."
+            )
+
+    if not isinstance(assert_app_state, dict) or not assert_app_state:
+        result.errors.append(
+            f"{context.label}: data-dependent capture needs non-empty assertAppState."
+        )
+    if not (
+        isinstance(visible_controls, list)
+        and visible_controls
+        or isinstance(visible_text, list)
+        and visible_text
+    ):
+        result.errors.append(
+            f"{context.label}: data-dependent capture must declare visibleControls or visibleText."
+        )
+
+
 def validate_tutorial_media(
     samples: list[dict[str, Any]],
     *,
@@ -336,6 +465,7 @@ def validate_tutorial_media(
             result.operation_count += 1
             example_operation_count += 1
             add_operation_text_validation(result, context, operation)
+            add_capture_contract_validation(result, context, sample, operation)
             operation_media = media_entries(operation.get("media"))
             if not operation_media:
                 result.errors.append(f"{context.label}: operation is missing media.")
@@ -787,6 +917,196 @@ def capture_multi_selector_clip(
     return padded_clip_from_boxes(boxes, padding, page_scroll_dimensions(page))
 
 
+def assert_capture_app_state(page, capture: dict[str, Any]) -> None:
+    expectations = capture.get("assertAppState")
+    if not isinstance(expectations, dict) or not expectations:
+        return
+
+    mismatches = page.evaluate(
+        """
+        (expectations) => {
+          const resolvePath = (root, path) => String(path).split('.').reduce(
+            (value, segment) => value == null ? undefined : value[segment],
+            root,
+          );
+          const equal = (actual, expected) => {
+            if (Object.is(actual, expected)) return true;
+            try {
+              return JSON.stringify(actual) === JSON.stringify(expected);
+            } catch {
+              return false;
+            }
+          };
+          const describe = (value) => {
+            if (value === undefined) return '<undefined>';
+            if (value instanceof File) return { name: value.name, type: value.type };
+            try {
+              return JSON.parse(JSON.stringify(value));
+            } catch {
+              return String(value);
+            }
+          };
+          const app = window.__GBDRAW_APP__;
+          if (!app) return [{ path: '<app>', expected: 'mounted app', actual: '<undefined>' }];
+          return Object.entries(expectations).flatMap(([path, expected]) => {
+            const actual = resolvePath(app, path);
+            return equal(actual, expected) ? [] : [{ path, expected, actual: describe(actual) }];
+          });
+        }
+        """,
+        expectations,
+    )
+    if mismatches:
+        details = "; ".join(
+            f"{item['path']} expected {item['expected']!r}, got {item['actual']!r}"
+            for item in mismatches
+        )
+        raise RuntimeError(f"capture assertAppState failed: {details}")
+
+
+def assert_capture_visible_contract(
+    page,
+    capture: dict[str, Any],
+    clip: dict[str, float],
+) -> None:
+    controls = capture.get("visibleControls")
+    text_entries = capture.get("visibleText")
+    controls = controls if isinstance(controls, list) else []
+    text_entries = text_entries if isinstance(text_entries, list) else []
+    if not controls and not text_entries:
+        return
+
+    failures = page.evaluate(
+        """
+        ({ controls, textEntries, clip }) => {
+          const normalize = (value) => String(value ?? '').replace(/\\s+/g, ' ').trim();
+          const key = (value) => normalize(value).toLowerCase();
+          const pageRect = (element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              x: rect.left + window.scrollX,
+              y: rect.top + window.scrollY,
+              width: rect.width,
+              height: rect.height,
+            };
+          };
+          const isVisible = (element) => {
+            if (!element) return false;
+            const style = getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return style.display !== 'none'
+              && style.visibility !== 'hidden'
+              && Number(style.opacity || 1) > 0
+              && rect.width > 0
+              && rect.height > 0;
+          };
+          const insideClip = (rect) => {
+            const tolerance = 1;
+            return rect.x >= clip.x - tolerance
+              && rect.y >= clip.y - tolerance
+              && rect.x + rect.width <= clip.x + clip.width + tolerance
+              && rect.y + rect.height <= clip.y + clip.height + tolerance;
+          };
+          const controlForLabel = (label) => {
+            if (label.control) return label.control;
+            const nested = label.querySelector('input, select, textarea, button');
+            if (nested) return nested;
+            let container = label.parentElement;
+            for (let depth = 0; container && depth < 3; depth += 1) {
+              const nearby = container.querySelector('input, select, textarea, button');
+              if (nearby) return nearby;
+              container = container.parentElement;
+            }
+            return null;
+          };
+          const resolveControl = (spec) => {
+            if (spec.selector) {
+              const matches = Array.from(document.querySelectorAll(spec.selector));
+              const element = matches[Number(spec.nth || 0)] || null;
+              return { element, label: null };
+            }
+            const labelKey = key(spec.label);
+            const labels = Array.from(document.querySelectorAll('label')).filter(
+              (label) => key(label.textContent).includes(labelKey),
+            );
+            const label = labels[Number(spec.nth || 0)] || null;
+            return { element: label ? controlForLabel(label) : null, label };
+          };
+
+          const failures = [];
+          controls.forEach((spec, index) => {
+            const name = spec.label || spec.selector || `control ${index + 1}`;
+            let resolved;
+            try {
+              resolved = resolveControl(spec);
+            } catch (error) {
+              failures.push(`${name}: invalid selector (${error.message})`);
+              return;
+            }
+            const { element, label } = resolved;
+            if (!isVisible(element)) {
+              failures.push(`${name}: control is not visible`);
+              return;
+            }
+            const controlRect = pageRect(element);
+            if (!insideClip(controlRect)) {
+              failures.push(
+                `${name}: control is outside the final crop `
+                + `(control=${JSON.stringify(controlRect)}, clip=${JSON.stringify(clip)})`,
+              );
+            }
+            const labelRect = label ? pageRect(label) : null;
+            if (label && (!isVisible(label) || !insideClip(labelRect))) {
+              failures.push(
+                `${name}: label is outside the final crop `
+                + `(label=${JSON.stringify(labelRect)}, clip=${JSON.stringify(clip)})`,
+              );
+            }
+            if (Object.prototype.hasOwnProperty.call(spec, 'checked')) {
+              const actual = Boolean(element.checked);
+              if (actual !== Boolean(spec.checked)) {
+                failures.push(`${name}: expected checked=${Boolean(spec.checked)}, got ${actual}`);
+              }
+            }
+            if (Object.prototype.hasOwnProperty.call(spec, 'value')) {
+              const expected = normalize(spec.value);
+              const selected = element.tagName === 'SELECT'
+                ? normalize(element.options[element.selectedIndex]?.textContent)
+                : '';
+              const actual = normalize(element.value);
+              if (expected !== actual && expected !== selected) {
+                failures.push(`${name}: expected value "${expected}", got "${selected || actual}"`);
+              }
+            }
+          });
+
+          textEntries.forEach((expectedText, index) => {
+            const expectedKey = key(expectedText);
+            const candidates = Array.from(document.querySelectorAll('body *'))
+              .filter((element) => !['SCRIPT', 'STYLE'].includes(element.tagName))
+              .filter((element) => isVisible(element) && key(element.textContent).includes(expectedKey))
+              .map((element) => ({ element, rect: pageRect(element) }))
+              .sort((left, right) => (
+                left.rect.width * left.rect.height - right.rect.width * right.rect.height
+              ));
+            const match = candidates.find(({ rect }) => insideClip(rect));
+            if (!match) {
+              failures.push(`visibleText ${index + 1}: "${normalize(expectedText)}" is not visible in the final crop`);
+            }
+          });
+          return failures;
+        }
+        """,
+        {
+            "controls": controls,
+            "textEntries": text_entries,
+            "clip": clip,
+        },
+    )
+    if failures:
+        raise RuntimeError("capture visibility contract failed: " + "; ".join(failures))
+
+
 def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: dict[str, Any]) -> None:
     source = as_text(capture.get("source")).lower() or "gallery"
     viewport = capture.get("viewport") if isinstance(capture.get("viewport"), dict) else DEFAULT_VIEWPORT
@@ -863,46 +1183,42 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
     clip_selectors = [as_text(selector) for selector in as_array(capture.get("clipSelectors")) if as_text(selector)]
 
     if as_text(capture.get("crop")) == "openSelect":
-        png_bytes = page.screenshot(
-            type="png",
-            clip=capture_open_select_clip(
-                page,
-                normalize_crop_padding(capture.get("cropPadding"), default=14),
-            ),
+        clip = capture_open_select_clip(
+            page,
+            normalize_crop_padding(capture.get("cropPadding"), default=14),
         )
     elif clip_selectors:
-        png_bytes = page.screenshot(
-            type="png",
-            clip=capture_multi_selector_clip(
-                page,
-                clip_selectors,
-                normalize_crop_padding(capture.get("cropPadding"), default=24),
-            ),
+        clip = capture_multi_selector_clip(
+            page,
+            clip_selectors,
+            normalize_crop_padding(capture.get("cropPadding"), default=24),
         )
     elif target_locator is not None and capture.get("cropPadding") is not None:
-        png_bytes = page.screenshot(
-            type="png",
-            clip=capture_selector_clip(
-                page,
-                target_locator,
-                normalize_crop_padding(capture.get("cropPadding"), default=12),
-            ),
+        clip = capture_selector_clip(
+            page,
+            target_locator,
+            normalize_crop_padding(capture.get("cropPadding"), default=12),
         )
     elif target_locator is not None:
-        png_bytes = target_locator.screenshot(type="png")
+        clip = capture_selector_clip(
+            page,
+            target_locator,
+            normalize_crop_padding(0, default=0),
+        )
     else:
         box = capture.get("boundingBox")
         if not isinstance(box, dict):
             raise RuntimeError("capture metadata needs selector, cardTitle, crop=openSelect, or boundingBox.")
-        png_bytes = page.screenshot(
-            type="png",
-            clip={
-                "x": float(box["x"]),
-                "y": float(box["y"]),
-                "width": float(box["width"]),
-                "height": float(box["height"]),
-            },
-        )
+        clip = {
+            "x": float(box["x"]),
+            "y": float(box["y"]),
+            "width": float(box["width"]),
+            "height": float(box["height"]),
+        }
+
+    assert_capture_app_state(page, capture)
+    assert_capture_visible_contract(page, capture, clip)
+    png_bytes = page.screenshot(type="png", clip=clip)
 
     target.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(io.BytesIO(png_bytes)) as image:
@@ -917,7 +1233,7 @@ def capture_examples(
     quality: int,
     device_scale_factor: float,
     keep_going: bool,
-) -> int:
+) -> tuple[int, list[str]]:
     capturable: list[tuple[dict[str, Any], TutorialContext, dict[str, Any]]] = []
     for sample in samples:
         tutorial_path = resolve_gallery_reference(as_text(sample.get("tutorial")))
@@ -934,7 +1250,7 @@ def capture_examples(
 
     if not capturable:
         print("No operations with capture metadata were found.")
-        return 0
+        return 0, []
 
     sync_playwright = import_playwright()
     with serve_web_root() as base_url, sync_playwright() as playwright:
@@ -966,7 +1282,7 @@ def capture_examples(
             browser.close()
     if failures:
         print(f"capture completed with {len(failures)} failure(s).", file=sys.stderr)
-    return captured_count
+    return captured_count, failures
 
 
 def print_validation(result: ValidationResult, *, strict: bool) -> int:
@@ -1028,14 +1344,14 @@ def main() -> int:
         )
         return print_validation(result, strict=args.strict)
 
-    capture_examples(
+    _, failures = capture_examples(
         samples,
         operation_filter=args.operation,
         quality=args.quality,
         device_scale_factor=args.device_scale_factor,
         keep_going=args.keep_going,
     )
-    return 0
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.analysis.collinearity as collinearity_module
+import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
@@ -1860,41 +1861,30 @@ def test_native_tsv_parser_rejects_conflicting_block_evalues() -> None:
 
 
 @pytest.mark.linear
-def test_linear_cli_builds_collinearity(
+def test_linear_cli_forwards_collinearity_options(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     records = [_record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"]})]), _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"]})])]
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
-    def fake_build(*_args, **_kwargs):
-        anchor = _anchor(0, 0)
-        return CollinearityResult(
-            blocks=(
-                CollinearityBlock(
-                    block_id="block_0001",
-                    query_record_index=0,
-                    subject_record_index=1,
-                    orientation="plus",
-                    score=50.0,
-                    anchors=(anchor,),
-                ),
-            )
-        )
-
-    def fake_render_request(request):
-        captured["canonical_request"] = request
+    def fake_render_request(request, **_kwargs):
+        resolved = request_render_module.resolve_request(request)
+        captured["canonical_request"] = resolved
         return SimpleNamespace(
             drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
             interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
         )
 
-    monkeypatch.setattr(linear_cli_module, "build_orthogroup_collinearity_blocks", fake_build)
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
@@ -1934,10 +1924,9 @@ def test_linear_cli_builds_collinearity(
     assert options.orthogroup_membership_mode == "anchor_core_v1"
     assert options.orthogroup_member_max_hits == 5
     assert options.collinear_max_paralog_links_per_orthogroup == 2
-    assert options.protein_blastp_mode == "none"
-    comparisons = options.protein_comparisons
-    assert comparisons is not None
-    assert comparisons[0].iloc[0]["collinearity_color_mode"] == "orientation"
+    assert options.protein_blastp_mode == "collinear"
+    assert options.protein_comparisons is None
+    assert options.collinearity_color_mode == "orientation"
 
 
 @pytest.mark.linear

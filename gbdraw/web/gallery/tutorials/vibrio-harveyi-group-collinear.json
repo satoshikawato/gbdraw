@@ -53,6 +53,7 @@
       "body": "Open gbdraw.app and select Linear before adding the assemblies.",
       "operations": [
         {
+          "genericMedia": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-01-01-linear-mode.webp",
             "alt": "Mode selector with Linear selected.",
@@ -151,6 +152,7 @@
       "note": "With multi-record rows, Adjacent pairs searches every cross-record combination between neighboring rows. This layout evaluates 18 record pairs across four species boundaries; same-row and non-neighboring-row pairs are omitted.",
       "operations": [
         {
+          "genericMedia": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-04-01-collinear-reduction.webp",
             "alt": "LOSAT Settings panel with the blastp mode menu open and Collinear blocks highlighted.",
@@ -158,6 +160,7 @@
           }
         },
         {
+          "genericMedia": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-04-02-orientation-identity.webp",
             "alt": "LOSAT Settings panel with the Color mode menu open and Orientation plus identity highlighted.",

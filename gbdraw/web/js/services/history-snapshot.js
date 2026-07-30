@@ -6,6 +6,10 @@ import {
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData } from './json-clone.js';
 import { replaceLayoutPreferences } from '../app/layout-preferences.js';
+import {
+  isResourceBackedCanonicalComparison,
+  mapResourceBackedCanonicalComparison
+} from './canonical-comparisons.js';
 
 export { cloneJsonData };
 
@@ -279,6 +283,18 @@ const buildFilesData = (state, fileStore) => ({
     : null,
   c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
   c_conservation_sequence_sources: fileStore.describeValue(state.files?.c_conservation_sequence_sources || []),
+  linearCanonicalComparisons: (
+    Array.isArray(state.files?.linearCanonicalComparisons)
+      ? state.files.linearCanonicalComparisons
+      : []
+  ).map((comparison) => (
+    isResourceBackedCanonicalComparison(comparison)
+      ? {
+          ...mapResourceBackedCanonicalComparison(comparison),
+          file: fileStore.describeValue(comparison.file)
+        }
+      : cloneJsonData(comparison)
+  )),
   d_color: fileStore.describeValue(state.files?.d_color),
   t_color: fileStore.describeValue(state.files?.t_color),
   blacklist: fileStore.describeValue(state.files?.blacklist),
@@ -321,10 +337,17 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
     ? 'losat-cache'
     : null;
   state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
-    ? restore(filesData.c_conservation_fastas).filter(Boolean)
+    ? restore(filesData.c_conservation_fastas)
     : [];
   state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
     ? restore(filesData.c_conservation_sequence_sources)
+    : [];
+  state.files.linearCanonicalComparisons = Array.isArray(filesData?.linearCanonicalComparisons)
+    ? filesData.linearCanonicalComparisons.map((comparison) => (
+        isResourceBackedCanonicalComparison(comparison)
+          ? mapResourceBackedCanonicalComparison(comparison, restore)
+          : cloneJsonData(comparison)
+      ))
     : [];
   state.files.d_color = restore(filesData?.d_color);
   state.files.t_color = restore(filesData?.t_color);

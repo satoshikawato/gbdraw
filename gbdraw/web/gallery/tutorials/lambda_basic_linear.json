@@ -20,6 +20,7 @@
       "body": "Open gbdraw.app and select Linear before adding the phage record.",
       "operations": [
         {
+          "genericMedia": true,
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-01-01-linear-mode.webp",
             "alt": "Mode selector with Linear selected.",
@@ -29,27 +30,322 @@
       ]
     },
     {
-      "title": "Upload the lambda GenBank record",
-      "body": "Upload NC_001416.gb and set Output prefix to lambda_basic_linear. One record is enough to learn the linear layout controls.",
+      "title": "Upload the lambda record and name the output",
+      "body": "Use one Linear input row and enter the output prefix. The optional record text fields can remain blank.",
+      "table": {
+        "columns": [
+          "Control",
+          "Value"
+        ],
+        "rows": [
+          [
+            "GenBank File",
+            "NC_001416.gb"
+          ],
+          [
+            "Output Prefix",
+            "lambda_basic_linear"
+          ]
+        ]
+      },
       "operations": [
         {
+          "dataDependent": true,
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-02-01-record-text-row.webp",
-            "alt": "A Linear GenBank input row showing the file and record text controls.",
-            "caption": "Use one Linear input row; optional record text can be left blank."
+            "src": "./media/lambda_basic_linear/manual-02-01-genbank-upload.webp",
+            "alt": "First Linear input row containing NC_001416.gb.",
+            "caption": "Upload NC_001416.gb in record row 1."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const seq = app?.linearSeqs?.[0]; const file = seq?.gb; if (!file || app.linearSeqs.length !== 1) throw new Error('Lambda GenBank input was not restored.'); seq.gb = new File([file], 'NC_001416.gb', { type: file.type, lastModified: file.lastModified }); app.form.prefix = 'lambda_basic_linear'; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = Array.from(card?.querySelectorAll('div') || []).find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); const label = Array.from(row?.querySelectorAll('label') || []).find((node) => node.textContent.trim() === 'GenBank File'); const uploader = label?.parentElement?.parentElement; if (!badge || !uploader) throw new Error('Lambda Linear input row was not found.'); badge.dataset.capture = 'lambda-record-badge'; uploader.dataset.capture = 'lambda-genbank-upload'; uploader.scrollIntoView({ block: 'center' });"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => window.__GBDRAW_APP__?.linearSeqs?.[0]?.gb?.name === 'NC_001416.gb'"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='lambda-record-badge']",
+              "[data-capture='lambda-genbank-upload']"
+            ],
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 1,
+              "linearSeqs.0.gb.name": "NC_001416.gb"
+            },
+            "visibleText": [
+              "NC_001416.gb"
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/lambda_basic_linear/manual-02-02-basic-settings.webp",
+            "alt": "Basic settings with lambda_basic_linear as the output prefix.",
+            "caption": "Set Output Prefix to lambda_basic_linear."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.form.prefix = 'lambda_basic_linear'; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false;"
+              }
+            ],
+            "cardTitle": "Basic",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "form.prefix": "lambda_basic_linear"
+            },
+            "visibleControls": [
+              {
+                "label": "Output Prefix",
+                "value": "lambda_basic_linear"
+              }
+            ]
           }
         }
       ]
     },
     {
-      "title": "Set labels, strands, and ruler",
-      "body": "Enable Separate Strands, set Show Labels to All Records, set Scale Style to Ruler, and put the legend on the left.",
+      "title": "Set strands, labels, ruler, and legend",
+      "body": "Apply the four Linear presentation settings below.",
+      "table": {
+        "columns": [
+          "Control",
+          "Value"
+        ],
+        "rows": [
+          [
+            "Separate Strands",
+            "On"
+          ],
+          [
+            "Show Labels",
+            "All Records"
+          ],
+          [
+            "Scale Style",
+            "Ruler (Ticks)"
+          ],
+          [
+            "Legend Position",
+            "Left"
+          ]
+        ]
+      },
       "operations": [
         {
+          "dataDependent": true,
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-05-02-scale-style-ruler.webp",
-            "alt": "Scale Style selector with Ruler highlighted in the linear layout controls.",
-            "caption": "Set Scale Style to Ruler after enabling labels and Separate Strands."
+            "src": "./media/lambda_basic_linear/manual-03-01-separate-strands.webp",
+            "alt": "Linear Layout controls with Separate Strands checked.",
+            "caption": "Enable Separate Strands in Layout."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "openDetails": [
+              "Layout"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.replace(/\\s+/g, ' ').trim().startsWith('Layout')); const summary = card?.querySelector('summary'); const options = Array.from(card?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Separate Strands'))?.closest('.grid'); if (!summary || !options) throw new Error('Linear layout controls were not found.'); summary.dataset.capture = 'lambda-layout-summary'; options.dataset.capture = 'lambda-layout-options'; options.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": [
+              "[data-capture='lambda-layout-summary']",
+              "[data-capture='lambda-layout-options']"
+            ],
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "form.separate_strands": true,
+              "adv.linear_track_slots_enabled": false
+            },
+            "visibleControls": [
+              {
+                "label": "Separate Strands",
+                "checked": true
+              }
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/lambda_basic_linear/manual-03-02-show-labels-all.webp",
+            "alt": "Show Labels selector with All Records highlighted.",
+            "caption": "Set Show Labels to All Records."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "openDetails": [
+              "Labels"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.form.show_labels_linear = 'all';"
+              }
+            ],
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "All Records",
+              "options": [
+                "None",
+                "All Records",
+                "First Record Only",
+                "Top Similarity Group Record"
+              ],
+              "label": "Show Labels"
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "form.show_labels_linear": "all"
+            },
+            "visibleControls": [
+              {
+                "label": "Show Labels",
+                "value": "All Records"
+              }
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/lambda_basic_linear/manual-03-03-scale-style-ruler.webp",
+            "alt": "Scale Style selector with Ruler highlighted.",
+            "caption": "Set Scale Style to Ruler (Ticks)."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "openDetails": [
+              "Axis & Scale"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.form.scale_style = 'ruler';"
+              }
+            ],
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 80,
+              "bottom": 24,
+              "left": 80
+            },
+            "openSelect": {
+              "selectedLabel": "Ruler (Ticks)",
+              "options": [
+                "Bar (Simple)",
+                "Ruler (Ticks)"
+              ],
+              "label": "Scale Style"
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "form.scale_style": "ruler"
+            },
+            "visibleControls": [
+              {
+                "label": "Scale Style",
+                "value": "Ruler (Ticks)"
+              }
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/lambda_basic_linear/manual-03-04-legend-position-left.webp",
+            "alt": "Legend Position selector with Left highlighted.",
+            "caption": "Set Legend Position to Left."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 900
+            },
+            "openDetails": [
+              "Title & Legend"
+            ],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.form.legend = 'left';"
+              }
+            ],
+            "crop": "openSelect",
+            "cropPadding": {
+              "top": 54,
+              "right": 100,
+              "bottom": 24,
+              "left": 100
+            },
+            "openSelect": {
+              "selectedLabel": "Left",
+              "options": [
+                "Right",
+                "Left",
+                "Top",
+                "Bottom",
+                "None"
+              ],
+              "label": "Legend Position"
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "form.legend": "left"
+            },
+            "visibleControls": [
+              {
+                "label": "Legend Position",
+                "value": "Left"
+              }
+            ]
           }
         }
       ]
