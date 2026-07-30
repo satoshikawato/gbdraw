@@ -27,7 +27,7 @@ from .api.options import (
     LinearDiagramOptions,
     LinearMultiRecordOptions,
     LinearOutputOptions,
-    LinearTrackOptions,
+    LinearRequestTrackOptions,
 )
 from .linear_comparison import LinearComparison
 from .layout.linear_multi_record import record_pairs_between_adjacent_rows
@@ -91,6 +91,7 @@ from .cli_utils.common import (
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
     _add_format_arg,
+    _add_overwrite_arg,
     _add_gc_skew_toggle_args,
     _add_gc_content_axis_args,
     _add_legend_size_args,
@@ -113,6 +114,7 @@ from .cli_utils.session import (
     collect_track_slot_geometry_records,
     make_rendered_svg,
     parse_session_pre_args,
+    preflight_session_sidecar_if_requested,
     render_canonical_session_if_present,
     save_session_sidecar_if_requested,
 )
@@ -664,6 +666,7 @@ def _get_args(args) -> argparse.Namespace:
         help='output file prefix (default: out)',
         type=str,
         default="out")
+    _add_overwrite_arg(parser)
     parser.add_argument(
         '-n',
         '--nt',
@@ -1160,6 +1163,7 @@ def linear_main(cmd_args) -> None:
                 mode="linear",
                 output_override=session_request.output,
                 format_override=session_request.format,
+                overwrite=session_request.overwrite,
                 save_session=session_request.save_session,
                 session_output=session_request.session_output,
             ):
@@ -1172,11 +1176,18 @@ def linear_main(cmd_args) -> None:
                 format_override=session_request.format,
             )
             args = _get_args(list(run_spec.args))
+            args.overwrite = session_request.overwrite
             args._gbdraw_source_session = session
             args._gbdraw_collect_losat_cache = bool(
                 session_request.save_session
                 or session_request.session_output
                 or _source_session_losat_entries(session)
+            )
+            preflight_session_sidecar_if_requested(
+                save_session=session_request.save_session,
+                session_output=session_request.session_output,
+                output_prefix=args.output,
+                overwrite=session_request.overwrite,
             )
             run_result = run_linear_from_namespace(args)
             save_session_sidecar_if_requested(
@@ -1187,10 +1198,17 @@ def linear_main(cmd_args) -> None:
                 source_session=session,
                 cli_invocation_args=run_spec.cli_invocation_args,
                 file_bindings=run_spec.file_bindings,
+                overwrite=session_request.overwrite,
             )
         return
 
     args: argparse.Namespace = _get_args(cmd_args)
+    preflight_session_sidecar_if_requested(
+        save_session=bool(args.save_session or args.session_output),
+        session_output=args.session_output,
+        output_prefix=args.output,
+        overwrite=bool(args.overwrite),
+    )
     run_result = run_linear_from_namespace(args)
     save_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
@@ -1198,6 +1216,7 @@ def linear_main(cmd_args) -> None:
         output_prefix=args.output,
         run_result=run_result,
         cmd_args=cmd_args,
+        overwrite=bool(args.overwrite),
     )
 
 
@@ -1874,7 +1893,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 default_colors=default_colors,
                 default_colors_palette=palette,
             ),
-            tracks=LinearTrackOptions(
+            tracks=LinearRequestTrackOptions(
                 linear_track_slots=linear_track_slot_specs,
                 linear_track_axis_index=linear_track_axis_index,
             ),
@@ -1948,7 +1967,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 request_path.parent if request_path.parent != Path(".") else None
             ),
             formats=tuple(out_formats),
-            overwrite=True,
+            overwrite=args.overwrite,
         ),
     )
     render_result = render_request(canonical_request)

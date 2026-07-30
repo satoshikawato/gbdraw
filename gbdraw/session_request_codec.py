@@ -61,12 +61,13 @@ from .api.options import (
     CircularDiagramOptions,
     CircularMultiRecordOptions,
     CircularOutputOptions,
-    CircularTrackOptions,
+    CircularRequestTrackOptions,
     ColorOptions,
+    DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
     LinearOutputOptions,
-    LinearTrackOptions,
+    LinearRequestTrackOptions,
 )
 from .api.requests import (
     CircularBatchRequest,
@@ -404,6 +405,23 @@ _FILE_SEQUENCE_FIELDS = frozenset({"depth_files", "conservation_blast_files"})
 _OPTIONAL_FILE_SEQUENCE_FIELDS = frozenset({"conservation_fasta_files"})
 _TABLE_MATRIX_FIELDS = frozenset({"depth_track_tables"})
 _FILE_MATRIX_FIELDS = frozenset({"depth_track_files"})
+_DEPTH_COMPATIBILITY_FIELDS = frozenset(
+    {
+        "depth_table",
+        "depth_file",
+        "depth_tables",
+        "depth_files",
+        "depth_track_tables",
+        "depth_track_files",
+        "depth_track_labels",
+        "depth_track_colors",
+        "depth_track_heights",
+        "depth_track_large_tick_intervals",
+        "depth_track_small_tick_intervals",
+        "depth_track_tick_font_sizes",
+    }
+)
+_ALL_DEPTH_INPUT_FIELDS = _DEPTH_COMPATIBILITY_FIELDS | {"depth_tracks"}
 
 _TYPED_TREE_CLASSES = {
     cls.__name__: cls
@@ -573,7 +591,11 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             _encode_record(record, index=index, resources=resources)
             for index, record in enumerate(request.records, start=1)
         ],
-        "diagramOptions": _encode_diagram_options(request.options, resources=resources),
+        "diagramOptions": _encode_diagram_options(
+            request.options,
+            record_count=len(request.records),
+            resources=resources,
+        ),
         "layout": _encode_layout(request),
         "comparisons": _encode_comparisons(request.options, mode=mode, resources=resources),
         "output": (
@@ -983,7 +1005,7 @@ def _encode_output(output: RenderOutputRequest) -> dict[str, Any]:
     return {
         "prefix": output.output_prefix,
         "formats": list(output.formats),
-        "overwrite": output.overwrite,
+        "overwrite": False,
         "interactiveMetadataPolicy": output.interactive_metadata_policy,
     }
 
@@ -1054,6 +1076,7 @@ def _decode_linear_layout(value: object) -> LinearMultiRecordOptions | None:
 def _encode_diagram_options(
     options: CircularDiagramOptions | LinearDiagramOptions,
     *,
+    record_count: int,
     resources: _ResourceBuilder,
 ) -> dict[str, Any]:
     if isinstance(options, CircularDiagramOptions):
@@ -1064,16 +1087,25 @@ def _encode_diagram_options(
         raise CanonicalRequestEncodingError(
             "diagramOptions must use mode-specific options."
         )
+    depth_tracks = _canonical_depth_tracks_for_encoding(
+        options,
+        record_count=record_count,
+    )
     result: dict[str, Any] = {}
     for item in fields(options):
         name = item.name
-        if name in _COMPARISON_FIELDS:
+        if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS:
             continue
         value = getattr(options, name)
         default = getattr(default_options, name)
         if _same_default(value, default):
             continue
         result[_camel(name)] = _encode_option_value(name, value, resources=resources)
+    if depth_tracks is not None:
+        result["depthTracks"] = _encode_depth_tracks(
+            depth_tracks,
+            resources=resources,
+        )
     return result
 
 
@@ -1508,6 +1540,367 @@ def _restore_legacy_sparse_defaults(
     decoded["config_overrides"] = overrides
 
 
+def _encode_depth_source(
+    value: object,
+    *,
+    name: str,
+    resources: _ResourceBuilder,
+) -> dict[str, str]:
+    if isinstance(value, DataFrame):
+        return _table_ref(name, value, resources=resources)
+    if isinstance(value, (str, Path)):
+        return _file_ref(name, value, resources=resources)
+    raise CanonicalRequestEncodingError(
+        f"{name} must be a path or pandas DataFrame."
+    )
+
+
+def _expanded_depth_text_metadata(
+    values: Sequence[object] | None,
+    *,
+    track_count: int,
+    field_name: str,
+) -> list[str | None]:
+    if values is None:
+        return [None] * track_count
+    items = [str(value).strip() or None for value in values]
+    if len(items) == 1:
+        return items * track_count
+    if len(items) != track_count:
+        raise CanonicalRequestEncodingError(
+            f"{field_name} count must be one or equal to the number of depth "
+            f"tracks ({track_count})."
+        )
+    return items
+
+
+def _expanded_depth_numeric_metadata(
+    values: Sequence[float | str | None] | None,
+    *,
+    track_count: int,
+    field_name: str,
+) -> list[float | None]:
+    if values is None:
+        return [None] * track_count
+    items: list[float | None] = []
+    for value in values:
+        if value is None or (
+            isinstance(value, str)
+            and value.strip().lower() in {"", "auto", "none", "null", "-"}
+        ):
+            items.append(None)
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise CanonicalRequestEncodingError(
+                f"{field_name} values must be finite numbers > 0 or None."
+            ) from exc
+        if not math.isfinite(numeric) or numeric <= 0:
+            raise CanonicalRequestEncodingError(
+                f"{field_name} values must be finite numbers > 0 or None."
+            )
+        items.append(numeric)
+    if len(items) == 1:
+        return items * track_count
+    if len(items) != track_count:
+        raise CanonicalRequestEncodingError(
+            f"{field_name} count must be one or equal to the number of depth "
+            f"tracks ({track_count})."
+        )
+    return items
+
+
+def _canonical_depth_tracks_for_encoding(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+    *,
+    record_count: int,
+) -> tuple[DepthTrackInput, ...] | None:
+    """Project compatibility depth inputs onto the canonical logical-track form."""
+
+    if options.depth_tracks is not None:
+        return tuple(options.depth_tracks)
+
+    singular_plural_present = any(
+        getattr(options, name) is not None
+        for name in ("depth_table", "depth_file", "depth_tables", "depth_files")
+    )
+    matrix_present = any(
+        getattr(options, name, None) is not None
+        for name in (
+            "depth_track_tables",
+            "depth_track_files",
+            "depth_track_labels",
+            "depth_track_colors",
+            "depth_track_heights",
+            "depth_track_large_tick_intervals",
+            "depth_track_small_tick_intervals",
+            "depth_track_tick_font_sizes",
+        )
+    )
+    if singular_plural_present and matrix_present:
+        raise CanonicalRequestEncodingError(
+            "Singular/plural depth inputs cannot be combined with depth_track_* "
+            "compatibility inputs."
+        )
+    if not singular_plural_present and not matrix_present:
+        return None
+
+    if singular_plural_present:
+        if options.depth_table is not None and options.depth_file is not None:
+            raise CanonicalRequestEncodingError(
+                "Pass either depth_table or depth_file, not both."
+            )
+        singular = (
+            options.depth_table
+            if options.depth_table is not None
+            else options.depth_file
+        )
+        plural = (
+            options.depth_tables
+            if options.depth_tables is not None
+            else options.depth_files
+        )
+        if singular is not None and plural is not None:
+            raise CanonicalRequestEncodingError(
+                "Use depth_table/depth_file or depth_tables/depth_files, not both."
+            )
+        if options.depth_tables is not None and options.depth_files is not None:
+            raise CanonicalRequestEncodingError(
+                "Pass either depth_tables or depth_files, not both."
+            )
+        if singular is not None:
+            return (DepthTrackInput(source=singular),)
+        sources = tuple(plural or ())
+        if not sources:
+            raise CanonicalRequestEncodingError(
+                "depth_tables/depth_files must include at least one source."
+            )
+        if len(sources) not in {1, record_count}:
+            raise CanonicalRequestEncodingError(
+                "depth_tables/depth_files must contain one shared source or one "
+                f"source per displayed record ({record_count}); got {len(sources)}."
+            )
+        source: object = sources[0] if len(sources) == 1 else sources
+        return (DepthTrackInput(source=source),)
+
+    table_rows = options.depth_track_tables
+    file_rows = options.depth_track_files
+    if table_rows is not None and file_rows is not None:
+        raise CanonicalRequestEncodingError(
+            "Pass either depth_track_tables or depth_track_files, not both."
+        )
+    raw_rows = table_rows if table_rows is not None else file_rows
+    if raw_rows is None:
+        raise CanonicalRequestEncodingError(
+            "depth_track metadata requires depth_track_tables or depth_track_files."
+        )
+    rows = [tuple(row) for row in raw_rows]
+    if not rows:
+        raise CanonicalRequestEncodingError(
+            "depth_track_tables/depth_track_files must include at least one row."
+        )
+    if len(rows) not in {1, record_count}:
+        raise CanonicalRequestEncodingError(
+            "depth_track_tables/depth_track_files must contain one shared row or "
+            f"one row per displayed record ({record_count}); got {len(rows)}."
+        )
+    track_count = max((len(row) for row in rows), default=0)
+    if track_count <= 0:
+        raise CanonicalRequestEncodingError(
+            "depth_track_tables/depth_track_files must include at least one track."
+        )
+
+    labels = _expanded_depth_text_metadata(
+        options.depth_track_labels,
+        track_count=track_count,
+        field_name="depth_track_labels",
+    )
+    colors = _expanded_depth_text_metadata(
+        options.depth_track_colors,
+        track_count=track_count,
+        field_name="depth_track_colors",
+    )
+    heights = _expanded_depth_numeric_metadata(
+        getattr(options, "depth_track_heights", None),
+        track_count=track_count,
+        field_name="depth_track_heights",
+    )
+    large_ticks = _expanded_depth_numeric_metadata(
+        options.depth_track_large_tick_intervals,
+        track_count=track_count,
+        field_name="depth_track_large_tick_intervals",
+    )
+    small_ticks = _expanded_depth_numeric_metadata(
+        options.depth_track_small_tick_intervals,
+        track_count=track_count,
+        field_name="depth_track_small_tick_intervals",
+    )
+    tick_fonts = _expanded_depth_numeric_metadata(
+        options.depth_track_tick_font_sizes,
+        track_count=track_count,
+        field_name="depth_track_tick_font_sizes",
+    )
+
+    tracks: list[DepthTrackInput] = []
+    for track_index in range(track_count):
+        per_record = tuple(
+            row[track_index] if track_index < len(row) else None
+            for row in rows
+        )
+        source = per_record[0] if len(rows) == 1 else per_record
+        tracks.append(
+            DepthTrackInput(
+                source=source,
+                label=labels[track_index],
+                color=colors[track_index],
+                height=heights[track_index],
+                large_tick_interval=large_ticks[track_index],
+                small_tick_interval=small_ticks[track_index],
+                tick_font_size=tick_fonts[track_index],
+            )
+        )
+    return tuple(tracks)
+
+
+def _encode_depth_tracks(
+    value: object,
+    *,
+    resources: _ResourceBuilder,
+) -> list[dict[str, Any]]:
+    tracks = _sequence(value, name="depth_tracks")
+    encoded: list[dict[str, Any]] = []
+    for track_index, track in enumerate(tracks, start=1):
+        if not isinstance(track, DepthTrackInput):
+            raise CanonicalRequestEncodingError(
+                "depth_tracks must contain DepthTrackInput values."
+            )
+        source_name = f"depth-tracks-{track_index}-source"
+        source = track.source
+        if isinstance(source, SequenceABC) and not isinstance(
+            source,
+            (str, bytes, bytearray),
+        ) and not isinstance(source, DataFrame):
+            encoded_source: object = [
+                (
+                    _encode_depth_source(
+                        item,
+                        name=f"{source_name}-record-{record_index}",
+                        resources=resources,
+                    )
+                    if item is not None
+                    else None
+                )
+                for record_index, item in enumerate(source, start=1)
+            ]
+        else:
+            encoded_source = _encode_depth_source(
+                source,
+                name=source_name,
+                resources=resources,
+            )
+        encoded.append(
+            {
+                "source": encoded_source,
+                "label": track.label,
+                "color": track.color,
+                "height": track.height,
+                "largeTickInterval": track.large_tick_interval,
+                "smallTickInterval": track.small_tick_interval,
+                "tickFontSize": track.tick_font_size,
+            }
+        )
+    return encoded
+
+
+def _decode_depth_source(
+    value: object,
+    *,
+    name: str,
+    resource_paths: Mapping[str, str | Path],
+) -> str | DataFrame:
+    ref = _object(
+        value,
+        path=f"resource reference {name}",
+        required={"resourceId", "representation"},
+    )
+    representation = ref["representation"]
+    if representation == "canonicalTsv":
+        return _decode_table_ref(
+            ref,
+            name=name,
+            resource_paths=resource_paths,
+        )
+    if representation == "file":
+        return str(
+            _decode_file_ref(
+                ref,
+                name=name,
+                resource_paths=resource_paths,
+            )
+        )
+    raise CanonicalRequestDecodingError(
+        f"Unsupported resource representation for {name}: {representation!r}."
+    )
+
+
+def _decode_depth_tracks(
+    value: object,
+    *,
+    resource_paths: Mapping[str, str | Path],
+) -> tuple[DepthTrackInput, ...]:
+    raw_tracks = _array(
+        value,
+        path="renderRequest.diagramOptions.depthTracks",
+    )
+    decoded: list[DepthTrackInput] = []
+    required = {
+        "source",
+        "label",
+        "color",
+        "height",
+        "largeTickInterval",
+        "smallTickInterval",
+        "tickFontSize",
+    }
+    for track_index, raw_track in enumerate(raw_tracks, start=1):
+        path = f"renderRequest.diagramOptions.depthTracks[{track_index - 1}]"
+        track = _object(raw_track, path=path, required=required)
+        raw_source = track["source"]
+        source_name = f"depth-tracks-{track_index}-source"
+        if isinstance(raw_source, list):
+            source: object = tuple(
+                (
+                    _decode_depth_source(
+                        item,
+                        name=f"{source_name}-record-{record_index}",
+                        resource_paths=resource_paths,
+                    )
+                    if item is not None
+                    else None
+                )
+                for record_index, item in enumerate(raw_source, start=1)
+            )
+        else:
+            source = _decode_depth_source(
+                raw_source,
+                name=source_name,
+                resource_paths=resource_paths,
+            )
+        decoded.append(
+            DepthTrackInput(
+                source=source,
+                label=_optional_string(track["label"], f"{path}.label"),
+                color=_optional_string(track["color"], f"{path}.color"),
+                height=track["height"],
+                large_tick_interval=track["largeTickInterval"],
+                small_tick_interval=track["smallTickInterval"],
+                tick_font_size=track["tickFontSize"],
+            )
+        )
+    return tuple(decoded)
+
+
 def _encode_option_value(
     name: str,
     value: object,
@@ -1537,6 +1930,8 @@ def _encode_option_value(
         return _encode_annotations(value, resources=resources)
     if name == "output":
         return _encode_assembly_output(value)
+    if name == "depth_tracks":
+        return _encode_depth_tracks(value, resources=resources)
     if name in _TABLE_FIELDS:
         return _table_ref(name, value, resources=resources)
     if name in _FILE_FIELDS:
@@ -1589,6 +1984,8 @@ def _decode_option_value(
         return _decode_annotations(value, resource_paths=resource_paths)
     if name == "output":
         return _decode_assembly_output(value, mode=mode, schema=schema)
+    if name == "depth_tracks":
+        return _decode_depth_tracks(value, resource_paths=resource_paths)
     if name in _TABLE_FIELDS:
         return _decode_table_ref(value, name=name, resource_paths=resource_paths)
     if name in _FILE_FIELDS:
@@ -1845,13 +2242,13 @@ def _decode_colors(
 
 
 def _encode_tracks(value: object) -> dict[str, Any]:
-    if isinstance(value, CircularTrackOptions):
+    if isinstance(value, CircularRequestTrackOptions):
         circular_slots = value.circular_track_slots
         circular_axis_index = value.circular_track_axis_index
         linear_slots = None
         linear_axis_index = None
         center_reserved_radius = value.center_reserved_radius
-    elif isinstance(value, LinearTrackOptions):
+    elif isinstance(value, LinearRequestTrackOptions):
         circular_slots = None
         circular_axis_index = None
         linear_slots = value.linear_track_slots
@@ -1875,7 +2272,7 @@ def _decode_tracks(
     *,
     mode: Literal["circular", "linear"],
     schema: int,
-) -> CircularTrackOptions | LinearTrackOptions:
+) -> CircularRequestTrackOptions | LinearRequestTrackOptions:
     path = "renderRequest.diagramOptions.tracks"
     payload = _object(
         value,
@@ -1905,10 +2302,12 @@ def _decode_tracks(
             raise CanonicalRequestDecodingError(
                 "A Circular request cannot contain Linear track values."
             )
-        result: CircularTrackOptions | LinearTrackOptions = CircularTrackOptions(
-            circular_track_slots=circular_slots,
-            circular_track_axis_index=payload["circularTrackAxisIndex"],
-            center_reserved_radius=payload["centerReservedRadius"],
+        result: CircularRequestTrackOptions | LinearRequestTrackOptions = (
+            CircularRequestTrackOptions(
+                circular_track_slots=circular_slots,
+                circular_track_axis_index=payload["circularTrackAxisIndex"],
+                center_reserved_radius=payload["centerReservedRadius"],
+            )
         )
     else:
         if (
@@ -1919,7 +2318,7 @@ def _decode_tracks(
             raise CanonicalRequestDecodingError(
                 "A Linear request cannot contain Circular track values."
             )
-        result = LinearTrackOptions(
+        result = LinearRequestTrackOptions(
             linear_track_slots=linear_slots,
             linear_track_axis_index=payload["linearTrackAxisIndex"],
         )
@@ -2840,11 +3239,12 @@ def _decode_output(
         raise CanonicalRequestDecodingError(
             "renderRequest.output.formats must be an array."
         )
+    _boolean(payload["overwrite"], "renderRequest.output.overwrite")
     return RenderOutputRequest(
         output_prefix=payload["prefix"],
         output_directory=output_directory,
         formats=tuple(formats),
-        overwrite=payload["overwrite"],
+        overwrite=False,
         interactive_metadata_policy=payload["interactiveMetadataPolicy"],
     )
 

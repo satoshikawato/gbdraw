@@ -18,7 +18,7 @@ export const PAIRWISE_MATCH_SELECTOR = [
 
 const MATCH_KIND_TITLES = {
   pairwise: 'Pairwise match',
-  orthogroup: 'Orthogroup match',
+  orthogroup: 'Similarity-group match',
   collinear: 'Collinearity block',
   homology: 'Homology ring match'
 };
@@ -705,7 +705,7 @@ const resolveBlockMemberLabels = ({
 
 const buildOrthogroupDetailRows = ({
   orthogroupId,
-  idLabel = 'Orthogroup ID',
+  idLabel = 'Similarity group ID',
   displayName,
   description,
   scopeLabel,
@@ -723,7 +723,7 @@ const buildOrthogroupDetailRows = ({
   addRow(rows, 'Members', memberCount);
   addRow(rows, 'Record coverage', recordCoverage);
   addRow(rows, 'RBH seeds', Array.isArray(rbhOrthogroups) ? rbhOrthogroups.join('; ') : rbhOrthogroups);
-  addRow(rows, 'Ortholog paths', orthologPathCount);
+  addRow(rows, 'Group paths', orthologPathCount);
   addRow(rows, 'Related edges', relatedEdgeCount);
   return rows;
 };
@@ -757,7 +757,9 @@ const buildBlockOrthogroups = ({
     Array.isArray(group?.members) ? group.members.length : ''
   );
   const scopeLabel = groupMetadataScopeLabel(normalizedGroupScope);
-  const idLabel = normalizedGroupScope === 'adjacent_local' ? 'Collinear group ID' : 'Orthogroup ID';
+  const idLabel = normalizedGroupScope === 'adjacent_local'
+    ? 'Collinear group ID'
+    : 'Similarity group ID';
   const recordCoverage = firstText(group?.record_coverage_count, group?.recordCoverage);
   const rbhOrthogroups = Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds : [];
   const orthologPathCount = Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '';
@@ -991,7 +993,7 @@ export const buildMatchPopupPayload = (
   addRow(alignmentRows, 'Edge kind', attr(element, 'data-edge-kind'));
   addRow(alignmentRows, 'Render role', attr(element, 'data-render-role'));
   addRow(alignmentRows, 'RBH seed', attr(element, 'data-rbh-orthogroup-id'));
-  addRow(alignmentRows, 'Path ID', attr(element, 'data-ortholog-path-id'));
+  addRow(alignmentRows, 'Group path ID', attr(element, 'data-ortholog-path-id'));
   addRow(alignmentRows, 'Query members', attr(element, 'data-query-orthogroup-member-count'));
   addRow(alignmentRows, 'Subject members', attr(element, 'data-subject-orthogroup-member-count'));
   addRow(alignmentRows, 'Query member role', attr(element, 'data-query-orthogroup-role'));
@@ -1019,13 +1021,13 @@ export const buildMatchPopupPayload = (
 
   const orthogroupRows = [];
   if (matchKind !== 'collinear') {
-    addRow(orthogroupRows, 'Orthogroup ID', orthogroupId);
+    addRow(orthogroupRows, 'Similarity group ID', orthogroupId);
     addRow(orthogroupRows, 'Display name', displayName);
     addRow(orthogroupRows, 'Description', description);
     addRow(orthogroupRows, 'Members', firstText(group?.member_count, group?.memberCount));
     addRow(orthogroupRows, 'Record coverage', firstText(group?.record_coverage_count, group?.recordCoverage));
     addRow(orthogroupRows, 'RBH seeds', Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds.join('; ') : '');
-    addRow(orthogroupRows, 'Ortholog paths', Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '');
+    addRow(orthogroupRows, 'Group paths', Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '');
     addRow(orthogroupRows, 'Related edges', Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : '');
   }
   const orthogroupMemberRows = buildOrthogroupMemberRows(
@@ -1063,7 +1065,7 @@ export const buildMatchPopupPayload = (
   }
   if (matchKind === 'orthogroup' || orthogroupRows.length > 0) {
     sections.push(section(
-      'Orthogroup',
+      'Similarity group',
       orthogroupRows,
       orthogroupMemberSectionExtras(orthogroupMemberRows, orthogroupId, displayName)
     ));
@@ -1073,10 +1075,16 @@ export const buildMatchPopupPayload = (
     const localGroups = normalizedGroupScope === 'adjacent_local';
     addRow(
       blockOrthogroupRows,
-      localGroups ? 'Number of local collinear groups' : 'Number of orthogroups covered',
+      localGroups
+        ? 'Number of local collinear groups'
+        : 'Number of similarity groups covered',
       String(orthogroupIds.length)
     );
-    sections.push(section(localGroups ? 'Local collinear groups' : 'Orthogroups covered', blockOrthogroupRows, { blockOrthogroups }));
+    sections.push(section(
+      localGroups ? 'Local collinear groups' : 'Similarity groups covered',
+      blockOrthogroupRows,
+      { blockOrthogroups }
+    ));
   }
   if (matchKind === 'collinear' || blockRows.length > 0) {
     sections.push(section('Collinearity', blockRows));
@@ -1151,22 +1159,32 @@ export const buildPairwiseMatchHoverRows = (payload) => {
     sectionEntry?.rows.find((row) => row.label === label)?.value || '';
   if (payload.matchKind === 'orthogroup') {
     addFirst('Kind', payload.matchKind);
-    addFirst('Orthogroup', findValue(summary, 'Orthogroup ID') || payload.orthogroupId);
+    addFirst(
+      'Similarity group',
+      findValue(summary, 'Similarity group ID') || payload.orthogroupId
+    );
     addFirst('Display name', findValue(summary, 'Display name'));
     addFirst('Members', findValue(summary, 'Members'));
     return rows.slice(0, 6);
   }
   const alignment = payload.sections.find((entry) => entry.title === 'Alignment');
   const block = payload.sections.find((entry) => entry.title === 'Collinearity');
-  const orthogroup = payload.sections.find((entry) => entry.title === 'Orthogroup');
+  const orthogroup = payload.sections.find(
+    (entry) => entry.title === 'Similarity group'
+  );
   addFirst('Kind', payload.matchKind);
   addFirst('Identity', findValue(alignment, 'Identity') || findValue(block, 'Average identity'));
   addFirst('Query', findValue(summary, 'Query interval'));
   addFirst('Subject', findValue(summary, 'Subject interval'));
   if (payload.matchKind === 'collinear') {
-    addFirst(payload.groupScope === 'adjacent_local' ? 'Collinear groups' : 'Orthogroups', String(payload.blockOrthogroupCount ?? ''));
+    addFirst(
+      payload.groupScope === 'adjacent_local'
+        ? 'Collinear groups'
+        : 'Similarity groups',
+      String(payload.blockOrthogroupCount ?? '')
+    );
   } else {
-    addFirst('Orthogroup', findValue(orthogroup, 'Orthogroup ID'));
+    addFirst('Similarity group', findValue(orthogroup, 'Similarity group ID'));
   }
   addFirst('Block', findValue(block, 'Block ID'));
   return rows.slice(0, 6);

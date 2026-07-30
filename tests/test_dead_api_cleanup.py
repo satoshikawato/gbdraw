@@ -4,10 +4,12 @@ import copy
 import importlib.util
 import inspect
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+from svgwrite import Drawing
 
 import gbdraw.analysis as analysis
 import gbdraw.analysis.collinearity as collinearity
@@ -81,6 +83,33 @@ def test_internal_render_aliases_and_availability_proxy_are_removed() -> None:
     assert not hasattr(render_export, "CAIROSVG_AVAILABLE")
     assert not hasattr(cli_common, "CAIROSVG_AVAILABLE")
     assert not hasattr(cli_utils, "CAIROSVG_AVAILABLE")
+
+
+def test_internal_save_figure_warns_before_compatibility_export(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "compatibility.svg"
+    drawing = Drawing(filename=str(output))
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"save_figure\(\).*gbdraw 0\.16",
+    ):
+        render_export.save_figure(drawing, ["svg"])
+
+    assert output.exists()
+
+
+def test_dead_web_style_module_and_color_dialog_aliases_are_removed() -> None:
+    web_root = Path(__file__).parents[1] / "gbdraw" / "web"
+
+    assert not (web_root / "js" / "app" / "annotations" / "style-actions.js").exists()
+    for relative_path in (
+        Path("js/state.js"),
+        Path("js/app/feature-editor/color-actions.js"),
+    ):
+        source = (web_root / relative_path).read_text(encoding="utf-8")
+        assert "individualLabel" not in source
 
 
 def test_dead_flat_config_overrides_are_removed() -> None:

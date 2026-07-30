@@ -877,7 +877,7 @@ def _match_kind(element: ET.Element) -> str:
 
 _MATCH_TITLES = {
     "pairwise": "Pairwise match",
-    "orthogroup": "Orthogroup match",
+    "orthogroup": "Similarity-group match",
     "collinear": "Collinearity block",
     "homology": "Homology ring match",
 }
@@ -1516,7 +1516,7 @@ def _build_orthogroup_detail_rows(
     record_coverage: str,
 ) -> list[list[str]]:
     rows: list[list[str]] = []
-    _add_match_row(rows, "Orthogroup ID", orthogroup_id)
+    _add_match_row(rows, "Similarity group ID", orthogroup_id)
     _add_match_row(rows, "Display name", display_name)
     _add_match_row(rows, "Description", description)
     _add_match_row(rows, "Members", member_count)
@@ -1707,7 +1707,7 @@ def _match_payload_v1(
     )
     orthogroup_rows: list[list[str]] = []
     if kind != "collinear":
-        _add_match_row(orthogroup_rows, "Orthogroup ID", orthogroup_id)
+        _add_match_row(orthogroup_rows, "Similarity group ID", orthogroup_id)
         _add_match_row(orthogroup_rows, "Display name", orthogroup_display_name)
         _add_match_row(orthogroup_rows, "Description", group.get("description") if group else "")
         _add_match_row(
@@ -1754,7 +1754,7 @@ def _match_payload_v1(
         )
         hover_rows: list[list[str]] = []
         _add_match_row(hover_rows, "Kind", kind)
-        _add_match_row(hover_rows, "Orthogroup", orthogroup_id)
+        _add_match_row(hover_rows, "Similarity group", orthogroup_id)
         _add_match_row(hover_rows, "Display name", orthogroup_display_name)
         _add_match_row(
             hover_rows,
@@ -1783,7 +1783,7 @@ def _match_payload_v1(
     if orthogroup_rows or kind == "orthogroup":
         sections.append(
             _match_section(
-                "Orthogroup",
+                "Similarity group",
                 orthogroup_rows,
                 member_rows=member_rows,
                 member_copy_text=_member_copy_text(member_rows),
@@ -1793,12 +1793,12 @@ def _match_payload_v1(
         block_orthogroup_rows: list[list[str]] = []
         _add_match_row(
             block_orthogroup_rows,
-            "Number of orthogroups covered",
+            "Number of similarity groups covered",
             str(len(orthogroup_ids)),
         )
         sections.append(
             _match_section(
-                "Orthogroups covered",
+                "Similarity groups covered",
                 block_orthogroup_rows,
                 block_orthogroups=block_orthogroups,
             )
@@ -1859,9 +1859,9 @@ def _match_payload_v1(
     _add_match_row(hover_rows, "Query", find_row("Summary", "Query interval"))
     _add_match_row(hover_rows, "Subject", find_row("Summary", "Subject interval"))
     if kind == "collinear":
-        _add_match_row(hover_rows, "Orthogroups", str(len(block_orthogroups) or len(orthogroup_ids)))
+        _add_match_row(hover_rows, "Similarity groups", str(len(block_orthogroups) or len(orthogroup_ids)))
     else:
-        _add_match_row(hover_rows, "Orthogroup", orthogroup_id)
+        _add_match_row(hover_rows, "Similarity group", orthogroup_id)
     _add_match_row(hover_rows, "Block", block_id)
 
     return {

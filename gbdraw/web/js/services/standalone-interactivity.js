@@ -999,7 +999,7 @@ const standaloneMatchKind = (element) => {
 const STANDALONE_MATCH_TITLES = {
   homology: 'Homology ring match',
   pairwise: 'Pairwise match',
-  orthogroup: 'Orthogroup match',
+  orthogroup: 'Similarity-group match',
   collinear: 'Collinearity block'
 };
 
@@ -1321,7 +1321,7 @@ const buildStandaloneOrthogroupDetailRows = ({
   recordCoverage
 }) => {
   const rows = [];
-  addStandaloneMatchRow(rows, 'Orthogroup ID', orthogroupId);
+  addStandaloneMatchRow(rows, 'Similarity group ID', orthogroupId);
   addStandaloneMatchRow(rows, 'Display name', displayName);
   addStandaloneMatchRow(rows, 'Description', description);
   addStandaloneMatchRow(rows, 'Members', memberCount);
@@ -1479,7 +1479,7 @@ const buildStandaloneMatchPayloadsV1 = (svg, { features = [], orthogroups = [] }
     );
     const orthogroupRows = [];
     if (matchKind !== 'collinear') {
-      addStandaloneMatchRow(orthogroupRows, 'Orthogroup ID', orthogroupId);
+      addStandaloneMatchRow(orthogroupRows, 'Similarity group ID', orthogroupId);
       addStandaloneMatchRow(orthogroupRows, 'Display name', orthogroupDisplayName);
       addStandaloneMatchRow(orthogroupRows, 'Description', orthogroup?.description);
       addStandaloneMatchRow(orthogroupRows, 'Members', firstStandaloneText(orthogroup?.member_count, orthogroup?.memberCount));
@@ -1511,7 +1511,7 @@ const buildStandaloneMatchPayloadsV1 = (svg, { features = [], orthogroups = [] }
       };
       const hoverRows = [];
       addStandaloneMatchRow(hoverRows, 'Kind', matchKind);
-      addStandaloneMatchRow(hoverRows, 'Orthogroup', orthogroupId);
+      addStandaloneMatchRow(hoverRows, 'Similarity group', orthogroupId);
       addStandaloneMatchRow(hoverRows, 'Display name', orthogroupDisplayName);
       addStandaloneMatchRow(hoverRows, 'Members', firstStandaloneText(orthogroup?.member_count, orthogroup?.memberCount));
 
@@ -1534,16 +1534,16 @@ const buildStandaloneMatchPayloadsV1 = (svg, { features = [], orthogroups = [] }
     }
     if (orthogroupRows.length || matchKind === 'orthogroup') {
       sections.push({
-        ...buildStandaloneMatchSection('Orthogroup', orthogroupRows),
+        ...buildStandaloneMatchSection('Similarity group', orthogroupRows),
         member_rows: orthogroupMemberRows,
         member_copy_text: standaloneMemberCopyText(orthogroupMemberRows)
       });
     }
     if (matchKind === 'collinear') {
       const blockOrthogroupRows = [];
-      addStandaloneMatchRow(blockOrthogroupRows, 'Number of orthogroups covered', String(orthogroupIds.length));
+      addStandaloneMatchRow(blockOrthogroupRows, 'Number of similarity groups covered', String(orthogroupIds.length));
       sections.push({
-        ...buildStandaloneMatchSection('Orthogroups covered', blockOrthogroupRows),
+        ...buildStandaloneMatchSection('Similarity groups covered', blockOrthogroupRows),
         block_orthogroups: blockOrthogroups
       });
     }
@@ -1586,9 +1586,9 @@ const buildStandaloneMatchPayloadsV1 = (svg, { features = [], orthogroups = [] }
     addStandaloneMatchRow(hoverRows, 'Query', findRow('Summary', 'Query interval'));
     addStandaloneMatchRow(hoverRows, 'Subject', findRow('Summary', 'Subject interval'));
     if (matchKind === 'collinear') {
-      addStandaloneMatchRow(hoverRows, 'Orthogroups', String(blockOrthogroups.length || orthogroupIds.length));
+      addStandaloneMatchRow(hoverRows, 'Similarity groups', String(blockOrthogroups.length || orthogroupIds.length));
     } else {
-      addStandaloneMatchRow(hoverRows, 'Orthogroup', orthogroupId);
+      addStandaloneMatchRow(hoverRows, 'Similarity group', orthogroupId);
     }
     addStandaloneMatchRow(hoverRows, 'Block', blockId);
 

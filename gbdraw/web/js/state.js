@@ -23,6 +23,7 @@ import {
   managedAdvStateForMode,
   trackDefaultsForMode
 } from './mode-profiles.js';
+import { WEB_UX_PROFILE } from './web-ux-profile.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -387,8 +388,8 @@ export const createDefaultForm = () => ({
   linear_ruler_on_axis: false,
   labels_mode: 'none',
   show_labels_linear: 'none',
-  multi_record_canvas: false,
-  separate_strands: true,
+  multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
+  separate_strands: WEB_UX_PROFILE.separateStrands,
   suppress_gc: !circularTrackDefaults.gc,
   suppress_skew: !circularTrackDefaults.skew,
   align_center: false,
@@ -474,6 +475,7 @@ export const createDefaultAdv = (profileMode = 'circular') => ({
   ruler_label_color: null,
 
   // Circular Specific
+  circular_grouping_intent: 'auto',
   multi_record_size_mode: 'auto',
   multi_record_min_radius_ratio: 0.55,
   multi_record_column_gap_ratio: 0.10,
@@ -846,9 +848,6 @@ const colorScopeDialog = reactive({
   displayLabelSiblingCount: 0, // Number of other features sharing display label
   annotationLabel: null, // Feature's source annotation label (product/gene/locus_tag)
   annotationLabelSiblingCount: 0, // Number of other features sharing source annotation label
-  // Backward-compatible alias fields for old template/method references
-  individualLabel: null,
-  individualLabelSiblingCount: 0,
   existingCaptionRule: null, // Existing hash rule for same caption (already colored)
   existingCaptionColor: null, // Color of existing caption rule
   resolve: null // Promise resolver

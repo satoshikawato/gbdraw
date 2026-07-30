@@ -47,6 +47,24 @@ def _request(session: dict[str, object]) -> dict[str, object]:
     return request
 
 
+@pytest.mark.parametrize(
+    "example",
+    EXAMPLES,
+    ids=lambda example: example.id,
+)
+def test_gallery_sessions_do_not_persist_overwrite_permission(
+    example: GallerySessionExample,
+) -> None:
+    output = _request(load_session(example.session_path))["output"]
+    outputs = output if isinstance(output, list) else [output]
+
+    assert outputs
+    assert all(
+        isinstance(item, dict) and item.get("overwrite") is False
+        for item in outputs
+    )
+
+
 def _resource_bytes(
     session: dict[str, object], ref: dict[str, object]
 ) -> bytes:

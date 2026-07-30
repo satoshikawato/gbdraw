@@ -1557,9 +1557,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var proteinId = displayProteinId(feature, member);
     var internalId = internalProteinId(feature, member);
     var items = [];
-    appendSearchItems(items, 'Orthogroup ID', orthogroupId);
-    appendSearchItems(items, 'Orthogroup name', group && (group.display_name || group.displayName || group.name));
-    appendSearchItems(items, 'Orthogroup description', group && group.description);
+    appendSearchItems(items, 'Similarity group ID', orthogroupId);
+    appendSearchItems(items, 'Similarity group name', group && (group.display_name || group.displayName || group.name));
+    appendSearchItems(items, 'Similarity group description', group && group.description);
     appendSearchItems(items, 'Protein ID', proteinId);
     if (
       internalId &&
@@ -1568,11 +1568,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     ) {
       appendSearchItems(items, 'Internal protein ID', internalId);
     }
-    appendSearchItems(items, 'Orthogroup member', member && member.label);
-    appendSearchItems(items, 'Orthogroup member gene', member && member.gene);
-    appendSearchItems(items, 'Orthogroup member product', member && member.product);
-    appendSearchItems(items, 'Orthogroup member note', member && member.note);
-    appendSearchItems(items, 'Orthogroup member protein ID', displayProteinId(null, member));
+    appendSearchItems(items, 'Similarity-group member', member && member.label);
+    appendSearchItems(items, 'Similarity-group member gene', member && member.gene);
+    appendSearchItems(items, 'Similarity-group member product', member && member.product);
+    appendSearchItems(items, 'Similarity-group member note', member && member.note);
+    appendSearchItems(items, 'Similarity-group member protein ID', displayProteinId(null, member));
     return items;
   }
 
@@ -2270,7 +2270,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       ['record-id', 'Record ID'],
       ['location', 'Location'],
       ['strand', 'Strand'],
-      ['orthogroup', 'Orthogroup'],
+      ['orthogroup', 'Similarity group'],
       ['qualifier-key', 'Qualifier key'],
       ['qualifier-value', 'Qualifier value'],
       ['nucleotide', 'Nucleotide'],
@@ -3419,8 +3419,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var recordCoverage = Number(feature && feature.orthogroup_record_coverage);
     var proteinId = displayProteinId(feature, member);
     var rows = [
-      ['Orthogroup ID', feature && feature.orthogroup_id || ''],
-      ['Orthogroup name', group && (group.display_name || group.name) || ''],
+      ['Similarity group ID', feature && feature.orthogroup_id || ''],
+      ['Similarity group name', group && (group.display_name || group.name) || ''],
       ['Members', Number.isFinite(memberCount) && memberCount > 0 ? String(memberCount) : (group && group.member_count ? String(group.member_count) : '')],
       ['Record coverage', Number.isFinite(recordCoverage) && recordCoverage > 0 ? String(recordCoverage) : (group && group.record_coverage_count ? String(group.record_coverage_count) : '')],
       ['Protein ID', proteinId]
@@ -3575,7 +3575,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         '</tr>';
     }).join('');
     return '<div class="gfi-block">' +
-      '<div class="gfi-block-title"><span>Orthogroup members</span><span>' + members.length + '</span>' + copyButton(text) + '</div>' +
+      '<div class="gfi-block-title"><span>Similarity-group members</span><span>' + members.length + '</span>' + copyButton(text) + '</div>' +
       '<div class="gfi-table-wrap"><table class="gfi-table gfi-og-members-table">' +
       '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th><th>Seq</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>' +
@@ -3900,7 +3900,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     addMaterializedMatchRow(alignmentRows, 'Gap opens', match.gap_opens);
     var memberRows = group ? orthogroupMemberTableRows(Array.isArray(group.members) ? group.members : [], group) : [];
     var orthogroupRows = [];
-    addMaterializedMatchRow(orthogroupRows, 'Orthogroup ID', orthogroupId);
+    addMaterializedMatchRow(orthogroupRows, 'Similarity group ID', orthogroupId);
     addMaterializedMatchRow(orthogroupRows, 'Display name', displayName);
     addMaterializedMatchRow(orthogroupRows, 'Description', group && group.description);
     addMaterializedMatchRow(orthogroupRows, 'Members', group && (group.member_count || group.memberCount));
@@ -3912,13 +3912,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       sections.push({ title: 'Summary', rows: summaryRows });
       if (kind !== 'collinear') sections.push({ title: 'Alignment', rows: alignmentRows });
       if (kind !== 'collinear' && orthogroupRows.length) {
-        sections.push({ title: 'Orthogroup', rows: orthogroupRows, member_rows: memberRows });
+        sections.push({ title: 'Similarity group', rows: orthogroupRows, member_rows: memberRows });
       }
       if (kind === 'collinear') {
         sections.push({
-          title: localCollinearGroups ? 'Local collinear groups' : 'Orthogroups covered',
+          title: localCollinearGroups ? 'Local collinear groups' : 'Similarity groups covered',
           rows: [[
-            localCollinearGroups ? 'Number of local collinear groups' : 'Number of orthogroups covered',
+            localCollinearGroups ? 'Number of local collinear groups' : 'Number of similarity groups covered',
             String(orthogroupIds.length)
           ]],
           block_orthogroups: orthogroupIds.map(function (id) {
@@ -3932,7 +3932,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
               queryMember: materializedBlockMemberLabels(blockGroup, match.query_feature_svg_id),
               subjectMember: materializedBlockMemberLabels(blockGroup, match.subject_feature_svg_id),
               detailRows: [
-                [localCollinearGroups ? 'Collinear group ID' : 'Orthogroup ID', id],
+                [localCollinearGroups ? 'Collinear group ID' : 'Similarity group ID', id],
                 ['Display name', blockDisplayName],
                 ['Description', firstDisplayText(blockGroup.description)],
                 ['Members', firstDisplayText(blockGroup.member_count, blockGroup.memberCount)],
@@ -3988,12 +3988,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     addMaterializedMatchRow(hoverRows, 'Subject', sInterval);
     addMaterializedMatchRow(
       hoverRows,
-      kind === 'collinear' ? (localCollinearGroups ? 'Collinear groups' : 'Orthogroups') : 'Orthogroup',
+      kind === 'collinear' ? (localCollinearGroups ? 'Collinear groups' : 'Similarity groups') : 'Similarity group',
       kind === 'collinear' ? orthogroupIds.length : orthogroupId
     );
     addMaterializedMatchRow(hoverRows, 'Block', match.collinearity_block_id);
     var title = kind === 'orthogroup'
-      ? (displayName && displayName !== orthogroupId ? orthogroupId + ':' + displayName : orthogroupId || 'Orthogroup match')
+      ? (displayName && displayName !== orthogroupId ? orthogroupId + ':' + displayName : orthogroupId || 'Similarity-group match')
       : (kind === 'collinear' ? 'Collinearity block' : (kind === 'homology' ? 'Homology ring match' : 'Pairwise match'));
     match._gbdrawMaterialized = {
       id: match.id,
@@ -4247,7 +4247,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       });
       var selectedHtml = selectedBlockOrthogroup
         ? '<div class="gfi-block gfi-block--selected-og">' +
-          '<div class="gfi-block-title">' + escapeHtml('Selected orthogroup') + '</div>' +
+          '<div class="gfi-block-title">' + escapeHtml('Selected similarity group') + '</div>' +
           renderRows(selectedBlockOrthogroup.detailRows) +
           renderMatchMemberTable(selectedBlockOrthogroup, selectedBlockOrthogroup.memberRows) +
           '</div>'
@@ -4411,7 +4411,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     rows.push(['Length', featureLengthText(feature)]);
     rows.push(['Location', locationText(feature)]);
     rows.push(['Record', feature && feature.record_id || '']);
-    rows.push(['Orthogroup', feature && feature.orthogroup_id || '']);
+    rows.push(['Similarity group', feature && feature.orthogroup_id || '']);
     return rows.filter(function (row) {
       return String(row[1] == null ? '' : row[1]).trim() !== '';
     });

@@ -90,13 +90,21 @@ def get_palettes_json():
         return "{}"
 
 def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
+    if mode not in {"circular", "linear"}:
+        return json.dumps({
+            "error": {
+                "type": "ValidationError",
+                "message": f"Unsupported diagram mode: {mode}. Expected 'circular' or 'linear'.",
+            }
+        })
+
     for f in glob.glob("*.svg"):
         try:
             os.remove(f)
         except:
             pass
 
-    full_args = args + ["-f", "svg"]
+    full_args = args + ["-f", "svg", "--overwrite"]
     stdout_buf = io.StringIO()
     stderr_buf = io.StringIO()
     original_load_comparisons = None

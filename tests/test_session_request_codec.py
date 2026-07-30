@@ -34,6 +34,7 @@ from gbdraw.api.options import (
     CircularOutputOptions,
     CircularTrackOptions,
     ColorOptions,
+    DepthTrackInput,
     LinearDiagramOptions,
     LinearOutputOptions,
     LinearTrackOptions,
@@ -321,6 +322,7 @@ def test_circular_request_payload_round_trip_uses_stable_resources(tmp_path: Pat
     assert str(tmp_path) not in serialized
     assert "outputDirectory" not in encoded.payload["output"]
     assert encoded.payload["output"]["prefix"] == "canonical-circular"
+    assert encoded.payload["output"]["overwrite"] is False
     assert encoded.payload["diagramOptions"]["output"] == {
         "legend": "left",
         "plotTitlePosition": "top",
@@ -344,8 +346,18 @@ def test_circular_request_payload_round_trip_uses_stable_resources(tmp_path: Pat
         plot_title_position="top",
     )
     assert decoded.output.output_prefix == "canonical-circular"
+    assert decoded.output.overwrite is False
     assert decoded.records[1].region == parse_region_spec("1-100:rc")
     assert encode_canonical_request(decoded).payload == encoded.payload
+
+    legacy_unsafe_payload = copy.deepcopy(encoded.payload)
+    legacy_unsafe_payload["output"]["overwrite"] = True
+    legacy_unsafe = decode_canonical_request(
+        legacy_unsafe_payload,
+        resource_paths=resource_paths,
+        output_directory=replay_directory,
+    )
+    assert legacy_unsafe.output.overwrite is False
 
 
 @pytest.mark.parametrize("schema", sorted(SUPPORTED_CANONICAL_REQUEST_SCHEMAS))
@@ -1169,7 +1181,7 @@ def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None
             label_whitelist_file=str(table_file),
             qualifier_priority_file=str(table_file),
             label_override_file=str(table_file),
-            depth_track_files=((str(depth_file), None),),
+            depth_track_files=((str(depth_file),),),
             conservation_blast_files=(str(blast_file),),
             conservation_fasta_files=(None, str(fasta_file)),
         ),
@@ -1184,9 +1196,186 @@ def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None
 
     assert isinstance(decoded.options.config, GbdrawConfig)
     assert decoded.options.feature_visibility_table_file == str(table_file)
-    assert decoded.options.depth_track_files == ((str(depth_file), None),)
+    assert set(encoded.payload["diagramOptions"]).isdisjoint(
+        {
+            "depthFile",
+            "depthFiles",
+            "depthTrackFiles",
+            "depthTrackLabels",
+        }
+    )
+    assert decoded.options.depth_tracks is not None
+    assert decoded.options.depth_tracks[0].source == str(depth_file)
+    assert decoded.options.depth_track_files is None
     assert decoded.options.conservation_blast_files == (str(blast_file),)
     assert decoded.options.conservation_fasta_files == (None, str(fasta_file))
+    assert encode_canonical_request(decoded).payload == encoded.payload
+
+
+def test_canonical_depth_tracks_round_trip_mixed_sources(tmp_path: Path) -> None:
+    gbk_a = _source_file(tmp_path / "a.gbk")
+    gbk_b = _source_file(tmp_path / "b.gbk")
+    depth_file = _source_file(
+        tmp_path / "a.depth.tsv",
+        "a\t1\t5\n",
+    )
+    depth_table = pd.DataFrame(
+        {
+            "reference_name": ["b"],
+            "position": [1],
+            "depth": [8],
+        }
+    )
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(source=GenBankInputSource(gbk_a)),
+            RecordInput(source=GenBankInputSource(gbk_b)),
+        ),
+        options=LinearDiagramOptions(
+            depth_tracks=(
+                DepthTrackInput(
+                    source=(depth_file, depth_table),
+                    label="Coverage",
+                    color="#345678",
+                    height=24,
+                    large_tick_interval=10,
+                    small_tick_interval=5,
+                    tick_font_size=9,
+                ),
+            ),
+        ),
+    )
+
+    encoded = encode_canonical_request(request)
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / "materialized-depth-tracks",
+        ),
+        output_directory=tmp_path / "output",
+    )
+
+    assert "depthTracks" in encoded.payload["diagramOptions"]
+    assert decoded.options.depth_tracks is not None
+    decoded_track = decoded.options.depth_tracks[0]
+    assert isinstance(decoded_track, DepthTrackInput)
+    assert isinstance(decoded_track.source, tuple)
+    assert decoded_track.source[0] == str(depth_file)
+    assert isinstance(decoded_track.source[1], pd.DataFrame)
+    assert decoded_track.source[1].equals(depth_table)
+    assert decoded_track.label == "Coverage"
+    assert decoded_track.color == "#345678"
+    assert decoded_track.height == 24
+    assert encode_canonical_request(decoded).payload == encoded.payload
+
+
+def test_canonical_depth_track_shape_and_text_are_strict(tmp_path: Path) -> None:
+    gbk = _source_file(tmp_path / "record.gbk")
+    depth = _source_file(tmp_path / "record.depth.tsv", "record\t1\t5\n")
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(gbk)),),
+        options=LinearDiagramOptions(
+            depth_tracks=(DepthTrackInput(source=depth, label="Coverage"),),
+        ),
+    )
+    encoded = encode_canonical_request(request)
+    resource_paths = _materialize_resources(
+        encoded,
+        tmp_path / "materialized-strict-depth",
+    )
+
+    missing = copy.deepcopy(encoded.payload)
+    del missing["diagramOptions"]["depthTracks"][0]["label"]
+    with pytest.raises(CanonicalRequestDecodingError, match="Missing required.*label"):
+        decode_canonical_request(
+            missing,
+            resource_paths=resource_paths,
+            output_directory=tmp_path / "missing",
+        )
+
+    blank = copy.deepcopy(encoded.payload)
+    blank["diagramOptions"]["depthTracks"][0]["label"] = " "
+    with pytest.raises(CanonicalRequestDecodingError, match="non-empty string"):
+        decode_canonical_request(
+            blank,
+            resource_paths=resource_paths,
+            output_directory=tmp_path / "blank",
+        )
+
+    non_string = copy.deepcopy(encoded.payload)
+    non_string["diagramOptions"]["depthTracks"][0]["color"] = 123
+    with pytest.raises(CanonicalRequestDecodingError, match="string or null"):
+        decode_canonical_request(
+            non_string,
+            resource_paths=resource_paths,
+            output_directory=tmp_path / "non-string",
+        )
+
+    unknown = copy.deepcopy(encoded.payload)
+    unknown["diagramOptions"]["depthTracks"][0]["legacyLabel"] = "old"
+    with pytest.raises(CanonicalRequestDecodingError, match="Unknown field.*legacyLabel"):
+        decode_canonical_request(
+            unknown,
+            resource_paths=resource_paths,
+            output_directory=tmp_path / "unknown",
+        )
+
+
+def test_legacy_depth_matrix_is_written_as_canonical_tracks(tmp_path: Path) -> None:
+    gbk_a = _source_file(tmp_path / "a.gbk")
+    gbk_b = _source_file(tmp_path / "b.gbk")
+    depth_a = _source_file(tmp_path / "a.depth.tsv", "a\t1\t5\n")
+    depth_b = _source_file(tmp_path / "b.depth.tsv", "b\t1\t8\n")
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(source=GenBankInputSource(gbk_a)),
+            RecordInput(source=GenBankInputSource(gbk_b)),
+        ),
+        options=LinearDiagramOptions(
+            depth_track_files=((str(depth_a), None), (None, str(depth_b))),
+            depth_track_labels=("First", "Second"),
+            depth_track_colors=("#112233", "#445566"),
+            depth_track_heights=(18, 24),
+            depth_track_large_tick_intervals=(10,),
+            depth_track_small_tick_intervals=(2, 4),
+            depth_track_tick_font_sizes=(8, 9),
+        ),
+    )
+
+    encoded = encode_canonical_request(request)
+    diagram_options = encoded.payload["diagramOptions"]
+
+    assert set(diagram_options).isdisjoint(
+        {
+            "depthTrackFiles",
+            "depthTrackLabels",
+            "depthTrackColors",
+            "depthTrackHeights",
+            "depthTrackLargeTickIntervals",
+            "depthTrackSmallTickIntervals",
+            "depthTrackTickFontSizes",
+        }
+    )
+    assert len(diagram_options["depthTracks"]) == 2
+    assert diagram_options["depthTracks"][0]["source"][1] is None
+    assert diagram_options["depthTracks"][1]["source"][0] is None
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / "materialized-legacy-depth",
+        ),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.options.depth_tracks is not None
+    assert [track.label for track in decoded.options.depth_tracks] == [
+        "First",
+        "Second",
+    ]
+    assert [track.height for track in decoded.options.depth_tracks] == [18, 24]
+    assert decoded.options.depth_track_files is None
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 

@@ -4598,7 +4598,7 @@ json.dumps({
           throwIfGenerationCanceled();
           if (useProteinBlastp) {
             if (!convertProteinBlast) {
-              throw new Error('Current gbdraw wheel does not support LOSATP orthogroup metadata. Rebuild and redeploy the web wheel.');
+              throw new Error('Current gbdraw wheel does not support LOSATP similarity-group metadata. Rebuild and redeploy the web wheel.');
             }
             const recordPayloads = [];
             for (let i = 0; i < linearSeqs.length; i += 1) {

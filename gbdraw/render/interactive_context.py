@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Callable
+from typing import Any, Sequence, TypeVar
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.visibility import compile_feature_visibility_rules
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.annotations import AnnotationOptions, resolve_annotations
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
@@ -17,6 +18,25 @@ from gbdraw.web_support.orthogroup_metadata import (
     enrich_features_with_orthogroups,
     serialize_orthogroups_payload,
 )
+
+_MetadataT = TypeVar("_MetadataT")
+
+
+def require_interactive_svg_metadata(
+    factory: Callable[[], _MetadataT],
+) -> _MetadataT:
+    """Build explicitly requested interactive metadata or raise a clear export error."""
+
+    try:
+        return factory()
+    except ExportError:
+        raise
+    except Exception as exc:
+        detail = str(exc).strip()
+        suffix = f": {detail}" if detail else ""
+        raise ExportError(
+            f"Interactive SVG metadata generation failed{suffix}"
+        ) from exc
 
 
 def build_interactive_svg_context(
@@ -148,4 +168,7 @@ def build_interactive_svg_context(
     )
 
 
-__all__ = ["build_interactive_svg_context"]
+__all__ = [
+    "build_interactive_svg_context",
+    "require_interactive_svg_metadata",
+]

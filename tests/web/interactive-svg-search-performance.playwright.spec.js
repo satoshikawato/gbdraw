@@ -234,7 +234,7 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
     'Subject span',
     'Summary',
     'Alignment',
-    'Orthogroup',
+    'Similarity group',
     'Query',
     'Subject',
   ]);
@@ -636,7 +636,7 @@ test('standalone orthogroup FASTA retains non-rendered biological members', asyn
   expect(popupTitle).toContain('VP_1');
   expect(popupTitle).not.toMatch(/h_[a-z2-7]{26}/i);
   expect(popupTitle).not.toMatch(/f_[0-9a-f]{64}/i);
-  const memberBlock = page.locator('.gfi-block').filter({ hasText: 'Orthogroup members' }).last();
+  const memberBlock = page.locator('.gfi-block').filter({ hasText: 'Similarity-group members' }).last();
   await expect(memberBlock.locator('tbody tr')).toHaveCount(2);
   const memberText = await memberBlock.innerText();
   expect(memberText).toContain('VP_1');

@@ -15,6 +15,7 @@ from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
+from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
 from gbdraw.io.colors import load_default_colors
@@ -506,7 +507,7 @@ def test_cli_legacy_label_options_are_rejected(legacy_option: str) -> None:
         ([], "none", True, True, False),
         (["--labels"], "outer", True, True, False),
         (["--labels", "out"], "outer", True, True, False),
-        (["--labels", "both"], "both", False, False, True),
+        (["--labels", "both"], "both", True, True, False),
     ],
 )
 def test_cli_labels_mode_maps_to_circular_scope(
@@ -649,6 +650,50 @@ def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pyt
     slots = captured["circular_track_slots"]
     by_id = {slot.id: slot for slot in slots}
     assert by_id["features"].width.resolve(390.0) == pytest.approx(42.0)
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--feature_width", "42"),
+        ("--depth_width", "42"),
+        ("--gc_content_width", "22"),
+        ("--gc_content_radius", "0.74"),
+        ("--gc_skew_width", "18"),
+        ("--gc_skew_radius", "0.68"),
+    ],
+)
+def test_cli_geometry_shortcuts_reject_explicit_slot_geometry(
+    option: str,
+    value: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    record = _load_record()
+
+    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
+    _stub_typed_request_export(monkeypatch, tmp_path)
+
+    with pytest.raises(
+        ValidationError,
+        match="Circular geometry shortcut options cannot be combined",
+    ):
+        circular_cli_module.circular_main(
+            [
+                "--gbk",
+                "dummy.gb",
+                option,
+                value,
+                "--circular_track_slot",
+                "features:features",
+                "--format",
+                "svg",
+                "-o",
+                str(tmp_path / "out"),
+            ]
+        )
 
 
 def test_cli_gc_track_width_radius_forwards_internal_track_specs(

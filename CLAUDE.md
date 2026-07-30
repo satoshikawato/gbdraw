@@ -177,7 +177,7 @@ Main configurator classes encapsulate drawing logic:
 The `gbdraw/render/` module has a two-tier architecture:
 - **drawers/**: Low-level SVG element builders (individual shapes, paths)
 - **groups/**: High-level SVG group assemblers that compose drawers
-- **export.py**: Format conversion (`save_figure()`, `parse_formats()`)
+- **export.py**: Internal format parsing and deprecated lenient export compatibility
 
 ### Web UI Structure
 

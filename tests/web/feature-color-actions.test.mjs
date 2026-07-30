@@ -83,8 +83,6 @@ const colorScopeDialog = {
   displayLabelSiblingCount: 0,
   annotationLabel: null,
   annotationLabelSiblingCount: 0,
-  individualLabel: null,
-  individualLabelSiblingCount: 0,
   existingCaptionRule: null,
   existingCaptionColor: null,
   resolve: null

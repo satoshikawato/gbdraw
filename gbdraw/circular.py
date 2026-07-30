@@ -26,7 +26,7 @@ from .api.options import (
     CircularDiagramOptions,
     CircularMultiRecordOptions,
     CircularOutputOptions,
-    CircularTrackOptions,
+    CircularRequestTrackOptions,
     ColorOptions,
 )
 from .annotations import read_annotation_table
@@ -74,6 +74,7 @@ from .cli_utils.common import (
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
     _add_format_arg,
+    _add_overwrite_arg,
     _add_gc_skew_toggle_args,
     _add_gc_content_axis_args,
     _add_legend_size_args,
@@ -96,6 +97,7 @@ from .cli_utils.session import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
     parse_session_pre_args,
+    preflight_session_sidecar_if_requested,
     render_canonical_session_if_present,
     save_session_sidecar_if_requested,
 )
@@ -122,6 +124,8 @@ def _parse_multi_record_position_arg(value: str) -> str:
 def _render_output_request(
     output_prefix: str,
     formats: list[str],
+    *,
+    overwrite: bool,
 ) -> RenderOutputRequest:
     """Split a CLI path prefix into the typed output directory and basename."""
 
@@ -135,7 +139,7 @@ def _render_output_request(
         output_prefix=prefix_path.name,
         output_directory=output_directory,
         formats=tuple(formats),
-        overwrite=True,
+        overwrite=overwrite,
     )
 
 
@@ -180,6 +184,7 @@ def _get_args(
         '--output',
         help='output file prefix (default: accession number of the sequence)',
         type=str)
+    _add_overwrite_arg(parser)
     add_color_args(parser)
     add_analysis_args(parser)
     parser.add_argument(
@@ -622,6 +627,7 @@ def circular_main(cmd_args) -> None:
                 mode="circular",
                 output_override=session_request.output,
                 format_override=session_request.format,
+                overwrite=session_request.overwrite,
                 save_session=session_request.save_session,
                 session_output=session_request.session_output,
             ):
@@ -637,10 +643,17 @@ def circular_main(cmd_args) -> None:
                 list(run_spec.args),
                 _allow_legacy_track_transport=True,
             )
+            args.overwrite = session_request.overwrite
             args._allow_legacy_track_transport = True
             args._require_canonical_session = bool(
                 session_request.save_session
                 or session_request.session_output
+            )
+            preflight_session_sidecar_if_requested(
+                save_session=session_request.save_session,
+                session_output=session_request.session_output,
+                output_prefix=args.output,
+                overwrite=session_request.overwrite,
             )
             run_result = run_circular_from_namespace(args)
             save_session_sidecar_if_requested(
@@ -651,10 +664,17 @@ def circular_main(cmd_args) -> None:
                 source_session=session,
                 cli_invocation_args=run_spec.cli_invocation_args,
                 file_bindings=run_spec.file_bindings,
+                overwrite=session_request.overwrite,
             )
         return
 
     args: argparse.Namespace = _get_args(cmd_args)
+    preflight_session_sidecar_if_requested(
+        save_session=bool(args.save_session or args.session_output),
+        session_output=args.session_output,
+        output_prefix=args.output,
+        overwrite=bool(args.overwrite),
+    )
     run_result = run_circular_from_namespace(args)
     save_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
@@ -662,6 +682,7 @@ def circular_main(cmd_args) -> None:
         output_prefix=args.output,
         run_result=run_result,
         cmd_args=cmd_args,
+        overwrite=bool(args.overwrite),
     )
 
 
@@ -750,7 +771,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     label_rendering: str = args.label_rendering
     circular_label_placement: str = args.label_placement
     resolve_overlaps: bool = args.resolve_overlaps
-    inner_labels_enabled: bool = labels_mode == "both"
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
@@ -864,17 +884,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
     inner_label_x_radius_offset: Optional[float] = args.inner_label_x_radius_offset
     inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
-    if (
-        circular_label_placement == "horizontal"
-        and inner_labels_enabled
-        and (show_gc or show_skew)
-    ):
-
-        show_gc = False
-        show_skew = False
-        logger.warning(
-            "WARNING: --labels both requires suppressing GC and skew tracks. Suppressing GC and skew tracks.")  #
-
     user_defined_default_colors: str = args.default_colors
     block_stroke_color: Optional[str] = args.block_stroke_color
     block_stroke_width: Optional[float] = args.block_stroke_width
@@ -1019,7 +1028,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
 
     out_formats: list[str] = parse_formats(args.format)
     out_formats = handle_output_formats(out_formats)
-    legacy_geometry_requested = any(
+    shortcut_geometry_requested = any(
         value is not None
         for value in (
             feature_width,
@@ -1030,10 +1039,10 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             gc_skew_radius,
         )
     )
-    if circular_track_slot_specs and legacy_geometry_requested:
+    if circular_track_slot_specs and shortcut_geometry_requested:
         slot_source_option = "--circular_track_table" if circular_track_table else "--circular_track_slot"
         raise ValidationError(
-            f"Legacy circular geometry options cannot be combined with {slot_source_option}; "
+            f"Circular geometry shortcut options cannot be combined with {slot_source_option}; "
             "put r= and/or w= on the matching circular track slot."
         )
 
@@ -1049,7 +1058,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             show_skew=show_skew,
             dinucleotide=dinucleotide,
         )
-    elif legacy_geometry_requested:
+    elif shortcut_geometry_requested:
         circular_track_slots_or_none = circular_track_slots_from_order(
             "features,ticks,depth,gc_content,gc_skew",
             show_depth=show_depth,
@@ -1107,7 +1116,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             default_colors=default_colors,
             default_colors_palette=palette,
         ),
-        tracks=CircularTrackOptions(
+        tracks=CircularRequestTrackOptions(
             circular_track_slots=circular_track_slots_or_none,
             circular_track_axis_index=circular_track_axis_index,
             center_reserved_radius=center_reserved_radius,
@@ -1168,20 +1177,54 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 multi_record_row_gap_ratio=multi_record_row_gap_ratio,
                 multi_record_positions=multi_record_positions or None,
             ),
-            output=_render_output_request(grid_prefix, out_formats),
+            output=_render_output_request(
+                grid_prefix,
+                out_formats,
+                overwrite=args.overwrite,
+            ),
             grouping="grid",
         )
     else:
+        batch_prefixes = tuple(
+            determine_output_file_prefixes(
+                gb_records,
+                output_prefix,
+            )
+        )
         canonical_request = CircularBatchRequest(
             records=request_records,
             options=request_options,
             outputs=tuple(
-                _render_output_request(prefix, out_formats)
-                for prefix in determine_output_file_prefixes(
-                    gb_records,
-                    output_prefix,
+                _render_output_request(
+                    prefix,
+                    out_formats,
+                    overwrite=args.overwrite,
                 )
+                for prefix in batch_prefixes
             ),
+        )
+
+    if (
+        bool(args.save_session or args.session_output)
+        and output_prefix is None
+    ):
+        if args.session_output:
+            implicit_sidecar_path = Path(args.session_output)
+        elif isinstance(canonical_request, CircularBatchRequest):
+            implicit_sidecar_path = (
+                Path(f"{batch_prefixes[0]}.gbdraw-session.json")
+                if len(batch_prefixes) == 1
+                else Path("gbdraw.gbdraw-session.json")
+            )
+        else:
+            implicit_sidecar_path = Path(
+                f"{canonical_request.output.output_prefix}.gbdraw-session.json"
+            )
+        preflight_session_sidecar_if_requested(
+            save_session=True,
+            session_output=str(implicit_sidecar_path),
+            output_prefix=None,
+            overwrite=bool(args.overwrite),
         )
 
     rendered = render_request(canonical_request)

@@ -45,7 +45,10 @@ from gbdraw.features.visibility import (
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.io.record_select import reverse_records, select_record
-from gbdraw.render.interactive_context import build_interactive_svg_context
+from gbdraw.render.interactive_context import (
+    build_interactive_svg_context,
+    require_interactive_svg_metadata,
+)
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.render.formats import resolve_output_paths
 from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload
@@ -242,6 +245,7 @@ def _without_depth_inputs(options: CircularDiagramOptions) -> CircularDiagramOpt
 
     return replace(
         options,
+        depth_tracks=None,
         depth_table=None,
         depth_file=None,
         depth_tables=None,
@@ -286,6 +290,7 @@ class CircularBatchRequestPlan:
         options = self.request.options
         normalized_depth = normalize_depth_tracks(
             self.records,
+            depth_tracks=options.depth_tracks,
             depth_table=options.depth_table,
             depth_file=options.depth_file,
             depth_tables=options.depth_tables,
@@ -1609,16 +1614,18 @@ def _interactive_context(
     if "interactive_svg" not in output.formats or output.interactive_metadata_policy == "omit":
         return None
 
-    options = prepared.request.options
-    colors = options.colors
-    color_table = _color_table(options)
-    default_colors = colors.default_colors if colors is not None else None
-    if default_colors is None:
-        default_colors = load_default_colors(
-            colors.default_colors_file if colors is not None and colors.default_colors_file else "",
-            colors.default_colors_palette if colors is not None else "default",
-        )
-    try:
+    def build() -> InteractiveSvgContext:
+        options = prepared.request.options
+        colors = options.colors
+        color_table = _color_table(options)
+        default_colors = colors.default_colors if colors is not None else None
+        if default_colors is None:
+            default_colors = load_default_colors(
+                colors.default_colors_file
+                if colors is not None and colors.default_colors_file
+                else "",
+                colors.default_colors_palette if colors is not None else "default",
+            )
         return build_interactive_svg_context(
             prepared.records,
             selected_features_set=options.selected_features_set,
@@ -1636,13 +1643,8 @@ def _interactive_context(
             mode=prepared.mode,
             comparison_sequence_records=comparison_sequence_records,
         )
-    except Exception as exc:
-        logger.warning(
-            "Rich interactive feature metadata could not be generated; "
-            "using rendered SVG metadata only: %s",
-            exc,
-        )
-        return InteractiveSvgContext()
+
+    return require_interactive_svg_metadata(build)
 
 
 def render_request(
@@ -1697,17 +1699,14 @@ def _comparison_sequence_records(
         for output in outputs
     ):
         return ()
-    records = []
-    for path in options.conservation_fasta_files or ():
-        try:
-            records.append(tuple(SeqIO.parse(path, "fasta")) if path else ())
-        except Exception as exc:
-            logger.warning(
-                "Comparison FASTA could not be embedded in interactive SVG: %s",
-                exc,
-            )
-            records.append(())
-    return tuple(records)
+
+    def load() -> tuple[tuple[SeqRecord, ...], ...]:
+        return tuple(
+            tuple(SeqIO.parse(path, "fasta")) if path else ()
+            for path in options.conservation_fasta_files or ()
+        )
+
+    return require_interactive_svg_metadata(load)
 
 
 def _preflight_circular_batch_outputs(

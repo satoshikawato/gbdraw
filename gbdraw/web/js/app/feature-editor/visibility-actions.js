@@ -168,8 +168,8 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     if (orthogroupMembers.length > 1) {
       scopes.push({
         id: 'orthogroup',
-        label: `Current orthogroup members (${orthogroupMembers.length})`,
-        description: 'One rule per current orthogroup member.',
+        label: `Current similarity-group members (${orthogroupMembers.length})`,
+        description: 'One rule per current similarity-group member.',
         features: orthogroupMembers
       });
     }

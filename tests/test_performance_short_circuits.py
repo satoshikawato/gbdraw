@@ -15,6 +15,7 @@ import gbdraw.render.groups.linear.gc_content as linear_gc_content_module
 import gbdraw.render.groups.linear.gc_skew as linear_gc_skew_module
 import gbdraw.render.export as export_module
 from gbdraw.analysis.skew import skew_df as real_skew_df
+from gbdraw.api import render as api_render
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
@@ -204,7 +205,7 @@ def test_linear_legend_none_skips_legend_preparation(
     )
 
 
-def test_save_figure_svg_only_skips_cairosvg_lookup(
+def test_save_figure_to_svg_only_skips_cairosvg_lookup(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
@@ -216,7 +217,7 @@ def test_save_figure_svg_only_skips_cairosvg_lookup(
 
     monkeypatch.setattr(export_module, "get_cairosvg", unexpected_get_cairosvg)
 
-    export_module.save_figure(drawing, ["svg"])
+    api_render.save_figure_to(drawing, ["svg"])
 
     assert (tmp_path / "figure.svg").exists()
 

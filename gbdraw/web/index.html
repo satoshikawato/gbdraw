@@ -1300,9 +1300,9 @@
                                 <div v-else class="space-y-2">
                                     <div class="grid grid-cols-2 gap-1">
                                         <div class="col-span-2">
-                                            <label class="text-[9px] flex items-center">blastp mode <help-tip text="Pairwise draws top protein hits, Orthogroups keeps reciprocal best-hit groups, and Collinear mode clusters selected edge links into span ribbons."></help-tip></label>
+                                            <label class="text-[9px] flex items-center">blastp mode <help-tip text="Pairwise draws top protein hits, Similarity groups keeps reciprocal best-hit groups, and Collinear mode clusters selected edge links into span ribbons."></help-tip></label>
                                             <select v-model="losat.blastp.mode" @change="losat.blastp.mode === 'collinear' && (adv.pairwise_match_style = 'curve')" class="form-input px-1 py-0.5 text-xs">
-                                                <option value="orthogroup">Orthogroups</option>
+                                                <option value="orthogroup">Similarity groups</option>
                                                 <option value="collinear">Collinear blocks</option>
                                                 <option value="pairwise">Pairwise</option>
                                             </select>
@@ -1313,7 +1313,7 @@
                                         </div>
                                         <template v-if="losat.blastp.mode === 'collinear'">
                                             <div>
-                                                <label class="text-[9px] flex items-center">Max unit gap <help-tip text="Maximum CDS-order gap between neighboring Orthogroup RBH anchors that can be merged into one span ribbon."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Max unit gap <help-tip text="Maximum CDS-order gap between neighboring similarity-group RBH anchors that can be merged into one span ribbon."></help-tip></label>
                                                 <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
@@ -1336,7 +1336,7 @@
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Diagonal drift <help-tip text="Maximum order-space diagonal drift allowed when merging neighboring Orthogroup RBH anchors."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Diagonal drift <help-tip text="Maximum order-space diagonal drift allowed when merging neighboring similarity-group RBH anchors."></help-tip></label>
                                                 <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxDiagonalDrift" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
@@ -1346,19 +1346,19 @@
                                         </template>
                                         <div class="col-span-2 grid grid-cols-2 gap-1 pt-2 border-t border-slate-200">
                                             <div>
-                                                <label class="text-[9px] flex items-center">Bitscore <help-tip text="Minimum LOSATP blastp bitscore retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Bitscore <help-tip text="Minimum LOSATP blastp bitscore retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
                                                 <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))">
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">E-value <help-tip text="Maximum LOSATP blastp e-value retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">E-value <help-tip text="Maximum LOSATP blastp e-value retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
                                                 <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'evalue'))">
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Minimum Identity <help-tip text="Minimum LOSATP blastp percent identity retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Minimum Identity <help-tip text="Minimum LOSATP blastp percent identity retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
                                                 <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'identity'))">
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Minimum Length <help-tip text="Minimum LOSATP blastp alignment length retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Minimum Length <help-tip text="Minimum LOSATP blastp alignment length retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
                                                 <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))">
                                             </div>
                                         </div>
@@ -2812,6 +2812,8 @@
                                     <option value="bottom">Bottom</option>
                                     <option value="upper_left" v-if="mode === 'circular'">Upper Left</option>
                                     <option value="upper_right" v-if="mode === 'circular'">Upper Right</option>
+                                    <option value="lower_left" v-if="mode === 'circular'">Lower Left</option>
+                                    <option value="lower_right" v-if="mode === 'circular'">Lower Right</option>
                                     <option value="none">None</option>
                                 </select>
                             </div>
@@ -3140,12 +3142,12 @@
                         <summary><i class="ph ph-text-t"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
-                                <label class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Orthogroup Record' requires LOSATP orthogroup or collinear mode."></help-tip></label>
+                                <label class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Similarity Group Record' requires LOSATP similarity-group or collinear mode."></help-tip></label>
                                 <select v-model="form.show_labels_linear" class="form-input text-xs py-1">
                                     <option value="none">None</option>
                                     <option value="all">All Records</option>
                                     <option value="first">First Record Only</option>
-                                    <option value="orthogroup_top" :disabled="!(blastSource === 'losat' && losatProgram === 'blastp' && (losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear')) && form.show_labels_linear !== 'orthogroup_top'">Top Orthogroup Record</option>
+                                    <option value="orthogroup_top" :disabled="!(blastSource === 'losat' && losatProgram === 'blastp' && (losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear')) && form.show_labels_linear !== 'orthogroup_top'">Top Similarity Group Record</option>
                                 </select>
                             </div>
                             <div v-else>
@@ -4140,19 +4142,19 @@
                         <div v-if="canUseClickedOrthogroupActions" class="grid grid-cols-2 gap-2">
                             <button @click="openClickedOrthogroupInEditor"
                                     class="px-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Open orthogroup editor">
+                                    title="Open similarity-group editor">
                                 <i class="ph ph-sidebar-simple"></i>
                                 <span>Open</span>
                             </button>
                             <button @click="alignByClickedOrthogroup"
                                     class="px-2 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Align by this orthogroup">
+                                    title="Align by this similarity group">
                                 <i class="ph ph-arrows-left-right"></i>
                                 <span>Align</span>
                             </button>
                             <button @click="highlightClickedOrthogroup"
                                     class="px-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Highlight orthogroup">
+                                    title="Highlight similarity group">
                                 <i class="ph ph-target"></i>
                                 <span>Highlight</span>
                             </button>
@@ -4160,14 +4162,14 @@
                                     :disabled="!selectedOrthogroupAlignmentFeature"
                                     class="px-2 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                                     :class="selectedOrthogroupAlignmentFeature ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'"
-                                    title="Reset orthogroup alignment">
+                                    title="Reset similarity-group alignment">
                                 <i class="ph ph-arrow-counter-clockwise"></i>
                                 <span>Reset</span>
                             </button>
                         </div>
                         <div v-if="clickedOrthogroupDetail" class="border-y border-slate-100 py-3">
                             <div class="flex items-center justify-between mb-2">
-                                <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Orthogroup</div>
+                                <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Similarity group</div>
                                 <div class="text-[10px] text-slate-500">{{ clickedOrthogroupDetail.id }}</div>
                             </div>
                             <div class="mb-3">
@@ -4374,7 +4376,7 @@
                                 <option value="exclude_matching">Exclude from matching (leave visibility unchanged)</option>
                             </select>
                             <p class="text-[10px] text-slate-400 mt-1">
-                                Choose a scope when orthogroup, product, or protein ID rules are available.
+                                Choose a scope when similarity-group, product, or protein ID rules are available.
                             </p>
                         </div>
                         </div>
@@ -4717,13 +4719,13 @@
                                 <div v-if="section.blockOrthogroups && section.blockOrthogroups.length"
                                      class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
                                     <div class="bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase text-slate-500">
-                                        Orthogroups covered
+                                        Similarity groups covered
                                     </div>
                                     <div class="overflow-auto custom-scrollbar max-h-52">
                                         <table class="min-w-[54rem] w-full text-xs">
                                             <thead class="bg-white sticky top-0">
                                                 <tr class="text-[10px] uppercase text-slate-400">
-                                                    <th class="text-left font-semibold px-3 py-2">OG ID</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Group ID</th>
                                                     <th class="text-left font-semibold px-3 py-2">Display name</th>
                                                     <th class="text-left font-semibold px-3 py-2">Members</th>
                                                     <th class="text-left font-semibold px-3 py-2">Record coverage</th>
@@ -4753,7 +4755,7 @@
                                 <div v-if="section.memberRows && section.memberRows.length"
                                      class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
                                     <div class="flex items-center justify-between gap-2 bg-slate-50 px-3 py-2">
-                                        <div class="text-[10px] font-semibold uppercase text-slate-500">Orthogroup members</div>
+                                        <div class="text-[10px] font-semibold uppercase text-slate-500">Similarity-group members</div>
                                         <div class="flex items-center gap-1">
                                             <button type="button"
                                                     @click="copyText(section.memberNtFasta)"
@@ -5285,7 +5287,7 @@
                                   orthogroupCount === 0 ? 'opacity-40 cursor-not-allowed hover:bg-transparent' : ''
                                 ]">
                             <i class="ph ph-tree-structure"></i>
-                            <span>Orthogroups</span>
+                            <span>Similarity groups</span>
                         </button>
                     </div>
 
@@ -5423,13 +5425,13 @@
                     <div v-show="rightDrawerTab === 'orthogroups'" class="flex-1 min-h-0 flex flex-col">
                         <div class="px-4 py-2 border-b border-slate-100 bg-white shrink-0 space-y-2">
                             <div class="flex items-center justify-between text-xs">
-                                <span class="font-semibold text-slate-600">{{ orthogroupCount }} orthogroups</span>
+                                <span class="font-semibold text-slate-600">{{ orthogroupCount }} similarity groups</span>
                                 <span class="text-[10px] text-slate-500 truncate max-w-[180px]" :title="selectedAlignmentTargetLabel">
                                     Align: {{ selectedAlignmentTargetLabel || 'none' }}
                                 </span>
                             </div>
                             <div class="grid grid-cols-[1fr_120px] gap-2">
-                                <input v-model="orthogroupSearch" data-history-ignore placeholder="Search orthogroups..." class="form-input text-xs w-full">
+                                <input v-model="orthogroupSearch" data-history-ignore placeholder="Search similarity groups..." class="form-input text-xs w-full">
                                 <select v-model="orthogroupSortMode" data-history-ignore class="form-select text-xs w-full">
                                     <option value="id">ID</option>
                                     <option value="name">Name</option>
@@ -5460,7 +5462,7 @@
                                     <span v-if="isOrthogroupRenamed(group)" class="text-blue-600 font-medium">Edited</span>
                                 </div>
                             </button>
-                            <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-400 text-xs">No orthogroups found</div>
+                            <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-400 text-xs">No similarity groups found</div>
                         </div>
 
                         <div v-if="selectedOrthogroup" class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 custom-scrollbar">
@@ -5475,7 +5477,7 @@
                                     <input type="text"
                                            :value="resolveOrthogroupName(selectedOrthogroup)"
                                            @input="setOrthogroupNameOverride(selectedOrthogroup.id, $event.target.value)"
-                                           placeholder="Rename this orthogroup"
+                                           placeholder="Rename this similarity group"
                                            class="form-input text-sm w-full">
                                 </div>
                                 <div>

@@ -52,6 +52,7 @@ import {
   modeProfile,
   trackDefaultsForMode
 } from '../mode-profiles.js';
+import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
@@ -235,7 +236,7 @@ const resolveCircularBatchPrefixes = (records, explicitPrefix) => {
 const renderOutputPayload = (prefix) => ({
   prefix,
   formats: ['interactive_svg'],
-  overwrite: true,
+  overwrite: false,
   interactiveMetadataPolicy: 'auto'
 });
 
@@ -248,6 +249,15 @@ const optionalNumber = (value) => {
 const optionalPositiveInteger = (value) => {
   const numeric = optionalNumber(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+};
+
+const canonicalOptionalPositiveNumber = (value, fieldName) => {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    throw new Error(`${fieldName} must be null or a positive finite number.`);
+  }
+  return numeric;
 };
 
 const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
@@ -681,10 +691,6 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
 };
 
 const buildDepthResources = ({ state, filesData, resources, diagramOptions, recordCount }) => {
-  const rows = state.mode.value === 'linear'
-    ? (filesData.linearSeqs || []).map((seq) => Array.isArray(seq.depth) ? seq.depth : (seq.depth ? [seq.depth] : []))
-    : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount);
-  if (!rows.some((row) => row.some(Boolean))) return;
   if (
     state.mode.value === 'circular' &&
     isRecordMajorDepthFileMatrix(filesData.c_depth) &&
@@ -694,20 +700,65 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
       `Circular Depth matrix has ${filesData.c_depth.length} record rows; expected ${recordCount}.`
     );
   }
-  diagramOptions.depthTrackFiles = rows.map((row, rowIndex) => row.map((entry, columnIndex) => {
-    if (!entry) return null;
-    const id = `depth-track-files-${rowIndex + 1}-${columnIndex + 1}`;
-    return fileRef(resources.addFile(id, 'depth-track-file', entry));
-  }));
-  const tracks = Array.isArray(state.adv.depth_tracks) ? state.adv.depth_tracks : [];
-  diagramOptions.depthTrackLabels = tracks.map((track, index) => String(track?.label || `Depth ${index + 1}`));
-  diagramOptions.depthTrackColors = tracks.map((track) => String(track?.color || state.adv.depth_color));
-  if (state.mode.value === 'linear') {
-    diagramOptions.depthTrackHeights = tracks.map((track) => optionalNumber(track?.height));
+  const rows = state.mode.value === 'linear'
+    ? (filesData.linearSeqs || []).map((seq) => Array.isArray(seq.depth) ? seq.depth : (seq.depth ? [seq.depth] : []))
+    : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount);
+  if (!rows.some((row) => row.some(Boolean))) return;
+  if (rows.length !== recordCount || rows.some((row) => !Array.isArray(row))) {
+    throw new Error(
+      `${state.mode.value === 'circular' ? 'Circular' : 'Linear'} Depth sources must contain one row per record (${recordCount}).`
+    );
   }
-  diagramOptions.depthTrackLargeTickIntervals = tracks.map((track) => optionalNumber(track?.large_tick_interval));
-  diagramOptions.depthTrackSmallTickIntervals = tracks.map((track) => optionalNumber(track?.small_tick_interval));
-  diagramOptions.depthTrackTickFontSizes = tracks.map((track) => optionalNumber(track?.tick_font_size));
+  const tracks = Array.isArray(state.adv.depth_tracks) ? state.adv.depth_tracks : [];
+  const logicalTrackCount = Math.max(
+    tracks.length,
+    ...rows.map((row) => row.length)
+  );
+  diagramOptions.depthTracks = Array.from({ length: logicalTrackCount }, (_, trackIndex) => {
+    const sources = rows.map((row) => row[trackIndex] || null);
+    if (!sources.some(Boolean)) {
+      throw new Error(
+        `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no source in any record.`
+      );
+    }
+    const sharedSource = sources[0] && sources.every((source) => source === sources[0]);
+    const sourceName = `depth-tracks-${trackIndex + 1}-source`;
+    const source = sharedSource
+      ? fileRef(resources.addFile(sourceName, 'depth-track-file', sources[0]))
+      : sources.map((entry, recordIndex) => (
+          entry
+            ? fileRef(resources.addFile(
+                `${sourceName}-record-${recordIndex + 1}`,
+                'depth-track-file',
+                entry
+              ))
+            : null
+        ));
+    const track = tracks[trackIndex] || {};
+    return {
+      source,
+      label: String(track.label || (logicalTrackCount === 1 ? 'Depth' : `Depth ${trackIndex + 1}`)),
+      color: String(track.color || state.adv.depth_color || '#4A90E2'),
+      height: state.mode.value === 'linear'
+        ? canonicalOptionalPositiveNumber(
+            track.height,
+            `depthTracks[${trackIndex}].height`
+          )
+        : null,
+      largeTickInterval: canonicalOptionalPositiveNumber(
+        track.large_tick_interval,
+        `depthTracks[${trackIndex}].largeTickInterval`
+      ),
+      smallTickInterval: canonicalOptionalPositiveNumber(
+        track.small_tick_interval,
+        `depthTracks[${trackIndex}].smallTickInterval`
+      ),
+      tickFontSize: canonicalOptionalPositiveNumber(
+        track.tick_font_size,
+        `depthTracks[${trackIndex}].tickFontSize`
+      )
+    };
+  });
 };
 
 const buildTracks = (state) => {
@@ -875,10 +926,29 @@ export const buildCanonicalSessionRequest = ({ state, filesData }) => {
   const webFiles = {};
   const records = buildRecords({ state, filesData, resources });
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
+  const circularGroupingIntent = ['single', 'batch'].includes(
+    state.adv.circular_grouping_intent
+  )
+    ? state.adv.circular_grouping_intent
+    : null;
   const grouping = state.mode.value === 'linear'
     ? 'single'
-    : (state.form.multi_record_canvas ? 'grid' : 'batch');
+    : (
+        state.form.multi_record_canvas
+          ? 'grid'
+          : (
+              records.length === 1
+                ? (
+                    circularGroupingIntent ||
+                    WEB_UX_PROFILE.circular.singleRecordGrouping
+                  )
+                : WEB_UX_PROFILE.circular.multiRecordGrouping
+            )
+      );
   const explicitPrefix = explicitOutputPrefix(state.form.prefix);
+  if (state.mode.value === 'circular') {
+    webFiles.circularOutputPrefixExplicit = explicitPrefix !== null;
+  }
   const knownCircularRecords = Array.isArray(state.circularRecordList.value)
     ? state.circularRecordList.value
     : [];
@@ -1156,6 +1226,162 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   if (!entry || typeof entry !== 'object') throw new Error(`Missing canonical resource: ${resourceId}`);
   const { kind: _kind, ...file } = entry;
   return file;
+};
+
+const LEGACY_DEPTH_OPTION_FIELDS = Object.freeze([
+  'depthTable',
+  'depthFile',
+  'depthTables',
+  'depthFiles',
+  'depthTrackTables',
+  'depthTrackFiles',
+  'depthTrackLabels',
+  'depthTrackColors',
+  'depthTrackHeights',
+  'depthTrackLargeTickIntervals',
+  'depthTrackSmallTickIntervals',
+  'depthTrackTickFontSizes'
+]);
+
+const hasOptionValue = (value) => value !== null && value !== undefined;
+
+const requireExactCanonicalFields = (value, required, fieldName) => {
+  const keys = Object.keys(value);
+  const missing = required.filter(
+    (key) => !Object.prototype.hasOwnProperty.call(value, key)
+  );
+  if (missing.length > 0) {
+    throw new Error(`${fieldName} is missing required field(s): ${missing.join(', ')}.`);
+  }
+  const unknown = keys.filter((key) => !required.includes(key));
+  if (unknown.length > 0) {
+    throw new Error(`${fieldName} contains unknown field(s): ${unknown.join(', ')}.`);
+  }
+};
+
+const canonicalDepthResourceFile = (ref, resources, fieldName) => {
+  if (!ref || typeof ref !== 'object' || Array.isArray(ref)) {
+    throw new Error(`${fieldName} must be a canonical resource reference.`);
+  }
+  requireExactCanonicalFields(ref, ['resourceId', 'representation'], fieldName);
+  if (!['file', 'canonicalTsv'].includes(ref.representation)) {
+    throw new Error(`${fieldName} has unsupported representation '${ref.representation}'.`);
+  }
+  if (typeof ref.resourceId !== 'string' || !ref.resourceId.trim()) {
+    throw new Error(`${fieldName}.resourceId must be a non-empty string.`);
+  }
+  const resourceId = ref.resourceId.trim();
+  return resourceAsLegacyFile(resources, resourceId);
+};
+
+const canonicalDepthNumber = (value, fieldName) => {
+  if (value === null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`${fieldName} must be null or a positive finite number.`);
+  }
+  return value;
+};
+
+const canonicalDepthText = (value, fieldName) => {
+  if (value === null) return null;
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${fieldName} must be null or a non-empty string.`);
+  }
+  return value.trim();
+};
+
+const projectCanonicalDepthTracks = ({
+  options,
+  records,
+  resources,
+  mode
+}) => {
+  const canonicalPresent = hasOptionValue(options.depthTracks);
+  const legacyFields = LEGACY_DEPTH_OPTION_FIELDS.filter(
+    (fieldName) => hasOptionValue(options[fieldName])
+  );
+  if (canonicalPresent && legacyFields.length > 0) {
+    throw new Error(
+      `diagramOptions.depthTracks cannot be combined with legacy depth fields: ${legacyFields.join(', ')}.`
+    );
+  }
+  if (!canonicalPresent) return null;
+  if (!Array.isArray(options.depthTracks) || options.depthTracks.length === 0) {
+    throw new Error('diagramOptions.depthTracks must be a non-empty array.');
+  }
+
+  const sourceRows = Array.from({ length: records.length }, () => []);
+  const fileRows = Array.from({ length: records.length }, () => []);
+  const tracks = options.depthTracks.map((track, trackIndex) => {
+    const fieldName = `diagramOptions.depthTracks[${trackIndex}]`;
+    if (!track || typeof track !== 'object' || Array.isArray(track)) {
+      throw new Error(`${fieldName} must be an object.`);
+    }
+    requireExactCanonicalFields(
+      track,
+      [
+        'source',
+        'label',
+        'color',
+        'height',
+        'largeTickInterval',
+        'smallTickInterval',
+        'tickFontSize'
+      ],
+      fieldName
+    );
+    let sourceRefs;
+    if (Array.isArray(track.source)) {
+      if (track.source.length !== records.length) {
+        throw new Error(
+          `${fieldName}.source must contain one source per displayed record (${records.length}).`
+        );
+      }
+      sourceRefs = track.source;
+    } else {
+      sourceRefs = Array.from({ length: records.length }, () => track.source);
+    }
+    if (!sourceRefs.some((ref) => ref !== null && ref !== undefined)) {
+      throw new Error(
+        `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no source in any record.`
+      );
+    }
+    sourceRefs.forEach((ref, recordIndex) => {
+      sourceRows[recordIndex][trackIndex] = ref ?? null;
+      fileRows[recordIndex][trackIndex] = ref === null || ref === undefined
+        ? null
+        : canonicalDepthResourceFile(
+          ref,
+          resources,
+          `${fieldName}.source${Array.isArray(track.source) ? `[${recordIndex}]` : ''}`
+        );
+    });
+    if (mode === 'circular' && track.height !== null) {
+      throw new Error(`${fieldName}.height must be null for Circular requests.`);
+    }
+    const label = canonicalDepthText(track.label, `${fieldName}.label`);
+    const color = canonicalDepthText(track.color, `${fieldName}.color`);
+    return {
+      label: label ?? (options.depthTracks.length === 1 ? 'Depth' : `Depth ${trackIndex + 1}`),
+      color: color ?? '#4A90E2',
+      height: mode === 'linear'
+        ? canonicalDepthNumber(track.height, `${fieldName}.height`)
+        : null,
+      large_tick_interval: canonicalDepthNumber(
+        track.largeTickInterval,
+        `${fieldName}.largeTickInterval`
+      ),
+      small_tick_interval: canonicalDepthNumber(
+        track.smallTickInterval,
+        `${fieldName}.smallTickInterval`
+      ),
+      tick_font_size: canonicalDepthNumber(
+        track.tickFontSize,
+        `${fieldName}.tickFontSize`
+      )
+    };
+  });
+  return { sourceRows, fileRows, tracks };
 };
 
 export const decodeCanonicalResourceText = (resources, resourceId) => {
@@ -1525,10 +1751,20 @@ const inferredImplicitBatchPrefixes = (records) => {
   );
 };
 
-const projectedOutputPrefix = (renderRequest, grouping, records, prefixes) => {
+const projectedOutputPrefix = (
+  renderRequest,
+  grouping,
+  records,
+  prefixes,
+  circularPrefixExplicit
+) => {
+  if (renderRequest.mode === 'circular' && circularPrefixExplicit === false) {
+    return '';
+  }
   if (grouping !== 'batch') return prefixes[0] || 'out';
   const implicitPrefixes = inferredImplicitBatchPrefixes(records);
   if (
+    circularPrefixExplicit !== true &&
     implicitPrefixes &&
     implicitPrefixes.every((prefix, index) => prefix === prefixes[index])
   ) {
@@ -1670,6 +1906,12 @@ export const projectCanonicalSessionRequest = ({
 
   const options = renderRequest.diagramOptions || {};
   validateCanonicalAssemblyOutput(options.output, renderRequest.schema);
+  const canonicalDepth = projectCanonicalDepthTracks({
+    options,
+    records,
+    resources,
+    mode: renderRequest.mode
+  });
   const projectedCircularSizeMode = renderRequest.mode === 'circular'
     ? (
         renderRequest.schema <= 2
@@ -1681,7 +1923,9 @@ export const projectCanonicalSessionRequest = ({
             )
       )
     : 'auto';
-  const depthRows = Array.isArray(options.depthTrackFiles) ? options.depthTrackFiles : [];
+  const depthRows = canonicalDepth?.sourceRows || (
+    Array.isArray(options.depthTrackFiles) ? options.depthTrackFiles : []
+  );
   if (depthRows.length > 0) {
     if (depthRows.length !== records.length || depthRows.some((row) => !Array.isArray(row))) {
       throw new Error(
@@ -1691,7 +1935,7 @@ export const projectCanonicalSessionRequest = ({
   }
   if (renderRequest.mode === 'circular' && depthRows.length > 0) {
     files.c_depth = normalizeRecordMajorDepthFileRows(
-      depthRows.map((row) => row.map((ref) => (
+      canonicalDepth?.fileRows || depthRows.map((row) => row.map((ref) => (
         ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null
       ))),
       records.length
@@ -1700,7 +1944,7 @@ export const projectCanonicalSessionRequest = ({
   if (renderRequest.mode === 'linear') {
     depthRows.forEach((row, index) => {
       if (!files.linearSeqs[index] || !Array.isArray(row)) return;
-      const depth = row
+      const depth = canonicalDepth?.fileRows[index] || row
         .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null);
       files.linearSeqs[index].depth = depth.length > 1 ? depth : (depth[0] || null);
     });
@@ -1888,12 +2132,14 @@ export const projectCanonicalSessionRequest = ({
     );
     return Math.max(width, trackIndex + 1);
   }, 0);
-  const projectedDepthTrackCount = Math.max(
-    0,
-    ...depthRows.map((row) => Array.isArray(row) ? row.length : 0),
-    ...depthMetadataFields.map((values) => Array.isArray(values) ? values.length : 0),
-    referencedDepthTrackWidth
-  );
+  const projectedDepthTrackCount = canonicalDepth
+    ? canonicalDepth.tracks.length
+    : Math.max(
+        0,
+        ...depthRows.map((row) => Array.isArray(row) ? row.length : 0),
+        ...depthMetadataFields.map((values) => Array.isArray(values) ? values.length : 0),
+        referencedDepthTrackWidth
+      );
   validateTrackSlotBindingInvariants(projectedCircularTrackSlots, {
     modeLabel: 'Circular',
     layoutKind: 'circular',
@@ -1911,16 +2157,33 @@ export const projectCanonicalSessionRequest = ({
     depthTrackCount: projectedDepthTrackCount
   });
   validateProjectedDepthSources(depthRows, projectedDepthTrackCount);
-  const projectedDepthTracks = Array.from({ length: projectedDepthTrackCount }, (_, index) => ({
-    label: String(options.depthTrackLabels?.[index] ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
-    color: String(options.depthTrackColors?.[index] || (index === 0 ? overrides.depth_color : '') || '#4A90E2'),
-    height: optionalNumber(options.depthTrackHeights?.[index]),
-    large_tick_interval: optionalNumber(options.depthTrackLargeTickIntervals?.[index]),
-    small_tick_interval: optionalNumber(options.depthTrackSmallTickIntervals?.[index]),
-    tick_font_size: optionalNumber(options.depthTrackTickFontSizes?.[index])
-  }));
+  if (
+    !canonicalDepth &&
+    renderRequest.mode === 'circular' &&
+    Array.isArray(options.depthTrackHeights) &&
+    options.depthTrackHeights.some((height) => height !== null && height !== undefined)
+  ) {
+    throw new Error('diagramOptions.depthTrackHeights must contain only null values for Circular requests.');
+  }
+  const projectedDepthTracks = canonicalDepth?.tracks || Array.from(
+    { length: projectedDepthTrackCount },
+    (_, index) => ({
+      label: String(options.depthTrackLabels?.[index] ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
+      color: String(options.depthTrackColors?.[index] || (index === 0 ? overrides.depth_color : '') || '#4A90E2'),
+      height: optionalNumber(options.depthTrackHeights?.[index]),
+      large_tick_interval: optionalNumber(options.depthTrackLargeTickIntervals?.[index]),
+      small_tick_interval: optionalNumber(options.depthTrackSmallTickIntervals?.[index]),
+      tick_font_size: optionalNumber(options.depthTrackTickFontSizes?.[index])
+    })
+  );
   const form = {
-    prefix: projectedOutputPrefix(renderRequest, grouping, records, outputPrefixes),
+    prefix: projectedOutputPrefix(
+      renderRequest,
+      grouping,
+      records,
+      outputPrefixes,
+      webMetadata.circularOutputPrefixExplicit
+    ),
     plot_title: options.plotTitle || '',
     legend: options.output?.legend || 'right',
     multi_record_canvas: renderRequest.mode === 'circular' && grouping === 'grid',
@@ -2007,6 +2270,9 @@ export const projectCanonicalSessionRequest = ({
       : (overrides.linear_axis_stroke_color ?? null),
     legend_box_size: overrides.legend_box_size ?? null,
     legend_font_size: overrides.legend_font_size ?? null,
+    circular_grouping_intent: renderRequest.mode === 'circular'
+      ? grouping
+      : 'auto',
     multi_record_size_mode: projectedCircularSizeMode,
     multi_record_min_radius_ratio: renderRequest.layout?.multiRecordMinRadiusRatio ?? 0.55,
     multi_record_column_gap_ratio: renderRequest.layout?.multiRecordColumnGapRatio ?? 0.10,

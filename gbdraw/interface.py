@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import wraps
+from inspect import Parameter, signature
 from os import PathLike
 from pathlib import Path
 from typing import Literal, Mapping, Sequence, TypeAlias
@@ -31,12 +34,12 @@ from gbdraw.api.options import (
     CircularDiagramOptions as _CircularDiagramOptions,
     CircularMultiRecordOptions as _CircularLayout,
     CircularOutputOptions as _CircularOutputOptions,
-    CircularTrackOptions as _CircularRequestTrackOptions,
+    CircularRequestTrackOptions as _CircularRequestTrackOptions,
     ColorOptions as _ColorOptions,
     LinearDiagramOptions as _LinearDiagramOptions,
     LinearMultiRecordOptions as _LinearLayout,
     LinearOutputOptions as _LinearOutputOptions,
-    LinearTrackOptions as _LinearRequestTrackOptions,
+    LinearRequestTrackOptions as _LinearRequestTrackOptions,
     _validate_center_reserved_radius,
     _validate_track_configuration,
 )
@@ -59,7 +62,11 @@ from gbdraw.mode_profiles import (
     DEFAULT_FEATURE_TYPES,
     LINEAR_MODE_PROFILE,
 )
-from gbdraw.render.interactive_context import build_interactive_svg_context
+from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT, normalize_format_token
+from gbdraw.render.interactive_context import (
+    build_interactive_svg_context,
+    require_interactive_svg_metadata,
+)
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
 
@@ -287,8 +294,8 @@ class LinearLayout:
 
 
 @dataclass(frozen=True)
-class ConservationTrackOptions:
-    """One circular sequence-conservation ring."""
+class ComparisonRingTrackOptions:
+    """One circular comparison ring drawn from sequence-similarity hits."""
 
     source: TableSource
     label: str | None = None
@@ -297,13 +304,18 @@ class ConservationTrackOptions:
 
 
 @dataclass(frozen=True)
-class ConservationOptions:
-    """Circular conservation rings and their shared geometry."""
+class ComparisonRingOptions:
+    """Circular sequence-similarity comparison rings and their shared geometry."""
 
-    tracks: Sequence[ConservationTrackOptions] = ()
+    tracks: Sequence[ComparisonRingTrackOptions] = ()
     reference: Literal["query", "subject", "auto"] = "auto"
     ring_width: float | None = None
     ring_gap: float | None = None
+
+
+# Compatibility aliases for the original package-root names.
+ConservationTrackOptions = ComparisonRingTrackOptions
+ConservationOptions = ComparisonRingOptions
 
 
 @dataclass(frozen=True)
@@ -378,10 +390,14 @@ def _validate_common_options(options: _CommonOptions) -> None:
 
 @dataclass(frozen=True)
 class CircularOptions(_CommonOptions):
-    """Options accepted only by :func:`draw_circular`."""
+    """Options for :func:`draw_circular`.
+
+    ``comparison_rings`` is the canonical sequence-similarity ring field.
+    ``conservation`` remains a runtime compatibility constructor and attribute alias.
+    """
 
     tracks: CircularTrackOptions = field(default_factory=CircularTrackOptions)
-    conservation: ConservationOptions = field(default_factory=ConservationOptions)
+    comparison_rings: ComparisonRingOptions | None = None
     species: str | None = None
     strain: str | None = None
     keep_full_definition_with_title: bool = False
@@ -399,8 +415,15 @@ class CircularOptions(_CommonOptions):
         )
         if not isinstance(self.tracks, CircularTrackOptions):
             raise ValidationError("tracks must be CircularTrackOptions.")
-        if not isinstance(self.conservation, ConservationOptions):
-            raise ValidationError("conservation must be ConservationOptions.")
+        comparison_rings = self.comparison_rings
+        if comparison_rings is None:
+            comparison_rings = ComparisonRingOptions()
+        if not isinstance(comparison_rings, ComparisonRingOptions):
+            raise ValidationError(
+                "comparison_rings must be ComparisonRingOptions "
+                "(ConservationOptions is a compatibility alias)."
+            )
+        object.__setattr__(self, "comparison_rings", comparison_rings)
         if self.title.position not in {None, "none", "top", "bottom"}:
             raise ValidationError(
                 "Circular title position must be one of: none, top, bottom."
@@ -410,6 +433,50 @@ class CircularOptions(_CommonOptions):
                 raise ValidationError(
                     "Depth track height is supported only by linear diagrams."
                 )
+
+    @property
+    def conservation(self) -> ComparisonRingOptions:
+        """Compatibility attribute alias for :attr:`comparison_rings`."""
+
+        comparison_rings = self.comparison_rings
+        assert comparison_rings is not None
+        return comparison_rings
+
+
+_CIRCULAR_OPTIONS_GENERATED_INIT = CircularOptions.__init__
+_CIRCULAR_OPTIONS_INIT_SIGNATURE = signature(_CIRCULAR_OPTIONS_GENERATED_INIT)
+
+
+@wraps(_CIRCULAR_OPTIONS_GENERATED_INIT)
+def _circular_options_init(
+    self: CircularOptions,
+    *args: object,
+    conservation: ComparisonRingOptions | None = None,
+    **kwargs: object,
+) -> None:
+    bound = _CIRCULAR_OPTIONS_INIT_SIGNATURE.bind_partial(self, *args, **kwargs)
+    if conservation is not None:
+        if bound.arguments.get("comparison_rings") is not None:
+            raise ValidationError(
+                "Pass comparison_rings or the conservation compatibility alias, "
+                "not both."
+            )
+        bound.arguments["comparison_rings"] = conservation
+    _CIRCULAR_OPTIONS_GENERATED_INIT(*bound.args, **bound.kwargs)
+
+
+_circular_options_init.__signature__ = _CIRCULAR_OPTIONS_INIT_SIGNATURE.replace(  # type: ignore[attr-defined]
+    parameters=(
+        *_CIRCULAR_OPTIONS_INIT_SIGNATURE.parameters.values(),
+        Parameter(
+            "conservation",
+            kind=Parameter.KEYWORD_ONLY,
+            default=None,
+            annotation=ComparisonRingOptions | None,
+        ),
+    ),
+)
+CircularOptions.__init__ = _circular_options_init  # type: ignore[method-assign]
 
 
 @dataclass(frozen=True)
@@ -449,12 +516,23 @@ class Diagram:
         *,
         mode: Literal["circular", "linear"],
         records: Sequence[SeqRecord],
-        interactive_context: InteractiveSvgContext | None,
+        interactive_context: (
+            InteractiveSvgContext
+            | Callable[[], InteractiveSvgContext]
+            | None
+        ),
     ) -> None:
         self._drawing = drawing
         self.mode = mode
         self.records = tuple(records)
         self._interactive_context = interactive_context
+
+    def _resolve_interactive_context(self) -> InteractiveSvgContext | None:
+        if callable(self._interactive_context):
+            self._interactive_context = require_interactive_svg_metadata(
+                self._interactive_context
+            )
+        return self._interactive_context
 
     def to_bytes(self, format: str = "svg") -> bytes:
         """Return the diagram in SVG or a supported binary format."""
@@ -462,7 +540,11 @@ class Diagram:
         return render_to_bytes(
             self._drawing,
             format,
-            interactive_context=self._interactive_context,
+            interactive_context=(
+                self._resolve_interactive_context()
+                if normalize_format_token(format) == INTERACTIVE_SVG_FORMAT
+                else None
+            ),
         )
 
     def to_svg(self, *, interactive: bool = False) -> str:
@@ -685,35 +767,41 @@ def _circular_options(
         legend=options.legend,
         plot_title_position=options.title.position,
     )
-    conservation = options.conservation
-    if conservation.tracks:
+    comparison_rings = options.comparison_rings
+    assert comparison_rings is not None
+    if comparison_rings.tracks:
         kinds = {
             "table" if isinstance(track.source, DataFrame) else "file"
-            for track in conservation.tracks
+            for track in comparison_rings.tracks
         }
         if len(kinds) != 1:
             raise ValidationError(
-                "Conservation tracks must use either DataFrames or paths in one diagram, not both."
+                "Comparison rings must use either DataFrames or paths in one "
+                "diagram, not both."
             )
-        sources = [track.source for track in conservation.tracks]
+        sources = [track.source for track in comparison_rings.tracks]
         if "table" in kinds:
             values["conservation_dataframes"] = sources
         else:
             values["conservation_blast_files"] = [str(source) for source in sources]
-        labels = [track.label for track in conservation.tracks]
-        colors = [track.color for track in conservation.tracks]
+        labels = [track.label for track in comparison_rings.tracks]
+        colors = [track.color for track in comparison_rings.tracks]
         if any(label is not None for label in labels):
             if any(label is None for label in labels):
-                raise ValidationError("Set labels for every conservation track or for none of them.")
+                raise ValidationError(
+                    "Set labels for every comparison ring or for none of them."
+                )
             values["conservation_labels"] = labels
         if any(color is not None for color in colors):
             if any(color is None for color in colors):
-                raise ValidationError("Set colors for every conservation track or for none of them.")
+                raise ValidationError(
+                    "Set colors for every comparison ring or for none of them."
+                )
             values["conservation_colors"] = colors
     values.update(
-        conservation_reference=conservation.reference,
-        conservation_ring_width=conservation.ring_width,
-        conservation_ring_gap=conservation.ring_gap,
+        conservation_reference=comparison_rings.reference,
+        conservation_ring_width=comparison_rings.ring_width,
+        conservation_ring_gap=comparison_rings.ring_gap,
         species=options.species,
         strain=options.strain,
         keep_full_definition_with_plot_title=options.keep_full_definition_with_title,
@@ -787,7 +875,9 @@ def _interactive_context(
         default_colors = load_default_colors(default_file or "", options.features.palette)
     comparison_sequence_records: list[list[SeqRecord]] = []
     if isinstance(options, CircularOptions):
-        for track in options.conservation.tracks:
+        comparison_rings = options.comparison_rings
+        assert comparison_rings is not None
+        for track in comparison_rings.tracks:
             source = track.comparison_sequence_source
             if source is None:
                 comparison_sequence_records.append([])
@@ -844,7 +934,7 @@ def draw_circular(
         prepared.drawing,
         mode="circular",
         records=normalized,
-        interactive_context=_interactive_context(
+        interactive_context=lambda: _interactive_context(
             prepared.records,
             options=options,
             legacy=prepared.request.options,
@@ -882,7 +972,7 @@ def draw_linear(
         prepared.drawing,
         mode="linear",
         records=normalized,
-        interactive_context=_interactive_context(
+        interactive_context=lambda: _interactive_context(
             prepared.records,
             options=options,
             legacy=prepared.request.options,
@@ -895,6 +985,8 @@ __all__ = [
     "CircularLayout",
     "CircularOptions",
     "CircularTrackOptions",
+    "ComparisonRingOptions",
+    "ComparisonRingTrackOptions",
     "ConservationOptions",
     "ConservationTrackOptions",
     "DepthTrackOptions",

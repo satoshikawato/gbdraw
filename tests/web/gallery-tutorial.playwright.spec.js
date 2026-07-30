@@ -302,7 +302,7 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
     page.getByRole('heading', { name: 'Plot CDS protein-similarity links across five Hepatoplasmataceae genomes' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
-  await expect(tutorialPanel.getByRole('row', { name: 'blastp mode Orthogroups' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'blastp mode Similarity groups' })).toBeVisible();
   await expect(
     tutorialPanel.getByText(
       'gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records.'
@@ -602,7 +602,7 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'blastp mode Orthogroups'
+      name: 'blastp mode Similarity groups'
     })
   ).toBeVisible();
   await expect(

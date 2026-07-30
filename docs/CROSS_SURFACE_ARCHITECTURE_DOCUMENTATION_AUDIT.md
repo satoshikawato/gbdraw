@@ -1,6 +1,6 @@
 # Cross-Surface Architecture and Documentation Audit
 
-Date: 2026-07-29
+Date: 2026-07-30
 
 ## Executive summary
 
@@ -12,26 +12,34 @@ into CLI arguments while session saving translates the same state into a separat
 JavaScript request. This creates multiple authorities for defaults, validation,
 resources, and names.
 
-The highest-priority confirmed defects found by the audit are:
+The audit found seven release-blocking defects. The follow-up implementation resolved
+all seven:
 
-1. Circular Web sessions did not preserve the comparison FASTA files used by **Run
-   LOSAT**, despite the tutorial's statement that **Load Session** restores embedded
-   inputs, settings, and the saved result. In that tutorial, "lossless" describes gzip
-   compression, not restoration completeness. Current saves preserve available LOSAT
-   FASTAs and loads restore them, but older sessions cannot recover FASTAs they never
-   stored.
+1. Circular Web sessions now preserve the comparison FASTA files used by **Run
+   LOSAT**. The bundled WSSV session now contains all 20 exact comparison FASTAs:
+   12 accession-pinned NCBI Nucleotide records and eight prepared assemblies supplied
+   under `tests/test_inputs/MAGs`. Hash, record-ID, length, LOSAT-cache, and BLAST
+   coordinate checks prevent substitution with a merely similar sequence.
 2. Circular ring labels edited in the Web UI could revert to an older value after a
    session round trip. The current session writer now uses displayed series order for
    BLAST resources, associated FASTAs, labels, and colors.
 3. Gallery promotion computed current Web field names but retained the obsolete
    source `config`, so every regenerated Gallery session failed Web import. Promotion,
    current-session validation, and the generated sessions are fixed in this change.
-4. CLI rendering always overwrites an existing output, while both Python APIs protect
-   existing files by default.
-5. Circular CLI/Web and Python APIs produce different track sets for the same
-   horizontal inner-label configuration: only CLI/Web suppress GC content and GC skew.
-6. The CLI Reference is not synchronized with live help, and three user guides state
-   the opposite of the tested sparse-depth layout behavior.
+4. CLI rendering now refuses to replace output unless the current invocation includes
+   `--overwrite`; saved sessions do not retain that permission.
+5. Horizontal inner labels use one shared GC/skew policy across CLI, Web, and Python.
+   Explicit track slots remain authoritative.
+6. Generated CLI help blocks and an option-parity test keep the CLI Reference current.
+7. The three sparse-depth guides now match the tested zero-reserve behavior.
+
+The selected P1–P3 recommendations were also implemented where they represented a
+bounded contract decision: strict interactive metadata, wrong-mode override
+rejection, distinct typed track names, one canonical typed depth-track input,
+an explicit Web UX profile, accurate comparison/similarity terminology, and
+evidence-gated compatibility cleanup. A-01, A-02, A-03, A-06, A-07, W-03, W-04,
+W-05, D-03, D-05, and D-06 remain architectural or documentation work outside this
+follow-up.
 
 The documentation has little vocabulary-level AI writing smell. Its larger problem is
 structural: internal session schemas are repeated in tutorials and FAQ answers,
@@ -75,35 +83,35 @@ as a coherent cross-surface policy.
 
 | ID | Priority | Status | Finding |
 | --- | --- | --- | --- |
-| W-01 | P0 | Resolved, with historical-data limit | A Circular **Run LOSAT** session omitted its comparison FASTA resources and could not rebuild popup sequence state. |
+| W-01 | P0 | Resolved | A Circular **Run LOSAT** session omitted its comparison FASTA resources and could not rebuild popup sequence state. |
 | W-02 | P0 | Resolved | An edited Circular ring label could revert after save/load. |
 | W-07 | P0 | Resolved | Gallery promotion retained obsolete Web field names in otherwise current sessions, making all bundled sessions fail Web import. |
-| C-01 | P0 | Confirmed | CLI output overwrites existing files without an opt-in; Python defaults are safe. |
-| C-02 | P0 | Confirmed | Circular inner-label policy changes GC/skew only in CLI/Web, not in Python. |
-| D-01 | P0 | Confirmed | CLI Reference option inventories and copied help are stale. |
-| D-02 | P0 | Confirmed | Sparse Linear depth geometry is described incorrectly in three guides. |
+| C-01 | P0 | Resolved | CLI output overwrites existing files without an opt-in; Python defaults are safe. |
+| C-02 | P0 | Resolved | Circular inner-label policy changes GC/skew only in CLI/Web, not in Python. |
+| D-01 | P0 | Resolved | CLI Reference option inventories and copied help are stale. |
+| D-02 | P0 | Resolved | Sparse Linear depth geometry is described incorrectly in three guides. |
 | A-01 | P1 | Confirmed | Web maintains three render/session representations and imports private CLI parsers. |
 | A-02 | P1 | Confirmed | CLI performs domain preprocessing already owned by the typed planner. |
 | A-03 | P1 | Confirmed | Root API can lose computed orthogroup metadata from interactive Linear SVG. |
-| A-04 | P1 | Confirmed | Root and typed interactive-metadata paths have different failure semantics. |
-| A-05 | P1 | Confirmed | Typed requests accept wrong-mode configuration paths that persist as no-ops. |
+| A-04 | P1 | Resolved | Root and typed interactive-metadata paths have different failure semantics. |
+| A-05 | P1 | Resolved | Typed requests accept wrong-mode configuration paths that persist as no-ops. |
 | W-03 | P1 | Confirmed | Web capability detection searches Python source text and duplicates fallback maps. |
-| API-01 | P1 | Confirmed | Root and typed APIs export incompatible classes under the same track-option names. |
+| API-01 | P1 | Resolved with aliases | Root and typed APIs export incompatible classes under the same track-option names. |
 | A-08 | P1 | Resolved | Readers still accepted session/request schemas that existed only on the development branch. |
 | D-03 | P1 | Confirmed | Two Gallery basic tutorials use screenshots that do not show the described task. |
-| D-04 | P1 | Partly resolved | Two local documentation links were broken and are fixed here; README still contradicts itself about CairoSVG. |
-| API-02 | P2 | Confirmed | Typed depth input has singular, plural, and matrix forms for the same concept. |
-| P-01 | P2 | Decision | Multi-record grouping and visual defaults differ by surface. |
-| P-02 | P2 | Decision | “Conservation” and “orthogroup” public names overstate the implemented inference. |
+| D-04 | P1 | Resolved | Two local documentation links were broken, and README contradicted itself about CairoSVG. |
+| API-02 | P2 | Resolved with canonical writer and compatibility inputs | Typed depth input has singular, plural, and matrix forms for the same concept. |
+| P-01 | P2 | Resolved by explicit profile | Multi-record grouping and visual defaults differ by surface. |
+| P-02 | P2 | Resolved with aliases | “Conservation” and “orthogroup” public names overstate the implemented inference. |
 | A-06 | P2 | Confirmed | Current request rendering also owns a large legacy-session migration pipeline. |
 | A-07 | P2 | Confirmed | Table/config normalization and metadata construction repeat work within one render. |
 | W-04 | P2 | Confirmed | Web injects virtual BLAST inputs by monkey-patching an internal assembler loader. |
 | W-05 | P2 | Confirmed | User-facing Web errors repeat deployment instructions and CLI transport details. |
 | D-05 | P2 | Confirmed | Session/cache internals are duplicated across tutorials, FAQ, API docs, and release notes. |
 | D-06 | P2 | Confirmed | `gbdraw/web/CLAUDE.md` describes an obsolete UI and runtime architecture. |
-| C-03 | P3 | Candidate | `save_figure` is an old lenient export path with tests but no production caller. |
-| W-06 | P3 | Candidate | One JS style module and backward-compatible dialog aliases appear unused. |
-| C-04 | P3 | Decision | Legacy Circular geometry shortcuts and repeated validation have no sunset policy. |
+| C-03 | P3 | Resolved | `save_figure` remains as a deprecated direct-import compatibility path until 0.16. |
+| W-06 | P3 | Resolved | The unimported JS style module and transient dialog aliases were removed. |
+| C-04 | P3 | Resolved | Release-backed Circular geometry options are documented as supported shortcuts. |
 
 ## P0 findings
 
@@ -132,18 +140,25 @@ still determines the intended companion FASTA.
 Result and limitation:
 
 - newly saved sessions preserve available popup sequence sources and rebuild the
-  Pairwise/Conservation lookup state after import;
-- the bundled WSSV session predates this fix and contains one reference GenBank plus
-  20 twelve-column BLAST tables, but no comparison FASTAs. Its reference sequence can
-  be recovered; the 20 comparison sequences cannot be reconstructed from BLAST
-  coordinates and must not be fabricated;
-- loading and resaving that WSSV session now retains all 20 derived BLAST tables,
-  displayed labels, colors, and ring order. The loader records their LOSAT-cache
-  provenance so reactive file reconciliation does not remove them merely because the
-  original comparison FASTAs are absent;
-- the FASTA references are intentionally Web restore metadata. Python/CLI replay still
-  models precomputed `conservationBlastFiles`; it does not replay a LOSAT computation
-  from these Web-only sources. Converging that contract remains part of A-01.
+  Pairwise/comparison-ring lookup state after import;
+- the bundled WSSV session now embeds all 20 exact comparison FASTAs in displayed
+  ring order. Twelve are raw NCBI EFetch records for `NC_003225.3`, `AF440570.1`,
+  `NC_075105.1`, `AF369029.2`, `AP027278.1`, `AP027279.1`, `AP027284.1`,
+  `AP027286.1`, `AP027288.1`, `KT995471.1`, `KY827813.1`, and `MF768985.1`.
+  Eight are the prepared files supplied under `tests/test_inputs/MAGs`;
+- `tools/restore_wssv_gallery_fastas.py` records source URLs and pinned raw SHA-256
+  values, then checks each FASTA against its record ID, sequence length, LOSAT cache
+  identity, BLAST query ID, and maximum BLAST query coordinate before embedding it;
+- save/load and the Web request projector retain the 20 FASTAs, 20 BLAST tables,
+  displayed labels, colors, and source indexes, so popup sequence actions can be
+  rebuilt without the network or the untracked MAG directory;
+- an arbitrary historical session that stored neither its sequence nor a verifiable
+  source still cannot be reconstructed from BLAST coordinates alone. The WSSV repair
+  was possible because all 20 exact inputs were independently identified and
+  validated, not inferred from the hits;
+- the FASTA references remain Web restore metadata. Python/CLI replay models
+  precomputed `conservationBlastFiles`; it does not rerun LOSAT from these Web-only
+  sources. Converging that contract remains part of A-01.
 
 Remaining recommendation: model a Circular comparison input as one typed union
 covering uploaded BLAST plus optional companion FASTA, or analysis FASTA plus program
@@ -191,7 +206,8 @@ the WSSV round trip
 
 ### C-01: CLI output silently overwrites existing files
 
-Circular and Linear CLI adapters construct `RenderOutputRequest(overwrite=True)`
+At audit time, Circular and Linear CLI adapters constructed
+`RenderOutputRequest(overwrite=True)`
 ([circular.py](../gbdraw/circular.py), lines 122–139;
 [linear.py](../gbdraw/linear.py), lines 1945–1952). The typed request default is
 `False` ([requests.py](../gbdraw/api/requests.py), lines 176–184), and
@@ -201,16 +217,22 @@ Circular and Linear CLI adapters construct `RenderOutputRequest(overwrite=True)`
 This is a safety inconsistency, not merely a visual default: the same output name can
 destroy a file in CLI use and raise a validation error in Python use.
 
-Recommendation: add an explicit `--overwrite` or `--force` switch and use the shared
-safe default. If unconditional CLI replacement is retained as product policy, state
-it prominently and add a test; the current implicit difference is not acceptable.
+Resolution: Circular and Linear now use the shared safe default and expose
+`--overwrite`. Request and session writers always persist `overwrite: false`, and
+decoders treat any stored true value as untrusted compatibility input rather than
+permission. Session replay and session-sidecar replacement therefore accept overwrite
+permission only from the current invocation. Direct session-document writes also
+refuse an existing path unless the caller opts in. Known sidecar collisions are
+rejected before rendering, so a failed CLI invocation does not leave a new diagram
+behind. The browser's ephemeral worker output passes `--overwrite` explicitly because
+it writes disposable in-browser files.
 
 ### C-02: the same Circular label configuration changes track visibility by surface
 
-Circular CLI code suppresses both GC content and GC skew when horizontal inner labels
-are enabled
-([circular.py](../gbdraw/circular.py), lines 867–876). Web generation reaches this
-same policy through the CLI adapter. The typed Circular mode profile keeps both tracks
+At audit time, Circular CLI code suppressed both GC content and GC skew when
+horizontal inner labels were enabled
+([circular.py](../gbdraw/circular.py), lines 867–876). Web generation reached this
+same policy through the CLI adapter. The typed Circular mode profile kept both tracks
 enabled by default
 ([mode_profiles.py](../gbdraw/mode_profiles.py), lines 107–117), and the root/typed
 API path does not apply the CLI-only suppression.
@@ -220,9 +242,11 @@ the CLI behavior but do not compare surfaces
 ([test_circular_feature_width.py](../tests/test_circular_feature_width.py), lines
 497–568).
 
-Recommendation: decide whether the layout still requires suppression. Put the
-decision in the shared planner and test group presence for CLI, root API, and typed
-API with equivalent inputs.
+Resolution: the shared Circular builder suppresses implicit GC content and GC skew
+when labels use scope `both` with horizontal placement. CLI-only preprocessing was
+removed. Explicit track slots remain authoritative, allowing an advanced caller to
+retain either track deliberately. Single-record and multi-record regressions cover
+the implicit and explicit cases.
 
 ### D-01: CLI Reference does not mirror current help
 
@@ -241,9 +265,10 @@ help. A live option-set comparison found:
 The missing lists are in the appendix. This drift is predictable because executable
 help and a hand-copied reference are separate authorities.
 
-Recommendation: generate the help blocks, or add a test that compares sorted long
-option sets for both modes and fails with missing/extra names. Descriptive recipes may
-remain hand-written; parser inventory should not be.
+Resolution: `tools/update_cli_reference_help.py` now replaces marked Circular and
+Linear help blocks from the live parsers. `tests/test_cli_reference.py` compares the
+documented and executable long-option sets, including the new `--overwrite` switch.
+Descriptive recipes remain hand-written.
 
 ### D-02: sparse Linear depth documentation states the opposite of tested behavior
 
@@ -259,8 +284,10 @@ The following text says the missing cell retains a reserve band or does not comp
 - [Tutorial 6](./TUTORIALS/6_Depth_Quantitative_Tracks.md), line 110;
 - [Tutorial 7](./TUTORIALS/7_Linear_Layout.md), line 142.
 
-Recommendation: use one precise statement everywhere: the logical series index is
-preserved, but a missing cell draws nothing and reserves no vertical geometry.
+Resolution: the CLI Reference and Tutorials 6 and 7 now use the tested rule: the
+logical series index is preserved, while a missing cell draws nothing and reserves no
+vertical geometry. Later numeric tracks therefore compact upward without being
+renumbered.
 
 ## P1 architecture and API findings
 
@@ -317,13 +344,18 @@ metadata helper only examines the original input options
 ([interface.py](../gbdraw/interface.py), lines 766–815), so computed metadata can be
 absent from `Diagram.to_svg(interactive=True)`.
 
-The two paths also handle metadata failures differently: typed rendering degrades to
-an empty context, while the root helper lets the exception fail `draw_*` after the
-drawing has been built.
+The two paths also handled metadata failures differently: typed rendering degraded to
+an empty context, while the root helper let the exception fail `draw_*` after the
+drawing had been built.
 
-Recommendation: have every surface consume the prepared diagram and interactive
-context produced by one owner. Add a root-API test for orthogroups computed in-process,
-not only orthogroups supplied by the caller.
+A-04 is resolved. Root and typed APIs now use the same strict interactive-metadata
+boundary and raise `ExportError` when requested metadata or comparison FASTA content
+cannot be prepared. The root API resolves that context lazily only when exporting
+interactive SVG, so static drawing remains unaffected.
+
+A-03 remains open: every surface should consume the prepared diagram and interactive
+context produced by one owner. Add a root-API test for similarity groups computed
+in-process, not only groups supplied by the caller.
 
 ### A-05: wrong-mode configuration paths are accepted and ignored
 
@@ -338,9 +370,10 @@ accept examples such as:
 The fields persist in the request but the selected renderer ignores them. This gives a
 false signal that a valid, accepted option affected output.
 
-Recommendation: define mode ownership for configuration paths and reject wrong-mode
-paths, or emit a structured warning if cross-mode storage is deliberately supported.
-Test both accepted and rejected paths.
+Resolution: typed option construction now validates mode ownership centrally and
+rejects wrong-mode paths such as `canvas.linear.*` on Circular requests and
+`canvas.circular.*` on Linear requests. Shared paths remain accepted, and regressions
+cover accepted and rejected overrides.
 
 ### W-03: capability detection inspects implementation source text
 
@@ -357,16 +390,19 @@ validation should be the final authority.
 
 ### API-01: identical exported class names have incompatible constructors
 
-The package root exports `CircularTrackOptions` and `LinearTrackOptions` with
+At audit time, the package root exported `CircularTrackOptions` and
+`LinearTrackOptions` with
 `slots` and `axis_index`
-([interface.py](../gbdraw/interface.py), lines 183–227). `gbdraw.api` exports
+([interface.py](../gbdraw/interface.py), lines 183–227). `gbdraw.api` exported
 different classes with the same names and mode-prefixed fields
 ([options.py](../gbdraw/api/options.py), lines 199–249). Tests already alias the typed
 classes to keep them distinguishable.
 
-Recommendation: give the integration types distinct request-oriented names, or expose
-public conversion functions and deprecate one spelling. The Python API guide must state
-the two tiers explicitly until the collision is removed.
+Resolution: typed integrations now use `CircularRequestTrackOptions` and
+`LinearRequestTrackOptions`. Their former short names remain identity aliases for
+compatibility. Package-root `CircularTrackOptions` and `LinearTrackOptions` retain
+their beginner-facing constructors, and the Python API guide states the boundary
+explicitly.
 
 ### A-08: branch-only persisted-format compatibility was treated as public
 
@@ -418,19 +454,21 @@ Other defects:
 
 The two dangling references were removed rather than restoring 355 lines of deleted
 internal design documents. The release notes now state the materialization lifetime
-directly. Remaining recommendation: recapture task-specific Gallery views and use one
-exact CairoSVG statement.
+directly. README now states once that PNG, PDF, EPS, and PS require CairoSVG, resolving
+D-04. D-03 remains: recapture the two task-specific Gallery views.
 
 ## P2 design, parity, and documentation findings
 
 ### API and runtime structure
 
-- API-02 (redundant depth inputs): `_ModeDiagramOptions` exposes `depth_table`,
-  `depth_file`, plural forms, and record-major `depth_track_*` matrices at once
-  ([options.py](../gbdraw/api/options.py), lines 384–423). Normalization explicitly
-  calls the first group legacy and rejects mixed forms
-  ([depth_tracks.py](../gbdraw/analysis/depth_tracks.py), lines 250–294). Converge on
-  one per-track spec and decode older forms only at a compatibility boundary.
+- API-02 (resolved with a canonical writer and compatibility inputs): typed requests now use one
+  `DepthTrackInput` per logical series under `depth_tracks`. Its `source` is either
+  one path/DataFrame shared by displayed records or a per-record sequence of
+  path/DataFrame/`None` values. Style and tick fields live on the same object; Linear
+  alone accepts `height`. The former singular, plural, and `depth_track_*` matrices
+  remain public constructor and decoder inputs and cannot be mixed with the
+  canonical form. Python and Web writers always emit `depthTracks`; both decoders
+  round-trip the logical-track representation.
 
 - A-06 (legacy replay in current rendering):
   [request_render.py](../gbdraw/api/request_render.py), roughly lines 689–1453,
@@ -454,12 +492,12 @@ exact CairoSVG statement.
 
 | Concept | Current behavior | Assessment |
 | --- | --- | --- |
-| Circular multi-record default | Root API auto-grids; CLI defaults to separate batch output; Web uses a multi-record-canvas toggle. | Make `single/grid/batch` explicit and documented on every surface. |
-| Separate strands | Web default is true; CLI and config/API default are false. | Either publish a Web UX profile or use a generated shared profile. |
-| Legend position | Web defaults are Circular left and Linear bottom; CLI/typed default is right. | Same decision as above; current defaults can drift silently. |
-| Circular legend choices | CLI accepts lower-left/lower-right; Web selector does not. | Add supported choices or constrain/document the engine contract. |
-| Circular Web input | Web accepts one GenBank or one GFF/FASTA pair, while CLI/API accept sequences. | Document as a deliberate Web limitation or add multi-file upload. |
-| Annotation styling | API/state support many advanced fields; Web editor exposes a small subset. | Prefer an explicit “advanced via TSV” boundary over adding every field to the form. |
+| Circular grouping default | Root API auto-grids multiple records; CLI defaults to separate batch output; Web profile v1 uses `single` for one record, `batch` for several, and exposes `grid` as an opt-in. | The Web writer reads the profile values directly, and behavior tests cover `single`, `batch`, and `grid`. |
+| Separate strands | Web profile v1 defaults to true; CLI and config/API default to false. | Intentional UX-profile difference, covered by a profile test. |
+| Legend position | Web profile v1 uses Circular left and Linear bottom; CLI/typed default is right. | Intentional UX-profile difference, documented with the profile. |
+| Circular legend choices | CLI and Web expose upper-left, upper-right, lower-left, and lower-right. | Resolved; a Web regression covers all four corners. |
+| Circular Web input | Web accepts one GenBank/GBFF file or one GFF/FASTA pair per run, while CLI/API accept sequences. | Documented as a deliberate Web limitation. A multi-record GenBank file remains supported. |
+| Annotation styling | API/state support many advanced fields; Web editor exposes a small subset. | The Web guide directs advanced styling to annotation TSV rather than implying form parity. |
 
 ### Scientific terminology
 
@@ -474,9 +512,16 @@ Likewise, the protein “orthogroup” mode creates gbdraw similarity groups fro
 reciprocal-hit/grouping procedure. User-facing text should not imply that this alone
 establishes orthology.
 
-Recommendation: introduce `SimilarityRing*`/`ComparisonRing*` names and user-facing
-“similarity group” terminology. Keep current identifiers as compatibility aliases
-through a documented deprecation period.
+Resolution: the package-root API now exports `ComparisonRingOptions` and
+`ComparisonRingTrackOptions`, with `CircularOptions.comparison_rings` as the
+canonical field. `CircularOptions.conservation` resolves to the same value for
+runtime compatibility without storing a second option; `ConservationOptions` and
+`ConservationTrackOptions` are identity
+aliases. Lower request/session `conservation_*` fields remain transport compatibility
+names. Supplying non-null values for both root option names is rejected, and dataclass replacement uses
+the canonical field. Web controls, search, popups, standalone interactive SVGs, Gallery tutorials,
+and Gallery runtime assets use “similarity group”. Internal `orthogroup` identifiers
+remain stable for session and CLI compatibility.
 
 ### User-facing text and AI-writing assessment
 
@@ -524,25 +569,30 @@ Rewrite it around module ownership, the worker boundary, local assets, current
 multi-record behavior, and the single request/session contract. Avoid volatile line
 numbers.
 
-## P3 cleanup candidates
+## P3 compatibility decisions
 
-The following removals or deprecations require a public-compatibility decision:
+First-parent and release evidence determined the cleanup boundary:
 
-- `gbdraw.render.export.save_figure` has no production caller, but tests and stale
-  internal references still use it. Migrate tests to `save_figure_to` or
-  `render_to_bytes`, deprecate it, then remove it in a versioned change.
-- `gbdraw/web/js/app/annotations/style-actions.js` has no production import. Delete it
-  if no plugin or downstream template contract depends on it.
-- `colorScopeDialog.individualLabel*` fields are marked backward-compatible aliases
-  but current templates use the newer names. Check migration fixtures before removal.
-- Circular shortcut geometry flags are translated into track slots and cannot be
-  mixed with current slot inputs. Either support them as documented shortcuts or set a
-  deprecation schedule; do not leave them indefinitely labeled as hidden legacy.
+- `gbdraw.render.export.save_figure` exists in released versions through 0.13.0.
+  It remains callable, emits `DeprecationWarning` in 0.14, and is scheduled for
+  removal in 0.16. Routine tests and internal references now use
+  `save_figure_to` or `render_to_bytes`.
+- `gbdraw/web/js/app/annotations/style-actions.js` had no production, template,
+  test-fixture, or plugin import in this repository and was deleted.
+- `colorScopeDialog.individualLabel*` was transient UI state, not persisted
+  session data. Current templates and fixtures use `annotationLabel*`, so the
+  aliases were removed.
+- `--feature_width`, `--depth_width`, `--gc_content_width`,
+  `--gc_content_radius`, `--gc_skew_width`, and `--gc_skew_radius` exist in
+  releases 0.11.0 through 0.13.0 and remain active Web inputs. They are supported
+  geometry shortcuts that expand to track-slot `w` or `r` values. They cannot be
+  combined with explicit `--circular_track_slot` or `--circular_track_table`
+  geometry.
+- The Web Python wrapper now rejects modes other than `circular` and `linear`
+  before deleting output files or dispatching a renderer.
 
-The remaining items are internal validation and ownership cleanup:
+The remaining item is internal validation and ownership cleanup:
 
-- the Web Python wrapper treats every mode other than `circular` as `linear`; reject an
-  unknown mode explicitly.
 - request models, public builders, and assemblers resolve or validate some values more
   than once. Separate unresolved input from a resolved plan before removing validation
   needed by direct advanced APIs.
@@ -561,12 +611,19 @@ The remaining items are internal validation and ownership cleanup:
    tutorials.
 6. Generate CLI help blocks or add option-set parity tests.
 
+Follow-up status: WSSV now has all exact inputs; overwrite safety, shared Circular
+track policy, sparse-depth prose, local links, CairoSVG text, generated help, and help
+parity are complete. The two D-03 basic-tutorial screenshots remain.
+
 ### Phase 1: converge runtime boundaries
 
 1. Make Web generation and session save consume one typed request.
 2. Make CLI adapters construct unresolved typed inputs without domain preprocessing.
 3. Centralize prepared interactive context and computed orthogroup metadata.
 4. Reject wrong-mode overrides and replace source-text capability probing.
+
+Follow-up status: A-04 strict interactive metadata and A-05 wrong-mode override
+rejection are complete. A-01, A-02, A-03, and W-03 remain.
 
 ### Phase 2: simplify the public contract
 
@@ -575,11 +632,15 @@ The remaining items are internal validation and ownership cleanup:
 3. Define one explicit grouping/default profile across surfaces.
 4. Introduce accurate comparison/similarity terminology with aliases.
 
+Follow-up status: all four bounded contract decisions are implemented. Compatibility
+decoders and aliases retain the previously released or persisted spellings.
+
 ### Phase 3: isolate compatibility and reduce documentation load
 
 1. Move legacy session promotion out of current request rendering.
 2. Apply the new main/release evidence gate before retaining any compatibility path.
-3. Deprecate old export/geometry paths after measuring external use.
+3. Remove the deprecated export path in 0.16; keep the release-backed Circular
+   geometry shortcuts documented and tested.
 4. Create one compatibility reference and shorten task tutorials and FAQ answers.
 5. Update Web developer guidance and remove confirmed dead JS.
 
@@ -587,19 +648,19 @@ The remaining items are internal validation and ownership cleanup:
 
 Keep or add these tests before the corresponding changes:
 
-1. Circular LOSAT source FASTA survives Web save/load and rebuilds the popup sequence
+1. **Covered:** Circular LOSAT source FASTA survives Web save/load and rebuilds the popup sequence
    registry. Resource projection and display-ordered registry tests were added here;
    retain a browser-level regeneration check.
-2. Editing only `series[index].label` survives a Web session round trip.
-3. Circular and Linear live-help long-option sets match the CLI Reference inventory.
-4. Equivalent Circular label options produce the same GC/skew group policy in CLI,
+2. **Covered:** Editing only `series[index].label` survives a Web session round trip.
+3. **Covered:** Circular and Linear live-help long-option sets match the CLI Reference inventory.
+4. **Covered:** Equivalent Circular label options produce the same GC/skew group policy in CLI,
    root API, and typed API.
-5. CLI refuses existing output without explicit overwrite permission.
-6. Root interactive Linear SVG includes orthogroups computed during rendering.
-7. Wrong-mode config paths are rejected or produce a structured warning.
-8. Cross-surface default-profile snapshots cover strandedness, legend, grouping, and
+5. **Covered:** CLI refuses existing output without explicit overwrite permission.
+6. **Remaining (A-03):** Root interactive Linear SVG includes similarity groups computed during rendering.
+7. **Covered:** Wrong-mode config paths are rejected.
+8. **Covered:** Cross-surface default-profile snapshots cover strandedness, legend, grouping, and
    other intentionally divergent defaults.
-9. Gallery screenshot validation records which controls and data identity must be
+9. **Remaining (D-03):** Gallery screenshot validation records which controls and data identity must be
    visible, not only that an image exists.
 
 ## Verification performed
@@ -608,54 +669,43 @@ Keep or add these tests before the corresponding changes:
   corresponding CLI Reference sections.
 - Checked local Markdown targets. The two missing files found at the start of the
   audit were the only broken relative document links and are fixed in this change.
-- Visually inspected the two Gallery screenshots called out in D-03.
-- Applied the repository `avoid-ai-writing` Skill in detect mode to README,
-  documentation, CLI entry text, Web strings, and this report. No chatbot citation
-  tokens, AI-tool URL parameters, unfilled publishing placeholders, promotional
-  vocabulary clusters, or generic conclusion patterns were found. The only Tier-1
-  vocabulary match outside this report was `serves as` in an internal CLI function
-  docstring, not user-facing help.
-- Ran:
-
-  ```text
-  pytest tests/test_api_requests.py tests/test_api_request_render.py \
-    tests/test_api_library_usage.py tests/test_dead_api_cleanup.py \
-    tests/test_linear_vertical_layout.py -q
-  ```
-
-  Result: 288 passed.
-
-- Ran the focused mode/interface contract suite during the architecture audit:
-  184 passed.
-- Ran the Web session/resource and popup sequence tests, including LOSAT FASTA
-  projection, stale legacy labels, display-ordered Conservation resources, derived
-  cache provenance, and save/project/resave: passed.
-- Ran seven match-sequence registry tests, including a B/A ring reorder with stale
-  source indexes: passed.
-- Ran two focused Chromium tests for the standalone Conservation popup FASTA and the
-  Web interactive-SVG sequence payload: passed.
-- Ran the interactive SVG, Pairwise popup, and Circular conservation Python tests:
-  51 passed.
-- Loaded the bundled WSSV session through the Web projector: 20 Conservation BLAST
-  resources and labels were retained, no absent comparison FASTAs were fabricated,
-  and the saved result retained the same 20 rings.
-- Loaded all 11 Gallery sessions in Chromium after current-field normalization. The
-  WSSV session retained 20 enabled rings, and saving it retained 20 BLAST resources
-  and labels without inventing comparison FASTAs: passed.
-- Ran the final session, Gallery, Markdown-link, and request-codec focus suite:
-  265 passed.
-- Ran the complete non-slow test suite after the final popup ordering and test-harness
-  changes: 2,153 passed, 19 skipped, and 10 deselected.
-- `ruff check --isolated gbdraw/` passed. The configured `ruff check gbdraw/` command
-  could not use the repository-pinned 0.15.12 because the environment provides 0.15.0;
-  this is a validation-environment limitation, not a source finding.
+- Verified the WSSV repair with `tests/test_wssv_gallery_fastas.py`: all 20 displayed
+  rings have exact companion FASTAs, comprising 12 accession-pinned raw NCBI EFetch
+  records and eight prepared MAG assemblies. Record IDs, lengths, raw hashes, LOSAT
+  cache hashes, BLAST query IDs, and maximum query coordinates agree.
+- Loaded, projected, and resaved the WSSV session through the Web session code. Its 20
+  BLAST tables, 20 FASTAs, labels, colors, and source indexes remain in displayed
+  order.
+- Ran all `tests/web/*.test.mjs` files. Session projection, one-record explicit batch
+  grouping, default-profile behavior, popup sequence lookup, and branch-only schema
+  rejection passed.
+- Ran the focused Gallery/session integration checks: 22 Gallery semantic tests and
+  30 selected Web packaging tests passed. All 11 Gallery sessions persist
+  `overwrite: false`.
+- Verified overwrite refusal before rendering for ordinary Circular and Linear CLI
+  runs, canonical session replay in both modes, and Circular's implicit output name.
+  Existing sidecars were preserved and no SVG was created.
+- Recaptured and visually checked 15 Gallery WebP assets. Strict capture checks passed
+  for BGC (`16/16/16`), Hepatoplasmataceae collinear (`10/10/10`),
+  Hepatoplasmataceae similarity groups (`10/10/10`), and Majanivirus similarity
+  groups (`11/11/11`).
+- Ran the complete non-slow test suite after the final preflight and test changes:
+  2,226 passed, 19 skipped, and 10 deselected.
+- Applied the repository `avoid-ai-writing` Skill in detect mode to modified
+  user-facing prose and UI strings, then reviewed the matches manually. No publishing
+  placeholders, chatbot citation tokens, promotional vocabulary clusters, or generic
+  conclusion patterns remained.
+- `ruff check gbdraw/` and `git diff --check` passed.
 
 This audit also changed the current Web session writer/loader and popup sequence
 restoration, removed branch-only session/request compatibility, migrated bundled
 sessions, fixed the CI-breaking documentation targets, and regenerated Gallery-owned
 outputs. Tracked reference outputs were not regenerated as part of this audit.
 
-## Appendix: options missing from the CLI Reference sections
+## Appendix: options missing from the CLI Reference at audit time
+
+The generated help blocks now include every option below. The list is retained as the
+baseline that motivated the parity test.
 
 Circular (18):
 

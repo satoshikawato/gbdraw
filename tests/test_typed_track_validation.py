@@ -7,10 +7,13 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 import gbdraw.interface as interface
+import gbdraw.api as typed_api
 from gbdraw.api.options import (
     CircularDiagramOptions,
+    CircularRequestTrackOptions,
     CircularTrackOptions,
     LinearDiagramOptions,
+    LinearRequestTrackOptions,
     LinearTrackOptions,
 )
 from gbdraw.api.requests import (
@@ -28,6 +31,23 @@ def _record_input() -> RecordInput:
             SeqRecord(Seq("ATGC"), id="record"),
         )
     )
+
+
+def test_typed_track_option_compatibility_aliases_share_the_canonical_classes() -> None:
+    assert typed_api.CircularRequestTrackOptions is CircularRequestTrackOptions
+    assert typed_api.LinearRequestTrackOptions is LinearRequestTrackOptions
+    assert typed_api.CircularTrackOptions is CircularRequestTrackOptions
+    assert typed_api.LinearTrackOptions is LinearRequestTrackOptions
+    assert CircularTrackOptions is CircularRequestTrackOptions
+    assert LinearTrackOptions is LinearRequestTrackOptions
+
+    circular = CircularTrackOptions()
+    linear = LinearTrackOptions()
+
+    assert type(circular).__name__ == "CircularRequestTrackOptions"
+    assert type(linear).__name__ == "LinearRequestTrackOptions"
+    assert isinstance(circular, CircularRequestTrackOptions)
+    assert isinstance(linear, LinearRequestTrackOptions)
 
 
 def test_linear_track_options_reject_circular_only_renderer() -> None:
@@ -73,21 +93,21 @@ def test_circular_track_options_reject_invalid_center_radius(radius: object) -> 
 
 def test_request_track_options_validate_slots_axes_and_radius() -> None:
     with pytest.raises(ValidationError, match="unknown linear track renderer"):
-        LinearTrackOptions(
+        LinearRequestTrackOptions(
             linear_track_slots=("conservation:sequence_conservation",)
         )
     with pytest.raises(ValidationError, match="linear_track_axis_index"):
-        LinearTrackOptions(
+        LinearRequestTrackOptions(
             linear_track_slots=("features:features",),
             linear_track_axis_index=-1,
         )
     with pytest.raises(ValidationError, match="circular_track_axis_index"):
-        CircularTrackOptions(
+        CircularRequestTrackOptions(
             circular_track_slots=("features:features",),
             circular_track_axis_index="0",  # type: ignore[arg-type]
         )
     with pytest.raises(ValidationError, match="center_reserved_radius"):
-        CircularTrackOptions(center_reserved_radius=-1)
+        CircularRequestTrackOptions(center_reserved_radius=-1)
 
 
 @pytest.mark.parametrize(
@@ -111,11 +131,11 @@ def test_fresh_track_options_reject_private_circular_transport(
     slot: str | CircularTrackSlot,
 ) -> None:
     with pytest.raises(ValidationError, match="private"):
-        CircularTrackOptions(circular_track_slots=(slot,))
+        CircularRequestTrackOptions(circular_track_slots=(slot,))
 
 
 def test_linear_request_rejects_valid_circular_only_track_bundle() -> None:
-    circular_tracks = CircularTrackOptions(
+    circular_tracks = CircularRequestTrackOptions(
         circular_track_slots=("conservation:sequence_conservation",)
     )
 

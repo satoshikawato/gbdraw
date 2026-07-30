@@ -371,6 +371,7 @@ assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
 assert.equal(canonical.webFiles.resourceOriginalNames['record-1-genbank'], 'input.gb');
 assert.equal(canonical.webFiles.circularInputOriginalName, 'input.gb');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
+assert.equal(canonical.renderRequest.output.overwrite, false);
 assert.deepEqual(canonical.renderRequest.diagramOptions.output, {
   legend: 'right',
   plotTitlePosition: 'none'
@@ -426,27 +427,51 @@ state.form.labels_mode = 'none';
 state.circularRecordList.value = [{ selector: '#1', record_id: 'single.id' }];
 state.form.prefix = '';
 const implicitSingleCanonical = buildCanonicalSessionRequest({ state, filesData });
-assert.equal(implicitSingleCanonical.renderRequest.grouping, 'batch');
+assert.equal(implicitSingleCanonical.renderRequest.grouping, 'single');
+assert.equal(implicitSingleCanonical.webFiles.circularOutputPrefixExplicit, false);
 assert.deepEqual(
   implicitSingleCanonical.renderRequest.records[0].selector,
   { kind: 'recordId', value: 'single.id' }
 );
-assert.deepEqual(
-  implicitSingleCanonical.renderRequest.output.map((output) => output.prefix),
-  ['single.id']
-);
+assert.equal(implicitSingleCanonical.renderRequest.output.prefix, 'single.id');
 assert.equal(projectCanonicalSessionRequest(implicitSingleCanonical).config.form.prefix, '');
 
 state.form.prefix = 'release.v1';
-const explicitSingleBatchCanonical = buildCanonicalSessionRequest({ state, filesData });
-assert.deepEqual(
-  explicitSingleBatchCanonical.renderRequest.output.map((output) => output.prefix),
-  ['release.v1']
-);
+const explicitSingleCanonical = buildCanonicalSessionRequest({ state, filesData });
+assert.equal(explicitSingleCanonical.renderRequest.output.prefix, 'release.v1');
+assert.equal(explicitSingleCanonical.webFiles.circularOutputPrefixExplicit, true);
 assert.equal(
-  projectCanonicalSessionRequest(explicitSingleBatchCanonical).config.form.prefix,
+  projectCanonicalSessionRequest(explicitSingleCanonical).config.form.prefix,
   'release.v1'
 );
+
+const explicitOneRecordBatch = structuredClone(explicitSingleCanonical);
+explicitOneRecordBatch.renderRequest.grouping = 'batch';
+explicitOneRecordBatch.renderRequest.output = [
+  explicitOneRecordBatch.renderRequest.output
+];
+const oneRecordBatchProjection = projectCanonicalSessionRequest(
+  explicitOneRecordBatch
+);
+assert.equal(
+  oneRecordBatchProjection.config.adv.circular_grouping_intent,
+  'batch'
+);
+Object.assign(state.form, oneRecordBatchProjection.config.form);
+Object.assign(state.adv, oneRecordBatchProjection.config.adv);
+const resavedOneRecordBatch = buildCanonicalSessionRequest({
+  state,
+  filesData: oneRecordBatchProjection.files
+});
+assert.equal(resavedOneRecordBatch.renderRequest.grouping, 'batch');
+assert.equal(Array.isArray(resavedOneRecordBatch.renderRequest.output), true);
+assert.equal(
+  resavedOneRecordBatch.renderRequest.output.every(
+    (entry) => entry.overwrite === false
+  ),
+  true
+);
+state.adv.circular_grouping_intent = 'auto';
 
 const namingRecords = [
   { selector: '#1', record_id: 'dup' },
@@ -1707,17 +1732,21 @@ assert.equal(
 );
 state.adv.comparison_height = 42.5;
 
+const depthAText = 'position\tdepth\n1\t10\n';
 const depthA = {
   ...genbank,
   name: 'sample-a.depth.tsv',
   type: 'text/tab-separated-values',
-  data: btoa('position\tdepth\n1\t10\n')
+  size: new TextEncoder().encode(depthAText).byteLength,
+  data: btoa(depthAText)
 };
+const depthBText = 'position\tdepth\n1\t20\n';
 const depthB = {
   ...genbank,
   name: 'sample-b.depth.tsv',
   type: 'text/tab-separated-values',
-  data: btoa('position\tdepth\n1\t20\n')
+  size: new TextEncoder().encode(depthBText).byteLength,
+  data: btoa(depthBText)
 };
 state.form.show_depth = true;
 state.adv.resolve_overlaps = true;
@@ -1754,10 +1783,16 @@ const circularSparseCanonical = buildCanonicalSessionRequest({
 });
 assert.equal(circularSparseCanonical.renderRequest.records.length, 2);
 assert.deepEqual(
-  circularSparseCanonical.renderRequest.diagramOptions.depthTrackFiles.map((row) => (
-    row.map((entry) => Boolean(entry?.resourceId))
+  circularSparseCanonical.renderRequest.diagramOptions.depthTracks.map((track) => (
+    track.source.map((entry) => Boolean(entry?.resourceId))
   )),
   [[true, false], [false, true]]
+);
+assert.equal(
+  circularSparseCanonical.renderRequest.diagramOptions.depthTracks.every(
+    (track) => track.height === null
+  ),
+  true
 );
 const circularSparseProjection = projectCanonicalSessionRequest(circularSparseCanonical);
 assert.deepEqual(
@@ -1777,8 +1812,8 @@ const circularSparseRebuilt = buildCanonicalSessionRequest({
   filesData: circularSparseProjection.files
 });
 assert.deepEqual(
-  circularSparseRebuilt.renderRequest.diagramOptions.depthTrackFiles.map((row) => (
-    row.map((entry) => Boolean(entry?.resourceId))
+  circularSparseRebuilt.renderRequest.diagramOptions.depthTracks.map((track) => (
+    track.source.map((entry) => Boolean(entry?.resourceId))
   )),
   [[true, false], [false, true]]
 );
@@ -1792,9 +1827,15 @@ const circularLegacyFlatCanonical = buildCanonicalSessionRequest({
   }
 });
 assert.deepEqual(
-  circularLegacyFlatCanonical.renderRequest.diagramOptions.depthTrackFiles.map((row) => (
-    row.map((entry) => Boolean(entry?.resourceId))
-  )),
+  circularLegacyFlatCanonical.renderRequest.diagramOptions.depthTracks.map(
+    (track) => Boolean(track.source?.resourceId)
+  ),
+  [true, true]
+);
+assert.deepEqual(
+  projectCanonicalSessionRequest(circularLegacyFlatCanonical).files.c_depth.map(
+    (row) => row.map((entry) => Boolean(entry))
+  ),
   [[true, true], [true, true]]
 );
 assert.throws(
@@ -1810,6 +1851,7 @@ assert.throws(
 );
 
 state.mode.value = 'linear';
+state.adv.plot_title_position = 'bottom';
 state.form.multi_record_canvas = false;
 state.circularRecordList.value = [];
 const nullOnlyDepthCanonical = buildCanonicalSessionRequest({
@@ -1820,6 +1862,7 @@ const nullOnlyDepthCanonical = buildCanonicalSessionRequest({
   }
 });
 assert.equal(nullOnlyDepthCanonical.renderRequest.diagramOptions.depthTrackFiles, undefined);
+assert.equal(nullOnlyDepthCanonical.renderRequest.diagramOptions.depthTracks, undefined);
 state.adv.linear_track_slots_enabled = true;
 state.adv.linear_track_slots_axis_index = 1;
 state.adv.linear_track_slots = [
@@ -1841,13 +1884,79 @@ const sparseDepthFilesData = {
   }))
 };
 const sparseDepthCanonical = buildCanonicalSessionRequest({ state, filesData: sparseDepthFilesData });
-assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles.length, 2);
-assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[0].length, 2);
-assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[0][1], null);
-assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[1][0], null);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTracks.length, 2);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTracks[0].source.length, 2);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTracks[0].source[1], null);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTracks[1].source[0], null);
 assert.deepEqual(
-  sparseDepthCanonical.renderRequest.diagramOptions.depthTrackLabels,
+  sparseDepthCanonical.renderRequest.diagramOptions.depthTracks.map((track) => track.label),
   ['Sample A', 'Sample B']
+);
+[
+  'depthTrackFiles',
+  'depthTrackLabels',
+  'depthTrackColors',
+  'depthTrackHeights',
+  'depthTrackLargeTickIntervals',
+  'depthTrackSmallTickIntervals',
+  'depthTrackTickFontSizes'
+].forEach((fieldName) => {
+  assert.equal(
+    Object.hasOwn(sparseDepthCanonical.renderRequest.diagramOptions, fieldName),
+    false
+  );
+});
+const mixedCanonicalDepth = structuredClone(sparseDepthCanonical);
+mixedCanonicalDepth.renderRequest.diagramOptions.depthTrackFiles = [
+  [sparseDepthCanonical.renderRequest.diagramOptions.depthTracks[0].source[0], null],
+  [null, sparseDepthCanonical.renderRequest.diagramOptions.depthTracks[1].source[1]]
+];
+assert.throws(
+  () => projectCanonicalSessionRequest(mixedCanonicalDepth),
+  /depthTracks cannot be combined with legacy depth fields: depthTrackFiles/
+);
+const wrongCanonicalDepthCardinality = structuredClone(sparseDepthCanonical);
+wrongCanonicalDepthCardinality.renderRequest.diagramOptions.depthTracks[0].source =
+  wrongCanonicalDepthCardinality.renderRequest.diagramOptions.depthTracks[0].source.slice(0, 1);
+assert.throws(
+  () => projectCanonicalSessionRequest(wrongCanonicalDepthCardinality),
+  /one source per displayed record \(2\)/
+);
+const emptyCanonicalDepth = structuredClone(sparseDepthCanonical);
+emptyCanonicalDepth.renderRequest.diagramOptions.depthTracks[0].source = [null, null];
+assert.throws(
+  () => projectCanonicalSessionRequest(emptyCanonicalDepth),
+  /logical track index 0.*no source/
+);
+const circularDepthHeight = structuredClone(circularSparseCanonical);
+circularDepthHeight.renderRequest.diagramOptions.depthTracks[0].height = 12;
+assert.throws(
+  () => projectCanonicalSessionRequest(circularDepthHeight),
+  /height must be null for Circular requests/
+);
+const missingCanonicalDepthField = structuredClone(sparseDepthCanonical);
+delete missingCanonicalDepthField.renderRequest.diagramOptions.depthTracks[0].label;
+assert.throws(
+  () => projectCanonicalSessionRequest(missingCanonicalDepthField),
+  /missing required field\(s\): label/
+);
+const blankCanonicalDepthLabel = structuredClone(sparseDepthCanonical);
+blankCanonicalDepthLabel.renderRequest.diagramOptions.depthTracks[0].label = ' ';
+assert.throws(
+  () => projectCanonicalSessionRequest(blankCanonicalDepthLabel),
+  /label must be null or a non-empty string/
+);
+const nonStringCanonicalDepthColor = structuredClone(sparseDepthCanonical);
+nonStringCanonicalDepthColor.renderRequest.diagramOptions.depthTracks[0].color = 123;
+assert.throws(
+  () => projectCanonicalSessionRequest(nonStringCanonicalDepthColor),
+  /color must be null or a non-empty string/
+);
+const unknownCanonicalDepthField = structuredClone(sparseDepthCanonical);
+unknownCanonicalDepthField.renderRequest.diagramOptions.depthTracks[0].legacyLabel = 'old';
+assert.throws(
+  () => projectCanonicalSessionRequest(unknownCanonicalDepthField),
+  /contains unknown field\(s\): legacyLabel/
 );
 assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 1);
 assert.deepEqual(
@@ -2008,11 +2117,42 @@ if (projectSessionIndex >= 0) {
     assert.equal(projectedSession.config.adv.def_font_size, 16);
     assert.equal(projectedSession.config.filterMode, 'None');
   }
+  if (sessionPath.includes('python-canonical-depth')) {
+    assert.deepEqual(
+      projectedSession.files.linearSeqs.map((sequence) => sequence.depth.map(Boolean)),
+      [[true, true], [true, false]]
+    );
+    assert.deepEqual(
+      projectedSession.config.adv.depth_tracks,
+      [
+        {
+          label: 'Shared',
+          color: '#112233',
+          height: 18,
+          large_tick_interval: 10,
+          small_tick_interval: null,
+          tick_font_size: null
+        },
+        {
+          label: 'Sparse',
+          color: '#445566',
+          height: 24,
+          large_tick_interval: null,
+          small_tick_interval: 5,
+          tick_font_size: 9
+        }
+      ]
+    );
+  }
   if (sessionPath.includes('WSSV_genome_comparison')) {
     assert.equal(projectedSession.files.c_conservation_blasts.length, 20);
     assert.equal(projectedSession.files.c_conservation_blasts_source, 'losat-cache');
-    assert.equal((projectedSession.files.c_conservation_fastas || []).length, 0);
+    assert.equal((projectedSession.files.c_conservation_fastas || []).length, 20);
   }
 }
 
-if (process.argv.includes('--print')) console.log(JSON.stringify(canonical));
+if (process.argv.includes('--print-depth')) {
+  console.log(JSON.stringify(sparseDepthCanonical));
+} else if (process.argv.includes('--print')) {
+  console.log(JSON.stringify(canonical));
+}

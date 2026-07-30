@@ -1898,7 +1898,7 @@ export const createAppSetup = () => {
     const selectedGroup = selectedPairwiseBlockOrthogroup.value;
     if (!selectedGroup) return sections;
     const selectedSection = {
-      title: 'Selected orthogroup',
+      title: 'Selected similarity group',
       rows: Array.isArray(selectedGroup.detailRows) ? selectedGroup.detailRows : [],
       memberRows: Array.isArray(selectedGroup.memberRows) ? selectedGroup.memberRows : [],
       memberCopyText: selectedGroup.memberCopyText || '',

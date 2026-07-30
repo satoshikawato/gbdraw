@@ -2,6 +2,7 @@ import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
 } from './plot-title-position.js';
+import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 
 const normalizeLegendPosition = (value, fallback) => {
   const normalized = String(value ?? '').trim().toLowerCase();
@@ -13,8 +14,8 @@ const storedText = (value) => typeof value === 'string' && value.trim() !== '';
 export const createDefaultLayoutPreferences = () => ({
   circular: {
     single: {
-      legend: 'left',
-      plotTitlePosition: 'none'
+      legend: WEB_UX_PROFILE.circular.legend,
+      plotTitlePosition: WEB_UX_PROFILE.circular.plotTitlePosition
     },
     multi: {
       legend: null,
@@ -22,8 +23,8 @@ export const createDefaultLayoutPreferences = () => ({
     }
   },
   linear: {
-    legend: 'bottom',
-    plotTitlePosition: 'bottom'
+    legend: WEB_UX_PROFILE.linear.legend,
+    plotTitlePosition: WEB_UX_PROFILE.linear.plotTitlePosition
   }
 });
 
@@ -31,7 +32,10 @@ export const resolveCircularLayoutPreference = (preferences, useMultiRecord = fa
   const defaults = createDefaultLayoutPreferences();
   const circular = preferences?.circular || defaults.circular;
   const single = {
-    legend: normalizeLegendPosition(circular.single?.legend, 'left'),
+    legend: normalizeLegendPosition(
+      circular.single?.legend,
+      WEB_UX_PROFILE.circular.legend
+    ),
     plotTitlePosition: normalizeCircularPlotTitlePosition(
       circular.single?.plotTitlePosition
     )
@@ -54,7 +58,10 @@ export const resolveActiveLayoutPreference = (
 ) => {
   if (mode === 'linear') {
     return {
-      legend: normalizeLegendPosition(preferences?.linear?.legend, 'bottom'),
+      legend: normalizeLegendPosition(
+        preferences?.linear?.legend,
+        WEB_UX_PROFILE.linear.legend
+      ),
       plotTitlePosition: normalizeLinearPlotTitlePosition(
         preferences?.linear?.plotTitlePosition
       )
@@ -71,7 +78,10 @@ export const updateActiveLayoutPreference = (
 ) => {
   if (mode === 'linear') {
     if (Object.prototype.hasOwnProperty.call(patch, 'legend')) {
-      preferences.linear.legend = normalizeLegendPosition(patch.legend, 'bottom');
+      preferences.linear.legend = normalizeLegendPosition(
+        patch.legend,
+        WEB_UX_PROFILE.linear.legend
+      );
     }
     if (Object.prototype.hasOwnProperty.call(patch, 'plotTitlePosition')) {
       preferences.linear.plotTitlePosition = normalizeLinearPlotTitlePosition(
@@ -83,7 +93,10 @@ export const updateActiveLayoutPreference = (
 
   const key = useMultiRecord ? 'multi' : 'single';
   if (Object.prototype.hasOwnProperty.call(patch, 'legend')) {
-    preferences.circular[key].legend = normalizeLegendPosition(patch.legend, 'left');
+    preferences.circular[key].legend = normalizeLegendPosition(
+      patch.legend,
+      WEB_UX_PROFILE.circular.legend
+    );
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'plotTitlePosition')) {
     preferences.circular[key].plotTitlePosition = normalizeCircularPlotTitlePosition(
@@ -112,7 +125,10 @@ export const normalizeLayoutPreferences = (source) => {
       }
     },
     linear: {
-      legend: normalizeLegendPosition(source.linear?.legend, 'bottom'),
+      legend: normalizeLegendPosition(
+        source.linear?.legend,
+        WEB_UX_PROFILE.linear.legend
+      ),
       plotTitlePosition: normalizeLinearPlotTitlePosition(
         source.linear?.plotTitlePosition
       )
@@ -132,8 +148,12 @@ export const migrateLegacyLayoutPreferences = (
   {
     mode = 'circular',
     multiRecord = false,
-    activeLegend = mode === 'linear' ? 'bottom' : 'left',
-    activePlotTitlePosition = mode === 'linear' ? 'bottom' : 'none'
+    activeLegend = mode === 'linear'
+      ? WEB_UX_PROFILE.linear.legend
+      : WEB_UX_PROFILE.circular.legend,
+    activePlotTitlePosition = mode === 'linear'
+      ? WEB_UX_PROFILE.linear.plotTitlePosition
+      : WEB_UX_PROFILE.circular.plotTitlePosition
   } = {}
 ) => {
   if (ui?.layoutPreferences) {

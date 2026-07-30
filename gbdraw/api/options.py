@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import math
 from numbers import Integral, Real
+from pathlib import Path
 from typing import Literal, Mapping, Sequence, cast
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -53,6 +54,75 @@ from gbdraw.tracks import (  # type: ignore[reportMissingImports]
 from gbdraw.annotations import AnnotationOptions
 
 
+# Paths not listed here are shared by both renderers.
+_MODE_CONFIG_OVERRIDE_PREFIXES: dict[DiagramMode, tuple[str, ...]] = {
+    "circular": (
+        "canvas.circular",
+        "labels.circular",
+        "labels.length_threshold.circular",
+        "labels.font_size.short",
+        "labels.font_size.long",
+        "labels.radius_factor",
+        "labels.inner_radius_factor",
+        "labels.arc_x_radius_factor",
+        "labels.arc_y_radius_factor",
+        "labels.arc_center_x",
+        "labels.arc_angle",
+        "labels.inner_arc_x_radius_factor",
+        "labels.inner_arc_y_radius_factor",
+        "labels.inner_arc_center_x",
+        "labels.inner_arc_angle",
+        "labels.unified_adjustment",
+        "labels.spacing.circular",
+        "objects.axis.circular",
+        "objects.conservation",
+        "objects.definition.circular",
+        "objects.ticks",
+    ),
+    "linear": (
+        "canvas.linear",
+        "labels.linear",
+        "labels.length_threshold.linear",
+        "labels.font_size.linear",
+        "labels.spacing.linear",
+        "objects.axis.linear",
+        "objects.blast_match",
+        "objects.definition.linear",
+    ),
+}
+
+
+def _validate_mode_config_overrides(
+    overrides: Mapping[str, object] | None,
+    *,
+    mode: DiagramMode,
+) -> None:
+    other_mode: DiagramMode = "linear" if mode == "circular" else "circular"
+    other_prefixes = _MODE_CONFIG_OVERRIDE_PREFIXES[other_mode]
+    wrong_paths = sorted(
+        path
+        for path in (overrides or {})
+        if any(
+            path == prefix or path.startswith(f"{prefix}.")
+            for prefix in other_prefixes
+        )
+    )
+    if not wrong_paths:
+        return
+    mode_name = mode.title()
+    other_name = other_mode.title()
+    target = (
+        f"{other_name} label settings"
+        if all(path.startswith(f"labels.{other_mode}.") for path in wrong_paths)
+        else f"{other_name} settings"
+    )
+    raise ValidationError(
+        f"{mode_name} config overrides cannot target {target}: "
+        + ", ".join(wrong_paths)
+        + "."
+    )
+
+
 @dataclass(frozen=True)
 class ColorOptions:
     """Color table and palette inputs."""
@@ -62,6 +132,82 @@ class ColorOptions:
     default_colors: DataFrame | None = None
     default_colors_palette: str = "default"
     default_colors_file: str | None = None
+
+
+_DepthTrackSource = str | Path | DataFrame
+
+
+@dataclass(frozen=True)
+class DepthTrackInput:
+    """Data and styling for one logical depth track in a typed request."""
+
+    source: _DepthTrackSource | Sequence[_DepthTrackSource | None]
+    label: str | None = None
+    color: str | None = None
+    height: float | None = None
+    large_tick_interval: float | None = None
+    small_tick_interval: float | None = None
+    tick_font_size: float | None = None
+
+    def __post_init__(self) -> None:
+        source = self.source
+        if isinstance(source, DataFrame):
+            pass
+        elif isinstance(source, (str, Path)):
+            if not str(source).strip():
+                raise ValidationError(
+                    "DepthTrackInput.source path must not be empty."
+                )
+        elif isinstance(source, Sequence) and not isinstance(source, (str, bytes)):
+            sources = tuple(source)
+            if not sources:
+                raise ValidationError(
+                    "DepthTrackInput.source must include at least one source."
+                )
+            for index, item in enumerate(sources):
+                if item is None or isinstance(item, DataFrame):
+                    continue
+                if isinstance(item, (str, Path)) and str(item).strip():
+                    continue
+                raise ValidationError(
+                    "DepthTrackInput.source"
+                    f"[{index}] must be a path, DataFrame, or None."
+                )
+            if not any(item is not None for item in sources):
+                raise ValidationError(
+                    "DepthTrackInput.source must include at least one non-None source."
+                )
+            object.__setattr__(self, "source", sources)
+        else:
+            raise ValidationError(
+                "DepthTrackInput.source must be a path, DataFrame, or a sequence "
+                "of per-record sources."
+            )
+
+        for field_name in ("label", "color"):
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not value.strip():
+                raise ValidationError(
+                    f"DepthTrackInput.{field_name} must be a non-empty string or None."
+                )
+            object.__setattr__(self, field_name, value.strip())
+
+        for field_name in (
+            "height",
+            "large_tick_interval",
+            "small_tick_interval",
+            "tick_font_size",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _validate_positive_real(
+                    getattr(self, field_name),
+                    field_name=f"DepthTrackInput.{field_name}",
+                ),
+            )
 
 
 def _validate_track_configuration(
@@ -197,8 +343,8 @@ def _validate_nested_sequence_elements(
 
 
 @dataclass(frozen=True)
-class CircularTrackOptions:
-    """Circular track layout options."""
+class CircularRequestTrackOptions:
+    """Circular track layout options for typed requests."""
 
     circular_track_slots: Sequence[str | CircularTrackSlot] | None = None
     circular_track_axis_index: int | None = None
@@ -228,8 +374,8 @@ class CircularTrackOptions:
 
 
 @dataclass(frozen=True)
-class LinearTrackOptions:
-    """Linear track layout options."""
+class LinearRequestTrackOptions:
+    """Linear track layout options for typed requests."""
 
     linear_track_slots: Sequence[str | LinearTrackSlot] | None = None
     linear_track_axis_index: int | None = None
@@ -247,6 +393,12 @@ class LinearTrackOptions:
                 axis_field_name="linear_track_axis_index",
             ),
         )
+
+
+# Compatibility aliases for the original typed API names. The package-root
+# classes with these names are separate beginner-facing option bundles.
+CircularTrackOptions = CircularRequestTrackOptions
+LinearTrackOptions = LinearRequestTrackOptions
 
 
 @dataclass(frozen=True)
@@ -404,6 +556,7 @@ class _ModeDiagramOptions:
     step: int | None = None
     depth_window: int | None = None
     depth_step: int | None = None
+    depth_tracks: Sequence[DepthTrackInput] | None = None
     depth_table: DataFrame | None = None
     depth_file: str | None = None
     depth_tables: Sequence[DataFrame] | None = None
@@ -470,6 +623,50 @@ class _ModeDiagramOptions:
                 raise ValidationError(
                     "selected_features_set must contain non-empty strings."
                 )
+        if self.depth_tracks is not None:
+            if (
+                isinstance(self.depth_tracks, (str, bytes))
+                or not isinstance(self.depth_tracks, Sequence)
+            ):
+                raise ValidationError(
+                    "depth_tracks must be a sequence of DepthTrackInput values."
+                )
+            depth_tracks = tuple(self.depth_tracks)
+            if not depth_tracks:
+                raise ValidationError(
+                    "depth_tracks must include at least one DepthTrackInput."
+                )
+            if not all(isinstance(track, DepthTrackInput) for track in depth_tracks):
+                raise ValidationError(
+                    "depth_tracks must contain DepthTrackInput values."
+                )
+            compatibility_fields = (
+                "depth_table",
+                "depth_file",
+                "depth_tables",
+                "depth_files",
+                "depth_track_tables",
+                "depth_track_files",
+                "depth_track_labels",
+                "depth_track_colors",
+                "depth_track_heights",
+                "depth_track_large_tick_intervals",
+                "depth_track_small_tick_intervals",
+                "depth_track_tick_font_sizes",
+            )
+            mixed = [
+                field_name
+                for field_name in compatibility_fields
+                if getattr(self, field_name, None) is not None
+            ]
+            if mixed:
+                raise ValidationError(
+                    "depth_tracks cannot be combined with compatibility depth "
+                    "inputs: "
+                    + ", ".join(mixed)
+                    + "."
+                )
+            object.__setattr__(self, "depth_tracks", depth_tracks)
         if self.depth_table is not None and not isinstance(
             self.depth_table,
             DataFrame,
@@ -518,7 +715,7 @@ class _ModeDiagramOptions:
 class CircularDiagramOptions(_ModeDiagramOptions):
     """Options accepted by a Circular typed request."""
 
-    tracks: CircularTrackOptions | None = None
+    tracks: CircularRequestTrackOptions | None = None
     output: CircularOutputOptions | None = None
     conservation_blast_files: Sequence[str] | None = None
     conservation_fasta_files: Sequence[str | None] | None = None
@@ -534,23 +731,22 @@ class CircularDiagramOptions(_ModeDiagramOptions):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        wrong_mode_label_paths = set(self.config_overrides or {}) & {
-            "labels.linear.scope",
-            "labels.linear.placement",
-            "labels.linear.rotation",
-        }
-        if wrong_mode_label_paths:
-            raise ValidationError(
-                "Circular config overrides cannot target Linear label settings: "
-                + ", ".join(sorted(wrong_mode_label_paths))
-                + "."
-            )
-        if self.tracks is not None and not isinstance(
-            self.tracks,
-            CircularTrackOptions,
+        if self.depth_tracks is not None and any(
+            track.height is not None for track in self.depth_tracks
         ):
             raise ValidationError(
-                "tracks must be CircularTrackOptions or None."
+                "DepthTrackInput.height is available only for Linear diagrams."
+            )
+        _validate_mode_config_overrides(
+            self.config_overrides,
+            mode="circular",
+        )
+        if self.tracks is not None and not isinstance(
+            self.tracks,
+            CircularRequestTrackOptions,
+        ):
+            raise ValidationError(
+                "tracks must be CircularRequestTrackOptions or None."
             )
         if self.output is not None and not isinstance(
             self.output,
@@ -605,7 +801,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
 class LinearDiagramOptions(_ModeDiagramOptions):
     """Options accepted by a Linear typed request."""
 
-    tracks: LinearTrackOptions | None = None
+    tracks: LinearRequestTrackOptions | None = None
     output: LinearOutputOptions | None = None
     depth_track_heights: Sequence[float | str | None] | None = None
     blast_files: Sequence[str] | None = None
@@ -642,22 +838,16 @@ class LinearDiagramOptions(_ModeDiagramOptions):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        wrong_mode_label_paths = set(self.config_overrides or {}) & {
-            "labels.circular.scope",
-            "labels.circular.placement",
-        }
-        if wrong_mode_label_paths:
-            raise ValidationError(
-                "Linear config overrides cannot target Circular label settings: "
-                + ", ".join(sorted(wrong_mode_label_paths))
-                + "."
-            )
+        _validate_mode_config_overrides(
+            self.config_overrides,
+            mode="linear",
+        )
         if self.tracks is not None and not isinstance(
             self.tracks,
-            LinearTrackOptions,
+            LinearRequestTrackOptions,
         ):
             raise ValidationError(
-                "tracks must be LinearTrackOptions or None."
+                "tracks must be LinearRequestTrackOptions or None."
             )
         if self.output is not None and not isinstance(
             self.output,
@@ -824,13 +1014,16 @@ __all__ = [
     "CircularDiagramOptions",
     "CircularMultiRecordOptions",
     "CircularOutputOptions",
+    "CircularRequestTrackOptions",
     "CircularTrackOptions",
     "LinearMultiRecordOptions",
     "LinearDiagramOptions",
     "LinearOutputOptions",
+    "LinearRequestTrackOptions",
     "LinearTrackOptions",
     "AnnotationOptions",
     "ColorOptions",
+    "DepthTrackInput",
     "resolve_circular_diagram_options",
     "resolve_linear_diagram_options",
 ]

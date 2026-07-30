@@ -159,8 +159,9 @@ const syntheticGuiSession = {
 const promotedSyntheticGui = promoteGallerySessionToCurrent(syntheticGuiSession);
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
 assert.equal(promotedSyntheticGui.renderRequest.schema, 5);
-assert.equal(promotedSyntheticGui.renderRequest.grouping, 'batch');
-assert.equal(promotedSyntheticGui.renderRequest.output[0].prefix, 'gui');
+assert.equal(promotedSyntheticGui.renderRequest.grouping, 'single');
+assert.equal(promotedSyntheticGui.renderRequest.output.prefix, 'gui');
+assert.equal(promotedSyntheticGui.renderRequest.output.overwrite, false);
 assert.deepEqual(syntheticGuiOptions.output, {
   legend: 'left',
   plotTitlePosition: 'none'

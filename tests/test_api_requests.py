@@ -266,6 +266,59 @@ def test_mode_specific_output_options_reject_other_mode_title_positions() -> Non
 
 
 @pytest.mark.parametrize(
+    ("options_type", "path", "value"),
+    [
+        (CircularDiagramOptions, "canvas.circular.track_type", "middle"),
+        (LinearDiagramOptions, "canvas.linear.track_layout", "above"),
+    ],
+)
+def test_mode_specific_options_accept_owned_config_override_paths(
+    options_type,
+    path: str,
+    value: object,
+) -> None:
+    options = options_type(config_overrides={path: value})
+
+    assert options.config_overrides == {path: value}
+
+
+@pytest.mark.parametrize(
+    ("options_type", "path", "value", "other_mode"),
+    [
+        (
+            CircularDiagramOptions,
+            "canvas.linear.track_layout",
+            "above",
+            "Linear",
+        ),
+        (
+            CircularDiagramOptions,
+            "objects.axis.linear.stroke_color",
+            "black",
+            "Linear",
+        ),
+        (
+            LinearDiagramOptions,
+            "canvas.circular.track_type",
+            "middle",
+            "Circular",
+        ),
+    ],
+)
+def test_mode_specific_options_reject_other_mode_config_override_paths(
+    options_type,
+    path: str,
+    value: object,
+    other_mode: str,
+) -> None:
+    with pytest.raises(
+        ValidationError,
+        match=rf"cannot target {other_mode} settings: {path}",
+    ):
+        options_type(config_overrides={path: value})
+
+
+@pytest.mark.parametrize(
     "kwargs",
     [
         {"conservation_reference": "invalid"},

@@ -43,7 +43,7 @@ from gbdraw.api.requests import (
     RecordPresentation,
     RenderOutputRequest,
 )
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.session_io import validate_current_session_artifacts
@@ -703,6 +703,48 @@ def test_render_request_passes_output_policy_and_returns_existing_paths(
     }
 
 
+def test_render_request_fails_when_interactive_metadata_generation_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = LinearDiagramRequest(
+        records=(_memory_input("a"),),
+        output=RenderOutputRequest(
+            output_prefix="diagram",
+            output_directory=tmp_path,
+            formats=("interactive_svg",),
+        ),
+    )
+    prepared = PreparedDiagramRequest(
+        mode="linear",
+        request=request,
+        records=(_seqrecord("a"),),
+        drawing=Drawing("out.svg"),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_request_diagram",
+        lambda _: prepared,
+    )
+
+    def fail_context(*_args, **_kwargs):
+        raise RuntimeError("metadata exploded")
+
+    monkeypatch.setattr(
+        request_render_module,
+        "build_interactive_svg_context",
+        fail_context,
+    )
+
+    with pytest.raises(
+        ExportError,
+        match="Interactive SVG metadata generation failed: metadata exploded",
+    ):
+        render_request(request)
+
+    assert not list(tmp_path.iterdir())
+
+
 @pytest.mark.circular
 def test_render_request_circular_smoke_creates_svg(tmp_path: Path) -> None:
     record = _seqrecord("request-smoke", "ATGCGC" * 200)
@@ -817,14 +859,12 @@ def test_render_request_circular_batch_loads_comparison_fasta_once(
 
 
 @pytest.mark.parametrize(
-    ("formats", "expects_warning"),
-    [(("svg",), False), (("interactive_svg",), True)],
+    "formats",
+    [("svg",), ("interactive_svg",)],
 )
-def test_render_request_only_loads_comparison_fasta_for_interactive_output(
+def test_render_request_only_requires_comparison_fasta_for_interactive_output(
     tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
     formats: tuple[str, ...],
-    expects_warning: bool,
 ) -> None:
     request = CircularDiagramRequest(
         records=(_memory_input("record"),),
@@ -838,12 +878,16 @@ def test_render_request_only_loads_comparison_fasta_for_interactive_output(
         ),
     )
 
-    result = render_request(request)
-
-    assert result.output_paths
-    assert (
-        "Comparison FASTA could not be embedded in interactive SVG" in caplog.text
-    ) is expects_warning
+    if "interactive_svg" in formats:
+        with pytest.raises(
+            ExportError,
+            match="Interactive SVG metadata generation failed",
+        ):
+            render_request(request)
+        assert not list(tmp_path.iterdir())
+    else:
+        result = render_request(request)
+        assert result.output_paths
 
 
 @pytest.mark.circular

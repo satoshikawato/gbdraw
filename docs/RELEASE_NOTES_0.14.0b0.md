@@ -7,7 +7,7 @@ This beta introduces a small top-level Python interface for new library users.
 options replace the shared 71-field option bundle, and one Circular function now
 handles both single and multi-record input. Typed request/session and table
 contracts remain available from `gbdraw.api`; obsolete low-level convenience
-re-exports and compatibility aliases have been removed.
+re-exports have been removed.
 
 ## New top-level Python interface
 
@@ -16,6 +16,10 @@ re-exports and compatibility aliases have been removed.
 - Pass `CircularOptions` or `LinearOptions`; wrong-mode fields are absent instead
   of being accepted and rejected later.
 - Pass one `SeqRecord` or a sequence to the same drawing function.
+- Use `ComparisonRingOptions` and `ComparisonRingTrackOptions` for circular
+  BLAST or LOSAT similarity rings through `CircularOptions.comparison_rings`.
+  `CircularOptions.conservation` and the older `Conservation*` class names
+  remain compatibility aliases.
 - Use `CircularLayout` for explicit grid placement; a one-record 1×1 grid is
   valid.
 - Call `Diagram.to_svg()`, `Diagram.to_bytes()`, or `Diagram.save(path)` without
@@ -37,8 +41,10 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   and within `0..100`, and alignment length must be a non-negative integer.
   Identity `100` is valid.
 - Typed requests now use `CircularDiagramOptions` and `LinearDiagramOptions`.
-  Their mode-specific nested contracts are `CircularTrackOptions`,
-  `LinearTrackOptions`, `CircularOutputOptions`, and `LinearOutputOptions`.
+  Their mode-specific nested contracts are `CircularRequestTrackOptions`,
+  `LinearRequestTrackOptions`, `CircularOutputOptions`, and `LinearOutputOptions`.
+  The former typed track names remain compatibility aliases and are separate from
+  the package-root beginner option classes with the same short names.
   `CircularDiagramRequest` explicitly represents `single` and `grid`;
   `CircularBatchRequest` represents `batch` and carries one output per record.
   `CircularRequestPlan`, `CircularBatchRequestPlan`, and `LinearRequestPlan`
@@ -322,6 +328,11 @@ pip install "gbdraw[export]==0.14.0b0"
 The CLI retains its warning-and-skip behavior when an optional binary converter is
 unavailable. The strict contract applies to the explicit Python library helper
 `save_figure_to`.
+
+Direct imports of `gbdraw.render.export.save_figure` remain callable for
+compatibility, but the function now emits `DeprecationWarning`. It is scheduled
+for removal in gbdraw 0.16. Use `save_figure_to` for file output or
+`render_to_bytes` for in-memory output.
 
 ### Typed execution rejects options for the wrong mode
 

@@ -120,6 +120,13 @@ def _add_format_arg(parser: argparse.ArgumentParser) -> None:
         default="svg")
 
 
+def _add_overwrite_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        '--overwrite',
+        help='Replace existing output files (default: refuse to overwrite).',
+        action='store_true')
+
+
 def _add_gc_skew_toggle_args(
     parser: argparse.ArgumentParser,
     *,

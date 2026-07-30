@@ -182,8 +182,6 @@ export const createFeatureColorActions = ({
     colorScopeDialog.displayLabelSiblingCount = 0;
     colorScopeDialog.annotationLabel = null;
     colorScopeDialog.annotationLabelSiblingCount = 0;
-    colorScopeDialog.individualLabel = null;
-    colorScopeDialog.individualLabelSiblingCount = 0;
     colorScopeDialog.existingCaptionRule = null;
     colorScopeDialog.existingCaptionColor = null;
   };
@@ -1072,9 +1070,6 @@ export const createFeatureColorActions = ({
       colorScopeDialog.displayLabelSiblingCount = displayLabelSiblingCount;
       colorScopeDialog.annotationLabel = annotationLabel;
       colorScopeDialog.annotationLabelSiblingCount = annotationLabelSiblingCount;
-      // Backward-compatible aliases
-      colorScopeDialog.individualLabel = annotationLabel;
-      colorScopeDialog.individualLabelSiblingCount = annotationLabelSiblingCount;
       colorScopeDialog.existingCaptionRule = existingCaption?.rule || null;
       colorScopeDialog.existingCaptionColor = existingCaption?.color || null;
       if (options.closePopupOnDialog) {
@@ -1252,7 +1247,7 @@ export const createFeatureColorActions = ({
         }
       }
       await setFeatureColor(feat, color, singleCaption);
-    } else if (choice === 'annotationLabel' || choice === 'individualLabel') {
+    } else if (choice === 'annotationLabel') {
       const annotationLabel =
         normalizeCaption(colorScopeDialog.annotationLabel) || normalizeCaption(getIndividualFeatureLabel(feat));
       if (!annotationLabel) {

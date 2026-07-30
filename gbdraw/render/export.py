@@ -7,6 +7,7 @@ import importlib
 import os
 import sys
 import logging
+import warnings
 from types import ModuleType
 from typing import List
 
@@ -60,13 +61,18 @@ def save_figure(
     *,
     interactive_context: InteractiveSvgContext | None = None,
 ) -> None:
+    """Save a figure using the deprecated warning-and-skip export contract.
+
+    Use :func:`gbdraw.api.save_figure_to` for strict file export or
+    :func:`gbdraw.api.render_to_bytes` for in-memory output.
     """
-    Saves the rendered figure.
-    Logic:
-      1. Always save SVG (base format).
-      2. If Pyodide (Web), skip conversion (JS handles it).
-      3. If CLI, try CairoSVG. If not available, warn and skip.
-    """
+    warnings.warn(
+        "gbdraw.render.export.save_figure() is deprecated and will be removed "
+        "in gbdraw 0.16; use gbdraw.api.save_figure_to() or "
+        "gbdraw.api.render_to_bytes().",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     base_filename = os.path.splitext(canvas.filename)[0]
     svg_filename = resolve_format_output_path(base_filename, SVG_FORMAT)
 

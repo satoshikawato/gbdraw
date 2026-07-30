@@ -11,6 +11,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
+from gbdraw.api import save_figure_to
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
@@ -18,7 +19,6 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.core import text as text_module
 from gbdraw.diagrams.linear import precalc as linear_precalc
 from gbdraw.diagrams.linear.builders import add_record_definition_group
-from gbdraw.render.export import save_figure
 from gbdraw.render.groups.linear import DefinitionGroup
 
 
@@ -604,7 +604,7 @@ def test_linear_definition_gap_svg_converts_with_cairosvg(tmp_path: Path) -> Non
         output_prefix=str(tmp_path / "linear_definition_gap"),
     )
 
-    save_figure(canvas, ["svg", "png", "pdf", "eps", "ps"])
+    save_figure_to(canvas, ["svg", "png", "pdf", "eps", "ps"])
 
     for suffix in (".svg", ".png", ".pdf", ".eps", ".ps"):
         output_path = tmp_path / f"linear_definition_gap{suffix}"

@@ -154,25 +154,28 @@ assert depth_diagram.to_svg().startswith("<svg")
 Set `height` on a Linear depth track. Circular diagrams reject a non-default height
 because circular track width is controlled by the circular track layout.
 
-## Conservation rings
+## Sequence-similarity comparison rings
 
-`ConservationTrackOptions` binds each BLAST file or DataFrame to its label and color.
-All tracks in one diagram must use the same source kind. For interactive SVG output,
-set `comparison_sequence_source` to a FASTA path, one `SeqRecord`, or a sequence of
-records to enable the comparison-span FASTA actions for that track. Static geometry
-does not depend on this optional source.
+`ComparisonRingTrackOptions` binds each BLAST or LOSAT result path, or a DataFrame
+with the same tabular hits, to its label and color. The resulting ring displays
+sequence-similarity hits. It does not by itself establish biological conservation.
+All rings in one diagram must use the same source kind.
+
+For interactive SVG output, set `comparison_sequence_source` to a FASTA path, one
+`SeqRecord`, or a sequence of records to enable the comparison-span FASTA actions
+for that ring. Static geometry does not depend on this optional source.
 
 ```python
-from gbdraw import ConservationOptions, ConservationTrackOptions
+from gbdraw import ComparisonRingOptions, ComparisonRingTrackOptions
 
-conservation_record = read_genbank(test_inputs_dir / "AP027078.gb")[0]
-conservation_diagram = draw_circular(
-    conservation_record,
+comparison_record = read_genbank(test_inputs_dir / "AP027078.gb")[0]
+comparison_diagram = draw_circular(
+    comparison_record,
     options=CircularOptions(
-        conservation=ConservationOptions(
+        comparison_rings=ComparisonRingOptions(
             reference="query",
             tracks=(
-                ConservationTrackOptions(
+                ComparisonRingTrackOptions(
                     source=test_inputs_dir / "AP027078_AP027131.tblastx.out",
                     label="AP027131",
                 ),
@@ -180,8 +183,18 @@ conservation_diagram = draw_circular(
         ),
     ),
 )
-assert conservation_diagram.to_svg().startswith("<svg")
+assert comparison_diagram.to_svg().startswith("<svg")
 ```
+
+`CircularOptions.comparison_rings` is the canonical field.
+`CircularOptions.conservation` remains a runtime constructor and attribute alias for
+existing code. Both names address the same stored option; use the canonical name in
+new code and when calling `dataclasses.replace()`. Passing non-`None` values for both
+names is rejected.
+The lower-level request transport retains its
+`conservation_*` field names. The older `ConservationOptions` and
+`ConservationTrackOptions` class names are identity aliases for
+`ComparisonRingOptions` and `ComparisonRingTrackOptions`.
 
 ## Feature colors, visibility, and labels
 
@@ -220,7 +233,7 @@ three separate concerns:
 |---|---|---|
 | `labels.circular.scope` | `none`, `outer`, `both` | Whether Circular labels are hidden, outer-side only, or allowed on both outer and inner sides |
 | `labels.circular.placement` | `horizontal`, `radial` | Orientation of external Circular labels |
-| `labels.linear.scope` | `none`, `all`, `first`, `orthogroup_top` | Which Linear records or orthogroup members are eligible for labels |
+| `labels.linear.scope` | `none`, `all`, `first`, `orthogroup_top` | Which Linear records or similarity-group members are eligible for labels (`orthogroup_top` is the compatibility token) |
 | `labels.linear.placement` | `auto`, `above_feature` | Linear label geometry |
 | `labels.linear.rotation` | float | Linear label rotation in degrees |
 | `labels.rendering` | `auto`, `embedded_only`, `external_only` | Shared policy for embedding labels in feature bodies or routing them externally |
@@ -324,10 +337,48 @@ package-level `gbdraw.render` aliases have been removed; use `Diagram.save`,
 `render_to_bytes`, or `save_figure_to` at their documented boundaries.
 
 Typed Circular requests accept `CircularDiagramOptions`, with
-`CircularTrackOptions` and `CircularOutputOptions` for mode-specific nested
-settings. Typed Linear requests use `LinearDiagramOptions`,
-`LinearTrackOptions`, and `LinearOutputOptions`. `CircularDiagramRequest`
-explicitly selects `single` or `grid`; a one-record grid is valid.
+`CircularRequestTrackOptions` and `CircularOutputOptions` for mode-specific
+nested settings. Typed Linear requests use `LinearDiagramOptions`,
+`LinearRequestTrackOptions`, and `LinearOutputOptions`. Import these integration
+types from `gbdraw.api`.
+
+Typed requests use `DepthTrackInput` for depth data. Add one entry to
+`CircularDiagramOptions.depth_tracks` or `LinearDiagramOptions.depth_tracks` for
+each logical track. `source` accepts one path or DataFrame shared by all displayed
+records, or a sequence containing one path, DataFrame, or `None` per record.
+`LinearDiagramOptions` also accepts `height` on each entry.
+
+```python
+from gbdraw.api import DepthTrackInput, LinearDiagramOptions
+
+typed_options = LinearDiagramOptions(
+    depth_tracks=(
+        DepthTrackInput(
+            source=(
+                test_inputs_dir / "MjeNMV.DRR271272.depth.tsv",
+                test_inputs_dir / "MjeNMV.DRR271272.depth.tsv",
+            ),
+            label="Coverage",
+            color="#2563eb",
+            height=24,
+        ),
+    ),
+)
+```
+
+The older `depth_table`, `depth_file`, `depth_tables`, `depth_files`, and
+`depth_track_*` fields remain compatibility inputs. Do not combine them with
+`depth_tracks`; request normalization rejects mixed forms. New request and session
+writers serialize either input style as canonical `depthTracks`.
+
+The shorter `gbdraw.api.CircularTrackOptions` and
+`gbdraw.api.LinearTrackOptions` names remain compatibility aliases. They refer to
+the request classes above. By contrast, `gbdraw.CircularTrackOptions` and
+`gbdraw.LinearTrackOptions` are separate beginner-facing classes used inside the
+package-root `CircularOptions` and `LinearOptions`.
+
+`CircularDiagramRequest` explicitly selects `single` or `grid`; a one-record
+grid is valid.
 `CircularBatchRequest` selects `batch` and carries one
 `RenderOutputRequest` per record, without grid placement.
 Optional Circular comparison FASTA paths belong to

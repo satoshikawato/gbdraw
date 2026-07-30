@@ -955,44 +955,12 @@ def test_enrich_svg_match_metadata_matches_standalone_collinear_sections() -> No
     assert "sections" not in match
 
 
-def test_save_figure_interactive_writes_static_and_interactive_without_cairosvg(
+def test_save_figure_to_interactive_png_uses_cairosvg_only_for_png(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     drawing = _drawing(tmp_path / "out.svg")
-    calls: list[str] = []
-
-    def fake_enrich(svg_source: str, context=None) -> str:
-        calls.append(svg_source)
-        assert context is not None
-        return "<svg data-gbdraw-interactive-svg=\"true\" />"
-
-    monkeypatch.setattr(export_module, "enrich_svg", fake_enrich)
-    monkeypatch.setattr(
-        export_module,
-        "get_cairosvg",
-        lambda: pytest.fail("CairoSVG should not be loaded for interactive-svg only"),
-    )
-
-    export_module.save_figure(
-        drawing,
-        ["interactive-svg"],
-        interactive_context=InteractiveSvgContext(features=[{"svg_id": "fabc12345"}]),
-    )
-
-    assert (tmp_path / "out.svg").exists()
-    assert (tmp_path / "out.interactive.svg").read_text(encoding="utf-8").startswith(
-        "<svg data-gbdraw-interactive-svg"
-    )
-    assert len(calls) == 1
-
-
-def test_save_figure_interactive_png_uses_cairosvg_only_for_png(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    drawing = _drawing(tmp_path / "out.svg")
-    monkeypatch.setattr(export_module, "enrich_svg", lambda _source, context=None: "<svg />")
+    monkeypatch.setattr(api_render, "enrich_svg", lambda _source, context=None: "<svg />")
 
     class FakeCairoSvg:
         @staticmethod
@@ -1001,7 +969,7 @@ def test_save_figure_interactive_png_uses_cairosvg_only_for_png(
 
     monkeypatch.setattr(export_module, "get_cairosvg", lambda: FakeCairoSvg)
 
-    export_module.save_figure(drawing, ["interactive-svg", "png"])
+    api_render.save_figure_to(drawing, ["interactive-svg", "png"])
 
     assert (tmp_path / "out.interactive.svg").exists()
     assert (tmp_path / "out.png").exists()

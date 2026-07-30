@@ -388,6 +388,7 @@ def save_session_document(
     title: str | None = None,
     created_at: datetime | None = None,
     adjunct: Mapping[str, Any] | None = None,
+    overwrite: bool = False,
 ) -> SessionDocument:
     """Build and atomically write a current-version canonical session document."""
 
@@ -398,6 +399,12 @@ def save_session_document(
         adjunct=adjunct,
     )
     try:
+        output_path = Path(path)
+        if output_path.exists() and not overwrite:
+            raise ValidationError(
+                f"Session output already exists: {output_path}. "
+                "Pass overwrite=True to replace it."
+            )
         write_session_json(path, document._data)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
@@ -410,6 +417,7 @@ def with_request_output(
     output_prefix: str | None = None,
     output_directory: str | Path | None = None,
     formats: str | tuple[str, ...] | None = None,
+    overwrite: bool | None = None,
 ) -> DiagramRequest:
     """Return a request with caller-owned replay output overrides."""
 
@@ -435,7 +443,7 @@ def with_request_output(
                     else current.output_directory
                 ),
                 formats=formats if formats is not None else current.formats,
-                overwrite=current.overwrite,
+                overwrite=current.overwrite if overwrite is None else overwrite,
                 interactive_metadata_policy=current.interactive_metadata_policy,
             )
             for prefix, current in zip(
@@ -455,7 +463,7 @@ def with_request_output(
             else current.output_directory
         ),
         formats=formats if formats is not None else current.formats,
-        overwrite=current.overwrite,
+        overwrite=current.overwrite if overwrite is None else overwrite,
         interactive_metadata_policy=current.interactive_metadata_policy,
     )
     return replace(request, output=updated)

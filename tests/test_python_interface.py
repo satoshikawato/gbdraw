@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -14,12 +15,12 @@ import gbdraw.interface as interface
 from gbdraw.api.options import (
     CircularDiagramOptions,
     CircularOutputOptions,
-    CircularTrackOptions as CircularRequestTrackOptions,
+    CircularRequestTrackOptions,
     LinearDiagramOptions,
     LinearOutputOptions,
-    LinearTrackOptions as LinearRequestTrackOptions,
+    LinearRequestTrackOptions,
 )
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import ExportError, ValidationError
 
 
 def _record(record_id: str = "record") -> SeqRecord:
@@ -31,6 +32,8 @@ def test_root_namespace_is_the_small_beginner_facing_api() -> None:
         "CircularLayout",
         "CircularOptions",
         "CircularTrackOptions",
+        "ComparisonRingOptions",
+        "ComparisonRingTrackOptions",
         "ConservationOptions",
         "ConservationTrackOptions",
         "DepthTrackOptions",
@@ -49,6 +52,77 @@ def test_root_namespace_is_the_small_beginner_facing_api() -> None:
         "read_genbank",
         "read_gff",
     ]
+
+
+def test_root_and_typed_track_option_tiers_have_distinct_canonical_names() -> None:
+    assert gbdraw.CircularTrackOptions is interface.CircularTrackOptions
+    assert gbdraw.LinearTrackOptions is interface.LinearTrackOptions
+    assert gbdraw.CircularTrackOptions is not CircularRequestTrackOptions
+    assert gbdraw.LinearTrackOptions is not LinearRequestTrackOptions
+
+
+def test_comparison_ring_names_are_canonical_with_conservation_aliases() -> None:
+    assert gbdraw.ComparisonRingOptions is interface.ComparisonRingOptions
+    assert (
+        gbdraw.ComparisonRingTrackOptions
+        is interface.ComparisonRingTrackOptions
+    )
+    assert gbdraw.ConservationOptions is gbdraw.ComparisonRingOptions
+    assert (
+        gbdraw.ConservationTrackOptions
+        is gbdraw.ComparisonRingTrackOptions
+    )
+
+    legacy = gbdraw.ConservationOptions(
+        tracks=(gbdraw.ConservationTrackOptions(source="hits.tsv"),),
+    )
+
+    assert type(legacy).__name__ == "ComparisonRingOptions"
+    assert type(legacy.tracks[0]).__name__ == "ComparisonRingTrackOptions"
+    assert isinstance(legacy, gbdraw.ComparisonRingOptions)
+    assert isinstance(legacy.tracks[0], gbdraw.ComparisonRingTrackOptions)
+
+
+def test_circular_options_names_comparison_ring_type_in_validation() -> None:
+    with pytest.raises(ValidationError, match="ComparisonRingOptions"):
+        interface.CircularOptions(comparison_rings=object())  # type: ignore[arg-type]
+
+
+def test_circular_options_exposes_comparison_rings_with_conservation_alias() -> None:
+    canonical = interface.ComparisonRingOptions(
+        tracks=(interface.ComparisonRingTrackOptions(source="hits.tsv"),),
+    )
+
+    current = interface.CircularOptions(comparison_rings=canonical)
+    legacy = interface.CircularOptions(conservation=canonical)
+
+    assert current.comparison_rings is canonical
+    assert current.conservation is canonical
+    assert legacy.comparison_rings is canonical
+    assert legacy.conservation is canonical
+    with pytest.raises(ValidationError, match="not both"):
+        interface.CircularOptions(
+            comparison_rings=canonical,
+            conservation=canonical,
+        )
+
+
+def test_circular_options_alias_survives_dataclass_replace() -> None:
+    original = interface.CircularOptions(
+        comparison_rings=interface.ComparisonRingOptions(reference="query"),
+    )
+    replacement = interface.ComparisonRingOptions(reference="subject")
+
+    renamed = replace(original, species="Example species")
+    replaced_rings = replace(original, comparison_rings=replacement)
+
+    assert renamed.species == "Example species"
+    assert renamed.comparison_rings is original.comparison_rings
+    assert renamed.conservation is original.comparison_rings
+    assert replaced_rings.comparison_rings is replacement
+    assert replaced_rings.conservation is replacement
+    with pytest.raises(ValidationError, match="not both"):
+        replace(original, conservation=replacement)
 
 
 def test_draw_circular_dispatches_from_record_count(
@@ -90,6 +164,36 @@ def test_draw_circular_dispatches_from_record_count(
     legacy_layout = calls[2][2]
     assert legacy_layout.multi_record_size_mode == "equal"
     assert legacy_layout.multi_record_positions == ("#1@1", "#2@1")
+
+
+def test_root_api_builds_metadata_only_for_explicit_interactive_render(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        request_render_module,
+        "build_circular_diagram",
+        lambda *_args, **_kwargs: Drawing("circular.svg"),
+    )
+    calls = 0
+
+    def fail_context(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("metadata exploded")
+
+    monkeypatch.setattr(interface, "_interactive_context", fail_context)
+
+    diagram = interface.draw_circular(_record())
+
+    assert calls == 0
+    assert diagram.to_svg().startswith("<svg")
+    assert calls == 0
+    with pytest.raises(
+        ExportError,
+        match="Interactive SVG metadata generation failed: metadata exploded",
+    ):
+        diagram.to_svg(interactive=True)
+    assert calls == 1
 
 
 def test_draw_circular_one_record_layout_reaches_grid_builder(
@@ -227,9 +331,9 @@ def test_circular_companion_sequence_reaches_interactive_context() -> None:
         ],
     )
     options = interface.CircularOptions(
-        conservation=interface.ConservationOptions(
+        comparison_rings=interface.ComparisonRingOptions(
             tracks=(
-                interface.ConservationTrackOptions(
+                interface.ComparisonRingTrackOptions(
                     source=blast,
                     comparison_sequence_source=(comparison,),
                 ),
@@ -255,6 +359,29 @@ def test_draw_functions_require_mode_specific_options() -> None:
         interface.draw_circular(_record(), options=interface.LinearOptions())  # type: ignore[arg-type]
     with pytest.raises(ValidationError, match="LinearOptions"):
         interface.draw_linear(_record(), options=interface.CircularOptions())  # type: ignore[arg-type]
+
+
+def test_root_api_rejects_wrong_mode_config_override_paths() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="Circular config overrides cannot target Linear settings",
+    ):
+        interface.draw_circular(
+            _record(),
+            options=interface.CircularOptions(
+                config_overrides={"canvas.linear.track_layout": "above"},
+            ),
+        )
+    with pytest.raises(
+        ValidationError,
+        match="Linear config overrides cannot target Circular settings",
+    ):
+        interface.draw_linear(
+            _record(),
+            options=interface.LinearOptions(
+                config_overrides={"canvas.circular.track_type": "middle"},
+            ),
+        )
 
 
 def test_diagram_save_writes_exactly_the_requested_file(tmp_path: Path) -> None:

@@ -16,6 +16,7 @@ from gbdraw.api import (
     CircularMultiRecordOptions,
     apply_config_overrides,
     load_gff_fasta,
+    save_figure_to,
 )
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
@@ -37,7 +38,6 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.io.genome import load_gbks
 from gbdraw.mode_profiles import resolve_mode_profile_overrides
-from gbdraw.render.export import save_figure
 
 
 SELECTED_FEATURES = [
@@ -849,7 +849,7 @@ def test_api_circular_minimal(examples_dir: Path, temp_output_dir: Path) -> None
         legend="right",
     )
 
-    save_figure(canvas, ["svg"])
+    save_figure_to(canvas, ["svg"])
     output_svg = output_prefix.with_suffix(".svg")
 
     assert output_svg.exists()
@@ -883,7 +883,7 @@ def test_api_linear_gene_specific_rule_uses_default_fallback_for_legend(
         legend="right",
     )
 
-    save_figure(canvas, ["svg"])
+    save_figure_to(canvas, ["svg"])
     output_svg = output_prefix.with_suffix(".svg")
 
     assert output_svg.exists()
@@ -914,7 +914,7 @@ def test_api_linear_minimal(examples_dir: Path, temp_output_dir: Path) -> None:
         legend="right",
     )
 
-    save_figure(canvas, ["svg"])
+    save_figure_to(canvas, ["svg"])
     output_svg = output_prefix.with_suffix(".svg")
 
     assert output_svg.exists()

@@ -5,7 +5,7 @@ going through CLI argument parsing. Lower-level assembler functions remain priva
 engine boundaries used by those builders.
 
 The functions here return an `svgwrite.Drawing` (SVG canvas). Saving/conversion is
-handled separately (see `gbdraw.render.export.save_figure`).
+handled separately by `gbdraw.api.save_figure_to` or `gbdraw.api.render_to_bytes`.
 """
 
 from __future__ import annotations
@@ -79,6 +79,7 @@ from gbdraw.api.options import (  # type: ignore[reportMissingImports]
     AnnotationOptions,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
+    DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
     resolve_circular_diagram_options,
@@ -296,6 +297,28 @@ def _slots_have_renderer(
     renderer: str,
 ) -> bool:
     return any(slot.enabled and str(slot.renderer) == renderer for slot in (slots or []))
+
+
+def _resolve_circular_track_visibility(
+    cfg: GbdrawConfig,
+    slots: Sequence[CircularTrackSlot] | None,
+) -> tuple[bool, bool, bool]:
+    """Resolve canvas track flags, including the horizontal inner-label policy."""
+
+    if slots is not None:
+        return (
+            _slots_have_renderer(slots, "depth"),
+            _slots_have_renderer(slots, "dinucleotide_content"),
+            _slots_have_renderer(slots, "dinucleotide_skew"),
+        )
+
+    show_gc = bool(cfg.canvas.show_gc)
+    show_skew = bool(cfg.canvas.show_skew)
+    circular_labels = cfg.labels.circular
+    if circular_labels.scope == "both" and circular_labels.placement == "horizontal":
+        show_gc = False
+        show_skew = False
+    return bool(cfg.canvas.show_depth), show_gc, show_skew
 
 
 def _circular_slots_define_renderer(
@@ -1800,6 +1823,7 @@ def assemble_linear_diagram_from_records(
     step: Optional[int] = None,
     depth_window: Optional[int] = None,
     depth_step: Optional[int] = None,
+    depth_tracks: Sequence[DepthTrackInput] | None = None,
     depth_table: DataFrame | None = None,
     depth_file: str | None = None,
     depth_tables: Sequence[DataFrame] | None = None,
@@ -1977,6 +2001,7 @@ def assemble_linear_diagram_from_records(
     )
     record_depth_tracks = normalize_depth_tracks(
         records,
+        depth_tracks=depth_tracks,
         depth_table=depth_table,
         depth_file=depth_file,
         depth_tables=depth_tables,
@@ -2335,6 +2360,7 @@ def assemble_circular_diagram_from_record(
     step: Optional[int] = None,
     depth_window: Optional[int] = None,
     depth_step: Optional[int] = None,
+    depth_tracks: Sequence[DepthTrackInput] | None = None,
     depth_table: DataFrame | None = None,
     depth_file: str | None = None,
     depth_track_tables: Sequence[Sequence[DataFrame | None]] | None = None,
@@ -2416,6 +2442,7 @@ def assemble_circular_diagram_from_record(
         if _precomputed_depth_track_specs is not None
         else normalize_depth_tracks(
             [gb_record],
+            depth_tracks=depth_tracks,
             depth_table=depth_table,
             depth_file=depth_file,
             depth_track_tables=depth_track_tables,
@@ -2476,16 +2503,16 @@ def assemble_circular_diagram_from_record(
     legend_effective = legend
 
     # Explicit slots override high-level show flags used by canvas sizing.
-    if parsed_circular_track_slots is not None:
-        show_depth = _slots_have_renderer(parsed_circular_track_slots, "depth")
-        show_gc = _slots_have_renderer(parsed_circular_track_slots, "dinucleotide_content")
-        show_skew = _slots_have_renderer(parsed_circular_track_slots, "dinucleotide_skew")
-        if show_depth and not show_depth_from_input:
-            raise ValidationError("A circular depth track slot requires a depth_table, depth_file, or depth_track input.")
-    else:
-        show_depth = cfg.canvas.show_depth
-        show_gc = cfg.canvas.show_gc
-        show_skew = cfg.canvas.show_skew
+    show_depth, show_gc, show_skew = _resolve_circular_track_visibility(
+        cfg,
+        parsed_circular_track_slots,
+    )
+    if (
+        parsed_circular_track_slots is not None
+        and show_depth
+        and not show_depth_from_input
+    ):
+        raise ValidationError("A circular depth track slot requires a depth_table, depth_file, or depth_track input.")
     available_depth_track_count = _depth_track_count_for_render(
         record_depth_tracks,
         precomputed_depth_track_list,
@@ -2783,6 +2810,7 @@ def assemble_circular_diagram_from_records(
     step: Optional[int] = None,
     depth_window: Optional[int] = None,
     depth_step: Optional[int] = None,
+    depth_tracks: Sequence[DepthTrackInput] | None = None,
     depth_table: DataFrame | None = None,
     depth_file: str | None = None,
     depth_tables: Sequence[DataFrame] | None = None,
@@ -2896,6 +2924,7 @@ def assemble_circular_diagram_from_records(
             step=step,
             depth_window=depth_window,
             depth_step=depth_step,
+            depth_tracks=depth_tracks,
             depth_table=single_depth_table,
             depth_file=single_depth_file,
             depth_track_tables=depth_track_tables,
@@ -2945,6 +2974,7 @@ def assemble_circular_diagram_from_records(
     records = list(records)
     record_depth_tracks = normalize_depth_tracks(
         records,
+        depth_tracks=depth_tracks,
         depth_table=depth_table,
         depth_file=depth_file,
         depth_tables=depth_tables,
@@ -3008,16 +3038,16 @@ def assemble_circular_diagram_from_records(
 
     legend_effective = legend
 
-    if parsed_circular_track_slots is not None:
-        show_depth = _slots_have_renderer(parsed_circular_track_slots, "depth")
-        show_gc = _slots_have_renderer(parsed_circular_track_slots, "dinucleotide_content")
-        show_skew = _slots_have_renderer(parsed_circular_track_slots, "dinucleotide_skew")
-        if show_depth and record_depth_tracks is None:
-            raise ValidationError("A circular depth track slot requires depth_tables, depth_files, or depth_track input.")
-    else:
-        show_depth = cfg.canvas.show_depth
-        show_gc = cfg.canvas.show_gc
-        show_skew = cfg.canvas.show_skew
+    show_depth, show_gc, show_skew = _resolve_circular_track_visibility(
+        cfg,
+        parsed_circular_track_slots,
+    )
+    if (
+        parsed_circular_track_slots is not None
+        and show_depth
+        and record_depth_tracks is None
+    ):
+        raise ValidationError("A circular depth track slot requires depth_tables, depth_files, or depth_track input.")
     available_depth_track_count = depth_track_count(record_depth_tracks)
     parsed_circular_track_slots = _default_circular_depth_slots_if_needed(
         parsed_circular_track_slots=parsed_circular_track_slots,
@@ -3776,6 +3806,7 @@ def build_circular_diagram(
         step=options.step,
         depth_window=options.depth_window,
         depth_step=options.depth_step,
+        depth_tracks=options.depth_tracks,
         depth_table=depth_table,
         depth_file=depth_file,
         depth_track_tables=options.depth_track_tables,
@@ -3878,6 +3909,7 @@ def build_linear_diagram(
         step=options.step,
         depth_window=options.depth_window,
         depth_step=options.depth_step,
+        depth_tracks=options.depth_tracks,
         depth_table=options.depth_table,
         depth_file=options.depth_file,
         depth_tables=options.depth_tables,
@@ -3952,6 +3984,7 @@ def build_circular_multi_diagram(
         step=options.step,
         depth_window=options.depth_window,
         depth_step=options.depth_step,
+        depth_tracks=options.depth_tracks,
         depth_table=options.depth_table,
         depth_file=options.depth_file,
         depth_tables=options.depth_tables,

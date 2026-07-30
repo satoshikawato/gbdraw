@@ -27,6 +27,10 @@ const {
   trackDefaultsForMode
 } = await import(pathToFileURL(join(tempDir, 'js', 'mode-profiles.js')));
 const {
+  WEB_UX_PROFILE,
+  WEB_UX_PROFILE_VERSION
+} = await import(pathToFileURL(join(tempDir, 'js', 'web-ux-profile.js')));
+const {
   DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS,
   DEFAULT_LINEAR_BLAST_FILTERS,
   buildModeBlastFilterArgs,
@@ -62,6 +66,21 @@ const differentLeafPaths = (left, right, prefix = '') => {
 
 assert.equal(semanticParity.schema, 1);
 assert.equal(MODE_PROFILE_VERSION, semanticParity.profileVersion);
+assert.equal(WEB_UX_PROFILE_VERSION, 1);
+assert.deepEqual(WEB_UX_PROFILE, {
+  separateStrands: true,
+  circular: {
+    singleRecordGrouping: 'single',
+    multiRecordGrouping: 'batch',
+    gridByDefault: false,
+    legend: 'left',
+    plotTitlePosition: 'none'
+  },
+  linear: {
+    legend: 'bottom',
+    plotTitlePosition: 'bottom'
+  }
+});
 assert.deepEqual(
   [...MODE_DEFAULT_FEATURE_TYPES],
   semanticParity.featureTypes
@@ -199,12 +218,16 @@ state.mode.value = 'circular';
 const formDefaults = createDefaultForm();
 assert.deepEqual(
   {
+    multi_record_canvas: formDefaults.multi_record_canvas,
+    separate_strands: formDefaults.separate_strands,
     suppress_gc: formDefaults.suppress_gc,
     suppress_skew: formDefaults.suppress_skew,
     show_gc: formDefaults.show_gc,
     show_skew: formDefaults.show_skew
   },
   {
+    multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
+    separate_strands: WEB_UX_PROFILE.separateStrands,
     suppress_gc: false,
     suppress_skew: false,
     show_gc: false,
@@ -300,6 +323,12 @@ for (const modeName of ['circular', 'linear']) {
   const options = canonical.renderRequest.diagramOptions;
   const expected = expectedModes[modeName];
   assert.equal(canonical.renderRequest.mode, modeName);
+  assert.equal(
+    canonical.renderRequest.grouping,
+    modeName === 'circular'
+      ? WEB_UX_PROFILE.circular.singleRecordGrouping
+      : 'single'
+  );
   assert.deepEqual({
     evalue: options.evalue,
     bitscore: options.bitscore,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7,13 +7,19 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-layout-preferences-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
+await mkdir(join(tempRoot, 'app'));
 for (const filename of ['layout-preferences.js', 'plot-title-position.js']) {
   await writeFile(
-    join(tempRoot, filename),
+    join(tempRoot, 'app', filename),
     await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'app', filename), 'utf8'),
     'utf8'
   );
 }
+await writeFile(
+  join(tempRoot, 'web-ux-profile.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'web-ux-profile.js'), 'utf8'),
+  'utf8'
+);
 
 const {
   createDefaultLayoutPreferences,
@@ -23,7 +29,7 @@ const {
   resolveActiveLayoutPreference,
   resolveCircularLayoutPreference,
   updateActiveLayoutPreference
-} = await import(pathToFileURL(join(tempRoot, 'layout-preferences.js')));
+} = await import(pathToFileURL(join(tempRoot, 'app', 'layout-preferences.js')));
 
 const defaults = createDefaultLayoutPreferences();
 assert.deepEqual(resolveCircularLayoutPreference(defaults, false), {

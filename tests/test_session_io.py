@@ -346,6 +346,27 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
         "protein-2",
     ]
 
+    sidecar.write_text("keep this session", encoding="utf-8")
+    with pytest.raises(ValidationError, match="--overwrite"):
+        save_session_sidecar_if_requested(
+            save_session=True,
+            session_output=str(sidecar),
+            output_prefix=str(output_prefix),
+            run_result=run_result,
+            cmd_args=(),
+        )
+    assert sidecar.read_text(encoding="utf-8") == "keep this session"
+
+    save_session_sidecar_if_requested(
+        save_session=True,
+        session_output=str(sidecar),
+        output_prefix=str(output_prefix),
+        run_result=run_result,
+        cmd_args=(),
+        overwrite=True,
+    )
+    assert load_session(sidecar)["format"] == "gbdraw-session"
+
 
 def test_current_session_version_matches_web_config() -> None:
     source = Path("gbdraw/web/js/services/config.js").read_text(encoding="utf-8")

@@ -62,6 +62,7 @@ class SessionCliRequest:
     session_path: str
     output: str | None
     format: str | None
+    overwrite: bool
     save_session: bool
     session_output: str | None
 
@@ -112,6 +113,7 @@ def parse_session_pre_args(
     parser.add_argument("--session", required=True)
     parser.add_argument("-o", "--output")
     parser.add_argument("-f", "--format")
+    parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--save_session", action="store_true")
     parser.add_argument("--session_output")
     namespace, unknown = parser.parse_known_args(list(cmd_args))
@@ -124,6 +126,7 @@ def parse_session_pre_args(
         session_path=str(namespace.session),
         output=namespace.output,
         format=namespace.format,
+        overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
     )
@@ -146,8 +149,35 @@ def resolve_session_sidecar_path(
     return Path("gbdraw.gbdraw-session.json")
 
 
+def preflight_session_sidecar_if_requested(
+    *,
+    save_session: bool,
+    session_output: str | None,
+    output_prefix: str | None,
+    outputs: Sequence[RenderedSvg] = (),
+    overwrite: bool = False,
+) -> Path | None:
+    """Reject an existing session sidecar before rendering when its path is known."""
+
+    if not save_session and not session_output:
+        return None
+    if not session_output and not output_prefix and not outputs:
+        return None
+    sidecar_path = resolve_session_sidecar_path(
+        explicit_path=session_output,
+        output_prefix=output_prefix,
+        outputs=outputs,
+    )
+    if sidecar_path.exists() and not overwrite:
+        raise ValidationError(
+            f"Session output already exists: {sidecar_path}. "
+            "Use --overwrite to replace it."
+        )
+    return sidecar_path
+
+
 def make_rendered_svg(output_prefix: str, result_name: str | None = None) -> RenderedSvg:
-    """Create a RenderedSvg result for the static SVG written by save_figure()."""
+    """Create a RenderedSvg result for a static SVG export."""
 
     svg_path = Path(resolve_format_output_path(output_prefix, SVG_FORMAT))
     return RenderedSvg(
@@ -218,16 +248,20 @@ def save_session_sidecar_if_requested(
     source_session: Mapping[str, Any] | None = None,
     cli_invocation_args: Sequence[str] = (),
     file_bindings: Sequence[SessionFileBinding] = (),
+    overwrite: bool = False,
 ) -> Path | None:
     """Build and write a GUI session sidecar when requested."""
 
     if not save_session and not session_output:
         return None
-    sidecar_path = resolve_session_sidecar_path(
-        explicit_path=session_output,
+    sidecar_path = preflight_session_sidecar_if_requested(
+        save_session=save_session,
+        session_output=session_output,
         output_prefix=output_prefix,
         outputs=run_result.outputs,
+        overwrite=overwrite,
     )
+    assert sidecar_path is not None
 
     if source_session is not None:
         embedded_files = source_session.get("files")
@@ -295,6 +329,7 @@ def render_canonical_session_if_present(
     format_override: str | None,
     save_session: bool,
     session_output: str | None,
+    overwrite: bool = False,
 ) -> bool:
     """Render an authoritative canonical request and bypass legacy CLI replay."""
 
@@ -329,12 +364,10 @@ def render_canonical_session_if_present(
             output_prefix=output_path.name if output_path is not None else None,
             output_directory=output_directory,
             formats=format_override,
+            overwrite=overwrite,
         )
-        rendered = _render_request(
-            request,
-            session_artifacts=document.to_dict(),
-        )
-
+        replay_prefix: str | None = None
+        sidecar_path: Path | None = None
         if save_session or session_output:
             from gbdraw.api.requests import CircularBatchRequest
 
@@ -355,6 +388,19 @@ def render_canonical_session_if_present(
                 if session_output
                 else output_directory / f"{replay_prefix}.gbdraw-session.json"
             )
+            preflight_session_sidecar_if_requested(
+                save_session=True,
+                session_output=str(sidecar_path),
+                output_prefix=None,
+                overwrite=overwrite,
+            )
+
+        rendered = _render_request(
+            request,
+            session_artifacts=document.to_dict(),
+        )
+
+        if sidecar_path is not None:
             adjunct = {
                 key: value
                 for key, value in document.to_dict().items()
@@ -500,6 +546,7 @@ def render_canonical_session_if_present(
                 request,
                 title=str(document.to_dict().get("title") or replay_prefix),
                 adjunct=adjunct,
+                overwrite=overwrite,
             )
     return True
 
@@ -517,13 +564,16 @@ def _render_request(request, *, session_artifacts=None):
 
 
 def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:
-    """Remove sidecar-output-only flags before storing cliInvocation.args."""
+    """Remove sidecar controls and overwrite permission from saved CLI arguments."""
 
     result: list[str] = []
     index = 0
     while index < len(cmd_args):
         token = str(cmd_args[index])
         if token == "--save_session":
+            index += 1
+            continue
+        if token == "--overwrite":
             index += 1
             continue
         if token.startswith("--session_output="):
@@ -894,6 +944,7 @@ __all__ = [
     "collect_track_slot_geometry_records",
     "make_rendered_svg",
     "parse_session_pre_args",
+    "preflight_session_sidecar_if_requested",
     "resolve_session_sidecar_path",
     "render_canonical_session_if_present",
     "save_session_sidecar_if_requested",

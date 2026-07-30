@@ -242,9 +242,11 @@ def test_low_level_api_owners_are_explicit() -> None:
     assert {
         "CircularDiagramOptions",
         "CircularOutputOptions",
+        "CircularRequestTrackOptions",
         "CircularTrackOptions",
         "LinearDiagramOptions",
         "LinearOutputOptions",
+        "LinearRequestTrackOptions",
         "LinearTrackOptions",
         "plan_circular_request",
         "plan_linear_request",

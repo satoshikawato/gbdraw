@@ -9,6 +9,7 @@ import {
   createDefaultPriorityRule,
   createDefaultSpecificRule
 } from '../state.js';
+import { createDefaultLayoutPreferences } from '../app/layout-preferences.js';
 
 const clonePlain = (value) => {
   if (Array.isArray(value)) return value.map((entry) => clonePlain(entry));
@@ -59,18 +60,10 @@ const resetPaletteState = (state) => {
 };
 
 const resetLayoutPreferenceState = (state) => {
-  Object.assign(state.layoutPreferences.circular.single, {
-    legend: 'left',
-    plotTitlePosition: 'none'
-  });
-  Object.assign(state.layoutPreferences.circular.multi, {
-    legend: null,
-    plotTitlePosition: null
-  });
-  Object.assign(state.layoutPreferences.linear, {
-    legend: 'bottom',
-    plotTitlePosition: 'bottom'
-  });
+  const defaults = createDefaultLayoutPreferences();
+  Object.assign(state.layoutPreferences.circular.single, defaults.circular.single);
+  Object.assign(state.layoutPreferences.circular.multi, defaults.circular.multi);
+  Object.assign(state.layoutPreferences.linear, defaults.linear);
   state.suppressCircularMultiRecordDefaults.value = false;
 };
 

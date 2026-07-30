@@ -74,8 +74,9 @@ def save_figure_to(
     """Save a figure to an explicit output directory/prefix.
 
     This always writes an SVG, then optionally converts to other formats using
-    CairoSVG. Unlike the CLI-oriented :func:`save_figure`, explicitly requested
-    formats are strict: failure to generate any one of them raises an exception.
+    CairoSVG. Unlike the deprecated
+    :func:`gbdraw.render.export.save_figure`, explicitly requested formats are
+    strict: failure to generate any one of them raises an exception.
     """
 
     fmt_list = _normalize_formats(formats)

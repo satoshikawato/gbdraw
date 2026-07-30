@@ -30,6 +30,12 @@ from gbdraw.api.diagram import (
     assemble_circular_diagram_from_records,
     assemble_circular_diagram_from_record,
     assemble_linear_diagram_from_records,
+    build_linear_diagram,
+)
+from gbdraw.api.options import (
+    CircularDiagramOptions,
+    DepthTrackInput,
+    LinearDiagramOptions,
 )
 from gbdraw.config.toml import load_config_toml
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
@@ -181,6 +187,151 @@ def test_depth_normalization_rejects_globally_empty_logical_column() -> None:
 def _write_depth_file(path: Path, text: str) -> Path:
     path.write_text(text, encoding="utf-8")
     return path
+
+
+def test_canonical_depth_track_normalizes_one_shared_source() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    table = pd.concat(
+        (
+            _constant_depth_table("rec1", 10, length=40),
+            _constant_depth_table("rec2", 20, length=40),
+        ),
+        ignore_index=True,
+    )
+
+    normalized = normalize_depth_tracks(
+        records,
+        depth_tracks=(
+            DepthTrackInput(
+                source=table,
+                label="Coverage",
+                color="#123456",
+                large_tick_interval=20,
+                small_tick_interval=10,
+                tick_font_size=8,
+            ),
+        ),
+    )
+
+    assert normalized is not None
+    assert [[spec.track_index for spec in row] for row in normalized] == [[0], [0]]
+    assert all(row[0].table is table for row in normalized)
+    assert normalized[0][0].label == "Coverage"
+    assert normalized[0][0].fill_color == "#123456"
+    assert normalized[0][0].large_tick_interval == 20
+    assert normalized[0][0].small_tick_interval == 10
+    assert normalized[0][0].tick_font_size == 8
+
+
+def test_canonical_depth_tracks_support_mixed_and_sparse_per_record_sources(
+    tmp_path: Path,
+) -> None:
+    records = [
+        _make_record("rec1", length=40),
+        _make_record("rec2", length=40),
+        _make_record("rec3", length=40),
+    ]
+    rec1_table = _constant_depth_table("rec1", 10, length=40)
+    rec2_file = _write_depth_file(
+        tmp_path / "rec2.depth.tsv",
+        "rec2\t1\t20\nrec2\t2\t20\n",
+    )
+    shared_table = pd.concat(
+        (
+            _constant_depth_table("rec1", 30, length=40),
+            _constant_depth_table("rec2", 30, length=40),
+            _constant_depth_table("rec3", 30, length=40),
+        ),
+        ignore_index=True,
+    )
+
+    normalized = normalize_depth_tracks(
+        records,
+        depth_tracks=(
+            DepthTrackInput(
+                source=(rec1_table, rec2_file, None),
+                label="Sparse",
+                height=14,
+            ),
+            DepthTrackInput(
+                source=shared_table,
+                label="Shared",
+                height=22,
+            ),
+        ),
+    )
+
+    assert normalized is not None
+    assert [[spec.track_index for spec in row] for row in normalized] == [
+        [0, 1],
+        [0, 1],
+        [1],
+    ]
+    assert normalized[0][0].table is rec1_table
+    assert normalized[1][0].table["reference_name"].tolist() == ["rec2", "rec2"]
+    assert depth_track_count(normalized) == 2
+    assert depth_track_heights(normalized) == [14, 22]
+
+
+def test_canonical_depth_tracks_reject_wrong_per_record_cardinality() -> None:
+    records = [_make_record("rec1"), _make_record("rec2")]
+
+    with pytest.raises(ValidationError, match="one source per displayed record"):
+        normalize_depth_tracks(
+            records,
+            depth_tracks=(
+                DepthTrackInput(source=(_depth_table("rec1"),)),
+            ),
+        )
+
+
+def test_typed_options_reject_canonical_and_compatibility_depth_inputs() -> None:
+    track = DepthTrackInput(source=_depth_table())
+
+    with pytest.raises(
+        ValidationError,
+        match="depth_tracks cannot be combined with compatibility depth inputs",
+    ):
+        LinearDiagramOptions(
+            depth_tracks=(track,),
+            depth_track_tables=((_depth_table(),),),
+        )
+
+
+def test_circular_typed_options_reject_linear_depth_height() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="available only for Linear diagrams",
+    ):
+        CircularDiagramOptions(
+            depth_tracks=(DepthTrackInput(source=_depth_table(), height=20),),
+        )
+
+
+def test_typed_linear_builder_accepts_canonical_depth_tracks() -> None:
+    record = _make_record("rec1", length=40)
+
+    svg = build_linear_diagram(
+        [record],
+        options=LinearDiagramOptions(
+            config_overrides={
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+            depth_tracks=(
+                DepthTrackInput(
+                    source=_constant_depth_table("rec1", 12, length=40),
+                    label="Coverage",
+                    height=18,
+                ),
+            ),
+            depth_window=10,
+            depth_step=10,
+        ),
+    ).tostring()
+
+    assert 'id="depth"' in svg
+    assert "Coverage" in svg
 
 
 def _svg_group_translate_y(svg: str, group_id: str) -> float:

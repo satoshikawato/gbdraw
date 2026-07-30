@@ -89,6 +89,36 @@ def test_python_helpers_blank_or_js_nullish_accepts_pyodide_sentinels(
         assert is_blank(value) is False  # type: ignore[operator]
 
 
+def test_run_gbdraw_wrapper_rejects_unknown_mode_before_dispatch_or_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    marker = tmp_path / "keep.svg"
+    marker.write_text("<svg />", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    def unexpected_linear_dispatch(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Unknown modes must not dispatch to Linear.")
+
+    monkeypatch.setitem(
+        python_helpers_namespace,
+        "run_linear_from_namespace",
+        unexpected_linear_dispatch,
+    )
+    wrapper = python_helpers_namespace["run_gbdraw_wrapper"]
+
+    payload = json.loads(wrapper("radial", []))  # type: ignore[operator]
+
+    assert payload == {
+        "error": {
+            "type": "ValidationError",
+            "message": "Unsupported diagram mode: radial. Expected 'circular' or 'linear'.",
+        }
+    }
+    assert marker.exists()
+
+
 def test_regenerate_definition_svgs_accepts_nullish_font_sizes(
     tmp_path: Path,
     python_helpers_namespace: dict[str, object],

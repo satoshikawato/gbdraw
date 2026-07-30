@@ -6,7 +6,8 @@ import copy
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from numbers import Integral
-from typing import Callable, Sequence, TypeVar
+from pathlib import Path
+from typing import TYPE_CHECKING, Callable, Sequence, TypeVar
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -15,6 +16,9 @@ from gbdraw.analysis.depth import depth_df, read_depth_tsv  # type: ignore[repor
 from gbdraw.configurators import DepthConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.tracks.parsing import parse_nonnegative_integer
+
+if TYPE_CHECKING:
+    from gbdraw.api.options import DepthTrackInput
 
 
 @dataclass(frozen=True)
@@ -247,9 +251,80 @@ def _tracks_from_record_major_values(
     return record_tracks
 
 
+def _tracks_from_logical_inputs(
+    inputs: Sequence[DepthTrackInput],
+    *,
+    records: Sequence[SeqRecord],
+) -> list[list[DepthTrackSpec]]:
+    """Expand canonical logical tracks into sparse record-major specs."""
+
+    from gbdraw.api.options import DepthTrackInput
+
+    record_count = len(records)
+    track_count = len(inputs)
+    record_tracks: list[list[DepthTrackSpec]] = [[] for _ in range(record_count)]
+    loaded_files: dict[str, DataFrame] = {}
+    track_ids = _default_depth_track_ids(track_count)
+    default_labels = _default_depth_track_labels(track_count)
+
+    for track_index, track in enumerate(inputs):
+        if not isinstance(track, DepthTrackInput):
+            raise ValidationError(
+                f"depth_tracks[{track_index}] must be a DepthTrackInput."
+            )
+        source = track.source
+        if isinstance(source, SequenceABC) and not isinstance(
+            source,
+            (str, bytes, bytearray),
+        ) and not isinstance(source, DataFrame):
+            source_values = list(source)
+            if len(source_values) != record_count:
+                raise ValidationError(
+                    f"depth_tracks[{track_index}].source must contain one source "
+                    f"per displayed record ({record_count}); got {len(source_values)}."
+                )
+        else:
+            source_values = [source for _ in range(record_count)]
+
+        if not any(value is not None for value in source_values):
+            raise ValidationError(f"Depth track {track_index + 1} is empty.")
+
+        for record_index, source_value in enumerate(source_values):
+            if source_value is None:
+                continue
+            if isinstance(source_value, DataFrame):
+                table = source_value
+            elif isinstance(source_value, (str, Path)):
+                source_path = str(source_value)
+                if source_path not in loaded_files:
+                    loaded_files[source_path] = read_depth_tsv(source_path)
+                table = loaded_files[source_path]
+            else:
+                raise ValidationError(
+                    f"depth_tracks[{track_index}].source[{record_index}] must be "
+                    "a path, DataFrame, or None."
+                )
+            record_tracks[record_index].append(
+                DepthTrackSpec(
+                    id=track_ids[track_index],
+                    label=str(track.label or default_labels[track_index]),
+                    table=table,
+                    track_index=track_index,
+                    fill_color=track.color,
+                    height=track.height,
+                    large_tick_interval=track.large_tick_interval,
+                    small_tick_interval=track.small_tick_interval,
+                    tick_font_size=track.tick_font_size,
+                )
+            )
+
+    return record_tracks
+
+
 def normalize_depth_tracks(
     records: Sequence[SeqRecord],
     *,
+    depth_tracks: Sequence[DepthTrackInput] | None = None,
     depth_table: DataFrame | None = None,
     depth_file: str | None = None,
     depth_tables: Sequence[DataFrame] | None = None,
@@ -269,8 +344,10 @@ def normalize_depth_tracks(
     if record_count <= 0:
         raise ValidationError("records is empty")
 
-    legacy_present = _has_any((depth_table, depth_file, depth_tables, depth_files))
-    new_present = _has_any(
+    singular_plural_present = _has_any(
+        (depth_table, depth_file, depth_tables, depth_files)
+    )
+    matrix_present = _has_any(
         (
             depth_track_tables,
             depth_track_files,
@@ -282,12 +359,34 @@ def normalize_depth_tracks(
             depth_track_tick_font_sizes,
         )
     )
-    if legacy_present and new_present:
-        raise ValidationError("Legacy depth inputs cannot be combined with depth_track_* inputs.")
-    if not legacy_present and not new_present:
+    compatibility_present = singular_plural_present or matrix_present
+    if depth_tracks is not None and compatibility_present:
+        raise ValidationError(
+            "depth_tracks cannot be combined with compatibility depth inputs."
+        )
+    if singular_plural_present and matrix_present:
+        raise ValidationError(
+            "Singular/plural depth inputs cannot be combined with depth_track_* "
+            "compatibility inputs."
+        )
+    if depth_tracks is None and not compatibility_present:
         return None
 
-    if new_present:
+    if depth_tracks is not None:
+        if isinstance(depth_tracks, (str, bytes)) or not isinstance(
+            depth_tracks,
+            SequenceABC,
+        ):
+            raise ValidationError(
+                "depth_tracks must be a sequence of DepthTrackInput values."
+            )
+        if not depth_tracks:
+            raise ValidationError(
+                "depth_tracks must include at least one logical depth track."
+            )
+        return _tracks_from_logical_inputs(depth_tracks, records=records)
+
+    if matrix_present:
         if depth_track_tables is not None and depth_track_files is not None:
             raise ValidationError("Pass either depth_track_tables or depth_track_files, not both.")
         if depth_track_tables is None and depth_track_files is None:

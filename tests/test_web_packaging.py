@@ -838,7 +838,7 @@ def test_web_record_local_orthogroup_scope_survives_state_and_ui_layers() -> Non
     assert "state.orthogroups.value = groups;" in config_js
     assert "orthogroupScope" in config_js
     assert "orthogroupScope" in run_analysis_js
-    assert "Species-specific orthogroup" in normalizer_js
+    assert "Record-specific similarity group" in normalizer_js
     assert "Collinearity-backed global evidence" in normalizer_js
     assert "Local collinear group" in normalizer_js
     assert "groupMetadataScopeLabel(orthogroupScope(groupOrId))" in orthogroups_js
@@ -853,7 +853,7 @@ def test_web_run_analysis_orthogroup_top_label_mode_is_wired() -> None:
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
 
     assert '<option value="orthogroup_top"' in index_html
-    assert "Top Orthogroup Record" in index_html
+    assert "Top Similarity Group Record" in index_html
     assert "losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear'" in index_html
     assert "if (form.show_labels_linear === 'orthogroup_top') args.push('orthogroup_top');" in run_analysis_js
     assert "show_labels_linear: 'none'" in state_js
@@ -1710,7 +1710,7 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "data-search-match-detail",
         "gfs-button--clear",
         "gfs-match-detail",
-        "['orthogroup', 'Orthogroup']",
+        "['orthogroup', 'Similarity group']",
         "['nucleotide', 'Nucleotide']",
         "['amino-acid', 'Amino acid']",
         "var NUCLEOTIDE_IUPAC = {",
@@ -1729,7 +1729,7 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "function setActiveMatch(index, options)",
         "function clearSearch()",
         "Search match",
-        "Orthogroup members",
+        "Similarity-group members",
         "function scheduleInitialViewportRefresh()",
         "var initialView = copyViewRect(getViewRect());",
         "rectsNearlyEqual(getViewRect(), initialView)",
@@ -2213,7 +2213,7 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         }});
 
         assert(payload.title === 'og_1:rpoB', `Unexpected title: ${{payload.title}}`);
-        assert(payload.subtitle === '', `Orthogroup popup should not duplicate subtitle: ${{payload.subtitle}}`);
+        assert(payload.subtitle === '', `Similarity-group popup should not duplicate subtitle: ${{payload.subtitle}}`);
         assert(payload.sections.map((section) => section.title).join(',') === 'Summary', JSON.stringify(payload.sections));
         const labels = payload.sections.flatMap((section) => section.rows.map((row) => row.label));
         assert(!labels.includes('Match style'), `Match style leaked: ${{JSON.stringify(labels)}}`);
@@ -2223,14 +2223,14 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         assert(!labels.includes('Subject record'), `Subject record should be omitted: ${{JSON.stringify(labels)}}`);
         assert(!labels.includes('Query interval'), `Query interval should be omitted: ${{JSON.stringify(labels)}}`);
         assert(!labels.includes('Subject interval'), `Subject interval should be omitted: ${{JSON.stringify(labels)}}`);
-        assert(labels.includes('Orthogroup ID'), `Orthogroup ID missing: ${{JSON.stringify(labels)}}`);
+        assert(labels.includes('Similarity group ID'), `Similarity group ID missing: ${{JSON.stringify(labels)}}`);
         assert(labels.includes('Display name'), `Display name missing: ${{JSON.stringify(labels)}}`);
         const summary = payload.sections[0];
         assert(summary.memberRows.length === 2, JSON.stringify(summary));
         assert(summary.memberRows.map((row) => row.proteinId).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(summary.memberRows));
         assert(summary.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tRole\\tConfidence\\tAssignment reason\\tProduct / note'), summary.memberCopyText);
         const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
-        assert(hoverLabels.includes('Orthogroup'), `Hover orthogroup row missing: ${{JSON.stringify(hoverLabels)}}`);
+        assert(hoverLabels.includes('Similarity group'), `Hover similarity-group row missing: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Query'), `Hover query row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Subject'), `Hover subject row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
 
@@ -2325,17 +2325,17 @@ def test_collinear_adjacent_popup_labels_local_collinear_groups(tmp_path: Path) 
         const payload = buildPairwiseMatchPayload(element, {{ featureLookup: new Map(), orthogroups: [] }});
         const sectionTitles = payload.sections.map((section) => section.title);
         assert(sectionTitles.includes('Local collinear groups'), JSON.stringify(sectionTitles));
-        assert(!sectionTitles.includes('Orthogroups covered'), JSON.stringify(sectionTitles));
+        assert(!sectionTitles.includes('Similarity groups covered'), JSON.stringify(sectionTitles));
         const groupSection = payload.sections.find((section) => section.title === 'Local collinear groups');
         const groupLabels = groupSection.rows.map((row) => row.label);
         assert(groupLabels.includes('Number of local collinear groups'), JSON.stringify(groupLabels));
         assert(payload.blockOrthogroupCount === 2, `Unexpected group count: ${{payload.blockOrthogroupCount}}`);
         const detailLabels = payload.blockOrthogroups[0].detailRows.map((row) => row.label);
         assert(detailLabels.includes('Collinear group ID'), JSON.stringify(detailLabels));
-        assert(!detailLabels.includes('Orthogroup ID'), JSON.stringify(detailLabels));
+        assert(!detailLabels.includes('Similarity group ID'), JSON.stringify(detailLabels));
         const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
         assert(hoverLabels.includes('Collinear groups'), JSON.stringify(hoverLabels));
-        assert(!hoverLabels.includes('Orthogroups'), JSON.stringify(hoverLabels));
+        assert(!hoverLabels.includes('Similarity groups'), JSON.stringify(hoverLabels));
         """,
         encoding="utf-8",
     )
@@ -5009,7 +5009,7 @@ def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
                 assert len(conservation_state["labels"]) == 20
                 assert conservation_state["blastCount"] == 20
                 assert conservation_state["blastSource"] == "losat-cache"
-                assert conservation_state["comparisonFastaCount"] == 0
+                assert conservation_state["comparisonFastaCount"] == 20
 
                 round_trip_path = tmp_path / "WSSV-round-trip.gbdraw-session.json.gz"
                 with page.expect_download() as download_info:
@@ -5023,7 +5023,9 @@ def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
                 assert options["conservationLabels"] == conservation_state["labels"]
                 assert round_trip["webFiles"]["conservationBlastSource"] == "losat-cache"
                 assert "conservationFastaFiles" not in options
-                assert "conservationLosatFastaSources" not in round_trip["webFiles"]
+                assert len(
+                    round_trip["webFiles"]["conservationLosatFastaSources"]
+                ) == 20
 
             if session_name == "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz":
                 multi_record_positions = page.evaluate(

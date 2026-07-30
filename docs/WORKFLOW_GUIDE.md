@@ -42,6 +42,34 @@ Use [precomputed BLAST comparisons](./TUTORIALS/2_Comparative_Genomics.md) when 
 | CLI | Reproducible commands, batch work, and all static export formats. |
 | `gbdraw` Python API | Python pipelines that need records and output in memory. See [Python API](./PYTHON_API.md). |
 
+### Web UX profile v1
+
+The browser interface has an explicit UX profile. These defaults are chosen for
+interactive editing and intentionally differ from the CLI and Python defaults:
+
+| Setting | Browser default |
+|---|---|
+| Feature strands | Separate strands on |
+| Circular legend | Left |
+| Linear legend | Bottom |
+| One Circular record | Single diagram |
+| Several records in one Circular input | Separate results; select **Multi-Record Canvas** for a grid |
+
+A loaded session restores its saved values instead of applying this profile again.
+The CLI keeps separate Circular outputs by default and uses
+`--multi_record_canvas` for a grid. The package-root Python API automatically uses a
+grid when `draw_circular()` receives several records; the typed API selects the
+single- or multi-record builder explicitly.
+
+Circular Web input accepts one GenBank/GBFF file or one GFF3 + FASTA pair per run. One file
+may contain several records. Use the CLI or Python API when records must come from
+several source files. Circular legends support Left, Right, Top, Bottom, all four
+corner positions, and None.
+
+The annotation editor covers common styles. Use an annotation TSV for the complete
+style contract, including fields that are not shown in the form; see
+[region annotation tables](./TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables).
+
 ## Output and reproducibility
 
 - Use SVG or PDF for editable vector output; use PNG only when a raster format is required.

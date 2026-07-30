@@ -5,12 +5,14 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import (
     CircularDiagramRequest,
+    DepthTrackInput,
     InMemoryRecordSource,
     LinearDiagramRequest,
     LinearDiagramOptions,
@@ -20,6 +22,7 @@ from gbdraw.api import (
     RenderOutputRequest,
     ScalarSpec,
     SessionFormatError,
+    SessionRenderError,
     SessionResourceError,
     SessionVersionError,
     build_session_document,
@@ -61,6 +64,7 @@ def test_session_document_round_trip_owns_resource_lifetime(
     assert document.mode == mode
     assert document.has_canonical_request is True
     assert document.to_dict()["resources"]["record-1-genbank"]["encoding"] == "base64"
+    assert document.to_dict()["renderRequest"]["output"]["overwrite"] is False
 
     with materialize_session(
         document,
@@ -68,6 +72,7 @@ def test_session_document_round_trip_owns_resource_lifetime(
         temporary_directory=tmp_path / "materialized",
     ) as materialized:
         decoded = session_to_request(materialized)
+        assert decoded.output.overwrite is False
         resource_path = decoded.records[0].source.path
         assert resource_path.is_file()
         assert materialized.active is True
@@ -116,6 +121,44 @@ def test_session_document_gzip_save_load(tmp_path: Path) -> None:
     assert session_path.read_bytes().startswith(b"\x1f\x8b")
     assert document.version == CURRENT_SESSION_VERSION
     assert document.mode == "circular"
+
+
+def test_session_document_requires_explicit_overwrite(tmp_path: Path) -> None:
+    request = CircularDiagramRequest(records=(_record(),))
+    session_path = tmp_path / "canonical.gbdraw-session.json"
+
+    save_session_document(session_path, request)
+    original = session_path.read_bytes()
+
+    with pytest.raises(SessionFormatError, match="overwrite=True"):
+        save_session_document(session_path, request)
+    assert session_path.read_bytes() == original
+
+    save_session_document(session_path, request, overwrite=True)
+    assert load_session_document(session_path).mode == "circular"
+
+
+def test_direct_session_render_ignores_stored_overwrite_permission(
+    tmp_path: Path,
+) -> None:
+    request = CircularDiagramRequest(
+        records=(_record(),),
+        output=RenderOutputRequest(
+            output_prefix="protected",
+            output_directory=tmp_path,
+            overwrite=True,
+        ),
+    )
+    document = build_session_document(request)
+    document._data["renderRequest"]["output"]["overwrite"] = True
+    protected = tmp_path / "protected.svg"
+    protected.write_text("keep this diagram", encoding="utf-8")
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        with pytest.raises(SessionRenderError, match="already exist"):
+            render_session(materialized)
+
+    assert protected.read_text(encoding="utf-8") == "keep this diagram"
 
 
 def test_current_document_quarantines_legacy_protein_cache_on_save(
@@ -359,3 +402,93 @@ def test_web_writer_payload_decodes_with_python_codec(tmp_path: Path) -> None:
 
     assert request.output.output_prefix == "web-session"
     assert [record.id for record in records] == ["WEBTEST"]
+
+
+def test_web_depth_writer_payload_decodes_with_python_codec(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+    completed = subprocess.run(
+        [node, "tests/web/session-request.test.mjs", "--print-depth"],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).parents[1],
+    )
+    canonical = json.loads(completed.stdout)
+    document = load_session_document(
+        {
+            "format": "gbdraw-session",
+            "version": CURRENT_SESSION_VERSION,
+            "renderRequest": canonical["renderRequest"],
+            "resources": canonical["resources"],
+        }
+    )
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+
+    assert request.options.depth_tracks is not None
+    assert [track.label for track in request.options.depth_tracks] == [
+        "Sample A",
+        "Sample B",
+    ]
+    assert request.options.depth_track_files is None
+    assert request.options.depth_track_labels is None
+
+
+def test_python_depth_request_projects_in_web(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+    shared_depth = pd.DataFrame(
+        {
+            "reference_name": ["first", "second"],
+            "position": [1, 1],
+            "depth": [5, 8],
+        }
+    )
+    sparse_depth = pd.DataFrame(
+        {
+            "reference_name": ["first"],
+            "position": [1],
+            "depth": [13],
+        }
+    )
+    request = LinearDiagramRequest(
+        records=(_record("first"), _record("second")),
+        options=LinearDiagramOptions(
+            depth_tracks=(
+                DepthTrackInput(
+                    source=shared_depth,
+                    label="Shared",
+                    color="#112233",
+                    height=18,
+                    large_tick_interval=10,
+                ),
+                DepthTrackInput(
+                    source=(sparse_depth, None),
+                    label="Sparse",
+                    color="#445566",
+                    height=24,
+                    small_tick_interval=5,
+                    tick_font_size=9,
+                ),
+            ),
+        ),
+    )
+    session_path = tmp_path / "python-canonical-depth.gbdraw-session.json"
+    save_session_document(session_path, request)
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+
+    assert len(session["renderRequest"]["diagramOptions"]["depthTracks"]) == 2
+    subprocess.run(
+        [
+            node,
+            "tests/web/session-request.test.mjs",
+            "--project-session",
+            str(session_path),
+        ],
+        check=True,
+        cwd=Path(__file__).parents[1],
+    )
