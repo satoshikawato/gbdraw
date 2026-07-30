@@ -150,6 +150,7 @@ def solve_linear_layout(
     first_axis_y: float = 0.0,
     row_gap_px: float = 0.0,
     comparison_height: float = 0.0,
+    comparison_endpoint_gap_px: float = 0.0,
     definition_clear_gap: float = 0.0,
     comparison_record_indices_by_boundary: Mapping[int, Sequence[int]] | None = None,
     record_order: Sequence[int] | None = None,
@@ -169,14 +170,17 @@ def solve_linear_layout(
         raise ValidationError("record_gap_px must be a finite non-negative number.")
     ordinary_gap = float(row_gap_px)
     comparison_gap = float(comparison_height)
+    comparison_endpoint_gap = float(comparison_endpoint_gap_px)
     definition_gap = float(definition_clear_gap)
     for name, value in (
         ("row_gap_px", ordinary_gap),
         ("comparison_height", comparison_gap),
+        ("comparison_endpoint_gap_px", comparison_endpoint_gap),
         ("definition_clear_gap", definition_gap),
     ):
         if not math.isfinite(value) or value < 0:
             raise ValidationError(f"{name} must be a finite non-negative number.")
+    comparison_clearance = comparison_gap + (2.0 * comparison_endpoint_gap)
     if any(not isinstance(row, int) or isinstance(row, bool) or row < 0 for row in rows_by_record):
         raise ValidationError("Linear rows must be non-negative integers.")
     if len({item.record_index for item in items}) != len(items):
@@ -239,7 +243,7 @@ def solve_linear_layout(
 
     boundary_records: dict[int, frozenset[int]] = {}
     if comparison_record_indices_by_boundary is None:
-        if comparison_gap > 0.0:
+        if comparison_clearance > 0.0:
             for boundary in range(max(0, len(grouped) - 1)):
                 boundary_records[boundary] = frozenset(
                     item.record_index
@@ -318,7 +322,7 @@ def solve_linear_layout(
             boundary_bands(boundary),
             boundary_bands(boundary + 1),
             ordinary_row_gap=ordinary_gap,
-            comparison_height=comparison_gap,
+            comparison_height=comparison_clearance,
             definition_clear_gap=definition_gap,
             boundary_has_comparison=bool(active_records),
         )
@@ -351,8 +355,16 @@ def solve_linear_layout(
                 right_inset=item.right_inset,
                 top_extent=item.top_extent,
                 bottom_extent=item.bottom_extent,
-                comparison_top_y=row_axis_y[row_index] - comparison_top_extent,
-                comparison_bottom_y=row_axis_y[row_index] + comparison_bottom_extent,
+                comparison_top_y=(
+                    row_axis_y[row_index]
+                    - comparison_top_extent
+                    - comparison_endpoint_gap
+                ),
+                comparison_bottom_y=(
+                    row_axis_y[row_index]
+                    + comparison_bottom_extent
+                    + comparison_endpoint_gap
+                ),
                 px_per_bp=px_per_bp,
             )
             placements.append(placement)

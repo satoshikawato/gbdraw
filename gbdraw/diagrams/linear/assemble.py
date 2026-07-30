@@ -148,6 +148,7 @@ from .track_slots import (
 
 
 logger = logging.getLogger(__name__)
+_COMPARISON_ENDPOINT_GAP_PX = 4.0
 
 if TYPE_CHECKING:
     from ...api.options import LinearMultiRecordOptions
@@ -1599,6 +1600,9 @@ def assemble_linear_diagram(
         canvas_config.legend_offset_y = 0
     ordinary_row_gap = float(canvas_config.cds_padding) * 1.5
     definition_clear_gap = max(1.0, 0.5 * float(canvas_config.vertical_padding))
+    comparison_endpoint_gap_px = (
+        _COMPARISON_ENDPOINT_GAP_PX if has_blast else 0.0
+    )
     comparison_boundary_records = _comparison_records_by_boundary(
         normalized_comparisons,
         rows_by_record,
@@ -1736,6 +1740,7 @@ def assemble_linear_diagram(
                 first_axis_y=first_axis_y,
                 row_gap_px=float(canvas_config.cds_padding) * 1.5,
                 comparison_height=float(canvas_config.configured_comparison_height),
+                comparison_endpoint_gap_px=comparison_endpoint_gap_px,
                 definition_clear_gap=definition_clear_gap,
                 comparison_record_indices_by_boundary=comparison_boundary_records,
                 record_order=ordered_record_indices,
@@ -1900,8 +1905,9 @@ def assemble_linear_diagram(
                 active_bands(record_index),
                 active_bands(next_record_index),
                 ordinary_row_gap=ordinary_row_gap,
-                comparison_height=float(
-                    canvas_config.configured_comparison_height
+                comparison_height=(
+                    float(canvas_config.configured_comparison_height)
+                    + (2.0 * comparison_endpoint_gap_px)
                 ),
                 definition_clear_gap=definition_clear_gap,
                 boundary_has_comparison=bool(active_records),
@@ -2011,8 +2017,16 @@ def assemble_linear_diagram(
             right_inset=0.0,
             top_extent=record_plan.canvas_top_extent,
             bottom_extent=record_plan.canvas_bottom_extent,
-            comparison_top_y=axis_y - record_plan.comparison_top_extent,
-            comparison_bottom_y=axis_y + record_plan.comparison_bottom_extent,
+            comparison_top_y=(
+                axis_y
+                - record_plan.comparison_top_extent
+                - comparison_endpoint_gap_px
+            ),
+            comparison_bottom_y=(
+                axis_y
+                + record_plan.comparison_bottom_extent
+                + comparison_endpoint_gap_px
+            ),
             px_per_bp=sequence_width / max(1, len(record.seq)),
         )
     canvas: Drawing = canvas_config.create_svg_canvas()

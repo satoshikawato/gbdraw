@@ -198,16 +198,20 @@ def test_multi_record_solver_reserves_comparison_only_on_active_boundary() -> No
         available_width=100,
         row_gap_px=8,
         comparison_height=60,
+        comparison_endpoint_gap_px=4,
         comparison_record_indices_by_boundary={0: (0, 1)},
     )
 
     first, second = plan.row_gap_resolutions
-    assert first.axis_gap == pytest.approx(70)
+    assert first.axis_gap == pytest.approx(78)
     assert first.current_band is not None
     assert first.current_band.kind == "comparison"
     assert second.axis_gap == pytest.approx(28)
     assert second.current_band is not None
     assert second.current_band.kind == "body"
+    top = plan.placement_for_index(0)
+    bottom = plan.placement_for_index(1)
+    assert bottom.comparison_top_y - top.comparison_bottom_y == pytest.approx(60)
 
 
 def test_single_record_rows_publish_boundary_constraints_and_fit_canvas() -> None:
@@ -230,17 +234,17 @@ def test_single_record_rows_publish_boundary_constraints_and_fit_canvas() -> Non
     first, second = geometry["axisGapConstraints"]
     assert first["currentKind"] == "comparison"
     assert first["nextKind"] == "comparison"
-    assert first["clearGapPx"] == pytest.approx(200)
+    assert first["clearGapPx"] == pytest.approx(208)
     assert second["currentKind"] != "comparison"
     assert second["nextKind"] != "comparison"
-    assert second["clearGapPx"] != pytest.approx(200)
+    assert second["clearGapPx"] != pytest.approx(208)
 
     records = geometry["records"]
     corridor = (
         records[1]["comparisonExclusionBand"]["absoluteTopPx"]
         - records[0]["comparisonExclusionBand"]["absoluteBottomPx"]
     )
-    assert corridor == pytest.approx(200)
+    assert corridor == pytest.approx(208)
     assert all(record["collisionBands"] for record in records)
 
     viewbox_height = float(str(canvas.attribs["viewBox"]).split()[-1])

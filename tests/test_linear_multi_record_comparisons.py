@@ -87,7 +87,7 @@ def test_explicit_comparison_metadata_uses_selected_endpoints() -> None:
     assert 'data-subject-row="1"' in svg
 
 
-def test_comparison_ribbons_attach_to_painted_occupancy_without_extra_padding() -> None:
+def test_comparison_ribbons_keep_four_pixel_clearance_from_painted_occupancy() -> None:
     records = _records()[:3]
     for record in records:
         record.features.extend(
@@ -163,17 +163,23 @@ def test_comparison_ribbons_attach_to_painted_occupancy_without_extra_padding() 
     geometry = canvas._gbdraw_track_slot_geometry["records"]
     assert top_record_bottom < top_record_axis
     assert bottom_record_top < translate_y(bottom_record)
-    assert comparison_top == pytest.approx(
-        geometry[0]["comparisonExclusionBand"]["absoluteBottomPx"]
+    assert (
+        comparison_top
+        - geometry[0]["comparisonExclusionBand"]["absoluteBottomPx"]
+        == pytest.approx(4.0)
     )
-    assert comparison_bottom == pytest.approx(
+    assert (
         geometry[2]["comparisonExclusionBand"]["absoluteTopPx"]
+        - comparison_bottom
+        == pytest.approx(4.0)
     )
     bottom_features = next(
         slot for slot in geometry[2]["slots"] if slot["renderer"] == "features"
     )
-    assert comparison_bottom == pytest.approx(
+    assert (
         bottom_features["paintBand"]["absoluteTopPx"]
+        - comparison_bottom
+        == pytest.approx(4.0)
     )
 
 
