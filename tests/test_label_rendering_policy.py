@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import (
+    CircularRenderProfile,
+    GbdrawConfig,
+    LinearRenderProfile,
+)
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
@@ -29,18 +33,21 @@ def _feature(feature_id: str, start: int, end: int, label: str, strand: str = "p
     )
 
 
-def _config(label_rendering: str) -> tuple[dict, GbdrawConfig]:
+def _config(label_rendering: str) -> GbdrawConfig:
     config_dict = modify_config_dict(
-        load_config_toml("gbdraw.data", "config.toml"),
-        label_rendering=label_rendering,
-        label_blacklist="",
-        show_labels=True,
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.rendering": label_rendering,
+            "labels.filtering.blacklist_keywords": [],
+            "labels.circular.scope": "outer",
+            "labels.linear.scope": "all",
+        },
     )
-    return config_dict, GbdrawConfig.from_dict(config_dict)
+    return GbdrawConfig.from_dict(config_dict)
 
 
 def _linear_policy_labels(label_rendering: str) -> list[dict]:
-    config_dict, cfg = _config(label_rendering)
+    cfg = _config(label_rendering)
     features = {
         "fits": _feature("fits", 1, 300, "A"),
         "external": _feature("external", 500, 510, "very long label that cannot fit inside a ten base feature"),
@@ -54,13 +61,12 @@ def _linear_policy_labels(label_rendering: str) -> list[dict]:
         False,
         "middle",
         None,
-        config_dict,
-        cfg=cfg,
+        LinearRenderProfile(cfg),
     )
 
 
 def _circular_policy_labels(label_rendering: str) -> list[dict]:
-    config_dict, cfg = _config(label_rendering)
+    cfg = _config(label_rendering)
     features = {
         "fits": _feature("fits", 1, 400, "A"),
         "external": _feature("external", 500, 510, "very long label that cannot fit inside a ten base feature"),
@@ -70,8 +76,7 @@ def _circular_policy_labels(label_rendering: str) -> list[dict]:
         1000,
         390,
         0.19,
-        config_dict,
-        cfg=cfg,
+        CircularRenderProfile(cfg),
     )
 
 

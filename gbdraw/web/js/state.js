@@ -3,13 +3,27 @@ import {
   normalizePaletteColors,
   normalizePaletteDefinitions
 } from './app/color-utils.js';
-import { createDefaultLinearDefinitionLineStyles } from './app/cli-args.js';
+import { createDefaultLinearDefinitionLineStyles } from './app/definition-line-style-state.js';
 import { createDefaultCircularTrackSlots } from './app/circular-track-slots.js';
 import { createDefaultLinearTrackSlots } from './app/linear-track-slots.js';
 import { collectSpecificColorQualifierSuggestions } from './app/feature-selector.js';
 import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibility.js';
 import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
+import {
+  createDefaultLayoutPreferences,
+  resolveActiveLayoutPreference,
+  updateActiveLayoutPreference
+} from './app/layout-preferences.js';
 import { createSequenceSourceRegistry } from './app/match-sequences.js';
+import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
+import {
+  MODE_DEFAULT_FEATURE_TYPES,
+  comparisonStateForMode,
+  createModeProfileStateManager,
+  managedAdvStateForMode,
+  trackDefaultsForMode
+} from './mode-profiles.js';
+import { WEB_UX_PROFILE } from './web-ux-profile.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -70,6 +84,9 @@ const svgContent = computed(() => {
         'class',
         'data-definition-line-kind',
         'data-gbdraw-feature-id',
+        'data-gbdraw-stable-feature-id',
+        'data-gbdraw-feature-part',
+        'data-gbdraw-auto-feature-underlay',
         'data-legend-key',
         'data-legend-owner',
         'data-label-key',
@@ -133,6 +150,8 @@ const svgContent = computed(() => {
         'data-gbdraw-record-index',
         'data-gbdraw-annotation-mark',
         'data-gbdraw-annotation-label',
+        'data-gbdraw-role',
+        'data-gbdraw-orientation',
         'data-annotation-set-id',
         'data-annotation-track-id',
         'data-annotation-record-id',
@@ -207,14 +226,7 @@ const canvasContainerRef = ref(null);
 
 // App State
 const mode = ref('circular');
-const circularLegendPosition = ref('left'); // Separate legend position for circular mode
-const linearLegendPosition = ref('bottom'); // Separate legend position for linear mode
-const circularPlotTitlePosition = ref('none'); // Separate plot title position for circular mode
-const linearPlotTitlePosition = ref('bottom'); // Separate plot title position for linear mode
-const circularSingleRecordLegendPosition = ref('left');
-const circularSingleRecordPlotTitlePosition = ref('none');
-const circularMultiRecordLegendPosition = ref(null);
-const circularMultiRecordPlotTitlePosition = ref(null);
+const layoutPreferences = reactive(createDefaultLayoutPreferences());
 const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
@@ -226,8 +238,10 @@ const files = reactive({
   c_fasta: null,
   c_depth: null,
   c_conservation_blasts: [],
+  c_conservation_blasts_source: null,
   c_conservation_fastas: [],
   c_conservation_sequence_sources: [],
+  linearCanonicalComparisons: [],
   d_color: null,
   t_color: null,
   blacklist: null,
@@ -359,10 +373,10 @@ const linearComparisons = reactive([]);
 const annotationSets = reactive([]);
 const selectedAnnotation = ref(null);
 
-const defaultDirectionalFeatureTypes = ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA'];
+export const createDefaultFeatureShapes = () => createDefaultFeatureRenderings();
 
-export const createDefaultFeatureShapes = () =>
-  Object.fromEntries(defaultDirectionalFeatureTypes.map((featureType) => [featureType, 'arrow']));
+const circularTrackDefaults = trackDefaultsForMode('circular');
+const linearTrackDefaults = trackDefaultsForMode('linear');
 
 export const createDefaultForm = () => ({
   prefix: '',
@@ -371,26 +385,25 @@ export const createDefaultForm = () => ({
   plot_title: '',
   track_type: 'tuckin',
   linear_track_layout: 'middle',
-  legend: 'left',
   scale_style: 'bar',
   linear_ruler_on_axis: false,
   labels_mode: 'none',
   show_labels_linear: 'none',
-  multi_record_canvas: false,
-  separate_strands: true,
-  suppress_gc: false,
-  suppress_skew: false,
+  multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
+  separate_strands: WEB_UX_PROFILE.separateStrands,
+  suppress_gc: !circularTrackDefaults.gc,
+  suppress_skew: !circularTrackDefaults.skew,
   align_center: false,
   keep_definition_left_aligned: false,
-  show_gc: false,
-  show_skew: false,
+  show_gc: linearTrackDefaults.gc,
+  show_skew: linearTrackDefaults.skew,
   show_depth: false,
   normalize_length: false
 });
 
-export const createDefaultAdv = () => ({
+export const createDefaultAdv = (profileMode = 'circular') => ({
   rich_feature_popup: true,
-  features: ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'repeat_region'],
+  features: [...MODE_DEFAULT_FEATURE_TYPES],
   feature_shapes: createDefaultFeatureShapes(),
   window_size: null,
   step_size: null,
@@ -410,7 +423,7 @@ export const createDefaultAdv = () => ({
   line_stroke_width: null,
   line_stroke_color: null,
   axis_stroke_width: null,
-  axis_stroke_color: null,
+  axis_stroke_color: managedAdvStateForMode(profileMode).axis_stroke_color,
 
   // Legend
   legend_box_size: null,
@@ -438,7 +451,7 @@ export const createDefaultAdv = () => ({
   depth_normalize: false,
   depth_show_axis: true,
   depth_show_ticks: true,
-  depth_tick_interval: null,
+  depth_large_tick_interval: null,
   depth_small_tick_interval: null,
   depth_tick_font_size: null,
   linear_track_slots_enabled: false,
@@ -455,10 +468,7 @@ export const createDefaultAdv = () => ({
   gc_content_tick_font_size: null,
   comparison_height: null,
   pairwise_match_style: 'ribbon',
-  min_bitscore: 50,
-  evalue: '1e-2',
-  identity: 0,
-  alignment_length: 0,
+  ...comparisonStateForMode(profileMode),
   scale_interval: null,
   scale_font_size: null,
   scale_stroke_width: null,
@@ -466,13 +476,13 @@ export const createDefaultAdv = () => ({
   ruler_label_color: null,
 
   // Circular Specific
+  circular_grouping_intent: 'auto',
   multi_record_size_mode: 'auto',
   multi_record_min_radius_ratio: 0.55,
   multi_record_column_gap_ratio: 0.10,
   multi_record_row_gap_ratio: 0.05,
   multi_record_positions: [],
   tick_label_font_size: null,
-  plot_title_position: 'none',
   plot_title_font_size: null,
   keep_full_definition_with_plot_title: false,
   center_reserved_radius: null,
@@ -508,7 +518,7 @@ export const createDefaultLosat = () => ({
     orthogroupMembershipMode: 'anchor_core_v1',
     orthogroupMemberMaxHits: 5,
     collinearMinAnchors: 1,
-    collinearMaxGeneGap: 0,
+    collinearMaxUnitGap: 0,
     collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1,
     collinearMaxParalogLinksPerOrthogroup: 2,
@@ -579,7 +589,37 @@ const defaultEditorDraftState = createDefaultEditorDraftState();
 const form = reactive(createDefaultForm());
 
 // Extended Advanced Config
-const adv = reactive(createDefaultAdv());
+const adv = reactive(createDefaultAdv(mode.value));
+const modeProfileStateManager = createModeProfileStateManager(mode.value, adv);
+const activeLayoutPreferences = computed(() => resolveActiveLayoutPreference(
+  layoutPreferences,
+  mode.value,
+  form.multi_record_canvas
+));
+Object.defineProperty(form, 'legend', {
+  enumerable: false,
+  get: () => activeLayoutPreferences.value.legend,
+  set: (value) => {
+    updateActiveLayoutPreference(
+      layoutPreferences,
+      mode.value,
+      form.multi_record_canvas,
+      { legend: value }
+    );
+  }
+});
+Object.defineProperty(adv, 'plot_title_position', {
+  enumerable: false,
+  get: () => activeLayoutPreferences.value.plotTitlePosition,
+  set: (value) => {
+    updateActiveLayoutPreference(
+      layoutPreferences,
+      mode.value,
+      form.multi_record_canvas,
+      { plotTitlePosition: value }
+    );
+  }
+});
 
 const losat = reactive(createDefaultLosat());
 
@@ -590,6 +630,14 @@ const losatThreadingStatus = ref({
 });
 const losatCache = ref(new Map());
 const losatDerivedCache = ref(new Map());
+const proteinIdentityManifest = ref({
+  schema: 2,
+  proteinSets: {},
+  recordAnalyses: {},
+  recordInstances: {}
+});
+const legacyProteinRawCandidates = ref({ schema: 1, entries: [] });
+const legacyProteinDerivedEvidence = ref({ schema: 1, entries: [] });
 const orthogroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
@@ -648,15 +696,26 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
+const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, manualSpecificRules)
 );
 const featureSelectorSafetyScope = ref([]); // Python selector scope before feature visibility filtering
+const renderedFeatureSvgId = (feature) => {
+  return String(
+    feature?.rendered_svg_id ||
+    feature?.renderedSvgId ||
+    feature?.rendered_feature_svg_id ||
+    feature?.renderedFeatureSvgId ||
+    feature?.svg_id ||
+    ''
+  ).trim();
+};
 const featuresBySvgId = computed(() => {
   const indexed = new Map();
   const features = Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [];
   for (const feat of features) {
-    const svgId = String(feat?.svg_id || '').trim();
+    const svgId = renderedFeatureSvgId(feat);
     if (!svgId || indexed.has(svgId)) continue;
     indexed.set(svgId, feat);
   }
@@ -685,7 +744,7 @@ const selectedFeatures = computed(() => {
   const bySvgId = featuresBySvgId.value instanceof Map ? featuresBySvgId.value : new Map();
   const fallback = new Map();
   (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []).forEach((feature) => {
-    const svgId = String(feature?.svg_id || '').trim();
+    const svgId = renderedFeatureSvgId(feature);
     if (svgId && !fallback.has(svgId)) fallback.set(svgId, feature);
   });
 
@@ -790,9 +849,6 @@ const colorScopeDialog = reactive({
   displayLabelSiblingCount: 0, // Number of other features sharing display label
   annotationLabel: null, // Feature's source annotation label (product/gene/locus_tag)
   annotationLabelSiblingCount: 0, // Number of other features sharing source annotation label
-  // Backward-compatible alias fields for old template/method references
-  individualLabel: null,
-  individualLabelSiblingCount: 0,
   existingCaptionRule: null, // Existing hash rule for same caption (already colored)
   existingCaptionColor: null, // Color of existing caption rule
   resolve: null // Promise resolver
@@ -1116,14 +1172,8 @@ export const state = {
   canvasPan,
   canvasContainerRef,
   mode,
-  circularLegendPosition,
-  linearLegendPosition,
-  circularPlotTitlePosition,
-  linearPlotTitlePosition,
-  circularSingleRecordLegendPosition,
-  circularSingleRecordPlotTitlePosition,
-  circularMultiRecordLegendPosition,
-  circularMultiRecordPlotTitlePosition,
+  layoutPreferences,
+  activeLayoutPreferences,
   suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,
@@ -1140,11 +1190,15 @@ export const state = {
   linearComparisons,
   form,
   adv,
+  modeProfileStateManager,
   losat,
   losatCacheInfo,
   losatThreadingStatus,
   losatCache,
   losatDerivedCache,
+  proteinIdentityManifest,
+  legacyProteinRawCandidates,
+  legacyProteinDerivedEvidence,
   orthogroups,
   featureOrthogroupIndex,
   selectedOrthogroupAlignmentFeature,
@@ -1179,6 +1233,7 @@ export const state = {
   specificRulePresetLoading,
   downloadDpi,
   extractedFeatures,
+  biologicalFeatures,
   featureSelectorSafetyScope,
   featuresBySvgId,
   selectedFeatureIds,

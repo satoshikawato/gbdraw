@@ -53,8 +53,8 @@ The resulting circular diagram:
 ## The same function handles multiple circular records
 
 Pass a sequence to create a shared circular grid. `CircularLayout` is optional for
-multiple records; omit it to use the automatic layout. A layout passed with only one
-record raises `ValidationError` instead of being ignored.
+multiple records; omit it to use the automatic layout. You can also pass a layout
+with one record to produce an explicit 1×1 grid.
 
 ```python
 from gbdraw import CircularLayout
@@ -73,7 +73,7 @@ multi_diagram = draw_circular(
 assert multi_diagram.to_svg().startswith("<svg")
 ```
 
-`size` accepts `auto`, `equal`, `linear`, or `sqrt`. Grid-only values remain in
+`size` accepts `auto`, `equal`, or `linear`. Grid-only values remain in
 `CircularLayout`; they are not mixed into drawing and feature options.
 
 ## Linear diagrams and comparisons
@@ -154,25 +154,28 @@ assert depth_diagram.to_svg().startswith("<svg")
 Set `height` on a Linear depth track. Circular diagrams reject a non-default height
 because circular track width is controlled by the circular track layout.
 
-## Conservation rings
+## Sequence-similarity comparison rings
 
-`ConservationTrackOptions` binds each BLAST file or DataFrame to its label and color.
-All tracks in one diagram must use the same source kind. For interactive SVG output,
-set `comparison_sequence_source` to a FASTA path, one `SeqRecord`, or a sequence of
-records to enable the comparison-span FASTA actions for that track. Static geometry
-does not depend on this optional source.
+`ComparisonRingTrackOptions` binds each BLAST or LOSAT result path, or a DataFrame
+with the same tabular hits, to its label and color. The resulting ring displays
+sequence-similarity hits. It does not by itself establish biological conservation.
+All rings in one diagram must use the same source kind.
+
+For interactive SVG output, set `comparison_sequence_source` to a FASTA path, one
+`SeqRecord`, or a sequence of records to enable the comparison-span FASTA actions
+for that ring. Static geometry does not depend on this optional source.
 
 ```python
-from gbdraw import ConservationOptions, ConservationTrackOptions
+from gbdraw import ComparisonRingOptions, ComparisonRingTrackOptions
 
-conservation_record = read_genbank(test_inputs_dir / "AP027078.gb")[0]
-conservation_diagram = draw_circular(
-    conservation_record,
+comparison_record = read_genbank(test_inputs_dir / "AP027078.gb")[0]
+comparison_diagram = draw_circular(
+    comparison_record,
     options=CircularOptions(
-        conservation=ConservationOptions(
+        comparison_rings=ComparisonRingOptions(
             reference="query",
             tracks=(
-                ConservationTrackOptions(
+                ComparisonRingTrackOptions(
                     source=test_inputs_dir / "AP027078_AP027131.tblastx.out",
                     label="AP027131",
                 ),
@@ -180,8 +183,18 @@ conservation_diagram = draw_circular(
         ),
     ),
 )
-assert conservation_diagram.to_svg().startswith("<svg")
+assert comparison_diagram.to_svg().startswith("<svg")
 ```
+
+`CircularOptions.comparison_rings` is the canonical field.
+`CircularOptions.conservation` remains a runtime constructor and attribute alias for
+existing code. Both names address the same stored option; use the canonical name in
+new code and when calling `dataclasses.replace()`. Passing non-`None` values for both
+names is rejected.
+The lower-level request transport retains its
+`conservation_*` field names. The older `ConservationOptions` and
+`ConservationTrackOptions` class names are identity aliases for
+`ComparisonRingOptions` and `ComparisonRingTrackOptions`.
 
 ## Feature colors, visibility, and labels
 
@@ -211,6 +224,65 @@ assert styled_diagram.to_svg().startswith("<svg")
 Use `FeatureOptions.color_table`, `default_colors`, `visibility`, and `shapes` for
 the corresponding feature controls.
 
+### Canonical label configuration overrides
+
+`config_overrides` accepts canonical dotted leaf paths. Label configuration has
+three separate concerns:
+
+| Path | Accepted values | Meaning |
+|---|---|---|
+| `labels.circular.scope` | `none`, `outer`, `both` | Whether Circular labels are hidden, outer-side only, or allowed on both outer and inner sides |
+| `labels.circular.placement` | `horizontal`, `radial` | Orientation of external Circular labels |
+| `labels.linear.scope` | `none`, `all`, `first`, `orthogroup_top` | Which Linear records or similarity-group members are eligible for labels (`orthogroup_top` is the compatibility token) |
+| `labels.linear.placement` | `auto`, `above_feature` | Linear label geometry |
+| `labels.linear.rotation` | float | Linear label rotation in degrees |
+| `labels.rendering` | `auto`, `embedded_only`, `external_only` | Shared policy for embedding labels in feature bodies or routing them externally |
+
+For example, Circular labels can use both outer and inner sides with radial
+external text:
+
+```python
+circular_label_diagram = draw_circular(
+    record,
+    options=CircularOptions(
+        features=FeatureOptions(types=("CDS",)),
+        config_overrides={
+            "labels.circular.scope": "both",
+            "labels.circular.placement": "radial",
+            "labels.rendering": "auto",
+        },
+    ),
+)
+assert circular_label_diagram.to_svg().startswith("<svg")
+```
+
+The Linear equivalents use their own scope vocabulary and also expose
+placement and rotation:
+
+```python
+linear_label_diagram = draw_linear(
+    linear_records,
+    options=LinearOptions(
+        features=FeatureOptions(types=("CDS",)),
+        config_overrides={
+            "labels.linear.scope": "first",
+            "labels.linear.placement": "above_feature",
+            "labels.linear.rotation": 45.0,
+            "labels.rendering": "auto",
+        },
+    ),
+)
+assert linear_label_diagram.to_svg().startswith("<svg")
+```
+
+`scope` selects eligible records or Circular label sides, `placement` controls
+text geometry, and only `labels.rendering` is the embedded/external rendering
+policy. Fresh Python requests reject the retired flat `show_labels` and
+`allow_inner_labels` aliases and the old `canvas.show_labels`,
+`canvas.circular.show_labels`, `canvas.linear.show_labels`, and
+`canvas.circular.allow_inner_labels` paths. Supported persisted-data readers
+migrate those keys; they are not canonical override examples for new code.
+
 ## GFF3 and FASTA
 
 `read_gff` accepts one paired input or equally sized path sequences.
@@ -228,7 +300,7 @@ assert [item.id for item in gff_records] == ["lambda_left", "lambda_right"]
 
 ## In-memory and file output
 
-`Diagram` hides the underlying SVG implementation and provides three output methods:
+`Diagram` hides the underlying SVG implementation and provides four output forms:
 
 - `to_svg()` returns SVG text.
 - `to_svg(interactive=True)` returns an interactive SVG with feature metadata.
@@ -250,19 +322,22 @@ PNG, PDF, EPS, and PS require the optional CairoSVG dependency. Pass
 `overwrite=True` to replace an existing file. Unknown filename extensions require an
 explicit `format` argument.
 
-## Errors and lower-level integration
+## Errors and integrations
 
 Catch `gbdraw.exceptions.GbdrawError` for expected gbdraw failures and
 `ValidationError` for invalid records or options. Mode-specific option classes reject
 Circular/Linear mix-ups before rendering.
 
-The CLI, web app, saved sessions, and integrations that need materialized input
-descriptions use request and session models under `gbdraw.api`. Those models are an
-orchestration layer, not a prerequisite for drawing from Python. Internal assembler
-functions and `svgwrite.Drawing` are not part of the beginner-facing contract.
+The package-root API is the ordinary Python drawing interface. Integrations that
+need explicit input sources, output policy, request planning, or session round
+trips use the models under `gbdraw.api`. See
+[Build typed render requests](./TYPED_API.md).
+
+For accepted persisted versions, retired inputs, and migration limits, see
+[Session and request compatibility](./SESSION_COMPATIBILITY.md).
 
 Pin a gbdraw version in reproducible pipelines and test representative output after
 upgrading. SVG geometry can change intentionally even when the Python call remains
 valid.
 
-[Home](./DOCS.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **Python API**
+[Home](./DOCS.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **Python API** | [Typed API](./TYPED_API.md) | [Session compatibility](./SESSION_COMPATIBILITY.md)

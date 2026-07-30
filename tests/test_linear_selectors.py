@@ -12,10 +12,27 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 import gbdraw.linear as linear_cli_module
+import gbdraw.api.request_render as request_render_module
 from gbdraw.exceptions import ValidationError
 
 INPUT_MG1655 = Path(__file__).parent / "test_inputs" / "MG1655.gbk"
 SVG_NS = {"svg": "http://www.w3.org/2000/svg"}
+
+
+def _find_record_group(
+    root: ET.Element,
+    record_id: str,
+    record_index: int,
+) -> ET.Element | None:
+    return next(
+        (
+            group
+            for group in root.findall(".//svg:g", SVG_NS)
+            if group.attrib.get("data-gbdraw-record-id") == record_id
+            and group.attrib.get("data-gbdraw-record-index") == str(record_index)
+        ),
+        None,
+    )
 
 
 def _extract_group_translate_y(root: ET.Element, group_id: str) -> float:
@@ -154,16 +171,25 @@ def test_linear_cli_records_table_regions_follow_sorted_rows(
     def fake_load(paths, *_args, **_kwargs):
         return [source_records[Path(paths[0]).name]]
 
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
+    def fake_build(records, **_kwargs):
+        captured["records"] = records
         return Drawing(filename=str(tmp_path / "linear.svg"))
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", fake_load)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", fake_load)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "build_linear_diagram_result",
+        fake_build,
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
 
     linear_cli_module.linear_main(
         [
@@ -190,12 +216,11 @@ def test_linear_cli_rejects_qualified_records_table_region_before_rendering(
     table.write_text("gbk\tregion\na.gbk\trecord_b:1-10\n", encoding="utf-8")
     rendered = False
 
-    def fake_assemble(*_args, **_kwargs):
+    def fake_render(*_args, **_kwargs):
         nonlocal rendered
         rendered = True
-        return Drawing(filename=str(tmp_path / "unexpected.svg"))
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
 
     with pytest.raises(ValidationError, match=rf"{table}.*row 2, column 'region'"):
         linear_cli_module.linear_main(["--records_table", str(table), "-f", "svg"])
@@ -439,8 +464,8 @@ def test_linear_plot_title_drawn_once_and_coexists_with_record_labels(
     assert "Global Plot Title" in "".join(plot_title_groups[0].itertext())
     assert "Record A Label" in svg_content
     assert "Record B Label" in svg_content
-    assert root.find(".//svg:g[@id='RecA_record_1']", SVG_NS) is not None
-    assert root.find(".//svg:g[@id='RecB_record_2']", SVG_NS) is not None
+    assert _find_record_group(root, "RecA", 0) is not None
+    assert _find_record_group(root, "RecB", 1) is not None
 
 
 @pytest.mark.linear
@@ -490,7 +515,7 @@ def test_linear_record_label_adds_top_line_without_hiding_accession(
 
     assert returncode == 0, f"gbdraw failed: {output}"
     root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
-    assert root.find(".//svg:g[@id='RecB']", SVG_NS) is not None
+    assert _find_record_group(root, "RecB", 0) is not None
     assert root.find(".//svg:g[@id='RecB_definition']", SVG_NS) is not None
     assert _extract_group_texts(root, "RecB_definition") == ["CustomLabel", "RecB", f"{lengths['RecB']:,} bp"]
 
@@ -659,8 +684,8 @@ def test_linear_definition_group_ids_are_unique_and_multi_line_blocks_do_not_ove
 
     assert returncode == 0, f"gbdraw failed: {output}"
     root = ET.fromstring(svg_path.read_text(encoding="utf-8"))
-    assert root.find(".//svg:g[@id='RecA_record_1']", SVG_NS) is not None
-    assert root.find(".//svg:g[@id='RecB_record_2']", SVG_NS) is not None
+    assert _find_record_group(root, "RecA", 0) is not None
+    assert _find_record_group(root, "RecB", 1) is not None
     assert root.find(".//svg:g[@id='RecA_definition_record_1']", SVG_NS) is not None
     assert root.find(".//svg:g[@id='RecB_definition_record_2']", SVG_NS) is not None
     assert _extract_group_texts(root, "RecA_definition_record_1") == ["Label A", "Chromosome 1", "RecA", f"{lengths['RecA']:,} bp"]

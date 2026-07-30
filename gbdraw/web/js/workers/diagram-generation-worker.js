@@ -3,11 +3,71 @@ import { PYTHON_HELPERS } from '../app/python-helpers.js';
 let runtimePromise = null;
 let runtime = null;
 
-const serializeError = (error) => ({
+export const serializeError = (error) => ({
   name: error?.name ? String(error.name) : 'Error',
   message: error?.message ? String(error.message) : String(error || 'Unknown diagram generation error'),
   stack: error?.stack ? String(error.stack) : ''
 });
+
+const errorDiagnostic = (error) => {
+  const name = error?.name ? String(error.name) : 'Error';
+  const message = error?.message ? String(error.message) : String(error || 'Unknown error');
+  return `${name}: ${message}`;
+};
+
+const attachCleanupDiagnostic = (
+  primary,
+  cleanupError,
+  label
+) => {
+  if (!primary || typeof primary !== 'object' || !cleanupError) return primary;
+  const note = `${label}: ${errorDiagnostic(cleanupError)}`;
+  const notes = Array.isArray(primary.notes) ? [...primary.notes] : [];
+  if (!notes.includes(note)) notes.push(note);
+  primary.notes = notes;
+  for (const field of ['traceback', 'stack']) {
+    if (typeof primary[field] !== 'string' || primary[field].includes(note)) continue;
+    primary[field] = `${primary[field].trimEnd()}\n${note}`;
+  }
+  return primary;
+};
+
+export const resolveGenerationCleanupOutcome = ({
+  result = null,
+  primaryError = null,
+  destroyError = null,
+  workspaceError = null
+} = {}) => {
+  const pythonError = (
+    result?.error &&
+    typeof result.error === 'object' &&
+    !Array.isArray(result.error)
+  )
+    ? result.error
+    : null;
+  const primary = primaryError || pythonError || destroyError || workspaceError;
+  if (primary) {
+    if (primary !== destroyError && destroyError) {
+      attachCleanupDiagnostic(
+        primary,
+        destroyError,
+        'Temporary render handle cleanup also failed'
+      );
+    }
+    if (primary !== workspaceError && workspaceError) {
+      attachCleanupDiagnostic(
+        primary,
+        workspaceError,
+        'Temporary render workspace cleanup also failed'
+      );
+    }
+  }
+  if (primaryError) throw primaryError;
+  if (pythonError) return result;
+  if (destroyError) throw destroyError;
+  if (workspaceError) throw workspaceError;
+  return result;
+};
 
 const ensureLocalAsset = async (url, label) => {
   const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
@@ -15,6 +75,15 @@ const ensureLocalAsset = async (url, label) => {
     throw new Error(`Missing packaged asset: ${label} (${response.status}) at ${url}`);
   }
   return url;
+};
+
+const readRuntimeCapabilities = (pyodide) => {
+  const raw = pyodide.runPython(`
+import json as _json
+from gbdraw.api import get_web_runtime_capabilities as _get_web_runtime_capabilities
+_json.dumps(_get_web_runtime_capabilities(), sort_keys=True)
+  `);
+  return JSON.parse(String(raw));
 };
 
 const initializeRuntime = async ({
@@ -51,7 +120,8 @@ const initializeRuntime = async ({
     await micropip.install(gbdrawWheelUrl);
     await pyodide.runPythonAsync(PYTHON_HELPERS);
 
-    runtime = { pyodide };
+    const capabilities = readRuntimeCapabilities(pyodide);
+    runtime = { pyodide, capabilities };
     return runtime;
   })();
 
@@ -94,43 +164,83 @@ const writeGenerationFiles = (pyodide, files = []) => {
 };
 
 const runGeneration = async ({
-  mode,
-  args = [],
-  files = [],
-  virtualBlastFiles = []
+  request,
+  resources,
+  requestId
 } = {}) => {
   if (!runtime?.pyodide) {
     throw new Error('Diagram generation worker has not been initialized.');
   }
+  if (!request || typeof request !== 'object' || Array.isArray(request)) {
+    throw new Error('Diagram generation requires a canonical typed request.');
+  }
+  if (!resources || typeof resources !== 'object' || Array.isArray(resources)) {
+    throw new Error('Diagram generation requires canonical request resources.');
+  }
   const { pyodide } = runtime;
-  writeGenerationFiles(pyodide, files);
-
-  const runWrapper = pyodide.globals.get('run_gbdraw_wrapper');
-  const pyArgs = pyodide.toPy(args.map((arg) => String(arg)));
+  const runWrapper = pyodide.globals.get('run_canonical_request_wrapper');
+  const workspace = `/gbdraw-web-render-${Number(requestId) || 0}`;
+  let result = null;
+  let primaryError = null;
   try {
     const resultJson = runWrapper(
-      String(mode || ''),
-      pyArgs,
-      virtualBlastFiles.length ? JSON.stringify(virtualBlastFiles) : null
+      JSON.stringify(request),
+      JSON.stringify(resources),
+      workspace
     );
-    return JSON.parse(String(resultJson || 'null'));
-  } finally {
-    pyArgs.destroy?.();
-    runWrapper.destroy?.();
+    result = JSON.parse(String(resultJson || 'null'));
+  } catch (error) {
+    primaryError = error;
   }
+  let destroyError = null;
+  try {
+    runWrapper.destroy?.();
+  } catch (error) {
+    destroyError = error;
+  }
+  let workspaceError = null;
+  try {
+    let remainingEntries = [];
+    if (pyodide.FS.analyzePath(workspace).exists) {
+      remainingEntries = pyodide.FS.readdir(workspace).filter(
+        (entry) => entry !== '.' && entry !== '..'
+      );
+      if (remainingEntries.length === 0) {
+        // Pyodide's MEMFS can retain the now-empty top-level directory after
+        // Python shutil.rmtree has removed its contents.
+        pyodide.FS.rmdir(workspace);
+      }
+    }
+    if (pyodide.FS.analyzePath(workspace).exists) {
+      workspaceError = new Error(
+        `Diagram render workspace cleanup invariant failed: ${workspace}` +
+        (remainingEntries.length > 0
+          ? ` (${remainingEntries.join(', ')})`
+          : '')
+      );
+    }
+  } catch (error) {
+    workspaceError = error;
+  }
+  return resolveGenerationCleanupOutcome({
+    result,
+    primaryError,
+    destroyError,
+    workspaceError
+  });
 };
 
 const runFeatureExtraction = async ({
   path,
   format = 'genbank',
   fastaPath = null,
-  mode = 'linear',
   files = [],
   regionSpec = null,
   recordSelector = null,
   reverseFlag = false,
   selectedFeatures = null,
-  featureVisibilityTablePath = null
+  featureVisibilityTablePath = null,
+  includeBiologicalFeatures = false
 } = {}) => {
   if (!runtime?.pyodide) {
     throw new Error('Diagram generation worker has not been initialized.');
@@ -160,12 +270,12 @@ const runFeatureExtraction = async ({
       ? extractFeatures(
           normalizedPath,
           normalizedFastaPath,
-          String(mode || 'linear'),
           regionSpec || null,
           recordSelector || null,
           reverseFlag ? '1' : '0',
           selectedFeaturesJson,
-          featureVisibilityTablePath || null
+          featureVisibilityTablePath || null,
+          Boolean(includeBiologicalFeatures)
         )
       : extractFeatures(
           normalizedPath,
@@ -173,7 +283,8 @@ const runFeatureExtraction = async ({
           recordSelector || null,
           reverseFlag ? '1' : '0',
           selectedFeaturesJson,
-          featureVisibilityTablePath || null
+          featureVisibilityTablePath || null,
+          Boolean(includeBiologicalFeatures)
         );
     return JSON.parse(String(resultJson || 'null'));
   } finally {
@@ -186,8 +297,13 @@ self.onmessage = async (event) => {
   const { id, requestId, type } = data;
   try {
     if (type === 'init') {
-      await initializeRuntime(data);
-      self.postMessage({ id, type: 'init', ok: true });
+      const initialized = await initializeRuntime(data);
+      self.postMessage({
+        id,
+        type: 'init',
+        ok: true,
+        capabilities: initialized.capabilities
+      });
       return;
     }
     if (type === 'ping') {
@@ -203,7 +319,10 @@ self.onmessage = async (event) => {
       throw new Error(`Unsupported diagram generation worker message type '${type || '(blank)'}'.`);
     }
 
-    const results = await runGeneration(data.payload || {});
+    const results = await runGeneration({
+      ...(data.payload || {}),
+      requestId
+    });
     self.postMessage({ requestId, type: 'run', ok: true, results });
   } catch (error) {
     self.postMessage({

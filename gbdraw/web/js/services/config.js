@@ -4,10 +4,17 @@ import { resetLayoutState, resetSettings as resetSettingsState } from './reset.j
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import {
+  compactSessionFeatureCatalog,
+  expandSessionFeatureCatalog
+} from './session-feature-catalog.js';
+import {
   applyCircularTrackOrderPlacements,
   CIRCULAR_TRACK_RENDERERS,
   clampCircularTrackAxisIndex,
   inferLegacyAxisIndexFromFeature,
+  migrateLegacyCircularTrackSlot,
+  migrateLegacyCircularTrackSlotSpec,
+  parseCircularTrackSlotSpec,
   normalizeCircularTrackSlots
 } from '../app/circular-track-slots.js';
 import {
@@ -43,12 +50,16 @@ import {
   normalizeGroupMetadataScope,
   normalizeOrthogroupMembershipMode
 } from '../app/losat-normalization.js';
-import { normalizeDefinitionLineStyleState } from '../app/cli-args.js';
+import { normalizeDefinitionLineStyleState } from '../app/definition-line-style-state.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
 } from '../app/plot-title-position.js';
+import {
+  migrateLegacyLayoutPreferences,
+  replaceLayoutPreferences
+} from '../app/layout-preferences.js';
 import {
   serializeFeatureVisibilityRules,
   normalizeFeatureVisibilityRule,
@@ -57,29 +68,65 @@ import {
 } from '../app/feature-visibility.js';
 import {
   buildSessionFeatureRecoveryPlan,
-  classifyFeatureMetadataState
+  classifyFeatureMetadataState,
+  hasUsableBiologicalFeatureCatalog
 } from '../app/session-feature-metadata.js';
+import { buildRestoredMatchSequenceSources } from '../app/match-sequences.js';
 import {
-  buildCanonicalSessionRequest,
+  buildCanonicalRenderRequest,
   projectCanonicalSessionRequest
 } from './session-request.js';
+import {
+  isResourceBackedCanonicalComparison,
+  mapResourceBackedCanonicalComparison
+} from './canonical-comparisons.js';
+import { promoteGallerySessionToCurrent } from './gallery-session-migration.js';
 import { downloadCompressedSession, readSessionText } from './session-file.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
+import {
+  LOSAT_DERIVED_CACHE_SCHEMA,
+  classifyRawLosatCacheEntry,
+  createLegacyProteinCandidateEnvelope,
+  emptyProteinIdentityManifest,
+  isCurrentRawLosatCacheEntry,
+  isLosatDerivedCacheEntry,
+  normalizeLegacyProteinCandidateEnvelope,
+  proteinRuntimeIdSets,
+  rawProteinTextMatchesBindings,
+  serializableLegacyProteinCandidateEnvelope,
+  validateDerivedProteinReferences,
+  validateProteinRawEntryReferences,
+  validateProteinIdentityManifest
+} from '../app/losat-cache.js';
+import {
+  defaultFeatureRendering,
+  normalizeFeatureRenderingMap
+} from '../utils/feature-rendering.js';
 import {
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
   validateSessionAuthorityInventory
 } from './session-authority.js';
+import {
+  migratePersistedCircularMultiRecordSizeMode,
+  migratePersistedLinearLabelPlacement,
+  migratePersistedLinearTrackLayout,
+  migratePersistedWebStateFieldNames,
+  requireCurrentCircularMultiRecordSizeMode,
+  requireCurrentLinearLabelPlacement,
+  requireCurrentLinearTrackLayout,
+  requireCurrentWebStateFieldNames
+} from '../app/current-option-values.js';
 
 const { nextTick } = window.Vue;
 
-const SESSION_VERSION = 33;
+export const SESSION_VERSION = 39;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
-const SUPPORTED_SESSION_VERSIONS = new Set([27, 28, 29, 30, 31, 32, SESSION_VERSION]);
-const LOSAT_CACHE_SCHEMA = 2;
-const LOSAT_DERIVED_CACHE_SCHEMA = 1;
+const SUPPORTED_SESSION_VERSIONS = new Set([
+  27, 28, 29, 30, 31, 32, 33, SESSION_VERSION
+]);
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
 const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
@@ -91,6 +138,7 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = [
   'outerRadius',
   'outer_radius',
   'placement',
+  'spacing',
   'strict',
   'compress',
   'reserve'
@@ -107,20 +155,7 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_PARAM_KEYS = [
   'reserve'
 ];
 
-const isRawLosatCacheEntry = (entry) =>
-  Boolean(entry) &&
-  entry.schema === LOSAT_CACHE_SCHEMA &&
-  entry.kind === 'raw-losat' &&
-  typeof entry.text === 'string';
-
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
-const isLosatDerivedCacheEntry = (entry) =>
-  Boolean(entry) &&
-  entry.schema === LOSAT_DERIVED_CACHE_SCHEMA &&
-  entry.kind === 'derived-losatp-payload' &&
-  typeof entry.key === 'string' &&
-  isPlainObject(entry.payload);
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
 
@@ -398,10 +433,7 @@ const validateImportedCircularTrackSlots = (configData = {}, { depthTrackCount =
   if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return;
   if (!Object.prototype.hasOwnProperty.call(adv, 'circular_track_slots')) return;
 
-  if (
-    adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION &&
-    adv.circular_track_slots_schema_version !== LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
-  ) {
+  if (adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) {
     throw new Error(
       `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${CIRCULAR_TRACK_SLOT_SCHEMA_VERSION}.`
     );
@@ -421,6 +453,67 @@ const validateImportedCircularTrackSlots = (configData = {}, { depthTrackCount =
     anchorlessRenderers: ['ticks', 'spacer'],
     depthTrackCount
   });
+};
+
+const migrateImportedCircularTrackSlots = (configData = {}) => {
+  const adv = configData && typeof configData === 'object' ? configData.adv : null;
+  if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return configData;
+  if (!Object.prototype.hasOwnProperty.call(adv, 'circular_track_slots')) return configData;
+  if (!Array.isArray(adv.circular_track_slots)) {
+    throw new Error('Custom Track Slots must be an array.');
+  }
+  const sourceSchemaVersion = adv.circular_track_slots_schema_version;
+  if (sourceSchemaVersion === CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) return configData;
+  if (sourceSchemaVersion !== LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) {
+    throw new Error(
+      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${CIRCULAR_TRACK_SLOT_SCHEMA_VERSION}.`
+    );
+  }
+
+  const defaultNt = adv.nt || 'GC';
+  const preset = configData.form?.track_type || 'tuckin';
+  return {
+    ...configData,
+    adv: {
+      ...adv,
+      circular_track_slots_schema_version: CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
+      circular_track_slots: adv.circular_track_slots.map((slot, index) => (
+        typeof slot === 'string'
+          ? parseCircularTrackSlotSpec(
+              migrateLegacyCircularTrackSlotSpec(slot),
+              index,
+              defaultNt,
+              preset
+            )
+          : migrateLegacyCircularTrackSlot(slot)
+      ))
+    }
+  };
+};
+
+const migratePersistedWebOptionValues = (configData = {}) => {
+  if (!configData || typeof configData !== 'object' || Array.isArray(configData)) {
+    return configData;
+  }
+  const migratedNames = migratePersistedWebStateFieldNames(configData);
+  const form = isPlainObject(migratedNames.form) ? { ...migratedNames.form } : migratedNames.form;
+  const adv = isPlainObject(migratedNames.adv) ? { ...migratedNames.adv } : migratedNames.adv;
+  if (isPlainObject(form) && Object.prototype.hasOwnProperty.call(form, 'linear_track_layout')) {
+    form.linear_track_layout = migratePersistedLinearTrackLayout(form.linear_track_layout);
+  }
+  if (isPlainObject(adv) && Object.prototype.hasOwnProperty.call(adv, 'label_placement')) {
+    adv.label_placement = migratePersistedLinearLabelPlacement(adv.label_placement);
+  }
+  if (isPlainObject(adv) && Object.prototype.hasOwnProperty.call(adv, 'multi_record_size_mode')) {
+    adv.multi_record_size_mode = migratePersistedCircularMultiRecordSizeMode(
+      adv.multi_record_size_mode
+    );
+  }
+  return {
+    ...migratedNames,
+    ...(form === undefined ? {} : { form }),
+    ...(adv === undefined ? {} : { adv })
+  };
 };
 
 const validateImportedLinearTrackSlots = (configData = {}, { depthTrackCount = null } = {}) => {
@@ -497,8 +590,6 @@ const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion =
 };
 
 const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
-
-const normalizeFeatureShape = (value) => (String(value || '').trim().toLowerCase() === 'arrow' ? 'arrow' : 'rectangle');
 
 const normalizePositiveInteger = (value, fallback) => {
   const numeric = Number(value);
@@ -646,19 +737,6 @@ const normalizeCircularConservationSeries = (series) => {
     }));
 };
 
-const normalizeFeatureShapes = (featureShapes) => {
-  const normalized = {};
-  if (!featureShapes || typeof featureShapes !== 'object' || Array.isArray(featureShapes)) {
-    return normalized;
-  }
-  Object.entries(featureShapes).forEach(([featureTypeRaw, shape]) => {
-    const featureType = String(featureTypeRaw || '').trim();
-    if (!featureType) return;
-    normalized[featureType] = normalizeFeatureShape(shape);
-  });
-  return normalized;
-};
-
 const DEPTH_TRACK_FALLBACK_COLORS = [
   '#4A90E2',
   '#E45756',
@@ -682,7 +760,7 @@ const normalizeDepthTrackConfig = (entry, index, legacyAdv = {}) => {
     color: resolveColorToHex(String(source.color || fallbackColor)),
     height: normalizePositiveNumberOrNull(hasHeight ? source.height : legacyAdv.depth_height),
     large_tick_interval: normalizePositiveNumberOrNull(
-      source.large_tick_interval ?? source.tick_interval ?? (index === 0 ? legacyAdv.depth_tick_interval : null)
+      source.large_tick_interval ?? (index === 0 ? legacyAdv.depth_large_tick_interval : null)
     ),
     small_tick_interval: normalizePositiveNumberOrNull(
       source.small_tick_interval ?? (index === 0 ? legacyAdv.depth_small_tick_interval : null)
@@ -715,7 +793,13 @@ const cloneLosatForConfig = () => {
 
 export const buildConfigData = () => ({
   form: state.form,
-  adv: state.adv,
+  adv: {
+    ...state.adv,
+    feature_shapes: {
+      repeat_region: defaultFeatureRendering('repeat_region'),
+      ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
+    }
+  },
   losat: cloneLosatForConfig(),
   cliOptions: preservedCliOptions ? cloneJsonData(preservedCliOptions) : undefined,
   colors: state.currentColors.value,
@@ -871,11 +955,137 @@ const normalizeSessionData = (data) => {
   };
 };
 
-const migrateSessionDataToCurrent = (data, sourceSessionVersion) => ({
-  ...data,
-  version: SESSION_VERSION,
-  config: migrateImportedLinearTrackSlots(data.config, sourceSessionVersion)
-});
+const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
+  if (!legacy || !isPlainObject(configData)) return configData;
+  const adv = isPlainObject(configData.adv) ? configData.adv : null;
+  if (!adv) return configData;
+  const features = Array.isArray(adv.features) ? adv.features : null;
+  if (features && !features.includes('repeat_region')) return configData;
+  const featureShapes = isPlainObject(adv.feature_shapes) ? adv.feature_shapes : {};
+  if (Object.prototype.hasOwnProperty.call(featureShapes, 'repeat_region')) return configData;
+  return {
+    ...configData,
+    adv: {
+      ...adv,
+      feature_shapes: { ...featureShapes, repeat_region: 'rectangle' }
+    }
+  };
+};
+
+const sessionArtifactEntries = (data, field) => {
+  const container = data[field];
+  if (container === undefined || container === null) return [];
+  if (!isPlainObject(container)) {
+    throw new Error(`Session ${field} must be an object when present.`);
+  }
+  const entries = Object.prototype.hasOwnProperty.call(container, 'entries')
+    ? container.entries
+    : [];
+  if (!Array.isArray(entries)) {
+    throw new Error(`Session ${field}.entries must be an array.`);
+  }
+  return entries;
+};
+
+const rejectInvalidLosatCacheKeys = (entries, owner, { requireKey = false } = {}) => {
+  const seen = new Set();
+  for (const [index, entry] of entries.entries()) {
+    const key = isPlainObject(entry) && typeof entry.key === 'string'
+      ? entry.key
+      : '';
+    if (!key) {
+      if (requireKey) {
+        throw new Error(
+          `LOSAT cache entry at losatCache.entries[${index}] requires a key.`
+        );
+      }
+      continue;
+    }
+    if (seen.has(key)) {
+      throw new Error(`Duplicate ${owner} cache key: ${JSON.stringify(key)}.`);
+    }
+    seen.add(key);
+  }
+};
+
+export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
+  if (sourceSessionVersion !== SESSION_VERSION) return;
+  const rawEntries = sessionArtifactEntries(data, 'losatCache');
+  const derivedEntries = sessionArtifactEntries(data, 'losatDerivedCache');
+  const manifest = data.proteinIdentityManifest;
+  rejectInvalidLosatCacheKeys(rawEntries, 'LOSAT', { requireKey: true });
+  rejectInvalidLosatCacheKeys(derivedEntries, 'derived LOSATP');
+
+  if (!validateProteinIdentityManifest(manifest)) {
+    throw new Error(
+      `Session version ${sourceSessionVersion} requires a valid schema-2 protein manifest.`
+    );
+  }
+  for (const entry of rawEntries) {
+    const classification = classifyRawLosatCacheEntry(entry);
+    if (!['protein-current', 'nucleotide-current'].includes(classification)) {
+      throw new Error(
+        `Session version ${sourceSessionVersion} contains a non-current raw LOSAT entry.`
+      );
+    }
+    if (classification !== 'protein-current') continue;
+    const ids = proteinRuntimeIdSets(
+      manifest,
+      entry.queryRecordInstanceKey,
+      entry.subjectRecordInstanceKey
+    );
+    if (
+      !validateProteinRawEntryReferences(entry, manifest) ||
+      !ids ||
+      !rawProteinTextMatchesBindings(entry.text, ids.query, ids.subject)
+    ) {
+      throw new Error(
+        `Session version ${sourceSessionVersion} contains an unresolved protein raw entry.`
+      );
+    }
+  }
+  if (
+    derivedEntries.some(
+      (entry) => !validateDerivedProteinReferences(entry, manifest)
+    )
+  ) {
+    throw new Error(
+      `Session version ${sourceSessionVersion} contains an invalid derived LOSATP entry.`
+    );
+  }
+};
+
+export const buildSessionLegacyArtifacts = ({
+  legacyRawCandidates,
+  legacyDerivedEvidence
+}) => {
+  const legacyArtifacts = {};
+  if (legacyRawCandidates?.entries?.length) {
+    legacyArtifacts.proteinRawCandidates = legacyRawCandidates;
+  }
+  if (legacyDerivedEvidence?.entries?.length) {
+    legacyArtifacts.proteinDerivedEvidence = legacyDerivedEvidence;
+  }
+  return Object.keys(legacyArtifacts).length > 0 ? legacyArtifacts : null;
+};
+
+const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
+  const readsLegacyOptionValues = sourceSessionVersion < SESSION_VERSION;
+  const migratedOptions = readsLegacyOptionValues
+    ? migratePersistedWebOptionValues(data.config)
+    : data.config;
+  return {
+    ...data,
+    version: SESSION_VERSION,
+    config: migrateLegacyFeatureRenderingConfig(
+      migrateImportedLinearTrackSlots(
+        migrateImportedCircularTrackSlots(migratedOptions),
+        sourceSessionVersion
+      ),
+      sourceSessionVersion <= 33
+    )
+  };
+};
 
 const LEGACY_CONFIG_KEYS = new Set([
   'form',
@@ -900,7 +1110,16 @@ const isLegacyConfigPayload = (data) =>
   Object.keys(data).some((key) => LEGACY_CONFIG_KEYS.has(key));
 
 const applyLegacyConfigPayload = (data) => {
-  const migrated = migrateImportedLinearTrackSlots(data);
+  const circularSlotSchema = data?.adv?.circular_track_slots_schema_version;
+  const migratedOptions = circularSlotSchema === CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
+    ? data
+    : migratePersistedWebOptionValues(data);
+  const migrated = migrateLegacyFeatureRenderingConfig(
+    migrateImportedLinearTrackSlots(
+      migrateImportedCircularTrackSlots(migratedOptions)
+    ),
+    true
+  );
   validateImportedCircularTrackSlots(migrated);
   validateImportedLinearTrackSlots(migrated);
   state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(migrated.form);
@@ -915,16 +1134,119 @@ const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
   return state.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
 };
 
+const overlayCanonicalObject = (stored, canonical) => {
+  const merged = isPlainObject(stored) ? cloneJsonData(stored) : {};
+  if (!isPlainObject(canonical)) return merged;
+  Object.entries(canonical).forEach(([key, value]) => {
+    if (['__proto__', 'constructor', 'prototype'].includes(key)) return;
+    merged[key] = isPlainObject(value)
+      ? overlayCanonicalObject(merged[key], value)
+      : cloneJsonData(value);
+  });
+  return merged;
+};
+
+const restoreStoredNonCanonicalConfig = (
+  projectedConfig,
+  storedConfig,
+  { hasCanonicalProteinPipeline = false } = {}
+) => {
+  const restored = cloneJsonData(projectedConfig);
+  if (!isPlainObject(storedConfig)) return restored;
+  // Keep canonical drawing values authoritative; only supplement state that the
+  // canonical request does not currently represent.
+  [
+    'losat',
+    'blastSource',
+    'losatProgram',
+    'cliOptions',
+    'paletteInstantPreviewEnabled',
+    'webEdits'
+  ].forEach((key) => {
+    if (hasCanonicalProteinPipeline && key === 'losat') {
+      if (!isPlainObject(storedConfig.losat)) return;
+      const canonicalLosat = isPlainObject(restored.losat)
+        ? cloneJsonData(restored.losat)
+        : {};
+      restored.losat = overlayCanonicalObject(
+        storedConfig.losat,
+        canonicalLosat
+      );
+      return;
+    }
+    if (
+      hasCanonicalProteinPipeline &&
+      ['blastSource', 'losatProgram'].includes(key)
+    ) return;
+    if (Object.prototype.hasOwnProperty.call(storedConfig, key)) {
+      restored[key] = cloneJsonData(storedConfig[key]);
+    }
+  });
+  const storedAdv = storedConfig.adv;
+  if (isPlainObject(storedAdv) && isPlainObject(restored.adv)) {
+    [
+      'rich_feature_popup',
+      'feature_width_circular',
+      'depth_width_circular',
+      'gc_content_width_circular',
+      'gc_content_radius_circular',
+      'gc_skew_width_circular',
+      'gc_skew_radius_circular'
+    ].forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(storedAdv, key)) {
+        restored.adv[key] = cloneJsonData(storedAdv[key]);
+      }
+    });
+  }
+  const storedConservation = storedConfig?.circularConservation;
+  if (!isPlainObject(storedConservation)) {
+    return restored;
+  }
+  if (!isPlainObject(restored?.circularConservation)) {
+    restored.circularConservation = cloneJsonData(storedConservation);
+    return restored;
+  }
+
+  ['enabled', 'source', 'losat_program', 'subject_gencode'].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(storedConservation, key)) {
+      restored.circularConservation[key] = cloneJsonData(storedConservation[key]);
+    }
+  });
+  if (
+    Array.isArray(restored.circularConservation.series) &&
+    Array.isArray(storedConservation.series)
+  ) {
+    restored.circularConservation.series = restored.circularConservation.series.map((entry, index) => {
+      const storedEntry = storedConservation.series[index];
+      if (!isPlainObject(entry) || !isPlainObject(storedEntry)) return entry;
+      if (!Object.prototype.hasOwnProperty.call(storedEntry, 'losat_gencode')) return entry;
+      return { ...entry, losat_gencode: cloneJsonData(storedEntry.losat_gencode) };
+    });
+  }
+  return restored;
+};
+
 const preflightSessionImport = (rawData) => {
   const sourceSessionVersion = rawData.version;
   const normalizedData = normalizeSessionData(rawData);
   validateSessionAuthorityInventory(normalizedData, sourceSessionVersion);
-  const data = migrateSessionDataToCurrent(normalizedData, sourceSessionVersion);
+  migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
+  const promotedData = (
+    sourceSessionVersion >= 31 &&
+    Number(normalizedData.renderRequest?.schema) === 2
+    )
+    ? promoteGallerySessionToCurrent(normalizedData)
+    : normalizedData;
+  validateSessionLosatArtifacts(promotedData, sourceSessionVersion);
+  const data = migrateSessionDataToCurrent(promotedData, sourceSessionVersion);
   const canonicalProjection = sourceSessionVersion >= 31
     ? projectCanonicalSessionRequest({
         renderRequest: data.renderRequest,
         resources: data.resources,
         webFiles: data.webFiles,
+        legacyFiles: data.files,
+        storedConfig: data.config,
+        fileBindings: data.cliInvocation?.fileBindings,
         linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
           : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
@@ -933,7 +1255,11 @@ const preflightSessionImport = (rawData) => {
     : null;
   const restoredConfig = canonicalProjection
     ? {
-        ...canonicalProjection.config,
+        ...restoreStoredNonCanonicalConfig(
+          canonicalProjection.config,
+          data.config,
+          { hasCanonicalProteinPipeline: Boolean(canonicalProjection.pipelineState) }
+        ),
         rules: applySpecificRuleProvenance(
           canonicalProjection.config.rules,
           data.config?.rules
@@ -961,124 +1287,78 @@ const preflightSessionImport = (rawData) => {
     });
   }
   const projectionResult = canonicalProjection
-    ? {
-        documentMetadata: projectDocumentMetadata(data),
-        renderState: {
-          mode: canonicalProjection.mode,
-          inputType: canonicalProjection.inputType,
-          config: restoredConfig,
-          semanticFeatureState: canonicalProjection.semanticFeatureState
-        },
-        editorMetadata: projectWebOnlyEditorMetadata(data),
-        artifactState: projectArtifactState(data),
-        restoredFiles: canonicalProjection.files
-      }
+    ? (() => {
+        const artifactState = projectArtifactState(data);
+        if (canonicalProjection.pipelineState) {
+          artifactState.orthogroupState = {
+            ...(artifactState.orthogroupState || {}),
+            selectedOrthogroupAlignmentFeature:
+              canonicalProjection.pipelineState.selectedOrthogroupAlignmentFeature
+          };
+        }
+        return {
+          documentMetadata: projectDocumentMetadata(data),
+          renderState: {
+            mode: canonicalProjection.mode,
+            inputType: canonicalProjection.inputType,
+            config: restoredConfig,
+            semanticFeatureState: canonicalProjection.semanticFeatureState
+          },
+          editorMetadata: projectWebOnlyEditorMetadata(data),
+          artifactState,
+          restoredFiles: canonicalProjection.files
+        };
+      })()
     : null;
   return { data, canonicalProjection, restoredConfig, projectionResult };
 };
 
-const syncActiveCircularLayoutCache = () => {
-  const normalizedLegend = normalizeLegendPosition(state.form.legend, 'left');
-  const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
-
-  state.circularLegendPosition.value = normalizedLegend;
-  state.circularPlotTitlePosition.value = normalizedPlotTitlePosition;
-
-  if (state.form.multi_record_canvas) {
-    state.circularMultiRecordLegendPosition.value = normalizedLegend;
-    state.circularMultiRecordPlotTitlePosition.value = normalizedPlotTitlePosition;
-  } else {
-    state.circularSingleRecordLegendPosition.value = normalizedLegend;
-    state.circularSingleRecordPlotTitlePosition.value = normalizedPlotTitlePosition;
-  }
-
-  return {
-    legend: normalizedLegend,
-    plotTitlePosition: normalizedPlotTitlePosition
+const restoreLayoutPreferences = (ui = {}, { preserveActive = false } = {}) => {
+  const activeBeforeRestore = {
+    legend: state.form.legend,
+    plotTitlePosition: state.adv.plot_title_position
   };
-};
-
-const getStoredCircularLayout = (useMultiRecord) => {
-  const singleLegend = normalizeLegendPosition(state.circularSingleRecordLegendPosition.value, 'left');
-  const singlePlotTitlePosition = normalizeCircularPlotTitlePosition(state.circularSingleRecordPlotTitlePosition.value);
-
-  if (useMultiRecord) {
-    return {
-      legend: hasStoredLayoutValue(state.circularMultiRecordLegendPosition.value)
-        ? normalizeLegendPosition(state.circularMultiRecordLegendPosition.value, singleLegend)
-        : singleLegend,
-      plotTitlePosition: hasStoredLayoutValue(state.circularMultiRecordPlotTitlePosition.value)
-        ? normalizeCircularPlotTitlePosition(state.circularMultiRecordPlotTitlePosition.value)
-        : singlePlotTitlePosition
-    };
+  const migrated = migrateLegacyLayoutPreferences(ui, {
+    mode: state.mode.value,
+    multiRecord: Boolean(state.form.multi_record_canvas),
+    activeLegend: activeBeforeRestore.legend,
+    activePlotTitlePosition: activeBeforeRestore.plotTitlePosition
+  });
+  if (preserveActive) {
+    if (state.mode.value === 'linear') {
+      migrated.linear = {
+        legend: normalizeLegendPosition(activeBeforeRestore.legend, 'bottom'),
+        plotTitlePosition: normalizeLinearPlotTitlePosition(
+          activeBeforeRestore.plotTitlePosition
+        )
+      };
+    } else {
+      const key = state.form.multi_record_canvas ? 'multi' : 'single';
+      migrated.circular[key] = {
+        legend: normalizeLegendPosition(activeBeforeRestore.legend, 'left'),
+        plotTitlePosition: normalizeCircularPlotTitlePosition(
+          activeBeforeRestore.plotTitlePosition
+        )
+      };
+    }
   }
-
-  return {
-    legend: singleLegend,
-    plotTitlePosition: singlePlotTitlePosition
-  };
-};
-
-const resolveActiveCircularLayout = () => getStoredCircularLayout(Boolean(state.form.multi_record_canvas));
-
-const syncActiveModePlotTitlePosition = () => {
-  if (state.mode.value === 'linear') {
-    state.form.legend = normalizeLegendPosition(state.form.legend, 'bottom');
-    state.linearLegendPosition.value = state.form.legend;
-    state.linearPlotTitlePosition.value = normalizeLinearPlotTitlePosition(state.adv.plot_title_position);
-    state.adv.plot_title_position = state.linearPlotTitlePosition.value;
-    return;
-  }
-
-  state.form.legend = normalizeLegendPosition(state.form.legend, 'left');
-  state.adv.plot_title_position = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
-  syncActiveCircularLayoutCache();
-};
-
-const restoreSessionPlotTitlePositions = (ui = {}) => {
-  const activeMode = state.mode.value === 'linear' ? 'linear' : 'circular';
-  const activePosition = normalizeLinearPlotTitlePosition(state.adv.plot_title_position);
-  const hasLinearPlotTitlePosition =
-    typeof ui.linearPlotTitlePosition === 'string' && ui.linearPlotTitlePosition.trim() !== '';
-
-  state.linearPlotTitlePosition.value = hasLinearPlotTitlePosition
-    ? normalizeLinearPlotTitlePosition(ui.linearPlotTitlePosition)
-    : activeMode === 'linear'
-      ? activePosition
-      : 'bottom';
-};
-
-const restoreSessionCircularLayoutCaches = (ui = {}) => {
-  const activeLegend = normalizeLegendPosition(state.form.legend, 'left');
-  const activePlotTitlePosition = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
-  const legacyLegend = hasStoredLayoutValue(ui.circularLegendPosition)
-    ? normalizeLegendPosition(ui.circularLegendPosition, activeLegend)
-    : hasStoredLayoutValue(ui.legend)
-      ? normalizeLegendPosition(ui.legend, activeLegend)
-    : activeLegend;
-  const legacyPlotTitlePosition = hasStoredLayoutValue(ui.circularPlotTitlePosition)
-    ? normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition)
-    : activePlotTitlePosition;
-
-  state.circularSingleRecordLegendPosition.value = hasStoredLayoutValue(ui.circularSingleRecordLegendPosition)
-    ? normalizeLegendPosition(ui.circularSingleRecordLegendPosition, legacyLegend)
-    : (state.form.multi_record_canvas ? legacyLegend : activeLegend);
-  state.circularSingleRecordPlotTitlePosition.value = hasStoredLayoutValue(ui.circularSingleRecordPlotTitlePosition)
-    ? normalizeCircularPlotTitlePosition(ui.circularSingleRecordPlotTitlePosition)
-    : (state.form.multi_record_canvas ? legacyPlotTitlePosition : activePlotTitlePosition);
-  state.circularMultiRecordLegendPosition.value = hasStoredLayoutValue(ui.circularMultiRecordLegendPosition)
-    ? normalizeLegendPosition(ui.circularMultiRecordLegendPosition, legacyLegend)
-    : (state.form.multi_record_canvas ? activeLegend : legacyLegend);
-  state.circularMultiRecordPlotTitlePosition.value = hasStoredLayoutValue(ui.circularMultiRecordPlotTitlePosition)
-    ? normalizeCircularPlotTitlePosition(ui.circularMultiRecordPlotTitlePosition)
-    : (state.form.multi_record_canvas ? activePlotTitlePosition : legacyPlotTitlePosition);
-
-  const activeLayout = resolveActiveCircularLayout();
-  state.circularLegendPosition.value = activeLayout.legend;
-  state.circularPlotTitlePosition.value = activeLayout.plotTitlePosition;
+  replaceLayoutPreferences(
+    state.layoutPreferences,
+    migrated
+  );
 };
 
 export const applyConfigData = (data) => {
+  requireCurrentWebStateFieldNames(data);
+  if (isPlainObject(data.form) && Object.prototype.hasOwnProperty.call(data.form, 'linear_track_layout')) {
+    requireCurrentLinearTrackLayout(data.form.linear_track_layout);
+  }
+  if (isPlainObject(data.adv) && Object.prototype.hasOwnProperty.call(data.adv, 'label_placement')) {
+    requireCurrentLinearLabelPlacement(data.adv.label_placement);
+  }
+  if (isPlainObject(data.adv) && Object.prototype.hasOwnProperty.call(data.adv, 'multi_record_size_mode')) {
+    requireCurrentCircularMultiRecordSizeMode(data.adv.multi_record_size_mode);
+  }
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
   state.annotationSets.splice(
@@ -1115,9 +1395,9 @@ export const applyConfigData = (data) => {
       .filter((comparison) => comparison.queryUid && comparison.subjectUid)
   );
   state.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;
-  if (state.adv.label_placement === 'on_feature') {
-    state.adv.label_placement = 'above_feature';
-  }
+  state.adv.label_placement = requireCurrentLinearLabelPlacement(
+    state.adv.label_placement
+  );
   state.adv.label_rendering = normalizeLabelRendering(state.adv.label_rendering);
   state.adv.circular_label_placement =
     String(state.adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
@@ -1142,24 +1422,15 @@ export const applyConfigData = (data) => {
       ? numericTrackAxisGap
       : null;
   }
-  if (state.form.linear_track_layout === 'spreadout') {
-    state.form.linear_track_layout = 'above';
-  } else if (state.form.linear_track_layout === 'tuckin') {
-    state.form.linear_track_layout = 'below';
-  } else if (!['above', 'middle', 'below'].includes(state.form.linear_track_layout)) {
-    state.form.linear_track_layout = 'middle';
-  }
+  state.form.linear_track_layout = requireCurrentLinearTrackLayout(
+    state.form.linear_track_layout
+  );
   state.form.plot_title = String(state.form.plot_title || '');
   state.form.legend = normalizeLegendPosition(state.form.legend, state.mode.value === 'linear' ? 'bottom' : 'left');
-  state.adv.feature_shapes = normalizeFeatureShapes(state.adv.feature_shapes);
-  const normalizedMultiRecordSizeMode = String(state.adv.multi_record_size_mode || '').trim().toLowerCase();
-  if (normalizedMultiRecordSizeMode === 'sqrt') {
-    state.adv.multi_record_size_mode = 'auto';
-  } else {
-    state.adv.multi_record_size_mode = ['auto', 'linear', 'equal'].includes(normalizedMultiRecordSizeMode)
-      ? normalizedMultiRecordSizeMode
-      : 'auto';
-  }
+  state.adv.feature_shapes = normalizeFeatureRenderingMap(state.adv.feature_shapes);
+  state.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
+    state.adv.multi_record_size_mode
+  );
   const numericMinRadiusRatio = Number(state.adv.multi_record_min_radius_ratio);
   state.adv.multi_record_min_radius_ratio =
     Number.isFinite(numericMinRadiusRatio) && numericMinRadiusRatio > 0 && numericMinRadiusRatio <= 1
@@ -1201,7 +1472,6 @@ export const applyConfigData = (data) => {
   } else {
     state.adv.plot_title_position = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
   }
-  syncActiveModePlotTitlePosition();
   const rawPlotTitleFontSize = state.adv.plot_title_font_size;
   if (
     rawPlotTitleFontSize === null ||
@@ -1280,7 +1550,9 @@ export const applyConfigData = (data) => {
   }
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
   state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
-  state.adv.depth_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_tick_interval);
+  state.adv.depth_large_tick_interval = normalizePositiveNumberOrNull(
+    state.adv.depth_large_tick_interval
+  );
   state.adv.depth_small_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_small_tick_interval);
   state.adv.depth_tick_font_size = normalizePositiveNumberOrNull(state.adv.depth_tick_font_size);
   state.adv.depth_tracks.splice(
@@ -1373,8 +1645,8 @@ export const applyConfigData = (data) => {
     state.losat.blastp.orthogroupMemberMaxHits = normalizePositiveInteger(state.losat.blastp?.orthogroupMemberMaxHits, 5);
     state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 1);
     {
-      const maxGap = Number(state.losat.blastp?.collinearMaxGeneGap);
-      state.losat.blastp.collinearMaxGeneGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
+      const maxGap = Number(state.losat.blastp?.collinearMaxUnitGap);
+      state.losat.blastp.collinearMaxUnitGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
       const diagonalDrift = Number(state.losat.blastp?.collinearMaxDiagonalDrift);
       state.losat.blastp.collinearMaxDiagonalDrift = Number.isInteger(diagonalDrift) && diagonalDrift >= 0 ? diagonalDrift : 0;
       const mergeConflicts = Number(state.losat.blastp?.collinearMaxConflictsInMergeGap);
@@ -1564,7 +1836,7 @@ const serializeFile = async (file) => {
     name: file.name || 'file',
     type: file.type || '',
     size: file.size || buffer.byteLength,
-    lastModified: file.lastModified || Date.now(),
+    lastModified: file.lastModified ?? Date.now(),
     data: bufferToBase64(buffer)
   };
 };
@@ -1587,7 +1859,7 @@ const serializeDepthFile = async (file) => {
         name: file.name || 'depth.tsv',
         type: file.type || 'text/tab-separated-values',
         size: file.size || text.length,
-        lastModified: file.lastModified || Date.now(),
+        lastModified: file.lastModified ?? Date.now(),
         encoding: DEPTH_FILE_ENCODING,
         data: encodedDepth
       };
@@ -1608,19 +1880,24 @@ const deserializeFile = (entry) => {
   if (Array.isArray(entry)) {
     return entry.map((item) => deserializeFile(item));
   }
-  if (!entry || !entry.data) return null;
+  if (
+    !entry ||
+    !Object.prototype.hasOwnProperty.call(entry, 'data') ||
+    entry.data === null ||
+    entry.data === undefined
+  ) return null;
   if (isEncodedDepthFileEntry(entry)) {
     const text = decodeDepthText(entry.data);
     return new File([text], entry.name || 'depth.tsv', {
       type: entry.type || 'text/tab-separated-values',
-      lastModified: entry.lastModified || Date.now()
+      lastModified: entry.lastModified ?? Date.now()
     });
   }
   if (typeof entry.data !== 'string') return null;
   const bytes = base64ToUint8(entry.data);
   return new File([bytes], entry.name || 'file', {
     type: entry.type || 'application/octet-stream',
-    lastModified: entry.lastModified || Date.now()
+    lastModified: entry.lastModified ?? Date.now()
   });
 };
 
@@ -1659,28 +1936,17 @@ const serializeLosatCache = () => {
   const entries = [];
   const seen = new Set();
 
-  const buildEntry = (key, cached, { filename = '', display = false } = {}) => {
-    const entry = {
-      schema: LOSAT_CACHE_SCHEMA,
-      kind: 'raw-losat',
-      key,
-      filename,
-      display,
-      text: cached.text,
-      program: cached.program || '',
-      queryCanonicalHash: cached.queryCanonicalHash || '',
-      subjectCanonicalHash: cached.subjectCanonicalHash || ''
-    };
-    if (cached.flow) entry.flow = cached.flow;
-    if (cached.outfmt) entry.outfmt = cached.outfmt;
-    if (Array.isArray(cached.args)) entry.args = cached.args.map((arg) => String(arg));
-    return entry;
-  };
+  const buildEntry = (key, cached, { filename = '', display = false } = {}) => ({
+    ...cloneJsonData(cached),
+    key: String(key),
+    filename: String(filename || ''),
+    display: Boolean(display)
+  });
 
   info.forEach((entry, idx) => {
     if (!entry || !entry.key) return;
     const cached = cacheMap.get(entry.key);
-    if (!isRawLosatCacheEntry(cached)) return;
+    if (!isCurrentRawLosatCacheEntry(cached)) return;
     entries.push(buildEntry(entry.key, cached, {
       filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
       display: entry.display !== false
@@ -1690,39 +1956,36 @@ const serializeLosatCache = () => {
 
   cacheMap.forEach((value, key) => {
     if (seen.has(key)) return;
-    if (!isRawLosatCacheEntry(value)) return;
+    if (!isCurrentRawLosatCacheEntry(value)) return;
     entries.push(buildEntry(key, value));
   });
 
   return entries;
 };
 
-const applyLosatCache = (entries) => {
+const applyLosatCache = (entries, legacyEnvelope = null) => {
   const map = new Map();
   const info = [];
+  const legacyEntries = [];
 
   if (Array.isArray(entries)) {
     entries.forEach((entry, idx) => {
+      const classification = classifyRawLosatCacheEntry(entry);
+      if (classification === 'protein-legacy') {
+        legacyEntries.push(entry);
+        return;
+      }
       if (
         !entry ||
-        entry.schema !== LOSAT_CACHE_SCHEMA ||
-        entry.kind !== 'raw-losat' ||
-        !entry.key ||
-        typeof entry.text !== 'string'
+        !isCurrentRawLosatCacheEntry(entry) ||
+        !entry.key
       ) {
         return;
       }
-      const restored = {
-        schema: LOSAT_CACHE_SCHEMA,
-        kind: 'raw-losat',
-        text: entry.text,
-        program: entry.program || '',
-        queryCanonicalHash: entry.queryCanonicalHash || '',
-        subjectCanonicalHash: entry.subjectCanonicalHash || ''
-      };
-      if (entry.flow) restored.flow = entry.flow;
-      if (entry.outfmt) restored.outfmt = entry.outfmt;
-      if (Array.isArray(entry.args)) restored.args = entry.args.map((arg) => String(arg));
+      const restored = cloneJsonData(entry);
+      delete restored.key;
+      delete restored.filename;
+      delete restored.display;
       map.set(entry.key, restored);
       if (entry.display === false) return;
       info.push({
@@ -1735,6 +1998,12 @@ const applyLosatCache = (entries) => {
 
   state.losatCache.value = map;
   state.losatCacheInfo.value = info;
+  const restoredEnvelope = normalizeLegacyProteinCandidateEnvelope(legacyEnvelope);
+  const importedEnvelope = createLegacyProteinCandidateEnvelope(legacyEntries);
+  state.legacyProteinRawCandidates.value = {
+    schema: 1,
+    entries: [...restoredEnvelope.entries, ...importedEnvelope.entries]
+  };
 };
 
 const pruneLosatDerivedCache = (map) => {
@@ -1755,26 +2024,47 @@ const serializeLosatDerivedCache = () => {
     const entry = {
       schema: LOSAT_DERIVED_CACHE_SCHEMA,
       kind: 'derived-losatp-payload',
+      idEncoding: 'runtime-handle-v1',
       key: String(key || value?.key || ''),
       mode: String(value?.mode || ''),
       payload: cloneJsonData(value?.payload)
     };
-    if (!isLosatDerivedCacheEntry(entry)) return;
+    if (!isLosatDerivedCacheEntry(entry, { allowLegacy: false })) return;
     entries.push(entry);
   });
 
   return entries.slice(-LOSAT_DERIVED_CACHE_LIMIT);
 };
 
-const applyLosatDerivedCache = (entries) => {
+const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
+  schema: 1,
+  entries: [
+    ...(
+      isPlainObject(value) && value.schema === 1 && Array.isArray(value.entries)
+        ? value.entries
+        : []
+    ),
+    ...fallbackEntries
+  ]
+    .filter((entry) => isLosatDerivedCacheEntry(entry) && entry.schema === 1)
+    .map((entry) => cloneJsonData(entry))
+});
+
+const applyLosatDerivedCache = (entries, legacyEvidence = null) => {
   const map = new Map();
+  const legacyEntries = [];
 
   if (Array.isArray(entries)) {
     entries.forEach((entry) => {
       if (!isLosatDerivedCacheEntry(entry)) return;
+      if (entry.schema === 1) {
+        legacyEntries.push(entry);
+        return;
+      }
       map.set(entry.key, {
         schema: LOSAT_DERIVED_CACHE_SCHEMA,
         kind: 'derived-losatp-payload',
+        idEncoding: 'runtime-handle-v1',
         key: entry.key,
         mode: String(entry.mode || ''),
         payload: cloneJsonData(entry.payload)
@@ -1784,15 +2074,23 @@ const applyLosatDerivedCache = (entries) => {
 
   pruneLosatDerivedCache(map);
   state.losatDerivedCache.value = map;
+  state.legacyProteinDerivedEvidence.value = normalizeLegacyDerivedEvidence(
+    legacyEvidence,
+    legacyEntries
+  );
+};
+
+const applyProteinIdentityManifest = (manifest) => {
+  state.proteinIdentityManifest.value = validateProteinIdentityManifest(manifest)
+    ? cloneJsonData(manifest)
+    : emptyProteinIdentityManifest();
 };
 
 const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
 
 const enrichExtractedFeaturesWithOrthogroups = (index) => {
-  if (!(index instanceof Map) || !Array.isArray(state.extractedFeatures.value) || state.extractedFeatures.value.length === 0) {
-    return;
-  }
-  state.extractedFeatures.value = state.extractedFeatures.value.map((feature) => {
+  if (!(index instanceof Map)) return;
+  const enrichFeatures = (features) => (Array.isArray(features) ? features : []).map((feature) => {
     const ids = [
       feature?.svg_id,
       feature?.stable_svg_id,
@@ -1830,6 +2128,10 @@ const enrichExtractedFeaturesWithOrthogroups = (index) => {
       orthogroupMember: entry.orthogroupMember
     };
   });
+  state.extractedFeatures.value = enrichFeatures(state.extractedFeatures.value);
+  if (state.biologicalFeatures) {
+    state.biologicalFeatures.value = enrichFeatures(state.biologicalFeatures.value);
+  }
 };
 
 export const applyOrthogroupStateData = (orthogroupState = {}) => {
@@ -1839,6 +2141,19 @@ export const applyOrthogroupStateData = (orthogroupState = {}) => {
     .filter(Boolean);
   const groupIdSet = new Set(groupIds);
   const index = new Map();
+  const indexOwners = new Map();
+  const ambiguousIndexKeys = new Set();
+  const addUniqueIndexEntry = (key, owner, entry) => {
+    if (!key || ambiguousIndexKeys.has(key)) return;
+    const existingOwner = indexOwners.get(key);
+    if (existingOwner && existingOwner !== owner) {
+      index.delete(key);
+      ambiguousIndexKeys.add(key);
+      return;
+    }
+    indexOwners.set(key, owner);
+    index.set(key, entry);
+  };
 
   groups.forEach((group) => {
     const orthogroupId = String(group?.id || '').trim();
@@ -1849,10 +2164,15 @@ export const applyOrthogroupStateData = (orthogroupState = {}) => {
     ).size || 0);
     const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
     const sourceRecordIndex = Number(group?.source_record_index);
-    members.forEach((member) => {
-      const featureSvgId = String(member?.featureSvgId || '').trim();
+    members.forEach((member, memberIndex) => {
+      const featureSvgIds = Array.from(new Set([
+        member?.stableFeatureSvgId,
+        member?.stable_feature_svg_id,
+        member?.featureSvgId,
+        member?.feature_svg_id
+      ].map((value) => String(value || '').trim()).filter(Boolean)));
       const recordIndex = Number(member?.recordIndex);
-      if (!featureSvgId || !Number.isInteger(recordIndex)) return;
+      if (featureSvgIds.length === 0 || !Number.isInteger(recordIndex)) return;
       const entry = {
         orthogroupId,
         orthogroupMemberCount: memberCount,
@@ -1864,8 +2184,15 @@ export const applyOrthogroupStateData = (orthogroupState = {}) => {
         orthogroupSourceRecordIndex: Number.isInteger(sourceRecordIndex) ? sourceRecordIndex : null,
         orthogroupMember: member
       };
-      index.set(buildOrthogroupIndexKey(recordIndex, featureSvgId), entry);
-      if (!index.has(featureSvgId)) index.set(featureSvgId, entry);
+      const owner = `${recordIndex}\u001f${member?.featureIndex ?? memberIndex}\u001f${orthogroupId}`;
+      featureSvgIds.forEach((featureSvgId) => {
+        addUniqueIndexEntry(
+          buildOrthogroupIndexKey(recordIndex, featureSvgId),
+          owner,
+          entry
+        );
+        addUniqueIndexEntry(featureSvgId, owner, entry);
+      });
     });
   });
 
@@ -1915,6 +2242,19 @@ export const serializeFiles = async () => {
       file: await serializeFile(comparison?.file)
     }))
   );
+  const linearCanonicalComparisons = await Promise.all(
+    (Array.isArray(state.files.linearCanonicalComparisons)
+      ? state.files.linearCanonicalComparisons
+      : []
+    ).map(async (comparison) => (
+      isResourceBackedCanonicalComparison(comparison)
+        ? {
+            ...mapResourceBackedCanonicalComparison(comparison),
+            file: await serializeFile(comparison.file)
+          }
+        : cloneJsonData(comparison)
+    ))
+  );
 
   return {
     c_gb: await serializeFile(state.files.c_gb),
@@ -1922,7 +2262,15 @@ export const serializeFiles = async () => {
     c_fasta: await serializeFile(state.files.c_fasta),
     c_depth: await serializeDepthFile(state.files.c_depth),
     c_conservation_blasts: await serializeFileArray(state.files.c_conservation_blasts),
-    c_conservation_fastas: await serializeFileArray(state.files.c_conservation_fastas),
+    c_conservation_blasts_source: state.files.c_conservation_blasts_source === 'losat-cache'
+      ? 'losat-cache'
+      : null,
+    c_conservation_fastas: await Promise.all(
+      (Array.isArray(state.files.c_conservation_fastas)
+        ? state.files.c_conservation_fastas
+        : []
+      ).map((file) => serializeFile(file))
+    ),
     c_conservation_sequence_sources: await Promise.all(
       (Array.isArray(state.files.c_conservation_sequence_sources) ? state.files.c_conservation_sequence_sources : [])
         .map((file) => serializeFile(file))
@@ -1933,8 +2281,71 @@ export const serializeFiles = async () => {
     whitelist: await serializeFile(state.files.whitelist),
     qualifier_priority: await serializeFile(state.files.qualifier_priority),
     linearSeqs,
-    linearComparisons
+    linearComparisons,
+    linearCanonicalComparisons
   };
+};
+
+const deserializeCanonicalComparisons = (comparisons) => (
+  Array.isArray(comparisons)
+    ? comparisons.map((comparison) => (
+        isResourceBackedCanonicalComparison(comparison)
+          ? mapResourceBackedCanonicalComparison(comparison, deserializeFile)
+          : cloneJsonData(comparison)
+      ))
+    : []
+);
+
+export const adoptCanonicalRenderArtifacts = (canonical) => {
+  const projection = projectCanonicalSessionRequest(canonical);
+  if (projection.mode === 'linear') {
+    const comparisons = deserializeCanonicalComparisons(
+      projection.files.linearCanonicalComparisons
+    );
+    state.files.linearCanonicalComparisons = comparisons;
+    return;
+  }
+  if (projection.files.c_conservation_blasts_source !== 'losat-cache') return;
+
+  const blastFiles = (projection.files.c_conservation_blasts || [])
+    .map((entry) => deserializeFile(entry))
+    .filter(Boolean);
+  const fastaFiles = (projection.files.c_conservation_fastas || [])
+    .map((entry) => deserializeFile(entry));
+  const sequenceSources = (projection.files.c_conservation_sequence_sources || [])
+    .map((entry) => deserializeFile(entry));
+  const projectedConservation = projection.config.circularConservation;
+  const currentSeries = Array.isArray(state.circularConservation.series)
+    ? state.circularConservation.series.map((entry) => cloneJsonData(entry))
+    : [];
+  const series = Array.isArray(projectedConservation?.series)
+    ? projectedConservation.series.map((entry, index) => ({
+        ...entry,
+        ...(currentSeries[index] || {}),
+        sourceIndex: index,
+        fileName: entry.fileName,
+        label: entry.label,
+        color: entry.color
+      }))
+    : [];
+
+  state.files.c_conservation_blasts = blastFiles;
+  state.files.c_conservation_blasts_source = 'losat-cache';
+  state.files.c_conservation_fastas = fastaFiles;
+  state.files.c_conservation_sequence_sources = sequenceSources;
+  if (projectedConservation) {
+    state.circularConservation.enabled = true;
+    state.circularConservation.source = 'losat';
+    state.circularConservation.reference = projectedConservation.reference;
+    state.circularConservation.labels = series.map((entry) => entry.label).join(',');
+    state.circularConservation.ring_width = projectedConservation.ring_width;
+    state.circularConservation.ring_gap = projectedConservation.ring_gap;
+    state.circularConservation.series.splice(
+      0,
+      state.circularConservation.series.length,
+      ...series
+    );
+  }
 };
 
 const applyFiles = (filesData) => {
@@ -1944,8 +2355,10 @@ const applyFiles = (filesData) => {
   state.files.c_fasta = null;
   state.files.c_depth = null;
   state.files.c_conservation_blasts = [];
+  state.files.c_conservation_blasts_source = null;
   state.files.c_conservation_fastas = [];
   state.files.c_conservation_sequence_sources = [];
+  state.files.linearCanonicalComparisons = [];
   state.files.d_color = null;
   state.files.t_color = null;
   state.files.blacklist = null;
@@ -1967,12 +2380,18 @@ const applyFiles = (filesData) => {
   state.files.c_conservation_blasts = Array.isArray(filesData.c_conservation_blasts)
     ? filesData.c_conservation_blasts.map((entry) => deserializeFile(entry)).filter(Boolean)
     : [];
+  state.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'
+    ? 'losat-cache'
+    : null;
   state.files.c_conservation_fastas = Array.isArray(filesData.c_conservation_fastas)
-    ? filesData.c_conservation_fastas.map((entry) => deserializeFile(entry)).filter(Boolean)
+    ? filesData.c_conservation_fastas.map((entry) => deserializeFile(entry))
     : [];
   state.files.c_conservation_sequence_sources = Array.isArray(filesData.c_conservation_sequence_sources)
     ? filesData.c_conservation_sequence_sources.map((entry) => deserializeFile(entry))
     : [];
+  state.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
+    filesData.linearCanonicalComparisons
+  );
   state.files.d_color = deserializeFile(filesData.d_color);
   state.files.t_color = deserializeFile(filesData.t_color);
   state.files.blacklist = deserializeFile(filesData.blacklist);
@@ -2064,7 +2483,7 @@ const reconcileDepthTrackStateAfterSessionFiles = () => {
   const defaults = {
     depthColor: state.adv.depth_color,
     depthHeight: state.adv.depth_height,
-    largeTickInterval: state.adv.depth_tick_interval,
+    largeTickInterval: state.adv.depth_large_tick_interval,
     smallTickInterval: state.adv.depth_small_tick_interval,
     tickFontSize: state.adv.depth_tick_font_size
   };
@@ -2144,7 +2563,16 @@ const cloneLiveFileState = () => ({
       : [],
     c_conservation_sequence_sources: Array.isArray(state.files.c_conservation_sequence_sources)
       ? [...state.files.c_conservation_sequence_sources]
-      : []
+      : [],
+    linearCanonicalComparisons: (
+      Array.isArray(state.files.linearCanonicalComparisons)
+        ? state.files.linearCanonicalComparisons
+        : []
+    ).map((comparison) => (
+      isResourceBackedCanonicalComparison(comparison)
+        ? mapResourceBackedCanonicalComparison(comparison)
+        : cloneJsonData(comparison)
+    ))
   },
   linearSeqs: state.linearSeqs.map((seq) => ({
     ...seq,
@@ -2175,6 +2603,9 @@ const captureSessionImportSnapshot = () => ({
   runState: buildRunStateData(),
   losatCache: new Map(state.losatCache.value),
   losatDerivedCache: new Map(state.losatDerivedCache.value),
+  proteinIdentityManifest: cloneJsonData(state.proteinIdentityManifest.value),
+  legacyProteinRawCandidates: cloneJsonData(state.legacyProteinRawCandidates.value),
+  legacyProteinDerivedEvidence: cloneJsonData(state.legacyProteinDerivedEvidence.value),
   losatCacheInfo: cloneJsonData(state.losatCacheInfo.value),
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value
@@ -2190,6 +2621,9 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   restoreLiveFileState(snapshot.files);
   state.losatCache.value = new Map(snapshot.losatCache);
   state.losatDerivedCache.value = new Map(snapshot.losatDerivedCache);
+  state.proteinIdentityManifest.value = cloneJsonData(snapshot.proteinIdentityManifest);
+  state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
+  state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
   state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
   applyResultsData(snapshot.results, snapshot.ui);
   applyFeatureStateData(snapshot.features);
@@ -2224,6 +2658,9 @@ const resetSessionBaseline = () => {
   applyFiles(null);
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
+  state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
+  state.legacyProteinRawCandidates.value = { schema: 1, entries: [] };
+  state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
   state.losatCacheInfo.value = [];
   state.orthogroups.value = [];
   state.featureOrthogroupIndex.value = new Map();
@@ -2232,6 +2669,7 @@ const resetSessionBaseline = () => {
   clearObject(state.orthogroupNameOverrides);
   clearObject(state.orthogroupDescriptionOverrides);
   state.extractedFeatures.value = [];
+  if (state.biologicalFeatures) state.biologicalFeatures.value = [];
   state.featureSelectorSafetyScope.value = [];
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
@@ -2257,36 +2695,6 @@ const resetSessionBaseline = () => {
 };
 
 export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
-  const currentLegend = state.form.legend;
-  const isLinear = state.mode.value === 'linear';
-  const currentPlotTitlePosition = state.adv.plot_title_position;
-  const activeCircularLegend = isLinear
-    ? normalizeLegendPosition(state.circularLegendPosition.value, 'left')
-    : normalizeLegendPosition(currentLegend, 'left');
-  const activeCircularPlotTitlePosition = isLinear
-    ? normalizeCircularPlotTitlePosition(state.circularPlotTitlePosition.value)
-    : normalizeCircularPlotTitlePosition(currentPlotTitlePosition);
-  const savedCircularSingleRecordLegendPosition =
-    !isLinear && !state.form.multi_record_canvas
-      ? activeCircularLegend
-      : normalizeLegendPosition(state.circularSingleRecordLegendPosition.value, activeCircularLegend);
-  const savedCircularSingleRecordPlotTitlePosition =
-    !isLinear && !state.form.multi_record_canvas
-      ? activeCircularPlotTitlePosition
-      : normalizeCircularPlotTitlePosition(state.circularSingleRecordPlotTitlePosition.value);
-  const savedCircularMultiRecordLegendPosition =
-    !isLinear && state.form.multi_record_canvas
-      ? activeCircularLegend
-      : hasStoredLayoutValue(state.circularMultiRecordLegendPosition.value)
-        ? normalizeLegendPosition(state.circularMultiRecordLegendPosition.value, savedCircularSingleRecordLegendPosition)
-        : savedCircularSingleRecordLegendPosition;
-  const savedCircularMultiRecordPlotTitlePosition =
-    !isLinear && state.form.multi_record_canvas
-      ? activeCircularPlotTitlePosition
-      : hasStoredLayoutValue(state.circularMultiRecordPlotTitlePosition.value)
-        ? normalizeCircularPlotTitlePosition(state.circularMultiRecordPlotTitlePosition.value)
-        : savedCircularSingleRecordPlotTitlePosition;
-
   const ui = {
     title: String(state.sessionTitle.value || ''),
     mode: state.mode.value,
@@ -2298,19 +2706,7 @@ export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
     generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
       state.generatedCircularPlotTitlePosition.value
     ),
-    legend: currentLegend,
-    circularLegendPosition: activeCircularLegend,
-    linearLegendPosition: isLinear
-      ? normalizeLegendPosition(currentLegend, 'bottom')
-      : normalizeLegendPosition(state.linearLegendPosition.value, 'bottom'),
-    circularPlotTitlePosition: activeCircularPlotTitlePosition,
-    linearPlotTitlePosition: isLinear
-      ? normalizeLinearPlotTitlePosition(currentPlotTitlePosition)
-      : normalizeLinearPlotTitlePosition(state.linearPlotTitlePosition.value),
-    circularSingleRecordLegendPosition: savedCircularSingleRecordLegendPosition,
-    circularSingleRecordPlotTitlePosition: savedCircularSingleRecordPlotTitlePosition,
-    circularMultiRecordLegendPosition: savedCircularMultiRecordLegendPosition,
-    circularMultiRecordPlotTitlePosition: savedCircularMultiRecordPlotTitlePosition,
+    layoutPreferences: cloneJsonData(state.layoutPreferences),
     featurePanelTab: state.featurePanelTab.value,
     cInputType: state.cInputType.value,
     lInputType: state.lInputType.value,
@@ -2376,8 +2772,7 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
   }
 
   restorePaletteStateFromSession(ui);
-  restoreSessionCircularLayoutCaches(ui);
-  restoreSessionPlotTitlePositions(ui);
+  restoreLayoutPreferences(ui);
 
   if (ui.circularBaseConfig && typeof ui.circularBaseConfig === 'object') {
     state.circularBaseConfig.value = cloneJsonData(ui.circularBaseConfig);
@@ -2419,22 +2814,6 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
     if (typeof ui.zoom === 'number') state.zoom.value = ui.zoom;
   }
 
-  if (state.mode.value === 'linear') {
-    const nextLinearLegend = hasStoredLayoutValue(ui.linearLegendPosition)
-      ? normalizeLegendPosition(ui.linearLegendPosition, 'bottom')
-      : hasStoredLayoutValue(ui.legend)
-        ? normalizeLegendPosition(ui.legend, 'bottom')
-        : normalizeLegendPosition(state.form.legend, 'bottom');
-    state.form.legend = nextLinearLegend;
-    state.linearLegendPosition.value = nextLinearLegend;
-    state.adv.plot_title_position = state.linearPlotTitlePosition.value;
-  } else {
-    const activeCircularLayout = resolveActiveCircularLayout();
-    state.form.legend = activeCircularLayout.legend;
-    state.adv.plot_title_position = activeCircularLayout.plotTitlePosition;
-    state.circularLegendPosition.value = activeCircularLayout.legend;
-    state.circularPlotTitlePosition.value = activeCircularLayout.plotTitlePosition;
-  }
 };
 
 export const applyResultsData = (resultsData = [], ui = {}) => {
@@ -2461,6 +2840,7 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
 
 export const buildFeatureStateData = () => ({
   extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
+  biologicalFeatures: sanitizeExtractedFeaturesForSession(state.biologicalFeatures?.value),
   featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
@@ -2479,6 +2859,11 @@ export const applyFeatureStateData = (features = {}) => {
   state.extractedFeatures.value = Array.isArray(features.extractedFeatures)
     ? features.extractedFeatures
     : [];
+  if (state.biologicalFeatures) {
+    state.biologicalFeatures.value = Array.isArray(features.biologicalFeatures)
+      ? features.biologicalFeatures
+      : [];
+  }
   state.featureSelectorSafetyScope.value = Array.isArray(features.featureSelectorSafetyScope)
     ? features.featureSelectorSafetyScope
     : [];
@@ -2590,11 +2975,6 @@ const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-f
     extractedFeatures: state.extractedFeatures.value
   });
 
-  if (validation.state === 'ready' || validation.state === 'not-needed') {
-    applySessionFeatureRecoveryPlan({ status: 'ready', validation }, { generationId });
-    return { status: 'ready', validation };
-  }
-
   if (validation.state === 'missing' || validation.state === 'alignable' || validation.state === 'stale') {
     state.featureExtractionPending.value = true;
     state.featureExtractionError.value = null;
@@ -2647,44 +3027,8 @@ const guardSessionFeatureMetadataForExport = async () => {
 
 export const exportSession = async (titleOverride = null) => {
   const losatEntries = serializeLosatCache();
+  const losatDerivedEntries = serializeLosatDerivedCache();
   const losatBytes = losatEntries.reduce((sum, entry) => sum + (entry.text ? entry.text.length : 0), 0);
-  const currentLegend = state.form.legend;
-  const isLinear = state.mode.value === 'linear';
-  const currentPlotTitlePosition = state.adv.plot_title_position;
-  const activeCircularLegend = isLinear
-    ? normalizeLegendPosition(state.circularLegendPosition.value, 'left')
-    : normalizeLegendPosition(currentLegend, 'left');
-  const activeCircularPlotTitlePosition = isLinear
-    ? normalizeCircularPlotTitlePosition(state.circularPlotTitlePosition.value)
-    : normalizeCircularPlotTitlePosition(currentPlotTitlePosition);
-  const savedCircularLegend = activeCircularLegend;
-  const savedLinearLegend = isLinear
-    ? normalizeLegendPosition(currentLegend, 'bottom')
-    : normalizeLegendPosition(state.linearLegendPosition.value, 'bottom');
-  const savedCircularPlotTitlePosition = activeCircularPlotTitlePosition;
-  const savedLinearPlotTitlePosition = isLinear
-    ? normalizeLinearPlotTitlePosition(currentPlotTitlePosition)
-    : normalizeLinearPlotTitlePosition(state.linearPlotTitlePosition.value);
-  const savedCircularSingleRecordLegendPosition =
-    !isLinear && !state.form.multi_record_canvas
-      ? activeCircularLegend
-      : normalizeLegendPosition(state.circularSingleRecordLegendPosition.value, activeCircularLegend);
-  const savedCircularSingleRecordPlotTitlePosition =
-    !isLinear && !state.form.multi_record_canvas
-      ? activeCircularPlotTitlePosition
-      : normalizeCircularPlotTitlePosition(state.circularSingleRecordPlotTitlePosition.value);
-  const savedCircularMultiRecordLegendPosition =
-    !isLinear && state.form.multi_record_canvas
-      ? activeCircularLegend
-      : hasStoredLayoutValue(state.circularMultiRecordLegendPosition.value)
-        ? normalizeLegendPosition(state.circularMultiRecordLegendPosition.value, savedCircularSingleRecordLegendPosition)
-        : savedCircularSingleRecordLegendPosition;
-  const savedCircularMultiRecordPlotTitlePosition =
-    !isLinear && state.form.multi_record_canvas
-      ? activeCircularPlotTitlePosition
-      : hasStoredLayoutValue(state.circularMultiRecordPlotTitlePosition.value)
-        ? normalizeCircularPlotTitlePosition(state.circularMultiRecordPlotTitlePosition.value)
-        : savedCircularSingleRecordPlotTitlePosition;
   const resolvedTitle =
     typeof titleOverride === 'string'
       ? titleOverride.trim()
@@ -2712,6 +3056,12 @@ export const exportSession = async (titleOverride = null) => {
     (state.files.blacklist?.size || 0) +
     (state.files.whitelist?.size || 0) +
     (state.files.qualifier_priority?.size || 0) +
+    (Array.isArray(state.files.linearCanonicalComparisons)
+      ? state.files.linearCanonicalComparisons.reduce(
+          (sum, comparison) => sum + (comparison?.file?.size || 0),
+          0
+        )
+      : 0) +
     state.linearSeqs.reduce((sum, seq) => {
       return (
         sum +
@@ -2738,7 +3088,13 @@ export const exportSession = async (titleOverride = null) => {
     ? cloneJsonData(lastRunInvocation)
     : undefined;
   const serializedFiles = await serializeFiles();
-  const canonical = buildCanonicalSessionRequest({ state, filesData: serializedFiles });
+  const canonical = buildCanonicalRenderRequest({ state, filesData: serializedFiles });
+  const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
+    state.legacyProteinRawCandidates.value
+  );
+  const legacyDerivedEvidence = normalizeLegacyDerivedEvidence(
+    state.legacyProteinDerivedEvidence.value
+  );
   const sessionData = {
     format: 'gbdraw-session',
     version: SESSION_VERSION,
@@ -2756,15 +3112,7 @@ export const exportSession = async (titleOverride = null) => {
       generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
         state.generatedCircularPlotTitlePosition.value
       ),
-      legend: currentLegend,
-      circularLegendPosition: savedCircularLegend,
-      linearLegendPosition: savedLinearLegend,
-      circularPlotTitlePosition: savedCircularPlotTitlePosition,
-      linearPlotTitlePosition: savedLinearPlotTitlePosition,
-      circularSingleRecordLegendPosition: savedCircularSingleRecordLegendPosition,
-      circularSingleRecordPlotTitlePosition: savedCircularSingleRecordPlotTitlePosition,
-      circularMultiRecordLegendPosition: savedCircularMultiRecordLegendPosition,
-      circularMultiRecordPlotTitlePosition: savedCircularMultiRecordPlotTitlePosition,
+      layoutPreferences: cloneJsonData(state.layoutPreferences),
       featurePanelTab: state.featurePanelTab.value,
       cInputType: state.cInputType.value,
       lInputType: state.lInputType.value,
@@ -2782,6 +3130,7 @@ export const exportSession = async (titleOverride = null) => {
     results: serializeResults(),
     features: {
       extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
+      biologicalFeatures: sanitizeExtractedFeaturesForSession(state.biologicalFeatures?.value),
       featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
       featureRecordIds: state.featureRecordIds.value,
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
@@ -2807,16 +3156,30 @@ export const exportSession = async (titleOverride = null) => {
       entries: losatEntries
     },
     losatDerivedCache: {
-      entries: serializeLosatDerivedCache()
+      entries: losatDerivedEntries
     },
+    proteinIdentityManifest: validateProteinIdentityManifest(state.proteinIdentityManifest.value)
+      ? cloneJsonData(state.proteinIdentityManifest.value)
+      : emptyProteinIdentityManifest(),
     cliInvocation: exportableCliInvocation
   };
+
+  const legacyArtifacts = buildSessionLegacyArtifacts({
+    legacyRawCandidates,
+    legacyDerivedEvidence
+  });
+  if (legacyArtifacts) {
+    sessionData.legacyArtifacts = legacyArtifacts;
+  }
 
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {
     const proceed = confirm(`Download "${sessionFilename}" again? Your browser may overwrite or rename the file.`);
     if (!proceed) return;
   }
-  await downloadCompressedSession(sessionData, sessionFilename);
+  await downloadCompressedSession(
+    compactSessionFeatureCatalog(sessionData),
+    sessionFilename
+  );
   lastSessionFilename = sessionFilename;
 };
 
@@ -2835,6 +3198,7 @@ export const importSession = async (e, options = {}) => {
       }
       return value;
     });
+    data = expandSessionFeatureCatalog(data);
 
     if (isLegacyConfigPayload(data)) {
       applyLegacyConfigPayload(data);
@@ -2885,9 +3249,6 @@ export const importSession = async (e, options = {}) => {
       state.featurePanelTab.value = 'colors';
     }
     state.generatedMode.value = ui.mode === 'linear' ? 'linear' : 'circular';
-    if (ui.linearLegendPosition) {
-      state.linearLegendPosition.value = normalizeLegendPosition(ui.linearLegendPosition, 'bottom');
-    }
     if (ui.generatedLegendPosition) {
       state.generatedLegendPosition.value = normalizeLegendPosition(
         ui.generatedLegendPosition,
@@ -2906,23 +3267,45 @@ export const importSession = async (e, options = {}) => {
       applyConfigData(restoredConfig);
     }
     restorePaletteStateFromSession(ui);
-    if (canonicalSession) {
-      syncActiveModePlotTitlePosition();
-    } else {
-      restoreSessionCircularLayoutCaches(ui);
-      restoreSessionPlotTitlePositions(ui);
-    }
+    restoreLayoutPreferences(ui, { preserveActive: Boolean(canonicalSession) });
 
     const { collapsedLinearSeqs } = applyFiles(
       canonicalSession ? projectionResult.restoredFiles : data.files
     );
     reconcileDepthTrackStateAfterSessionFiles();
+    try {
+      const sequenceSources = await buildRestoredMatchSequenceSources({
+        mode: state.mode.value,
+        cInputType: state.cInputType.value,
+        lInputType: state.lInputType.value,
+        files: state.files,
+        linearSeqs: state.linearSeqs,
+        circularConservation: state.circularConservation
+      });
+      state.matchSequenceRegistry?.reset?.(sequenceSources);
+    } catch (sequenceError) {
+      console.warn('Session loaded, but match sequence recovery failed.', sequenceError);
+    }
     if (canonicalSession) {
-      applyLosatCache(projectionResult.artifactState.losatCache?.entries);
-      applyLosatDerivedCache(projectionResult.artifactState.losatDerivedCache?.entries);
+      applyLosatCache(
+        projectionResult.artifactState.losatCache?.entries,
+        projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates
+      );
+      applyLosatDerivedCache(
+        projectionResult.artifactState.losatDerivedCache?.entries,
+        projectionResult.artifactState.legacyArtifacts?.proteinDerivedEvidence
+      );
+      applyProteinIdentityManifest(projectionResult.artifactState.proteinIdentityManifest);
     } else {
-      applyLosatCache(data.losatCache?.entries);
-      applyLosatDerivedCache(data.losatDerivedCache?.entries);
+      applyLosatCache(
+        data.losatCache?.entries,
+        data.legacyArtifacts?.proteinRawCandidates
+      );
+      applyLosatDerivedCache(
+        data.losatDerivedCache?.entries,
+        data.legacyArtifacts?.proteinDerivedEvidence
+      );
+      applyProteinIdentityManifest(data.proteinIdentityManifest);
     }
     if (collapsedLinearSeqs) {
       state.losatCacheInfo.value = [];
@@ -2966,23 +3349,6 @@ export const importSession = async (e, options = {}) => {
       applyEditorStateData(projectionResult.artifactState.editorState);
     } else {
       applyEditorStateData(data.editorState);
-    }
-
-    if (state.mode.value === 'linear') {
-      const nextLinearLegend = hasStoredLayoutValue(ui.linearLegendPosition)
-        ? normalizeLegendPosition(ui.linearLegendPosition, 'bottom')
-        : hasStoredLayoutValue(ui.legend)
-          ? normalizeLegendPosition(ui.legend, 'bottom')
-          : normalizeLegendPosition(state.form.legend, 'bottom');
-      state.form.legend = nextLinearLegend;
-      state.linearLegendPosition.value = nextLinearLegend;
-      state.adv.plot_title_position = state.linearPlotTitlePosition.value;
-    } else {
-      const activeCircularLayout = resolveActiveCircularLayout();
-      state.form.legend = activeCircularLayout.legend;
-      state.adv.plot_title_position = activeCircularLayout.plotTitlePosition;
-      state.circularLegendPosition.value = activeCircularLayout.legend;
-      state.circularPlotTitlePosition.value = activeCircularLayout.plotTitlePosition;
     }
 
     await nextTick();

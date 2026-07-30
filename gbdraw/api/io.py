@@ -47,18 +47,14 @@ from gbdraw.io.regions import (  # type: ignore[reportMissingImports]
 
 def load_gbks(
     gbk_list: Sequence[str],
-    mode: str,
-    load_comparison: bool = False,
     record_selectors: list[str] | None = None,
     reverse_flags: list[bool] | None = None,
 ) -> list[SeqRecord]:
-    """Load GenBank files with consistent API exceptions."""
+    """Load GenBank files without applying diagram-mode policy."""
 
     try:
         return _load_gbks(
             list(gbk_list),
-            mode=mode,
-            load_comparison=load_comparison,
             record_selectors=record_selectors,
             reverse_flags=reverse_flags,
         )
@@ -69,16 +65,14 @@ def load_gbks(
 def load_gff_fasta(
     gff_list: Sequence[str],
     fasta_list: Sequence[str],
-    mode: str,
     selected_features_set=None,
     keep_all_features: bool = False,
-    load_comparison: bool = False,
     record_selectors: list[str] | None = None,
     reverse_flags: list[bool] | None = None,
     color_table: DataFrame | None = None,
     feature_visibility_table: DataFrame | None = None,
 ) -> list[SeqRecord]:
-    """Load paired GFF3 + FASTA files with consistent API exceptions."""
+    """Load paired GFF3 + FASTA files without applying diagram-mode policy."""
 
     try:
         candidate_features = selected_features_set
@@ -94,10 +88,8 @@ def load_gff_fasta(
         return _load_gff_fasta(
             list(gff_list),
             list(fasta_list),
-            mode=mode,
             selected_features_set=candidate_features,
             keep_all_features=resolved_keep_all_features,
-            load_comparison=load_comparison,
             record_selectors=record_selectors,
             reverse_flags=reverse_flags,
         )

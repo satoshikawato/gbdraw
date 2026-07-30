@@ -13,14 +13,20 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.api.diagram as diagram_api_module
+import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
 import gbdraw.render.groups.circular.ticks as circular_ticks_group_module
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_circular_diagram_from_records
-from gbdraw.api.options import DiagramOptions, OutputOptions
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.toml import load_config_toml
+from gbdraw.api.options import CircularDiagramOptions, CircularOutputOptions
+from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest
 from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
+from gbdraw.tracks import CircularTrackSlot
 
 
 def _build_record(record_id: str, feature_start: int, length: int = 1200) -> SeqRecord:
@@ -36,7 +42,7 @@ def _build_record(record_id: str, feature_start: int, length: int = 1200) -> Seq
 
 
 def _build_distinct_circular_style_config_dict() -> dict[str, Any]:
-    config_dict = diagram_api_module.load_config_toml("gbdraw.data", "config.toml")
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict["canvas"]["circular"]["track_ratio_factors"]["short"][0] = 0.77
     config_dict["canvas"]["circular"]["track_ratio_factors"]["long"][0] = 0.33
     config_dict["canvas"]["circular"]["track_ratio_factors"]["short"][1] = 0.91
@@ -591,7 +597,7 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
         records,
         selected_features_set=["CDS"],
         legend="right",
-        config_overrides={"show_labels": True},
+        cfg=apply_config_overrides(None, {"labels.circular.scope": "outer"}),
     )
 
     root = ET.fromstring(canvas.tostring())
@@ -626,7 +632,16 @@ def test_assemble_circular_diagram_from_records_shared_legend_and_unique_ids() -
             for group in record_group.findall("./svg:g[@id]", ns)
             if group.attrib.get("id", "").startswith("label_")
         }
-        assert {"label_leaders", "label_text"}.issubset(record_label_ids)
+        assert any(
+            group_id == "label_leaders"
+            or group_id.startswith("label_leaders__record_")
+            for group_id in record_label_ids
+        )
+        assert any(
+            group_id == "label_text"
+            or group_id.startswith("label_text__record_")
+            for group_id in record_label_ids
+        )
 
     skew_ids = [
         gid
@@ -691,6 +706,7 @@ def test_assemble_circular_diagram_from_records_default_auto_scaling(
 
     assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -746,7 +762,7 @@ def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
 
     assemble_circular_diagram_from_records(
         records,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -775,11 +791,11 @@ def test_multi_record_mixed_lengths_unify_feature_label_font_sizes() -> None:
             records,
             selected_features_set=["CDS"],
             legend="none",
-            config_overrides={
-                "show_labels": True,
-                "show_gc": False,
-                "show_skew": False,
-            },
+            cfg=apply_config_overrides(None, {
+                "labels.circular.scope": "outer",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            }),
         ).tostring()
     )
     font_sizes = _extract_label_font_sizes_by_text(
@@ -787,7 +803,7 @@ def test_multi_record_mixed_lengths_unify_feature_label_font_sizes() -> None:
         {"protein_long_label", "protein_short_label"},
     )
     cfg = diagram_api_module.GbdrawConfig.from_dict(
-        diagram_api_module.load_config_toml("gbdraw.data", "config.toml")
+        load_config_toml("gbdraw.data", "config.toml")
     )
 
     assert set(font_sizes) == {"protein_long_label", "protein_short_label"}
@@ -841,7 +857,7 @@ def test_multi_record_all_short_keeps_short_feature_axis_style(
 
     assemble_circular_diagram_from_records(
         records,
-        config_dict=config_dict,
+        cfg=GbdrawConfig.from_dict(config_dict),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -920,7 +936,7 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
     )
 
     assert captured_tick_path_channels[20_000] == "long"
@@ -981,11 +997,11 @@ def test_circular_tick_label_font_size_reaches_tick_label_generator(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        config_overrides={
-            "show_gc": False,
-            "show_skew": False,
-            "tick_label_font_size": 19.0,
-        },
+        cfg=apply_config_overrides(None, {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "objects.ticks.tick_labels.font_size": 19.0,
+        }),
     )
 
     assert captured_font_sizes[20_000] == pytest.approx(19.0)
@@ -1001,7 +1017,7 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
     ]
     captured_gc_window_steps: dict[str, tuple[int, int]] = {}
 
-    def fake_assemble(**kwargs: Any) -> Drawing:
+    def fake_assemble(**kwargs: Any) -> tuple[Drawing, object]:
         gb_record = kwargs["gb_record"]
         canvas_config = kwargs["canvas_config"]
         gc_config = kwargs["gc_config"]
@@ -1011,17 +1027,19 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
         )
         width = float(canvas_config.total_width)
         height = float(canvas_config.total_height)
-        return Drawing(
+        drawing = Drawing(
             filename=f"{gb_record.id}.svg",
             size=(f"{width}px", f"{height}px"),
             viewBox=f"0 0 {width} {height}",
             debug=False,
         )
+        measurement = kwargs["legend_config"].measure_legend({}, canvas_config)
+        return drawing, measurement
 
     monkeypatch.setattr(diagram_api_module, "assemble_circular_diagram", fake_assemble)
 
     expected_cfg = diagram_api_module.GbdrawConfig.from_dict(
-        diagram_api_module.load_config_toml("gbdraw.data", "config.toml")
+        load_config_toml("gbdraw.data", "config.toml")
     )
     expected_short = tuple(expected_cfg.objects.sliding_window.default)
     expected_long = tuple(expected_cfg.objects.sliding_window.up1m)
@@ -1030,7 +1048,7 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
         records,
         selected_features_set=["CDS"],
         legend="none",
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
     )
 
     assert captured_gc_window_steps["short_len"] == expected_short
@@ -1042,7 +1060,6 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
     ("size_mode", "min_ratio", "expected_ratio"),
     [
         ("auto", 0.55, 0.8),
-        ("sqrt", 0.55, 0.8),
         ("linear", 0.55, 0.64),
         ("equal", 0.55, 1.0),
     ],
@@ -1080,6 +1097,7 @@ def test_assemble_circular_diagram_from_records_scaling_mode_selection(
 
     assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_size_mode=size_mode,
@@ -1123,6 +1141,7 @@ def test_assemble_circular_diagram_from_records_auto_renormalizes_when_multiple_
 
     assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_size_mode="auto",
@@ -1172,6 +1191,7 @@ def test_assemble_circular_diagram_from_records_auto_keeps_single_clamp_behavior
 
     assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_size_mode="auto",
@@ -1184,55 +1204,22 @@ def test_assemble_circular_diagram_from_records_auto_keeps_single_clamp_behavior
 
 
 @pytest.mark.circular
-def test_assemble_circular_diagram_from_records_sqrt_alias_matches_auto(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_assemble_circular_diagram_from_records_rejects_removed_sqrt_alias() -> None:
     records = [
         _build_record("max_len", 30, length=1000),
         _build_record("mid_len", 60, length=300),
         _build_record("small_len", 90, length=200),
         _build_record("tiny_len", 120, length=100),
     ]
-    captured_radii: dict[str, list[float]] = {"auto": [], "sqrt": []}
-    active_mode = {"value": "auto"}
-
-    def fake_single(gb_record: SeqRecord, **kwargs: Any) -> Drawing:
-        cfg = kwargs["cfg"]
-        radius = float(cfg.canvas.circular.radius)
-        width = float(cfg.canvas.circular.width.without_labels)
-        height = float(cfg.canvas.circular.height)
-        captured_radii[active_mode["value"]].append(radius)
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+    with pytest.raises(ValidationError, match="auto, linear, equal"):
+        assemble_circular_diagram_from_records(
+            records,
+            cfg=apply_config_overrides(None, None),
+            selected_features_set=["CDS"],
+            legend="none",
+            multi_record_size_mode="sqrt",
+            multi_record_min_radius_ratio=0.55,
         )
-
-    monkeypatch.setattr(
-        diagram_api_module,
-        "assemble_circular_diagram_from_record",
-        fake_single,
-    )
-
-    active_mode["value"] = "auto"
-    assemble_circular_diagram_from_records(
-        records,
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_size_mode="auto",
-        multi_record_min_radius_ratio=0.55,
-    )
-    active_mode["value"] = "sqrt"
-    assemble_circular_diagram_from_records(
-        records,
-        selected_features_set=["CDS"],
-        legend="none",
-        multi_record_size_mode="sqrt",
-        multi_record_min_radius_ratio=0.55,
-    )
-
-    assert captured_radii["auto"] == pytest.approx(captured_radii["sqrt"], rel=1e-6)
 
 
 @pytest.mark.circular
@@ -1270,6 +1257,7 @@ def test_multi_record_variable_grid_width_is_tighter_than_fixed_cell_layout(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -1325,6 +1313,7 @@ def test_multi_record_default_column_and_row_gap_ratios_are_ten_and_five_percent
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -1387,6 +1376,7 @@ def test_multi_record_column_gap_ratio_override_controls_horizontal_spacing(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_column_gap_ratio=0.2,
@@ -1433,6 +1423,7 @@ def test_multi_record_column_gap_ratio_zero_removes_gap_between_records_in_same_
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_column_gap_ratio=0.0,
@@ -1483,6 +1474,7 @@ def test_multi_record_row_gap_ratio_override_accepts_legacy_ten_percent(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_row_gap_ratio=0.1,
@@ -1521,6 +1513,7 @@ def test_multi_record_row_gap_ratio_zero_removes_visible_gap_between_row_content
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_row_gap_ratio=0.0,
@@ -1564,6 +1557,7 @@ def test_multi_record_row_gap_ratio_adds_visible_gap_between_row_content(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_row_gap_ratio=0.1,
@@ -1616,6 +1610,7 @@ def test_multi_record_positions_group_rows_and_preserve_within_row_order(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_positions=["#2@2", "#5@1", "#1@1", "#6@2", "#3@1", "#4@2"],
@@ -1676,6 +1671,7 @@ def test_multi_record_positions_compress_row_gaps(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_positions=["#1@1", "#2@1", "#3@3", "#4@3", "#5@3"],
@@ -1721,6 +1717,7 @@ def test_multi_record_positions_default_layout_keeps_auto_square_when_unspecifie
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -1767,6 +1764,7 @@ def test_multi_record_positions_accept_record_id_selectors(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         multi_record_positions=["order_c@1", "order_a@2", "order_b@2", "order_d@1"],
@@ -1822,6 +1820,7 @@ def test_multi_record_row_outer_margins_equalize_to_larger_side_for_none_top_bot
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend=legend_position,
     )
@@ -1923,6 +1922,7 @@ def test_multi_record_row_margin_symmetry_not_applied_for_right_legend(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="right",
     )
@@ -1966,10 +1966,9 @@ def test_circular_cli_multi_record_canvas_opt_in_saves_once(
     calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
     captured_kwargs: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["single"] += 1
@@ -1977,15 +1976,29 @@ def test_circular_cli_multi_record_canvas_opt_in_saves_once(
 
     def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["multi"] += 1
-        captured_kwargs.update(_kwargs)
+        layout = _kwargs["layout"]
+        options = _kwargs["options"]
+        captured_kwargs.update(
+            multi_record_size_mode=layout.multi_record_size_mode,
+            multi_record_min_radius_ratio=layout.multi_record_min_radius_ratio,
+            multi_record_column_gap_ratio=layout.multi_record_column_gap_ratio,
+            multi_record_row_gap_ratio=layout.multi_record_row_gap_ratio,
+            plot_title_position=options.output.plot_title_position,
+        )
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+    def fake_save(
+        *_args: Any,
+        output_dir: str | None = None,
+        output_prefix: str | None = None,
+        **_kwargs: Any,
+    ) -> list[str]:
         calls["save"] += 1
+        return [str(Path(output_dir or ".") / f"{output_prefix}.svg")]
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
 
     circular_cli_module.circular_main(
         [
@@ -2007,6 +2020,114 @@ def test_circular_cli_multi_record_canvas_opt_in_saves_once(
     assert captured_kwargs["multi_record_column_gap_ratio"] == pytest.approx(0.10)
     assert captured_kwargs["multi_record_row_gap_ratio"] == pytest.approx(0.05)
     assert captured_kwargs["plot_title_position"] == "none"
+
+
+@pytest.mark.circular
+def test_circular_cli_one_record_grid_uses_typed_multi_planner(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    record = _build_record("one_grid", 20)
+    calls = {"single": 0, "multi": 0}
+
+    monkeypatch.setattr(
+        request_render_module,
+        "load_gbks",
+        lambda *_args, **_kwargs: [record],
+    )
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "read_feature_visibility_file",
+        lambda _path: None,
+    )
+
+    def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
+        calls["single"] += 1
+        return Drawing(filename=str(tmp_path / "single.svg"))
+
+    def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
+        calls["multi"] += 1
+        return Drawing(filename=str(tmp_path / "grid.svg"))
+
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
+
+    args = circular_cli_module._get_args(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--multi_record_canvas",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "one.grid"),
+        ]
+    )
+    result = circular_cli_module.run_circular_from_namespace(args)
+
+    assert calls == {"single": 0, "multi": 1}
+    assert isinstance(result.canonical_request, CircularDiagramRequest)
+    assert result.canonical_request.grouping == "grid"
+    assert result.canonical_request.layout is not None
+    assert result.canonical_request.output.output_directory == tmp_path
+    assert result.canonical_request.output.output_prefix == "one.grid"
+
+
+@pytest.mark.circular
+def test_circular_cli_one_record_without_grid_uses_typed_batch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    record = _build_record("one_batch", 20)
+
+    monkeypatch.setattr(
+        request_render_module,
+        "load_gbks",
+        lambda *_args, **_kwargs: [record],
+    )
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "read_feature_visibility_file",
+        lambda _path: None,
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_circular_diagram",
+        lambda *_args, **_kwargs: Drawing(filename=str(tmp_path / "single.svg")),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
+
+    args = circular_cli_module._get_args(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "one.batch"),
+        ]
+    )
+    result = circular_cli_module.run_circular_from_namespace(args)
+
+    assert isinstance(result.canonical_request, CircularBatchRequest)
+    assert result.canonical_request.grouping == "batch"
+    assert result.canonical_request.outputs[0].output_directory == tmp_path
+    assert result.canonical_request.outputs[0].output_prefix == "one.batch"
 
 
 @pytest.mark.circular
@@ -2035,12 +2156,17 @@ def test_circular_cli_records_table_regions_follow_sorted_rows(
         captured.update(kwargs)
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", fake_load)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", fake_load)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
 
     circular_cli_module.circular_main(
         [
@@ -2073,7 +2199,7 @@ def test_circular_cli_rejects_qualified_records_table_region_before_rendering(
         rendered = True
         return Drawing(filename=str(tmp_path / "unexpected.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     with pytest.raises(ValidationError, match=rf"{table}.*row 2, column 'region'"):
         circular_cli_module.circular_main(["--records_table", str(table), "-f", "svg"])
@@ -2110,20 +2236,25 @@ def test_circular_cli_track_table_validates_params_and_forwards_axis(
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
         "load_gbks",
         lambda *_args, **_kwargs: [_build_record("record", 20)],
     )
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
 
     def fake_single(*_args, **kwargs):
         captured.update(kwargs)
         return Drawing(filename=str(tmp_path / "single.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
 
     circular_cli_module.circular_main(
         [
@@ -2138,8 +2269,11 @@ def test_circular_cli_track_table_validates_params_and_forwards_axis(
         ]
     )
 
-    assert captured["circular_track_axis_index"] == 1
-    assert [spec.split(":", 1)[0] for spec in captured["circular_track_slots"]] == [
+    options = captured["options"]
+    assert options.tracks.circular_track_axis_index == 1
+    slots = options.tracks.circular_track_slots
+    assert all(isinstance(slot, CircularTrackSlot) for slot in slots)
+    assert [slot.id for slot in slots] == [
         "ticks",
         "features",
         "gc",
@@ -2154,10 +2288,9 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
     calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
     captured_kwargs: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["single"] += 1
@@ -2165,15 +2298,22 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
 
     def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["multi"] += 1
-        captured_kwargs.update(_kwargs)
+        captured_kwargs["layout"] = _kwargs["layout"]
+        captured_kwargs["options"] = _kwargs["options"]
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+    def fake_save(
+        *_args: Any,
+        output_dir: str | None = None,
+        output_prefix: str | None = None,
+        **_kwargs: Any,
+    ) -> list[str]:
         calls["save"] += 1
+        return [str(Path(output_dir or ".") / f"{output_prefix}.svg")]
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
 
     circular_cli_module.circular_main(
         [
@@ -2202,26 +2342,27 @@ def test_circular_cli_multi_record_canvas_passes_size_scaling_options(
     assert calls["single"] == 0
     assert calls["multi"] == 1
     assert calls["save"] == 1
-    assert captured_kwargs["multi_record_size_mode"] == "linear"
-    assert captured_kwargs["multi_record_min_radius_ratio"] == pytest.approx(0.4)
-    assert captured_kwargs["multi_record_column_gap_ratio"] == pytest.approx(0.2)
-    assert captured_kwargs["multi_record_row_gap_ratio"] == pytest.approx(0.12)
-    assert captured_kwargs["plot_title_position"] == "top"
-    assert captured_kwargs["cfg"].objects.definition.circular.plot_title_font_size == pytest.approx(30.0)
+    layout = captured_kwargs["layout"]
+    options = captured_kwargs["options"]
+    assert layout.multi_record_size_mode == "linear"
+    assert layout.multi_record_min_radius_ratio == pytest.approx(0.4)
+    assert layout.multi_record_column_gap_ratio == pytest.approx(0.2)
+    assert layout.multi_record_row_gap_ratio == pytest.approx(0.12)
+    assert options.output.plot_title_position == "top"
+    assert options.plot_title_font_size == pytest.approx(30.0)
 
 
 @pytest.mark.circular
-def test_circular_cli_multi_record_canvas_accepts_sqrt_alias(
+def test_circular_cli_multi_record_canvas_rejects_removed_sqrt_alias(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     records = [_build_record("cli_a", 20), _build_record("cli_b", 220)]
     calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
     captured_kwargs: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["single"] += 1
@@ -2232,31 +2373,37 @@ def test_circular_cli_multi_record_canvas_accepts_sqrt_alias(
         captured_kwargs.update(_kwargs)
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+    def fake_save(
+        *_args: Any,
+        output_dir: str | None = None,
+        output_prefix: str | None = None,
+        **_kwargs: Any,
+    ) -> list[str]:
         calls["save"] += 1
+        return [str(Path(output_dir or ".") / f"{output_prefix}.svg")]
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
 
-    circular_cli_module.circular_main(
-        [
-            "--gbk",
-            "dummy.gb",
-            "--format",
-            "svg",
-            "--multi_record_canvas",
-            "--multi_record_size_mode",
-            "sqrt",
-            "-o",
-            str(tmp_path / "out"),
-        ]
-    )
+    with pytest.raises(SystemExit) as exc_info:
+        circular_cli_module.circular_main(
+            [
+                "--gbk",
+                "dummy.gb",
+                "--format",
+                "svg",
+                "--multi_record_canvas",
+                "--multi_record_size_mode",
+                "sqrt",
+                "-o",
+                str(tmp_path / "out"),
+            ]
+        )
 
-    assert calls["single"] == 0
-    assert calls["multi"] == 1
-    assert calls["save"] == 1
-    assert captured_kwargs["multi_record_size_mode"] == "sqrt"
+    assert exc_info.value.code == 2
+    assert calls == {"single": 0, "multi": 0, "save": 0}
+    assert captured_kwargs == {}
 
 
 @pytest.mark.circular
@@ -2271,10 +2418,9 @@ def test_circular_cli_multi_record_canvas_passes_positions(
     calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
     captured_kwargs: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["single"] += 1
@@ -2282,15 +2428,21 @@ def test_circular_cli_multi_record_canvas_passes_positions(
 
     def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["multi"] += 1
-        captured_kwargs.update(_kwargs)
+        captured_kwargs["layout"] = _kwargs["layout"]
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+    def fake_save(
+        *_args: Any,
+        output_dir: str | None = None,
+        output_prefix: str | None = None,
+        **_kwargs: Any,
+    ) -> list[str]:
         calls["save"] += 1
+        return [str(Path(output_dir or ".") / f"{output_prefix}.svg")]
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
 
     circular_cli_module.circular_main(
         [
@@ -2313,7 +2465,11 @@ def test_circular_cli_multi_record_canvas_passes_positions(
     assert calls["single"] == 0
     assert calls["multi"] == 1
     assert calls["save"] == 1
-    assert captured_kwargs["multi_record_positions"] == ["#3@1", "cli_a@2", "#2@2"]
+    assert captured_kwargs["layout"].multi_record_positions == (
+        "#3@1",
+        "cli_a@2",
+        "#2@2",
+    )
 
 
 @pytest.mark.circular
@@ -2325,7 +2481,7 @@ def test_circular_cli_rejects_invalid_multi_record_position(
     monkeypatch: pytest.MonkeyPatch,
     position: str,
 ) -> None:
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
     with pytest.raises(SystemExit):
         circular_cli_module.circular_main(
             [
@@ -2349,7 +2505,7 @@ def test_circular_cli_rejects_removed_multi_record_layout_options(
     removed_option: str,
     value: str,
 ) -> None:
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [_build_record("cli_a", 20)])
     with pytest.raises(SystemExit):
         circular_cli_module.circular_main(
             [
@@ -2387,6 +2543,7 @@ def test_multi_record_positions_invalid_selector_raises_validation_error(
     with pytest.raises(ValidationError):
         assemble_circular_diagram_from_records(
             records,
+            cfg=apply_config_overrides(None, None),
             selected_features_set=["CDS"],
             legend="none",
             multi_record_positions=["none@1", "#2@2"],
@@ -2421,6 +2578,7 @@ def test_multi_record_positions_with_duplicate_selector_raises_validation_error(
     with pytest.raises(ValidationError, match="specified more than once"):
         assemble_circular_diagram_from_records(
             records,
+            cfg=apply_config_overrides(None, None),
             selected_features_set=["CDS"],
             legend="none",
             multi_record_positions=["#1@1", "#1@2", "#3@2"],
@@ -2455,6 +2613,7 @@ def test_multi_record_positions_with_missing_record_raises_validation_error(
     with pytest.raises(ValidationError, match="must include each loaded record exactly once"):
         assemble_circular_diagram_from_records(
             records,
+            cfg=apply_config_overrides(None, None),
             selected_features_set=["CDS"],
             legend="none",
             multi_record_positions=["#1@1", "#2@2"],
@@ -2488,6 +2647,7 @@ def test_multi_record_positions_with_non_positive_row_raises_validation_error(
     with pytest.raises(ValidationError, match="positive integer row"):
         assemble_circular_diagram_from_records(
             records,
+            cfg=apply_config_overrides(None, None),
             selected_features_set=["CDS"],
             legend="none",
             multi_record_positions=["#1@0", "#2@1"],
@@ -2502,10 +2662,9 @@ def test_circular_cli_without_multi_record_canvas_keeps_per_record_saves(
     calls: dict[str, int] = {"single": 0, "multi": 0, "save": 0}
     single_kwargs: list[dict[str, Any]] = []
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
     def fake_single(*_args: Any, **_kwargs: Any) -> Drawing:
         calls["single"] += 1
@@ -2516,12 +2675,18 @@ def test_circular_cli_without_multi_record_canvas_keeps_per_record_saves(
         calls["multi"] += 1
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    def fake_save(*_args: Any, **_kwargs: Any) -> None:
+    def fake_save(
+        *_args: Any,
+        output_dir: str | None = None,
+        output_prefix: str | None = None,
+        **_kwargs: Any,
+    ) -> list[str]:
         calls["save"] += 1
+        return [str(Path(output_dir or ".") / f"{output_prefix}.svg")]
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_single)
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", fake_save)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_single)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
 
     circular_cli_module.circular_main(
         [
@@ -2545,10 +2710,22 @@ def test_circular_cli_without_multi_record_canvas_keeps_per_record_saves(
     assert calls["multi"] == 0
     assert calls["save"] == len(records)
     assert single_kwargs
-    assert all(kwargs.get("plot_title") == "CLI Shared Title" for kwargs in single_kwargs)
-    assert all(kwargs.get("plot_title_position") == "top" for kwargs in single_kwargs)
-    assert all(kwargs.get("plot_title_font_size") == pytest.approx(30.0) for kwargs in single_kwargs)
-    assert all(kwargs.get("keep_full_definition_with_plot_title") is True for kwargs in single_kwargs)
+    assert all(
+        kwargs["options"].plot_title == "CLI Shared Title"
+        for kwargs in single_kwargs
+    )
+    assert all(
+        kwargs["options"].output.plot_title_position == "top"
+        for kwargs in single_kwargs
+    )
+    assert all(
+        kwargs["options"].plot_title_font_size == pytest.approx(30.0)
+        for kwargs in single_kwargs
+    )
+    assert all(
+        kwargs["options"].keep_full_definition_with_plot_title is True
+        for kwargs in single_kwargs
+    )
 
 
 @pytest.mark.circular
@@ -2558,22 +2735,27 @@ def test_circular_cli_multi_record_canvas_passes_keep_full_definition_option(
     records = [_build_record("cli_a", 20), _build_record("cli_b", 220)]
     captured_kwargs: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
     monkeypatch.setattr(
-        circular_cli_module,
-        "assemble_circular_diagram_from_record",
+        request_render_module,
+        "build_circular_diagram",
         lambda *_args, **_kwargs: Drawing(filename=str(tmp_path / "single.svg")),
     )
 
     def fake_multi(*_args: Any, **_kwargs: Any) -> Drawing:
-        captured_kwargs.update(_kwargs)
+        captured_kwargs["options"] = _kwargs["options"]
         return Drawing(filename=str(tmp_path / "multi.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_records", fake_multi)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(request_render_module, "build_circular_multi_diagram", fake_multi)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
 
     circular_cli_module.circular_main(
         [
@@ -2588,7 +2770,7 @@ def test_circular_cli_multi_record_canvas_passes_keep_full_definition_option(
         ]
     )
 
-    assert captured_kwargs["keep_full_definition_with_plot_title"] is True
+    assert captured_kwargs["options"].keep_full_definition_with_plot_title is True
 
 
 @pytest.mark.circular
@@ -2739,6 +2921,7 @@ def test_multi_record_default_hides_plot_title_and_keeps_record_summary_content(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -2791,6 +2974,7 @@ def test_multi_record_shared_record_summary_includes_replicon_when_available() -
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -2842,7 +3026,7 @@ def test_plot_title_font_size_override_only_changes_plot_title() -> None:
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
-        config_overrides={"plot_title_font_size": 30},
+        cfg=apply_config_overrides(None, {"objects.definition.circular.plot_title_font_size": 30}),
     )
     root = ET.fromstring(canvas.tostring())
 
@@ -2886,6 +3070,7 @@ def test_plot_title_single_line_with_missing_species_or_strain(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
@@ -2915,18 +3100,21 @@ def test_plot_title_position_moves_shared_group_vertically() -> None:
 
     none_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="none",
     )
     top_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
     )
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="bottom",
@@ -2957,6 +3145,7 @@ def test_single_record_bottom_plot_title_uses_summary_center_definition() -> Non
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="bottom",
@@ -2990,6 +3179,7 @@ def test_single_record_plot_title_can_keep_full_center_definition() -> None:
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
@@ -3022,6 +3212,7 @@ def test_single_record_custom_plot_title_overrides_default_when_visible() -> Non
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title="Custom Circular Title",
@@ -3053,6 +3244,7 @@ def test_single_record_plot_title_keeps_plain_text_around_inline_italics() -> No
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title=plot_title,
@@ -3077,6 +3269,7 @@ def test_single_record_hidden_plot_title_ignores_custom_title_and_keeps_full_def
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title="Hidden Circular Title",
@@ -3128,6 +3321,7 @@ def test_multi_record_center_definition_aligns_with_record_axis(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position=plot_title_position,
@@ -3155,21 +3349,25 @@ def test_single_record_legend_top_bottom_positions_expand_and_move() -> None:
 
     top_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="top",
     )
     left_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="left",
     )
     bottom_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="bottom",
     )
     none_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -3259,10 +3457,10 @@ def test_single_record_top_bottom_legend_centers_between_edge_and_content(
         record,
         selected_features_set=["CDS", "rRNA", "tRNA"],
         legend=legend_position,
-        config_overrides={
-            "show_labels": show_labels,
-            "track_type": track_type,
-        },
+        cfg=apply_config_overrides(None, {
+            "labels.circular.scope": "outer" if show_labels else "none",
+            "canvas.circular.track_type": track_type,
+        }),
     )
     root = ET.fromstring(canvas.tostring())
     legend_top, legend_bottom = _extract_legend_vertical_bounds(root)
@@ -3320,21 +3518,25 @@ def test_multi_record_legend_top_bottom_positions_expand_and_move() -> None:
 
     top_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="top",
     )
     left_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="left",
     )
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="bottom",
     )
     none_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -3375,6 +3577,7 @@ def test_multi_record_top_legend_keeps_minimum_top_padding() -> None:
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="top",
     )
@@ -3402,6 +3605,7 @@ def test_multi_record_bottom_plot_title_stays_below_legend() -> None:
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="bottom",
         plot_title_position="bottom",
@@ -3424,6 +3628,7 @@ def test_single_record_bottom_plot_title_stays_below_legend() -> None:
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="bottom",
         plot_title_position="bottom",
@@ -3453,6 +3658,7 @@ def test_multi_record_custom_plot_title_overrides_default_shared_title() -> None
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title="Custom Shared Plot Title",
@@ -3485,6 +3691,7 @@ def test_multi_record_left_right_plot_title_bottom_keeps_margins(
 
     baseline_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend=legend_position,
         plot_title_position="none",
@@ -3494,6 +3701,7 @@ def test_multi_record_left_right_plot_title_bottom_keeps_margins(
 
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend=legend_position,
         plot_title_position="bottom",
@@ -3526,11 +3734,13 @@ def test_single_record_side_legend_matches_upper_corner_edge_margin(
 
     side_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=side_position,
     )
     corner_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=corner_position,
     )
@@ -3575,11 +3785,13 @@ def test_multi_record_side_legend_matches_upper_corner_edge_margin(
 
     side_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=side_position,
     )
     corner_canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=corner_position,
     )
@@ -3625,11 +3837,13 @@ def test_circular_top_legend_uses_horizontal_entry_layout() -> None:
 
     top_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS", "tRNA", "rRNA"],
         legend="top",
     )
     right_canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS", "tRNA", "rRNA"],
         legend="right",
     )
@@ -3660,6 +3874,7 @@ def test_single_record_top_bottom_legend_centers_each_wrapped_row(
 
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=legend_position,
     )
@@ -3695,6 +3910,7 @@ def test_multi_record_top_bottom_legend_centers_each_wrapped_row(
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=selected_features,
         legend=legend_position,
     )
@@ -3726,6 +3942,7 @@ def test_multi_record_visible_plot_title_uses_default_shared_title_when_blank() 
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
@@ -3758,6 +3975,7 @@ def test_multi_record_plot_title_can_keep_full_definitions() -> None:
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="top",
@@ -3791,6 +4009,7 @@ def test_multi_record_hidden_plot_title_keeps_summary_when_keep_full_enabled() -
 
     canvas = assemble_circular_diagram_from_records(
         records,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
         plot_title_position="none",
@@ -3823,11 +4042,11 @@ def test_build_circular_diagram_passes_plot_title_position_option(
 
     diagram_api_module.build_circular_diagram(
         record,
-        options=DiagramOptions(
+        options=CircularDiagramOptions(
             plot_title="Build Shared Title",
             plot_title_font_size=28,
             keep_full_definition_with_plot_title=True,
-            output=OutputOptions(plot_title_position="bottom"),
+            output=CircularOutputOptions(plot_title_position="bottom"),
         ),
     )
 

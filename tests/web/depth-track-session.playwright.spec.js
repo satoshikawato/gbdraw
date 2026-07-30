@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { createReadStream, existsSync, readFileSync } = require('node:fs');
 const { createServer } = require('node:http');
 const { extname, join, normalize, resolve, sep } = require('node:path');
+const { gunzipSync } = require('node:zlib');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionPath = join(repoRoot, 'tests/test_inputs/2026-06-16_wssv.gbdraw-session.json');
@@ -64,14 +65,38 @@ const inspectSparseDepthResult = async (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   const content = app.results?.[0]?.content || '';
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
-  const hasGroup = (id) => Boolean(svg.querySelector(`[id="${id}"]`));
-  const groupFills = (id) => {
-    const group = svg.querySelector(`[id="${id}"]`);
+  const depthGroups = (slotId) => [
+    ...svg.querySelectorAll(
+      `g[data-gbdraw-slot-id="${slotId}"][data-gbdraw-slot-renderer="depth"]`
+    )
+  ];
+  const recordIndexForGroup = (group) => {
+    for (
+      let sibling = group?.nextElementSibling;
+      sibling;
+      sibling = sibling.nextElementSibling
+    ) {
+      if (sibling.matches(
+        'g[data-gbdraw-role="record-definition"][data-gbdraw-record-index]'
+      )) {
+        return Number.parseInt(sibling.getAttribute('data-gbdraw-record-index'), 10);
+      }
+    }
+    return null;
+  };
+  const depthGroup = (slotId, recordIndex) => depthGroups(slotId)
+    .find((group) => recordIndexForGroup(group) === recordIndex);
+  const hasAxis = (group) => Boolean(group?.querySelector(':scope > g'));
+  const groupFills = (group) => {
     if (!group) return [];
     return [group, ...group.querySelectorAll('[fill]')]
       .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
       .filter(Boolean);
   };
+  const depthARecord1 = depthGroup('depth_a', 0);
+  const depthARecord2 = depthGroup('depth_a', 1);
+  const depthBRecord1 = depthGroup('depth_b', 0);
+  const depthBRecord2 = depthGroup('depth_b', 1);
   const args = Array.isArray(app.lastRunInfo?.invocation?.args)
     ? app.lastRunInfo.invocation.args
     : [];
@@ -82,15 +107,15 @@ const inspectSparseDepthResult = async (page) => page.evaluate(() => {
   return {
     resultCount: app.results?.length || 0,
     groups: {
-      depthARecord1: hasGroup('depth_a_record_1'),
-      depthARecord1Axis: hasGroup('depth_a_record_1_axis'),
-      depthARecord2: hasGroup('depth_a_record_2'),
-      depthBRecord1: hasGroup('depth_b_record_1'),
-      depthBRecord2: hasGroup('depth_b_record_2'),
-      depthBRecord2Axis: hasGroup('depth_b_record_2_axis')
+      depthARecord1: Boolean(depthARecord1),
+      depthARecord1Axis: hasAxis(depthARecord1),
+      depthARecord2: Boolean(depthARecord2),
+      depthBRecord1: Boolean(depthBRecord1),
+      depthBRecord2: Boolean(depthBRecord2),
+      depthBRecord2Axis: hasAxis(depthBRecord2)
     },
-    depthAFills: groupFills('depth_a_record_1'),
-    depthBFills: groupFills('depth_b_record_2'),
+    depthAFills: groupFills(depthARecord1),
+    depthBFills: groupFills(depthBRecord2),
     depthArgs
   };
 });
@@ -99,14 +124,32 @@ const inspectCircularSparseDepthResult = async (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   const content = app.results?.[0]?.content || '';
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
-  const hasGroup = (id) => Boolean(svg.querySelector(`[id="${id}"]`));
-  const groupFills = (id) => {
-    const group = svg.querySelector(`[id="${id}"]`);
+  const depthGroups = (slotId) => [
+    ...svg.querySelectorAll(
+      `g[data-gbdraw-slot-id="${slotId}"][data-gbdraw-slot-renderer="depth"]`
+    )
+  ];
+  const recordIndexForGroup = (group) => {
+    const featureGroup = group?.parentElement?.querySelector(
+      'g[data-gbdraw-slot-renderer="features"][data-gbdraw-record-index]'
+    );
+    return featureGroup
+      ? Number.parseInt(featureGroup.getAttribute('data-gbdraw-record-index'), 10)
+      : null;
+  };
+  const depthGroup = (slotId, recordIndex) => depthGroups(slotId)
+    .find((group) => recordIndexForGroup(group) === recordIndex);
+  const hasAxis = (group) => Boolean(group?.querySelector(':scope > g'));
+  const groupFills = (group) => {
     if (!group) return [];
     return [group, ...group.querySelectorAll('[fill]')]
       .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
       .filter(Boolean);
   };
+  const depthARecord1 = depthGroup('depth_1', 0);
+  const depthARecord2 = depthGroup('depth_1', 1);
+  const depthBRecord1 = depthGroup('depth_2', 0);
+  const depthBRecord2 = depthGroup('depth_2', 1);
   const args = Array.isArray(app.lastRunInfo?.invocation?.args)
     ? app.lastRunInfo.invocation.args
     : [];
@@ -116,15 +159,15 @@ const inspectCircularSparseDepthResult = async (page) => page.evaluate(() => {
   });
   return {
     groups: {
-      depthARecord1: hasGroup('depth_1_record_1'),
-      depthARecord1Axis: hasGroup('depth_1_record_1_axis'),
-      depthARecord2: hasGroup('depth_1_record_2'),
-      depthBRecord1: hasGroup('depth_2_record_1'),
-      depthBRecord2: hasGroup('depth_2_record_2'),
-      depthBRecord2Axis: hasGroup('depth_2_record_2_axis')
+      depthARecord1: Boolean(depthARecord1),
+      depthARecord1Axis: hasAxis(depthARecord1),
+      depthARecord2: Boolean(depthARecord2),
+      depthBRecord1: Boolean(depthBRecord1),
+      depthBRecord2: Boolean(depthBRecord2),
+      depthBRecord2Axis: hasAxis(depthBRecord2)
     },
-    depthAFills: groupFills('depth_1_record_1'),
-    depthBFills: groupFills('depth_2_record_2'),
+    depthAFills: groupFills(depthARecord1),
+    depthBFills: groupFills(depthBRecord2),
     depthArgs
   };
 });
@@ -573,7 +616,11 @@ ORIGIN
       ...unknownAuthoritySession.renderRequest,
       diagramOptions: {
         configOverrides: { comparison_height: -2 },
-        output: { legend: 'bottom', plotTitlePosition: 'top' },
+        output: {
+          outputPrefix: 'preflight',
+          legend: 'bottom',
+          plotTitlePosition: 'top'
+        },
         tracks: {}
       }
     },
@@ -601,6 +648,132 @@ ORIGIN
     legend: 'bottom',
     plotTitlePosition: 'top'
   });
+});
+
+test('v39 layout preferences project by mode and survive export and import', async ({ page }) => {
+  test.setTimeout(120000);
+  const expectedPreferences = {
+    circular: {
+      single: { legend: 'right', plotTitlePosition: 'top' },
+      multi: { legend: 'upper_left', plotTitlePosition: 'bottom' }
+    },
+    linear: { legend: 'top', plotTitlePosition: 'center' }
+  };
+  const recordText = `LOCUS       LAYOUT_PREFS                4 bp    DNA     linear   UNK 01-JAN-1980
+DEFINITION  Layout preference session fixture.
+ACCESSION   LAYOUT_PREFS
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+`;
+  const activeProjection = async (mode, multiRecord) => page.evaluate(
+    async ({ nextMode, nextMultiRecord }) => {
+      const app = window.__GBDRAW_APP__;
+      const { state } = await import('./js/state.js');
+      app.mode = nextMode;
+      if (nextMode === 'circular') app.form.multi_record_canvas = nextMultiRecord;
+      await window.Vue.nextTick();
+      await window.Vue.nextTick();
+      return {
+        active: JSON.parse(JSON.stringify(state.activeLayoutPreferences.value)),
+        formLegend: app.form.legend,
+        plotTitlePosition: app.adv.plot_title_position
+      };
+    },
+    { nextMode: mode, nextMultiRecord: multiRecord }
+  );
+  const expectActiveProjection = async (mode, multiRecord, expected) => {
+    expect(await activeProjection(mode, multiRecord)).toEqual({
+      active: expected,
+      formLegend: expected.legend,
+      plotTitlePosition: expected.plotTitlePosition
+    });
+  };
+  const layoutPreferenceTree = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return JSON.parse(JSON.stringify(state.layoutPreferences));
+  });
+
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.evaluate(async ({ genbankText }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'circular';
+    app.form.multi_record_canvas = false;
+    await window.Vue.nextTick();
+    app.form.legend = 'right';
+    app.adv.plot_title_position = 'top';
+
+    app.form.multi_record_canvas = true;
+    await window.Vue.nextTick();
+    app.form.legend = 'upper_left';
+    app.adv.plot_title_position = 'bottom';
+
+    app.mode = 'linear';
+    await window.Vue.nextTick();
+    app.form.legend = 'top';
+    app.adv.plot_title_position = 'center';
+    await window.Vue.nextTick();
+
+    app.cInputType = 'gb';
+    app.files.c_gb = new File([genbankText], 'layout-preferences.gbk', {
+      type: 'text/plain',
+      lastModified: 1
+    });
+    app.sessionTitle = 'layout-preferences-v39';
+  }, { genbankText: recordText });
+
+  expect(await layoutPreferenceTree()).toEqual(expectedPreferences);
+  await expectActiveProjection('circular', false, expectedPreferences.circular.single);
+  await expectActiveProjection('circular', true, expectedPreferences.circular.multi);
+  await expectActiveProjection('linear', false, expectedPreferences.linear);
+
+  await activeProjection('circular', false);
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.biologicalFeatures.value = [{ nucleotide_sequence: 'ATGC' }];
+  });
+  const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const download = await downloadPromise;
+  const savedSessionPath = await download.path();
+  expect(savedSessionPath).toBeTruthy();
+
+  const exportedSession = JSON.parse(
+    gunzipSync(readFileSync(savedSessionPath)).toString('utf8')
+  );
+  const legacyLayoutFields = [
+    'legend',
+    'circularLegendPosition',
+    'linearLegendPosition',
+    'circularPlotTitlePosition',
+    'linearPlotTitlePosition',
+    'circularSingleRecordLegendPosition',
+    'circularSingleRecordPlotTitlePosition',
+    'circularMultiRecordLegendPosition',
+    'circularMultiRecordPlotTitlePosition'
+  ];
+  expect(exportedSession.version).toBe(39);
+  expect(exportedSession.ui.layoutPreferences).toEqual(expectedPreferences);
+  expect(legacyLayoutFields.filter((field) => (
+    Object.prototype.hasOwnProperty.call(exportedSession.ui, field)
+  ))).toEqual([]);
+  expect(exportedSession.config.form).not.toHaveProperty('legend');
+  expect(exportedSession.config.adv).not.toHaveProperty('plot_title_position');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+
+  expect(await layoutPreferenceTree()).toEqual(expectedPreferences);
+  await expectActiveProjection('circular', false, expectedPreferences.circular.single);
+  await expectActiveProjection('circular', true, expectedPreferences.circular.multi);
+  await expectActiveProjection('linear', false, expectedPreferences.linear);
 });
 
 test('Session commit failure restores the pre-import state', async ({ page }) => {
@@ -788,7 +961,7 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
     };
   });
 
-  ['--separate_strands', '--resolve_overlaps', '--show_gc', '--show_skew'].forEach((arg) => {
+  ['--separate_strands', '--resolve_overlaps', '--gc', '--skew'].forEach((arg) => {
     expect(geometry.args).toContain(arg);
   });
   for (const bands of [geometry.client, geometry.bbox]) {

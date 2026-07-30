@@ -15,10 +15,12 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
+import gbdraw.api.request_render as request_render_module
+from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.core.sequence import check_feature_presence
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
 from gbdraw.features.colors import compute_feature_hash, precompute_used_color_rules, preprocess_color_tables
-from gbdraw.features.factory import create_feature_dict
+from gbdraw.features.factory import create_feature_dict, create_feature_layers
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
     read_feature_visibility_file,
@@ -469,6 +471,35 @@ def test_specific_color_rule_draws_matching_feature_outside_selected_types() -> 
     assert used_rules == {("Insertion", "#ff00aa")}
 
 
+def test_specific_color_rule_can_reveal_unselected_underlay_with_resolved_color() -> None:
+    record = _make_record()
+    default_colors_df = load_default_colors("", "default")
+    color_table_df = pd.DataFrame(
+        [["misc_feature", "note", "transposase", "#ff00aa", "Insertion"]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+    color_map, default_color_map = preprocess_color_tables(color_table_df, default_colors_df)
+    label_filtering = preprocess_label_filtering(_base_label_filtering())
+
+    result = create_feature_layers(
+        record,
+        color_map,
+        ["tRNA"],
+        default_color_map,
+        separate_strands=False,
+        resolve_overlaps=False,
+        label_filtering=label_filtering,
+        feature_shapes={"misc_feature": "underlay"},
+    )
+
+    assert result.foreground_features == {}
+    assert [feature.feature_type for feature in result.underlay_features] == [
+        "misc_feature"
+    ]
+    assert result.underlay_features[0].color == "#ff00aa"
+    assert result.used_color_rules == {("Insertion", "#ff00aa")}
+
+
 def test_extract_cds_proteins_off_and_exclude_matching_remove_cds() -> None:
     record = _make_record()
     off_rules = compile_feature_visibility_rules(
@@ -567,6 +598,9 @@ def test_prepare_legend_table_falls_back_to_default_color_for_gene_other_entry()
         ["gene"],
         used_color_rules={("Gene A", "#b56576")},
         default_used_features={"gene"},
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert legend_table["Gene A"]["fill"] == "#b56576"
@@ -588,6 +622,9 @@ def test_prepare_legend_table_skips_gene_other_entry_without_default_usage() -> 
         ["gene"],
         used_color_rules={("Gene A", "#b56576")},
         default_used_features=set(),
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert legend_table["Gene A"]["fill"] == "#b56576"
@@ -605,33 +642,43 @@ def test_prepare_legend_table_plain_gene_entry_uses_default_fallback_color() -> 
         ["gene"],
         used_color_rules=set(),
         default_used_features={"gene"},
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert legend_table["gene"]["fill"] == "#d3d3d3"
 
 
-def test_circular_cli_feature_table_is_forwarded(
+def test_circular_cli_feature_visibility_table_is_forwarded(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     record = _make_record()
     feature_table_df = _visibility_df([["*", "*", "gene", "^geneA$", "off"]])
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
+    monkeypatch.setattr(
+        request_render_module,
         "read_feature_visibility_file",
         lambda _path: feature_table_df,
     )
 
     def fake_assemble(*_args, **kwargs):
-        captured["feature_table"] = kwargs.get("feature_table")
+        captured["feature_visibility_table"] = (
+            kwargs["options"].feature_visibility_table
+        )
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     circular_cli_module.circular_main(
         [
@@ -646,31 +693,38 @@ def test_circular_cli_feature_table_is_forwarded(
         ]
     )
 
-    assert captured["feature_table"] is feature_table_df
+    assert captured["feature_visibility_table"] is feature_table_df
 
 
-def test_linear_cli_feature_table_is_forwarded(
+def test_linear_cli_feature_visibility_table_is_forwarded(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     record = _make_record()
     feature_table_df = _visibility_df([["*", "*", "gene", "^geneA$", "off"]])
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
-        linear_cli_module,
+        request_render_module,
         "read_feature_visibility_file",
         lambda _path: feature_table_df,
     )
 
-    def fake_assemble(*_args, **kwargs):
-        captured["feature_table"] = kwargs.get("feature_table")
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render(canonical_request, **_kwargs):
+        resolved = request_render_module.resolve_request(canonical_request)
+        captured["canonical_request"] = resolved
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
 
     linear_cli_module.linear_main(
         [
@@ -685,7 +739,9 @@ def test_linear_cli_feature_table_is_forwarded(
         ]
     )
 
-    assert captured["feature_table"] is feature_table_df
+    canonical_request = captured["canonical_request"]
+    assert isinstance(canonical_request, LinearDiagramRequest)
+    assert canonical_request.options.feature_visibility_table is feature_table_df
 
 
 def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_table_given(
@@ -695,22 +751,27 @@ def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_tab
     captured: dict[str, Any] = {}
 
     def fake_load_gff_fasta(*args, **kwargs):
-        captured["selected_features_set"] = set(args[3])
+        captured["selected_features_set"] = set(kwargs["selected_features_set"])
         captured["keep_all_features"] = kwargs.get("keep_all_features")
         return [record]
 
-    monkeypatch.setattr(circular_cli_module, "load_gff_fasta", fake_load_gff_fasta)
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
-        circular_cli_module,
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
+    monkeypatch.setattr(
+        request_render_module,
         "read_feature_visibility_file",
         lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "off"]]),
     )
     monkeypatch.setattr(
-        circular_cli_module,
-        "assemble_circular_diagram_from_record",
+        request_render_module,
+        "build_circular_diagram",
         lambda *_args, **_kwargs: Drawing(filename=str(tmp_path / "dummy.svg")),
     )
 
@@ -738,27 +799,38 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     record = _make_record()
+    feature_table_df = _visibility_df(
+        [["*", "misc_feature", "gene", "^geneA$", "off"]]
+    )
     captured: dict[str, Any] = {}
 
     def fake_load_gff_fasta(*args, **kwargs):
-        captured["selected_features_set"] = set(args[3])
+        captured["selected_features_set"] = set(kwargs["selected_features_set"])
         captured["keep_all_features"] = kwargs.get("keep_all_features")
         return [record]
 
-    monkeypatch.setattr(linear_cli_module, "load_gff_fasta", fake_load_gff_fasta)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
-        linear_cli_module,
+        request_render_module,
         "read_feature_visibility_file",
-        lambda _path: _visibility_df([["*", "misc_feature", "gene", "^geneA$", "off"]]),
+        lambda _path: feature_table_df,
     )
-    monkeypatch.setattr(
-        linear_cli_module,
-        "assemble_linear_diagram_from_records",
-        lambda *_args, **_kwargs: Drawing(filename=str(tmp_path / "dummy.svg")),
-    )
+
+    def fake_render(canonical_request, **_kwargs):
+        resolved = request_render_module.resolve_request(canonical_request)
+        captured["canonical_request"] = resolved
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
+        )
+
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
 
     linear_cli_module.linear_main(
         [
@@ -778,3 +850,6 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
     assert captured["keep_all_features"] is False
     assert "CDS" in captured["selected_features_set"]
     assert "misc_feature" in captured["selected_features_set"]
+    canonical_request = captured["canonical_request"]
+    assert isinstance(canonical_request, LinearDiagramRequest)
+    assert canonical_request.options.feature_visibility_table is feature_table_df

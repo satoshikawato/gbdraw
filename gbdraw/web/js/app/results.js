@@ -4,7 +4,59 @@ import {
   getTransformedBBox,
   parseTransform
 } from './legend-layout/transform-utils.js';
+import { COMPARISON_LEGEND_SELECTOR } from './legend/utils.js';
+import { closestRecordGroup, isMultiRecordCanvasSvg } from './record-groups.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
+
+const RECORD_DEFINITION_SELECTOR = 'g[data-gbdraw-role="record-definition"]';
+
+export const findRecordDefinitionGroup = (svg, entry = {}) => {
+  const rawRecordIndex = entry?.record_index ?? entry?.recordIndex;
+  const hasRecordIndex =
+    rawRecordIndex !== null &&
+    rawRecordIndex !== undefined &&
+    String(rawRecordIndex).trim() !== '';
+
+  if (hasRecordIndex) {
+    const semanticMatch = Array.from(
+      svg?.querySelectorAll?.(RECORD_DEFINITION_SELECTOR) || []
+    ).find(
+      (group) =>
+        String(group.getAttribute?.('data-gbdraw-record-index') || '') ===
+        String(rawRecordIndex)
+    );
+    if (semanticMatch) return semanticMatch;
+  }
+
+  const definitionGroupId = String(entry?.definition_group_id || '').trim();
+  return definitionGroupId ? svg?.getElementById?.(definitionGroupId) || null : null;
+};
+
+export const preserveDefinitionGroupDomIdentity = (existingGroup, importedGroup) => {
+  if (!existingGroup || !importedGroup) return importedGroup;
+
+  const existingId = existingGroup.getAttribute?.('id');
+  if (existingId !== null && existingId !== undefined) {
+    importedGroup.setAttribute('id', existingId);
+  }
+  const existingTransform = existingGroup.getAttribute?.('transform');
+  if (existingTransform) {
+    importedGroup.setAttribute('transform', existingTransform);
+  }
+  return importedGroup;
+};
+
+export const findSingleRecordDefinitionGroup = (svg) => {
+  const semanticMatch = Array.from(
+    svg?.querySelectorAll?.(RECORD_DEFINITION_SELECTOR) || []
+  ).find((group) => !closestRecordGroup(group));
+  if (semanticMatch) return semanticMatch;
+
+  return (
+    Array.from(svg?.querySelectorAll?.('g[id$="_definition"]') || [])
+      .find((group) => !closestRecordGroup(group)) || null
+  );
+};
 
 export const createResultsManager = ({ state, getPyodide, legendLayout, rerenderLinearDefinitions = null }) => {
   const {
@@ -238,7 +290,7 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
       if (!pyodide) return;
 
       const gbPath = cInputType.value === 'gb' ? '/input.gb' : '/input.gb';
-      const isMultiRecordCanvasOnSvg = svg.querySelector('g[id^="record_"]') !== null;
+      const isMultiRecordCanvasOnSvg = isMultiRecordCanvasSvg(svg);
 
       try {
         const species = form.species || '';
@@ -312,14 +364,11 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
 
           const newGroup = parseGroupSvg(definitionSvg);
           if (!newGroup) return;
-          const existingGroup = svg.getElementById(definitionGroupId);
+          const existingGroup = findRecordDefinitionGroup(svg, entry);
           const importedGroup = svg.ownerDocument.importNode(newGroup, true);
 
           if (existingGroup) {
-            const existingTransform = existingGroup.getAttribute('transform');
-            if (existingTransform) {
-              importedGroup.setAttribute('transform', existingTransform);
-            }
+            preserveDefinitionGroupDomIdentity(existingGroup, importedGroup);
             existingGroup.parentNode.replaceChild(importedGroup, existingGroup);
             updated = true;
             return;
@@ -343,8 +392,7 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
           let canvasHeight = canvasSize.height;
           const legendPosition = String(form.legend || 'right').trim().toLowerCase();
           const legendGroup = svg.getElementById('legend');
-          const singleDefinitionGroup = Array.from(svg.querySelectorAll('g[id$="_definition"]'))
-            .find((group) => !group.closest('g[id^="record_"]'));
+          const singleDefinitionGroup = findSingleRecordDefinitionGroup(svg);
           if (singleDefinitionGroup) {
             placeDefinitionGroup(singleDefinitionGroup, canvasWidth, canvasHeight, 'center');
             updated = true;
@@ -420,6 +468,7 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
             id === 'legend' ||
             id === 'feature_legend' ||
             id === 'pairwise_legend' ||
+            group.matches?.(COMPARISON_LEGEND_SELECTOR) ||
             id === 'horizontal_legend' ||
             id === 'vertical_legend' ||
             id === 'length_bar'

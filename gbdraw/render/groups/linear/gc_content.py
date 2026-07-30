@@ -21,7 +21,6 @@ class GcContentGroup:
         track_height (float): Height of the GC content track.
         alignment_width (float): Width of the alignment area.
         gc_config (GcContentConfigurator): Configuration for GC content visualization.
-        config_dict (dict): Configuration dictionary with styling parameters.
         start_x (float): Starting x-coordinate for the GC content visualization.
         start_y (float): Starting y-coordinate for the GC content visualization.
     """
@@ -33,10 +32,10 @@ class GcContentGroup:
         track_height: float,
         alignment_width: float,
         gc_config: GcContentConfigurator,
-        config_dict: dict,
+        *,
+        cfg: GbdrawConfig,
         start_x: float = 0,
         start_y: float = 0,
-        cfg: GbdrawConfig | None = None,
         gc_df: DataFrame | None = None,
         group_id: str = "gc_content",
         sequence_width: float | None = None,
@@ -50,12 +49,11 @@ class GcContentGroup:
             track_height (float): Height of the GC content track.
             alignment_width (float): Width of the alignment area.
             gc_config (GcContentConfigurator): Configuration for GC content visualization.
-            config_dict (dict): Configuration dictionary with styling parameters.
             start_x (float): Starting x-coordinate for the GC content visualization.
             start_y (float): Starting y-coordinate for the GC content visualization.
         """
         self.group_id = group_id
-        self.gc_group = Group(id=self.group_id)
+        self.gc_group = Group(id=self.group_id, debug=False)
         self.start_x: float = start_x
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len
@@ -69,7 +67,6 @@ class GcContentGroup:
             float(sequence_width) if sequence_width is not None else alignment_width
         )
         self.sequence_width = sequence_width
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         self.bool_normalize_length = cfg.canvas.linear.normalize_length
         self.normalize_length()

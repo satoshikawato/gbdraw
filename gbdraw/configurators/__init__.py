@@ -7,7 +7,7 @@ from .blast import BlastMatchConfigurator
 from .depth import DepthConfigurator
 from .features import FeatureDrawingConfigurator
 from .gc import GcContentConfigurator, GcSkewConfigurator
-from .legend import LegendDrawingConfigurator
+from .legend import LegendDrawingConfigurator, LegendMeasurement
 
 __all__ = [
     "BlastMatchConfigurator",
@@ -16,6 +16,6 @@ __all__ = [
     "GcContentConfigurator",
     "GcSkewConfigurator",
     "LegendDrawingConfigurator",
+    "LegendMeasurement",
 ]
-
 

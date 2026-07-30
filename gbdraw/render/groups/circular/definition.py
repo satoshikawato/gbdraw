@@ -13,6 +13,7 @@ from ....analysis.gc import calculate_gc_percent
 from ....canvas import CircularCanvasConfigurator
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ....core.record_metadata import infer_record_source_metadata
+from ....svg.ids import definition_group_svg_id
 from ...drawers.circular.definition import DefinitionDrawer
 from ....core.text import parse_mixed_content_text
 
@@ -79,13 +80,15 @@ class DefinitionGroup:
         self,
         gb_record: SeqRecord,
         canvas_config: CircularCanvasConfigurator,
-        config_dict: dict,
+        *,
+        cfg: GbdrawConfig,
         species: Optional[str] = None,
         strain: Optional[str] = None,
         plot_title: Optional[str] = None,
         definition_profile: CircularDefinitionProfile | str = "full",
         definition_group_id: str | None = None,
-        cfg: GbdrawConfig | None = None,
+        record_index: int = 0,
+        record_count: int = 1,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
@@ -95,21 +98,35 @@ class DefinitionGroup:
         self.definition_profile: CircularDefinitionProfile = _normalize_definition_profile(
             str(definition_profile)
         )
+        self.record_index = int(record_index)
+        self.record_count = int(record_count)
         self.replicon: str | None = None
         self.organelle: str | None = None
         self.record_name: str = ""
-        self.config_dict: dict = config_dict
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         self.interval = cfg.objects.definition.circular.interval
         self.font_size = cfg.objects.definition.circular.font_size
         self.plot_title_font_size = cfg.objects.definition.circular.plot_title_font_size
         self.font = cfg.objects.text.font_family
-        self.track_id: str = str(self.gb_record.id).replace(" ", "_")
+        self.track_id: str = str(self.gb_record.id)
         self.definition_group_id: str = (
-            str(definition_group_id) if definition_group_id else f"{self.track_id}_definition"
+            str(definition_group_id)
+            if definition_group_id
+            else definition_group_svg_id(
+                self.track_id,
+                mode="circular",
+                record_index=self.record_index,
+                record_count=self.record_count,
+            )
         )
-        self.definition_group = Group(id=self.definition_group_id)
+        self.definition_group = Group(id=self.definition_group_id, debug=False)
+        if self.definition_profile == "shared_common" or self.definition_group_id == "plot_title":
+            self.definition_group.attribs["data-gbdraw-role"] = "plot-title"
+        else:
+            self.definition_group.attribs["data-gbdraw-role"] = "record-definition"
+            self.definition_group.attribs["data-gbdraw-definition-part"] = "main"
+            self.definition_group.attribs["data-gbdraw-record-id"] = str(self.gb_record.id)
+            self.definition_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
         self.radius: float = self.canvas_config.radius
         self.calculate_coordinates()
         self.find_organism_name()
@@ -184,7 +201,7 @@ class DefinitionGroup:
         )
         active_name_font_weight = "normal" if self.definition_profile == "shared_common" else "bold"
 
-        self.definition_group: Group = DefinitionDrawer(self.config_dict, cfg=self._cfg).draw(
+        self.definition_group: Group = DefinitionDrawer(cfg=self._cfg).draw(
             self.definition_group,
             self.title_x,
             self.title_y,
@@ -207,4 +224,3 @@ class DefinitionGroup:
 
 
 __all__ = ["CircularDefinitionProfile", "DefinitionGroup"]
-

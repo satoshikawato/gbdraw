@@ -216,7 +216,6 @@ _CIRCULAR_TRACK_COLUMNS = frozenset(
         "side",
         "r",
         "w",
-        "spacing",
         "inner_gap_px",
         "outer_gap_px",
         "z",
@@ -331,7 +330,11 @@ def read_conservation_table(path: str) -> ConservationTable:
     )
 
 
-def read_circular_track_table(path: str) -> CircularTrackTable:
+def read_circular_track_table(
+    path: str,
+    *,
+    _allow_legacy_transport: bool = False,
+) -> CircularTrackTable:
     table_path, header, rows = _read_tsv_table(
         path,
         allowed_columns=_CIRCULAR_TRACK_COLUMNS,
@@ -363,6 +366,7 @@ def read_circular_track_table(path: str) -> CircularTrackTable:
             row.row_number,
             renderer,
             row.values.get("params", ""),
+            _allow_legacy_transport=_allow_legacy_transport,
         )
         track_rows.append(
             _TrackRow(
@@ -420,7 +424,10 @@ def read_circular_track_table(path: str) -> CircularTrackTable:
     for row in ordered_rows:
         specs.append(_circular_track_row_to_spec(table_path, row))
     try:
-        slots = parse_circular_track_slots(specs)
+        slots = parse_circular_track_slots(
+            specs,
+            _allow_legacy_transport=_allow_legacy_transport,
+        )
         normalize_circular_track_slots_with_axis(slots, axis_index)
     except Exception as exc:
         raise ValidationError(f"{table_path}: invalid circular track table: {exc}") from exc
@@ -761,7 +768,6 @@ def _circular_track_row_to_spec(table_path: Path, row: _TrackRow) -> str:
     for column, option in (
         ("r", "r"),
         ("w", "w"),
-        ("spacing", "spacing"),
         ("inner_gap_px", "inner_gap_px"),
         ("outer_gap_px", "outer_gap_px"),
         ("z", "z"),
@@ -783,6 +789,8 @@ def _parse_circular_track_table_params(
     row_number: int,
     renderer: str,
     raw_params: str,
+    *,
+    _allow_legacy_transport: bool = False,
 ) -> tuple[tuple[str, str], ...]:
     params = str(raw_params or "").strip()
     if not params:
@@ -798,6 +806,18 @@ def _parse_circular_track_table_params(
         reserved_keys.update(_FEATURE_LANE_PARAM_KEYS)
     for key, _value in parsed_params:
         normalized_key = key.strip().lower()
+        if normalized_key.startswith("_") and not (
+            _allow_legacy_transport
+            and normalized_key == "__gbdraw_legacy_spacing"
+        ):
+            raise ValidationError(
+                _cell_error(
+                    table_path,
+                    row_number,
+                    "params",
+                    f"private key {key!r} is not allowed",
+                )
+            )
         if normalized_key in reserved_keys:
             raise ValidationError(
                 _cell_error(

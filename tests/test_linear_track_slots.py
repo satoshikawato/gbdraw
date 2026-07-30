@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from types import SimpleNamespace
+import xml.etree.ElementTree as ET
 
 import numpy as np
 import pandas as pd
@@ -11,10 +13,12 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
+import gbdraw.api.request_render as request_render_module
 import gbdraw.linear as linear_cli_module
-from gbdraw.api import assemble_linear_diagram_from_records
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import load_default_colors
@@ -56,9 +60,8 @@ def _resolve_layout(slot_specs: list[str]) -> tuple[LinearTrackLayout, LinearCan
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=1200,
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
     slots = normalize_linear_track_slots_with_axis(parse_linear_track_slots(slot_specs), None)
     return (
@@ -78,32 +81,88 @@ def _layout_track(layout: LinearTrackLayout, track_id: str):
 
 
 def _extract_group_y(svg_text: str, group_id: str) -> float:
+    root = ET.fromstring(svg_text)
+    group = next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and (
+                element.attrib.get("data-gbdraw-record-id") == group_id
+                or element.attrib.get("data-gbdraw-slot-id") == group_id
+                or element.attrib.get("id") == group_id
+            )
+        ),
+        None,
+    )
+    assert group is not None
     match = re.search(
-        rf'<g id="{re.escape(group_id)}" transform="translate\([^,]+,([\-0-9.]+)\)">',
-        svg_text,
+        r"translate\([^,]+,([\-0-9.]+)\)",
+        group.attrib.get("transform", ""),
     )
     assert match is not None
     return float(match.group(1))
 
 
 def _extract_axis_baseline_y(svg_text: str, group_id: str) -> float:
-    group_match = re.search(
-        rf'<g id="{re.escape(group_id)}">(.*?)</g>',
-        svg_text,
-        flags=re.DOTALL,
+    root = ET.fromstring(svg_text)
+    slot_group = next(
+        element
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "g"
+        and (
+            element.attrib.get("data-gbdraw-slot-id") == group_id
+            or element.attrib.get("id") == group_id
+        )
     )
-    assert group_match is not None
-    for line_match in re.finditer(r"<line\b[^>]*>", group_match.group(1)):
-        attrs = dict(re.findall(r'([A-Za-z_:][\w:.-]*)="([^"]*)"', line_match.group(0)))
+    axis_group = next(
+        (
+            element
+            for element in slot_group.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and element is not slot_group
+            and element.attrib.get("id", "").endswith("_axis")
+        ),
+        slot_group,
+    )
+    for line in axis_group.iter():
+        if line.tag.rsplit("}", 1)[-1] != "line":
+            continue
+        attrs = line.attrib
         if "y1" in attrs and attrs.get("y2") == attrs["y1"]:
             return float(attrs["y1"])
     raise AssertionError(f"axis baseline line not found for {group_id}")
 
 
 def _extract_group_fragment(svg_text: str, group_id: str) -> str:
-    match = re.search(rf'<g id="{re.escape(group_id)}"[^>]*>.*?</g>', svg_text, flags=re.DOTALL)
-    assert match is not None
-    return match.group(0)
+    root = ET.fromstring(svg_text)
+    group = next(
+        element
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "g"
+        and (
+            element.attrib.get("data-gbdraw-slot-id") == group_id
+            or element.attrib.get("id") == group_id
+        )
+    )
+    return ET.tostring(group, encoding="unicode")
+
+
+def _resolved_slot_geometry(canvas, slot_id: str) -> dict[str, object]:
+    slots = canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    return next(slot for slot in slots if slot["slotId"] == slot_id)
+
+
+def _adjacent_band_gap(
+    inner: dict[str, object],
+    outer: dict[str, object],
+    band_key: str,
+) -> float:
+    inner_band = inner[band_key]
+    outer_band = outer[band_key]
+    assert isinstance(inner_band, dict)
+    assert isinstance(outer_band, dict)
+    return float(outer_band["topPx"]) - float(inner_band["bottomPx"])
 
 
 def test_parse_linear_track_slot_with_layout_fields() -> None:
@@ -168,9 +227,20 @@ def test_linear_resolved_track_retains_spacing_after_px() -> None:
     assert depth_track.spacing_after_px == pytest.approx(8.0)
 
 
+def test_linear_track_spacing_falls_back_to_zero() -> None:
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    linear_config = config_dict["canvas"]["linear"]
+    linear_config.pop("track_spacing")
+
+    cfg = GbdrawConfig.from_dict(config_dict)
+
+    assert cfg.canvas.linear.track_spacing == pytest.approx(0.0)
+
+
 def test_linear_track_slot_geometry_metadata_keeps_duplicate_record_instances() -> None:
     canvas = assemble_linear_diagram_from_records(
         [_record("duplicate"), _record("duplicate")],
+        cfg=apply_config_overrides(None, None),
         legend="none",
         linear_track_slots=[
             "features:features@side=overlay",
@@ -212,19 +282,22 @@ def test_linear_record_plans_expand_only_records_with_extra_feature_lanes() -> N
     ]
     canvas = assemble_linear_diagram_from_records(
         [shallow, deep],
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "canvas.strandedness": True,
+                "canvas.resolve_overlaps": True,
+            },
+        ),
         legend="none",
         depth_track_tables=[[_depth_table("shallow")], [_depth_table("deep")]],
         linear_track_slots=[
             "features:features@side=overlay",
             "depth:depth@track_index=0,side=below,h=10px",
         ],
-        config_overrides={
-            "show_labels": False,
-            "show_gc": False,
-            "show_skew": False,
-            "strandedness": True,
-            "resolve_overlaps": True,
-        },
     )
     records = canvas._gbdraw_track_slot_geometry["records"]
     features = [
@@ -238,6 +311,64 @@ def test_linear_record_plans_expand_only_records_with_extra_feature_lanes() -> N
 
     assert features[1]["reserveBand"]["bottomPx"] > features[0]["reserveBand"]["bottomPx"]
     assert depth[1]["resolvedOriginPx"] > depth[0]["resolvedOriginPx"]
+
+
+@pytest.mark.linear
+def test_default_middle_slots_match_explicit_geometry_and_shared_spacing() -> None:
+    overrides = {
+        "canvas.show_gc": True,
+        "canvas.show_skew": True,
+        "labels.linear.scope": "none",
+        "canvas.strandedness": True,
+    }
+    cfg = apply_config_overrides(None, overrides)
+    default_canvas = assemble_linear_diagram_from_records(
+        [_record()],
+        cfg=cfg,
+        legend="none",
+    )
+    explicit_canvas = assemble_linear_diagram_from_records(
+        [_record()],
+        cfg=cfg,
+        legend="none",
+        linear_track_slots=[
+            "features:features@side=overlay",
+            "gc_content:dinucleotide_content@side=below,nt=GC",
+            "gc_skew:dinucleotide_skew@side=below,nt=GC",
+        ],
+    )
+    default_features = _resolved_slot_geometry(default_canvas, "features")
+    default_gc = _resolved_slot_geometry(default_canvas, "gc_content")
+    default_skew = _resolved_slot_geometry(default_canvas, "gc_skew")
+    explicit_features = _resolved_slot_geometry(explicit_canvas, "features")
+    explicit_gc = _resolved_slot_geometry(explicit_canvas, "gc_content")
+    explicit_skew = _resolved_slot_geometry(explicit_canvas, "gc_skew")
+
+    assert default_features["reserveBand"] == pytest.approx(
+        explicit_features["reserveBand"]
+    )
+    assert default_gc["resolvedOriginPx"] == pytest.approx(
+        explicit_gc["resolvedOriginPx"]
+    )
+    assert default_gc["paintBand"] == pytest.approx(explicit_gc["paintBand"])
+    assert default_gc["reserveBand"] == pytest.approx(explicit_gc["reserveBand"])
+    assert default_skew["resolvedOriginPx"] == pytest.approx(
+        explicit_skew["resolvedOriginPx"]
+    )
+    assert default_skew["paintBand"] == pytest.approx(explicit_skew["paintBand"])
+    assert default_skew["reserveBand"] == pytest.approx(explicit_skew["reserveBand"])
+    assert cfg.canvas.linear.track_spacing == pytest.approx(0.0)
+    for band_key in ("paintBand", "reserveBand"):
+        assert _adjacent_band_gap(
+            default_features,
+            default_gc,
+            band_key,
+        ) == pytest.approx(cfg.canvas.linear.track_spacing)
+        assert _adjacent_band_gap(
+            default_gc,
+            default_skew,
+            band_key,
+        ) == pytest.approx(cfg.canvas.linear.track_spacing)
 
 
 def test_parse_linear_track_slot_aliases() -> None:
@@ -417,8 +548,11 @@ def test_resolve_linear_track_layout_clears_numeric_track_below_axis() -> None:
 def test_assemble_linear_custom_slots_places_tracks_above_and_below_axis() -> None:
     svg = assemble_linear_diagram_from_records(
         [_record()],
+        cfg=apply_config_overrides(
+            None,
+            {"canvas.show_gc": True, "canvas.show_skew": True},
+        ),
         legend="none",
-        config_overrides={"show_gc": True, "show_skew": True},
         linear_track_slots=[
             "gc_skew:gc_skew@side=above,h=28px",
             "features:features@side=overlay",
@@ -438,9 +572,12 @@ def test_assemble_linear_dinucleotide_skew_slot_uses_custom_colors_and_legend() 
     default_colors = load_default_colors("", palette="default")
     svg = assemble_linear_diagram_from_records(
         [_record()],
+        cfg=apply_config_overrides(
+            None,
+            {"canvas.show_gc": True, "canvas.show_skew": True},
+        ),
         legend="right",
         default_colors=default_colors,
-        config_overrides={"show_gc": True, "show_skew": True},
         linear_track_slots=[
             "features:features@side=overlay",
             "gc_skew:dinucleotide_skew@nt=GC,h=20px",
@@ -466,8 +603,11 @@ def test_assemble_linear_dinucleotide_skew_slot_rejects_invalid_custom_color() -
     with pytest.raises(ValidationError, match="Unknown color name"):
         assemble_linear_diagram_from_records(
             [_record()],
+            cfg=apply_config_overrides(
+                None,
+                {"canvas.show_gc": True, "canvas.show_skew": True},
+            ),
             legend="none",
-            config_overrides={"show_gc": True, "show_skew": True},
             linear_track_slots=[
                 "features:features@side=overlay",
                 "at_skew:dinucleotide_skew@nt=AT,positive_color=not-a-color",
@@ -478,6 +618,7 @@ def test_assemble_linear_dinucleotide_skew_slot_rejects_invalid_custom_color() -
 def test_assemble_linear_custom_depth_above_axis_keeps_depth_axis_clear() -> None:
     svg = assemble_linear_diagram_from_records(
         [_record()],
+        cfg=apply_config_overrides(None, None),
         legend="none",
         depth_table=_depth_table("rec1"),
         linear_track_slots=[
@@ -489,7 +630,7 @@ def test_assemble_linear_custom_depth_above_axis_keeps_depth_axis_clear() -> Non
 
     genome_axis_y = _extract_group_y(svg, "rec1")
     depth_group_y = _extract_group_y(svg, "depth")
-    depth_axis_y = depth_group_y + _extract_axis_baseline_y(svg, "depth_axis")
+    depth_axis_y = depth_group_y + _extract_axis_baseline_y(svg, "depth")
 
     assert depth_axis_y < genome_axis_y
     assert genome_axis_y - depth_axis_y == pytest.approx(cfg.canvas.linear.vertical_padding)
@@ -501,24 +642,31 @@ def test_linear_cli_forwards_track_slots_to_api(
 ) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *args, **kwargs: [_record()])
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda canvas, formats: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: [_record()])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
-    def fake_assemble(*args, **kwargs):
-        captured.update(kwargs)
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render_request(request, **_kwargs):
+        resolved = request_render_module.resolve_request(request)
+        captured["canonical_request"] = resolved
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
             "--gbk",
             "dummy.gb",
-            "--show_gc",
-            "--show_skew",
+            "--gc",
+            "--skew",
             "--linear_track_axis_index",
             "1",
             "--linear_track_slot",
@@ -534,6 +682,9 @@ def test_linear_cli_forwards_track_slots_to_api(
         ]
     )
 
-    slots = captured["linear_track_slots"]
+    tracks = captured["canonical_request"].options.tracks
+    assert tracks is not None
+    slots = tracks.linear_track_slots
+    assert slots is not None
     assert [slot.id for slot in slots] == ["gc_skew", "features", "gc_content"]
-    assert captured["linear_track_axis_index"] == 1
+    assert tracks.linear_track_axis_index == 1

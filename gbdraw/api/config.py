@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import asdict
 from typing import Mapping
 
-from gbdraw.config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from gbdraw.config.modify import (  # type: ignore[reportMissingImports]
+    _apply_validated_config_overrides,
+    config_to_raw_dict,
+)
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.config.toml import load_config_toml  # type: ignore[reportMissingImports]
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.exceptions import ValidationError
 
 
 def load_default_config() -> dict:
@@ -22,7 +23,7 @@ def apply_config_overrides(
     config: GbdrawConfig | dict | None,
     overrides: Mapping[str, object] | None,
 ) -> GbdrawConfig:
-    """Apply CLI-style overrides and return a typed GbdrawConfig.
+    """Apply canonical dotted-path overrides and return a typed GbdrawConfig.
 
     Notes:
         - If `config` is None, the packaged default config.toml is loaded.
@@ -32,23 +33,22 @@ def apply_config_overrides(
     if config is None:
         config_dict = load_default_config()
     elif isinstance(config, GbdrawConfig):
-        config_dict = asdict(config)
-        # LabelsFilteringConfig intentionally keeps DataFrames and other extension
-        # values in ``raw``.  ``asdict`` nests those values under a second ``raw``
-        # key, while downstream label selection reads them from the filtering
-        # mapping itself.  Restore the lossless public representation before
-        # applying overrides.
-        config_dict["labels"]["filtering"] = deepcopy(
-            config.labels.filtering.as_dict()
-        )
+        if not overrides:
+            return config
+        config_dict = config_to_raw_dict(config)
     else:
-        config_dict = deepcopy(config)
+        try:
+            base_config = GbdrawConfig.from_dict(config)
+        except ValidationError:
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValidationError(f"Invalid configuration: {exc}") from exc
+        if not overrides:
+            return base_config
+        config_dict = config_to_raw_dict(base_config)
 
     if overrides:
-        try:
-            config_dict = modify_config_dict(config_dict, **overrides)
-        except TypeError as exc:
-            raise ValidationError(f"Invalid config override: {exc}") from exc
+        config_dict = _apply_validated_config_overrides(config_dict, overrides)
 
     return GbdrawConfig.from_dict(config_dict)
 

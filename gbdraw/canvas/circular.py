@@ -1,12 +1,17 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Literal
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal
 
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
-from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ..config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
 from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
+
+if TYPE_CHECKING:
+    from ..configurators.legend import LegendMeasurement
 
 
 def resolve_circular_side_legend_geometry(
@@ -45,34 +50,26 @@ class CircularCanvasConfigurator:
     def __init__(
         self,
         output_prefix: str,
-        config_dict: dict,
+        profile: CircularRenderProfile,
         legend: str,
         gb_record,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         """
         Initializes the circular canvas configurator with given settings.
 
         Args:
         output_prefix (str): Prefix for the output file.
-        config_dict (dict): Configuration dictionary with canvas settings.
+        profile (CircularRenderProfile): Resolved circular render settings.
         show_gc (bool, optional): Flag to display GC content. Defaults to True.
         strandedness (bool, optional): Flag to display strandedness. Defaults to True.
         show_skew (bool, optional): Flag to display GC skew. Defaults to True.
         """
-
+        cfg = profile.config
         self.output_prefix: str = output_prefix
-        self.config_dict = config_dict
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
+        self._profile = profile
         self._cfg = cfg
 
-        raw_show_labels = cfg.canvas.show_labels
-        if isinstance(raw_show_labels, str):
-            self.show_labels = raw_show_labels != "none"
-        else:
-            self.show_labels = bool(raw_show_labels)
-
-        if self.show_labels:
+        if profile.labels_enabled:
             label_setting = "with_labels"
         else:
             label_setting = "without_labels"
@@ -84,10 +81,6 @@ class CircularCanvasConfigurator:
         self.default_height: int = cfg.canvas.circular.height
         self.radius: float = cfg.canvas.circular.radius
         self.track_ratio: float = cfg.canvas.circular.track_ratio
-        self.show_gc: bool = cfg.canvas.show_gc
-        self.show_skew: bool = cfg.canvas.show_skew
-        self.show_depth: bool = cfg.canvas.show_depth
-        self.strandedness: bool = cfg.canvas.strandedness
         self.dpi: int = cfg.canvas.dpi
         self.length_threshold = cfg.labels.length_threshold.circular
         self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
@@ -97,6 +90,30 @@ class CircularCanvasConfigurator:
 
         self.calculate_dimensions()
         self.get_track_ids()
+
+    @property
+    def profile(self) -> CircularRenderProfile:
+        return self._profile
+
+    @property
+    def show_gc(self) -> bool:
+        return self._profile.show_gc
+
+    @property
+    def show_skew(self) -> bool:
+        return self._profile.show_skew
+
+    @property
+    def show_depth(self) -> bool:
+        return self._profile.show_depth
+
+    @property
+    def strandedness(self) -> bool:
+        return self._profile.strandedness
+
+    @property
+    def resolve_overlaps(self) -> bool:
+        return self._profile.resolve_overlaps
 
     def calculate_dimensions(self) -> None:
         """
@@ -117,37 +134,50 @@ class CircularCanvasConfigurator:
 
         # Create linear canvas
 
-    def recalculate_canvas_dimensions(self, legend_config):
-        legend_local_top = -0.5 * float(legend_config.color_rect_size)
+    def recalculate_canvas_dimensions(
+        self,
+        legend_measurement: LegendMeasurement,
+    ) -> None:
+        legend_local_top = -0.5 * float(legend_measurement.color_rect_size)
         legend_edge_margin = 16.0
         legend_content_gap = 12.0
         top_bottom_reserved_height = (
-            float(legend_config.legend_height) + legend_edge_margin + legend_content_gap
+            float(legend_measurement.legend_height)
+            + legend_edge_margin
+            + legend_content_gap
         )
         side_inner_gap, side_edge_margin, side_reserved_width = resolve_circular_side_legend_geometry(
             canvas_height=float(self.total_height),
-            legend_width=float(legend_config.legend_width),
-            color_rect_size=float(legend_config.color_rect_size),
+            legend_width=float(legend_measurement.legend_width),
+            color_rect_size=float(legend_measurement.color_rect_size),
         )
 
         if self.legend_position == "right":
             self.total_width = self.default_width + side_reserved_width
             self.legend_offset_x = self.default_width + side_inner_gap
-            self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
+            self.legend_offset_y = (
+                self.total_height - legend_measurement.legend_height
+            ) / 2
         elif self.legend_position == "left":
             self.total_width = self.default_width + side_reserved_width
             self.legend_offset_x = side_edge_margin
             self.offset_x: float = (self.default_width * 0.5) + side_reserved_width
-            self.legend_offset_y = (self.total_height - legend_config.legend_height) / 2
+            self.legend_offset_y = (
+                self.total_height - legend_measurement.legend_height
+            ) / 2
         elif self.legend_position == "top":
             self.total_height = self.default_height + top_bottom_reserved_height
             self.offset_y = (self.default_height * 0.5) + top_bottom_reserved_height
-            self.legend_offset_x = (self.total_width - legend_config.legend_width) / 2
+            self.legend_offset_x = (
+                self.total_width - legend_measurement.legend_width
+            ) / 2
             self.legend_offset_y = legend_edge_margin - legend_local_top
         elif self.legend_position == "bottom":
             self.total_height = self.default_height + top_bottom_reserved_height
             self.offset_y = self.default_height * 0.5
-            self.legend_offset_x = (self.total_width - legend_config.legend_width) / 2
+            self.legend_offset_x = (
+                self.total_width - legend_measurement.legend_width
+            ) / 2
             self.legend_offset_y = self.default_height + legend_content_gap - legend_local_top
         elif self.legend_position == "upper_left":
             self.legend_offset_x: float = 0.025 * self.total_width
@@ -205,5 +235,3 @@ class CircularCanvasConfigurator:
             self.track_ids["skew_track"] = skew_track_id
 
 __all__ = ["CircularCanvasConfigurator", "resolve_circular_side_legend_geometry"]
-
-

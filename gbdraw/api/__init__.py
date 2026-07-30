@@ -1,29 +1,10 @@
-"""Public, stable-ish library API for gbdraw.
+"""Typed library contracts for gbdraw requests, sessions, tables, and rendering.
 
-This package is the official entry point for pipeline/library usage (as opposed to CLI
-entry points). It stays intentionally thin and mostly re-exports internal building
-blocks through a stable namespace.
+The beginner-facing drawing facade lives at the package root. This namespace exposes
+the typed contracts and explicit render helpers used by pipelines and integrations.
 """
 
-from .canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
 from .config import GbdrawConfig, apply_config_overrides, load_default_config
-from .configurators import (
-    BlastMatchConfigurator,
-    DepthConfigurator,
-    FeatureDrawingConfigurator,
-    GcContentConfigurator,
-    GcSkewConfigurator,
-    LegendDrawingConfigurator,
-)
-from .diagram import (  # type: ignore[reportMissingImports]
-    DEFAULT_SELECTED_FEATURES,
-    assemble_circular_diagram_from_records,
-    assemble_circular_diagram_from_record,
-    assemble_linear_diagram_from_records,
-    build_circular_diagram,
-    build_circular_multi_diagram,
-    build_linear_diagram,
-)
 from .io import (
     CircularTrackTable,
     ConservationTable,
@@ -53,7 +34,6 @@ from .io import (
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityAnchor,
     CollinearityBlock,
-    CollinearityParameters,
     CollinearityResult,
     CollinearitySearchScope,
     LosslessCollinearityParameters,
@@ -67,14 +47,21 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     OrthologPath,
     normalize_orthogroup_membership_mode,
 )
+from .diagram import LinearDiagramMetadata
 from .options import (
     AnnotationOptions,
+    CircularDiagramOptions,
     CircularMultiRecordOptions,
+    CircularOutputOptions,
+    CircularRequestTrackOptions,
+    CircularTrackOptions,
     ColorOptions,
-    DiagramOptions,
+    DepthTrackInput,
+    LinearDiagramOptions,
     LinearMultiRecordOptions,
-    OutputOptions,
-    TrackOptions,
+    LinearOutputOptions,
+    LinearRequestTrackOptions,
+    LinearTrackOptions,
 )
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.linear_multi_record import LinearLayoutPlan, LinearRecordPlacement, RecordKey
@@ -94,21 +81,42 @@ from gbdraw.annotations import (
     read_annotation_table,
     resolve_annotations,
 )
-from .render import parse_formats, render_to_bytes, save_figure, save_figure_to
+from .render import render_to_bytes, save_figure_to
 from .request_render import (
+    CircularBatchRenderResult,
+    CircularBatchRequestPlan,
+    CircularRequestPlan,
+    CurrentRequestArtifacts,
+    DiagramRequestPlan,
+    LinearRequestPlan,
+    PreparedCircularBatchRequest,
+    PreparedDiagramInputs,
     PreparedDiagramRequest,
     RequestRenderResult,
+    build_request_plan_diagram,
+    build_prepared_interactive_context,
     build_request_diagram,
     normalize_request_records,
+    plan_request,
+    plan_circular_batch_request,
+    plan_circular_request,
+    plan_linear_request,
+    render_prepared_request,
     render_request,
+    resolve_request,
 )
+from .prepared import ResolvedFeatureInputs
 from .requests import (
+    CircularBatchOutputPolicy,
+    CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
     GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCardinality,
+    RecordCollectionOptions,
     RecordInput,
     RecordInputSource,
     RecordPresentation,
@@ -116,6 +124,12 @@ from .requests import (
 )
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+from gbdraw.web_support.capabilities import (
+    WEB_RENDER_OPTIONS_SCHEMA,
+    WEB_RENDER_PROTOCOL,
+    WEB_RUNTIME_CAPABILITY_SCHEMA,
+    get_web_runtime_capabilities,
+)
 from gbdraw.session import (
     MaterializedSession,
     SessionConversionError,
@@ -160,28 +174,10 @@ from .tracks import (  # type: ignore[reportMissingImports]
 )
 
 __all__ = [
-    # canvas
-    "CircularCanvasConfigurator",
-    "LinearCanvasConfigurator",
     # config
     "GbdrawConfig",
     "apply_config_overrides",
     "load_default_config",
-    # configurators
-    "BlastMatchConfigurator",
-    "DepthConfigurator",
-    "FeatureDrawingConfigurator",
-    "GcContentConfigurator",
-    "GcSkewConfigurator",
-    "LegendDrawingConfigurator",
-    # diagrams
-    "DEFAULT_SELECTED_FEATURES",
-    "assemble_circular_diagram_from_records",
-    "assemble_circular_diagram_from_record",
-    "assemble_linear_diagram_from_records",
-    "build_circular_diagram",
-    "build_circular_multi_diagram",
-    "build_linear_diagram",
     # io
     "CircularTrackTable",
     "ConservationTable",
@@ -210,7 +206,6 @@ __all__ = [
     # collinearity
     "CollinearityAnchor",
     "CollinearityBlock",
-    "CollinearityParameters",
     "CollinearityResult",
     "CollinearitySearchScope",
     "LosslessCollinearityParameters",
@@ -238,39 +233,70 @@ __all__ = [
     "read_annotation_table",
     "resolve_annotations",
     "CircularMultiRecordOptions",
+    "CircularDiagramOptions",
+    "CircularOutputOptions",
+    "CircularRequestTrackOptions",
+    "CircularTrackOptions",
     "LinearMultiRecordOptions",
+    "LinearDiagramOptions",
+    "LinearDiagramMetadata",
+    "LinearOutputOptions",
+    "LinearRequestTrackOptions",
+    "LinearTrackOptions",
     "LinearComparison",
     "LinearLayoutPlan",
     "LinearRecordPlacement",
     "RecordKey",
     "ColorOptions",
-    "DiagramOptions",
-    "OutputOptions",
-    "TrackOptions",
+    "DepthTrackInput",
     # render
     "InteractiveSvgContext",
     "build_interactive_svg_context",
     "enrich_svg",
-    "parse_formats",
     "render_to_bytes",
-    "save_figure",
     "save_figure_to",
     # typed requests
+    "CircularBatchRequest",
+    "CircularBatchOutputPolicy",
     "CircularDiagramRequest",
     "DiagramRequest",
     "GenBankInputSource",
     "GffFastaInputSource",
     "InMemoryRecordSource",
     "LinearDiagramRequest",
+    "RecordCardinality",
+    "RecordCollectionOptions",
     "RecordInput",
     "RecordInputSource",
     "RecordPresentation",
     "RenderOutputRequest",
+    "CircularBatchRenderResult",
+    "CircularBatchRequestPlan",
+    "CircularRequestPlan",
+    "CurrentRequestArtifacts",
+    "DiagramRequestPlan",
+    "LinearRequestPlan",
+    "PreparedCircularBatchRequest",
+    "PreparedDiagramInputs",
     "PreparedDiagramRequest",
     "RequestRenderResult",
+    "ResolvedFeatureInputs",
+    "build_request_plan_diagram",
+    "build_prepared_interactive_context",
     "build_request_diagram",
     "normalize_request_records",
+    "plan_request",
+    "plan_circular_batch_request",
+    "plan_circular_request",
+    "plan_linear_request",
+    "render_prepared_request",
     "render_request",
+    "resolve_request",
+    # Web runtime capabilities
+    "WEB_RENDER_OPTIONS_SCHEMA",
+    "WEB_RENDER_PROTOCOL",
+    "WEB_RUNTIME_CAPABILITY_SCHEMA",
+    "get_web_runtime_capabilities",
     # canonical sessions
     "MaterializedSession",
     "SessionConversionError",
@@ -312,5 +338,3 @@ __all__ = [
     "parse_linear_track_slot",
     "parse_linear_track_slots",
 ]
-
-

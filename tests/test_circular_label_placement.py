@@ -14,7 +14,7 @@ import gbdraw.render.groups.circular.labels as circular_labels_group_module
 import gbdraw.render.groups.circular.seq_record as circular_seq_record_group_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.canvas.circular import CircularCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.core.sequence import determine_length_parameter
@@ -92,7 +92,7 @@ def test_circular_label_drawer_uses_label_entry_font_size() -> None:
         "font_family": "Courier New",
     }
 
-    group = CircularLabelDrawer(config_dict, cfg=cfg).draw(
+    group = CircularLabelDrawer(profile=CircularRenderProfile(cfg)).draw(
         label,
         Group(id="test"),
         int(cfg.labels.length_threshold.circular) - 1,
@@ -279,12 +279,15 @@ def _load_mjenmv_external_labels_with_config(
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels=True,
-        strandedness=strandedness,
-        track_type=track_type,
-        resolve_overlaps=resolve_overlaps,
-        allow_inner_labels=allow_inner_labels,
-        label_blacklist=label_blacklist,
+        {
+            "labels.circular.scope": (
+                "both" if allow_inner_labels else "outer"
+            ),
+            "canvas.strandedness": strandedness,
+            "canvas.circular.track_type": track_type,
+            "canvas.resolve_overlaps": resolve_overlaps,
+            "labels.filtering.blacklist_keywords": [item.strip() for item in str(label_blacklist).split(',') if item.strip()],
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -309,8 +312,7 @@ def _load_mjenmv_external_labels_with_config(
         len(record.seq),
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        config_dict,
-        cfg=cfg,
+        CircularRenderProfile(cfg),
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq), cfg
@@ -349,12 +351,16 @@ def _load_hmmtdna_external_labels_with_config(
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels=True,
-        strandedness=strandedness,
-        track_type=track_type,
-        resolve_overlaps=resolve_overlaps,
-        allow_inner_labels=False,
-        label_font_size=label_font_size,
+        {
+            "labels.circular.scope": "outer",
+            "canvas.strandedness": strandedness,
+            "canvas.circular.track_type": track_type,
+            "canvas.resolve_overlaps": resolve_overlaps,
+            "labels.font_size.short": label_font_size,
+            "labels.font_size.long": label_font_size,
+            "labels.font_size.linear.short": label_font_size,
+            "labels.font_size.linear.long": label_font_size,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -379,8 +385,7 @@ def _load_hmmtdna_external_labels_with_config(
         len(record.seq),
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        config_dict,
-        cfg=cfg,
+        CircularRenderProfile(cfg),
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq), cfg
@@ -400,12 +405,16 @@ def _load_hmmtdna_external_labels_with_feature_width(
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels=True,
-        strandedness=strandedness,
-        track_type=track_type,
-        resolve_overlaps=resolve_overlaps,
-        allow_inner_labels=False,
-        label_font_size=label_font_size,
+        {
+            "labels.circular.scope": "outer",
+            "canvas.strandedness": strandedness,
+            "canvas.circular.track_type": track_type,
+            "canvas.resolve_overlaps": resolve_overlaps,
+            "labels.font_size.short": label_font_size,
+            "labels.font_size.long": label_font_size,
+            "labels.font_size.linear.short": label_font_size,
+            "labels.font_size.linear.long": label_font_size,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -427,29 +436,17 @@ def _load_hmmtdna_external_labels_with_feature_width(
 
     canvas_config = CircularCanvasConfigurator(
         output_prefix="tmp",
-        config_dict=config_dict,
+        profile=CircularRenderProfile(cfg),
         legend="left",
         gb_record=record,
-        cfg=cfg,
     )
 
     feature_track_ratio_factor_override = float(feature_width) / (
         float(canvas_config.radius) * float(canvas_config.track_ratio)
     )
-    feature_radius_mapper, _, _ = circular_assemble_module._build_feature_radius_mapper(
-        feature_dict,
-        len(record.seq),
-        canvas_config=canvas_config,
-        cfg=cfg,
-        feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-    )
     default_anchor_px, default_arc_outer_px = circular_assemble_module._default_outer_label_arena(
         canvas_config=canvas_config,
-        cfg=cfg,
     )
-    if feature_radius_mapper is not None:
-        default_anchor_px = float(feature_radius_mapper(default_anchor_px))
-        default_arc_outer_px = float(feature_radius_mapper(default_arc_outer_px))
     if default_arc_outer_px < default_anchor_px:
         default_anchor_px, default_arc_outer_px = default_arc_outer_px, default_anchor_px
     outer_arena = (default_anchor_px, default_arc_outer_px)
@@ -459,8 +456,7 @@ def _load_hmmtdna_external_labels_with_feature_width(
         len(record.seq),
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        config_dict,
-        cfg=cfg,
+        CircularRenderProfile(cfg),
         outer_arena=outer_arena,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
     )
@@ -493,11 +489,14 @@ def _load_nc001879_external_labels_with_priority_and_color_table(
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels=True,
-        strandedness=strandedness,
-        track_type=track_type,
-        resolve_overlaps=resolve_overlaps,
-        allow_inner_labels=allow_inner_labels,
+        {
+            "labels.circular.scope": (
+                "both" if allow_inner_labels else "outer"
+            ),
+            "canvas.strandedness": strandedness,
+            "canvas.circular.track_type": track_type,
+            "canvas.resolve_overlaps": resolve_overlaps,
+        },
     )
     config_dict["labels"]["filtering"]["qualifier_priority_df"] = qualifier_priority_df
     cfg = GbdrawConfig.from_dict(config_dict)
@@ -523,8 +522,7 @@ def _load_nc001879_external_labels_with_priority_and_color_table(
         len(record.seq),
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        config_dict,
-        cfg=cfg,
+        CircularRenderProfile(cfg),
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
     return external_labels, len(record.seq), cfg
@@ -560,12 +558,16 @@ def _load_nc001454_labels_with_inner_resolve(
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels=True,
-        strandedness=strandedness,
-        track_type=track_type,
-        resolve_overlaps=resolve_overlaps,
-        allow_inner_labels=True,
-        label_font_size=label_font_size,
+        {
+            "labels.circular.scope": "both",
+            "canvas.strandedness": strandedness,
+            "canvas.circular.track_type": track_type,
+            "canvas.resolve_overlaps": resolve_overlaps,
+            "labels.font_size.short": label_font_size,
+            "labels.font_size.long": label_font_size,
+            "labels.font_size.linear.short": label_font_size,
+            "labels.font_size.linear.long": label_font_size,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -590,8 +592,7 @@ def _load_nc001454_labels_with_inner_resolve(
         len(record.seq),
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        config_dict,
-        cfg=cfg,
+        CircularRenderProfile(cfg),
     )
     return labels, len(record.seq), cfg, feature_dict
 
@@ -626,12 +627,16 @@ def _load_nc001454_outer_labels_without_inner_resolve(
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels=True,
-        strandedness=strandedness,
-        track_type=track_type,
-        resolve_overlaps=resolve_overlaps,
-        allow_inner_labels=False,
-        label_font_size=label_font_size,
+        {
+            "labels.circular.scope": "outer",
+            "canvas.strandedness": strandedness,
+            "canvas.circular.track_type": track_type,
+            "canvas.resolve_overlaps": resolve_overlaps,
+            "labels.font_size.short": label_font_size,
+            "labels.font_size.long": label_font_size,
+            "labels.font_size.linear.short": label_font_size,
+            "labels.font_size.linear.long": label_font_size,
+        },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
 
@@ -656,8 +661,7 @@ def _load_nc001454_outer_labels_without_inner_resolve(
         len(record.seq),
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        config_dict,
-        cfg=cfg,
+        CircularRenderProfile(cfg),
     )
     external_labels = [label for label in labels if not label.get("is_embedded")]
     outer_labels = [label for label in external_labels if not label.get("is_inner")]
@@ -1185,10 +1189,10 @@ def test_rearrange_labels_legacy_prefers_same_half_plane_when_overlap_tied() -> 
         feature_radius,
         total_length,
         "long",
-        config_dict,
+        cfg,
         strands="separate",
         is_outer=True,
-        cfg=cfg,
+        inner_labels_enabled=False,
     )
 
     assert _count_overlaps(rearranged, total_length) == 0
@@ -1634,7 +1638,12 @@ def test_rearrange_dense_labels_50_to_70_always_compares_legacy_and_current_cand
     labels = [_make_label(50000 + idx * 500, width_px=140.0, height_px=20.0) for idx in range(60)]
 
     config_dict = load_config_toml("gbdraw.data", "config.toml")
-    config_dict = modify_config_dict(config_dict, allow_inner_labels=True)
+    config_dict = modify_config_dict(
+        config_dict,
+        {
+            "labels.circular.scope": "both",
+        },
+    )
     cfg = GbdrawConfig.from_dict(config_dict)
 
     scores_seen: list[str] = []
@@ -1691,10 +1700,10 @@ def test_rearrange_dense_labels_50_to_70_always_compares_legacy_and_current_cand
             feature_radius,
             total_length,
             "long",
-            config_dict,
+            cfg,
             strands="separate",
             is_outer=True,
-            cfg=cfg,
+            inner_labels_enabled=True,
         )
     finally:
         circular_labels_module._legacy_place_labels_on_arc_fc = original_legacy_place
@@ -1718,7 +1727,12 @@ def test_rearrange_dense_labels_over_70_reuses_single_legacy_candidate() -> None
     labels = [_make_label(50000 + idx * 300, width_px=160.0, height_px=20.0) for idx in range(80)]
 
     config_dict = load_config_toml("gbdraw.data", "config.toml")
-    config_dict = modify_config_dict(config_dict, allow_inner_labels=True)
+    config_dict = modify_config_dict(
+        config_dict,
+        {
+            "labels.circular.scope": "both",
+        },
+    )
     cfg = GbdrawConfig.from_dict(config_dict)
 
     scores_seen: list[str] = []
@@ -1775,10 +1789,10 @@ def test_rearrange_dense_labels_over_70_reuses_single_legacy_candidate() -> None
             feature_radius,
             total_length,
             "long",
-            config_dict,
+            cfg,
             strands="separate",
             is_outer=True,
-            cfg=cfg,
+            inner_labels_enabled=True,
         )
     finally:
         circular_labels_module._legacy_place_labels_on_arc_fc = original_legacy_place
@@ -2181,7 +2195,7 @@ def test_hmmtdna_resolve_overlaps_middle_keeps_trna_lys_text_outside_feature_tra
         total_length,
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        cfg,
+        CircularRenderProfile(cfg),
     )
     assert feature_intervals
 
@@ -2370,7 +2384,7 @@ def test_hmmtdna_resolve_overlaps_feature_width_keeps_middle_anchor_outside_loca
         total_length,
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        cfg,
+        CircularRenderProfile(cfg),
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
     )
     assert feature_intervals
@@ -2420,7 +2434,7 @@ def test_hmmtdna_resolve_overlaps_feature_width_font22_keeps_current_bbox_margin
         total_length,
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        cfg,
+        CircularRenderProfile(cfg),
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
     )
     assert feature_intervals
@@ -2578,18 +2592,22 @@ def test_hmmtdna_resolve_overlaps_default_font_keeps_label_bboxes_outside_local_
         total_length,
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        cfg,
+        CircularRenderProfile(cfg),
     )
     assert feature_intervals
 
     min_bbox_clearance = float("inf")
     for label in external_labels:
-        sampled_positions = circular_labels_module._sample_label_genome_positions(label, total_length)
-        assert sampled_positions
+        label_intervals = circular_labels_module._label_genome_intervals_for_clearance(
+            label,
+            total_length,
+        )
+        assert label_intervals
 
-        required_feature_outer = max(
-            circular_labels_module._max_outer_feature_radius_at_position(feature_intervals, position, total_length)
-            for position in sampled_positions
+        required_feature_outer = circular_labels_module._max_outer_feature_radius_for_intervals(
+            feature_intervals,
+            label_intervals,
+            total_length,
         )
         required_radius = required_feature_outer + circular_labels_module.MIN_OUTER_LABEL_TEXT_CLEARANCE_PX
         bbox_clearance = _label_bbox_min_radius(label, total_length) - required_radius
@@ -2784,7 +2802,7 @@ def test_nc001454_tuckin_resolve_overlaps_inner_labels_keep_bbox_inside_local_fe
         total_length,
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        cfg,
+        CircularRenderProfile(cfg),
     )
     assert feature_inner_intervals
 
@@ -2832,14 +2850,14 @@ def test_nc001454_tuckin_resolve_overlaps_inner_middle_to_label_segments_avoid_f
         total_length,
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        cfg,
+        CircularRenderProfile(cfg),
     )
     feature_outer_intervals = circular_labels_module._build_outer_feature_radius_intervals(
         feature_dict,
         total_length,
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        cfg,
+        CircularRenderProfile(cfg),
     )
     assert feature_inner_intervals
     assert feature_outer_intervals
@@ -2997,12 +3015,16 @@ def test_circular_assembly_reuses_precalculated_labels_once() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels=True,
-        strandedness=True,
-        track_type="tuckin",
-        resolve_overlaps=False,
-        allow_inner_labels=False,
-        label_font_size=22.0,
+        {
+            "labels.circular.scope": "outer",
+            "canvas.strandedness": True,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.resolve_overlaps": False,
+            "labels.font_size.short": 22.0,
+            "labels.font_size.long": 22.0,
+            "labels.font_size.linear.short": 22.0,
+            "labels.font_size.linear.long": 22.0,
+        },
     )
 
     counts = {"assemble": 0, "labels_group": 0, "seq_record_group": 0}
@@ -3023,7 +3045,7 @@ def test_circular_assembly_reuses_precalculated_labels_once() -> None:
     try:
         _ = assemble_circular_diagram_from_record(
             record,
-            config_dict=config_dict,
+            cfg=GbdrawConfig.from_dict(config_dict),
             selected_features_set=selected_features,
             output_prefix="tmp",
             legend="left",
@@ -3134,11 +3156,12 @@ def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     config_dict = modify_config_dict(
         config_dict,
-        show_labels=True,
-        strandedness=True,
-        track_type="tuckin",
-        resolve_overlaps=False,
-        allow_inner_labels=False,
+        {
+            "labels.circular.scope": "outer",
+            "canvas.strandedness": True,
+            "canvas.circular.track_type": 'tuckin',
+            "canvas.resolve_overlaps": False,
+        },
     )
     override_template_config = copy.deepcopy(config_dict)
     cfg = GbdrawConfig.from_dict(config_dict)
@@ -3163,8 +3186,7 @@ def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:
         len(record.seq),
         cfg.canvas.circular.radius,
         cfg.canvas.circular.track_ratio,
-        config_dict,
-        cfg=cfg,
+        CircularRenderProfile(cfg),
     )
 
     nd4_baseline = next(
@@ -3199,8 +3221,7 @@ def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:
         len(record.seq),
         override_cfg.canvas.circular.radius,
         override_cfg.canvas.circular.track_ratio,
-        override_config_dict,
-        cfg=override_cfg,
+        CircularRenderProfile(override_cfg),
     )
 
     nd4_override = next(label for label in override_labels if label.get("label_text") == "ND4")

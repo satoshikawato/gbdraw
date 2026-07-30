@@ -13,14 +13,18 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.diagram as api_diagram_module
+import gbdraw.api.request_render as request_render_module
 import gbdraw.linear as linear_cli_module
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
-from gbdraw.api.options import DiagramOptions
+from gbdraw.api.options import LinearDiagramOptions
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import load_comparisons
+from gbdraw.legend.table import prepare_legend_table
+from gbdraw.render.drawers.circular.conservation import ConservationDrawer
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 
 
@@ -106,7 +110,12 @@ def test_blast_match_config_rejects_invalid_curve_tension() -> None:
 def test_modify_config_dict_maps_pairwise_match_style() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
 
-    modified = modify_config_dict(config_dict, pairwise_match_style="curve")
+    modified = modify_config_dict(
+        config_dict,
+        {
+            "objects.blast_match.style": 'curve',
+        },
+    )
 
     assert GbdrawConfig.from_dict(modified).objects.blast_match.style == "curve"
 
@@ -159,18 +168,24 @@ def test_linear_cli_alignment_length_is_forwarded(
     record = _build_record()
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
-    def fake_assemble(*_args, **kwargs):
-        captured["alignment_length"] = kwargs.get("alignment_length")
-        captured["pairwise_match_style"] = kwargs.get("pairwise_match_style")
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render_request(request, **_kwargs):
+        resolved = request_render_module.resolve_request(request)
+        captured["canonical_request"] = resolved
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
@@ -187,8 +202,9 @@ def test_linear_cli_alignment_length_is_forwarded(
         ]
     )
 
-    assert captured["alignment_length"] == 123
-    assert captured["pairwise_match_style"] == "curve"
+    options = captured["canonical_request"].options
+    assert options.alignment_length == 123
+    assert options.pairwise_match_style == "curve"
 
 
 @pytest.mark.linear
@@ -260,7 +276,10 @@ def test_build_linear_diagram_forwards_alignment_length(monkeypatch: pytest.Monk
 
     canvas = api_diagram_module.build_linear_diagram(
         [_build_record()],
-        options=DiagramOptions(alignment_length=321, pairwise_match_style="curve"),
+        options=LinearDiagramOptions(
+            alignment_length=321,
+            pairwise_match_style="curve",
+        ),
     )
 
     assert isinstance(canvas, Drawing)
@@ -273,6 +292,7 @@ def test_assemble_linear_diagram_rejects_negative_alignment_length() -> None:
     with pytest.raises(ValidationError, match="alignment_length must be >= 0"):
         assemble_linear_diagram_from_records(
             [_build_record()],
+            cfg=apply_config_overrides(None, None),
             alignment_length=-1,
         )
 
@@ -282,6 +302,7 @@ def test_assemble_linear_diagram_rejects_invalid_pairwise_match_style() -> None:
     with pytest.raises(ValidationError, match="pairwise_match_style must be one of: ribbon, curve"):
         assemble_linear_diagram_from_records(
             [_build_record()],
+            cfg=apply_config_overrides(None, None),
             pairwise_match_style="line",
         )
 
@@ -295,6 +316,78 @@ def test_pairwise_match_ribbon_path_uses_straight_segments() -> None:
     assert "C" not in path_desc
     assert path.attribs["data-pairwise-match-style"] == "ribbon"
     assert float(path.attribs["data-identity-factor"]) == pytest.approx(0.95)
+
+
+@pytest.mark.linear
+def test_pairwise_match_identity_100_uses_the_maximum_color() -> None:
+    group = _build_pairwise_group("ribbon")
+    group.min_identity = 100
+    row = _build_match_row()
+    row.identity = 100
+
+    path = group.generate_linear_match_path(row)
+
+    assert path.attribs["fill"] == "#000000"
+    assert float(path.attribs["data-identity-factor"]) == 1
+
+
+@pytest.mark.circular
+def test_circular_conservation_identity_100_uses_the_maximum_color() -> None:
+    drawer = ConservationDrawer(
+        min_identity=100,
+        min_color="#ffffff",
+        max_color="#000000",
+        fill_opacity=1,
+        stroke_color="none",
+        stroke_width=0,
+    )
+
+    assert drawer._identity_factor(100) == 1
+    assert drawer._fill_color(100) == "#000000"
+
+
+def test_identity_100_legend_is_a_safe_zero_span_at_the_maximum_color() -> None:
+    feature_config = SimpleNamespace(
+        color_table=None,
+        default_colors=pd.DataFrame(
+            [("CDS", "#54bcf8"), ("default", "#d3d3d3")],
+            columns=["feature_type", "color"],
+        ),
+        block_stroke_color="none",
+        block_stroke_width=0,
+    )
+    hidden_track = SimpleNamespace(
+        show_gc=False,
+        show_skew=False,
+        dinucleotide="GC",
+        stroke_color="none",
+        stroke_width=0,
+        high_fill_color="#ffffff",
+        low_fill_color="#000000",
+    )
+    blast_config = SimpleNamespace(
+        min_color="#ffffff",
+        max_color="#000000",
+        identity=100,
+        hide_pairwise_identity_legend=False,
+    )
+
+    legend = prepare_legend_table(
+        hidden_track,
+        hidden_track,
+        feature_config,
+        [],
+        blast_config=blast_config,
+        has_blast=True,
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
+    )
+    gradient = legend["Pairwise match identity"]
+
+    assert gradient["min_value"] == 100
+    assert gradient["min_color"] == "#000000"
+    assert gradient["max_color"] == "#000000"
 
 
 @pytest.mark.linear

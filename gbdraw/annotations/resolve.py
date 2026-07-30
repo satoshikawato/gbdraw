@@ -56,7 +56,9 @@ def _bind_record(records: Sequence[SeqRecord], selector: RecordSelector | None) 
     return matches[0]
 
 
-def _merge_segments(segments: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
+def merge_annotation_segments(
+    segments: Sequence[tuple[int, int]],
+) -> tuple[tuple[int, int], ...]:
     ordered = sorted((int(start), int(end)) for start, end in segments if int(end) > int(start))
     if not ordered:
         return ()
@@ -138,7 +140,7 @@ def _coordinate_segments(
             for start, end in ranges
         ]
     segments = tuple(segment for segment, _ in resolved if segment[1] > segment[0])
-    return _merge_segments(segments), any(clipped for _, clipped in resolved)
+    return merge_annotation_segments(segments), any(clipped for _, clipped in resolved)
 
 
 def _seqfeature_segments(feature: object) -> tuple[tuple[int, int], ...]:
@@ -203,7 +205,7 @@ def _feature_segments(target: FeatureSpan, record: SeqRecord, *, mode: str) -> t
         raise ValidationError(
             f"Feature annotation selector(s) did not match record {record.id!r}: {', '.join(unmatched)}."
         )
-    segments = _merge_segments(
+    segments = merge_annotation_segments(
         [segment for feature in matched for segment in _seqfeature_segments(feature)]
     )
     if not segments:
@@ -225,7 +227,10 @@ def _feature_segments(target: FeatureSpan, record: SeqRecord, *, mode: str) -> t
     return ((segments[-1][0], length), (0, segments[0][1])) if use_wrap else normal
 
 
-def _midpoint(segments: Sequence[tuple[int, int]], record_length: int) -> float:
+def annotation_midpoint(
+    segments: Sequence[tuple[int, int]],
+    record_length: int,
+) -> float:
     if len(segments) == 2 and segments[0][0] == 0 and segments[-1][1] == record_length:
         ordered = (segments[-1], segments[0])
         span = sum(end - start for start, end in ordered)
@@ -306,7 +311,7 @@ def resolve_annotation_set(
                 set_id=annotation_set.id,
                 record_index=record_index,
                 segments=tuple(segments),
-                midpoint_bp=_midpoint(segments, len(record.seq)),
+                midpoint_bp=annotation_midpoint(segments, len(record.seq)),
                 span_bp=span_bp,
                 label=annotation.label,
                 mark=annotation.mark,
@@ -353,4 +358,9 @@ def resolve_annotations(
     )
 
 
-__all__ = ["resolve_annotation_set", "resolve_annotations"]
+__all__ = [
+    "annotation_midpoint",
+    "merge_annotation_segments",
+    "resolve_annotation_set",
+    "resolve_annotations",
+]

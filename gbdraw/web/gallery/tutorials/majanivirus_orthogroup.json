@@ -4,7 +4,7 @@
   "title": "Plot CDS protein-similarity links across nine majanivirus genomes",
   "summary": "Run LOSATP in the browser, assign CDS-derived proteins from nine majanivirus genomes to gbdraw similarity groups, apply product-based feature colors, and draw curved links between group members.",
   "appMode": "Linear",
-  "primaryWorkflow": "LOSATP similarity-group comparison (Orthogroups mode)",
+  "primaryWorkflow": "LOSATP similarity-group comparison",
   "downloads": [
     {
       "label": "LC738868",
@@ -127,7 +127,7 @@
     },
     {
       "title": "Configure browser LOSAT",
-      "body": "In Pairwise Comparisons, choose Run LOSAT and LOSATP, then set blastp mode to Orthogroups.",
+      "body": "In Pairwise Comparisons, choose Run LOSAT and LOSATP, then set blastp mode to Similarity groups.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -135,20 +135,20 @@
           ["Total threads", "Safe"],
           ["Parallel runs", "Auto"],
           ["Threads per run", "32 requested; capped by the Safe total-thread budget"],
-          ["blastp mode", "Orthogroups"],
+          ["blastp mode", "Similarity groups"],
           ["Bitscore", "100"],
           ["E-value", "1e-3"],
           ["Minimum Identity", "20"],
           ["Minimum Length", "0"]
         ]
       },
-      "note": "This is a large browser workload. The displayed 32 is a requested per-run maximum, not 32 guaranteed workers: Total threads = Safe caps the effective value to the safe browser budget. Orthogroups mode forms similarity groups for visualization; it does not infer phylogeny-based orthogroups.",
+      "note": "This is a large browser workload. The displayed 32 is a requested per-run maximum, not 32 guaranteed workers: Total threads = Safe caps the effective value to the safe browser budget. Similarity groups forms visualization groups; it does not infer phylogeny-based orthology.",
       "operations": [
         {
           "title": "Pairwise Comparisons panel",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-01-open-pairwise.webp",
-            "alt": "Run LOSAT settings with LOSATP Orthogroups, Safe total threads, a requested maximum of 32 threads per run, and thresholds 100, 1e-3, 20, and 0.",
+            "alt": "Run LOSAT settings with LOSATP Similarity groups, Safe total threads, a requested maximum of 32 threads per run, and thresholds 100, 1e-3, 20, and 0.",
             "caption": "Request up to 32 threads per run; the Safe total-thread budget caps the effective workers. Use thresholds 100 / 1e-3 / 20 / 0."
           },
           "capture": {
@@ -175,11 +175,11 @@
           }
         },
         {
-          "title": "LOSATP orthogroups mode",
+          "title": "LOSATP similarity groups mode",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-02-losatp-orthogroups.webp",
-            "alt": "LOSAT Settings panel with the blastp mode menu open and the Orthogroups option highlighted.",
-            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Orthogroups option."
+            "alt": "LOSAT Settings panel with the blastp mode menu open and the Similarity groups option highlighted.",
+            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Similarity groups option."
           },
           "capture": {
             "source": "webapp",
@@ -191,8 +191,8 @@
               "left": 80
             },
             "openSelect": {
-              "selectedLabel": "Orthogroups",
-              "options": ["Orthogroups", "Collinear blocks", "Pairwise"],
+              "selectedLabel": "Similarity groups",
+              "options": ["Similarity groups", "Collinear blocks", "Pairwise"],
               "label": "blastp mode"
             }
           }
@@ -502,7 +502,7 @@
     },
     {
       "title": "Expected ribbons are missing",
-      "body": "Check that protein blastp mode is Orthogroups, then compare the input order and the bit score, E-value, and identity thresholds with the tutorial tables."
+      "body": "Check that protein blastp mode is Similarity groups, then compare the input order and the bit score, E-value, and identity thresholds with the tutorial tables."
     },
     {
       "title": "The rows do not match the Gallery figure",

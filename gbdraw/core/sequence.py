@@ -18,15 +18,6 @@ def determine_length_parameter(record_length: int, length_threshold: int) -> str
     return "long"
 
 
-def determine_output_file_prefix(gb_records, output_prefix, record_count, accession):
-    if len(gb_records) > 1 and output_prefix is not None:
-        return "{}_{}".format(output_prefix, record_count)
-    elif len(gb_records) == 1 and output_prefix is not None:
-        return output_prefix
-    else:
-        return accession
-
-
 def check_feature_presence(
     records: Union[List[SeqRecord], SeqRecord],
     features_list: List[str],
@@ -81,8 +72,5 @@ __all__ = [
     "check_feature_presence",
     "create_dict_for_sequence_lengths",
     "determine_length_parameter",
-    "determine_output_file_prefix",
     "get_coordinates_of_longest_segment",
 ]
-
-

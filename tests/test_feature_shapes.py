@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+import re
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -12,16 +14,23 @@ from svgwrite import Drawing
 
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
+import gbdraw.api.request_render as request_render_module
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_circular_diagram_from_record, assemble_linear_diagram_from_records
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.features.colors import preprocess_color_tables
-from gbdraw.features.factory import create_feature_dict
+from gbdraw.features.factory import create_feature_dict, create_feature_layers
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.features.shapes import (
     DEFAULT_DIRECTIONAL_FEATURE_TYPES,
+    DEFAULT_FEATURE_RENDERINGS,
+    FEATURE_RENDERING_VALUES,
+    default_feature_rendering,
     parse_feature_shape_assignment,
     parse_feature_shape_overrides,
     resolve_directional_feature_types,
+    resolve_feature_rendering,
+    resolve_underlay_feature_types,
 )
 from gbdraw.io.colors import load_default_colors
 from gbdraw.io.genome import load_gbks
@@ -69,6 +78,37 @@ def test_parse_feature_shape_assignment_valid() -> None:
         "repeat_region",
         "rectangle",
     )
+    assert parse_feature_shape_assignment("misc_feature=UNDERLAY") == (
+        "misc_feature",
+        "underlay",
+    )
+
+
+def test_feature_rendering_defaults_and_resolvers() -> None:
+    assert FEATURE_RENDERING_VALUES == {"arrow", "rectangle", "underlay"}
+    assert DEFAULT_FEATURE_RENDERINGS["repeat_region"] == "underlay"
+    assert default_feature_rendering("CDS") == "arrow"
+    assert default_feature_rendering("repeat_region") == "underlay"
+    assert default_feature_rendering("misc_feature") == "rectangle"
+    assert resolve_feature_rendering("repeat_region", None) == "underlay"
+    assert resolve_feature_rendering(
+        "repeat_region", {"repeat_region": "rectangle"}
+    ) == "rectangle"
+    assert resolve_underlay_feature_types(None) == {"repeat_region"}
+    assert resolve_underlay_feature_types(
+        {"repeat_region": "arrow", "CDS": "underlay"}
+    ) == {"CDS"}
+
+
+def test_python_and_web_feature_rendering_defaults_stay_in_sync() -> None:
+    source = Path("gbdraw/web/js/utils/feature-rendering.js").read_text(encoding="utf-8")
+    for rendering in FEATURE_RENDERING_VALUES:
+        assert re.search(rf"['\"]{re.escape(rendering)}['\"]", source)
+    for feature_type, rendering in DEFAULT_FEATURE_RENDERINGS.items():
+        assert re.search(
+            rf"\b{re.escape(feature_type)}\s*:\s*['\"]{re.escape(rendering)}['\"]",
+            source,
+        )
 
 
 @pytest.mark.parametrize(
@@ -127,6 +167,58 @@ def test_create_feature_dict_applies_directional_feature_types() -> None:
     assert repeat_objects[0].is_directional is True
 
 
+def test_create_feature_layers_partitions_underlays_before_lane_assignment() -> None:
+    default_colors = load_default_colors("", "default")
+    color_table, default_colors = preprocess_color_tables(None, default_colors)
+    label_filtering = preprocess_label_filtering(
+        {"blacklist_keywords": [], "whitelist_df": None, "qualifier_priority_df": None}
+    )
+
+    result = create_feature_layers(
+        _build_test_record(),
+        color_table,
+        ["CDS", "repeat_region"],
+        default_colors,
+        separate_strands=False,
+        resolve_overlaps=True,
+        label_filtering=label_filtering,
+    )
+
+    assert [feature.feature_type for feature in result.foreground_features.values()] == [
+        "CDS"
+    ]
+    assert [feature.feature_type for feature in result.underlay_features] == [
+        "repeat_region"
+    ]
+    assert result.underlay_features[0].label_text == ""
+    assert result.underlay_features[0].feature_track_id == 0
+
+
+@pytest.mark.parametrize("rendering", ["rectangle", "arrow"])
+def test_explicit_repeat_foreground_rendering(rendering: str) -> None:
+    default_colors = load_default_colors("", "default")
+    color_table, default_colors = preprocess_color_tables(None, default_colors)
+    label_filtering = preprocess_label_filtering(
+        {"blacklist_keywords": [], "whitelist_df": None, "qualifier_priority_df": None}
+    )
+
+    result = create_feature_layers(
+        _build_test_record(),
+        color_table,
+        ["repeat_region"],
+        default_colors,
+        separate_strands=False,
+        resolve_overlaps=False,
+        label_filtering=label_filtering,
+        feature_shapes={"repeat_region": rendering},
+    )
+
+    assert not result.underlay_features
+    repeat = next(iter(result.foreground_features.values()))
+    assert repeat.feature_type == "repeat_region"
+    assert repeat.is_directional is (rendering == "arrow")
+
+
 def test_linear_feature_paths_change_with_directionality() -> None:
     generator = LinearFeaturePathGenerator(
         genome_length=1000,
@@ -173,12 +265,13 @@ def test_circular_feature_paths_change_with_directionality() -> None:
 
 
 def test_hmmtdna_origin_spanning_d_loop_arrow_renders_as_single_block() -> None:
-    record = load_gbks([str(Path("tests/test_inputs/HmmtDNA.gbk"))], "circular")[0]
+    record = load_gbks([str(Path("tests/test_inputs/HmmtDNA.gbk"))])[0]
     d_loop_feature = next(feature for feature in record.features if feature.type == "D-loop")
     d_loop_id = compute_feature_hash(d_loop_feature, record_id=record.id)
 
     canvas = assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "repeat_region", "D-loop"],
         feature_shapes={"D-loop": "arrow"},
         legend="none",
@@ -211,6 +304,7 @@ def test_linear_multipart_feature_paths_have_unique_dom_ids_and_shared_feature_i
 
     canvas = assemble_linear_diagram_from_records(
         [record],
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -271,6 +365,7 @@ def test_linear_multipart_features_with_shared_first_exon_get_distinct_feature_i
 
     canvas = assemble_linear_diagram_from_records(
         [record],
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["mRNA"],
         legend="none",
     )
@@ -306,6 +401,7 @@ def test_circular_multipart_feature_connector_shares_feature_id() -> None:
 
     canvas = assemble_circular_diagram_from_record(
         record,
+        cfg=apply_config_overrides(None, None),
         selected_features_set=["CDS"],
         legend="none",
     )
@@ -336,16 +432,21 @@ def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tm
     record = _build_test_record()
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(circular_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
-    monkeypatch.setattr(circular_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(circular_cli_module, "load_default_colors", lambda _path, _palette: None)
-    monkeypatch.setattr(circular_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
+            str(Path(output_dir or ".") / f"{output_prefix}.svg")
+        ],
+    )
 
     def fake_assemble(*_args, **kwargs):
-        captured["feature_shapes"] = kwargs.get("feature_shapes")
+        captured["feature_shapes"] = kwargs["options"].feature_shapes
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
-    monkeypatch.setattr(circular_cli_module, "assemble_circular_diagram_from_record", fake_assemble)
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
 
     circular_cli_module.circular_main(
         [
@@ -354,30 +455,40 @@ def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tm
             "--feature_shape",
             "CDS=rectangle",
             "--feature_shape",
-            "repeat_region=arrow",
+            "repeat_region=underlay",
             "--format",
             "svg",
             "-o",
             str(tmp_path / "out"),
         ]
     )
-    assert captured["feature_shapes"] == {"CDS": "rectangle", "repeat_region": "arrow"}
+    assert captured["feature_shapes"] == {
+        "CDS": "rectangle",
+        "repeat_region": "underlay",
+    }
 
 
 def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     record = _build_test_record()
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
 
-    def fake_assemble(*_args, **kwargs):
-        captured["feature_shapes"] = kwargs.get("feature_shapes")
-        return Drawing(filename=str(tmp_path / "dummy.svg"))
+    def fake_render_request(request, **_kwargs):
+        resolved = request_render_module.resolve_request(request)
+        captured["canonical_request"] = resolved
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
@@ -386,14 +497,17 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
             "--feature_shape",
             "CDS=rectangle",
             "--feature_shape",
-            "repeat_region=arrow",
+            "repeat_region=underlay",
             "--format",
             "svg",
             "-o",
             str(tmp_path / "out"),
         ]
     )
-    assert captured["feature_shapes"] == {"CDS": "rectangle", "repeat_region": "arrow"}
+    assert captured["canonical_request"].options.feature_shapes == {
+        "CDS": "rectangle",
+        "repeat_region": "underlay",
+    }
 
 
 @pytest.mark.parametrize(

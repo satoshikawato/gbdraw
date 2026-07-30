@@ -6,11 +6,24 @@ export const getLegendChildById = (parent, id) => {
   if (!parent) return null;
   for (const child of parent.children || []) {
     if (child.id === id) return child;
+    if (
+      id === 'pairwise_legend' &&
+      (
+        child.getAttribute?.('data-gbdraw-role') === 'comparison-legend' ||
+        /^pairwise_legend_(?:h|v)$/.test(String(child.id || ''))
+      )
+    ) {
+      return child;
+    }
   }
   return null;
 };
 
-const COMPARISON_LEGEND_SELECTOR = '#pairwise_legend, #conservation_identity_legend';
+export const PAIRWISE_LEGEND_SELECTOR =
+  '[data-gbdraw-role="comparison-legend"][data-gbdraw-orientation="h"], [data-gbdraw-role="comparison-legend"][data-gbdraw-orientation="v"], #pairwise_legend, #pairwise_legend_h, #pairwise_legend_v';
+
+export const COMPARISON_LEGEND_SELECTOR =
+  `[data-gbdraw-role="comparison-legend"], ${PAIRWISE_LEGEND_SELECTOR}, #conservation_identity_legend`;
 
 export const getComparisonLegendGroup = (parent) =>
   getLegendChildById(parent, 'pairwise_legend') ||

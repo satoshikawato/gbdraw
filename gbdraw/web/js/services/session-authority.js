@@ -15,6 +15,9 @@ export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   orthogroupState: 'artifact',
   losatCache: 'artifact',
   losatDerivedCache: 'artifact',
+  proteinIdentityManifest: 'artifact',
+  legacyArtifacts: 'artifact',
+  runMetadata: 'artifact',
   cliInvocation: 'provenance'
 });
 
@@ -26,7 +29,18 @@ const WEB_EDITOR_UI_FIELDS = Object.freeze([
   'featurePanelTab',
   'downloadDpi',
   'autoLabelReflow',
-  'paletteInstantPreviewEnabled'
+  'paletteInstantPreviewEnabled',
+  'layoutPreferences',
+  // Older editor payloads stored the same preference state in parallel fields.
+  'legend',
+  'circularLegendPosition',
+  'linearLegendPosition',
+  'circularPlotTitlePosition',
+  'linearPlotTitlePosition',
+  'circularSingleRecordLegendPosition',
+  'circularSingleRecordPlotTitlePosition',
+  'circularMultiRecordLegendPosition',
+  'circularMultiRecordPlotTitlePosition'
 ]);
 
 const ARTIFACT_UI_FIELDS = Object.freeze([
@@ -77,7 +91,10 @@ export const projectArtifactState = (sessionData) => ({
   editorState: sessionData?.editorState || {},
   orthogroupState: sessionData?.orthogroupState || {},
   losatCache: sessionData?.losatCache || {},
-  losatDerivedCache: sessionData?.losatDerivedCache || {}
+  losatDerivedCache: sessionData?.losatDerivedCache || {},
+  proteinIdentityManifest: sessionData?.proteinIdentityManifest || {},
+  legacyArtifacts: sessionData?.legacyArtifacts || {},
+  runMetadata: sessionData?.runMetadata || {}
 });
 
 export const projectDocumentMetadata = (sessionData) => ({
@@ -86,4 +103,3 @@ export const projectDocumentMetadata = (sessionData) => ({
   createdAt: sessionData?.createdAt,
   title: typeof sessionData?.title === 'string' ? sessionData.title : ''
 });
-

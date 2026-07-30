@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import hashlib
-
 from pandas import DataFrame
 from svgwrite.container import Group
 from svgwrite.path import Path
@@ -10,6 +8,7 @@ from svgwrite.masking import ClipPath
 
 from ....configurators import GcSkewConfigurator
 from ....svg.circular_tracks import generate_circle_path_desc, generate_circular_gc_skew_path_desc
+from ....svg.ids import stable_svg_id
 
 
 class SkewDrawer:
@@ -21,6 +20,7 @@ class SkewDrawer:
         self.skew_high_fill_color: str = skew_config.high_fill_color
         self.skew_low_fill_color: str = skew_config.low_fill_color
         self.skew_stroke_color: str = skew_config.stroke_color
+        self.skew_stroke_width: float = skew_config.stroke_width
         self.skew_fill_opacity: float = skew_config.fill_opacity
 
     def draw(
@@ -33,15 +33,23 @@ class SkewDrawer:
         norm_factor: float,
         dinucleotide: str,
         record_identifier: str | None = None,
+        group_identifier: str | None = None,
     ) -> Group:
         skew_desc: str = generate_circular_gc_skew_path_desc(
             radius, gc_df, record_len, track_width, norm_factor, dinucleotide
         )
         circle_desc: str = generate_circle_path_desc(radius, norm_factor)
-        clip_id_source = (
-            f"{record_identifier or ''}|{record_len}|{track_width:g}|{norm_factor:g}|{dinucleotide}|{skew_desc}"
+        clip_id = stable_svg_id(
+            "clipper_circle",
+            "circular-skew-clip",
+            group_identifier,
+            record_identifier,
+            record_len,
+            track_width,
+            norm_factor,
+            dinucleotide,
+            skew_desc,
         )
-        clip_id = f"clipper_circle_{hashlib.md5(clip_id_source.encode('utf-8')).hexdigest()[:12]}"
         circle_path: ClipPath = ClipPath(id=clip_id)
         circle_path.add(Path(d=circle_desc, fill="white", stroke="none"))
         skew_high: Path = Path(
@@ -60,6 +68,12 @@ class SkewDrawer:
             clip_rule="nonzero",
             fill_rule="evenodd",
         )
+        if (
+            self.skew_stroke_width > 0
+            or self.skew_stroke_color.strip().lower() != "none"
+        ):
+            for path in (skew_high, skew_low):
+                path["stroke-width"] = self.skew_stroke_width
         group.add(circle_path)
         group.add(skew_high)
         group.add(skew_low)

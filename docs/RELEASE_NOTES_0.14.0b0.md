@@ -5,8 +5,13 @@
 This beta introduces a small top-level Python interface for new library users.
 `draw_circular` and `draw_linear` return a first-party `Diagram`, mode-specific
 options replace the shared 71-field option bundle, and one Circular function now
-handles both single and multi-record input. Lower-level request, session, table,
-and rendering components remain available from `gbdraw.api` for integrations.
+handles both single and multi-record input. Typed request/session and table
+contracts remain available from `gbdraw.api`; obsolete low-level convenience
+re-exports have been removed.
+
+These notes record what changed in this release. For the currently supported
+persisted versions and migration boundaries, see
+[Session and request compatibility](./SESSION_COMPATIBILITY.md).
 
 ## New top-level Python interface
 
@@ -15,13 +20,175 @@ and rendering components remain available from `gbdraw.api` for integrations.
 - Pass `CircularOptions` or `LinearOptions`; wrong-mode fields are absent instead
   of being accepted and rejected later.
 - Pass one `SeqRecord` or a sequence to the same drawing function.
-- Use `CircularLayout` only for a multi-record grid.
+- Use `ComparisonRingOptions` and `ComparisonRingTrackOptions` for circular
+  BLAST or LOSAT similarity rings through `CircularOptions.comparison_rings`.
+  `CircularOptions.conservation` and the older `Conservation*` class names
+  remain compatibility aliases.
+- Use `CircularLayout` for explicit grid placement; a one-record 1×1 grid is
+  valid.
 - Call `Diagram.to_svg()`, `Diagram.to_bytes()`, or `Diagram.save(path)` without
   handling `svgwrite.Drawing` directly.
 - `Diagram.save(path)` writes exactly the requested path. It does not create an
   additional base SVG when saving another format.
 
 See the [Python API guide](./PYTHON_API.md) for executable examples.
+
+## Architecture/API Phase 0–2 and beta cleanup
+
+- Fresh Python, CLI, and Web requests now resolve one versioned mode profile.
+  Circular defaults to comparison thresholds `1e-5` / `50` / `70` / `0` and
+  visible GC content/skew; Linear defaults to `1e-2` / `50` / `0` / `0` and
+  hidden GC content/skew. Both modes include `misc_RNA`. Linear uses
+  `lightgray` for the default axis and `dimgray` when a ruler is on the axis.
+- Comparison thresholds are validated eagerly on every current entry point:
+  e-value and bitscore must be finite and non-negative, identity must be finite
+  and within `0..100`, and alignment length must be a non-negative integer.
+  Identity `100` is valid.
+- Typed requests now use `CircularDiagramOptions` and `LinearDiagramOptions`.
+  Their mode-specific nested contracts are `CircularRequestTrackOptions`,
+  `LinearRequestTrackOptions`, `CircularOutputOptions`, and `LinearOutputOptions`.
+  The former typed track names remain compatibility aliases and are separate from
+  the package-root beginner option classes with the same short names.
+  `CircularDiagramRequest` explicitly represents `single` and `grid`;
+  `CircularBatchRequest` represents `batch` and carries one output per record.
+  `CircularRequestPlan`, `CircularBatchRequestPlan`, and `LinearRequestPlan`
+  normalize builder selection. Root API, fresh CLI/Web generation, current
+  canonical replay, and legacy internal replay route through those planners.
+  A one-record `CircularLayout` produces a valid 1×1 grid.
+- Emitted SVG IDs are valid, unique, and deterministic for the same input,
+  configuration, and gbdraw version. First-party interactivity uses
+  `data-gbdraw-*` roles, record indexes, renderers, and orientations instead of
+  depending on undocumented internal ID spelling.
+- GC content and GC skew now apply `stroke_width` consistently in Circular and
+  Linear rendering. Width `0` produces no visible outline; a positive width uses
+  the configured stroke color, and `stroke_color="none"` remains invisible.
+- The canonical CLI switches are now `--gc` / `--no-gc`, `--skew` /
+  `--no-skew`, and repeatable `--depth_track`. The old executable
+  `--show_gc`, `--show_skew`, `--suppress_gc`, `--suppress_skew`, `--depth`,
+  and `--show_depth` spellings are removed. Supported saved sessions that
+  contain those tokens are migrated by the reader before replay.
+- Fresh CLI options and Python request fields also reject the retired
+  `depth_tick_interval`, `feature_table`, and `collinear_max_gene_gap` names,
+  Circular `multi_record_size_mode=sqrt`, Linear
+  `label_placement=on_feature`, and Linear
+  `track_layout=spreadout|tuckin`. Use `depth_large_tick_interval`,
+  `feature_visibility_table`, `collinear_max_unit_gap`, Circular `auto`,
+  Linear `above_feature`, and Linear `above|below`, respectively. CLI
+  spellings add the leading `--`.
+- Label configuration now uses schema-derived, mode-specific leaves. Circular
+  uses `labels.circular.scope` (`none|outer|both`) and
+  `labels.circular.placement` (`horizontal|radial`). Linear uses
+  `labels.linear.scope` (`none|all|first|orthogroup_top`),
+  `labels.linear.placement` (`auto|above_feature`), and
+  `labels.linear.rotation`. The shared `labels.rendering`
+  (`auto|embedded_only|external_only`) setting remains the policy for embedding
+  labels in feature bodies or routing them externally.
+- Fresh configuration and override inputs reject the retired flat
+  `show_labels` / `allow_inner_labels` aliases, `canvas.show_labels`,
+  `canvas.circular.show_labels`, `canvas.linear.show_labels`, and
+  `canvas.circular.allow_inner_labels`. Supported persisted-data readers
+  migrate them to the canonical `labels.*` leaves; current writers do not emit
+  the old forms.
+- Fresh Circular slot specifications reject `spacing`, `strict`, `compress`,
+  and `reserve`. Use `inner_gap_px` and `outer_gap_px`; reservation and
+  compression are derived from current slot geometry and `side`.
+- Those retired forms remain readable only through supported persisted-session
+  and canonical request schema 1 and 2 migration. The active
+  `--annotation-table` alias for `--annotation_table` and
+  `--gc_content_tick_interval` alias for
+  `--gc_content_large_tick_interval` are unchanged and are not removals.
+- The private `__gbdraw_legacy_spacing` transport is confined to canonical
+  request schema 1 and 2 readers and is never emitted by the current schema 5
+  writer. Pixel spacing migrates to explicit inner and outer pixel gaps.
+  Factor-based spacing can still be replayed, but it cannot be re-saved
+  losslessly by the current schema 5 writer; replace it with explicit
+  `inner_gap_px` and `outer_gap_px` first.
+- `gbdraw.api.canvas`, `gbdraw.api.configurators`, and
+  `gbdraw.circular_diagram_components` were thin compatibility modules and have
+  been removed. `gbdraw.api` no longer re-exports
+  `DEFAULT_SELECTED_FEATURES`, the `assemble_*` / `build_*` helpers, or
+  `DiagramOptions`, `TrackOptions`, and `OutputOptions`. The obsolete
+  `plot_circular_diagram` /
+  `plot_linear_diagram` save wrappers and package-level `gbdraw.render`
+  aliases were removed; use the root drawing facade, `render_to_bytes`, and
+  `save_figure_to`. The CLI-only helpers remain internal to
+  `gbdraw.render.export`. Typed request/render/session contracts,
+  mode-specific diagram/track/output options, and table APIs remain supported.
+- Unused argument/session helpers, the old `suppress_gc_content_and_skew`
+  config helper, the CairoSVG availability proxy, the no-op
+  `labels.circular_horizontal` adapter, the unreachable `-i` / `--input`
+  warning path, inert GC normalization/height config keys, and zero-caller
+  layout/label/collinearity helpers were removed. Supported persisted
+  config/session readers still tolerate the recognized old fields; fresh
+  executable APIs no longer expose them.
+- `OutputOptions.output_prefix` was duplicate state and has been removed.
+  `RenderOutputRequest.output_prefix` is the sole output-prefix owner for typed
+  request and session execution, and the root drawing facade is output-neutral.
+  Assembly remains output-neutral.
+- Explicit output prefixes preserve dots. One-record Circular batch output uses
+  the prefix unchanged; multiple records use `_1`, `_2`, ... suffixes. Without
+  a prefix, each record ID is used and duplicate implicit names receive the
+  first available `_2`, `_3`, ... suffix. Circular grid output uses the first
+  record ID by default and preserves an explicit prefix unchanged. Batch
+  sessions preserve the explicit grouping and every resolved output. A record
+  ID used as an implicit output name must be one filename component; path-like
+  IDs, IDs containing ASCII control characters, and Windows-reserved device,
+  stream, or wildcard names require an explicit output prefix.
+- Diagram, multi-format, batch, and sidecar targets are preflighted as complete
+  sets before rendering. Existing regular files require current overwrite
+  permission; directories, special files, dangling symlinks, invalid parents,
+  and targets that appear after preflight fail closed. Package-root
+  `Diagram.save()` and strict typed exports create final files exclusively, and
+  session sidecars use a same-directory staged commit. Multi-format generation
+  remains sequential rather than transactional, so completed formats survive a
+  later conversion failure.
+- Current session version 39 uses canonical request schema 5 and persists
+  explicit `single`, `grid`, or `batch` grouping. Schema 5 stores one output
+  object for a single diagram or grid and an output array for Circular batch.
+  Record loading is mode-neutral; planners own topology warnings and mode,
+  comparison, and cardinality policy.
+
+Active and public runtime collinearity configuration uses
+`LosslessCollinearityParameters`; canonical request schemas 1 and 2 privately
+migrate legacy `standard` parameter payloads while preserving their effective
+fields. Current schema 5 accepts only the lossless form.
+
+Phase 2 completes the internal state/planner consolidation:
+
+- Frozen `CircularRenderProfile` and `LinearRenderProfile` values resolve the
+  active typed configuration once before canvas and drawing-configurator
+  construction.
+- `CircularRecordRenderContext` carries resolved radial layout state.
+  `LinearRecordRenderContext` carries the Linear profile, resolved track layout,
+  and Depth availability; its active feature-track layout, strandedness, and
+  axis-ruler state are derived read-only values.
+- Record placement, annotation slot planning, and common track-slot parsing now
+  have one shared owner. Reusable Circular radial contracts live in
+  `gbdraw.layout`, and feature render groups require prepared
+  `FeatureBuildResult` layers.
+- The temporary shared `DiagramOptions`, `TrackOptions`, and `OutputOptions`
+  implementation bridge is removed. Builders accept only the mode-specific
+  typed option contracts.
+
+## Compact LOSATP runtime handles
+
+- Current session version 39 and canonical `renderRequest` schema 5 store
+  compact runtime handles. Public typed conversion is available for canonical
+  session versions 31–33 and 39; versions 27–30 remain CLI replay inputs.
+- Generated protein FASTA, raw LOSATP QUERY/SUBJECT fields, protein maps, and derived comparison references now use deterministic session-global handles with the form `h_[a-z2-7]{26}`. The handles bind a record instance to the complete CDS feature identity without repeating long feature hashes or readable aliases in every hit row. Upload filenames, modification times, session resource names, display aliases, and reopen time do not determine the handle or raw-cache identity.
+- Current protein raw cache entries use schema 4, derived comparison payloads use schema 3, and the protein identity manifest uses schema 2. The manifest remains the authority for complete feature identity and display metadata and separates runtime binding from display binding. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
+- **Save Raw LOSAT TSV** hydrates generated protein results at download time: it resolves every internal handle through the manifest and replaces only QUERY and SUBJECT with readable, percent-encoded protein or feature aliases. Duplicate aliases receive deterministic short ordinals. Row order, columns 3–12, numeric text, comments, and line endings are preserved; an unresolved or wrong-binding handle aborts the download instead of exposing an internal ID. User-uploaded comparison TSV is never rewritten.
+- Versions 27–33 retain their existing schema-2 protein candidate path and derived schema-1 evidence. Save-before-Generate preserves pending candidates, verified results are copied to raw schema 4, and an unverifiable candidate becomes only a pair-local miss.
+
+## Feature underlay rendering
+
+- Feature rendering now accepts `arrow`, `rectangle`, or `underlay` through `--feature_shape`, Python `feature_shapes`, and the Web feature editor.
+- New configurations render `repeat_region` as an underlay: the interval covers the full feature band behind foreground glyphs and is excluded from overlap lanes and feature labels. Use `repeat_region=rectangle` to restore the previous appearance.
+- Underlays are generic to any feature type and retain resolved colors, feature legends, interactive metadata, search/edit behavior, and protein-comparison eligibility. Rendering assignments do not change feature visibility.
+- Automatic feature underlays are private render-time highlights, not saved region annotations. Custom track stacks require exactly one enabled feature slot when a visible underlay exists.
+- Current session version 39/schema 5 records the new default. Supported older
+  sessions and schema 1/2 requests with no repeat assignment migrate to
+  `repeat_region=rectangle` so visual replay remains stable.
 
 ## Python/Web session version 33
 
@@ -107,6 +274,13 @@ remains a minimum corridor; record spacing expands around taller occupancy while
 keeping links outside the track stacks. Geometry metadata schema v2 reports
 record-specific paint, reserve, comparison-exclusion, and canvas bands.
 
+Row spacing now composes body, comparison, and definition constraints with an
+X-aware `CollisionBand` solver. It takes the maximum eligible clearance instead
+of adding independent reservations. Comparison clearance applies only at row
+boundaries crossed by a comparison, and non-overlapping left-column definitions
+do not enlarge the plot corridor. Single- and multi-record rows use the same
+constraint policy.
+
 In the web app, the Custom Track Slots caret controls only whether the editor is
 open. **Use custom stack** controls rendering, disabling and re-enabling it
 preserves the stack, and **Reset** is the only action that rebuilds the stack
@@ -170,26 +344,25 @@ The CLI retains its warning-and-skip behavior when an optional binary converter 
 unavailable. The strict contract applies to the explicit Python library helper
 `save_figure_to`.
 
-### High-level builders reject options for the wrong mode
+Direct imports of `gbdraw.render.export.save_figure` remain callable for
+compatibility, but the function now emits `DeprecationWarning`. It is scheduled
+for removal in gbdraw 0.16. Use `save_figure_to` for file output or
+`render_to_bytes` for in-memory output.
 
-Previously, a non-default Circular-only option passed to `build_linear_diagram`,
-or a Linear-only option passed to either Circular high-level builder, could be
-silently ignored. The three `build_*` helpers now raise `ValidationError` and name
-the incompatible fields. Move the option to the matching builder or leave it at
-its default when sharing an option bundle.
+### Typed execution rejects options for the wrong mode
 
-`build_circular_diagram` also rejects ambiguous or lossy legacy depth inputs. Pass
-one of `depth_table`, `depth_file`, a one-element `depth_tables`, or a one-element
-`depth_files`; do not combine singular/plural or table/file forms. The low-level
-mode-specific assembler signatures are unchanged.
+Previously, a non-default option for the other drawing mode in the shared
+`DiagramOptions` bundle could be silently ignored. Typed requests now use
+`CircularDiagramOptions` or `LinearDiagramOptions`, so the incompatible fields
+are absent from the request contract. Root `CircularOptions` and `LinearOptions`
+also avoid those fields at construction.
 
-## Added lower-level integration capabilities
+## Added integration capabilities
 
 The following remain available from `gbdraw.api` for CLI, web, session, and custom
 integration work:
 
-- Circular multi-record layout: `CircularMultiRecordOptions` and
-  `build_circular_multi_diagram`.
+- Circular multi-record typed layout: `CircularMultiRecordOptions`.
 - Interactive SVG metadata and enrichment: `InteractiveSvgContext`,
   `build_interactive_svg_context`, and `enrich_svg`.
 - Interactive byte rendering through
@@ -201,18 +374,19 @@ integration work:
 - Circular track tables: `CircularTrackTable` and `read_circular_track_table`.
 - Label tables: `read_label_whitelist_table`,
   `read_qualifier_priority_table`, and `read_label_override_table`.
-- `DiagramOptions` fields for the DataFrame and file forms of label whitelist,
-  qualifier-priority, and label-override inputs.
+- `CircularDiagramOptions` and `LinearDiagramOptions` fields for the DataFrame
+  and file forms of label whitelist, qualifier-priority, and label-override
+  inputs.
 - Region annotation models, TSV loading, coordinate/feature resolution, Circular and Linear annotation track rendering, and interactive SVG annotation metadata.
 
 New drawing code should prefer the top-level interface described above.
 
-## Lower-level compatibility
+## Lower-level contract
 
-- Existing `assemble_circular_diagram_from_record`,
-  `assemble_circular_diagram_from_records`, and
-  `assemble_linear_diagram_from_records` import paths remain available.
-- Existing defaults, including `collinearity_anchor_mode="rbh"`, remain unchanged.
+- Low-level assemblers and builders remain implementation modules, but are no
+  longer re-exported from `gbdraw.api`. New integrations should use the root
+  drawing facade or typed request/render contracts.
+- The existing `collinearity_anchor_mode="rbh"` default remains unchanged.
 - For each label-table input, pass either a DataFrame or a file path. Passing both
   forms raises `ValidationError` instead of choosing one silently.
 - Catch `GbdrawError` for all expected gbdraw library failures, or catch
@@ -220,16 +394,24 @@ New drawing code should prefer the top-level interface described above.
 
 ## Session API boundary
 
-The public session bridge accepts version 31, 32, and 33 canonical documents.
+The public session bridge accepts canonical documents from versions 31–33 and
+39.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
-Versions 27 through 30 can be regenerated with `gbdraw circular --session` or
+Current writers emit version 39 and `renderRequest` schema 5. Version 39 stores
+Circular-single, Circular-multi, and Linear legend/title preferences in one
+canonical `ui.layoutPreferences` tree; supported older fields migrate on load.
+Schema 5 persists
+explicit Circular `single`, `grid`, or `batch` grouping; batch output is an
+array with one resolved entry per record, while other requests use one output
+object. `renderRequest.output.prefix` is the sole output-prefix owner; schema 1
+and 2 readers ignore the legacy nested prefix. Versions 27 through 30 can be
+regenerated with `gbdraw circular --session` or
 `gbdraw linear --session`. Public typed conversion rejects them with
 `SessionVersionError` instead of reconstructing a request from `cliInvocation` or
-GUI state. The
-[session API ADR](./ADR_PYTHON_SESSION_API.md) records the version 31 boundary and
-the temporary-resource lifetime contract.
+GUI state. Paths decoded by `materialize_session` remain valid only inside the
+active materialization context.
 
 [Home](./DOCS.md) | [Python API](./PYTHON_API.md) | [Export](./EXPORT.md)

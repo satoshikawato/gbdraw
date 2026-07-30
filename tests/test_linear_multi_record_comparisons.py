@@ -11,19 +11,24 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import (
-    DiagramOptions,
     InMemoryRecordSource,
     LinearComparison,
+    LinearDiagramOptions,
     LinearDiagramRequest,
     LinearMultiRecordOptions,
     RecordInput,
-    assemble_linear_diagram_from_records,
     read_comparisons_table,
 )
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import merge_linear_comparisons, validate_linear_comparison_topology
-from gbdraw.session_request_codec import decode_canonical_request, encode_canonical_request
+from gbdraw.session_request_codec import (
+    CANONICAL_REQUEST_SCHEMA,
+    decode_canonical_request,
+    encode_canonical_request,
+)
 
 
 def _comparison(query: int, subject: int) -> LinearComparison:
@@ -61,12 +66,19 @@ def test_multiple_sources_for_one_pair_are_merged() -> None:
 def test_explicit_comparison_metadata_uses_selected_endpoints() -> None:
     canvas = assemble_linear_diagram_from_records(
         _records(),
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+        ),
         linear_comparisons=[_comparison(1, 2)],
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
         ),
         legend="none",
-        config_overrides={"show_labels": False, "show_gc": False, "show_skew": False},
     )
     svg = canvas.tostring()
     assert 'data-query-record-index="1"' in svg
@@ -86,19 +98,22 @@ def test_comparison_ribbons_attach_to_painted_occupancy_without_extra_padding() 
         )
     canvas = assemble_linear_diagram_from_records(
         records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "canvas.strandedness": True,
+                "canvas.linear.track_layout": "above",
+                "canvas.linear.ruler_on_axis": False,
+            },
+        ),
         linear_comparisons=[_comparison(0, 2)],
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2"),
         ),
         legend="none",
-        config_overrides={
-            "show_labels": False,
-            "show_gc": False,
-            "show_skew": False,
-            "strandedness": True,
-            "linear_track_layout": "above",
-            "linear_ruler_on_axis": False,
-        },
     )
     svg = canvas.tostring()
     root = ET.fromstring(svg)
@@ -127,8 +142,16 @@ def test_comparison_ribbons_attach_to_painted_occupancy_without_extra_padding() 
             )
         ]
 
-    top_record = groups["r1_record_1"]
-    bottom_record = groups["r3_record_3"]
+    def record_group(record_id: str, record_index: int) -> ET.Element:
+        return next(
+            group
+            for group in groups.values()
+            if group.attrib.get("data-gbdraw-record-id") == record_id
+            and group.attrib.get("data-gbdraw-record-index") == str(record_index)
+        )
+
+    top_record = record_group("r1", 0)
+    bottom_record = record_group("r3", 2)
     comparison = groups["comparison1"]
     top_record_axis = translate_y(top_record)
     top_record_bottom = top_record_axis + max(path_y_values(top_record))
@@ -157,9 +180,16 @@ def test_comparison_ribbons_attach_to_painted_occupancy_without_extra_padding() 
 def test_reversed_explicit_endpoints_work_with_legacy_one_record_rows() -> None:
     canvas = assemble_linear_diagram_from_records(
         _records()[:2],
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+        ),
         linear_comparisons=[_comparison(1, 0)],
         legend="none",
-        config_overrides={"show_labels": False, "show_gc": False, "show_skew": False},
     )
     svg = canvas.tostring()
     assert 'data-query-record-index="1"' in svg
@@ -181,13 +211,20 @@ def test_selected_generated_protein_pairs_keep_explicit_endpoints(monkeypatch) -
     )
     canvas = assemble_linear_diagram_from_records(
         _records(),
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+        ),
         protein_blastp_mode="pairwise",
         protein_comparison_pairs=((0, 2), (1, 3)),
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
         ),
         legend="none",
-        config_overrides={"show_labels": False, "show_gc": False, "show_skew": False},
     )
     assert calls == [("r1", "r3"), ("r2", "r4")]
     svg = canvas.tostring()
@@ -220,13 +257,20 @@ def test_collinear_all_scope_renders_every_cross_row_pair(monkeypatch) -> None:
     )
     canvas = assemble_linear_diagram_from_records(
         _records(),
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+        ),
         protein_blastp_mode="collinear",
         collinearity_search_scope="all",
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
         ),
         legend="none",
-        config_overrides={"show_labels": False, "show_gc": False, "show_skew": False},
     )
     assert captured_pairs == ((0, 2), (0, 3), (1, 2), (1, 3))
     svg = canvas.tostring()
@@ -250,7 +294,7 @@ def test_comparisons_table_resolves_relative_blast_path(tmp_path) -> None:
     assert table.path_dependencies[0].column == "blast"
 
 
-def test_schema_two_preserves_record_keys_layout_and_explicit_endpoints(tmp_path) -> None:
+def test_current_schema_preserves_record_keys_layout_and_explicit_endpoints(tmp_path) -> None:
     request = LinearDiagramRequest(
         records=tuple(
             RecordInput(
@@ -259,14 +303,16 @@ def test_schema_two_preserves_record_keys_layout_and_explicit_endpoints(tmp_path
             )
             for index, record in enumerate(_records(), start=1)
         ),
-        options=DiagramOptions(linear_comparisons=(_comparison(1, 2),)),
+        options=LinearDiagramOptions(
+            linear_comparisons=(_comparison(1, 2),)
+        ),
         layout=LinearMultiRecordOptions(
             record_gap_px=30,
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
         ),
     )
     encoded = encode_canonical_request(request)
-    assert encoded.payload["schema"] == 2
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["records"][0]["recordKey"] == "stable-1"
     assert encoded.payload["comparisons"][0]["queryRecordIndex"] == 1
 

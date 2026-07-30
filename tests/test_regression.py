@@ -120,6 +120,19 @@ class TestBasicFunctionality:
         assert result.returncode == 0
         assert "linear" in result.stdout.lower() or "gbk" in result.stdout.lower()
 
+    def test_unknown_command_lists_every_surface(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "gbdraw.cli", "unknown"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert "circular, linear, or gui" in result.stderr
+        assert "--help" in result.stderr
+
 
 # ============================================================================
 # Circular Diagram Regression Tests
@@ -274,7 +287,7 @@ class TestCircularRegression:
             [gbk_file],
             "MjeNMV_no_gc",
             temp_output_dir,
-            extra_args=["--suppress_gc", "--legend", "none"],
+            extra_args=["--no-gc", "--legend", "none"],
         )
         assert returncode == 0
 
@@ -284,7 +297,7 @@ class TestCircularRegression:
             [gbk_file],
             "MjeNMV_no_gc_skew",
             temp_output_dir,
-            extra_args=["--suppress_gc", "--suppress_skew", "--legend", "none"],
+            extra_args=["--no-gc", "--no-skew", "--legend", "none"],
         )
         assert returncode == 0
 
@@ -389,7 +402,7 @@ class TestLinearRegression:
             [gbk_file],
             "MjeNMV_gc_skew_test",
             temp_output_dir,
-            extra_args=["--show_gc", "--show_skew", "--legend", "none"],
+            extra_args=["--gc", "--skew", "--legend", "none"],
         )
 
         assert returncode == 0, f"gbdraw failed: {output}"

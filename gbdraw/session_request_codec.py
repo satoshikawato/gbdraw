@@ -24,7 +24,6 @@ from pandas import DataFrame, read_csv  # type: ignore[reportMissingImports]
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityAnchor,
     CollinearityBlock,
-    CollinearityParameters,
     CollinearityResult,
     LosslessCollinearityParameters,
 )
@@ -42,6 +41,11 @@ from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
+from gbdraw.tracks.circular import (
+    _InternalCircularTrackSlot,
+    _internal_circular_track_slot,
+    parse_circular_track_slot,
+)
 from gbdraw.annotations import (
     AnnotationOptions,
     AnnotationSet,
@@ -54,34 +58,302 @@ from gbdraw.annotations import (
 )
 
 from .api.options import (
+    CircularDiagramOptions,
     CircularMultiRecordOptions,
+    CircularOutputOptions,
+    CircularRequestTrackOptions,
     ColorOptions,
-    DiagramOptions,
+    DepthTrackInput,
+    LinearDiagramOptions,
     LinearMultiRecordOptions,
-    OutputOptions,
-    TrackOptions,
+    LinearOutputOptions,
+    LinearRequestTrackOptions,
 )
 from .api.requests import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     DiagramRequest,
     GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCardinality,
+    RecordCollectionOptions,
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 2
+CANONICAL_REQUEST_SCHEMA = 5
+SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, CANONICAL_REQUEST_SCHEMA})
 UNKNOWN_FIELD_POLICY = "reject"
+
+
+@dataclass(frozen=True)
+class _LegacyStandardCollinearityPayload:
+    """Reader-only representation of persisted ``kind=standard`` parameters."""
+
+    min_anchors: int
+    max_gene_gap: int
+    block_merge_gap: int
+    singleton_merge_gap: int
+    max_diagonal_drift: int
+    max_conflicts_in_merge_gap: int
+    max_paralog_links_per_orthogroup: int
+    gap_penalty: float
+    nearby_duplicate_window: int
+    score_mode: Literal["constant", "bitscore"]
+    constant_anchor_score: float
+    min_block_score: float | None
+    block_evalue: float | None
+
+    def validate(self) -> None:
+        if self.min_anchors <= 0:
+            raise ValidationError("collinear_min_anchors must be > 0")
+        if self.max_gene_gap < 0:
+            raise ValidationError("collinear_max_gene_gap must be >= 0")
+        if self.block_merge_gap < 0:
+            raise ValidationError("collinear_block_merge_gap must be >= 0")
+        if self.singleton_merge_gap < 0:
+            raise ValidationError("collinear_singleton_merge_gap must be >= 0")
+        if self.max_diagonal_drift < 0:
+            raise ValidationError("collinear_max_diagonal_drift must be >= 0")
+        if self.max_conflicts_in_merge_gap < 0:
+            raise ValidationError(
+                "collinear_max_conflicts_in_merge_gap must be >= 0"
+            )
+        if self.max_paralog_links_per_orthogroup <= 0:
+            raise ValidationError(
+                "collinear_max_paralog_links_per_orthogroup must be > 0"
+            )
+        if self.gap_penalty < 0:
+            raise ValidationError("collinear_gap_penalty must be >= 0")
+        if self.nearby_duplicate_window < 0:
+            raise ValidationError("collinear_nearby_duplicate_window must be >= 0")
+        if str(self.score_mode) not in {"constant", "bitscore"}:
+            raise ValidationError(
+                "collinear_score_mode must be one of: constant, bitscore"
+            )
+        if self.constant_anchor_score <= 0:
+            raise ValidationError("collinear_constant_anchor_score must be > 0")
+        if self.block_evalue is not None:
+            block_evalue = float(self.block_evalue)
+            if not math.isfinite(block_evalue) or block_evalue < 0:
+                raise ValidationError(
+                    "collinear_block_evalue must be a finite value >= 0 or None"
+                )
+
+    def to_lossless(self) -> LosslessCollinearityParameters:
+        return LosslessCollinearityParameters(
+            min_anchors=self.min_anchors,
+            max_unit_gap=self.max_gene_gap,
+            max_diagonal_drift=self.max_diagonal_drift,
+            max_conflicts=self.max_conflicts_in_merge_gap,
+            merge_orientation="either",
+        )
+
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _TOP_LEVEL_FIELDS = frozenset(
     {"schema", "mode", "records", "diagramOptions", "layout", "comparisons", "output"}
 )
-_DEFAULT_OPTIONS = DiagramOptions()
+_TOP_LEVEL_FIELDS_V5 = _TOP_LEVEL_FIELDS | {"grouping"}
+_DEFAULT_CIRCULAR_OPTIONS = CircularDiagramOptions()
+_DEFAULT_LINEAR_OPTIONS = LinearDiagramOptions()
+_SHARED_OPTION_WRONG_MODE_DEFAULTS = {
+    "circular": {
+        "depth_track_heights": None,
+        "pairwise_match_style": "ribbon",
+    },
+    "linear": {
+        "conservation_blast_files": None,
+        "conservation_fasta_files": None,
+        "conservation_dataframes": None,
+        "conservation_reference": "auto",
+        "conservation_labels": None,
+        "conservation_colors": None,
+        "conservation_ring_width": None,
+        "conservation_ring_gap": None,
+        "keep_full_definition_with_plot_title": False,
+        "species": None,
+        "strain": None,
+    },
+}
+_LEGACY_SPARSE_COMPARISON_DEFAULTS = {
+    "evalue": 1e-5,
+    "bitscore": 50.0,
+    "identity": 70.0,
+    "alignment_length": 0,
+}
+_LEGACY_SPARSE_FEATURE_TYPES = (
+    "CDS",
+    "rRNA",
+    "tRNA",
+    "tmRNA",
+    "ncRNA",
+    "misc_RNA",
+    "repeat_region",
+)
+_LEGACY_SPARSE_CONFIG_OVERRIDES = {
+    "circular": {
+        "canvas.show_gc": True,
+        "canvas.show_skew": True,
+    },
+    "linear": {
+        "canvas.show_gc": True,
+        "canvas.show_skew": True,
+        "objects.axis.linear.stroke_color": "gray",
+    },
+}
+_LEGACY_CONFIG_OVERRIDE_KEYS = {
+    "depth_tick_interval": "depth_large_tick_interval",
+}
+_LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES = {
+    "label_placement": {
+        "on_feature": "above_feature",
+    },
+    "linear_track_layout": {
+        "spreadout": "above",
+        "tuckin": "below",
+    },
+}
+_LEGACY_FLAT_CONFIG_OVERRIDE_PATHS = {
+    "block_stroke_width": (
+        "objects.features.block_stroke_width.short",
+        "objects.features.block_stroke_width.long",
+    ),
+    "block_stroke_color": ("objects.features.block_stroke_color",),
+    "circular_axis_stroke_color": ("objects.axis.circular.stroke_color",),
+    "circular_axis_stroke_width": (
+        "objects.axis.circular.stroke_width.short",
+        "objects.axis.circular.stroke_width.long",
+    ),
+    "linear_axis_stroke_color": ("objects.axis.linear.stroke_color",),
+    "linear_axis_stroke_width": (
+        "objects.axis.linear.stroke_width.short",
+        "objects.axis.linear.stroke_width.long",
+    ),
+    "line_stroke_color": ("objects.features.line_stroke_color",),
+    "line_stroke_width": (
+        "objects.features.line_stroke_width.short",
+        "objects.features.line_stroke_width.long",
+    ),
+    "gc_stroke_color": ("objects.gc_content.stroke_color",),
+    "gc_content_mode": ("objects.gc_content.mode",),
+    "gc_content_min_percent": ("objects.gc_content.min_percent",),
+    "gc_content_max_percent": ("objects.gc_content.max_percent",),
+    "gc_content_show_axis": ("objects.gc_content.show_axis",),
+    "gc_content_show_ticks": ("objects.gc_content.show_ticks",),
+    "gc_content_tick_interval": ("objects.gc_content.large_tick_interval",),
+    "gc_content_large_tick_interval": ("objects.gc_content.large_tick_interval",),
+    "gc_content_small_tick_interval": ("objects.gc_content.small_tick_interval",),
+    "gc_content_tick_font_size": ("objects.gc_content.tick_font_size",),
+    "gc_content_percent_background_color": (
+        "objects.gc_content.percent_background_color",
+    ),
+    "gc_content_percent_background_opacity": (
+        "objects.gc_content.percent_background_opacity",
+    ),
+    "gc_content_percent_border_color": (
+        "objects.gc_content.percent_border_color",
+    ),
+    "gc_content_percent_border_width": (
+        "objects.gc_content.percent_border_width",
+    ),
+    "show_gc": ("canvas.show_gc",),
+    "show_skew": ("canvas.show_skew",),
+    "show_depth": ("canvas.show_depth",),
+    "depth_color": ("objects.depth.fill_color",),
+    "depth_height": ("canvas.linear.depth_height",),
+    "depth_min": ("objects.depth.min_depth",),
+    "depth_max": ("objects.depth.max_depth",),
+    "depth_normalize": ("objects.depth.normalize",),
+    "depth_show_axis": ("objects.depth.show_axis",),
+    "depth_show_ticks": ("objects.depth.show_ticks",),
+    "depth_large_tick_interval": ("objects.depth.large_tick_interval",),
+    "depth_small_tick_interval": ("objects.depth.small_tick_interval",),
+    "depth_tick_font_size": ("objects.depth.tick_font_size",),
+    "depth_share_axis": ("objects.depth.share_axis",),
+    "align_center": ("canvas.linear.align_center",),
+    "keep_definition_left_aligned": (
+        "canvas.linear.keep_definition_left_aligned",
+    ),
+    "linear_track_layout": ("canvas.linear.track_layout",),
+    "linear_track_axis_gap": ("canvas.linear.track_axis_gap",),
+    "linear_ruler_on_axis": ("canvas.linear.ruler_on_axis",),
+    "track_type": ("canvas.circular.track_type",),
+    "strandedness": ("canvas.strandedness",),
+    "resolve_overlaps": ("canvas.resolve_overlaps",),
+    "label_radius_offset": ("labels.radius_factor",),
+    "label_blacklist": ("labels.filtering.blacklist_keywords",),
+    "outer_label_x_radius_offset": (
+        "labels.unified_adjustment.outer_labels.x_radius_offset",
+    ),
+    "outer_label_y_radius_offset": (
+        "labels.unified_adjustment.outer_labels.y_radius_offset",
+    ),
+    "inner_label_x_radius_offset": (
+        "labels.unified_adjustment.inner_labels.x_radius_offset",
+    ),
+    "inner_label_y_radius_offset": (
+        "labels.unified_adjustment.inner_labels.y_radius_offset",
+    ),
+    "comparison_height": ("canvas.linear.comparison_height",),
+    "font_family": ("objects.text.font_family",),
+    "default_cds_height": (
+        "canvas.linear.default_cds_height.short",
+        "canvas.linear.default_cds_height.long",
+    ),
+    "gc_height": ("canvas.linear.default_gc_height",),
+    "scale_style": ("objects.scale.style",),
+    "scale_stroke_color": ("objects.scale.stroke_color",),
+    "scale_label_color": ("objects.scale.label_color",),
+    "scale_stroke_width": ("objects.scale.stroke_width",),
+    "scale_font_size": (
+        "objects.scale.font_size.short",
+        "objects.scale.font_size.long",
+    ),
+    "ruler_label_font_size": (
+        "objects.scale.ruler_label_font_size.short",
+        "objects.scale.ruler_label_font_size.long",
+    ),
+    "scale_interval": ("objects.scale.interval",),
+    "tick_label_font_size": ("objects.ticks.tick_labels.font_size",),
+    "pairwise_match_style": ("objects.blast_match.style",),
+    "legend_box_size": (
+        "objects.legends.color_rect_size.short",
+        "objects.legends.color_rect_size.long",
+    ),
+    "legend_font_size": (
+        "objects.legends.font_size.short",
+        "objects.legends.font_size.long",
+    ),
+    "circular_label_spacing": ("labels.spacing.circular",),
+    "circular_label_placement": ("labels.circular.placement",),
+    "linear_label_spacing": ("labels.spacing.linear",),
+    "label_rendering": ("labels.rendering",),
+    "label_placement": ("labels.linear.placement",),
+    "label_rotation": ("labels.linear.rotation",),
+    "linear_definition_font_size": (
+        "objects.definition.linear.font_size.short",
+        "objects.definition.linear.font_size.long",
+    ),
+    "linear_definition_show_replicon": (
+        "objects.definition.linear.show_replicon",
+    ),
+    "linear_definition_show_accession": (
+        "objects.definition.linear.show_accession",
+    ),
+    "linear_definition_show_length": ("objects.definition.linear.show_length",),
+    "plot_title_font_size": ("objects.definition.circular.plot_title_font_size",),
+    "normalize_length": ("canvas.linear.normalize_length",),
+}
+_LEGACY_FILTERING_RAW_KEYS = {
+    "label_whitelist": "whitelist_df",
+    "qualifier_priority": "qualifier_priority_df",
+    "label_table": "label_override_df",
+}
 
 _COMPARISON_SOURCE_FIELDS = frozenset(
     {
@@ -114,7 +386,6 @@ _COMPARISON_FIELDS = _COMPARISON_SOURCE_FIELDS | frozenset(_PIPELINE_FIELDS)
 
 _TABLE_FIELDS = frozenset(
     {
-        "feature_table",
         "feature_visibility_table",
         "label_whitelist_table",
         "qualifier_priority_table",
@@ -124,7 +395,6 @@ _TABLE_FIELDS = frozenset(
 )
 _FILE_FIELDS = frozenset(
     {
-        "feature_table_file",
         "feature_visibility_table_file",
         "label_whitelist_file",
         "qualifier_priority_file",
@@ -134,8 +404,26 @@ _FILE_FIELDS = frozenset(
 )
 _TABLE_SEQUENCE_FIELDS = frozenset({"depth_tables", "conservation_dataframes"})
 _FILE_SEQUENCE_FIELDS = frozenset({"depth_files", "conservation_blast_files"})
+_OPTIONAL_FILE_SEQUENCE_FIELDS = frozenset({"conservation_fasta_files"})
 _TABLE_MATRIX_FIELDS = frozenset({"depth_track_tables"})
 _FILE_MATRIX_FIELDS = frozenset({"depth_track_files"})
+_DEPTH_COMPATIBILITY_FIELDS = frozenset(
+    {
+        "depth_table",
+        "depth_file",
+        "depth_tables",
+        "depth_files",
+        "depth_track_tables",
+        "depth_track_files",
+        "depth_track_labels",
+        "depth_track_colors",
+        "depth_track_heights",
+        "depth_track_large_tick_intervals",
+        "depth_track_small_tick_intervals",
+        "depth_track_tick_font_sizes",
+    }
+)
+_ALL_DEPTH_INPUT_FIELDS = _DEPTH_COMPATIBILITY_FIELDS | {"depth_tracks"}
 
 _TYPED_TREE_CLASSES = {
     cls.__name__: cls
@@ -157,11 +445,11 @@ class CanonicalRequestCodecError(ValidationError):
 
 
 class CanonicalRequestEncodingError(CanonicalRequestCodecError):
-    """Raised when a typed request cannot be represented by schema 1."""
+    """Raised when a typed request cannot be represented canonically."""
 
 
 class CanonicalRequestDecodingError(CanonicalRequestCodecError):
-    """Raised when a schema 1 payload cannot produce a typed request."""
+    """Raised when a canonical payload cannot produce a typed request."""
 
 
 @dataclass(frozen=True)
@@ -268,33 +556,86 @@ def encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalRequest
 def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalRequest:
     """Encode without embedding files or changing the session version."""
 
-    if not isinstance(request, (CircularDiagramRequest, LinearDiagramRequest)):
+    if not isinstance(
+        request,
+        (CircularDiagramRequest, CircularBatchRequest, LinearDiagramRequest),
+    ):
         raise CanonicalRequestEncodingError("Unsupported typed diagram request.")
+    unresolved_reasons: list[str] = []
+    if any(
+        record.cardinality is not RecordCardinality.EXACTLY_ONE
+        for record in request.records
+    ):
+        unresolved_reasons.append("record cardinality")
+    if request.record_options != RecordCollectionOptions():
+        unresolved_reasons.append("collection-level record transforms")
+    if isinstance(request, CircularBatchRequest) and request.output_policy is not None:
+        unresolved_reasons.append("Circular batch output policy")
+    if isinstance(request, CircularBatchRequest) and any(
+        output.resolve_prefix_from_first_record for output in request.outputs
+    ):
+        unresolved_reasons.append("record-derived output prefix")
+    if isinstance(request, CircularDiagramRequest):
+        if request.output.resolve_prefix_from_first_record:
+            unresolved_reasons.append("record-derived output prefix")
+        if request.options.conservation_table_file is not None:
+            unresolved_reasons.append("Circular comparison table")
+    if isinstance(request, LinearDiagramRequest):
+        if request.output.resolve_prefix_from_first_record:
+            unresolved_reasons.append("record-derived output prefix")
+        if request.options.comparison_table_file is not None:
+            unresolved_reasons.append("Linear comparison table")
+    if unresolved_reasons:
+        raise CanonicalRequestEncodingError(
+            "Canonical schema 5 requires a materialized exact-one request; "
+            "call gbdraw.api.resolve_request() before encoding (unresolved: "
+            + ", ".join(unresolved_reasons)
+            + ")."
+        )
     _validate_dataclass_contract(request.options, path="diagramOptions", error="encode")
-    _validate_dataclass_contract(request.output, path="output", error="encode")
-    if request.layout is not None:
+    if isinstance(request, CircularBatchRequest):
+        for index, output in enumerate(request.outputs, start=1):
+            _validate_dataclass_contract(
+                output,
+                path=f"output[{index - 1}]",
+                error="encode",
+            )
+    else:
+        _validate_dataclass_contract(request.output, path="output", error="encode")
+    if getattr(request, "layout", None) is not None:
         _validate_dataclass_contract(request.layout, path="layout", error="encode")
 
     resources = _ResourceBuilder()
     mode: Literal["circular", "linear"] = (
-        "circular" if isinstance(request, CircularDiagramRequest) else "linear"
+        "circular"
+        if isinstance(request, (CircularDiagramRequest, CircularBatchRequest))
+        else "linear"
+    )
+    grouping = (
+        request.grouping
+        if isinstance(request, (CircularDiagramRequest, CircularBatchRequest))
+        else "single"
     )
     payload = {
         "schema": CANONICAL_REQUEST_SCHEMA,
         "mode": mode,
+        "grouping": grouping,
         "records": [
             _encode_record(record, index=index, resources=resources)
             for index, record in enumerate(request.records, start=1)
         ],
-        "diagramOptions": _encode_diagram_options(request.options, resources=resources),
+        "diagramOptions": _encode_diagram_options(
+            request.options,
+            record_count=len(request.records),
+            resources=resources,
+        ),
         "layout": _encode_layout(request),
         "comparisons": _encode_comparisons(request.options, mode=mode, resources=resources),
-        "output": {
-            "prefix": request.output.output_prefix,
-            "formats": list(request.output.formats),
-            "overwrite": request.output.overwrite,
-            "interactiveMetadataPolicy": request.output.interactive_metadata_policy,
-        },
+        "output": (
+            [_encode_output(output) for output in request.outputs]
+            if isinstance(request, CircularBatchRequest)
+            else _encode_output(request.output)
+        ),
     }
     return EncodedCanonicalRequest(payload=payload, resources=resources.result())
 
@@ -305,7 +646,7 @@ def decode_canonical_request(
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
 ) -> DiagramRequest:
-    """Decode canonical schemas 1 or 2 and normalize validation failures."""
+    """Decode every supported canonical schema and normalize validation failures."""
 
     try:
         return _decode_canonical_request(
@@ -329,14 +670,28 @@ def _decode_canonical_request(
 ) -> DiagramRequest:
     """Decode a supported schema using caller-owned materialized resources."""
 
-    top = _object(payload, path="renderRequest", required=_TOP_LEVEL_FIELDS)
+    top = _object(
+        payload,
+        path="renderRequest",
+        required={"schema"},
+        exact=False,
+    )
     schema = top["schema"]
     if not isinstance(schema, int) or isinstance(schema, bool):
         raise CanonicalRequestDecodingError("renderRequest.schema must be an integer.")
-    if schema not in {1, CANONICAL_REQUEST_SCHEMA}:
+    if schema not in SUPPORTED_CANONICAL_REQUEST_SCHEMAS:
         raise CanonicalRequestDecodingError(
             f"Unsupported canonical request schema: {schema!r}."
         )
+    _require_exact_fields(
+        top,
+        path="renderRequest",
+        required=set(
+            _TOP_LEVEL_FIELDS_V5
+            if schema == CANONICAL_REQUEST_SCHEMA
+            else _TOP_LEVEL_FIELDS
+        ),
+    )
     mode = top["mode"]
     if mode not in {"circular", "linear"}:
         raise CanonicalRequestDecodingError(
@@ -361,16 +716,33 @@ def _decode_canonical_request(
         for index, value in enumerate(raw_records, start=1)
     )
     options_kwargs = _decode_diagram_options(
-        top["diagramOptions"], resource_paths=resource_paths
+        top["diagramOptions"],
+        mode=mode,
+        schema=schema,
+        resource_paths=resource_paths,
     )
     comparison_kwargs = _decode_comparisons(
         top["comparisons"], mode=mode, schema=schema, resource_paths=resource_paths
     )
-    options = DiagramOptions(**options_kwargs, **comparison_kwargs)
+    options_type = (
+        CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
+    )
+    options = options_type(**options_kwargs, **comparison_kwargs)
     _validate_dataclass_contract(options, path="diagramOptions", error="decode")
-    output = _decode_output(top["output"], output_directory=output_directory)
+    grouping = top.get("grouping")
+    if schema == CANONICAL_REQUEST_SCHEMA:
+        allowed_groupings = (
+            {"single", "grid", "batch"}
+            if mode == "circular"
+            else {"single"}
+        )
+        if grouping not in allowed_groupings:
+            raise CanonicalRequestDecodingError(
+                f"Unsupported {mode} request grouping: {grouping!r}."
+            )
 
     if mode == "linear":
+        output = _decode_output(top["output"], output_directory=output_directory)
         if schema == 1:
             layout_payload = _object(top["layout"], path="renderRequest.layout")
             if layout_payload:
@@ -387,12 +759,30 @@ def _decode_canonical_request(
             output=output,
         )
 
-    layout = _decode_circular_layout(top["layout"])
+    layout = _decode_circular_layout(top["layout"], schema=schema)
+    if schema in {1, 2}:
+        grouping = "grid" if layout is not None or len(records) > 1 else "single"
+    if grouping == "batch":
+        if layout is not None:
+            raise CanonicalRequestDecodingError(
+                "A Circular batch canonical request cannot define a grid layout."
+            )
+        return CircularBatchRequest(
+            records=records,
+            options=options,
+            outputs=_decode_batch_outputs(
+                top["output"],
+                output_directory=output_directory,
+                record_count=len(records),
+            ),
+        )
+    output = _decode_output(top["output"], output_directory=output_directory)
     return CircularDiagramRequest(
         records=records,
         options=options,
         layout=layout,
         output=output,
+        grouping=grouping,
     )
 
 
@@ -615,6 +1005,8 @@ def _decode_region(value: object, *, path: str) -> RegionSpec | None:
 
 
 def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
+    if isinstance(request, CircularBatchRequest):
+        return {}
     if isinstance(request, LinearDiagramRequest):
         if request.layout is None:
             return {}
@@ -642,7 +1034,20 @@ def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
     }
 
 
-def _decode_circular_layout(value: object) -> CircularMultiRecordOptions | None:
+def _encode_output(output: RenderOutputRequest) -> dict[str, Any]:
+    return {
+        "prefix": output.output_prefix,
+        "formats": list(output.formats),
+        "overwrite": False,
+        "interactiveMetadataPolicy": output.interactive_metadata_policy,
+    }
+
+
+def _decode_circular_layout(
+    value: object,
+    *,
+    schema: int,
+) -> CircularMultiRecordOptions | None:
     layout = _object(value, path="renderRequest.layout")
     if not layout:
         return None
@@ -662,8 +1067,11 @@ def _decode_circular_layout(value: object) -> CircularMultiRecordOptions | None:
         raise CanonicalRequestDecodingError(
             "renderRequest.layout.multiRecordPositions must be a string array or null."
         )
+    size_mode = layout["multiRecordSizeMode"]
+    if schema in {1, 2} and size_mode == "sqrt":
+        size_mode = "auto"
     result = CircularMultiRecordOptions(
-        multi_record_size_mode=layout["multiRecordSizeMode"],
+        multi_record_size_mode=size_mode,
         multi_record_min_radius_ratio=layout["multiRecordMinRadiusRatio"],
         multi_record_column_gap_ratio=layout["multiRecordColumnGapRatio"],
         multi_record_row_gap_ratio=layout["multiRecordRowGapRatio"],
@@ -699,32 +1107,62 @@ def _decode_linear_layout(value: object) -> LinearMultiRecordOptions | None:
 
 
 def _encode_diagram_options(
-    options: DiagramOptions,
+    options: CircularDiagramOptions | LinearDiagramOptions,
     *,
+    record_count: int,
     resources: _ResourceBuilder,
 ) -> dict[str, Any]:
+    if isinstance(options, CircularDiagramOptions):
+        default_options = _DEFAULT_CIRCULAR_OPTIONS
+    elif isinstance(options, LinearDiagramOptions):
+        default_options = _DEFAULT_LINEAR_OPTIONS
+    else:
+        raise CanonicalRequestEncodingError(
+            "diagramOptions must use mode-specific options."
+        )
+    depth_tracks = _canonical_depth_tracks_for_encoding(
+        options,
+        record_count=record_count,
+    )
     result: dict[str, Any] = {}
-    for item in fields(DiagramOptions):
+    for item in fields(options):
         name = item.name
-        if name in _COMPARISON_FIELDS:
+        if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS:
             continue
         value = getattr(options, name)
-        default = getattr(_DEFAULT_OPTIONS, name)
+        default = getattr(default_options, name)
         if _same_default(value, default):
             continue
         result[_camel(name)] = _encode_option_value(name, value, resources=resources)
+    if depth_tracks is not None:
+        result["depthTracks"] = _encode_depth_tracks(
+            depth_tracks,
+            resources=resources,
+        )
     return result
 
 
 def _decode_diagram_options(
     value: object,
     *,
+    mode: Literal["circular", "linear"],
+    schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> dict[str, Any]:
     payload = _object(value, path="renderRequest.diagramOptions")
+    if schema in {1, 2}:
+        payload = _migrate_legacy_feature_visibility_fields(payload)
+    payload = dict(payload)
+    for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
+        key = _camel(name)
+        if key in payload and payload[key] == default:
+            payload.pop(key)
+    options_type = (
+        CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
+    )
     known = {
         _camel(item.name): item.name
-        for item in fields(DiagramOptions)
+        for item in fields(options_type)
         if item.name not in _COMPARISON_FIELDS
     }
     unknown = set(payload) - set(known)
@@ -734,12 +1172,766 @@ def _decode_diagram_options(
             + ", ".join(sorted(unknown))
             + "."
         )
-    return {
+    decoded = {
         known[key]: _decode_option_value(
-            known[key], raw, resource_paths=resource_paths
+            known[key],
+            raw,
+            mode=mode,
+            schema=schema,
+            resource_paths=resource_paths,
         )
         for key, raw in payload.items()
     }
+    if decoded.get("config_overrides") is not None:
+        decoded["config_overrides"] = _decode_config_overrides(
+            decoded["config_overrides"],
+            mode=mode,
+            schema=schema,
+        )
+    if schema in {1, 2}:
+        feature_shapes = dict(decoded.get("feature_shapes") or {})
+        feature_shapes.setdefault("repeat_region", "rectangle")
+        decoded["feature_shapes"] = feature_shapes
+    if schema in {1, 2}:
+        _restore_legacy_sparse_defaults(decoded, mode=mode)
+    return decoded
+
+
+def _migrate_legacy_feature_visibility_fields(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Move removed feature-table aliases at the legacy schema boundary."""
+
+    migrated = dict(payload)
+    for old_name, current_name in (
+        ("featureTable", "featureVisibilityTable"),
+        ("featureTableFile", "featureVisibilityTableFile"),
+    ):
+        if old_name not in migrated:
+            continue
+        old_value = migrated.pop(old_name)
+        current_value = migrated.get(current_name)
+        if old_value is not None and current_value is not None:
+            raise CanonicalRequestDecodingError(
+                f"renderRequest.diagramOptions cannot contain both "
+                f"{old_name} and {current_name}."
+            )
+        if current_name not in migrated or current_value is None:
+            migrated[current_name] = old_value
+    return migrated
+
+
+def _decode_config_overrides(
+    value: object,
+    *,
+    mode: Literal["circular", "linear"],
+    schema: int,
+) -> dict[str, Any]:
+    path = "renderRequest.diagramOptions.configOverrides"
+    overrides = dict(_object(value, path=path))
+    if schema in {1, 2}:
+        for old_name, current_name in _LEGACY_CONFIG_OVERRIDE_KEYS.items():
+            if old_name not in overrides:
+                continue
+            old_value = overrides.pop(old_name)
+            current_value = overrides.get(current_name)
+            if old_value is not None and current_value is not None:
+                raise CanonicalRequestDecodingError(
+                    f"{path} cannot contain both {old_name} and {current_name}."
+                )
+            if current_name not in overrides or current_value is None:
+                overrides[current_name] = old_value
+        if mode == "linear":
+            for name, replacements in _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES.items():
+                raw = overrides.get(name)
+                if isinstance(raw, str):
+                    overrides[name] = replacements.get(
+                        raw.strip().lower(),
+                        raw,
+                    )
+    else:
+        retired = _retired_config_override(overrides)
+        if retired is not None:
+            raise CanonicalRequestDecodingError(
+                f"{path} contains retired value {retired!r}; schema {schema} "
+                "requires canonical config overrides."
+            )
+    return _migrate_flat_config_overrides(overrides, mode=mode, path=path)
+
+
+def _migrate_flat_config_overrides(
+    overrides: Mapping[str, Any],
+    *,
+    mode: Literal["circular", "linear"],
+    path: str,
+) -> dict[str, Any]:
+    """Project persisted flat aliases onto schema-derived dotted leaves."""
+
+    legacy_label_paths = {
+        "canvas.show_labels",
+        "canvas.circular.show_labels",
+        "canvas.linear.show_labels",
+        "canvas.circular.allow_inner_labels",
+    }
+    migrated = {
+        name: deepcopy(value)
+        for name, value in overrides.items()
+        if "." in name and name not in legacy_label_paths
+    }
+    migrated_sources = {name: name for name in migrated}
+    consumed: set[str] = set()
+
+    def assign(canonical_path: str, value: object, *, source: str) -> None:
+        existing_source = migrated_sources.get(canonical_path)
+        if existing_source is not None:
+            if (
+                existing_source == "gc_content_tick_interval"
+                and source == "gc_content_large_tick_interval"
+            ):
+                migrated[canonical_path] = deepcopy(value)
+                migrated_sources[canonical_path] = source
+                return
+            if migrated[canonical_path] == value:
+                return
+            raise CanonicalRequestDecodingError(
+                f"{path} cannot contain both {existing_source} and {source}."
+            )
+        migrated[canonical_path] = deepcopy(value)
+        migrated_sources[canonical_path] = source
+
+    active_show_names = (
+        ("show_labels", "canvas.show_labels", "canvas.circular.show_labels")
+        if mode == "circular"
+        else ("show_labels", "canvas.show_labels", "canvas.linear.show_labels")
+    )
+    wrong_show_name = (
+        "canvas.linear.show_labels"
+        if mode == "circular"
+        else "canvas.circular.show_labels"
+    )
+    if overrides.get(wrong_show_name) is not None:
+        raise CanonicalRequestDecodingError(
+            f"{path}.{wrong_show_name} is for the other drawing mode."
+        )
+    consumed.add(wrong_show_name)
+    legacy_scope: str | None = None
+    legacy_scope_source: str | None = None
+    for legacy_name in active_show_names:
+        if legacy_name not in overrides:
+            continue
+        consumed.add(legacy_name)
+        value = overrides[legacy_name]
+        if value is None:
+            continue
+        circular_scope, linear_scope = _legacy_mode_label_scopes(
+            value,
+            mode=mode,
+            path=f"{path}.{legacy_name}",
+        )
+        scope = circular_scope if mode == "circular" else linear_scope
+        if legacy_scope is not None and legacy_scope != scope:
+            raise CanonicalRequestDecodingError(
+                f"{path} cannot contain conflicting {legacy_scope_source} "
+                f"and {legacy_name} values."
+            )
+        legacy_scope = scope
+        legacy_scope_source = legacy_name
+
+    inner_label_names = (
+        "allow_inner_labels",
+        "canvas.circular.allow_inner_labels",
+    )
+    inner_labels: bool | None = None
+    inner_source: str | None = None
+    for legacy_name in inner_label_names:
+        if legacy_name not in overrides:
+            continue
+        consumed.add(legacy_name)
+        value = overrides[legacy_name]
+        if value is None:
+            continue
+        if not isinstance(value, bool):
+            raise CanonicalRequestDecodingError(
+                f"{path}.{legacy_name} must be a boolean."
+            )
+        if inner_labels is not None and inner_labels != value:
+            raise CanonicalRequestDecodingError(
+                f"{path} cannot contain conflicting {inner_source} "
+                f"and {legacy_name} values."
+            )
+        inner_labels = value
+        inner_source = legacy_name
+
+    if mode == "circular":
+        if legacy_scope == "outer" and inner_labels:
+            legacy_scope = "both"
+        elif legacy_scope is None and inner_labels:
+            legacy_scope = "both"
+        if legacy_scope is not None:
+            assign(
+                "labels.circular.scope",
+                legacy_scope,
+                source=legacy_scope_source or inner_source or "legacy labels",
+            )
+    elif inner_labels:
+        raise CanonicalRequestDecodingError(
+            f"{path}.{inner_source} is Circular-only."
+        )
+    elif legacy_scope is not None:
+        assign(
+            "labels.linear.scope",
+            legacy_scope,
+            source=legacy_scope_source or "legacy labels",
+        )
+
+    for legacy_name, canonical_paths in _LEGACY_FLAT_CONFIG_OVERRIDE_PATHS.items():
+        if legacy_name not in overrides:
+            continue
+        consumed.add(legacy_name)
+        value = overrides[legacy_name]
+        if value is None:
+            continue
+        if legacy_name == "label_blacklist" and isinstance(value, str):
+            value = [item.strip() for item in value.split(",") if item.strip()]
+        for canonical_path in canonical_paths:
+            assign(canonical_path, value, source=legacy_name)
+
+    if "label_font_size" in overrides:
+        consumed.add("label_font_size")
+        value = overrides["label_font_size"]
+        if value is not None:
+            prefix = (
+                "labels.font_size"
+                if mode == "circular"
+                else "labels.font_size.linear"
+            )
+            for suffix in ("short", "long"):
+                assign(
+                    f"{prefix}.{suffix}",
+                    value,
+                    source="label_font_size",
+                )
+
+    if "circular_definition_font_size" in overrides:
+        consumed.add("circular_definition_font_size")
+        value = overrides["circular_definition_font_size"]
+        if value is not None:
+            assign(
+                "objects.definition.circular.font_size",
+                value,
+                source="circular_definition_font_size",
+            )
+            try:
+                interval = int(float(value) + 2)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise CanonicalRequestDecodingError(
+                    f"{path}.circular_definition_font_size must be numeric."
+                ) from exc
+            assign(
+                "objects.definition.circular.interval",
+                interval,
+                source="circular_definition_font_size",
+            )
+
+    if "linear_definition_line_styles" in overrides:
+        consumed.add("linear_definition_line_styles")
+        line_styles = overrides["linear_definition_line_styles"]
+        if line_styles is not None:
+            if not isinstance(line_styles, MappingABC):
+                raise CanonicalRequestDecodingError(
+                    f"{path}.linear_definition_line_styles must be an object."
+                )
+            for line_kind, style in line_styles.items():
+                if not isinstance(style, MappingABC):
+                    raise CanonicalRequestDecodingError(
+                        f"{path}.linear_definition_line_styles.{line_kind} "
+                        "must be an object."
+                    )
+                for property_name, property_value in style.items():
+                    if property_value is None:
+                        continue
+                    assign(
+                        "objects.definition.linear.line_styles."
+                        f"{line_kind}.{property_name}",
+                        property_value,
+                        source=(
+                            "linear_definition_line_styles."
+                            f"{line_kind}.{property_name}"
+                        ),
+                    )
+
+    raw_filtering = {
+        raw_name: deepcopy(overrides[legacy_name])
+        for legacy_name, raw_name in _LEGACY_FILTERING_RAW_KEYS.items()
+        if legacy_name in overrides and overrides[legacy_name] is not None
+    }
+    consumed.update(
+        legacy_name
+        for legacy_name in _LEGACY_FILTERING_RAW_KEYS
+        if legacy_name in overrides
+    )
+    if raw_filtering:
+        assign(
+            "labels.filtering.raw",
+            raw_filtering,
+            source=", ".join(
+                legacy_name
+                for legacy_name in _LEGACY_FILTERING_RAW_KEYS
+                if legacy_name in overrides
+                and overrides[legacy_name] is not None
+            ),
+        )
+
+    for name, value in overrides.items():
+        if name not in consumed and "." not in name:
+            migrated[name] = deepcopy(value)
+    return migrated
+
+
+def _legacy_mode_label_scopes(
+    value: object,
+    *,
+    mode: Literal["circular", "linear"],
+    path: str,
+) -> tuple[
+    Literal["none", "outer"],
+    Literal["none", "all", "first", "orthogroup_top"],
+]:
+    if isinstance(value, bool):
+        return ("outer" if value else "none"), ("all" if value else "none")
+    if not isinstance(value, str):
+        raise CanonicalRequestDecodingError(
+            f"{path} must be a boolean or label policy."
+        )
+    normalized = value.strip().lower()
+    aliases = {
+        "true": "all",
+        "yes": "all",
+        "on": "all",
+        "false": "none",
+        "no": "none",
+        "off": "none",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in {"all", "first", "orthogroup_top", "none"}:
+        raise CanonicalRequestDecodingError(
+            f"{path} contains unsupported label policy {value!r}."
+        )
+    if mode == "circular" and normalized in {"first", "orthogroup_top"}:
+        raise CanonicalRequestDecodingError(
+            f"{path} contains Linear-only label policy {normalized!r}."
+        )
+    circular_scope = "outer" if normalized == "all" else "none"
+    return circular_scope, normalized  # type: ignore[return-value]
+
+
+def _retired_config_override(overrides: Mapping[str, Any]) -> str | None:
+    for old_name in _LEGACY_CONFIG_OVERRIDE_KEYS:
+        if old_name in overrides:
+            return old_name
+    for name, replacements in _LEGACY_LINEAR_CONFIG_OVERRIDE_VALUES.items():
+        raw = overrides.get(name)
+        if isinstance(raw, str):
+            normalized = raw.strip().lower()
+            if normalized in replacements:
+                return f"{name}={normalized}"
+    return None
+
+
+def _restore_legacy_sparse_defaults(
+    decoded: dict[str, Any],
+    *,
+    mode: Literal["circular", "linear"],
+) -> None:
+    """Keep supported sparse payloads on the defaults they were saved with.
+
+    Canonical schemas 1 and 2 omitted values equal to the
+    shared Python defaults. Fresh requests now use mode-specific profiles, so
+    the compatibility reader materializes the historical values before the
+    typed request applies the current profile.
+    """
+
+    for name, default in _LEGACY_SPARSE_COMPARISON_DEFAULTS.items():
+        decoded.setdefault(name, default)
+    decoded.setdefault("selected_features_set", _LEGACY_SPARSE_FEATURE_TYPES)
+
+    if decoded.get("config") is not None:
+        return
+    explicit_overrides = decoded.get("config_overrides")
+    if explicit_overrides is not None and not isinstance(
+        explicit_overrides, MappingABC
+    ):
+        return
+    overrides = dict(_LEGACY_SPARSE_CONFIG_OVERRIDES[mode])
+    overrides.update(
+        {
+            key: value
+            for key, value in (explicit_overrides or {}).items()
+            if value is not None
+        }
+    )
+    decoded["config_overrides"] = overrides
+
+
+def _encode_depth_source(
+    value: object,
+    *,
+    name: str,
+    resources: _ResourceBuilder,
+) -> dict[str, str]:
+    if isinstance(value, DataFrame):
+        return _table_ref(name, value, resources=resources)
+    if isinstance(value, (str, Path)):
+        return _file_ref(name, value, resources=resources)
+    raise CanonicalRequestEncodingError(
+        f"{name} must be a path or pandas DataFrame."
+    )
+
+
+def _expanded_depth_text_metadata(
+    values: Sequence[object] | None,
+    *,
+    track_count: int,
+    field_name: str,
+) -> list[str | None]:
+    if values is None:
+        return [None] * track_count
+    items = [str(value).strip() or None for value in values]
+    if len(items) == 1:
+        return items * track_count
+    if len(items) != track_count:
+        raise CanonicalRequestEncodingError(
+            f"{field_name} count must be one or equal to the number of depth "
+            f"tracks ({track_count})."
+        )
+    return items
+
+
+def _expanded_depth_numeric_metadata(
+    values: Sequence[float | str | None] | None,
+    *,
+    track_count: int,
+    field_name: str,
+) -> list[float | None]:
+    if values is None:
+        return [None] * track_count
+    items: list[float | None] = []
+    for value in values:
+        if value is None or (
+            isinstance(value, str)
+            and value.strip().lower() in {"", "auto", "none", "null", "-"}
+        ):
+            items.append(None)
+            continue
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise CanonicalRequestEncodingError(
+                f"{field_name} values must be finite numbers > 0 or None."
+            ) from exc
+        if not math.isfinite(numeric) or numeric <= 0:
+            raise CanonicalRequestEncodingError(
+                f"{field_name} values must be finite numbers > 0 or None."
+            )
+        items.append(numeric)
+    if len(items) == 1:
+        return items * track_count
+    if len(items) != track_count:
+        raise CanonicalRequestEncodingError(
+            f"{field_name} count must be one or equal to the number of depth "
+            f"tracks ({track_count})."
+        )
+    return items
+
+
+def _canonical_depth_tracks_for_encoding(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+    *,
+    record_count: int,
+) -> tuple[DepthTrackInput, ...] | None:
+    """Project compatibility depth inputs onto the canonical logical-track form."""
+
+    if options.depth_tracks is not None:
+        return tuple(options.depth_tracks)
+
+    singular_plural_present = any(
+        getattr(options, name) is not None
+        for name in ("depth_table", "depth_file", "depth_tables", "depth_files")
+    )
+    matrix_present = any(
+        getattr(options, name, None) is not None
+        for name in (
+            "depth_track_tables",
+            "depth_track_files",
+            "depth_track_labels",
+            "depth_track_colors",
+            "depth_track_heights",
+            "depth_track_large_tick_intervals",
+            "depth_track_small_tick_intervals",
+            "depth_track_tick_font_sizes",
+        )
+    )
+    if singular_plural_present and matrix_present:
+        raise CanonicalRequestEncodingError(
+            "Singular/plural depth inputs cannot be combined with depth_track_* "
+            "compatibility inputs."
+        )
+    if not singular_plural_present and not matrix_present:
+        return None
+
+    if singular_plural_present:
+        if options.depth_table is not None and options.depth_file is not None:
+            raise CanonicalRequestEncodingError(
+                "Pass either depth_table or depth_file, not both."
+            )
+        singular = (
+            options.depth_table
+            if options.depth_table is not None
+            else options.depth_file
+        )
+        plural = (
+            options.depth_tables
+            if options.depth_tables is not None
+            else options.depth_files
+        )
+        if singular is not None and plural is not None:
+            raise CanonicalRequestEncodingError(
+                "Use depth_table/depth_file or depth_tables/depth_files, not both."
+            )
+        if options.depth_tables is not None and options.depth_files is not None:
+            raise CanonicalRequestEncodingError(
+                "Pass either depth_tables or depth_files, not both."
+            )
+        if singular is not None:
+            return (DepthTrackInput(source=singular),)
+        sources = tuple(plural or ())
+        if not sources:
+            raise CanonicalRequestEncodingError(
+                "depth_tables/depth_files must include at least one source."
+            )
+        if len(sources) not in {1, record_count}:
+            raise CanonicalRequestEncodingError(
+                "depth_tables/depth_files must contain one shared source or one "
+                f"source per displayed record ({record_count}); got {len(sources)}."
+            )
+        source: object = sources[0] if len(sources) == 1 else sources
+        return (DepthTrackInput(source=source),)
+
+    table_rows = options.depth_track_tables
+    file_rows = options.depth_track_files
+    if table_rows is not None and file_rows is not None:
+        raise CanonicalRequestEncodingError(
+            "Pass either depth_track_tables or depth_track_files, not both."
+        )
+    raw_rows = table_rows if table_rows is not None else file_rows
+    if raw_rows is None:
+        raise CanonicalRequestEncodingError(
+            "depth_track metadata requires depth_track_tables or depth_track_files."
+        )
+    rows = [tuple(row) for row in raw_rows]
+    if not rows:
+        raise CanonicalRequestEncodingError(
+            "depth_track_tables/depth_track_files must include at least one row."
+        )
+    if len(rows) not in {1, record_count}:
+        raise CanonicalRequestEncodingError(
+            "depth_track_tables/depth_track_files must contain one shared row or "
+            f"one row per displayed record ({record_count}); got {len(rows)}."
+        )
+    track_count = max((len(row) for row in rows), default=0)
+    if track_count <= 0:
+        raise CanonicalRequestEncodingError(
+            "depth_track_tables/depth_track_files must include at least one track."
+        )
+
+    labels = _expanded_depth_text_metadata(
+        options.depth_track_labels,
+        track_count=track_count,
+        field_name="depth_track_labels",
+    )
+    colors = _expanded_depth_text_metadata(
+        options.depth_track_colors,
+        track_count=track_count,
+        field_name="depth_track_colors",
+    )
+    heights = _expanded_depth_numeric_metadata(
+        getattr(options, "depth_track_heights", None),
+        track_count=track_count,
+        field_name="depth_track_heights",
+    )
+    large_ticks = _expanded_depth_numeric_metadata(
+        options.depth_track_large_tick_intervals,
+        track_count=track_count,
+        field_name="depth_track_large_tick_intervals",
+    )
+    small_ticks = _expanded_depth_numeric_metadata(
+        options.depth_track_small_tick_intervals,
+        track_count=track_count,
+        field_name="depth_track_small_tick_intervals",
+    )
+    tick_fonts = _expanded_depth_numeric_metadata(
+        options.depth_track_tick_font_sizes,
+        track_count=track_count,
+        field_name="depth_track_tick_font_sizes",
+    )
+
+    tracks: list[DepthTrackInput] = []
+    for track_index in range(track_count):
+        per_record = tuple(
+            row[track_index] if track_index < len(row) else None
+            for row in rows
+        )
+        source = per_record[0] if len(rows) == 1 else per_record
+        tracks.append(
+            DepthTrackInput(
+                source=source,
+                label=labels[track_index],
+                color=colors[track_index],
+                height=heights[track_index],
+                large_tick_interval=large_ticks[track_index],
+                small_tick_interval=small_ticks[track_index],
+                tick_font_size=tick_fonts[track_index],
+            )
+        )
+    return tuple(tracks)
+
+
+def _encode_depth_tracks(
+    value: object,
+    *,
+    resources: _ResourceBuilder,
+) -> list[dict[str, Any]]:
+    tracks = _sequence(value, name="depth_tracks")
+    encoded: list[dict[str, Any]] = []
+    for track_index, track in enumerate(tracks, start=1):
+        if not isinstance(track, DepthTrackInput):
+            raise CanonicalRequestEncodingError(
+                "depth_tracks must contain DepthTrackInput values."
+            )
+        source_name = f"depth-tracks-{track_index}-source"
+        source = track.source
+        if isinstance(source, SequenceABC) and not isinstance(
+            source,
+            (str, bytes, bytearray),
+        ) and not isinstance(source, DataFrame):
+            encoded_source: object = [
+                (
+                    _encode_depth_source(
+                        item,
+                        name=f"{source_name}-record-{record_index}",
+                        resources=resources,
+                    )
+                    if item is not None
+                    else None
+                )
+                for record_index, item in enumerate(source, start=1)
+            ]
+        else:
+            encoded_source = _encode_depth_source(
+                source,
+                name=source_name,
+                resources=resources,
+            )
+        encoded.append(
+            {
+                "source": encoded_source,
+                "label": track.label,
+                "color": track.color,
+                "height": track.height,
+                "largeTickInterval": track.large_tick_interval,
+                "smallTickInterval": track.small_tick_interval,
+                "tickFontSize": track.tick_font_size,
+            }
+        )
+    return encoded
+
+
+def _decode_depth_source(
+    value: object,
+    *,
+    name: str,
+    resource_paths: Mapping[str, str | Path],
+) -> str | DataFrame:
+    ref = _object(
+        value,
+        path=f"resource reference {name}",
+        required={"resourceId", "representation"},
+    )
+    representation = ref["representation"]
+    if representation == "canonicalTsv":
+        return _decode_table_ref(
+            ref,
+            name=name,
+            resource_paths=resource_paths,
+        )
+    if representation == "file":
+        return str(
+            _decode_file_ref(
+                ref,
+                name=name,
+                resource_paths=resource_paths,
+            )
+        )
+    raise CanonicalRequestDecodingError(
+        f"Unsupported resource representation for {name}: {representation!r}."
+    )
+
+
+def _decode_depth_tracks(
+    value: object,
+    *,
+    resource_paths: Mapping[str, str | Path],
+) -> tuple[DepthTrackInput, ...]:
+    raw_tracks = _array(
+        value,
+        path="renderRequest.diagramOptions.depthTracks",
+    )
+    decoded: list[DepthTrackInput] = []
+    required = {
+        "source",
+        "label",
+        "color",
+        "height",
+        "largeTickInterval",
+        "smallTickInterval",
+        "tickFontSize",
+    }
+    for track_index, raw_track in enumerate(raw_tracks, start=1):
+        path = f"renderRequest.diagramOptions.depthTracks[{track_index - 1}]"
+        track = _object(raw_track, path=path, required=required)
+        raw_source = track["source"]
+        source_name = f"depth-tracks-{track_index}-source"
+        if isinstance(raw_source, list):
+            source: object = tuple(
+                (
+                    _decode_depth_source(
+                        item,
+                        name=f"{source_name}-record-{record_index}",
+                        resource_paths=resource_paths,
+                    )
+                    if item is not None
+                    else None
+                )
+                for record_index, item in enumerate(raw_source, start=1)
+            )
+        else:
+            source = _decode_depth_source(
+                raw_source,
+                name=source_name,
+                resource_paths=resource_paths,
+            )
+        decoded.append(
+            DepthTrackInput(
+                source=source,
+                label=_optional_string(track["label"], f"{path}.label"),
+                color=_optional_string(track["color"], f"{path}.color"),
+                height=track["height"],
+                large_tick_interval=track["largeTickInterval"],
+                small_tick_interval=track["smallTickInterval"],
+                tick_font_size=track["tickFontSize"],
+            )
+        )
+    return tuple(decoded)
 
 
 def _encode_option_value(
@@ -756,6 +1948,13 @@ def _encode_option_value(
                 config.labels.filtering.as_dict()
             )
         return _json_value(value, path="diagramOptions.config")
+    if name == "config_overrides" and isinstance(value, MappingABC):
+        retired = _retired_config_override(value)
+        if retired is not None:
+            raise CanonicalRequestEncodingError(
+                "diagramOptions.configOverrides contains retired value "
+                f"{retired!r}; use canonical config overrides."
+            )
     if name == "colors":
         return _encode_colors(value, resources=resources)
     if name == "tracks":
@@ -764,6 +1963,8 @@ def _encode_option_value(
         return _encode_annotations(value, resources=resources)
     if name == "output":
         return _encode_assembly_output(value)
+    if name == "depth_tracks":
+        return _encode_depth_tracks(value, resources=resources)
     if name in _TABLE_FIELDS:
         return _table_ref(name, value, resources=resources)
     if name in _FILE_FIELDS:
@@ -778,6 +1979,15 @@ def _encode_option_value(
             _file_ref(f"{name}-{index}", item, resources=resources)
             for index, item in enumerate(_sequence(value, name=name), start=1)
         ]
+    if name in _OPTIONAL_FILE_SEQUENCE_FIELDS:
+        return [
+            (
+                _file_ref(f"{name}-{index}", item, resources=resources)
+                if item is not None
+                else None
+            )
+            for index, item in enumerate(_sequence(value, name=name), start=1)
+        ]
     if name in _TABLE_MATRIX_FIELDS:
         return _encode_resource_matrix(name, value, table=True, resources=resources)
     if name in _FILE_MATRIX_FIELDS:
@@ -789,18 +1999,26 @@ def _decode_option_value(
     name: str,
     value: object,
     *,
+    mode: Literal["circular", "linear"],
+    schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> Any:
     if name == "config":
-        return dict(_object(value, path="renderRequest.diagramOptions.config"))
+        return _migrate_legacy_full_config(
+            _object(value, path="renderRequest.diagramOptions.config"),
+            mode=mode,
+            path="renderRequest.diagramOptions.config",
+        )
     if name == "colors":
         return _decode_colors(value, resource_paths=resource_paths)
     if name == "tracks":
-        return _decode_tracks(value)
+        return _decode_tracks(value, mode=mode, schema=schema)
     if name == "annotations":
         return _decode_annotations(value, resource_paths=resource_paths)
     if name == "output":
-        return _decode_assembly_output(value)
+        return _decode_assembly_output(value, mode=mode, schema=schema)
+    if name == "depth_tracks":
+        return _decode_depth_tracks(value, resource_paths=resource_paths)
     if name in _TABLE_FIELDS:
         return _decode_table_ref(value, name=name, resource_paths=resource_paths)
     if name in _FILE_FIELDS:
@@ -821,6 +2039,22 @@ def _decode_option_value(
             )
             for index, item in enumerate(raw, start=1)
         )
+    if name in _OPTIONAL_FILE_SEQUENCE_FIELDS:
+        raw = _array(value, path=f"renderRequest.diagramOptions.{_camel(name)}")
+        return tuple(
+            (
+                str(
+                    _decode_file_ref(
+                        item,
+                        name=f"{name}-{index}",
+                        resource_paths=resource_paths,
+                    )
+                )
+                if item is not None
+                else None
+            )
+            for index, item in enumerate(raw, start=1)
+        )
     if name in _TABLE_MATRIX_FIELDS:
         return _decode_resource_matrix(
             value, name=name, table=True, resource_paths=resource_paths
@@ -830,6 +2064,120 @@ def _decode_option_value(
             value, name=name, table=False, resource_paths=resource_paths
         )
     return value
+
+
+def _migrate_legacy_full_config(
+    value: Mapping[str, Any],
+    *,
+    mode: Literal["circular", "linear"],
+    path: str,
+) -> dict[str, Any]:
+    """Move persisted config aliases onto the current typed schema."""
+
+    migrated = deepcopy(dict(value))
+    canvas = migrated.get("canvas")
+    if not isinstance(canvas, dict):
+        return migrated
+
+    circular_canvas = canvas.get("circular")
+    linear_canvas = canvas.get("linear")
+    if not isinstance(circular_canvas, dict) or not isinstance(linear_canvas, dict):
+        return migrated
+
+    legacy_track_layout = linear_canvas.get("track_layout")
+    if isinstance(legacy_track_layout, str):
+        normalized_track_layout = legacy_track_layout.strip().lower()
+        linear_canvas["track_layout"] = {
+            "spreadout": "above",
+            "tuckin": "below",
+        }.get(normalized_track_layout, legacy_track_layout)
+
+    labels = migrated.get("labels")
+    if isinstance(labels, dict):
+        linear_labels = labels.get("linear")
+        if isinstance(linear_labels, dict):
+            legacy_placement = linear_labels.get("placement")
+            if (
+                isinstance(legacy_placement, str)
+                and legacy_placement.strip().lower() == "on_feature"
+            ):
+                linear_labels["placement"] = "above_feature"
+
+    shared_show = canvas.pop("show_labels", None)
+    circular_show = circular_canvas.pop("show_labels", None)
+    linear_show = linear_canvas.pop("show_labels", None)
+    allow_inner = circular_canvas.pop("allow_inner_labels", None)
+    if all(
+        item is None
+        for item in (shared_show, circular_show, linear_show, allow_inner)
+    ):
+        return migrated
+
+    circular_scope: str | None = None
+    linear_scope: str | None = None
+    if shared_show is not None:
+        circular_scope, linear_scope = _legacy_mode_label_scopes(
+            shared_show,
+            mode=mode,
+            path=f"{path}.canvas.show_labels",
+        )
+    if circular_show is not None:
+        nested_circular_scope, _unused_linear_scope = _legacy_mode_label_scopes(
+            circular_show,
+            mode="circular",
+            path=f"{path}.canvas.circular.show_labels",
+        )
+        if (
+            circular_scope is not None
+            and circular_scope != nested_circular_scope
+        ):
+            raise CanonicalRequestDecodingError(
+                f"{path}.canvas contains conflicting Circular label values."
+            )
+        circular_scope = nested_circular_scope
+    if linear_show is not None:
+        _unused_circular_scope, nested_linear_scope = _legacy_mode_label_scopes(
+            linear_show,
+            mode="linear",
+            path=f"{path}.canvas.linear.show_labels",
+        )
+        if linear_scope is not None and linear_scope != nested_linear_scope:
+            raise CanonicalRequestDecodingError(
+                f"{path}.canvas contains conflicting Linear label values."
+            )
+        linear_scope = nested_linear_scope
+    if allow_inner is not None:
+        if not isinstance(allow_inner, bool):
+            raise CanonicalRequestDecodingError(
+                f"{path}.canvas.circular.allow_inner_labels must be a boolean."
+            )
+        if allow_inner and circular_scope in {None, "outer"}:
+            circular_scope = "both"
+
+    if not isinstance(labels, dict):
+        raise CanonicalRequestDecodingError(f"{path}.labels must be an object.")
+    for section_name, scope in (
+        ("circular", circular_scope),
+        ("linear", linear_scope),
+    ):
+        if scope is None:
+            continue
+        section = labels.get(section_name)
+        if section is None:
+            section = {}
+            labels[section_name] = section
+        elif not isinstance(section, dict):
+            raise CanonicalRequestDecodingError(
+                f"{path}.labels.{section_name} must be an object."
+            )
+        existing = section.get("scope")
+        if existing is not None and existing != scope:
+            raise CanonicalRequestDecodingError(
+                f"{path} contains conflicting legacy and current "
+                f"{section_name} label scopes."
+            )
+        section.setdefault("scope", scope)
+    return migrated
 
 
 def _encode_colors(value: object, *, resources: _ResourceBuilder) -> dict[str, Any]:
@@ -927,18 +2275,37 @@ def _decode_colors(
 
 
 def _encode_tracks(value: object) -> dict[str, Any]:
-    if not isinstance(value, TrackOptions):
-        raise CanonicalRequestEncodingError("diagramOptions.tracks must be TrackOptions.")
+    if isinstance(value, CircularRequestTrackOptions):
+        circular_slots = value.circular_track_slots
+        circular_axis_index = value.circular_track_axis_index
+        linear_slots = None
+        linear_axis_index = None
+        center_reserved_radius = value.center_reserved_radius
+    elif isinstance(value, LinearRequestTrackOptions):
+        circular_slots = None
+        circular_axis_index = None
+        linear_slots = value.linear_track_slots
+        linear_axis_index = value.linear_track_axis_index
+        center_reserved_radius = None
+    else:
+        raise CanonicalRequestEncodingError(
+            "diagramOptions.tracks must use mode-specific track options."
+        )
     return {
-        "circularTrackSlots": _encode_track_slots(value.circular_track_slots),
-        "circularTrackAxisIndex": value.circular_track_axis_index,
-        "linearTrackSlots": _encode_track_slots(value.linear_track_slots),
-        "linearTrackAxisIndex": value.linear_track_axis_index,
-        "centerReservedRadius": value.center_reserved_radius,
+        "circularTrackSlots": _encode_track_slots(circular_slots),
+        "circularTrackAxisIndex": circular_axis_index,
+        "linearTrackSlots": _encode_track_slots(linear_slots),
+        "linearTrackAxisIndex": linear_axis_index,
+        "centerReservedRadius": center_reserved_radius,
     }
 
 
-def _decode_tracks(value: object) -> TrackOptions:
+def _decode_tracks(
+    value: object,
+    *,
+    mode: Literal["circular", "linear"],
+    schema: int,
+) -> CircularRequestTrackOptions | LinearRequestTrackOptions:
     path = "renderRequest.diagramOptions.tracks"
     payload = _object(
         value,
@@ -951,17 +2318,43 @@ def _decode_tracks(value: object) -> TrackOptions:
             "centerReservedRadius",
         },
     )
-    result = TrackOptions(
-        circular_track_slots=_decode_track_slots(
-            payload["circularTrackSlots"], mode="circular", path=f"{path}.circularTrackSlots"
-        ),
-        circular_track_axis_index=payload["circularTrackAxisIndex"],
-        linear_track_slots=_decode_track_slots(
-            payload["linearTrackSlots"], mode="linear", path=f"{path}.linearTrackSlots"
-        ),
-        linear_track_axis_index=payload["linearTrackAxisIndex"],
-        center_reserved_radius=payload["centerReservedRadius"],
+    circular_slots = _decode_track_slots(
+        payload["circularTrackSlots"],
+        mode="circular",
+        schema=schema,
+        path=f"{path}.circularTrackSlots",
     )
+    linear_slots = _decode_track_slots(
+        payload["linearTrackSlots"],
+        mode="linear",
+        schema=schema,
+        path=f"{path}.linearTrackSlots",
+    )
+    if mode == "circular":
+        if linear_slots is not None or payload["linearTrackAxisIndex"] is not None:
+            raise CanonicalRequestDecodingError(
+                "A Circular request cannot contain Linear track values."
+            )
+        result: CircularRequestTrackOptions | LinearRequestTrackOptions = (
+            CircularRequestTrackOptions(
+                circular_track_slots=circular_slots,
+                circular_track_axis_index=payload["circularTrackAxisIndex"],
+                center_reserved_radius=payload["centerReservedRadius"],
+            )
+        )
+    else:
+        if (
+            circular_slots is not None
+            or payload["circularTrackAxisIndex"] is not None
+            or payload["centerReservedRadius"] is not None
+        ):
+            raise CanonicalRequestDecodingError(
+                "A Linear request cannot contain Circular track values."
+            )
+        result = LinearRequestTrackOptions(
+            linear_track_slots=linear_slots,
+            linear_track_axis_index=payload["linearTrackAxisIndex"],
+        )
     _validate_dataclass_contract(result, path="diagramOptions.tracks", error="decode")
     return result
 
@@ -1205,15 +2598,53 @@ def _encode_track_slot(
     kind: str,
 ) -> dict[str, Any]:
     result = {"kind": kind}
-    for item in fields(slot):
+    legacy_spacing = (
+        slot.legacy_spacing
+        if isinstance(slot, _InternalCircularTrackSlot)
+        else None
+    )
+    slot_fields = (
+        fields(CircularTrackSlot)
+        if isinstance(slot, CircularTrackSlot)
+        else fields(LinearTrackSlot)
+    )
+    for item in slot_fields:
         raw = getattr(slot, item.name)
         if isinstance(raw, ScalarSpec):
             raw = {"value": raw.value, "unit": raw.unit}
         elif item.name == "params" and isinstance(raw, MappingABC):
             raw = dict(raw)
+            private_keys = [
+                str(key)
+                for key in raw
+                if str(key).strip().startswith("_")
+            ]
+            if private_keys:
+                raise CanonicalRequestEncodingError(
+                    "trackSlot.params cannot contain private key(s): "
+                    + ", ".join(sorted(private_keys))
+                    + "."
+                )
             if isinstance(raw.get("style_override"), RegionAnnotationStyle):
                 raw["style_override"] = _encode_annotation_style(raw["style_override"])
         result[_camel(item.name)] = _json_value(raw, path=f"trackSlot.{_camel(item.name)}")
+    if legacy_spacing is not None:
+        if legacy_spacing.unit != "px":
+            raise CanonicalRequestEncodingError(
+                "A legacy factor-based Circular spacing value can be replayed "
+                "but cannot be written to the current canonical schema. Set explicit "
+                "inner_gap_px and outer_gap_px values before saving."
+            )
+        result["innerGapPx"] = (
+            slot.inner_gap_px
+            if slot.inner_gap_px is not None
+            else legacy_spacing.value
+        )
+        result["outerGapPx"] = (
+            slot.outer_gap_px
+            if slot.outer_gap_px is not None
+            else legacy_spacing.value
+        )
     return result
 
 
@@ -1221,6 +2652,7 @@ def _decode_track_slots(
     value: object,
     *,
     mode: Literal["circular", "linear"],
+    schema: int,
     path: str,
 ) -> tuple[str | CircularTrackSlot | LinearTrackSlot, ...] | None:
     if value is None:
@@ -1231,10 +2663,38 @@ def _decode_track_slots(
     result: list[str | CircularTrackSlot | LinearTrackSlot] = []
     for index, raw in enumerate(raw_slots):
         if isinstance(raw, str):
-            result.append(raw)
+            if mode == "circular" and schema in {1, 2}:
+                migrated = _migrate_legacy_circular_track_slot_spec(raw)
+                try:
+                    result.append(
+                        parse_circular_track_slot(
+                            migrated,
+                            _allow_legacy_transport=True,
+                        )
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise CanonicalRequestDecodingError(
+                        f"Invalid legacy Circular slot at {path}[{index}]: {exc}"
+                    ) from exc
+            else:
+                result.append(raw)
             continue
         slot_path = f"{path}[{index}]"
         slot = _object(raw, path=slot_path, required={"kind"}, exact=False)
+        legacy_spacing: ScalarSpec | None = None
+        if mode == "circular" and schema in {1, 2} and "spacing" in slot:
+            slot = dict(slot)
+            raw_legacy_spacing = slot.pop("spacing")
+            if raw_legacy_spacing is not None:
+                decoded_spacing = _decode_scalar_if_needed(
+                    raw_legacy_spacing,
+                    path=f"{slot_path}.spacing",
+                )
+                legacy_spacing = (
+                    decoded_spacing
+                    if isinstance(decoded_spacing, ScalarSpec)
+                    else ScalarSpec.parse(decoded_spacing)
+                )
         if slot["kind"] != expected_kind:
             raise CanonicalRequestDecodingError(
                 f"Unsupported track slot kind at {slot_path}: {slot['kind']!r}."
@@ -1244,7 +2704,7 @@ def _decode_track_slots(
             slot, path=slot_path, required={"kind", *field_map.keys()}
         )
         scalar_fields = (
-            {"radius", "width", "spacing"}
+            {"radius", "width"}
             if mode == "circular"
             else {"height", "spacing"}
         )
@@ -1256,6 +2716,20 @@ def _decode_track_slots(
             )
             for key, name in field_map.items()
         }
+        if mode == "circular" and schema in {1, 2}:
+            params = dict(kwargs.get("params") or {})
+            private_spacing = params.pop("__gbdraw_legacy_spacing", None)
+            if private_spacing is not None:
+                if legacy_spacing is not None:
+                    raise CanonicalRequestDecodingError(
+                        f"{slot_path} contains two legacy spacing values."
+                    )
+                legacy_spacing = (
+                    private_spacing
+                    if isinstance(private_spacing, ScalarSpec)
+                    else ScalarSpec.parse(private_spacing)
+                )
+            kwargs["params"] = params
         if str(kwargs.get("renderer", "")).strip().lower() == "annotations":
             params = dict(kwargs.get("params") or {})
             if isinstance(params.get("style_override"), MappingABC):
@@ -1263,8 +2737,42 @@ def _decode_track_slots(
                     params["style_override"], path=f"{slot_path}.params.style_override"
                 )
             kwargs["params"] = params
-        result.append(cls(**kwargs))
+        decoded_slot = cls(**kwargs)
+        if (
+            isinstance(decoded_slot, CircularTrackSlot)
+            and legacy_spacing is not None
+        ):
+            decoded_slot = _internal_circular_track_slot(
+                decoded_slot,
+                legacy_spacing=legacy_spacing,
+            )
+        result.append(decoded_slot)
     return tuple(result)
+
+
+def _migrate_legacy_circular_track_slot_spec(spec: str) -> str:
+    """Translate retired Circular slot fields at the persisted-data boundary."""
+
+    head, separator, options = str(spec).partition("@")
+    if not separator:
+        return str(spec)
+    migrated: list[str] = []
+    for raw_part in options.split(","):
+        part = raw_part.strip()
+        if not part or "=" not in part:
+            migrated.append(part)
+            continue
+        raw_key, raw_value = part.split("=", 1)
+        key = raw_key.strip().lower()
+        if key in {"strict", "compress", "reserve"}:
+            continue
+        if key == "spacing":
+            migrated.append(
+                f"__gbdraw_legacy_spacing={raw_value.strip()}"
+            )
+        else:
+            migrated.append(part)
+    return head if not migrated else f"{head}@{','.join(migrated)}"
 
 
 def _decode_scalar_if_needed(value: object, *, path: str) -> object:
@@ -1277,23 +2785,34 @@ def _decode_scalar_if_needed(value: object, *, path: str) -> object:
 
 
 def _encode_assembly_output(value: object) -> dict[str, Any]:
-    if not isinstance(value, OutputOptions):
-        raise CanonicalRequestEncodingError("diagramOptions.output must be OutputOptions.")
+    if not isinstance(value, (CircularOutputOptions, LinearOutputOptions)):
+        raise CanonicalRequestEncodingError(
+            "diagramOptions.output must use mode-specific output options."
+        )
     return {
-        "outputPrefix": value.output_prefix,
         "legend": value.legend,
         "plotTitlePosition": value.plot_title_position,
     }
 
 
-def _decode_assembly_output(value: object) -> OutputOptions:
+def _decode_assembly_output(
+    value: object,
+    *,
+    mode: Literal["circular", "linear"],
+    schema: int,
+) -> CircularOutputOptions | LinearOutputOptions:
+    required = {"legend", "plotTitlePosition"}
+    if schema in {1, 2}:
+        required.add("outputPrefix")
     payload = _object(
         value,
         path="renderRequest.diagramOptions.output",
-        required={"outputPrefix", "legend", "plotTitlePosition"},
+        required=required,
     )
-    result = OutputOptions(
-        output_prefix=payload["outputPrefix"],
+    output_type = (
+        CircularOutputOptions if mode == "circular" else LinearOutputOptions
+    )
+    result = output_type(
         legend=payload["legend"],
         plot_title_position=payload["plotTitlePosition"],
     )
@@ -1364,13 +2883,17 @@ def _decode_resource_matrix(
 
 
 def _encode_comparisons(
-    options: DiagramOptions,
+    options: CircularDiagramOptions | LinearDiagramOptions,
     *,
     mode: Literal["circular", "linear"],
     resources: _ResourceBuilder,
 ) -> list[dict[str, Any]]:
     if mode == "circular":
         return []
+    if not isinstance(options, LinearDiagramOptions):
+        raise CanonicalRequestEncodingError(
+            "Linear comparisons require LinearDiagramOptions."
+        )
     result: list[dict[str, Any]] = []
     for index, comparison in enumerate(options.linear_comparisons or (), start=1):
         ref = _table_ref(
@@ -1445,7 +2968,10 @@ def _encode_comparisons(
             }
         )
     if any(
-        not _same_default(getattr(options, name), getattr(_DEFAULT_OPTIONS, name))
+        not _same_default(
+            getattr(options, name),
+            getattr(_DEFAULT_LINEAR_OPTIONS, name),
+        )
         for name in _PIPELINE_FIELDS
     ) or options.protein_comparison_pairs is not None:
         settings = {
@@ -1617,17 +3143,13 @@ def _encode_pipeline_value(name: str, value: object) -> Any:
     if name == "collinearity_params":
         if value is None:
             return None
-        if isinstance(value, CollinearityParameters):
-            kind = "standard"
-        elif isinstance(value, LosslessCollinearityParameters):
-            kind = "lossless"
-        else:
+        if not isinstance(value, LosslessCollinearityParameters):
             raise CanonicalRequestEncodingError(
                 "Unsupported collinearity parameter object."
             )
         value.validate()
         return {
-            "kind": kind,
+            "kind": "lossless",
             "parameters": {
                 _camel(item.name): _json_value(
                     getattr(value, item.name), path=f"collinearityParams.{item.name}"
@@ -1651,6 +3173,7 @@ def _decode_pipeline(
     _require_exact_fields(settings, path=f"{path}.settings", required=set(field_map))
     mode = item["mode"]
     result = {"protein_blastp_mode": mode}
+    legacy_max_paralog_links: int | None = None
     if schema >= 2:
         pairs = _array(item["pairs"], path=f"{path}.pairs")
         decoded_pairs: list[tuple[int, int]] = []
@@ -1679,28 +3202,46 @@ def _decode_pipeline(
         )
     for key, name in field_map.items():
         raw = settings[key]
-        result[name] = (
-            _decode_collinearity_params(raw, path=f"{path}.settings.{key}")
-            if name == "collinearity_params"
-            else raw
+        if name == "collinearity_params":
+            decoded, legacy_max_paralog_links = _decode_collinearity_params(
+                raw,
+                path=f"{path}.settings.{key}",
+                allow_standard=schema in {1, 2},
+            )
+            result[name] = decoded
+        else:
+            result[name] = raw
+    if (
+        mode == "collinear"
+        and legacy_max_paralog_links is not None
+        and result["collinear_max_paralog_links_per_orthogroup"] == 2
+    ):
+        result["collinear_max_paralog_links_per_orthogroup"] = (
+            legacy_max_paralog_links
         )
     return result
 
 
-def _decode_collinearity_params(value: object, *, path: str) -> object:
+def _decode_collinearity_params(
+    value: object,
+    *,
+    path: str,
+    allow_standard: bool,
+) -> tuple[LosslessCollinearityParameters | None, int | None]:
     if value is None:
-        return None
+        return None, None
     payload = _object(value, path=path, required={"kind", "parameters"})
     kind = payload["kind"]
-    cls: type[CollinearityParameters] | type[LosslessCollinearityParameters]
-    if kind == "standard":
-        cls = CollinearityParameters
-    elif kind == "lossless":
-        cls = LosslessCollinearityParameters
-    else:
+    supported_kinds = {"standard", "lossless"} if allow_standard else {"lossless"}
+    if kind not in supported_kinds:
         raise CanonicalRequestDecodingError(
             f"Unsupported collinearity parameter kind at {path}: {kind!r}."
         )
+    cls = (
+        _LegacyStandardCollinearityPayload
+        if kind == "standard"
+        else LosslessCollinearityParameters
+    )
     parameters = _object(payload["parameters"], path=f"{path}.parameters")
     field_map = {_camel(item.name): item.name for item in fields(cls)}
     _require_exact_fields(
@@ -1709,7 +3250,11 @@ def _decode_collinearity_params(value: object, *, path: str) -> object:
     result = cls(**{name: parameters[key] for key, name in field_map.items()})
     _validate_dataclass_contract(result, path=path, error="decode")
     result.validate()
-    return result
+    if isinstance(result, _LegacyStandardCollinearityPayload):
+        lossless = result.to_lossless()
+        lossless.validate()
+        return lossless, result.max_paralog_links_per_orthogroup
+    return result, None
 
 
 def _decode_output(
@@ -1727,12 +3272,33 @@ def _decode_output(
         raise CanonicalRequestDecodingError(
             "renderRequest.output.formats must be an array."
         )
+    _boolean(payload["overwrite"], "renderRequest.output.overwrite")
     return RenderOutputRequest(
         output_prefix=payload["prefix"],
         output_directory=output_directory,
         formats=tuple(formats),
-        overwrite=payload["overwrite"],
+        overwrite=False,
         interactive_metadata_policy=payload["interactiveMetadataPolicy"],
+    )
+
+
+def _decode_batch_outputs(
+    value: object,
+    *,
+    output_directory: str | Path,
+    record_count: int,
+) -> tuple[RenderOutputRequest, ...]:
+    payloads = _array(value, path="renderRequest.output")
+    if len(payloads) != record_count:
+        raise CanonicalRequestDecodingError(
+            "A Circular batch canonical request requires one output per record."
+        )
+    return tuple(
+        _decode_output(
+            payload,
+            output_directory=output_directory,
+        )
+        for payload in payloads
     )
 
 
@@ -2225,6 +3791,7 @@ def _check_singleton_kind(kind: str, seen: set[str], *, path: str) -> None:
 
 __all__ = [
     "CANONICAL_REQUEST_SCHEMA",
+    "SUPPORTED_CANONICAL_REQUEST_SCHEMAS",
     "UNKNOWN_FIELD_POLICY",
     "CanonicalRequestCodecError",
     "CanonicalRequestDecodingError",

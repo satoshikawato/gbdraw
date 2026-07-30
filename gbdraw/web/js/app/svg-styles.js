@@ -16,8 +16,38 @@ import {
   isFeatureFillTarget
 } from './feature-dom.js';
 import { ruleMatchesFeature } from './feature-utils.js';
-import { parseTransformXY } from './legend/utils.js';
+import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
+
+export const getGroupsByBaseIds = (svg, baseIds, slotRenderers = []) => {
+  if (!svg) return [];
+  const seen = new Set();
+  const groups = [];
+  const addGroups = (selector) => {
+    svg.querySelectorAll(selector).forEach((group) => {
+      if (seen.has(group)) return;
+      seen.add(group);
+      groups.push(group);
+    });
+  };
+
+  if (Array.isArray(slotRenderers)) {
+    slotRenderers.forEach((renderer) => {
+      if (!renderer) return;
+      addGroups(`g[data-gbdraw-slot-renderer="${renderer}"]`);
+    });
+  }
+  if (groups.length > 0) return groups;
+
+  // Persisted SVGs created before semantic track hooks still need ID lookup.
+  if (Array.isArray(baseIds)) {
+    baseIds.forEach((baseId) => {
+      if (!baseId) return;
+      addGroups(`g[id="${baseId}"], g[id^="${baseId}_"]`);
+    });
+  }
+  return groups;
+};
 
 export const createSvgStyles = ({ state, watch, legendActions }) => {
   const {
@@ -40,26 +70,14 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
 
   const { getAllFeatureLegendGroups } = legendActions;
 
-  const getGroupsByBaseIds = (svg, baseIds) => {
-    if (!svg || !Array.isArray(baseIds) || baseIds.length === 0) return [];
-    const seen = new Set();
-    const groups = [];
-    baseIds.forEach((baseId) => {
-      if (!baseId) return;
-      const selector = `g[id="${baseId}"], g[id^="${baseId}_"]`;
-      svg.querySelectorAll(selector).forEach((group) => {
-        if (seen.has(group)) return;
-        seen.add(group);
-        groups.push(group);
-      });
-    });
-    return groups;
-  };
-
   const ensureUniqueSkewClipPathIds = (svg) => {
     if (!svg) return false;
 
-    const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
+    const skewGroups = getGroupsByBaseIds(
+      svg,
+      ['skew', 'gc_skew'],
+      ['dinucleotide_skew']
+    );
     if (skewGroups.length === 0) return false;
     let changed = false;
 
@@ -131,7 +149,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     let changed = false;
 
     const fixGradientId = (legend, suffix) => {
-      const pairwiseLegend = legend.querySelector('#pairwise_legend');
+      const pairwiseLegend = legend.querySelector(PAIRWISE_LEGEND_SELECTOR);
       if (!pairwiseLegend) return;
 
       pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
@@ -212,7 +230,11 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       }
     });
 
-    const gcContentGroups = getGroupsByBaseIds(svg, ['gc_content']);
+    const gcContentGroups = getGroupsByBaseIds(
+      svg,
+      ['gc_content'],
+      ['dinucleotide_content']
+    );
     if (gcContentGroups.length > 0 && colors.gc_content) {
       gcContentGroups.forEach((gcContentGroup) => {
         const gcPaths = gcContentGroup.querySelectorAll('path');
@@ -223,7 +245,11 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       });
     }
 
-    const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
+    const skewGroups = getGroupsByBaseIds(
+      svg,
+      ['skew', 'gc_skew'],
+      ['dinucleotide_skew']
+    );
     if (skewGroups.length > 0) {
       skewGroups.forEach((skewGroup) => {
         const skewPaths = skewGroup.querySelectorAll('path');
@@ -388,7 +414,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
     });
 
     if (colors.pairwise_match_min && colors.pairwise_match_max) {
-      const allPairwiseLegends = svg.querySelectorAll('#pairwise_legend, [id="pairwise_legend"]');
+      const allPairwiseLegends = svg.querySelectorAll(PAIRWISE_LEGEND_SELECTOR);
       allPairwiseLegends.forEach((pairwiseLegend) => {
         if (updatePairwiseLegendGradientStops(pairwiseLegend, colors)) updatedCount++;
       });
@@ -497,7 +523,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       });
     });
 
-    const tickGroups = getGroupsByBaseIds(svg, ['tick']);
+    const tickGroups = getGroupsByBaseIds(svg, ['tick'], ['ticks']);
     tickGroups.forEach((tickGroup) => {
       const tickElements = tickGroup.querySelectorAll('path, line');
       tickElements.forEach((el) => {
@@ -610,7 +636,11 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
 
     let updated = false;
 
-    const gcContentGroups = getGroupsByBaseIds(svg, ['gc_content']);
+    const gcContentGroups = getGroupsByBaseIds(
+      svg,
+      ['gc_content'],
+      ['dinucleotide_content']
+    );
     if (gcContentGroups.length > 0) {
       const shouldHide = mode.value === 'circular' ? form.suppress_gc : !form.show_gc;
       gcContentGroups.forEach((gcContentGroup) => {
@@ -625,7 +655,11 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       });
     }
 
-    const skewGroups = getGroupsByBaseIds(svg, ['skew', 'gc_skew']);
+    const skewGroups = getGroupsByBaseIds(
+      svg,
+      ['skew', 'gc_skew'],
+      ['dinucleotide_skew']
+    );
     if (skewGroups.length > 0) {
       const shouldHide = mode.value === 'circular' ? form.suppress_skew : !form.show_skew;
       skewGroups.forEach((skewGroup) => {
@@ -640,7 +674,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       });
     }
 
-    const depthGroups = getGroupsByBaseIds(svg, ['depth']);
+    const depthGroups = getGroupsByBaseIds(svg, ['depth'], ['depth']);
     if (depthGroups.length > 0) {
       const shouldHide = !form.show_depth;
       depthGroups.forEach((depthGroup) => {

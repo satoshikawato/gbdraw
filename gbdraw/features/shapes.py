@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""Feature shape helpers.
+"""Feature rendering helpers.
 
-This module centralizes feature-shape parsing and directional feature resolution.
+Public option names retain ``feature_shape`` for compatibility, while this module
+models the value as a rendering policy because ``underlay`` is a layer choice.
 """
 
 from __future__ import annotations
@@ -11,7 +12,22 @@ from __future__ import annotations
 from typing import Iterable, Literal, Mapping, cast
 
 
-FeatureShape = Literal["arrow", "rectangle"]
+FeatureRendering = Literal["arrow", "rectangle", "underlay"]
+FeatureShape = FeatureRendering
+
+FEATURE_RENDERING_VALUES: frozenset[str] = frozenset(
+    {"arrow", "rectangle", "underlay"}
+)
+
+DEFAULT_FEATURE_RENDERINGS: dict[str, FeatureRendering] = {
+    "CDS": "arrow",
+    "rRNA": "arrow",
+    "tRNA": "arrow",
+    "tmRNA": "arrow",
+    "ncRNA": "arrow",
+    "misc_RNA": "arrow",
+    "repeat_region": "underlay",
+}
 
 DEFAULT_DIRECTIONAL_FEATURE_TYPES: frozenset[str] = frozenset(
     {"CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA"}
@@ -20,11 +36,30 @@ DEFAULT_DIRECTIONAL_FEATURE_TYPES: frozenset[str] = frozenset(
 
 def normalize_feature_shape(value: str) -> FeatureShape:
     normalized = str(value).strip().lower()
-    if normalized not in {"arrow", "rectangle"}:
+    if normalized not in FEATURE_RENDERING_VALUES:
         raise ValueError(
-            f"invalid feature shape '{value}': expected 'arrow' or 'rectangle'"
+            f"invalid feature shape '{value}': expected 'arrow', 'rectangle', or 'underlay'"
         )
     return cast(FeatureShape, normalized)
+
+
+def default_feature_rendering(feature_type: str) -> FeatureRendering:
+    """Return the fresh-schema rendering default for one feature type."""
+
+    return DEFAULT_FEATURE_RENDERINGS.get(str(feature_type), "rectangle")
+
+
+def resolve_feature_rendering(
+    feature_type: str,
+    feature_shapes: Mapping[str, str] | None,
+) -> FeatureRendering:
+    """Resolve one feature type against strict explicit overrides and defaults."""
+
+    normalized_shapes = normalize_feature_shape_overrides(feature_shapes)
+    return normalized_shapes.get(
+        str(feature_type),
+        default_feature_rendering(str(feature_type)),
+    )
 
 
 def parse_feature_shape_assignment(raw: str) -> tuple[str, FeatureShape]:
@@ -82,12 +117,36 @@ def resolve_directional_feature_types(
     return directional_types
 
 
+def resolve_underlay_feature_types(
+    feature_shapes: Mapping[str, str] | None,
+) -> set[str]:
+    """Return default and explicitly configured underlay feature types."""
+
+    underlay_types = {
+        feature_type
+        for feature_type, rendering in DEFAULT_FEATURE_RENDERINGS.items()
+        if rendering == "underlay"
+    }
+    for feature_type, rendering in normalize_feature_shape_overrides(feature_shapes).items():
+        if rendering == "underlay":
+            underlay_types.add(feature_type)
+        else:
+            underlay_types.discard(feature_type)
+    return underlay_types
+
+
 __all__ = [
     "DEFAULT_DIRECTIONAL_FEATURE_TYPES",
+    "DEFAULT_FEATURE_RENDERINGS",
+    "FEATURE_RENDERING_VALUES",
+    "FeatureRendering",
     "FeatureShape",
+    "default_feature_rendering",
     "normalize_feature_shape",
     "normalize_feature_shape_overrides",
     "parse_feature_shape_assignment",
     "parse_feature_shape_overrides",
     "resolve_directional_feature_types",
+    "resolve_feature_rendering",
+    "resolve_underlay_feature_types",
 ]

@@ -24,6 +24,7 @@ _PYTHON_RUNTIME_PACKAGE_DATA = [
     "data/color_palettes.toml",
     "data/config.toml",
     "data/*.ttf",
+    "web/js/services/standalone-interactivity-assets.js",
 ]
 
 _NATIVE_RUNTIME_PACKAGE_DATA = [
@@ -90,6 +91,10 @@ _BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
 _BROWSER_WHEEL_FORBIDDEN_FILES = {
     "gbdraw/web/index.html",
     "gbdraw/web/open-source-notices.html",
+}
+
+_BROWSER_WHEEL_ALLOWED_FILES = {
+    "gbdraw/web/js/services/standalone-interactivity-assets.js",
 }
 
 
@@ -188,7 +193,10 @@ def inspect_browser_wheel_payload(path: Path) -> None:
         name
         for name in names
         if name in _BROWSER_WHEEL_FORBIDDEN_FILES
-        or any(name.startswith(prefix) for prefix in _BROWSER_WHEEL_FORBIDDEN_PREFIXES)
+        or (
+            name not in _BROWSER_WHEEL_ALLOWED_FILES
+            and any(name.startswith(prefix) for prefix in _BROWSER_WHEEL_FORBIDDEN_PREFIXES)
+        )
         or (name.startswith("gbdraw/web/gbdraw-") and name.endswith(".whl"))
     )
     if forbidden:
@@ -205,6 +213,7 @@ def inspect_browser_wheel_payload(path: Path) -> None:
     required = {
         "gbdraw/data/color_palettes.toml",
         "gbdraw/data/config.toml",
+        "gbdraw/web/js/services/standalone-interactivity-assets.js",
     }
     missing = sorted(required - names)
     if missing:

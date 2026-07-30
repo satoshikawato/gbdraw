@@ -10,19 +10,37 @@ from dataclasses import dataclass
 from email import policy
 from email.message import Message
 from email.parser import Parser
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from types import ModuleType
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
-from gbdraw._build_support import read_project_version  # noqa: E402
-from gbdraw._web_assets import (  # noqa: E402
-    PYODIDE_BUNDLED_WHEELS,
-    WEB_ASSET_NOTICES,
-    WEB_ROOT,
+
+def _load_repo_module(name: str, path: Path) -> ModuleType:
+    spec = spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load {name} from {path}")
+    module = module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_build_support = _load_repo_module(
+    "gbdraw_build_support_standalone",
+    REPO_ROOT / "gbdraw" / "_build_support.py",
 )
+_web_assets = _load_repo_module(
+    "gbdraw_web_assets_standalone",
+    REPO_ROOT / "gbdraw" / "_web_assets.py",
+)
+
+read_project_version = _build_support.read_project_version
+PYODIDE_BUNDLED_WHEELS = _web_assets.PYODIDE_BUNDLED_WHEELS
+WEB_ASSET_NOTICES = _web_assets.WEB_ASSET_NOTICES
+WEB_ROOT = _web_assets.WEB_ROOT
 
 
 NOTICES_PATH = WEB_ROOT / "open-source-notices.html"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,8 +31,9 @@ from gbdraw.render.formats import (
     resolve_format_output_path,
 )
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
-from gbdraw.features.ids import compute_feature_hash
+from gbdraw.features.ids import compute_feature_hash, compute_feature_hash_from_parts
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
+from gbdraw.web_support.orthogroup_metadata import enrich_features_with_orthogroups
 
 
 def _drawing(path: Path) -> Drawing:
@@ -90,6 +92,73 @@ def test_interactive_types_and_builder_are_public() -> None:
     assert public_enrich_svg is enrich_svg
     assert context.features[0]["record_id"] == "rec1"
     assert context.features[0]["type"] == "CDS"
+
+
+def test_linear_interactive_context_keeps_stable_feature_ids_until_svg_enrichment() -> (
+    None
+):
+    records = []
+    for record_index in range(2):
+        feature = SeqFeature(
+            SimpleLocation(0, 9, strand=1),
+            type="CDS",
+            qualifiers={"gene": [f"gene{record_index}"], "translation": ["M"]},
+        )
+        records.append(
+            SeqRecord(
+                Seq("ATG" * 4),
+                id=f"rec{record_index}",
+                features=[feature],
+            )
+        )
+
+    context = build_interactive_svg_context(
+        records,
+        selected_features_set=["CDS"],
+        linear_rendered_feature_ids=True,
+    )
+
+    assert len(context.features) == 2
+    assert all(
+        feature["svg_id"] == feature["stable_feature_id"]
+        for feature in context.features
+    )
+    assert [
+        feature["stable_feature_id"] for feature in context.biological_features
+    ] == [feature["stable_feature_id"] for feature in context.features]
+
+
+def test_orthogroup_enrichment_requires_record_index_for_ambiguous_stable_ids() -> None:
+    groups = [
+        {
+            "id": f"og_{record_index}",
+            "member_count": 1,
+            "record_coverage_count": 1,
+            "members": [
+                {
+                    "featureSvgId": "fshared",
+                    "stableFeatureSvgId": "fshared",
+                    "recordIndex": record_index,
+                    "featureIndex": 0,
+                    "proteinId": f"protein_{record_index}",
+                }
+            ],
+        }
+        for record_index in range(2)
+    ]
+
+    enriched = enrich_features_with_orthogroups(
+        [
+            {"svg_id": "fshared", "stable_feature_id": "fshared", "record_idx": 1},
+            {"svg_id": "fshared", "stable_feature_id": "fshared", "record_index": 0},
+            {"svg_id": "fshared", "stable_feature_id": "fshared"},
+        ],
+        groups,
+    )
+
+    assert enriched[0]["orthogroup_id"] == "og_1"
+    assert enriched[1]["orthogroup_id"] == "og_0"
+    assert "orthogroup_id" not in enriched[2]
 
 
 def test_parse_formats_accepts_interactive_svg_alias_and_dedupes() -> None:
@@ -381,7 +450,13 @@ def test_linear_cli_interactive_context_includes_orthogroup_payload() -> None:
         source_record_index_by_orthogroup_id={},
     )
 
-    context = linear_cli._build_interactive_svg_context([record], {"CDS"}, orthogroups)
+    context = build_interactive_svg_context(
+        [record],
+        selected_features_set={"CDS"},
+        orthogroups=orthogroups,
+        linear_rendered_feature_ids=True,
+        mode="linear",
+    )
 
     assert context.orthogroups[0]["id"] == "og_1"
     assert context.orthogroups[0]["members"][0]["start"] == 0
@@ -401,7 +476,13 @@ def test_linear_cli_interactive_context_orthogroup_members_use_absolute_region_c
     record = SeqRecord(Seq("N" * 1000), id="rec1", features=[feature])
     record.annotations["gbdraw_coord_base"] = 10000
     record.annotations["gbdraw_coord_step"] = 1
-    svg_id = compute_feature_hash(feature, record_id=record.id)
+    svg_id = compute_feature_hash_from_parts(
+        "CDS",
+        9999,
+        10456,
+        -1,
+        record_id=record.id,
+    )
     member = SimpleNamespace(
         orthogroup_id="og_1",
         protein_id="gbd_r0001_cds000001",
@@ -442,7 +523,13 @@ def test_linear_cli_interactive_context_orthogroup_members_use_absolute_region_c
         source_record_index_by_orthogroup_id={},
     )
 
-    context = linear_cli._build_interactive_svg_context([record], {"CDS"}, orthogroups)
+    context = build_interactive_svg_context(
+        [record],
+        selected_features_set={"CDS"},
+        orthogroups=orthogroups,
+        linear_rendered_feature_ids=True,
+        mode="linear",
+    )
 
     member_payload = context.orthogroups[0]["members"][0]
     assert member_payload["start"] == 9999
@@ -509,6 +596,180 @@ def test_enrich_svg_uses_orthogroup_payload_for_feature_and_match_metadata() -> 
     assert match["orthogroup_ids"] == ["og_1"]
     assert "sections" not in match
     assert "hover_rows" not in match
+
+
+def test_enrich_svg_uses_stable_orthogroup_member_feature_ids() -> None:
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
+      <path id="fstable" data-gbdraw-feature-id="fstable" fill="#54bcf8" d="M 1 1 L 2 2" />
+    </svg>"""
+    member = {
+        "orthogroupId": "og_1",
+        "featureSvgId": "fstable_record_1",
+        "stableFeatureSvgId": "fstable",
+        "recordId": "rec1",
+        "sourceProteinId": "WP_000001.1",
+        "start": 0,
+        "end": 9,
+        "strand": "+",
+    }
+
+    payload = _metadata_payload(
+        enrich_svg(
+            svg,
+            InteractiveSvgContext(
+                features=[
+                    {
+                        "svg_id": "fstable_record_1",
+                        "stable_svg_id": "fstable",
+                        "record_id": "rec1",
+                        "type": "CDS",
+                        "start": 0,
+                        "end": 9,
+                        "strand": "+",
+                        "orthogroup_id": "og_1",
+                        "orthogroup_member": member,
+                        "nucleotide_sequence": "ATGAAATAA",
+                        "amino_acid_sequence": "MK*",
+                    }
+                ],
+                orthogroups=[
+                    {
+                        "id": "og_1",
+                        "member_count": 1,
+                        "record_coverage_count": 1,
+                        "members": [member],
+                    }
+                ],
+            ),
+        )
+    )
+
+    assert payload["features"][0]["svg_id"] == "fstable"
+    assert payload["features"][0]["orthogroup_member"]["feature_svg_id"] == "fstable"
+    assert payload["orthogroups"][0]["members"][0]["feature_svg_id"] == "fstable"
+
+
+def test_enrich_svg_keeps_hidden_biological_features_and_orthogroup_members() -> None:
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
+      <path id="fvisible_record_1" data-gbdraw-feature-id="fvisible_record_1"
+        data-gbdraw-stable-feature-id="fvisible" data-gbdraw-record-index="0"
+        fill="#54bcf8" d="M 1 1 L 2 2" />
+    </svg>"""
+    visible_member = {
+        "orthogroupId": "og_shared",
+        "featureSvgId": "fvisible",
+        "stableFeatureSvgId": "fvisible",
+        "recordIndex": 0,
+        "recordId": "rec1",
+        "sourceProteinId": "WP_VISIBLE.1",
+    }
+    hidden_member = {
+        "orthogroupId": "og_shared",
+        "featureSvgId": "fvisible",
+        "stableFeatureSvgId": "fvisible",
+        "recordIndex": 1,
+        "recordId": "rec2",
+        "sourceProteinId": "WP_HIDDEN.1",
+    }
+    hidden_only_member = {
+        "orthogroupId": "og_hidden",
+        "featureSvgId": "fhiddenonly",
+        "stableFeatureSvgId": "fhiddenonly",
+        "recordIndex": 1,
+        "recordId": "rec2",
+        "sourceProteinId": "WP_HIDDEN_ONLY.1",
+    }
+
+    payload = _metadata_payload(
+        enrich_svg(
+            svg,
+            InteractiveSvgContext(
+                features=[
+                    {
+                        "svg_id": "fvisible",
+                        "stable_svg_id": "fvisible",
+                        "record_idx": 0,
+                        "record_id": "rec1",
+                        "type": "CDS",
+                        "orthogroup_id": "og_shared",
+                        "orthogroup_member": visible_member,
+                    }
+                ],
+                biological_features=[
+                    {
+                        "svg_id": "fvisible",
+                        "stable_svg_id": "fvisible",
+                        "stable_feature_id": "fvisible",
+                        "record_idx": 0,
+                        "feature_index": 0,
+                        "record_id": "rec1",
+                        "type": "CDS",
+                        "nucleotide_sequence": "ATGAAATAA",
+                        "amino_acid_sequence": "MK",
+                    },
+                    {
+                        "svg_id": "fvisible",
+                        "stable_svg_id": "fvisible",
+                        "stable_feature_id": "fvisible",
+                        "record_idx": 1,
+                        "feature_index": 0,
+                        "record_id": "rec2",
+                        "type": "CDS",
+                        "nucleotide_sequence": "ATGCCCTAA",
+                        "amino_acid_sequence": "MP",
+                    },
+                    {
+                        "svg_id": "fhiddenonly",
+                        "stable_svg_id": "fhiddenonly",
+                        "stable_feature_id": "fhiddenonly",
+                        "record_idx": 1,
+                        "feature_index": 1,
+                        "record_id": "rec2",
+                        "type": "CDS",
+                        "nucleotide_sequence": "ATGGGGTAA",
+                        "amino_acid_sequence": "MG",
+                    },
+                ],
+                orthogroups=[
+                    {
+                        "id": "og_shared",
+                        "member_count": 2,
+                        "record_coverage_count": 2,
+                        "members": [visible_member, hidden_member],
+                    },
+                    {
+                        "id": "og_hidden",
+                        "member_count": 1,
+                        "record_coverage_count": 1,
+                        "members": [hidden_only_member],
+                    },
+                ],
+            ),
+        )
+    )
+
+    assert [feature["svg_id"] for feature in payload["features"]] == [
+        "fvisible_record_1"
+    ]
+    biological_by_key = {
+        (feature["record_idx"], feature["stable_feature_id"]): feature
+        for feature in payload["biological_features"]
+    }
+    assert biological_by_key[(0, "fvisible")]["rendered_svg_id"] == "fvisible_record_1"
+    assert "rendered_svg_id" not in biological_by_key[(1, "fvisible")]
+    assert biological_by_key[(1, "fvisible")]["amino_acid_sequence"] == "MP"
+
+    groups = {group["id"]: group for group in payload["orthogroups"]}
+    assert set(groups) == {"og_shared", "og_hidden"}
+    shared_members = {
+        member["record_index"]: member for member in groups["og_shared"]["members"]
+    }
+    assert shared_members[0]["stable_feature_svg_id"] == "fvisible"
+    assert shared_members[0]["rendered_feature_svg_id"] == "fvisible_record_1"
+    assert shared_members[1]["feature_svg_id"] == "fvisible"
+    assert "rendered_feature_svg_id" not in shared_members[1]
+    assert groups["og_hidden"]["members"][0]["feature_svg_id"] == "fhiddenonly"
+    assert "rendered_feature_svg_id" not in groups["og_hidden"]["members"][0]
 
 
 def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> None:
@@ -695,53 +956,21 @@ def test_enrich_svg_match_metadata_matches_standalone_collinear_sections() -> No
     assert "sections" not in match
 
 
-def test_save_figure_interactive_writes_static_and_interactive_without_cairosvg(
+def test_save_figure_to_interactive_png_uses_cairosvg_only_for_png(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     drawing = _drawing(tmp_path / "out.svg")
-    calls: list[str] = []
-
-    def fake_enrich(svg_source: str, context=None) -> str:
-        calls.append(svg_source)
-        assert context is not None
-        return "<svg data-gbdraw-interactive-svg=\"true\" />"
-
-    monkeypatch.setattr(export_module, "enrich_svg", fake_enrich)
-    monkeypatch.setattr(
-        export_module,
-        "get_cairosvg",
-        lambda: pytest.fail("CairoSVG should not be loaded for interactive-svg only"),
-    )
-
-    export_module.save_figure(
-        drawing,
-        ["interactive-svg"],
-        interactive_context=InteractiveSvgContext(features=[{"svg_id": "fabc12345"}]),
-    )
-
-    assert (tmp_path / "out.svg").exists()
-    assert (tmp_path / "out.interactive.svg").read_text(encoding="utf-8").startswith(
-        "<svg data-gbdraw-interactive-svg"
-    )
-    assert len(calls) == 1
-
-
-def test_save_figure_interactive_png_uses_cairosvg_only_for_png(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    drawing = _drawing(tmp_path / "out.svg")
-    monkeypatch.setattr(export_module, "enrich_svg", lambda _source, context=None: "<svg />")
+    monkeypatch.setattr(api_render, "enrich_svg", lambda _source, context=None: "<svg />")
 
     class FakeCairoSvg:
         @staticmethod
         def svg2png(*, bytestring, write_to):
-            Path(write_to).write_bytes(bytestring)
+            write_to.write(bytestring)
 
     monkeypatch.setattr(export_module, "get_cairosvg", lambda: FakeCairoSvg)
 
-    export_module.save_figure(drawing, ["interactive-svg", "png"])
+    api_render.save_figure_to(drawing, ["interactive-svg", "png"])
 
     assert (tmp_path / "out.interactive.svg").exists()
     assert (tmp_path / "out.png").exists()
@@ -787,7 +1016,7 @@ def test_save_figure_to_overwrite_replaces_existing_binary(
     class FakeCairoSvg:
         @staticmethod
         def svg2png(*, bytestring, write_to):
-            Path(write_to).write_bytes(b"new png")
+            write_to.write(b"new png")
 
     monkeypatch.setattr(api_render._export, "get_cairosvg", lambda: FakeCairoSvg)
 
@@ -802,6 +1031,104 @@ def test_save_figure_to_overwrite_replaces_existing_binary(
     assert paths == [str(svg_path), str(png_path)]
     assert svg_path.read_text(encoding="utf-8").startswith("<?xml")
     assert png_path.read_bytes() == b"new png"
+
+
+@pytest.mark.parametrize("blocked_kind", ("directory", "fifo"))
+def test_save_figure_to_preflights_all_formats_before_overwrite_removal(
+    blocked_kind: str,
+    tmp_path: Path,
+) -> None:
+    drawing = _drawing(tmp_path / "ignored.svg")
+    svg_path = tmp_path / "api-out.svg"
+    svg_path.write_text("keep", encoding="utf-8")
+    blocked_png = tmp_path / "api-out.png"
+    if blocked_kind == "directory":
+        blocked_png.mkdir()
+    else:
+        if not hasattr(os, "mkfifo"):
+            pytest.skip("FIFOs are unavailable on this platform")
+        os.mkfifo(blocked_png)
+
+    with pytest.raises(ValidationError, match="not replaceable files"):
+        api_render.save_figure_to(
+            drawing,
+            "png",
+            output_dir=str(tmp_path),
+            output_prefix="api-out",
+            overwrite=True,
+        )
+
+    assert svg_path.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.parametrize("parent_kind", ("file", "fifo", "dangling-symlink"))
+def test_save_figure_to_rejects_invalid_output_parent_before_writing(
+    parent_kind: str,
+    tmp_path: Path,
+) -> None:
+    drawing = _drawing(tmp_path / "ignored.svg")
+    output_dir = tmp_path / "blocked-parent"
+    if parent_kind == "file":
+        output_dir.write_text("keep", encoding="utf-8")
+    elif parent_kind == "fifo":
+        if not hasattr(os, "mkfifo"):
+            pytest.skip("FIFOs are unavailable on this platform")
+        os.mkfifo(output_dir)
+    else:
+        try:
+            output_dir.symlink_to(
+                tmp_path / "missing-output-directory",
+                target_is_directory=True,
+            )
+        except OSError as exc:
+            pytest.skip(f"directory symlinks are unavailable: {exc}")
+
+    with pytest.raises(ValidationError, match="parent path.*not directories"):
+        api_render.save_figure_to(
+            drawing,
+            "svg",
+            output_dir=str(output_dir),
+            output_prefix="api-out",
+            overwrite=True,
+        )
+
+    assert not (output_dir / "api-out.svg").exists()
+
+
+def test_save_figure_to_does_not_follow_binary_target_created_after_preflight(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    drawing = _drawing(tmp_path / "ignored.svg")
+    png_path = tmp_path / "api-out.png"
+    protected_target = tmp_path / "protected.png"
+    protected_target.write_bytes(b"keep")
+
+    class FakeCairoSvg:
+        @staticmethod
+        def svg2png(*, bytestring, write_to):
+            write_to.write(bytestring)
+
+    def inject_symlink():
+        try:
+            png_path.symlink_to(protected_target)
+        except OSError as exc:
+            pytest.skip(f"file symlinks are unavailable: {exc}")
+        return FakeCairoSvg
+
+    monkeypatch.setattr(api_render._export, "get_cairosvg", inject_symlink)
+
+    with pytest.raises(ValidationError, match="already exists"):
+        api_render.save_figure_to(
+            drawing,
+            "png",
+            output_dir=str(tmp_path),
+            output_prefix="api-out",
+        )
+
+    assert (tmp_path / "api-out.svg").is_file()
+    assert png_path.is_symlink()
+    assert protected_target.read_bytes() == b"keep"
 
 
 def test_render_to_bytes_supports_interactive_svg(monkeypatch, tmp_path: Path) -> None:
@@ -853,7 +1180,7 @@ def test_save_figure_to_reports_partial_conversion_failure(
     class PartialCairoSvg:
         @staticmethod
         def svg2png(*, bytestring, write_to):
-            Path(write_to).write_bytes(bytestring)
+            write_to.write(bytestring)
 
         @staticmethod
         def svg2pdf(*, bytestring, write_to):

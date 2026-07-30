@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, TypeAlias
 
 from gbdraw.exceptions import ValidationError
+
+LinearTrackLayoutMode: TypeAlias = Literal["above", "middle", "below"]
 
 
 def _positive_finite_float(value: Any, *, field_name: str) -> float:
@@ -35,13 +37,22 @@ class CircularCanvasConfig:
     radius: float
     track_ratio: float
     track_type: str
-    allow_inner_labels: bool
     width: CircularCanvasWidthConfig
     track_ratio_factors: dict[str, list[float]]
     track_dict: dict[str, dict[str, dict[str, float]]]
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "CircularCanvasConfig":
+        if "show_labels" in d:
+            raise ValidationError(
+                "canvas.circular.show_labels is no longer accepted; use "
+                "labels.circular.scope"
+            )
+        if "allow_inner_labels" in d:
+            raise ValidationError(
+                "canvas.circular.allow_inner_labels is no longer accepted; use "
+                "labels.circular.scope"
+            )
         track_dict_raw = d.get("track_dict", {})
         track_dict: dict[str, dict[str, dict[str, float]]] = {}
         for length_param, by_track_type in dict(track_dict_raw).items():
@@ -56,7 +67,6 @@ class CircularCanvasConfig:
             radius=float(d["radius"]),
             track_ratio=float(d["track_ratio"]),
             track_type=str(d["track_type"]),
-            allow_inner_labels=bool(d["allow_inner_labels"]),
             width=CircularCanvasWidthConfig.from_dict(d["width"]),
             track_ratio_factors={
                 str(k): [float(x) for x in list(v)]
@@ -92,13 +102,14 @@ class LinearCanvasConfig:
     vertical_offset: float
     horizontal_offset: float
     vertical_padding: float
+    track_spacing: float
     comparison_height: float
     canvas_padding: float
     definition_gap: float
     default_gc_height: float
     depth_height: float
     depth_padding: float
-    track_layout: Literal["above", "middle", "below"]
+    track_layout: LinearTrackLayoutMode
     track_axis_gap: float | None
     ruler_on_axis: bool
     align_center: bool
@@ -109,13 +120,22 @@ class LinearCanvasConfig:
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "LinearCanvasConfig":
-        track_layout_raw = str(d.get("track_layout", "middle")).strip().lower()
-        if track_layout_raw in {"above", "spreadout"}:
-            track_layout: Literal["above", "middle", "below"] = "above"
-        elif track_layout_raw in {"below", "tuckin"}:
-            track_layout = "below"
-        else:
-            track_layout = "middle"
+        if "show_labels" in d:
+            raise ValidationError(
+                "canvas.linear.show_labels is no longer accepted; use "
+                "labels.linear.scope"
+            )
+        track_layout_value = d.get("track_layout", "middle")
+        if not isinstance(track_layout_value, str):
+            raise ValidationError(
+                "canvas.linear.track_layout must be one of: above, middle, below"
+            )
+        track_layout_raw = track_layout_value.strip().lower()
+        if track_layout_raw not in {"above", "middle", "below"}:
+            raise ValidationError(
+                "canvas.linear.track_layout must be one of: above, middle, below"
+            )
+        track_layout: Literal["above", "middle", "below"] = track_layout_raw  # type: ignore[assignment]
         track_axis_gap_raw = d.get("track_axis_gap", "auto")
         track_axis_gap: float | None
         if track_axis_gap_raw is None:
@@ -141,6 +161,10 @@ class LinearCanvasConfig:
             vertical_offset=float(d["vertical_offset"]),
             horizontal_offset=float(d["horizontal_offset"]),
             vertical_padding=float(d["vertical_padding"]),
+            track_spacing=max(
+                0.0,
+                float(d.get("track_spacing", 0.0)),
+            ),
             comparison_height=_positive_finite_float(
                 d["comparison_height"], field_name="comparison_height"
             ),
@@ -166,9 +190,6 @@ class CanvasConfig:
     show_gc: bool
     show_skew: bool
     show_depth: bool
-    # - bool: typical config.toml / circular CLI usage
-    # - str: linear CLI supports mode strings ("all"/"first"/"none")
-    show_labels: bool | Literal["all", "first", "orthogroup_top", "none"]
     strandedness: bool
     resolve_overlaps: bool
     circular: CircularCanvasConfig
@@ -176,19 +197,16 @@ class CanvasConfig:
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "CanvasConfig":
-        raw_show_labels = d.get("show_labels", False)
-        if raw_show_labels is None:
-            show_labels: bool | Literal["all", "first", "orthogroup_top", "none"] = False
-        elif isinstance(raw_show_labels, str):
-            show_labels = raw_show_labels
-        else:
-            show_labels = bool(raw_show_labels)
+        if "show_labels" in d:
+            raise ValidationError(
+                "canvas.show_labels is no longer accepted; use "
+                "labels.circular.scope and labels.linear.scope"
+            )
         return cls(
             dpi=int(d["dpi"]),
             show_gc=bool(d["show_gc"]),
             show_skew=bool(d["show_skew"]),
             show_depth=bool(d.get("show_depth", False)),
-            show_labels=show_labels,
             strandedness=bool(d["strandedness"]),
             resolve_overlaps=bool(d["resolve_overlaps"]),
             circular=CircularCanvasConfig.from_dict(d["circular"]),
@@ -200,6 +218,5 @@ __all__ = [
     "CanvasConfig",
     "CircularCanvasConfig",
     "LinearCanvasConfig",
+    "LinearTrackLayoutMode",
 ]
-
-

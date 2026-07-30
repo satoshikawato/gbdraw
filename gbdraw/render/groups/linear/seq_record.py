@@ -1,34 +1,28 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from collections import Counter
 from typing import Optional
 
-from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 from svgwrite.container import Group
 from svgwrite.shapes import Line
 from svgwrite.text import Text
 
 from ....canvas import LinearCanvasConfigurator
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.linear.labels import LabelDrawer
-from ....labels.placement import prepare_label_list_linear
-from ....layout.linear import LinearFeatureLaneGeometry
-from ....features.factory import create_feature_dict
-from ....features.objects import FeatureObject
-from ....features.colors import preprocess_color_tables
-from ....labels.filtering import preprocess_label_filtering
+from ....labels.linear import prepare_label_list_linear
+from ....layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
+from ....features.factory import FeatureBuildResult
 from ....configurators import FeatureDrawingConfigurator
+from ....svg.ids import record_group_svg_id
 from .length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
     auto_linear_tick_interval,
     format_linear_tick_label,
 )
-
-
-FeatureDict = dict[str, FeatureObject]
 
 
 class SeqRecordGroup:
@@ -39,11 +33,9 @@ class SeqRecordGroup:
         gb_record: SeqRecord,
         canvas_config: LinearCanvasConfigurator,
         feature_config: FeatureDrawingConfigurator,
-        config_dict: dict,
+        feature_layers: FeatureBuildResult,
+        render_context: LinearRecordRenderContext,
         precalculated_labels: Optional[list] = None,
-        cfg: GbdrawConfig | None = None,
-        precomputed_feature_dict: FeatureDict | None = None,
-        feature_track_layout: str | None = None,
         draw_features: bool = True,
         label_font_size: float | None = None,
         orthogroup_label_member_ids: set[str] | None = None,
@@ -60,31 +52,41 @@ class SeqRecordGroup:
         self.canvas_config = canvas_config
         self.length_param = self.canvas_config.length_param
         self.feature_config = feature_config
-        self.config_dict = config_dict
+        self.feature_layers = feature_layers
         self.precalculated_labels = precalculated_labels
-        self.precomputed_feature_dict = precomputed_feature_dict
         self.draw_features_enabled = bool(draw_features)
         self.orthogroup_label_member_ids = orthogroup_label_member_ids
         self.orthogroup_label_top_member_ids = orthogroup_label_top_member_ids
         self.record_index = int(record_index)
         self.record_count = int(record_count)
-        self.record_group_id = str(group_id) if group_id else str(gb_record.id)
+        self.record_group_id = (
+            str(group_id)
+            if group_id
+            else record_group_svg_id(
+                gb_record.id,
+                mode="linear",
+                record_index=self.record_index,
+                record_count=self.record_count,
+            )
+        )
         self.sequence_width = float(sequence_width) if sequence_width is not None else None
         self.record_local_ruler = bool(record_local_ruler)
         self.feature_offset_y = float(feature_offset_y)
         self.feature_lane_geometry = feature_lane_geometry
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
+        self.render_context = render_context
+        cfg = render_context.profile.config
         self._cfg = cfg
 
-        raw_show_labels = cfg.canvas.show_labels
-        self.show_labels = (raw_show_labels != "none") if isinstance(raw_show_labels, str) else bool(raw_show_labels)
+        label_scope = render_context.profile.label_scope
+        self.show_labels = (
+            label_scope == "all"
+            or label_scope == "orthogroup_top"
+            or (label_scope == "first" and self.record_index == 0)
+        )
 
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
         # Keep legacy behavior: linear label leader line width uses the "long" value.
         self.label_stroke_width = cfg.labels.stroke_width.long
-        self.label_filtering = cfg.labels.filtering.as_dict()
-        self.separate_strands = self.canvas_config.strandedness
-        self.resolve_overlaps = self.canvas_config.resolve_overlaps
         self.normalize_length = cfg.canvas.linear.normalize_length
         scale_cfg = cfg.objects.scale
         self.scale_style = str(scale_cfg.style).strip().lower()
@@ -104,14 +106,19 @@ class SeqRecordGroup:
         self.auto_scale_interval = auto_linear_tick_interval(max(1, int(self.canvas_config.longest_genome)))
         self.scale_label_context_length = max(1, int(self.canvas_config.longest_genome))
         self.axis_stroke_width = self._cfg.objects.axis.linear.stroke_width.for_length_param(self.length_param)
-        self.track_layout = str(feature_track_layout or self.canvas_config.track_layout).strip().lower()
-        self.ruler_on_axis = bool(cfg.canvas.linear.ruler_on_axis)
-        self.axis_ruler_enabled = (
-            self.ruler_on_axis
-            and self.scale_style == "ruler"
-            and self.track_layout in {"above", "below"}
-        )
         self.record_group: Group = self.setup_record_group()
+
+    @property
+    def separate_strands(self) -> bool:
+        return self.render_context.profile.strandedness
+
+    @property
+    def track_layout(self) -> str:
+        return self.render_context.feature_track_layout
+
+    @property
+    def axis_ruler_enabled(self) -> bool:
+        return self.render_context.axis_ruler_enabled
 
     def draw_linear_axis(self, alignment_width: float, genome_size_normalization_factor: float) -> Line:
         """
@@ -292,9 +299,15 @@ class SeqRecordGroup:
 
         # Draw features
         if self.draw_features_enabled:
+            feature_drawer = FeatureDrawer(self.feature_config)
+            feature_id_counts = Counter(
+                feature_drawer.get_feature_data_id(feature_object)
+                for feature_object in feature_dict.values()
+            )
             for feature_object in feature_dict.values():
                 feature_strand = feature_object.strand
-                feature_group = FeatureDrawer(self.feature_config).draw(
+                stable_feature_id = feature_drawer.get_feature_data_id(feature_object)
+                feature_group = feature_drawer.draw(
                     feature_object=feature_object,
                     group=feature_group,
                     genome_length=record_length,
@@ -309,12 +322,18 @@ class SeqRecordGroup:
                     feature_lane_geometry=self.feature_lane_geometry,
                     record_index=self.record_index,
                     record_count=self.record_count,
+                    feature_instance_id=(
+                        feature_object.feature_id
+                        if stable_feature_id
+                        and feature_id_counts[stable_feature_id] > 1
+                        else None
+                    ),
                 )
 
         # Add labels
         if self.show_labels:
             for label in label_list:
-                feature_group = LabelDrawer(self.config_dict).draw(label, feature_group)
+                feature_group = LabelDrawer().draw(label, feature_group)
 
         if has_feature_shift:
             feature_group.translate(0.0, self.feature_offset_y)
@@ -338,12 +357,11 @@ class SeqRecordGroup:
         cds_height: float = self.canvas_config.cds_height
         longest_genome: int = self.canvas_config.longest_genome
         arrow_length: float = self.canvas_config.arrow_length
-        color_table: DataFrame | None = self.feature_config.color_table
 
-        separate_strands = self.canvas_config.strandedness
-        resolve_overlaps = self.canvas_config.resolve_overlaps
-        label_filtering = self.label_filtering  # type: ignore
+        separate_strands = self.separate_strands
         record_group: Group = Group(id=self.record_group_id, debug=False)
+        record_group.attribs["data-gbdraw-record-id"] = str(self.gb_record.id)
+        record_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
 
         record_length: int = len(self.gb_record.seq)
 
@@ -354,31 +372,7 @@ class SeqRecordGroup:
         else:
             genome_size_normalization_factor: float = record_length / longest_genome
 
-        selected_features_set: str = self.feature_config.selected_features_set
-
-        default_colors: DataFrame | None = self.feature_config.default_colors
-        compute_label_text = self.show_labels and self.draw_features_enabled and self.precalculated_labels is None
-        label_filtering = (
-            preprocess_label_filtering(self.label_filtering)
-            if compute_label_text
-            else {}
-        )
-        if self.precomputed_feature_dict is not None:
-            feature_dict = self.precomputed_feature_dict
-        else:
-            color_table, default_colors = preprocess_color_tables(color_table, default_colors)
-            feature_dict, _ = create_feature_dict(
-                self.gb_record,
-                color_table,
-                selected_features_set,
-                default_colors,
-                separate_strands,
-                resolve_overlaps,
-                label_filtering,
-                directional_feature_types=self.feature_config.directional_feature_types,
-                feature_visibility_rules=self.feature_config.feature_visibility_rules,
-                compute_label_text=compute_label_text,
-            )
+        feature_dict = self.feature_layers.foreground_features
         label_list = []
         if self.show_labels and self.draw_features_enabled:
             if self.precalculated_labels is not None:
@@ -393,7 +387,6 @@ class SeqRecordGroup:
                     separate_strands,
                     self.track_layout,
                     self.canvas_config.track_axis_gap,
-                    self.config_dict,
                     cfg=self._cfg,
                     label_font_size=self.label_font_size,
                     orthogroup_label_member_ids=self.orthogroup_label_member_ids,
@@ -425,5 +418,3 @@ class SeqRecordGroup:
 
 
 __all__ = ["SeqRecordGroup"]
-
-

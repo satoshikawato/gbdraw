@@ -1,4 +1,8 @@
-import { resolveDisplayProteinId, resolveInternalProteinId } from '../feature-utils.js';
+import {
+  isInternalProteinDisplayId,
+  resolveDisplayProteinId,
+  resolveInternalProteinId
+} from '../feature-utils.js';
 
 export const RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([
   'qualifier-key',
@@ -14,7 +18,7 @@ export const FEATURE_SEARCH_FIELD_DEFINITIONS = Object.freeze([
   { id: 'record-id', label: 'Record ID' },
   { id: 'location', label: 'Location' },
   { id: 'strand', label: 'Strand' },
-  { id: 'orthogroup', label: 'Orthogroup' },
+  { id: 'orthogroup', label: 'Similarity group' },
   { id: 'qualifier-key', label: 'Qualifier key', richOnly: true },
   { id: 'qualifier-value', label: 'Qualifier value', richOnly: true },
   { id: 'nucleotide', label: 'Nucleotide', richOnly: true },
@@ -170,7 +174,7 @@ const appendSearchItems = (items, label, value, options = {}) => {
   }
   if (value === null || value === undefined) return;
   const text = String(value).trim();
-  if (!text) return;
+  if (!text || isInternalProteinDisplayId(text)) return;
   items.push({
     label,
     value: text,
@@ -294,18 +298,22 @@ const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   const proteinId = resolveDisplayProteinId(feature, member);
   const internalId = resolveInternalProteinId(feature, member);
   const items = [];
-  appendSearchItems(items, 'Orthogroup ID', orthogroupId);
-  appendSearchItems(items, 'Orthogroup name', group?.display_name || group?.displayName || group?.name);
-  appendSearchItems(items, 'Orthogroup description', group?.description);
+  appendSearchItems(items, 'Similarity group ID', orthogroupId);
+  appendSearchItems(items, 'Similarity group name', group?.display_name || group?.displayName || group?.name);
+  appendSearchItems(items, 'Similarity group description', group?.description);
   appendSearchItems(items, 'Protein ID', proteinId);
-  if (internalId && internalId !== proteinId) {
+  if (
+    internalId &&
+    internalId !== proteinId &&
+    !isInternalProteinDisplayId(internalId)
+  ) {
     appendSearchItems(items, 'Internal protein ID', internalId);
   }
-  appendSearchItems(items, 'Orthogroup member', member?.label);
-  appendSearchItems(items, 'Orthogroup member gene', member?.gene);
-  appendSearchItems(items, 'Orthogroup member product', member?.product);
-  appendSearchItems(items, 'Orthogroup member note', member?.note);
-  appendSearchItems(items, 'Orthogroup member protein ID', resolveDisplayProteinId(null, member));
+  appendSearchItems(items, 'Similarity-group member', member?.label);
+  appendSearchItems(items, 'Similarity-group member gene', member?.gene);
+  appendSearchItems(items, 'Similarity-group member product', member?.product);
+  appendSearchItems(items, 'Similarity-group member note', member?.note);
+  appendSearchItems(items, 'Similarity-group member protein ID', resolveDisplayProteinId(null, member));
   return items;
 };
 

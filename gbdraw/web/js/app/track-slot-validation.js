@@ -18,6 +18,9 @@ const CIRCULAR_GENERIC_LAYOUT_KEYS = new Set([
   'inner_radius', 'ro', 'outer', 'outer_radius', 'gap', 'gap_after',
   'gapafter', 'innerradius', 'outerradius'
 ]);
+const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = new Set([
+  'spacing', 'strict', 'compress', 'reserve'
+]);
 
 const parseSlotZIndex = (value, fieldName) => {
   if (value === null || value === undefined || value === '') return 0;
@@ -95,25 +98,25 @@ const validateSlotGeometry = (slot, id, layoutKind) => {
   if (layoutKind !== 'circular') {
     throw new Error(`Unsupported track-slot layout kind: ${layoutKind}.`);
   }
-  const spacing = parseOptionalCircularScalar(
-    slot.spacing,
-    `Circular track slot '${id}' spacing`
-  );
+  const obsoleteKey = Object.keys(slot).find((key) => (
+    OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedString(key))
+  ));
+  if (obsoleteKey) {
+    throw new Error(
+      `Circular track slot '${id}' uses obsolete field '${obsoleteKey}'. ` +
+      'Use inner_gap_px and outer_gap_px for physical gaps.'
+    );
+  }
   parseOptionalCircularScalar(slot.radius, `Circular track slot '${id}' radius`);
   parseOptionalCircularScalar(slot.width, `Circular track slot '${id}' width`);
-  const innerGap = parseOptionalCircularGap(
+  parseOptionalCircularGap(
     slot.inner_gap_px,
     `Circular track slot '${id}' inner_gap_px`
   );
-  const outerGap = parseOptionalCircularGap(
+  parseOptionalCircularGap(
     slot.outer_gap_px,
     `Circular track slot '${id}' outer_gap_px`
   );
-  if (spacing !== null && (innerGap !== null || outerGap !== null)) {
-    throw new Error(
-      `Circular track slot '${id}' cannot combine spacing with inner_gap_px or outer_gap_px.`
-    );
-  }
 };
 
 const validateGenericParams = (params, id, layoutKind) => {
@@ -122,6 +125,15 @@ const validateGenericParams = (params, id, layoutKind) => {
     : CIRCULAR_GENERIC_LAYOUT_KEYS;
   const invalidKey = Object.keys(params).find((key) => genericKeys.has(normalizedString(key)));
   if (invalidKey) {
+    if (
+      layoutKind === 'circular' &&
+      OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS.has(normalizedString(invalidKey))
+    ) {
+      throw new Error(
+        `Circular track slot '${id}' uses obsolete field 'params.${invalidKey}'. ` +
+        'Use inner_gap_px and outer_gap_px for physical gaps.'
+      );
+    }
     throw new Error(
       `${layoutKind === 'linear' ? 'Linear' : 'Circular'} track slot '${id}' stores generic layout field '${invalidKey}' in params.`
     );

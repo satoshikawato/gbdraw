@@ -11,25 +11,54 @@ public contracts and default diagrams remain stable.
 
 ## Inspect the contract first
 
-1. Read `CLAUDE.md`, `docs/PYTHON_API_IMPROVEMENT_PLAN.md`,
-   `docs/PYTHON_API.md`, and any related ADR.
-2. Inspect `git status` before editing. Preserve unrelated and pre-existing work.
+1. Read `CLAUDE.md`, `docs/PYTHON_API.md`, `docs/CLI_Reference.md`, the
+   current public-contract tests, and any related ADR that is present. Do not
+   assume an old plan or ADR still exists.
+2. Inspect `git status` and the affected diff before editing. In this repository,
+   dirty in-scope code is not protected: replace it when the requested fix requires
+   a different implementation. Leave unrelated files outside the change.
 3. Inventory the affected exports, signatures, dataclass fields/defaults, callers,
    documentation examples, and contract snapshots.
 4. Trace each public option through the adapter and assembler to the function that
    actually consumes it. Do not assume successful validation means successful
    forwarding.
+5. For a cross-surface change, make a matrix of Circular/Linear against the package
+   root API, `gbdraw.api`, CLI, Web generation, and saved-session replay. Record the
+   public name, default, validation owner, and final consumer for each affected
+   concept. Distinguish an intentional compatibility alias from the current
+   contract.
 
 ## Preserve dependency direction
 
 - Put shared behavior in a CLI-independent owner and make both CLI and API call it.
 - Keep `gbdraw.api` to re-exports and small validation or translation adapters.
 - Do not import CLI parsers or private CLI helpers from the public API.
+- Make Web generation submit the same versioned typed request that sessions
+  serialize. Do not maintain a second Web-to-CLI argument translation as the
+  rendering contract.
 - Reuse existing table validators, renderers, and config models instead of copying
   their logic.
 - Add a public option class only when it reduces the combined caller and
-  implementation complexity. Keep low-level `assemble_*` functions as compatibility
-  and advanced-use entry points.
+  implementation complexity. Treat release-backed low-level `assemble_*`
+  functions as compatibility entry points, not as the preferred public workflow.
+
+## Keep one resolution path
+
+- A surface adapter translates input shape only. It must not read domain files,
+  compile rules, select records, or reproduce planner policy.
+- Send unresolved inputs through one planner. The planner owns validation,
+  normalization, and the choice of downstream builder.
+- Carry resolved tables, compiled rules, and other reusable values in the prepared
+  request. Record loading, drawing, analysis, and interactive metadata must consume
+  those same prepared values instead of reopening or recompiling their sources.
+- When output names depend on resolved records, expose a reusable plan boundary.
+  Preflight every diagram and sidecar path from that plan before building, then build
+  the same plan instead of planning twice or assembling a drawing to discover paths.
+- Do not inspect implementation source text to discover capabilities, and do not
+  monkey-patch an internal loader or assembler to inject data. Add an explicit typed
+  boundary owned by the receiving layer.
+- Do not trade away a coherent boundary or required regression coverage to save
+  model tokens. Among complete designs, prefer the smallest durable change.
 
 ## Apply repository-specific patterns
 
@@ -74,12 +103,22 @@ public contracts and default diagrams remain stable.
 - Do not expose session regeneration as CLI argument strings. Require CLI-independent
   typed request models and pure conversion first; otherwise record the non-public
   decision in an ADR.
+- Keep persisted-session migration in the session compatibility adapter. Fresh
+  build/render functions accept typed current artifacts, never raw session mappings;
+  expose migration evidence on a session-specific result wrapper.
+- Treat compatibility as evidence-based. Support the current writer plus persisted
+  versions found in the first-parent history of `main` or a release tag; keep
+  session, request, cache, and metadata schema namespaces distinct.
+- For a format bump, retain a representative main-era fixture as a positive
+  control, regenerate branch-owned fixtures with the current writer, and reject
+  discarded branch-only versions in Python and Web tests. Do not accept or chain
+  migration through an intermediate schema that existed only on the active branch.
 
 ## Keep documentation executable
 
 - Add capability-oriented recipes to `docs/PYTHON_API.md` using public imports.
-- Do not use `canonical` as a label for a format, request, document, or
-  implementation. State the exact version, field, precedence rule, or behavior.
+- Use `canonical` only when it is part of a named contract in the code. Otherwise,
+  state the exact schema version, field, precedence rule, or behavior.
 - Do not call a check a `smoke test`. Name the feature and expected result, and
   report the exact command that checks it.
 - Inspect every fixture used by an example. Show only options that affect the
@@ -89,15 +128,25 @@ public contracts and default diagrams remain stable.
   sequentially in one namespace. Make each block valid in that execution model.
 - Explain intentional low-level or non-public boundaries instead of implying that
   an unstable workflow is supported.
+- When `docs/CLI_Reference.md` reproduces command help, compare the sorted
+  `--option` sets from live Circular and Linear help with the corresponding
+  documented blocks. Report missing and extra options; visual inspection is not
+  enough.
+- Check relative Markdown links in every touched document and fail the review for
+  links to absent repository files.
 
 ## Verify without contaminating evidence
 
 1. Run focused regression and contract tests for the changed boundary.
-2. Run the targeted command in `docs/PYTHON_API_IMPROVEMENT_PLAN.md`.
-3. Run `python -m pytest tests/ -v -m "not slow"`.
-4. Lint touched Python files first, then run the repository lint gate. Distinguish
+2. For public request or facade work, start with:
+   `pytest tests/test_api_requests.py tests/test_api_request_render.py
+   tests/test_api_library_usage.py tests/test_dead_api_cleanup.py -q`.
+3. For Web request/session work, also run
+   `node tests/web/session-request.test.mjs` and the relevant browser test.
+4. Run `python -m pytest tests/ -v -m "not slow"`.
+5. Lint touched Python files first, then run the repository lint gate. Distinguish
    new failures from a recorded pre-existing baseline.
-5. Check the working tree and public contract diff after every broad validation run.
+6. Check the working tree and public contract diff after every broad validation run.
 
 Treat reference generation as a write operation. `TestGenerateReferences` may
 rewrite tracked SVG fixtures before comparison, which can invalidate the regression

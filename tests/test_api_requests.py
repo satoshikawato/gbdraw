@@ -1,19 +1,29 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.api.options import CircularMultiRecordOptions, DiagramOptions
+from gbdraw.api.options import (
+    CircularDiagramOptions,
+    CircularMultiRecordOptions,
+    CircularOutputOptions,
+    LinearDiagramOptions,
+    LinearOutputOptions,
+)
 from gbdraw.api.requests import (
+    CircularBatchOutputPolicy,
+    CircularBatchRequest,
     CircularDiagramRequest,
     GenBankInputSource,
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCollectionOptions,
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
@@ -75,6 +85,38 @@ def test_record_source_accepts_an_in_memory_seqrecord() -> None:
     record = SeqRecord(Seq("ATGC"), id="record-a")
 
     assert InMemoryRecordSource(record).record is record
+
+
+def test_new_request_fields_preserve_released_positional_arguments() -> None:
+    selector = parse_record_selector("#1")
+    presentation = RecordPresentation(label="Shown")
+    record = RecordInput(
+        GenBankInputSource("record.gbk"),
+        selector,
+        None,
+        presentation,
+        "record-key",
+    )
+
+    assert record.selector is selector
+    assert record.region is None
+    assert record.presentation is presentation
+    assert record.record_key == "record-key"
+    assert record.cardinality.value == "exactly_one"
+
+    output = RenderOutputRequest()
+    request = CircularDiagramRequest(
+        (record,),
+        CircularDiagramOptions(),
+        None,
+        output,
+        "single",
+    )
+
+    assert request.grouping == "single"
+    assert request.record_options == RecordCollectionOptions()
+    assert fields(CircularDiagramOptions)[-1].name == "conservation_table_file"
+    assert fields(LinearDiagramOptions)[-1].name == "comparison_table_file"
 
 
 def test_in_memory_record_source_rejects_other_objects() -> None:
@@ -142,7 +184,35 @@ def test_circular_request_normalizes_records_and_default_multi_layout() -> None:
     request = CircularDiagramRequest(records=[_record("a.gbk"), _record("b.gbk")])
 
     assert request.records == (_record("a.gbk"), _record("b.gbk"))
+    assert request.grouping == "grid"
     assert request.layout == CircularMultiRecordOptions()
+
+
+def test_circular_request_allows_explicit_one_record_grid() -> None:
+    request = CircularDiagramRequest(
+        records=(_record("a.gbk"),),
+        grouping="grid",
+    )
+
+    assert request.grouping == "grid"
+    assert request.layout == CircularMultiRecordOptions()
+
+
+def test_circular_batch_requires_one_unique_output_per_record() -> None:
+    records = (_record("a.gbk"), _record("b.gbk"))
+    outputs = (
+        RenderOutputRequest(output_prefix="a"),
+        RenderOutputRequest(output_prefix="b"),
+    )
+
+    request = CircularBatchRequest(records=records, outputs=outputs)
+
+    assert request.grouping == "batch"
+    assert request.outputs == outputs
+    with pytest.raises(ValidationError, match="one resolved output"):
+        CircularBatchRequest(records=records, outputs=outputs[:1])
+    with pytest.raises(ValidationError, match="must be unique"):
+        CircularBatchRequest(records=records, outputs=(outputs[0], outputs[0]))
 
 
 def test_circular_request_accepts_unique_record_grid() -> None:
@@ -197,17 +267,137 @@ def test_requests_reject_empty_record_sequences() -> None:
         LinearDiagramRequest(records=())
 
 
-def test_requests_reuse_mode_specific_diagram_option_validation() -> None:
-    with pytest.raises(ValidationError, match="blast_files"):
+def test_requests_require_mode_specific_diagram_options() -> None:
+    with pytest.raises(ValidationError, match="CircularDiagramOptions"):
         CircularDiagramRequest(
             records=(_record(),),
-            options=DiagramOptions(blast_files=("comparison.tsv",)),
+            options=LinearDiagramOptions(),  # type: ignore[arg-type]
         )
-    with pytest.raises(ValidationError, match="conservation_blast_files"):
+    with pytest.raises(ValidationError, match="LinearDiagramOptions"):
         LinearDiagramRequest(
             records=(_record(),),
-            options=DiagramOptions(conservation_blast_files=("comparison.tsv",)),
+            options=CircularDiagramOptions(),  # type: ignore[arg-type]
         )
+
+
+def test_mode_specific_option_fields_do_not_overlap_other_mode_features() -> None:
+    circular_fields = {item.name for item in fields(CircularDiagramOptions)}
+    linear_fields = {item.name for item in fields(LinearDiagramOptions)}
+
+    assert {"blast_files", "protein_blastp_mode"}.isdisjoint(circular_fields)
+    assert {
+        "conservation_blast_files",
+        "conservation_fasta_files",
+        "conservation_reference",
+    }.isdisjoint(linear_fields)
+
+
+def test_mode_specific_output_options_reject_other_mode_title_positions() -> None:
+    with pytest.raises(ValidationError, match="Circular"):
+        CircularOutputOptions(plot_title_position="center")
+    with pytest.raises(ValidationError, match="Linear"):
+        LinearOutputOptions(plot_title_position="none")
+
+
+@pytest.mark.parametrize(
+    ("options_type", "path", "value"),
+    [
+        (CircularDiagramOptions, "canvas.circular.track_type", "middle"),
+        (LinearDiagramOptions, "canvas.linear.track_layout", "above"),
+    ],
+)
+def test_mode_specific_options_accept_owned_config_override_paths(
+    options_type,
+    path: str,
+    value: object,
+) -> None:
+    options = options_type(config_overrides={path: value})
+
+    assert options.config_overrides == {path: value}
+
+
+@pytest.mark.parametrize(
+    ("options_type", "path", "value", "other_mode"),
+    [
+        (
+            CircularDiagramOptions,
+            "canvas.linear.track_layout",
+            "above",
+            "Linear",
+        ),
+        (
+            CircularDiagramOptions,
+            "objects.axis.linear.stroke_color",
+            "black",
+            "Linear",
+        ),
+        (
+            LinearDiagramOptions,
+            "canvas.circular.track_type",
+            "middle",
+            "Circular",
+        ),
+    ],
+)
+def test_mode_specific_options_reject_other_mode_config_override_paths(
+    options_type,
+    path: str,
+    value: object,
+    other_mode: str,
+) -> None:
+    with pytest.raises(
+        ValidationError,
+        match=rf"cannot target {other_mode} settings: {path}",
+    ):
+        options_type(config_overrides={path: value})
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"conservation_reference": "invalid"},
+        {"conservation_ring_width": 0},
+        {"conservation_ring_gap": float("inf")},
+    ],
+)
+def test_circular_options_reject_invalid_mode_values(
+    kwargs: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        CircularDiagramOptions(**kwargs)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"protein_blastp_mode": "invalid"},
+        {"pairwise_match_style": "invalid"},
+        {"collinearity_unit_mode": "invalid"},
+        {"collinearity_anchor_mode": "invalid"},
+        {"collinearity_search_scope": "invalid"},
+        {"collinearity_color_mode": "invalid"},
+        {"orthogroup_membership_mode": "invalid"},
+        {"protein_blastp_max_hits": 0},
+        {"losatp_threads": 0},
+    ],
+)
+def test_linear_options_reject_invalid_mode_values(
+    kwargs: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        LinearDiagramOptions(**kwargs)
+
+
+def test_linear_options_normalize_supported_mode_aliases() -> None:
+    options = LinearDiagramOptions(
+        collinearity_anchor_mode="top1",
+        collinearity_color_mode="identity",
+        orthogroup_membership_mode="rbh",
+    )
+
+    assert options.collinearity_anchor_mode == "one_to_one"
+    assert options.collinearity_color_mode == "average_identity"
+    assert options.orthogroup_membership_mode == "anchor_core_v1"
 
 
 def test_render_output_request_normalizes_formats_and_paths() -> None:
@@ -230,6 +420,14 @@ def test_render_output_request_normalizes_formats_and_paths() -> None:
         {"output_prefix": ""},
         {"output_prefix": "nested/diagram"},
         {"output_prefix": r"nested\diagram"},
+        {"output_prefix": "diagram\x00hidden"},
+        {"output_prefix": "diagram\nhidden"},
+        {"output_prefix": "NUL"},
+        {"output_prefix": "CON.txt"},
+        {"output_prefix": "COM¹"},
+        {"output_prefix": "diagram:stream"},
+        {"output_prefix": "diagram?draft"},
+        {"output_directory": "results\x00hidden"},
         {"formats": ()},
         {"formats": ("unknown",)},
         {"overwrite": 1},
@@ -240,3 +438,8 @@ def test_render_output_request_normalizes_formats_and_paths() -> None:
 def test_render_output_request_rejects_invalid_values(kwargs: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         RenderOutputRequest(**kwargs)
+
+
+def test_circular_batch_output_policy_rejects_control_characters() -> None:
+    with pytest.raises(ValidationError):
+        CircularBatchOutputPolicy(output_prefix="diagram\x00hidden")

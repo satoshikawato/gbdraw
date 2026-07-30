@@ -241,7 +241,7 @@ The linear result places the 45-degree labels above their features:
 
 ## Fine-tune diagram appearance
 
-`--track_type` selects the base circular preset (`tuckin`, `middle`, or `spreadout`). Custom track slots add an ordered slot list on top of that preset. A built-in slot inherits any omitted radius, width, physical gaps, placement, and standard renderer parameters from the preset for each record. Explicit `r`, `w`, `inner_gap_px`, `outer_gap_px`, `side`, `z`, and renderer parameters override the inherited values. The legacy `spacing` field remains a compatibility alias for both circular gaps.
+`--track_type` selects the base circular preset (`tuckin`, `middle`, or `spreadout`). Custom track slots add an ordered slot list on top of that preset. A built-in slot inherits any omitted radius, width, physical gaps, placement, and standard renderer parameters from the preset for each record. Explicit `r`, `w`, `inner_gap_px`, `outer_gap_px`, `side`, `z`, and renderer parameters override the inherited values. Circular `spacing` has been removed; set the two physical gap fields explicitly.
 
 Numeric and depth slots placed inside the axis auto-compress when `r` and `w` are omitted; gbdraw never moves them outside automatically. The circular axis stays fixed and cannot be moved or hidden with a circular track slot.
 

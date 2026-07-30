@@ -1,4 +1,6 @@
 // Shared standalone interactive SVG runtime/style assets.
+// The embedded display denylist retains an unsupported historical protein-ID
+// shape defensively; it is not a supported session migration path.
 
 export const STANDALONE_INTERACTIVE_STYLE = `
 .gbdraw-interactive-feature {
@@ -826,6 +828,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   var features = Array.isArray(payload.features) ? payload.features : [];
+  var hasBiologicalFeatureCatalog = Array.isArray(payload.biological_features);
+  var biologicalFeatures = hasBiologicalFeatureCatalog ? payload.biological_features : features;
   var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];
   var matches = Array.isArray(payload.matches) ? payload.matches : [];
   var sequenceSources = Array.isArray(payload.sequence_sources) ? payload.sequence_sources : [];
@@ -871,6 +875,70 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (svgId && !featuresById.has(svgId)) {
       featuresById.set(svgId, feature);
     }
+  });
+  function featureRecordIndex(feature) {
+    var candidates = [
+      feature && feature.record_idx,
+      feature && feature.recordIndex,
+      feature && feature.record_index,
+      feature && feature.fileIdx,
+      feature && feature.file_idx
+    ];
+    for (var index = 0; index < candidates.length; index += 1) {
+      if (candidates[index] === null || candidates[index] === undefined || candidates[index] === '') continue;
+      var recordIndex = Number(candidates[index]);
+      if (Number.isInteger(recordIndex)) return recordIndex;
+    }
+    return null;
+  }
+
+  function biologicalFeatureStableSvgId(feature) {
+    return String(feature && (
+      feature.stable_svg_id ||
+      feature.stableFeatureSvgId ||
+      feature.stable_feature_svg_id ||
+      feature.stable_feature_id ||
+      feature.svg_id
+    ) || '').trim();
+  }
+
+  function biologicalFeatureKey(recordIndex, stableSvgId) {
+    return String(recordIndex) + ':' + String(stableSvgId || '').trim();
+  }
+
+  var biologicalFeaturesByRecordAndId = new Map();
+  var biologicalFeaturesById = new Map();
+  var ambiguousBiologicalRecordIds = new Set();
+  var ambiguousBiologicalIds = new Set();
+  function addBiologicalFeatureLookup(map, ambiguous, key, feature) {
+    if (!key || ambiguous.has(key)) return;
+    var existing = map.get(key);
+    if (existing && existing !== feature) {
+      map.delete(key);
+      ambiguous.add(key);
+      return;
+    }
+    map.set(key, feature);
+  }
+  biologicalFeatures.forEach(function (feature) {
+    var recordIndex = featureRecordIndex(feature);
+    var ids = [
+      biologicalFeatureStableSvgId(feature),
+      String(feature && feature.svg_id || '').trim()
+    ].filter(function (id, index, values) {
+      return id && values.indexOf(id) === index;
+    });
+    ids.forEach(function (id) {
+      if (Number.isInteger(recordIndex)) {
+        addBiologicalFeatureLookup(
+          biologicalFeaturesByRecordAndId,
+          ambiguousBiologicalRecordIds,
+          biologicalFeatureKey(recordIndex, id),
+          feature
+        );
+      }
+      addBiologicalFeatureLookup(biologicalFeaturesById, ambiguousBiologicalIds, id, feature);
+    });
   });
   var orthogroupsById = new Map();
   orthogroups.forEach(function (group) {
@@ -1230,7 +1298,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }
     if (value === null || value === undefined) return;
     var text = String(value).trim();
-    if (text) {
+    if (text && !isInternalProteinDisplayId(text)) {
     items.push({
       label: label,
       value: text,
@@ -1371,31 +1439,103 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return '';
   }
 
+  function isInternalProteinDisplayId(value) {
+    var text = String(value == null ? '' : value).trim();
+    return Boolean(
+      /^h_[a-z2-7]{26}$/i.test(text) ||
+      /^f_[0-9a-f]{64}$/i.test(text) ||
+      /^p_r_/.test(text) ||
+      /@[^|]+\|.+~f_[0-9a-f]{64}$/i.test(text) ||
+      /^(?:gbd_r\\d+_(?:cds\\d+|unit\\d+)|p_.+_\\d+_\\d+_-?\\d+_[0-9a-f]{12}(?:_\\d+)?)$/i.test(text)
+    );
+  }
+
+  function firstNonInternalDisplayText() {
+    for (var i = 0; i < arguments.length; i += 1) {
+      var value = arguments[i];
+      if (Array.isArray(value)) {
+        var nested = firstNonInternalDisplayText.apply(null, value);
+        if (nested) return nested;
+        continue;
+      }
+      var text = String(value == null ? '' : value).trim();
+      if (text && !isInternalProteinDisplayId(text)) return text;
+    }
+    return '';
+  }
+
+  function containsInternalProteinDisplayId(value) {
+    return String(value == null ? '' : value)
+      .split(/[\\s;,]+/)
+      .some(function (token) {
+        return isInternalProteinDisplayId(String(token || '').replace(/^>+/, ''));
+      });
+  }
+
+  function safeDelimitedDisplayIds(value) {
+    return String(value == null ? '' : value)
+      .split(';')
+      .map(function (entry) { return String(entry || '').trim(); })
+      .filter(function (entry) { return entry && !isInternalProteinDisplayId(entry); })
+      .join('; ');
+  }
+
+  function qualifierDisplayValue(feature, key) {
+    var normalizedKey = String(key || '').trim().toLowerCase();
+    var qualifiers = getFeatureQualifiers(feature);
+    if (!normalizedKey) return '';
+    if (Object.prototype.hasOwnProperty.call(qualifiers, normalizedKey)) {
+      return firstNonInternalDisplayText(normalizeArray(qualifiers[normalizedKey]));
+    }
+    var keys = Object.keys(qualifiers);
+    for (var i = 0; i < keys.length; i += 1) {
+      if (String(keys[i]).toLowerCase() === normalizedKey) {
+        return firstNonInternalDisplayText(normalizeArray(qualifiers[keys[i]]));
+      }
+    }
+    return '';
+  }
+
   function displayProteinId(feature, member, fallback) {
-    return firstDisplayText(
-      feature && (feature.source_protein_id || feature.sourceProteinId),
-      member && (member.sourceProteinId || member.source_protein_id),
-      firstQualifierValue(feature, 'protein_id'),
-      feature && (feature.locus_tag || feature.locusTag),
-      firstQualifierValue(feature, 'locus_tag'),
-      member && (member.locusTag || member.locus_tag),
-      feature && (feature.gene_id || feature.geneId),
-      firstQualifierValue(feature, 'gene_id'),
-      member && (member.geneId || member.gene_id),
-      feature && (feature.old_locus_tag || feature.oldLocusTag),
-      firstQualifierValue(feature, 'old_locus_tag'),
-      member && (member.oldLocusTag || member.old_locus_tag),
+    return firstNonInternalDisplayText(
+      feature && feature.displayProteinId,
+      feature && feature.display_protein_id,
+      member && member.displayProteinId,
+      member && member.display_protein_id,
+      feature && feature.sourceProteinId,
+      feature && feature.source_protein_id,
+      member && member.sourceProteinId,
+      member && member.source_protein_id,
+      qualifierDisplayValue(feature, 'protein_id'),
+      feature && feature.locusTag,
+      feature && feature.locus_tag,
+      qualifierDisplayValue(feature, 'locus_tag'),
+      member && member.locusTag,
+      member && member.locus_tag,
+      feature && feature.geneId,
+      feature && feature.gene_id,
+      qualifierDisplayValue(feature, 'gene_id'),
+      member && member.geneId,
+      member && member.gene_id,
+      feature && feature.oldLocusTag,
+      feature && feature.old_locus_tag,
+      qualifierDisplayValue(feature, 'old_locus_tag'),
+      member && member.oldLocusTag,
+      member && member.old_locus_tag,
       feature && feature.ID,
-      firstQualifierValue(feature, 'ID'),
+      qualifierDisplayValue(feature, 'ID'),
       feature && feature.Name,
-      firstQualifierValue(feature, 'Name'),
+      qualifierDisplayValue(feature, 'Name'),
       feature && feature.Parent,
-      firstQualifierValue(feature, 'Parent'),
+      qualifierDisplayValue(feature, 'Parent'),
       feature && feature.gene,
-      firstQualifierValue(feature, 'gene'),
+      qualifierDisplayValue(feature, 'gene'),
       member && member.gene,
-      feature && (feature.proteinId || feature.protein_id),
-      member && (member.proteinId || member.protein_id),
+      member && member.label,
+      feature && feature.proteinId,
+      feature && feature.protein_id,
+      member && member.proteinId,
+      member && member.protein_id,
       fallback
     );
   }
@@ -1417,18 +1557,22 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var proteinId = displayProteinId(feature, member);
     var internalId = internalProteinId(feature, member);
     var items = [];
-    appendSearchItems(items, 'Orthogroup ID', orthogroupId);
-    appendSearchItems(items, 'Orthogroup name', group && (group.display_name || group.displayName || group.name));
-    appendSearchItems(items, 'Orthogroup description', group && group.description);
+    appendSearchItems(items, 'Similarity group ID', orthogroupId);
+    appendSearchItems(items, 'Similarity group name', group && (group.display_name || group.displayName || group.name));
+    appendSearchItems(items, 'Similarity group description', group && group.description);
     appendSearchItems(items, 'Protein ID', proteinId);
-    if (internalId && internalId !== proteinId) {
+    if (
+      internalId &&
+      internalId !== proteinId &&
+      !isInternalProteinDisplayId(internalId)
+    ) {
       appendSearchItems(items, 'Internal protein ID', internalId);
     }
-    appendSearchItems(items, 'Orthogroup member', member && member.label);
-    appendSearchItems(items, 'Orthogroup member gene', member && member.gene);
-    appendSearchItems(items, 'Orthogroup member product', member && member.product);
-    appendSearchItems(items, 'Orthogroup member note', member && member.note);
-    appendSearchItems(items, 'Orthogroup member protein ID', displayProteinId(null, member));
+    appendSearchItems(items, 'Similarity-group member', member && member.label);
+    appendSearchItems(items, 'Similarity-group member gene', member && member.gene);
+    appendSearchItems(items, 'Similarity-group member product', member && member.product);
+    appendSearchItems(items, 'Similarity-group member note', member && member.note);
+    appendSearchItems(items, 'Similarity-group member protein ID', displayProteinId(null, member));
     return items;
   }
 
@@ -2126,7 +2270,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       ['record-id', 'Record ID'],
       ['location', 'Location'],
       ['strand', 'Strand'],
-      ['orthogroup', 'Orthogroup'],
+      ['orthogroup', 'Similarity group'],
       ['qualifier-key', 'Qualifier key'],
       ['qualifier-value', 'Qualifier value'],
       ['nucleotide', 'Nucleotide'],
@@ -3058,20 +3202,25 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function featureDescription(feature) {
-    return firstDisplayText(
+    return firstNonInternalDisplayText(
       feature && feature.product,
-      firstQualifierValue(feature, 'product'),
+      qualifierDisplayValue(feature, 'product'),
       feature && feature.gene,
-      firstQualifierValue(feature, 'gene'),
-      feature && (feature.locus_tag || feature.locusTag),
-      firstQualifierValue(feature, 'locus_tag'),
-      feature && (feature.display_label || feature.displayLabel || feature.label),
+      qualifierDisplayValue(feature, 'gene'),
+      feature && feature.locusTag,
+      feature && feature.locus_tag,
+      qualifierDisplayValue(feature, 'locus_tag'),
+      feature && feature.displayLabel,
+      feature && feature.display_label,
+      feature && feature.label,
       feature && feature.type
     );
   }
 
   function memberFeatureSvgId(memberOrRow) {
     return String(memberOrRow && (
+      memberOrRow.stableFeatureSvgId ||
+      memberOrRow.stable_feature_svg_id ||
       memberOrRow.featureSvgId ||
       memberOrRow.feature_svg_id ||
       memberOrRow.svgId ||
@@ -3079,16 +3228,59 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     ) || '').trim();
   }
 
+  function memberRenderedFeatureSvgId(memberOrRow) {
+    var explicit = String(memberOrRow && (
+      memberOrRow.renderedFeatureSvgId ||
+      memberOrRow.rendered_feature_svg_id
+    ) || '').trim();
+    if (explicit) return explicit;
+    if (!hasBiologicalFeatureCatalog) return memberFeatureSvgId(memberOrRow);
+    var feature = biologicalFeatureForMember(memberOrRow);
+    return String(feature && (feature.rendered_svg_id || feature.renderedSvgId) || '').trim();
+  }
+
+  function memberRecordIndex(memberOrRow) {
+    var value = memberOrRow && (
+      memberOrRow.recordIndex !== undefined ? memberOrRow.recordIndex :
+      memberOrRow.record_index !== undefined ? memberOrRow.record_index :
+      memberOrRow.record_idx
+    );
+    if (value === null || value === undefined || value === '') return null;
+    var recordIndex = Number(value);
+    return Number.isInteger(recordIndex) ? recordIndex : null;
+  }
+
+  function biologicalFeatureForMember(memberOrRow) {
+    var stableSvgId = memberFeatureSvgId(memberOrRow);
+    var recordIndex = memberRecordIndex(memberOrRow);
+    if (stableSvgId && Number.isInteger(recordIndex)) {
+      var recordFeature = biologicalFeaturesByRecordAndId.get(
+        biologicalFeatureKey(recordIndex, stableSvgId)
+      );
+      if (recordFeature) return recordFeature;
+    }
+    if (stableSvgId) {
+      var biologicalFeature = biologicalFeaturesById.get(stableSvgId);
+      if (biologicalFeature) return biologicalFeature;
+    }
+    return null;
+  }
+
   function featureForMember(memberOrRow) {
-    var svgId = memberFeatureSvgId(memberOrRow);
-    return svgId ? featuresById.get(svgId) || null : null;
+    var biologicalFeature = biologicalFeatureForMember(memberOrRow);
+    if (biologicalFeature) return biologicalFeature;
+    var renderedSvgId = memberRenderedFeatureSvgId(memberOrRow);
+    return renderedSvgId ? featuresById.get(renderedSvgId) || null : null;
   }
 
   function featureSequenceFilename(feature, sequenceKind) {
     var label = sequenceKindLabel(sequenceKind);
-    var id = firstDisplayText(
+    var id = firstNonInternalDisplayText(
       label === 'aa' ? displayProteinId(feature, null, '') : '',
-      feature && (feature.display_label || feature.displayLabel || feature.label),
+      feature && feature.displayLabel,
+      feature && feature.display_label,
+      feature && feature.label,
+      biologicalFeatureStableSvgId(feature),
       feature && feature.svg_id,
       'feature'
     );
@@ -3101,14 +3293,24 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var existing = label === 'aa'
       ? firstDisplayText(feature.amino_acid_fasta, feature.aminoAcidFasta)
       : firstDisplayText(feature.nucleotide_fasta, feature.nucleotideFasta);
-    if (existing) return existing;
+    if (existing && !containsInternalProteinDisplayId(existing)) return existing;
     var sequence = label === 'aa'
       ? featureAminoAcidSequence(feature)
       : firstDisplayText(feature.nucleotide_sequence, feature.nucleotideSequence);
     if (!normalizeSequence(sequence)) return '';
+    var proteinFallback = firstNonInternalDisplayText(
+      biologicalFeatureStableSvgId(feature),
+      feature.svg_id,
+      'protein'
+    );
     var id = label === 'aa'
-      ? displayProteinId(feature, null, feature.svg_id || 'protein')
-      : firstDisplayText(feature.record_id, feature.recordId, feature.svg_id || 'record') + ':' + locationText(feature);
+      ? displayProteinId(feature, null, proteinFallback)
+      : firstDisplayText(
+        feature.record_id,
+        feature.recordId,
+        biologicalFeatureStableSvgId(feature),
+        feature.svg_id || 'record'
+      ) + ':' + locationText(feature);
     return formatFastaEntry(id, featureDescription(feature), sequence);
   }
 
@@ -3119,10 +3321,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function memberSequenceFilename(memberOrRow, sequenceKind, orthogroupId) {
     var label = sequenceKindLabel(sequenceKind);
     var feature = featureForMember(memberOrRow);
-    var memberId = firstDisplayText(
-      memberOrRow && (memberOrRow.sourceProteinId || memberOrRow.source_protein_id),
-      memberOrRow && (memberOrRow.proteinId || memberOrRow.protein_id),
+    var memberId = firstNonInternalDisplayText(
+      memberOrRow && memberOrRow.sourceProteinId,
+      memberOrRow && memberOrRow.source_protein_id,
       feature && displayProteinId(feature, null, ''),
+      memberOrRow && displayProteinId(null, memberOrRow, ''),
       memberFeatureSvgId(memberOrRow),
       'member'
     );
@@ -3146,8 +3349,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function groupSequenceFilename(orthogroupId, displayName, sequenceKind) {
     var label = sequenceKindLabel(sequenceKind);
-    var id = firstDisplayText(orthogroupId, 'orthogroup');
-    var name = makeSafeFilename(firstDisplayText(displayName, id), id);
+    var id = firstNonInternalDisplayText(orthogroupId, 'orthogroup');
+    var name = makeSafeFilename(firstNonInternalDisplayText(displayName, id), id);
     return makeSafeFilename(id + '_' + name + '_' + label, 'orthogroup_' + label) + '.' + sequenceExtension(label);
   }
 
@@ -3216,8 +3419,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var recordCoverage = Number(feature && feature.orthogroup_record_coverage);
     var proteinId = displayProteinId(feature, member);
     var rows = [
-      ['Orthogroup ID', feature && feature.orthogroup_id || ''],
-      ['Orthogroup name', group && (group.display_name || group.name) || ''],
+      ['Similarity group ID', feature && feature.orthogroup_id || ''],
+      ['Similarity group name', group && (group.display_name || group.name) || ''],
       ['Members', Number.isFinite(memberCount) && memberCount > 0 ? String(memberCount) : (group && group.member_count ? String(group.member_count) : '')],
       ['Record coverage', Number.isFinite(recordCoverage) && recordCoverage > 0 ? String(recordCoverage) : (group && group.record_coverage_count ? String(group.record_coverage_count) : '')],
       ['Protein ID', proteinId]
@@ -3231,7 +3434,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var searchDetail = getFeatureSearchDetail(feature);
     var rows = [
       ['Search match', searchDetail],
-      ['Label', feature.display_label || feature.label || ''],
+      ['Label', firstNonInternalDisplayText(feature.display_label, feature.label)],
       ['Record ID', feature.record_id || ''],
       ['Type', feature.type || ''],
       ['Location', locationText(feature)]
@@ -3247,7 +3450,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       ? feature.qualifiers
       : {};
     return Object.keys(qualifiers).sort().map(function (key) {
-      var values = normalizeArray(qualifiers[key]);
+      var values = normalizeArray(qualifiers[key]).filter(function (value) {
+        return !isInternalProteinDisplayId(value);
+      });
       return {
         key: key,
         values: values,
@@ -3326,6 +3531,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       var feature = featureForMember(member);
       return {
         featureSvgId: memberFeatureSvgId(member),
+        stableFeatureSvgId: memberFeatureSvgId(member),
+        renderedFeatureSvgId: memberRenderedFeatureSvgId(member),
+        recordIndex: memberRecordIndex(member),
         orthogroupId: orthogroupId,
         displayName: displayName,
         record: firstDisplayText(member && (member.recordId || member.record_id), feature && (feature.record_id || feature.recordId)),
@@ -3367,7 +3575,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         '</tr>';
     }).join('');
     return '<div class="gfi-block">' +
-      '<div class="gfi-block-title"><span>Orthogroup members</span><span>' + members.length + '</span>' + copyButton(text) + '</div>' +
+      '<div class="gfi-block-title"><span>Similarity-group members</span><span>' + members.length + '</span>' + copyButton(text) + '</div>' +
       '<div class="gfi-table-wrap"><table class="gfi-table gfi-og-members-table">' +
       '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th><th>Seq</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>' +
@@ -3390,7 +3598,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function renderSequenceBlock(title, sequence, fasta, sequenceKind, feature) {
     var text = String(sequenceKind ? featureFasta(feature, sequenceKind) : '');
-    if (!text) text = String(fasta || sequence || '');
+    if (!text) {
+      var fallbackText = String(fasta || sequence || '');
+      text = containsInternalProteinDisplayId(fallbackText) ? '' : fallbackText;
+    }
     if (!text) {
       return '<div class="gfi-block"><div class="gfi-block-title">' + escapeHtml(title) + '</div><div class="gfi-empty">No sequence available.</div></div>';
     }
@@ -3415,9 +3626,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function renderSimplePopup(feature) {
+    var title = firstNonInternalDisplayText(
+      feature.display_label,
+      feature.label,
+      displayProteinId(feature, null, ''),
+      feature.locus_tag,
+      feature.gene,
+      feature.type,
+      feature.svg_id,
+      'Feature'
+    );
     return '<div class="gfi gfi--simple">' +
       '<div class="gfi-header" data-drag-handle="true">' +
-      '<div><div class="gfi-title">' + escapeHtml(feature.display_label || feature.label || feature.svg_id || 'Feature') + '</div>' +
+      '<div><div class="gfi-title">' + escapeHtml(title) + '</div>' +
       '<div class="gfi-subtitle">' + escapeHtml(locationText(feature)) + '</div></div>' +
       '<button type="button" class="gfi-close" data-close="true">x</button>' +
       '</div>' +
@@ -3443,9 +3664,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     function tabButton(id, label) {
       return '<button type="button" class="gfi-tab' + (tab === id ? ' is-active' : '') + '" data-tab="' + id + '">' + label + '</button>';
     }
+    var title = firstNonInternalDisplayText(
+      feature.display_label,
+      feature.label,
+      displayProteinId(feature, null, ''),
+      feature.locus_tag,
+      feature.gene,
+      feature.type,
+      feature.svg_id,
+      'Feature'
+    );
     return '<div class="gfi">' +
       '<div class="gfi-header" data-drag-handle="true">' +
-      '<div><div class="gfi-title">' + escapeHtml(feature.display_label || feature.label || feature.svg_id || 'Feature') + '</div>' +
+      '<div><div class="gfi-title">' + escapeHtml(title) + '</div>' +
       '<div class="gfi-subtitle">' + escapeHtml(locationText(feature)) + '</div></div>' +
       '<button type="button" class="gfi-close" data-close="true">x</button>' +
       '</div>' +
@@ -3467,16 +3698,35 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function materializedMatchFeatureRow(svgId, fallback) {
     var id = String(svgId || '').trim();
     var feature = featuresById.get(id) || {};
+    var proteinId = firstNonInternalDisplayText(
+      displayProteinId(feature, null, ''),
+      fallback && fallback.proteinId
+    );
+    var locusId = firstNonInternalDisplayText(
+      feature.locus_tag,
+      fallback && fallback.locusId
+    );
+    var displayName = firstNonInternalDisplayText(
+      featureDescription(feature),
+      fallback && fallback.displayName
+    );
     return {
       key: id || String(fallback && fallback.locusId || ''),
       svgId: id,
       canOpen: Boolean(id && featuresById.has(id)),
-      label: firstDisplayText(feature.display_label, feature.label, fallback && fallback.displayName, fallback && fallback.proteinId, id),
+      label: firstNonInternalDisplayText(
+        feature.display_label,
+        feature.label,
+        displayName,
+        proteinId,
+        id,
+        'Feature'
+      ),
       record: firstDisplayText(feature.record_id, fallback && fallback.recordId),
       location: firstDisplayText(feature.location, feature && locationText(feature), fallback && fallback.interval),
-      proteinId: firstDisplayText(displayProteinId(feature, null, ''), fallback && fallback.proteinId),
-      locusId: firstDisplayText(feature.locus_tag, fallback && fallback.locusId),
-      displayName: firstDisplayText(featureDescription(feature), fallback && fallback.displayName),
+      proteinId: proteinId,
+      locusId: locusId,
+      displayName: displayName,
       product: featureDescription(feature)
     };
   }
@@ -3494,10 +3744,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var members = Array.isArray(group.members) ? group.members : [];
     return getOrthogroupIds(featureSvgIds).map(function (svgId) {
       var member = members.find(function (candidate) {
-        return memberFeatureSvgId(candidate) === svgId;
+        return memberRenderedFeatureSvgId(candidate) === svgId ||
+          memberFeatureSvgId(candidate) === svgId;
       }) || null;
-      return firstDisplayText(
-        displayProteinId(featuresById.get(svgId) || null, member, ''),
+      return firstNonInternalDisplayText(
+        displayProteinId(featureForMember(member) || featuresById.get(svgId) || null, member, ''),
         member && member.label,
         svgId
       );
@@ -3649,7 +3900,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     addMaterializedMatchRow(alignmentRows, 'Gap opens', match.gap_opens);
     var memberRows = group ? orthogroupMemberTableRows(Array.isArray(group.members) ? group.members : [], group) : [];
     var orthogroupRows = [];
-    addMaterializedMatchRow(orthogroupRows, 'Orthogroup ID', orthogroupId);
+    addMaterializedMatchRow(orthogroupRows, 'Similarity group ID', orthogroupId);
     addMaterializedMatchRow(orthogroupRows, 'Display name', displayName);
     addMaterializedMatchRow(orthogroupRows, 'Description', group && group.description);
     addMaterializedMatchRow(orthogroupRows, 'Members', group && (group.member_count || group.memberCount));
@@ -3661,13 +3912,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       sections.push({ title: 'Summary', rows: summaryRows });
       if (kind !== 'collinear') sections.push({ title: 'Alignment', rows: alignmentRows });
       if (kind !== 'collinear' && orthogroupRows.length) {
-        sections.push({ title: 'Orthogroup', rows: orthogroupRows, member_rows: memberRows });
+        sections.push({ title: 'Similarity group', rows: orthogroupRows, member_rows: memberRows });
       }
       if (kind === 'collinear') {
         sections.push({
-          title: localCollinearGroups ? 'Local collinear groups' : 'Orthogroups covered',
+          title: localCollinearGroups ? 'Local collinear groups' : 'Similarity groups covered',
           rows: [[
-            localCollinearGroups ? 'Number of local collinear groups' : 'Number of orthogroups covered',
+            localCollinearGroups ? 'Number of local collinear groups' : 'Number of similarity groups covered',
             String(orthogroupIds.length)
           ]],
           block_orthogroups: orthogroupIds.map(function (id) {
@@ -3681,7 +3932,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
               queryMember: materializedBlockMemberLabels(blockGroup, match.query_feature_svg_id),
               subjectMember: materializedBlockMemberLabels(blockGroup, match.subject_feature_svg_id),
               detailRows: [
-                [localCollinearGroups ? 'Collinear group ID' : 'Orthogroup ID', id],
+                [localCollinearGroups ? 'Collinear group ID' : 'Similarity group ID', id],
                 ['Display name', blockDisplayName],
                 ['Description', firstDisplayText(blockGroup.description)],
                 ['Members', firstDisplayText(blockGroup.member_count, blockGroup.memberCount)],
@@ -3737,12 +3988,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     addMaterializedMatchRow(hoverRows, 'Subject', sInterval);
     addMaterializedMatchRow(
       hoverRows,
-      kind === 'collinear' ? (localCollinearGroups ? 'Collinear groups' : 'Orthogroups') : 'Orthogroup',
+      kind === 'collinear' ? (localCollinearGroups ? 'Collinear groups' : 'Similarity groups') : 'Similarity group',
       kind === 'collinear' ? orthogroupIds.length : orthogroupId
     );
     addMaterializedMatchRow(hoverRows, 'Block', match.collinearity_block_id);
     var title = kind === 'orthogroup'
-      ? (displayName && displayName !== orthogroupId ? orthogroupId + ':' + displayName : orthogroupId || 'Orthogroup match')
+      ? (displayName && displayName !== orthogroupId ? orthogroupId + ':' + displayName : orthogroupId || 'Similarity-group match')
       : (kind === 'collinear' ? 'Collinearity block' : (kind === 'homology' ? 'Homology ring match' : 'Pairwise match'));
     match._gbdrawMaterialized = {
       id: match.id,
@@ -3761,8 +4012,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function normalizeMatchRows(rows) {
     return (Array.isArray(rows) ? rows : []).map(function (row) {
-      if (Array.isArray(row)) return [row[0], row[1]];
-      return [row && row.label, row && row.value];
+      var normalized = Array.isArray(row)
+        ? [row[0], row[1]]
+        : [row && row.label, row && row.value];
+      if (isInternalProteinDisplayId(normalized[1])) normalized[1] = '';
+      return normalized;
     }).filter(function (row) {
       return String(row[0] == null ? '' : row[0]).trim() &&
         String(row[1] == null ? '' : row[1]).trim();
@@ -3773,12 +4027,32 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return (Array.isArray(rows) ? rows : []).map(function (row) {
       return {
         featureSvgId: String(row && (row.featureSvgId || row.feature_svg_id || row.svgId || row.svg_id) || '').trim(),
+        stableFeatureSvgId: String(row && (
+          row.stableFeatureSvgId ||
+          row.stable_feature_svg_id ||
+          row.featureSvgId ||
+          row.feature_svg_id ||
+          row.svgId ||
+          row.svg_id
+        ) || '').trim(),
+        renderedFeatureSvgId: String(row && (
+          row.renderedFeatureSvgId || row.rendered_feature_svg_id
+        ) || '').trim(),
+        recordIndex: memberRecordIndex(row),
         orthogroupId: String(row && (row.orthogroupId || row.orthogroup_id) || '').trim(),
-        displayName: String(row && (row.displayName || row.display_name) || '').trim(),
+        displayName: firstNonInternalDisplayText(
+          row && row.displayName,
+          row && row.display_name
+        ),
         record: String(row && (row.record || row.record_id) || '').trim(),
         coordinates: String(row && row.coordinates || '').trim(),
-        proteinId: String(row && (row.proteinId || row.protein_id) || '').trim(),
-        productOrNote: String(row && (row.productOrNote || row.product_or_note) || '').trim()
+        proteinId: firstNonInternalDisplayText(
+          row && row.proteinId,
+          row && row.protein_id
+        ),
+        productOrNote: firstNonInternalDisplayText(
+          row && (row.productOrNote || row.product_or_note)
+        )
       };
     }).filter(function (row) {
       return row.record || row.coordinates || row.proteinId || row.productOrNote || row.featureSvgId;
@@ -3788,7 +4062,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function normalizeMatchBlockOrthogroups(groups) {
     return (Array.isArray(groups) ? groups : []).map(function (group) {
       var id = String(group && group.id || '').trim();
-      var displayName = String(group && (group.displayName || group.display_name) || '').trim();
+      var displayName = firstNonInternalDisplayText(
+        group && group.displayName,
+        group && group.display_name
+      );
       var memberRows = normalizeMatchMemberRows(group && (group.memberRows || group.member_rows)).map(function (row) {
         if (!row.orthogroupId) row.orthogroupId = id;
         if (!row.displayName) row.displayName = displayName;
@@ -3799,11 +4076,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         displayName: displayName,
         memberCount: String(group && (group.memberCount || group.member_count) || '').trim(),
         recordCoverage: String(group && (group.recordCoverage || group.record_coverage) || '').trim(),
-        queryMember: String(group && (group.queryMember || group.query_member) || '').trim(),
-        subjectMember: String(group && (group.subjectMember || group.subject_member) || '').trim(),
+        queryMember: safeDelimitedDisplayIds(
+          firstNonInternalDisplayText(group && group.queryMember, group && group.query_member)
+        ),
+        subjectMember: safeDelimitedDisplayIds(
+          firstNonInternalDisplayText(group && group.subjectMember, group && group.subject_member)
+        ),
         detailRows: normalizeMatchRows(group && (group.detailRows || group.detail_rows)),
         memberRows: memberRows,
-        member_copy_text: String(group && (group.member_copy_text || group.memberCopyText) || '').trim()
+        member_copy_text: containsInternalProteinDisplayId(
+          group && (group.member_copy_text || group.memberCopyText)
+        )
+          ? ''
+          : String(group && (group.member_copy_text || group.memberCopyText) || '').trim()
       };
     }).filter(function (group) {
       return group.id;
@@ -3812,23 +4097,40 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function normalizeMatchFeatureRows(rows) {
     return (Array.isArray(rows) ? rows : []).map(function (row, index) {
-      var svgId = String(row && (row.svgId || row.svg_id) || '').trim();
-      var canOpen = Boolean(row && (row.canOpen || row.can_open)) || Boolean(svgId && featuresById.has(svgId));
+      var svgId = String(row && (
+        row.renderedFeatureSvgId ||
+        row.rendered_feature_svg_id ||
+        row.svgId ||
+        row.svg_id
+      ) || '').trim();
+      var canOpen = Boolean(svgId && featuresById.has(svgId));
       return {
         key: String(row && row.key || svgId || index),
         svgId: svgId,
         canOpen: canOpen,
-        label: String(row && row.label || '').trim(),
+        label: firstNonInternalDisplayText(row && row.label),
         record: String(row && row.record || '').trim(),
         location: String(row && row.location || '').trim(),
-        proteinId: String(row && (row.proteinId || row.protein_id) || '').trim(),
-        locusId: String(row && (row.locusId || row.locus_id) || '').trim(),
-        displayName: String(row && (row.displayName || row.display_name) || '').trim(),
-        product: String(row && row.product || '').trim(),
-        copyText: String(row && (row.copyText || row.copy_text) || '').trim()
+        proteinId: firstNonInternalDisplayText(
+          row && row.proteinId,
+          row && row.protein_id
+        ),
+        locusId: firstNonInternalDisplayText(
+          row && row.locusId,
+          row && row.locus_id
+        ),
+        displayName: firstNonInternalDisplayText(
+          row && row.displayName,
+          row && row.display_name
+        ),
+        product: firstNonInternalDisplayText(row && row.product),
+        copyText: containsInternalProteinDisplayId(row && (row.copyText || row.copy_text))
+          ? ''
+          : String(row && (row.copyText || row.copy_text) || '').trim()
       };
     }).filter(function (row) {
-      return row.svgId || row.label || row.record || row.location || row.product;
+      return row.svgId || row.label || row.record || row.location ||
+        row.proteinId || row.locusId || row.displayName || row.product;
     });
   }
 
@@ -3857,7 +4159,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       var copyText = row.copyText || [row.record, row.location, row.proteinId, row.locusId, row.displayName, row.product].join('\\t');
       var featureAttr = row.svgId ? ' data-match-feature-id="' + escapeHtml(row.svgId) + '"' : '';
       return '<tr class="gfi-match-feature-row' + (row.canOpen ? '' : ' is-disabled') + '"' + featureAttr + '>' +
-        '<td><div class="gfi-match-feature-main">' + escapeHtml(row.label || row.proteinId || row.svgId || 'Feature') + '</div>' +
+        '<td><div class="gfi-match-feature-main">' + escapeHtml(
+          firstNonInternalDisplayText(row.label, row.proteinId, row.svgId, 'Feature')
+        ) + '</div>' +
         (sub ? '<div class="gfi-match-feature-sub">' + escapeHtml(sub) + '</div>' : '') + '</td>' +
         '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
         '<td class="gfi-mono">' + escapeHtml(row.location) + '</td>' +
@@ -3874,7 +4178,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (!rows.length) return '';
     var orthogroupId = String(section && (section.id || section.orthogroupId || section.orthogroup_id) || rows[0] && (rows[0].orthogroupId || rows[0].orthogroup_id) || '').trim();
     var displayName = String(section && (section.displayName || section.display_name || section.name) || rows[0] && (rows[0].displayName || rows[0].display_name) || '').trim();
-    var copyText = String(section && (section.member_copy_text || section.memberCopyText) || '').trim();
+    var sourceCopyText = String(
+      section && (section.member_copy_text || section.memberCopyText) || ''
+    ).trim();
+    var copyText = containsInternalProteinDisplayId(sourceCopyText) ? '' : sourceCopyText;
     if (!copyText) {
       copyText = ['Record\\tCoordinates (+/-)\\tProtein ID\\tProduct / note'].concat(
         rows.map(function (row) {
@@ -3940,7 +4247,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       });
       var selectedHtml = selectedBlockOrthogroup
         ? '<div class="gfi-block gfi-block--selected-og">' +
-          '<div class="gfi-block-title">' + escapeHtml('Selected orthogroup') + '</div>' +
+          '<div class="gfi-block-title">' + escapeHtml('Selected similarity group') + '</div>' +
           renderRows(selectedBlockOrthogroup.detailRows) +
           renderMatchMemberTable(selectedBlockOrthogroup, selectedBlockOrthogroup.memberRows) +
           '</div>'
@@ -4063,20 +4370,39 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function hoverTitle(feature) {
-    var primary = firstQualifierValue(feature, 'gene') ||
-      firstQualifierValue(feature, 'locus_tag') ||
-      firstQualifierValue(feature, 'product') ||
-      String(feature && (feature.display_label || feature.label || feature.svg_id) || '').trim();
+    var primary = firstNonInternalDisplayText(
+      qualifierDisplayValue(feature, 'gene'),
+      qualifierDisplayValue(feature, 'locus_tag'),
+      qualifierDisplayValue(feature, 'product'),
+      feature && feature.display_label,
+      feature && feature.label,
+      feature && feature.svg_id
+    );
     var type = String(feature && feature.type || 'Feature').trim() || 'Feature';
     return primary && primary !== type ? type + ': ' + primary : type;
   }
 
   function hoverRows(feature) {
-    var primary = String(feature && (feature.display_label || feature.label || '') || '').trim();
-    var product = firstQualifierValue(feature, 'product') || String(feature && feature.product || '').trim();
-    var gene = firstQualifierValue(feature, 'gene') || String(feature && feature.gene || '').trim();
-    var locus = firstQualifierValue(feature, 'locus_tag') || String(feature && feature.locus_tag || '').trim();
-    var note = firstQualifierValue(feature, 'note') || String(feature && feature.note || '').trim();
+    var primary = firstNonInternalDisplayText(
+      feature && feature.display_label,
+      feature && feature.label
+    );
+    var product = firstNonInternalDisplayText(
+      qualifierDisplayValue(feature, 'product'),
+      feature && feature.product
+    );
+    var gene = firstNonInternalDisplayText(
+      qualifierDisplayValue(feature, 'gene'),
+      feature && feature.gene
+    );
+    var locus = firstNonInternalDisplayText(
+      qualifierDisplayValue(feature, 'locus_tag'),
+      feature && feature.locus_tag
+    );
+    var note = firstNonInternalDisplayText(
+      qualifierDisplayValue(feature, 'note'),
+      feature && feature.note
+    );
     var rows = [];
     if (gene && gene !== primary) rows.push(['Gene', gene]);
     if (locus && locus !== primary) rows.push(['Locus', locus]);
@@ -4085,7 +4411,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     rows.push(['Length', featureLengthText(feature)]);
     rows.push(['Location', locationText(feature)]);
     rows.push(['Record', feature && feature.record_id || '']);
-    rows.push(['Orthogroup', feature && feature.orthogroup_id || '']);
+    rows.push(['Similarity group', feature && feature.orthogroup_id || '']);
     return rows.filter(function (row) {
       return String(row[1] == null ? '' : row[1]).trim() !== '';
     });

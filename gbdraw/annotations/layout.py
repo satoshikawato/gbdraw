@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Mapping, Sequence
 
 from gbdraw.exceptions import ValidationError
@@ -166,7 +166,12 @@ def layout_annotation_track(
         raise ValidationError(
             f"Annotation slot {slot_id!r} requests set {track_params.set_id!r}, not {set_id!r}."
         )
-    selected = tuple(item for item in annotations if item.set_id == set_id)
+    selected = tuple(
+        item
+        for item in annotations
+        if item.set_id == set_id
+        and (track_params.marks is None or item.mark in track_params.marks)
+    )
     font_default = 10.0
 
     def label_width(annotation: ResolvedRegionAnnotation) -> float:
@@ -182,13 +187,16 @@ def layout_annotation_track(
         cap = annotation.style.stroke_width * 2.0 if annotation.mark == "bracket" else 0.0
         return (track_params.padding_px + cap) * scale
 
+    highlight_track = track_params.marks == ("highlight",)
     placements = assign_annotation_lanes(
         selected,
         record_lengths=record_lengths,
         label_width_bp=label_width,
         padding_bp=padding,
-        overflow=track_params.overflow,
+        overflow="compress" if highlight_track else track_params.overflow,
     )
+    if highlight_track:
+        placements = tuple(replace(item, lane=0) for item in placements)
     lane_count = max((item.lane for item in placements), default=-1) + 1
     lane_gap = float(track_params.lane_gap_px)
     required = (

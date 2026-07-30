@@ -5,15 +5,19 @@ from types import SimpleNamespace
 import pytest
 
 from gbdraw.layout.linear import (
+    CollisionBand,
     VerticalBand,
     measure_linear_feature_lanes,
+    required_axis_gap,
+    resolve_axis_gap,
     union_vertical_bands,
 )
 from gbdraw.canvas import LinearCanvasConfigurator
-from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.diagrams.linear.track_slots import (
     LinearSlotFootprint,
+    _resolve_side_slot_origin,
     resolve_linear_record_vertical_plan,
     resolve_linear_track_layout,
 )
@@ -30,9 +34,8 @@ def _base_layout(slot_specs: list[str]):
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
         longest_genome=1200,
-        config_dict=config_dict,
+        profile=LinearRenderProfile(cfg),
         legend="none",
-        cfg=cfg,
     )
     slots = normalize_linear_track_slots_with_axis(parse_linear_track_slots(slot_specs), None)
     layout = resolve_linear_track_layout(slots, canvas_config=canvas_config, cfg=cfg)
@@ -69,6 +72,195 @@ def test_union_vertical_bands_uses_explicit_empty_default() -> None:
     assert union_vertical_bands([], default=default) == default
     with pytest.raises(ValueError, match="at least one"):
         union_vertical_bands([])
+
+
+def _collision_band(
+    kind: str,
+    top_y: float,
+    bottom_y: float,
+    *,
+    x_start: float = 0.0,
+    x_end: float = 100.0,
+) -> CollisionBand:
+    return CollisionBand(kind, x_start, x_end, top_y, bottom_y)
+
+
+def test_required_axis_gap_uses_maximum_independent_constraint() -> None:
+    current = (
+        _collision_band("body", -10.0, 20.0),
+        _collision_band("comparison", -5.0, 5.0),
+        _collision_band("definition", -50.0, 50.0, x_start=-80.0, x_end=-10.0),
+    )
+    following = (
+        _collision_band("body", -15.0, 12.0),
+        _collision_band("comparison", -5.0, 5.0),
+        _collision_band("definition", -50.0, 50.0, x_start=-80.0, x_end=-10.0),
+    )
+
+    resolution = resolve_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=True,
+    )
+
+    assert resolution.axis_gap == pytest.approx(104.0)
+    assert resolution.clear_gap == pytest.approx(4.0)
+    assert resolution.current_band is not None
+    assert resolution.current_band.kind == "definition"
+    assert resolution.next_band is not None
+    assert resolution.next_band.kind == "definition"
+
+
+@pytest.mark.parametrize(
+    ("current", "following", "expected"),
+    [
+        (
+            (_collision_band("body", -10.0, 20.0),),
+            (_collision_band("body", -15.0, 12.0),),
+            43.0,
+        ),
+        (
+            (
+                _collision_band("body", -20.0, 20.0),
+                _collision_band("comparison", -5.0, 5.0),
+            ),
+            (
+                _collision_band("body", -20.0, 20.0),
+                _collision_band("comparison", -5.0, 5.0),
+            ),
+            70.0,
+        ),
+        (
+            (
+                _collision_band("body", -5.0, 5.0),
+                _collision_band(
+                    "definition", -30.0, -10.0, x_start=-80.0, x_end=-10.0
+                ),
+            ),
+            (
+                _collision_band("body", -5.0, 5.0),
+                _collision_band(
+                    "definition", -30.0, -10.0, x_start=-80.0, x_end=-10.0
+                ),
+            ),
+            24.0,
+        ),
+    ],
+)
+def test_required_axis_gap_allows_each_domain_to_dominate(
+    current: tuple[CollisionBand, ...],
+    following: tuple[CollisionBand, ...],
+    expected: float,
+) -> None:
+    assert required_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=True,
+    ) == pytest.approx(expected)
+
+
+def test_required_axis_gap_ignores_nonoverlapping_horizontal_domains() -> None:
+    current = (
+        _collision_band("body", -5.0, 5.0, x_start=0.0, x_end=100.0),
+        _collision_band("definition", -50.0, 50.0, x_start=-100.0, x_end=-10.0),
+    )
+    following = (
+        _collision_band("body", -5.0, 5.0, x_start=0.0, x_end=100.0),
+        _collision_band("definition", -50.0, 50.0, x_start=110.0, x_end=190.0),
+    )
+
+    assert required_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=False,
+    ) == pytest.approx(18.0)
+
+
+def test_required_axis_gap_applies_definition_body_policy_when_x_overlaps() -> None:
+    current = (_collision_band("body", -5.0, 10.0),)
+    following = (
+        _collision_band("body", -5.0, 5.0),
+        _collision_band("definition", -30.0, -10.0),
+    )
+
+    assert required_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=False,
+    ) == pytest.approx(44.0)
+
+
+def test_required_axis_gap_does_not_reserve_comparison_height_on_inactive_boundary() -> None:
+    current = (
+        _collision_band("body", -10.0, 10.0),
+        _collision_band("comparison", -5.0, 5.0),
+    )
+    following = (
+        _collision_band("body", -10.0, 10.0),
+        _collision_band("comparison", -5.0, 5.0),
+    )
+
+    assert required_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=False,
+    ) == pytest.approx(28.0)
+
+
+def test_required_axis_gap_uses_signed_off_axis_definition_edges() -> None:
+    current = (
+        _collision_band("body", -5.0, 5.0),
+        _collision_band(
+            "definition", -40.0, -20.0, x_start=-80.0, x_end=-10.0
+        ),
+    )
+    following = (
+        _collision_band("body", -5.0, 5.0),
+        _collision_band(
+            "definition", -40.0, -20.0, x_start=-80.0, x_end=-10.0
+        ),
+    )
+
+    assert required_axis_gap(
+        current,
+        following,
+        ordinary_row_gap=8.0,
+        comparison_height=60.0,
+        definition_clear_gap=4.0,
+        boundary_has_comparison=False,
+    ) == pytest.approx(24.0)
+
+
+def test_required_axis_gap_rejects_comparison_outside_body_reserve() -> None:
+    current = (
+        _collision_band("body", -10.0, 10.0),
+        _collision_band("comparison", -12.0, 5.0),
+    )
+
+    with pytest.raises(ValueError, match="contained in a record body"):
+        required_axis_gap(
+            current,
+            (_collision_band("body", -10.0, 10.0),),
+            ordinary_row_gap=8.0,
+            comparison_height=60.0,
+            definition_clear_gap=4.0,
+            boundary_has_comparison=True,
+        )
 
 
 def test_measure_middle_separated_feature_lanes_uses_renderer_factors() -> None:
@@ -137,9 +329,108 @@ def test_record_planner_reserves_middle_feature_band_before_depth() -> None:
     depth = plan.slot_by_id("depth")
     assert not features.reserve_band.intersects(depth.reserve_band)
     assert depth.reserve_band.top_y - features.reserve_band.bottom_y == pytest.approx(
-        canvas_config.vertical_padding
+        canvas_config.configured_track_spacing
     )
     assert plan.record_body_band == VerticalBand(-12.0, depth.reserve_band.bottom_y)
+
+
+@pytest.mark.parametrize(
+    (
+        "direction",
+        "occupied_edge",
+        "incoming_spacing",
+        "preferred_origin",
+        "expected_origin",
+    ),
+    [
+        ("above", -5.0, 0.0, -40.0, -40.0),
+        ("below", 5.0, 0.0, 40.0, 40.0),
+        ("above", -20.0, 3.0, -18.0, -33.0),
+        ("below", 20.0, 3.0, 18.0, 33.0),
+    ],
+)
+def test_side_slot_origin_uses_absolute_preference_and_spacing_once(
+    direction: str,
+    occupied_edge: float,
+    incoming_spacing: float,
+    preferred_origin: float,
+    expected_origin: float,
+) -> None:
+    assert _resolve_side_slot_origin(
+        direction=direction,
+        occupied_edge=occupied_edge,
+        incoming_spacing=incoming_spacing,
+        local_reserve_band=VerticalBand(-10.0, 10.0),
+        preferred_origin=preferred_origin,
+    ) == pytest.approx(expected_origin)
+
+
+def test_record_planner_feature_overlay_moves_numeric_only_for_protrusion() -> None:
+    spacing = 4.0
+    feature_band = VerticalBand(-10.0, 10.0)
+    content_band = VerticalBand(-10.0, 10.0)
+
+    def resolve(underlay_height: float | None):
+        slot_specs = [f"features:features@side=overlay,spacing={spacing}px"]
+        if underlay_height is not None:
+            slot_specs.append(
+                "underlay:annotations@side=overlay,h=20px,"
+                "anchor_slot=features,set_id=underlay,layer=underlay,z=-1"
+            )
+        slot_specs.append("content:gc_content@side=below,h=20px")
+        layout, _canvas_config = _base_layout(slot_specs)
+        footprints = {
+            "features": LinearSlotFootprint(feature_band, feature_band),
+            "content": LinearSlotFootprint(content_band, content_band),
+        }
+        if underlay_height is not None:
+            underlay_band = VerticalBand(0.0, underlay_height)
+            footprints["underlay"] = LinearSlotFootprint(
+                underlay_band,
+                underlay_band,
+            )
+        return resolve_linear_record_vertical_plan(
+            layout,
+            axis_band=VerticalBand(-0.5, 0.5),
+            footprints=footprints,
+        )
+
+    base_plan = resolve(None)
+    in_band_plan = resolve(20.0)
+    protruding_plan = resolve(30.0)
+    base_content = base_plan.slot_by_id("content")
+    in_band_content = in_band_plan.slot_by_id("content")
+    protruding_content = protruding_plan.slot_by_id("content")
+    protruding_underlay = protruding_plan.slot_by_id("underlay")
+
+    assert in_band_content.origin_y == pytest.approx(base_content.origin_y)
+    assert protruding_content.origin_y - base_content.origin_y == pytest.approx(10.0)
+    assert (
+        protruding_content.reserve_band.top_y
+        - protruding_underlay.reserve_band.bottom_y
+    ) == pytest.approx(spacing)
+
+
+@pytest.mark.parametrize("side", ["above", "below"])
+def test_record_planner_without_features_keeps_numeric_preferred_origin(
+    side: str,
+) -> None:
+    layout, _canvas_config = _base_layout(
+        [f"content:gc_content@side={side},h=20px"]
+    )
+    preferred_origin = layout.slots[0].y_offset
+    plan = resolve_linear_record_vertical_plan(
+        layout,
+        axis_band=VerticalBand(-0.5, 0.5),
+        footprints={
+            "content": LinearSlotFootprint(
+                VerticalBand(-10.0, 10.0),
+                VerticalBand(-10.0, 10.0),
+            ),
+        },
+    )
+
+    assert plan.slot_by_id("content").origin_y == pytest.approx(preferred_origin)
 
 
 def test_record_planner_missing_depth_has_no_paint_or_reserve() -> None:
@@ -167,6 +458,38 @@ def test_record_planner_missing_depth_has_no_paint_or_reserve() -> None:
     assert depth.paint_band is None
     assert depth.reserve_band.height == pytest.approx(0.0)
     assert plan.record_body_band == VerticalBand(-5.0, 5.0)
+
+
+def test_record_planner_missing_depth_compacts_following_numeric_track() -> None:
+    layout, canvas_config = _base_layout(
+        [
+            "features:features@side=overlay",
+            "depth:depth@side=below,h=20px",
+            "content:gc_content@side=below,h=20px",
+        ]
+    )
+    feature_band = VerticalBand(-5.0, 5.0)
+    plan = resolve_linear_record_vertical_plan(
+        layout,
+        axis_band=VerticalBand(-0.5, 0.5),
+        footprints={
+            "features": LinearSlotFootprint(feature_band, feature_band),
+            "depth": LinearSlotFootprint(
+                paint_band=None,
+                reserve_band=VerticalBand(0.0, 0.0),
+                data_available=False,
+            ),
+            "content": LinearSlotFootprint(
+                VerticalBand(-10.0, 10.0),
+                VerticalBand(-10.0, 10.0),
+            ),
+        },
+    )
+    content = plan.slot_by_id("content")
+
+    assert content.reserve_band.top_y - feature_band.bottom_y == pytest.approx(
+        canvas_config.configured_track_spacing
+    )
 
 
 def test_record_planner_comparison_band_uses_paint_not_empty_reserve() -> None:
@@ -204,7 +527,10 @@ def test_record_planner_packs_same_side_feature_and_depth_in_slot_order() -> Non
 
     features = plan.slot_by_id("features")
     depth = plan.slot_by_id("depth")
-    assert depth.reserve_band.top_y - features.reserve_band.bottom_y >= canvas_config.vertical_padding
+    assert (
+        depth.reserve_band.top_y - features.reserve_band.bottom_y
+        >= canvas_config.configured_track_spacing
+    )
 
 
 def test_record_planner_z_only_changes_paint_order_metadata() -> None:

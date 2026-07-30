@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import inspect
 import json
 import os
@@ -10,7 +11,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import gbdraw as public_api
-import gbdraw.api  # noqa: F401 - preserve the historical CLI contract import order
+import gbdraw.analysis as analysis_api
+import gbdraw.api as library_api
+import gbdraw.api.diagram as diagram_api
+import gbdraw.api.options as api_options
+import gbdraw.api.render as api_render
 import gbdraw.circular as circular_cli
 import gbdraw.linear as linear_cli
 
@@ -152,7 +157,7 @@ def build_contract() -> dict[str, object]:
                 "--gbk", "contract-a.gb", "contract-b.gb", "--blast", "hits.tsv",
                 "--output", "diagram", "--palette", "orchid", "--nt", "AT", "--window",
                 "1000", "--step", "100", "--features", "CDS,tRNA", "--legend", "bottom",
-                "--format", "svg,interactive_svg", "--show_gc", "--show_skew",
+                "--format", "svg,interactive_svg", "--gc", "--skew",
                 "--separate_strands",
             ],
         ),
@@ -162,3 +167,98 @@ def build_contract() -> dict[str, object]:
 def test_public_api_and_cli_contract_snapshot() -> None:
     expected = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
     assert build_contract() == expected
+
+
+def test_low_level_api_owners_are_explicit() -> None:
+    removed_diagram_reexports = {
+        "DEFAULT_SELECTED_FEATURES",
+        "assemble_circular_diagram_from_record",
+        "assemble_circular_diagram_from_records",
+        "assemble_linear_diagram_from_records",
+        "build_circular_diagram",
+        "build_circular_multi_diagram",
+        "build_linear_diagram",
+    }
+    removed_canvas_and_configurator_reexports = {
+        "BlastMatchConfigurator",
+        "CircularCanvasConfigurator",
+        "DepthConfigurator",
+        "FeatureDrawingConfigurator",
+        "GcContentConfigurator",
+        "GcSkewConfigurator",
+        "LegendDrawingConfigurator",
+        "LinearCanvasConfigurator",
+    }
+    removed_convenience_reexports = {
+        "DiagramOptions",
+        "OutputOptions",
+        "TrackOptions",
+        "parse_formats",
+        "save_figure",
+    }
+    removed_top_level_names = (
+        removed_diagram_reexports
+        | removed_canvas_and_configurator_reexports
+        | removed_convenience_reexports
+    )
+
+    assert removed_top_level_names.isdisjoint(library_api.__all__)
+    assert all(not hasattr(library_api, name) for name in removed_top_level_names)
+    assert importlib.util.find_spec("gbdraw.api.canvas") is None
+    assert importlib.util.find_spec("gbdraw.api.configurators") is None
+
+    assert {
+        "DEFAULT_SELECTED_FEATURES",
+        "LinearDiagramMetadata",
+        "build_circular_diagram",
+        "build_circular_multi_diagram",
+        "build_linear_diagram",
+    } <= set(diagram_api.__all__)
+    assert {
+        "assemble_circular_diagram_from_record",
+        "assemble_circular_diagram_from_records",
+        "assemble_linear_diagram_from_records",
+    }.isdisjoint(diagram_api.__all__)
+    assert all(
+        not hasattr(api_options, name)
+        for name in ("DiagramOptions", "OutputOptions", "TrackOptions")
+    )
+    assert not hasattr(api_render, "parse_formats")
+    assert not hasattr(api_render, "save_figure")
+
+    assert {"draw_circular", "draw_linear", "read_genbank", "read_gff"} <= set(
+        public_api.__all__
+    )
+    assert (
+        library_api.CircularDiagramOptions
+        is api_options.CircularDiagramOptions
+    )
+    assert library_api.LinearDiagramOptions is api_options.LinearDiagramOptions
+    assert "CollinearityParameters" not in library_api.__all__
+    assert not hasattr(library_api, "CollinearityParameters")
+    assert "LosslessCollinearityParameters" in library_api.__all__
+    assert "CollinearityParameters" not in analysis_api.__all__
+    assert not hasattr(analysis_api, "CollinearityParameters")
+    assert "LosslessCollinearityParameters" in analysis_api.__all__
+    assert {
+        "CircularDiagramOptions",
+        "CircularOutputOptions",
+        "CircularRequestTrackOptions",
+        "CircularTrackOptions",
+        "LinearDiagramOptions",
+        "LinearOutputOptions",
+        "LinearRequestTrackOptions",
+        "LinearTrackOptions",
+        "LinearDiagramMetadata",
+        "build_request_plan_diagram",
+        "plan_request",
+        "plan_circular_request",
+        "plan_linear_request",
+    } <= set(library_api.__all__)
+    assert library_api.LinearDiagramMetadata is diagram_api.LinearDiagramMetadata
+    assert {
+        "LinearDiagramBuildResult",
+        "build_linear_diagram_result",
+    }.isdisjoint(library_api.__all__)
+    assert library_api.render_to_bytes is api_render.render_to_bytes
+    assert library_api.save_figure_to is api_render.save_figure_to

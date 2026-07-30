@@ -1,21 +1,23 @@
 from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 import pytest
+from xml.etree import ElementTree
 
 from gbdraw.api import (
     AnnotationOptions,
     AnnotationSet,
     CoordinateSpan,
-    DiagramOptions,
     HatchStyle,
+    LinearDiagramOptions,
+    LinearTrackOptions,
     RegionAnnotation,
     RegionAnnotationStyle,
-    TrackOptions,
     LinearMultiRecordOptions,
-    assemble_linear_diagram_from_records,
-    build_linear_diagram,
     parse_record_selector,
 )
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.diagram import assemble_linear_diagram_from_records, build_linear_diagram
 from gbdraw.tracks import (
     LinearTrackSlot,
     normalize_linear_track_slots,
@@ -40,7 +42,7 @@ def test_linear_annotation_track_renders_metadata_and_hatch() -> None:
     )
     drawing = build_linear_diagram(
         [record],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             annotations=AnnotationOptions(sets=(AnnotationSet("regions", (annotation,)),))
         ),
     )
@@ -48,6 +50,75 @@ def test_linear_annotation_track_renders_metadata_and_hatch() -> None:
     assert 'data-gbdraw-annotation-id="region"' in svg
     assert "gbdraw-hatch-" in svg
     assert ">Region<" in svg
+
+
+def test_linear_highlight_automatically_renders_behind_features() -> None:
+    record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    record.features = [
+        SeqFeature(FeatureLocation(120, 250, strand=1), type="CDS")
+    ]
+    annotation = RegionAnnotation(
+        "highlighted",
+        CoordinateSpan(None, 100, 300),
+        label="Highlighted region",
+        mark="highlight",
+    )
+    drawing = build_linear_diagram(
+        [record],
+        options=LinearDiagramOptions(
+            annotations=AnnotationOptions(
+                sets=(AnnotationSet("regions", (annotation,)),)
+            )
+        ),
+    )
+    svg = drawing.tostring()
+    slots = {
+        slot["slotId"]: slot
+        for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert slots["annotations_1"]["side"] == "overlay"
+    assert 'data-gbdraw-annotation-mark="highlight"' in svg
+    assert 'fill="#94a3b8"' in svg
+    root = ElementTree.fromstring(svg)
+    elements = list(root.iter())
+    highlight_group = next(
+        element
+        for element in elements
+        if element.attrib.get("data-gbdraw-annotation-id") == "highlighted"
+    )
+    record_group = next(
+        element
+        for element in elements
+        if element.attrib.get("data-gbdraw-record-id") == "r1"
+        and element.attrib.get("id", "").startswith("record_group_")
+    )
+    assert elements.index(highlight_group) < elements.index(record_group)
+    highlight_rect = next(element for element in highlight_group if element.tag.endswith("rect"))
+    assert float(highlight_rect.attrib["height"]) >= 14.0
+
+
+def test_linear_mixed_annotation_set_splits_highlight_from_lane_marks() -> None:
+    record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    annotations = (
+        RegionAnnotation("highlighted", CoordinateSpan(None, 100, 300), mark="highlight"),
+        RegionAnnotation("bracketed", CoordinateSpan(None, 400, 600), mark="bracket"),
+    )
+    drawing = build_linear_diagram(
+        [record],
+        options=LinearDiagramOptions(
+            annotations=AnnotationOptions(
+                sets=(AnnotationSet("regions", annotations),)
+            )
+        ),
+    )
+    slots = {
+        slot["slotId"]: slot
+        for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert slots["annotations_1"]["side"] == "above"
+    assert slots["annotations_1_highlight"]["side"] == "overlay"
 
 
 def test_linear_annotation_overlay_requires_anchor_and_consistent_z() -> None:
@@ -108,11 +179,11 @@ def test_linear_annotation_clip_policy_creates_clip_path() -> None:
     )
     drawing = build_linear_diagram(
         [record],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             annotations=AnnotationOptions(
                 sets=(AnnotationSet("regions", annotations),)
             ),
-            tracks=TrackOptions(
+            tracks=LinearTrackOptions(
                 linear_track_slots=(
                     "regions:annotations@set_id=regions,h=8px,overflow=clip",
                 ),
@@ -122,7 +193,16 @@ def test_linear_annotation_clip_policy_creates_clip_path() -> None:
     )
     svg = drawing.tostring()
     assert 'data-gbdraw-annotation-clipped="true"' in svg
-    assert 'clip-path="url(#gbdraw-annotation-clip-' in svg
+    root = ElementTree.fromstring(svg)
+    clipped_group = next(
+        element
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-annotation-clipped") == "true"
+    )
+    clip_reference = clipped_group.attrib["clip-path"]
+    assert clip_reference.startswith("url(#annotation_clip_")
+    clip_id = clip_reference.removeprefix("url(#").removesuffix(")")
+    assert any(element.attrib.get("id") == clip_id for element in root.iter())
 
 
 def test_annotation_hatch_is_used_in_shared_legend_preview() -> None:
@@ -136,7 +216,7 @@ def test_annotation_hatch_is_used_in_shared_legend_preview() -> None:
     )
     drawing = build_linear_diagram(
         [record],
-        options=DiagramOptions(
+        options=LinearDiagramOptions(
             annotations=AnnotationOptions(
                 sets=(AnnotationSet("regions", (annotation,)),)
             )
@@ -175,16 +255,19 @@ def test_multi_record_annotation_lanes_use_final_sequence_width() -> None:
 
     drawing = assemble_linear_diagram_from_records(
         records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": "none",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+        ),
         annotation_options=annotations,
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1"),
         ),
         legend="none",
-        config_overrides={
-            "show_labels": False,
-            "show_gc": False,
-            "show_skew": False,
-        },
     )
     slots = {
         slot["slotId"]: slot

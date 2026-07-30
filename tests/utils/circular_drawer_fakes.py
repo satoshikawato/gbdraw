@@ -14,6 +14,7 @@ def make_feature_draw_ratio_capture(captured: list[float]):
         _track_type,
         _strandedness,
         _length_param,
+        **_kwargs,
     ):
         captured.append(float(track_ratio_factor))
         return group
@@ -33,7 +34,6 @@ def make_numeric_track_capture(
         _dataframe,
         _canvas_config,
         _track_config,
-        _config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,
@@ -55,7 +55,6 @@ def make_numeric_slot_capture(capture_numeric_slot, fallback_group_id: str):
         _dataframe,
         canvas_config,
         _track_config,
-        _config_dict,
         *,
         track_width_override=None,
         norm_factor_override=None,

@@ -20,6 +20,7 @@ const {
   buildSelectorSafetyUniquenessIndex,
   collectSpecificColorQualifierSuggestions,
   exactRegexValue,
+  resolveFeatureLabelSelector,
   selectFeatureSelector
 } = await import(pathToFileURL(join(tempDir, 'feature-selector.js')));
 
@@ -188,6 +189,42 @@ const makeFeature = (overrides = {}) => ({
 }
 
 assert.equal(exactRegexValue('YP_009725295.1'), '^YP_009725295\\.1$');
+
+{
+  const feature = makeFeature({
+    selector: {
+      hash: 'h1',
+      qualifiers: {
+        product: ['wsv360-like protein'],
+        gene: ['wsv360']
+      }
+    }
+  });
+  assert.deepEqual(resolveFeatureLabelSelector(feature, 'wsv360-like protein'), {
+    qualifier: 'product',
+    value: 'wsv360-like protein',
+    pattern: '^wsv360-like protein$'
+  });
+}
+
+{
+  const feature = makeFeature({
+    qualifiers: {
+      product: ['  ATPase (A)+ [x]?  ']
+    },
+    selector: {
+      hash: 'h1',
+      qualifiers: {
+        gene: ['atpA']
+      }
+    }
+  });
+  assert.equal(
+    resolveFeatureLabelSelector(feature, 'ATPase (A)+ [x]?')?.pattern,
+    '^  ATPase \\(A\\)\\+ \\[x\\]\\?  $'
+  );
+  assert.equal(resolveFeatureLabelSelector(feature, 'manually edited label'), null);
+}
 
 {
   const suggestions = collectSpecificColorQualifierSuggestions(

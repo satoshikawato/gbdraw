@@ -13,12 +13,14 @@ from svgwrite import Drawing  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ...features.factory import FeatureBuildResult
+from ...layout.circular import CircularRecordRenderContext
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
+    LegendMeasurement,
 )
 from ...render.groups.circular import (  # type: ignore[reportMissingImports]
     AxisGroup,
@@ -45,16 +47,14 @@ def add_depth_group_on_canvas(
     depth_df: DataFrame,
     canvas_config: CircularCanvasConfigurator,
     depth_config: DepthConfigurator,
-    config_dict: dict,
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
     group_id: str | None = None,
     axis_group_id: str | None = None,
-    cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """Adds the depth coverage group to the canvas."""
-    cfg = cfg or canvas_config._cfg
+    cfg = canvas_config.profile.config
     depth_track_width = (
         float(track_width_override)
         if track_width_override is not None
@@ -66,7 +66,6 @@ def add_depth_group_on_canvas(
         canvas_config.radius,
         depth_track_width,
         depth_config,
-        config_dict,
         canvas_config.track_ids["depth_track"],
         norm_factor_override=norm_factor_override,
         group_id=group_id,
@@ -87,10 +86,11 @@ def add_conservation_group_on_canvas(
     inner_radius_px: float,
     outer_radius_px: float,
     min_identity: float,
-    cfg: GbdrawConfig | None = None,
+    group_id: str | None = None,
+    slot_id: str | None = None,
 ) -> Drawing:
     """Adds one circular conservation ring group to the canvas."""
-    cfg = cfg or canvas_config._cfg
+    cfg = canvas_config.profile.config
     conservation_group: Group = ConservationGroup(
         hits=conservation_track.hits,
         total_length=len(gb_record.seq),
@@ -102,6 +102,8 @@ def add_conservation_group_on_canvas(
         outer_radius_px=outer_radius_px,
         min_identity=min_identity,
         cfg=cfg,
+        group_id=group_id,
+        slot_id=slot_id,
     ).get_group()
     conservation_group = center_group_on_canvas(conservation_group, canvas_config)
     canvas.add(conservation_group)
@@ -114,12 +116,10 @@ def add_gc_skew_group_on_canvas(
     gc_df: DataFrame,
     canvas_config: CircularCanvasConfigurator,
     skew_config: GcSkewConfigurator,
-    config_dict: dict,
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
     group_id: str | None = None,
-    cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
     Adds the GC skew group to the canvas.
@@ -129,12 +129,10 @@ def add_gc_skew_group_on_canvas(
     gb_record (SeqRecord): The GenBank record.
     gc_df (DataFrame): DataFrame containing GC content and skew information.
     canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    config_dict (dict): Configuration dictionary for drawing parameters.
-
     Returns:
     Drawing: The updated SVG drawing with the GC skew group added.
     """
-    cfg = cfg or canvas_config._cfg
+    cfg = canvas_config.profile.config
     skew_track_width = (
         float(track_width_override)
         if track_width_override is not None
@@ -146,7 +144,6 @@ def add_gc_skew_group_on_canvas(
         canvas_config.radius,
         skew_track_width,
         skew_config,
-        config_dict,
         canvas_config.track_ids["skew_track"],
         norm_factor_override=norm_factor_override,
         group_id=group_id,
@@ -163,12 +160,10 @@ def add_gc_content_group_on_canvas(
     gc_df: DataFrame,
     canvas_config: CircularCanvasConfigurator,
     gc_config: GcContentConfigurator,
-    config_dict: dict,
     *,
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
     group_id: str | None = None,
-    cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
     Adds the GC content group to the canvas.
@@ -179,12 +174,10 @@ def add_gc_content_group_on_canvas(
     gc_df (DataFrame): DataFrame containing GC content and skew information.
     canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
     gc_config (GcContentConfigurator): Configuration for the GC content representation.
-    config_dict (dict): Configuration dictionary for drawing parameters.
-
     Returns:
     Drawing: The updated SVG drawing with the GC content group added.
     """
-    cfg = cfg or canvas_config._cfg
+    cfg = canvas_config.profile.config
     gc_content_track_width = (
         float(track_width_override)
         if track_width_override is not None
@@ -196,7 +189,6 @@ def add_gc_content_group_on_canvas(
         canvas_config.radius,
         gc_content_track_width,
         gc_config,
-        config_dict,
         canvas_config.track_ids["gc_track"],
         norm_factor_override=norm_factor_override,
         group_id=group_id,
@@ -213,13 +205,13 @@ def add_record_definition_group_on_canvas(
     canvas_config: CircularCanvasConfigurator,
     species: str | None,
     strain: str | None,
-    config_dict: dict,
     *,
     plot_title: str | None = None,
     definition_profile: str = "full",
     definition_position: str = "center",
     definition_group_id: str | None = None,
-    cfg: GbdrawConfig | None = None,
+    record_index: int = 0,
+    record_count: int = 1,
 ) -> Drawing:
     """
     Adds the record definition group to the canvas.
@@ -230,21 +222,21 @@ def add_record_definition_group_on_canvas(
     canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
     species (str): Species name.
     strain (str): Strain name.
-    config_dict (dict): Configuration dictionary for drawing parameters.
-
     Returns:
     Drawing: The updated SVG drawing with the record definition group added.
     """
+    cfg = canvas_config.profile.config
     definition_group: Group = DefinitionGroup(
         gb_record,
         canvas_config,
+        cfg=cfg,
         species=species,
         strain=strain,
         plot_title=plot_title,
-        config_dict=config_dict,
         definition_profile=definition_profile,
         definition_group_id=definition_group_id,
-        cfg=cfg or canvas_config._cfg,
+        record_index=record_index,
+        record_count=record_count,
     ).get_group()
     definition_group = place_definition_group_on_canvas(
         definition_group,
@@ -260,13 +252,16 @@ def add_record_group_on_canvas(
     record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
     feature_config: FeatureDrawingConfigurator,
-    config_dict: dict,
     *,
-    cfg: GbdrawConfig | None = None,
-    precomputed_feature_dict: dict | None = None,
+    feature_layers: FeatureBuildResult,
+    render_context: CircularRecordRenderContext,
     precalculated_labels: list[dict] | None = None,
     feature_track_ratio_factor_override: float | None = None,
     feature_anchor_radius_px: float | None = None,
+    record_index: int = 0,
+    group_id: str | None = None,
+    slot_id: str | None = None,
+    feature_dom_namespace: str | None = None,
 ) -> Drawing:
     """
     Adds the record group to the canvas.
@@ -276,8 +271,6 @@ def add_record_group_on_canvas(
     record (SeqRecord): The GenBank record.
     canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
     feature_config (FeatureDrawingConfigurator): Configuration for feature drawing.
-    config_dict (dict): Configuration dictionary for drawing parameters.
-
     Returns:
     Drawing: The updated SVG drawing with the record group added.
     """
@@ -286,12 +279,15 @@ def add_record_group_on_canvas(
         gb_record=record,
         canvas_config=canvas_config,
         feature_config=feature_config,
-        config_dict=config_dict,
-        cfg=cfg or canvas_config._cfg,
-        precomputed_feature_dict=precomputed_feature_dict,
+        feature_layers=feature_layers,
+        render_context=render_context,
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         feature_anchor_radius_px=feature_anchor_radius_px,
+        record_index=record_index,
+        group_id=group_id,
+        slot_id=slot_id,
+        feature_dom_namespace=feature_dom_namespace,
     ).get_group()
     # Calculate start and end points for the 60-degree arc
 
@@ -304,10 +300,8 @@ def add_record_group_on_canvas(
 def add_axis_group_on_canvas(
     canvas: Drawing,
     canvas_config: CircularCanvasConfigurator,
-    config_dict: dict,
     *,
     radius_override: float | None = None,
-    cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
     Adds the axis group to the canvas.
@@ -315,16 +309,13 @@ def add_axis_group_on_canvas(
     Parameters:
     canvas (Drawing): The SVG drawing canvas.
     canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    config_dict (dict): Configuration dictionary for drawing parameters.
-
     Returns:
     Drawing: The updated SVG drawing with the axis group added.
     """
     axis_group: Group = AxisGroup(
         float(radius_override) if radius_override is not None else canvas_config.radius,
-        config_dict,
         canvas_config,
-        cfg=cfg or canvas_config._cfg,
+        cfg=canvas_config.profile.config,
     ).get_group()
     axis_group = center_group_on_canvas(axis_group, canvas_config)
     canvas.add(axis_group)
@@ -335,7 +326,6 @@ def add_tick_group_on_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
-    config_dict: dict,
     *,
     radius_override: float | None = None,
     tick_track_channel_override: str | None = None,
@@ -343,7 +333,8 @@ def add_tick_group_on_canvas(
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
     track_preset: str | None = None,
-    cfg: GbdrawConfig | None = None,
+    group_id: str | None = None,
+    slot_id: str | None = None,
 ) -> Drawing:
     """
     Adds the tick group to the canvas.
@@ -352,22 +343,21 @@ def add_tick_group_on_canvas(
     canvas (Drawing): The SVG drawing canvas.
     gb_record (SeqRecord): The GenBank record.
     canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    config_dict (dict): Configuration dictionary for drawing parameters.
-
     Returns:
     Drawing: The updated SVG drawing with the tick group added.
     """
     tick_group: Group = TickGroup(
         gb_record,
         canvas_config,
-        config_dict,
+        profile=canvas_config.profile,
         radius=radius_override,
         tick_track_channel_override=tick_track_channel_override,
         label_side=label_side,
         tick_side=tick_side,
         tick_length_px=tick_length_px,
         track_preset=track_preset,
-        cfg=cfg or canvas_config._cfg,
+        group_id=group_id,
+        slot_id=slot_id,
     ).get_group()
     tick_group = center_group_on_canvas(tick_group, canvas_config)
     canvas.add(tick_group)
@@ -378,12 +368,10 @@ def add_labels_group_on_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
-    feature_config: FeatureDrawingConfigurator,
-    config_dict: dict,
     *,
+    feature_layers: FeatureBuildResult,
+    render_context: CircularRecordRenderContext,
     outer_arena: tuple[float, float] | None = None,
-    cfg: GbdrawConfig | None = None,
-    precomputed_feature_dict: dict | None = None,
     precalculated_labels: list[dict] | None = None,
     feature_track_ratio_factor_override: float | None = None,
     feature_anchor_radius_px: float | None = None,
@@ -396,8 +384,6 @@ def add_labels_group_on_canvas(
     canvas (Drawing): The SVG drawing canvas.
     gb_record (SeqRecord): The GenBank record.
     canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    feature_config (FeatureDrawingConfigurator): Configuration for feature drawing.
-    config_dict (dict): Configuration dictionary for drawing parameters.
     outer_arena (tuple[float, float] | None): Optional outer arena bounds.
 
     Returns:
@@ -406,11 +392,9 @@ def add_labels_group_on_canvas(
     labels_group: Group = LabelsGroup(
         gb_record=gb_record,
         canvas_config=canvas_config,
-        feature_config=feature_config,
-        config_dict=config_dict,
+        feature_layers=feature_layers,
+        render_context=render_context,
         outer_arena=outer_arena,
-        cfg=cfg or canvas_config._cfg,
-        precomputed_feature_dict=precomputed_feature_dict,
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         feature_anchor_radius_px=feature_anchor_radius_px,
@@ -421,20 +405,29 @@ def add_labels_group_on_canvas(
     return canvas
 
 
-def add_legend_group_on_canvas(canvas: Drawing, canvas_config: CircularCanvasConfigurator, legend_config, legend_table) -> Drawing:
+def add_legend_group_on_canvas(
+    canvas: Drawing,
+    canvas_config: CircularCanvasConfigurator,
+    legend_measurement: LegendMeasurement,
+    legend_table,
+) -> Drawing:
     """
     Adds the legend group to the canvas.
 
     Parameters:
     canvas (Drawing): The SVG drawing canvas.
     canvas_config (CircularCanvasConfigurator): Configuration for the circular canvas.
-    legend_config: Configuration for the legend.
+    legend_measurement: Immutable measurement for the legend.
     legend_table: The legend table data.
 
     Returns:
     Drawing: The updated SVG drawing with the legend group added.
     """
-    legend_group = LegendGroup(canvas_config, legend_config, legend_table).get_group()
+    legend_group = LegendGroup(
+        canvas_config,
+        legend_measurement,
+        legend_table,
+    ).get_group()
     legend_group = place_legend_on_canvas(legend_group, canvas_config)
     canvas.add(legend_group)
 

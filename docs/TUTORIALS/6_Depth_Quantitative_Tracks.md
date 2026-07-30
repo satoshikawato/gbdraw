@@ -42,12 +42,12 @@ In a source checkout, this file is also available as `examples/MjeNMV.gb`.
 
 ## 2. Add one depth track
 
-Use `--depth` when you need one depth track.
+Use one `--depth_track` group when you need one depth track.
 
 ```bash
 gbdraw circular \
   --gbk tests/test_inputs/AP027133.gb \
-  --depth tests/test_inputs/AP027133.DRR394922.depth.tsv \
+  --depth_track tests/test_inputs/AP027133.DRR394922.depth.tsv \
   --depth_width 45 \
   --depth_window 100 \
   --depth_step 100 \
@@ -107,11 +107,11 @@ gbdraw linear \
   -f svg
 ```
 
-This writes `tutorial-6-sparse-depth-tracks.svg`. The first repeated group is logical track 0 and has data only for AP027131.1; the second is logical track 1 and has data only for AP027132.1. A missing cell draws no depth area, axis, or ticks for that record. It is not converted to zero coverage. The Linear planner measures each record separately but retains the missing logical slot's reserved band, so that cell does not compact or renumber its record's stack. Every `--depth_track` group must contain at least one file.
+This writes `tutorial-6-sparse-depth-tracks.svg`. The first repeated group is logical track 0 and has data only for AP027131.1; the second is logical track 1 and has data only for AP027132.1. A missing cell draws no depth area, axis, or ticks for that record. It is not converted to zero coverage and reserves no vertical geometry, so later numeric tracks compact without renumbering the logical series. Every `--depth_track` group must contain at least one file.
 
 For multiple samples, repeat `--depth_track`, and give each group a matching `--depth_track_label` and `--depth_track_color`. Within every group, list files or empty placeholders in displayed-record order. Do not substitute an unrelated file for a missing measurement.
 
-Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same y-axis range across records for each depth track. `--depth` and `--depth_track` are alternatives and cannot be used in the same command.
+Linear mode uses `--depth_height` for the vertical height of depth tracks. `--share_depth_axis` uses the same y-axis range across records for each depth track. `--depth_track` is the only depth-file option and may be repeated to add logical series.
 
 Use `--depth_track_height` when each depth track needs its own height. Track-specific axis overrides are also available:
 
@@ -126,7 +126,7 @@ Log scaling is useful when a few high-depth bins would otherwise flatten the res
 ```bash
 gbdraw linear \
   --gbk tests/test_inputs/AP027078.gb \
-  --depth tests/test_inputs/AP027078.DRR394944.depth.tsv \
+  --depth_track tests/test_inputs/AP027078.DRR394944.depth.tsv \
   --depth_height 40 \
   --depth_window 100 \
   --depth_step 100 \
@@ -152,7 +152,7 @@ The default GC content track shows deviation from the mean. Use `--gc_content_mo
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb \
-  --show_gc \
+  --gc \
   --gc_content_mode percent \
   --gc_content_min_percent 25 \
   --gc_content_max_percent 75 \
@@ -177,7 +177,7 @@ Custom track slots can add a second skew track with a different dinucleotide. Th
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb \
-  --show_skew \
+  --skew \
   --linear_track_slot 'features:features@side=overlay' \
   --linear_track_slot 'gc_skew:gc_skew@side=below,h=24px,spacing=8px' \
   --linear_track_slot 'at_skew:dinucleotide_skew@side=below,h=24px,spacing=8px,nt=AT,positive_color=#deaf6e,negative_color=#7294e3' \

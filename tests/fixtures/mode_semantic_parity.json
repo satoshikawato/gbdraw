@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "profileVersion": 1,
+  "featureTypes": [
+    "CDS",
+    "rRNA",
+    "tRNA",
+    "tmRNA",
+    "ncRNA",
+    "misc_RNA",
+    "repeat_region"
+  ],
+  "modes": {
+    "circular": {
+      "comparison": {
+        "evalue": 0.00001,
+        "bitscore": 50.0,
+        "identity": 70.0,
+        "alignmentLength": 0
+      },
+      "tracks": {
+        "gc": true,
+        "skew": true
+      },
+      "linearAxisColor": null,
+      "linearRulerAxisColor": null
+    },
+    "linear": {
+      "comparison": {
+        "evalue": 0.01,
+        "bitscore": 50.0,
+        "identity": 0.0,
+        "alignmentLength": 0
+      },
+      "tracks": {
+        "gc": false,
+        "skew": false
+      },
+      "linearAxisColor": "lightgray",
+      "linearRulerAxisColor": "dimgray"
+    }
+  },
+  "reviewedModeDifferences": [
+    {
+      "path": "comparison.evalue",
+      "reason": "Circular conservation uses a stricter fresh-request threshold."
+    },
+    {
+      "path": "comparison.identity",
+      "reason": "Circular conservation filters low-identity matches by default."
+    },
+    {
+      "path": "tracks.gc",
+      "reason": "Circular diagrams show the GC-content ring by default."
+    },
+    {
+      "path": "tracks.skew",
+      "reason": "Circular diagrams show the GC-skew ring by default."
+    },
+    {
+      "path": "linearAxisColor",
+      "reason": "Only Linear diagrams have the reviewed light-gray axis default."
+    },
+    {
+      "path": "linearRulerAxisColor",
+      "reason": "Only Linear diagrams have the reviewed dim-gray ruler-on-axis default."
+    }
+  ]
+}

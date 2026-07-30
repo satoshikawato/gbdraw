@@ -1,0 +1,30 @@
+{
+  "sourceCommit": "c64ff8c3b42fc315975dc36cf1942f471c93e847",
+  "sourcePath": "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+  "sourceSha256": "3f10b998e7f257fa0458fb4310f9c5ae246d3e431b8f54755b16fe506f53dbdd",
+  "sessionVersion": 33,
+  "renderRequestSchema": 2,
+  "storedRawEntries": 34,
+  "totalPairs": 25,
+  "cacheHits": 25,
+  "cacheMisses": 0,
+  "uniqueJobs": 0,
+  "workerCalls": 0,
+  "downloads": {
+    "pairIndex": 0,
+    "bulkEntryCount": 4,
+    "firstDataIds": [
+      "CAG38690.1",
+      "CAF33319.1"
+    ],
+    "forbiddenPatterns": [
+      "h_[a-z2-7]{26}",
+      "p_r_",
+      "f_[0-9a-f]{64}",
+      "@[^\\t\\r\\n|]+\\|[^\\t\\r\\n]+~f_[0-9a-f]{64}"
+    ],
+    "hydratedPromptThresholdBytes": 52428800,
+    "userUploadedTsv": "# café/遺伝子\r\nquery α\tsubject β\t99.0\t10\t0\t0\t1\t10\t1\t10\t1e-5\t42\r\n",
+    "userUploadedFilename": "user-uploaded-identity.tsv"
+  }
+}

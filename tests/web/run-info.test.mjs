@@ -53,6 +53,33 @@ assert.equal(quoteShellArg(''), "''");
 {
   const info = buildRunInfo({
     mode: 'linear',
+    args: ['--session', '/canonical-render-session.gbdraw-session.json'],
+    fileMetadata: {
+      '/canonical-render-session.gbdraw-session.json': {
+        name: 'comparison.gbdraw-session.json',
+        slot: 'generatedFiles.canonical_render_session',
+        kind: 'generated'
+      }
+    },
+    elapsedMs: 500,
+    resultCount: 1
+  });
+
+  assert.equal(
+    info.command,
+    'gbdraw linear --session comparison.gbdraw-session.json'
+  );
+  assert.equal(info.reproducibility.level, 'canonical-request');
+  assert.equal(
+    reproducibilityLabel(info.reproducibility.level),
+    'Exact typed request'
+  );
+  assert.match(info.reproducibility.notes.join('\n'), /exact typed request/i);
+}
+
+{
+  const info = buildRunInfo({
+    mode: 'linear',
     args: ['--gbk', '/seq_0.gb', '/seq_1.gb', '-b', '/blast_0.txt'],
     fileMetadata: {
       '/seq_0.gb': { name: 'alpha.gb', slot: 'files.linearSeqs[0].gb', kind: 'uploaded' },

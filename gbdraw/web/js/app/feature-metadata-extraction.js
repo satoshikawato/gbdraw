@@ -32,6 +32,12 @@ export const cloneFeatureExtractionData = (data) => ({
         feature && typeof feature === 'object' ? { ...feature } : feature
       ))
     : [],
+  biological_features: Array.isArray(data?.biological_features)
+    ? data.biological_features.map((feature) => cloneJsonValue(
+        feature,
+        feature && typeof feature === 'object' ? { ...feature } : feature
+      ))
+    : [],
   record_ids: Array.isArray(data?.record_ids) ? [...data.record_ids] : [],
   selector_safety_scope: Array.isArray(data?.selector_safety_scope)
     ? cloneJsonValue(data.selector_safety_scope, [])
@@ -47,7 +53,8 @@ export const buildFeatureExtractionCacheKey = ({
   featureVisibility,
   format = 'genbank',
   mode = 'linear',
-  fastaFile = null
+  fastaFile = null,
+  includeBiologicalFeatures = false
 }) =>
   JSON.stringify({
     regionSpec: String(regionSpec || ''),
@@ -57,7 +64,8 @@ export const buildFeatureExtractionCacheKey = ({
     featureVisibility: String(featureVisibility || ''),
     format: String(format || 'genbank'),
     mode: String(mode || 'linear'),
-    fastaFileId: getFeatureExtractionFileId(fastaFile)
+    fastaFileId: getFeatureExtractionFileId(fastaFile),
+    includeBiologicalFeatures: Boolean(includeBiologicalFeatures)
   });
 
 export const getCachedFeatureExtraction = (file, key) => {
@@ -89,6 +97,7 @@ export const readFeatureExtractionData = async ({
   recordSelector,
   reverseFlag,
   selectedFeatures = null,
+  includeBiologicalFeatures = false,
   featureVisibilityTablePath = null,
   featureVisibilityTsv = '',
   timingEntries = [],
@@ -103,7 +112,8 @@ export const readFeatureExtractionData = async ({
     featureVisibility: featureVisibilityTsv,
     format,
     mode,
-    fastaFile
+    fastaFile,
+    includeBiologicalFeatures
   });
   const cached = getCachedFeatureExtraction(file, cacheKey);
   if (cached) {
@@ -150,7 +160,8 @@ export const readFeatureExtractionData = async ({
     recordSelector: recordSelector || null,
     reverseFlag: Boolean(reverseFlag),
     selectedFeatures: Array.isArray(selectedFeatures) && selectedFeatures.length ? selectedFeatures : null,
-    featureVisibilityTablePath: featureVisibilityTablePath || null
+    featureVisibilityTablePath: featureVisibilityTablePath || null,
+    includeBiologicalFeatures: Boolean(includeBiologicalFeatures)
   });
   const featData = response?.result ?? response;
   if (Array.isArray(timingEntries)) {
@@ -160,13 +171,44 @@ export const readFeatureExtractionData = async ({
   return featData;
 };
 
-// Worker feature extraction is per input file, so it returns stable IDs. Normalize
-// them once here to match the renderer's multi-record linear SVG contract.
+// Retained for compatibility with older callers. Source metadata must not use this
+// prediction; actual rendered IDs are read back from the generated SVG.
 export const makeLinearRenderedFeatureId = (stableSvgId, recordIndex, recordCount) => {
   const svgId = String(stableSvgId || '').trim();
   if (!svgId || Number(recordCount) <= 1) return svgId;
   return `${svgId}_record_${Number(recordIndex) + 1}`;
 };
+
+const stableFeatureId = (feature) => String(
+  feature?.stable_feature_id ||
+  feature?.stableFeatureId ||
+  feature?.stable_svg_id ||
+  feature?.stableFeatureSvgId ||
+  feature?.svg_id ||
+  feature?.svgId ||
+  ''
+).trim();
+
+const normalizeBiologicalFeature = (feature, extra = {}) => {
+  const stableId = stableFeatureId(feature);
+  return {
+    ...feature,
+    ...extra,
+    svg_id: stableId,
+    stable_svg_id: stableId,
+    stable_feature_id: stableId
+  };
+};
+
+const biologicalFeaturesFromExtraction = (featData) => (
+  Array.isArray(featData?.biological_features) && (
+    featData.biological_features.length > 0 ||
+    !Array.isArray(featData?.features) ||
+    featData.features.length === 0
+  )
+    ? featData.biological_features
+    : (Array.isArray(featData?.features) ? featData.features : [])
+);
 
 const hasRegionValue = (value) => value !== null && value !== undefined && value !== '';
 
@@ -256,6 +298,7 @@ export const extractFeatureMetadataForPreview = async ({
       recordSelector: null,
       reverseFlag: false,
       selectedFeatures,
+      includeBiologicalFeatures: true,
       featureVisibilityTablePath,
       featureVisibilityTsv,
       timingEntries,
@@ -265,6 +308,7 @@ export const extractFeatureMetadataForPreview = async ({
       errors.push({ inputIndex: 0, message: String(featData.error) });
       return {
         extractedFeatures: [],
+        biologicalFeatures: [],
         featureSelectorSafetyScope: [],
         featureRecordIds: [],
         selectedFeatureRecordIdx: 0,
@@ -275,6 +319,7 @@ export const extractFeatureMetadataForPreview = async ({
       errors.push({ inputIndex: 0, message: 'Feature extraction returned an unexpected payload.' });
       return {
         extractedFeatures: [],
+        biologicalFeatures: [],
         featureSelectorSafetyScope: [],
         featureRecordIds: [],
         selectedFeatureRecordIdx: 0,
@@ -282,7 +327,9 @@ export const extractFeatureMetadataForPreview = async ({
       };
     }
     return {
-      extractedFeatures: featData.features,
+      extractedFeatures: featData.features.map((feature) => normalizeBiologicalFeature(feature)),
+      biologicalFeatures: biologicalFeaturesFromExtraction(featData)
+        .map((feature) => normalizeBiologicalFeature(feature)),
       featureSelectorSafetyScope: Array.isArray(featData?.selector_safety_scope)
         ? featData.selector_safety_scope
         : [],
@@ -298,10 +345,9 @@ export const extractFeatureMetadataForPreview = async ({
       ? { regionSpecs, recordSelectors, reverseFlags }
       : buildLinearRegionExtractionContext(linearSeqs, lInputType);
     let allFeatures = [];
+    let allBiologicalFeatures = [];
     let allSelectorSafetyScope = [];
     const allRecordLabels = [];
-    const recordCount = linearSeqs.length;
-
     for (let i = 0; i < linearSeqs.length; i += 1) {
       const seq = linearSeqs[i] || {};
       const featData = await readFeatureExtractionDataImpl({
@@ -315,6 +361,7 @@ export const extractFeatureMetadataForPreview = async ({
         recordSelector: regionContext.recordSelectors[i] ?? '',
         reverseFlag: Boolean(regionContext.reverseFlags[i]),
         selectedFeatures,
+        includeBiologicalFeatures: true,
         featureVisibilityTablePath,
         featureVisibilityTsv,
         timingEntries,
@@ -330,18 +377,19 @@ export const extractFeatureMetadataForPreview = async ({
         continue;
       }
 
-      const features = featData.features.map((feature) => {
+      const normalizeLinearFeature = (feature) => {
         const enriched = enrichFeature(feature, i) || feature;
-        return {
-          ...enriched,
-          stable_svg_id: feature.svg_id,
-          svg_id: makeLinearRenderedFeatureId(feature.svg_id, i, recordCount),
+        return normalizeBiologicalFeature(enriched, {
           fileIdx: i,
           displayRecordId: `File ${i + 1}: ${feature.record_id}`,
           id: `file${i}_${feature.id}`
-        };
-      });
+        });
+      };
+      const features = featData.features.map(normalizeLinearFeature);
+      const biologicalFeatures = biologicalFeaturesFromExtraction(featData)
+        .map(normalizeLinearFeature);
       allFeatures = allFeatures.concat(features);
+      allBiologicalFeatures = allBiologicalFeatures.concat(biologicalFeatures);
 
       if (Array.isArray(featData.selector_safety_scope)) {
         allSelectorSafetyScope = allSelectorSafetyScope.concat(
@@ -355,6 +403,7 @@ export const extractFeatureMetadataForPreview = async ({
 
     return {
       extractedFeatures: allFeatures,
+      biologicalFeatures: allBiologicalFeatures,
       featureSelectorSafetyScope: allSelectorSafetyScope,
       featureRecordIds: allRecordLabels.map((record) => record.label),
       selectedFeatureRecordIdx: 0,
@@ -364,6 +413,7 @@ export const extractFeatureMetadataForPreview = async ({
 
   return {
     extractedFeatures: [],
+    biologicalFeatures: [],
     featureSelectorSafetyScope: [],
     featureRecordIds: [],
     selectedFeatureRecordIdx: 0,

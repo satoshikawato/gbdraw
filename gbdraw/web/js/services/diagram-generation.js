@@ -1,4 +1,5 @@
 import { buildPyodideAssetManifest } from './pyodide-assets.js';
+import { validateWebRuntimeCapabilities } from './runtime-capabilities.js';
 
 export class DiagramGenerationCanceledError extends Error {
   constructor(message = 'Diagram generation was canceled.') {
@@ -36,6 +37,7 @@ const resolveWorkerUrl = () => new URL('../workers/diagram-generation-worker.js'
 
 let worker = null;
 let workerInitialized = false;
+let workerCapabilities = null;
 let initState = null;
 let activeRequest = null;
 const activeFeatureRequests = new Set();
@@ -90,6 +92,7 @@ const terminateWorker = (error = null) => {
     worker = null;
   }
   workerInitialized = false;
+  workerCapabilities = null;
 };
 
 const ensureWorkerInitialized = () => {
@@ -124,6 +127,12 @@ const ensureWorkerInitialized = () => {
     cleanup();
     initState = null;
     if (data.ok) {
+      try {
+        workerCapabilities = validateWebRuntimeCapabilities(data.capabilities);
+      } catch (error) {
+        fail(error);
+        return;
+      }
       workerInitialized = true;
       resolveInit(currentWorker);
       return;
@@ -148,7 +157,12 @@ const ensureWorkerInitialized = () => {
   return promise;
 };
 
-export const preinitializeDiagramGenerationWorker = () => ensureWorkerInitialized();
+export const preinitializeDiagramGenerationWorker = async () => {
+  await ensureWorkerInitialized();
+  return workerCapabilities;
+};
+
+export const getDiagramGenerationWorkerCapabilities = () => workerCapabilities;
 
 const collectTransferList = (payload) => {
   const buffers = new Set();

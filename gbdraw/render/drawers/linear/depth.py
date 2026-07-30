@@ -37,7 +37,6 @@ class DepthDrawer:
         self.show_axis: bool = depth_config.show_axis
         self.show_ticks: bool = depth_config.show_ticks
         self.large_tick_interval: float | None = depth_config.large_tick_interval
-        self.tick_interval: float | None = self.large_tick_interval
         self.small_tick_interval: float | None = depth_config.small_tick_interval
         self.tick_font_size: float | None = depth_config.tick_font_size
         self.axis_stroke: str = "#4b5563"

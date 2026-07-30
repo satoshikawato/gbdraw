@@ -29,7 +29,11 @@ def sync_annotation_legend_entries(
             continue
         params = annotation_track_params_from_mapping(getattr(slot, "params", {}) or {})
         for annotation in bundle.annotations:
-            if annotation.set_id != params.set_id or not annotation.legend_label:
+            if (
+                annotation.set_id != params.set_id
+                or (params.marks is not None and annotation.mark not in params.marks)
+                or not annotation.legend_label
+            ):
                 continue
             style = effective_annotation_style(annotation, params)
             hatch = style.hatch
@@ -51,7 +55,10 @@ def sync_annotation_legend_entries(
             caption = str(annotation.legend_label)
             out[_unique_legend_key(out, caption)] = {
                 "type": "solid",
-                "fill": hatch_pattern_paint(hatch) if hatch else (style.fill or "none"),
+                "fill": hatch_pattern_paint(hatch) if hatch else (
+                    style.fill
+                    or ("#94a3b8" if annotation.mark == "highlight" else "none")
+                ),
                 "stroke": style.stroke,
                 "width": style.stroke_width,
                 "annotation_hatch": hatch,

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import sys
+import tempfile
+from pathlib import Path
 from typing import Iterable, Sequence
 
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
@@ -22,6 +25,7 @@ from gbdraw.render.formats import (
     resolve_output_paths,
 )
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+from gbdraw.render.output_paths import preflight_output_paths
 
 logger = logging.getLogger(__name__)
 
@@ -30,37 +34,45 @@ def _normalize_formats(formats: Sequence[str] | str | None) -> list[str]:
     return normalize_format_sequence(formats, logger=logger)
 
 
+def _late_output_collision_message(path: str, *, overwrite: bool) -> str:
+    if overwrite:
+        return (
+            f"Output target appeared during export: {path}. "
+            "Refusing to replace it."
+        )
+    return (
+        f"Output file already exists: {path}. "
+        "Use overwrite=True to replace it."
+    )
+
+
 def _resolve_base_prefix(canvas: Drawing, output_prefix: str | None, output_dir: str | None) -> str:
     base_from_canvas = os.path.splitext(getattr(canvas, "filename", "") or "out.svg")[0]
     base_prefix = output_prefix or base_from_canvas or "out"
-    base_prefix = os.path.splitext(base_prefix)[0]
 
     if output_dir:
         if output_prefix and os.path.dirname(output_prefix) not in {"", "."}:
             raise ValidationError(
                 "output_dir cannot be combined with a path-like output_prefix; choose one."
             )
-        os.makedirs(output_dir, exist_ok=True)
         base_prefix = os.path.join(output_dir, os.path.basename(base_prefix))
 
     return base_prefix
 
 
-def _ensure_overwrite_ok(paths: Iterable[str], overwrite: bool) -> None:
-    if overwrite:
-        for path in paths:
-            if not os.path.exists(path):
-                continue
-            try:
-                os.remove(path)
-            except OSError as exc:
-                raise ExportError(f"Could not replace existing output file: {path}") from exc
+def _ensure_overwrite_ok(paths: Iterable[str | Path], overwrite: bool) -> None:
+    output_paths = preflight_output_paths(paths, overwrite=overwrite)
+    if not overwrite:
         return
-    existing = [path for path in paths if os.path.exists(path)]
-    if existing:
-        raise ValidationError(
-            "Output file(s) already exist: " + ", ".join(existing) + ". Use overwrite=True to replace."
-        )
+    for path in output_paths:
+        if not path.exists():
+            continue
+        try:
+            path.unlink()
+        except OSError as exc:
+            raise ExportError(
+                f"Could not replace existing output file: {path}"
+            ) from exc
 
 
 def save_figure_to(
@@ -75,8 +87,9 @@ def save_figure_to(
     """Save a figure to an explicit output directory/prefix.
 
     This always writes an SVG, then optionally converts to other formats using
-    CairoSVG. Unlike the CLI-oriented :func:`save_figure`, explicitly requested
-    formats are strict: failure to generate any one of them raises an exception.
+    CairoSVG. Unlike the deprecated
+    :func:`gbdraw.render.export.save_figure`, explicitly requested formats are
+    strict: failure to generate any one of them raises an exception.
     """
 
     fmt_list = _normalize_formats(formats)
@@ -86,9 +99,24 @@ def save_figure_to(
     output_paths = resolve_output_paths(base_prefix, fmt_list, include_base_svg=True)
 
     _ensure_overwrite_ok(output_paths, overwrite)
+    try:
+        Path(base_prefix).parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValidationError(
+            f"Could not prepare output directory: {Path(base_prefix).parent}"
+        ) from exc
 
     try:
-        canvas.saveas(svg_filename)
+        canvas.filename = svg_filename
+        with open(svg_filename, "x", encoding="utf-8") as svg_file:
+            canvas.write(svg_file)
+    except FileExistsError as exc:
+        raise ValidationError(
+            _late_output_collision_message(
+                svg_filename,
+                overwrite=overwrite,
+            )
+        ) from exc
     except Exception as exc:
         raise ExportError(f"Failed to generate SVG: {exc}") from exc
     if not os.path.isfile(svg_filename):
@@ -106,8 +134,15 @@ def save_figure_to(
         except Exception as exc:
             raise GbdrawError(f"Interactive SVG export failed: {exc}") from exc
         try:
-            with open(interactive_filename, "w", encoding="utf-8") as handle:
+            with open(interactive_filename, "x", encoding="utf-8") as handle:
                 handle.write(interactive_svg)
+        except FileExistsError as exc:
+            raise ValidationError(
+                _late_output_collision_message(
+                    interactive_filename,
+                    overwrite=overwrite,
+                )
+            ) from exc
         except OSError as exc:
             raise ExportError(f"Failed to write interactive SVG: {exc}") from exc
         if not os.path.isfile(interactive_filename):
@@ -139,16 +174,35 @@ def save_figure_to(
     for fmt in formats_to_process:
         out_file = resolve_format_output_path(base_prefix, fmt)
         try:
-            if fmt not in CAIROSVG_FORMATS:
-                continue
-            if fmt == "png":
-                cairosvg_module.svg2png(bytestring=svg_bytes, write_to=out_file)
-            elif fmt == "pdf":
-                cairosvg_module.svg2pdf(bytestring=svg_bytes, write_to=out_file)
-            elif fmt == "ps":
-                cairosvg_module.svg2ps(bytestring=svg_bytes, write_to=out_file)
-            elif fmt == "eps":
-                cairosvg_module.svg2ps(bytestring=svg_bytes, write_to=out_file)
+            with tempfile.SpooledTemporaryFile(
+                max_size=8 * 1024 * 1024,
+                mode="w+b",
+            ) as staged_output:
+                if fmt == "png":
+                    cairosvg_module.svg2png(
+                        bytestring=svg_bytes,
+                        write_to=staged_output,
+                    )
+                elif fmt == "pdf":
+                    cairosvg_module.svg2pdf(
+                        bytestring=svg_bytes,
+                        write_to=staged_output,
+                    )
+                elif fmt in {"ps", "eps"}:
+                    cairosvg_module.svg2ps(
+                        bytestring=svg_bytes,
+                        write_to=staged_output,
+                    )
+                staged_output.seek(0)
+                with open(out_file, "xb") as output_file:
+                    shutil.copyfileobj(staged_output, output_file)
+        except FileExistsError as exc:
+            raise ValidationError(
+                _late_output_collision_message(
+                    out_file,
+                    overwrite=overwrite,
+                )
+            ) from exc
         except Exception as exc:
             raise ExportError(f"Failed to generate {fmt.upper()}: {exc}") from exc
         if not os.path.isfile(out_file):
@@ -214,8 +268,4 @@ def render_to_bytes(
     return bytes(rendered)
 
 
-__all__ = ["parse_formats", "render_to_bytes", "save_figure", "save_figure_to"]
-
-# Re-exported for convenience.
-parse_formats = _export.parse_formats
-save_figure = _export.save_figure
+__all__ = ["preflight_output_paths", "render_to_bytes", "save_figure_to"]

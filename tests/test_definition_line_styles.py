@@ -10,6 +10,7 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
+import gbdraw.api.request_render as request_render_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.session_io as session_io
 from gbdraw.config.models import GbdrawConfig
@@ -124,23 +125,24 @@ def test_linear_cli_definition_line_style_validation(cmd_args: list[str]) -> Non
 def test_linear_cli_definition_line_style_forwards(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     record = _record("Top Label")
     captured: dict[str, Any] = {}
-    real_modify_config_dict = linear_cli_module.modify_config_dict
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: [record])
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
-    monkeypatch.setattr(
-        linear_cli_module,
-        "assemble_linear_diagram_from_records",
-        lambda *_args, **_kwargs: Drawing(filename=str(tmp_path / "dummy.svg")),
-    )
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
 
-    def fake_modify_config_dict(config_dict, **kwargs):
-        captured["line_styles"] = kwargs.get("linear_definition_line_styles")
-        return real_modify_config_dict(config_dict, **kwargs)
+    def fake_render_request(request, **_kwargs):
+        resolved = request_render_module.resolve_request(request)
+        captured["canonical_request"] = resolved
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
+        )
 
-    monkeypatch.setattr(linear_cli_module, "modify_config_dict", fake_modify_config_dict)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
@@ -159,10 +161,12 @@ def test_linear_cli_definition_line_style_forwards(monkeypatch: pytest.MonkeyPat
         ]
     )
 
-    assert captured["line_styles"] == {
-        "name": {"font_weight": "bold", "fill": "rgb(1,2,3)"},
-        "length": {"font_size": 9.0},
-    }
+    cfg = captured["canonical_request"].options.config
+    assert isinstance(cfg, GbdrawConfig)
+    line_styles = cfg.objects.definition.linear.line_styles
+    assert line_styles.name.font_weight == "bold"
+    assert line_styles.name.fill == "rgb(1,2,3)"
+    assert line_styles.length.font_size == 9.0
 
 
 def test_definition_line_style_config_defaults_and_legacy_inheritance() -> None:
@@ -198,9 +202,9 @@ def test_modify_config_dict_updates_nested_definition_line_styles() -> None:
 
     modified = modify_config_dict(
         config_dict,
-        linear_definition_line_styles={
-            "name": {"font_weight": "bold"},
-            "accession": {"font_size": 9.0, "fill": None},
+        {
+            "objects.definition.linear.line_styles.name.font_weight": 'bold',
+            "objects.definition.linear.line_styles.accession.font_size": 9.0,
         },
     )
     line_styles = modified["objects"]["definition"]["linear"]["line_styles"]
@@ -284,8 +288,8 @@ def test_definition_group_emits_line_specific_styles_and_data_attrs() -> None:
 
     definition_group = DefinitionGroup(
         record,
-        config_dict,
         _canvas_config(),
+        cfg=GbdrawConfig.from_dict(config_dict),
     )
     svg = definition_group.get_group().tostring()
 
@@ -325,7 +329,11 @@ def test_definition_line_specific_font_size_affects_layout(monkeypatch: pytest.M
         fake_bbox,
     )
 
-    definition_group = DefinitionGroup(_record("AA", "BBBB"), config_dict, _canvas_config())
+    definition_group = DefinitionGroup(
+        _record("AA", "BBBB"),
+        _canvas_config(),
+        cfg=GbdrawConfig.from_dict(config_dict),
+    )
 
     assert definition_group.definition_bounding_box_width == pytest.approx(40.0)
     assert definition_group.definition_bounding_box_height == pytest.approx(30.0)

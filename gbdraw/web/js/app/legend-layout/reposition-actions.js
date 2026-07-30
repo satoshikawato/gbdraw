@@ -4,6 +4,7 @@ import {
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys
 } from '../color-utils.js';
+import { PAIRWISE_LEGEND_SELECTOR } from '../legend/utils.js';
 import {
   getDefinitionGroupTranslate,
   getElementsBounds,
@@ -539,7 +540,7 @@ export const createLegendRepositionActions = ({
             if (appliedPaletteColors.value.pairwise_match_min && appliedPaletteColors.value.pairwise_match_max) {
               [horizontalLegend, verticalLegend].forEach((legend, idx) => {
                 if (!legend) return;
-                const pairwiseLegend = legend.querySelector('#pairwise_legend');
+                const pairwiseLegend = legend.querySelector(PAIRWISE_LEGEND_SELECTOR);
                 if (pairwiseLegend) {
                   if (updatePairwiseLegendGradientStops(pairwiseLegend, appliedPaletteColors.value)) {
                     debugLog(

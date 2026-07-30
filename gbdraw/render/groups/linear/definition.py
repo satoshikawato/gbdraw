@@ -18,6 +18,7 @@ from ....core.text import (
     create_text_element,
     parse_mixed_content_text,
 )
+from ....svg.ids import definition_group_svg_id
 
 _COORD_BASE_KEY = "gbdraw_coord_base"
 _COORD_STEP_KEY = "gbdraw_coord_step"
@@ -49,17 +50,20 @@ class DefinitionGroup:
     def __init__(
         self,
         record: SeqRecord,
-        config_dict: dict,
         canvas_config: dict,
+        *,
+        cfg: GbdrawConfig,
         title_start_x: float = 0,
         title_start_y: float = -9,
         length_start_x: float = 0,
         length_start_y: float = 9,
-        cfg: GbdrawConfig | None = None,
         text_anchor: str | None = None,
         text_x: float = 0.0,
         group_id: str | None = None,
         line_kinds: Collection[str] | None = None,
+        record_index: int = 0,
+        record_count: int = 1,
+        definition_part: str = "main",
     ) -> None:
         self.record: SeqRecord = record
         self.title_start_x: float = title_start_x
@@ -72,12 +76,14 @@ class DefinitionGroup:
         self.length_param = self.canvas_config.length_param
         self.text_x = float(text_x)
         self._explicit_group_id = str(group_id) if group_id else None
+        self.record_index = int(record_index)
+        self.record_count = int(record_count)
+        self.definition_part = str(definition_part or "main").strip().lower()
         self._line_kinds = (
             frozenset(str(kind).strip().lower() for kind in line_kinds)
             if line_kinds is not None
             else None
         )
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self._cfg = cfg
         def_cfg = cfg.objects.definition.linear
         self._def_cfg = def_cfg
@@ -100,7 +106,15 @@ class DefinitionGroup:
                 line for line in self.definition_lines if line.kind in self._line_kinds
             ]
         self.calculate_start_coordinates()
-        self.definition_group = Group(id=self.definition_group_id)
+        self.definition_group = Group(id=self.definition_group_id, debug=False)
+        self.definition_group.attribs["data-gbdraw-role"] = (
+            "record-definition"
+            if self.definition_part == "main"
+            else "record-definition-row"
+        )
+        self.definition_group.attribs["data-gbdraw-definition-part"] = self.definition_part
+        self.definition_group.attribs["data-gbdraw-record-id"] = str(self.record.id)
+        self.definition_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
         self.add_elements_to_group()
 
     def calculate_start_coordinates(self) -> None:
@@ -125,7 +139,12 @@ class DefinitionGroup:
     def get_definition_details(self) -> None:
         """Resolve all labels that may participate in the stacked definition."""
         self.track_id = str(self.record.id)
-        self.definition_group_id = self._explicit_group_id or f"{self.track_id.replace(' ', '_')}_definition"
+        self.definition_group_id = self._explicit_group_id or definition_group_svg_id(
+            self.track_id,
+            mode="linear",
+            record_index=self.record_index,
+            record_count=self.record_count,
+        )
 
         override = None
         if getattr(self.record, "annotations", None):

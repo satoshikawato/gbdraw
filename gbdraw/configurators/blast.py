@@ -5,7 +5,7 @@ from typing import Dict
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
-from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.models import RenderProfile  # type: ignore[reportMissingImports]
 from gbdraw.core.color import (
     COLLINEAR_ORIENTATION_COLOR_KEYS,
     COLLINEAR_ORIENTATION_MIN_COLOR_KEYS,
@@ -49,9 +49,8 @@ class BlastMatchConfigurator:
         identity: float,
         alignment_length: int,
         sequence_length_dict: Dict[str, int],
-        config_dict: Dict,
+        profile: RenderProfile,
         default_colors_df: DataFrame,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         """
         Initializes the BlastMatchConfigurator with specific thresholds and sequence length data.
@@ -63,7 +62,7 @@ class BlastMatchConfigurator:
             alignment_length (int): Minimum alignment length threshold for BLAST matches.
             sequence_length_dict (Dict[str, int]): Lengths of the sequences involved in BLAST matches.
         """
-
+        cfg = profile.config
         self.evalue: float = evalue
         self.bitscore: float = bitscore
         self.identity: float = identity
@@ -95,7 +94,6 @@ class BlastMatchConfigurator:
             )
             for orientation, color_key in COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.items()
         }
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.fill_opacity: float = cfg.objects.blast_match.fill_opacity
         self.stroke_color: str = cfg.objects.blast_match.stroke_color
         self.stroke_width: float = cfg.objects.blast_match.stroke_width

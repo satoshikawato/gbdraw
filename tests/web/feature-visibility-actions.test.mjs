@@ -17,6 +17,7 @@ await writeFile(
 );
 await writeFile(join(tempDir, 'app', 'feature-visibility.js'), await readFile(join(sourceDir, 'feature-visibility.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join(sourceDir, 'feature-selector.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(sourceDir, 'feature-utils.js'), 'utf8'), 'utf8');
 await writeFile(
   join(tempDir, 'services', 'text-download.js'),
   await readFile(join(sourceDir, '..', 'services', 'text-download.js'), 'utf8'),
@@ -31,6 +32,8 @@ const ref = (value) => ({ value });
 const featureA = { svg_id: 'feature-a', type: 'CDS', label: 'A' };
 const featureB = { svg_id: 'feature-b', type: 'CDS', label: 'B' };
 const featureVisibilityOverrides = {};
+const clickedFeature = ref({ svg_id: 'feature-a', featureVisibility: 'default' });
+const featureVisibilityScopeDialog = {};
 const selectedResultIndex = ref(0);
 const resultGenerationKey = ref('generation-1');
 const appliedPreviewChanges = [];
@@ -38,14 +41,14 @@ const flushes = [];
 
 const actions = createFeatureVisibilityActions({
   state: {
-    clickedFeature: ref({ svg_id: 'feature-a', featureVisibility: 'default' }),
+    clickedFeature,
     extractedFeatures: ref([featureA, featureB]),
     orthogroups: ref([]),
     featureVisibilityManualRules: [],
     featureVisibilityRules: ref([]),
     featureVisibilityOverrides,
     featureVisibilitySelectorCache: {},
-    featureVisibilityScopeDialog: {},
+    featureVisibilityScopeDialog,
     labelLayoutDirtyReason: ref(''),
     resultGenerationKey,
     results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
@@ -95,6 +98,41 @@ assert.deepEqual(
   [['feature-a', 'on'], ['feature-b', 'on']]
 );
 assert.deepEqual(flushes, [{ force: true }, { force: true }]);
+
+const sourceIdFeature = {
+  svg_id: 'feature-source-id',
+  type: 'CDS',
+  proteinId: 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa',
+  sourceProteinId: 'WP_012345678.1'
+};
+clickedFeature.value = {
+  svg_id: sourceIdFeature.svg_id,
+  featureVisibility: 'default',
+  feat: sourceIdFeature
+};
+actions.updateClickedFeatureVisibility('off');
+assert.equal(featureVisibilityScopeDialog.show, true);
+assert.ok(featureVisibilityScopeDialog.scopes.some((scope) => (
+  scope.id === 'protein_id' &&
+  scope.value === 'WP_012345678.1' &&
+  scope.label === 'Exact protein ID: WP_012345678.1'
+)));
+assert.ok(featureVisibilityScopeDialog.scopes.every((scope) => !scope.label.includes('h_')));
+
+const runtimeOnlyFeature = {
+  svg_id: 'feature-runtime-only',
+  type: 'CDS',
+  proteinId: 'h_bbbbbbbbbbbbbbbbbbbbbbbbbb'
+};
+clickedFeature.value = {
+  svg_id: runtimeOnlyFeature.svg_id,
+  featureVisibility: 'default',
+  feat: runtimeOnlyFeature
+};
+featureVisibilityScopeDialog.show = false;
+actions.updateClickedFeatureVisibility('off');
+assert.equal(featureVisibilityScopeDialog.show, false);
+delete featureVisibilityOverrides[runtimeOnlyFeature.svg_id];
 
 resultGenerationKey.value = 'generation-2';
 assert.equal(await command.apply(), false);

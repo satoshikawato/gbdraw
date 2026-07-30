@@ -15,25 +15,41 @@ import json
 import math
 import os
 import re
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePath, PureWindowsPath
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
+from .analysis.protein_artifacts import (
+    CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
+    is_current_derived_protein_artifact,
+    validate_current_derived_protein_artifacts,
+)
 from .definition_line_styles import DEFINITION_LINE_KINDS, parse_definition_line_style_overrides
 from .exceptions import ValidationError
 from .io.regions import RegionSpec, parse_region_specs
 from .render.formats import normalize_format_token
+from .render.output_paths import commit_staged_output_file
 
 if TYPE_CHECKING:
+    from .analysis.protein_colinearity import ProteinIdentityManifest
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 33
+CURRENT_SESSION_VERSION = 39
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, CURRENT_SESSION_VERSION}
 )
+PROTEIN_LOSAT_CACHE_SCHEMA = 4
+NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
+LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
+LEGACY_LOSAT_DERIVED_CACHE_SCHEMA = 1
+PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
+LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
+FEATURE_CATALOG_SCHEMA = 1
+FEATURE_CATALOG_ENCODING = "biological-authority-v1"
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
@@ -71,6 +87,385 @@ class SessionBuildContext:
     linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
 
 
+def _feature_catalog_key(feature: Mapping[str, Any]) -> tuple[int, str] | None:
+    record_index = feature.get("record_idx")
+    stable_id = (
+        feature.get("stable_svg_id")
+        or feature.get("stable_feature_id")
+        or feature.get("svg_id")
+    )
+    if (
+        not isinstance(record_index, int)
+        or isinstance(record_index, bool)
+        or not isinstance(stable_id, str)
+        or not stable_id
+    ):
+        return None
+    return record_index, stable_id
+
+
+def _json_values_equal(left: Any, right: Any) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, Mapping):
+        return (
+            left.keys() == right.keys()
+            and all(_json_values_equal(left[key], right[key]) for key in left)
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _json_values_equal(left_value, right_value)
+            for left_value, right_value in zip(left, right, strict=True)
+        )
+    return bool(left == right)
+
+
+def _first_feature_qualifier(
+    qualifiers: Mapping[str, Any],
+    key: str,
+) -> str:
+    values = qualifiers.get(key)
+    if not isinstance(values, list):
+        return ""
+    return next((value for value in values if value != ""), "")
+
+
+def _feature_qualifiers_are_strings(value: Any) -> bool:
+    return isinstance(value, Mapping) and all(
+        isinstance(key, str)
+        and isinstance(items, list)
+        and all(isinstance(item, str) for item in items)
+        for key, items in value.items()
+    )
+
+
+def _expand_compact_biological_feature(
+    feature: Mapping[str, Any],
+    *,
+    index: int,
+    profile: str,
+) -> dict[str, Any]:
+    expanded = copy.deepcopy(dict(feature))
+    qualifiers = expanded.get("qualifiers")
+    selector = expanded.get("selector")
+    if not isinstance(qualifiers, Mapping) or not isinstance(selector, Mapping):
+        raise ValidationError(
+            "Compact session biological features require qualifier and selector objects."
+        )
+    selector_qualifiers = selector.get("qualifiers")
+    if not _feature_qualifiers_are_strings(qualifiers) or (
+        "qualifiers" in selector
+        and not _feature_qualifiers_are_strings(selector_qualifiers)
+    ):
+        raise ValidationError(
+            "Compact session feature qualifiers must contain string arrays."
+        )
+    normalized_qualifiers = dict(qualifiers)
+    normalized_selector = dict(selector)
+    svg_id = expanded.get("svg_id")
+    if not isinstance(svg_id, str) or not svg_id:
+        raise ValidationError("Compact session biological features require svg_id.")
+
+    expanded.setdefault("id", f"f{index}")
+    expanded.setdefault("stable_svg_id", svg_id)
+    expanded.setdefault("stable_feature_id", svg_id)
+    for field in (
+        "protein_id",
+        "locus_tag",
+        "gene_id",
+        "old_locus_tag",
+        "gene",
+        "product",
+    ):
+        expanded.setdefault(
+            field,
+            _first_feature_qualifier(normalized_qualifiers, field),
+        )
+    expanded.setdefault("source_protein_id", expanded.get("protein_id", ""))
+    expanded.setdefault(
+        "note",
+        _first_feature_qualifier(normalized_qualifiers, "note")[:50],
+    )
+    expanded.setdefault("sequence_warnings", [])
+    normalized_selector.setdefault(
+        "qualifiers",
+        copy.deepcopy(normalized_qualifiers),
+    )
+    normalized_selector.setdefault("hash", svg_id)
+    expanded["selector"] = normalized_selector
+
+    if profile == "rich-v1":
+        translation = _first_feature_qualifier(
+            normalized_qualifiers,
+            "translation",
+        )
+        expanded.setdefault("amino_acid_sequence", translation)
+        if not isinstance(expanded.get("nucleotide_sequence"), str):
+            raise ValidationError(
+                "Compact rich biological features require nucleotide sequences."
+            )
+    elif profile != "sanitized-v1":
+        raise ValidationError(
+            f"Unsupported compact feature catalog profile: {profile!r}."
+        )
+    return expanded
+
+
+def _compact_biological_feature(
+    feature: Mapping[str, Any],
+    *,
+    index: int,
+    profile: str,
+) -> dict[str, Any] | None:
+    compact = copy.deepcopy(dict(feature))
+    qualifiers = compact.get("qualifiers")
+    selector = compact.get("selector")
+    if not isinstance(qualifiers, Mapping) or not isinstance(selector, Mapping):
+        return None
+    selector_qualifiers = selector.get("qualifiers")
+    if not _feature_qualifiers_are_strings(qualifiers) or (
+        "qualifiers" in selector
+        and not _feature_qualifiers_are_strings(selector_qualifiers)
+    ):
+        return None
+    svg_id = compact.get("svg_id")
+    if not isinstance(svg_id, str) or not svg_id:
+        return None
+
+    if compact.get("id") == f"f{index}":
+        compact.pop("id")
+    if compact.get("stable_svg_id") == svg_id:
+        compact.pop("stable_svg_id")
+    if compact.get("stable_feature_id") == svg_id:
+        compact.pop("stable_feature_id")
+    if (
+        "source_protein_id" in compact
+        and compact.get("source_protein_id") == compact.get("protein_id")
+    ):
+        compact.pop("source_protein_id")
+    if compact.get("sequence_warnings") == []:
+        compact.pop("sequence_warnings")
+
+    compact_selector = dict(selector)
+    if _json_values_equal(compact_selector.get("qualifiers"), qualifiers):
+        compact_selector.pop("qualifiers")
+    if compact_selector.get("hash") == svg_id:
+        compact_selector.pop("hash")
+    compact["selector"] = compact_selector
+
+    for field in (
+        "protein_id",
+        "locus_tag",
+        "gene_id",
+        "old_locus_tag",
+        "gene",
+        "product",
+    ):
+        if compact.get(field) == _first_feature_qualifier(qualifiers, field):
+            compact.pop(field)
+    if compact.get("note") == _first_feature_qualifier(qualifiers, "note")[:50]:
+        compact.pop("note")
+    if (
+        profile == "rich-v1"
+        and compact.get("amino_acid_sequence")
+        == _first_feature_qualifier(qualifiers, "translation")
+    ):
+        compact.pop("amino_acid_sequence")
+
+    try:
+        expanded = _expand_compact_biological_feature(
+            compact,
+            index=index,
+            profile=profile,
+        )
+    except ValidationError:
+        return None
+    return compact if _json_values_equal(expanded, dict(feature)) else None
+
+
+def _compact_feature_catalog(features: Mapping[str, Any]) -> Mapping[str, Any]:
+    if "featureCatalog" in features:
+        return features
+    extracted = features.get("extractedFeatures")
+    biological = features.get("biologicalFeatures")
+    if (
+        not isinstance(extracted, list)
+        or not extracted
+        or not isinstance(biological, list)
+        or not biological
+        or not all(isinstance(feature, Mapping) for feature in (*extracted, *biological))
+    ):
+        return features
+
+    has_rich_sequences = [
+        "nucleotide_sequence" in feature and "amino_acid_sequence" in feature
+        for feature in biological
+    ]
+    if all(has_rich_sequences):
+        profile = "rich-v1"
+    elif not any(
+        "nucleotide_sequence" in feature or "amino_acid_sequence" in feature
+        for feature in biological
+    ):
+        profile = "sanitized-v1"
+    else:
+        return features
+
+    biological_indexes: dict[tuple[int, str], int] = {}
+    for index, feature in enumerate(biological):
+        key = _feature_catalog_key(feature)
+        if key is None or key in biological_indexes:
+            return features
+        biological_indexes[key] = index
+
+    compact_biological: list[dict[str, Any]] = []
+    for index, feature in enumerate(biological):
+        compact = _compact_biological_feature(
+            feature,
+            index=index,
+            profile=profile,
+        )
+        if compact is None:
+            return features
+        compact_biological.append(compact)
+
+    references: list[list[Any]] = []
+    referenced_biological_indexes: set[int] = set()
+    for feature in extracted:
+        key = _feature_catalog_key(feature)
+        biological_index = biological_indexes.get(key) if key is not None else None
+        feature_id = feature.get("id")
+        if biological_index is None or not isinstance(feature_id, str):
+            return features
+        if biological_index in referenced_biological_indexes:
+            return features
+        referenced_biological_indexes.add(biological_index)
+        projected = copy.deepcopy(dict(biological[biological_index]))
+        projected.pop("feature_index", None)
+        projected["id"] = feature_id
+        rendered_id = feature.get("rendered_feature_svg_id")
+        reference: list[Any] = [biological_index, feature_id]
+        if isinstance(rendered_id, str):
+            projected["rendered_feature_svg_id"] = rendered_id
+            reference.append(rendered_id)
+        if not _json_values_equal(projected, dict(feature)):
+            return features
+        references.append(reference)
+
+    compact_features = dict(features)
+    compact_features.pop("extractedFeatures", None)
+    compact_features["biologicalFeatures"] = compact_biological
+    compact_features["featureCatalog"] = {
+        "schema": FEATURE_CATALOG_SCHEMA,
+        "encoding": FEATURE_CATALOG_ENCODING,
+        "profile": profile,
+        "extracted": references,
+    }
+    return compact_features
+
+
+def compact_session_feature_catalog(
+    session: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Return a disk projection that removes duplicated feature catalog data."""
+
+    if session.get("version") != CURRENT_SESSION_VERSION:
+        return session
+    features = session.get("features")
+    if not isinstance(features, Mapping):
+        return session
+    compact_features = _compact_feature_catalog(features)
+    if compact_features is features:
+        return session
+    compact_session = dict(session)
+    compact_session["features"] = compact_features
+    return compact_session
+
+
+def expand_session_feature_catalog(
+    session: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Expand a compact on-disk feature catalog to the stable in-memory shape."""
+
+    expanded_session = dict(session)
+    features = expanded_session.get("features")
+    if not isinstance(features, Mapping):
+        return expanded_session
+    if "featureCatalog" not in features:
+        return expanded_session
+    catalog = features.get("featureCatalog")
+    if (
+        not isinstance(catalog, Mapping)
+        or type(catalog.get("schema")) is not int
+        or catalog.get("schema") != FEATURE_CATALOG_SCHEMA
+        or catalog.get("encoding") != FEATURE_CATALOG_ENCODING
+        or catalog.get("profile") not in {"rich-v1", "sanitized-v1"}
+        or not isinstance(catalog.get("extracted"), list)
+        or "extractedFeatures" in features
+    ):
+        raise ValidationError("Invalid compact session feature catalog.")
+    biological = features.get("biologicalFeatures")
+    if not isinstance(biological, list) or not all(
+        isinstance(feature, Mapping) for feature in biological
+    ):
+        raise ValidationError(
+            "Compact session feature catalog requires biologicalFeatures."
+        )
+
+    references = catalog["extracted"]
+    if len(references) > len(biological):
+        raise ValidationError("Invalid compact extracted-feature reference.")
+    validated_references: list[tuple[int, str, str | None]] = []
+    referenced_biological_indexes: set[int] = set()
+    for reference in references:
+        if (
+            not isinstance(reference, list)
+            or len(reference) not in {2, 3}
+            or not isinstance(reference[0], int)
+            or isinstance(reference[0], bool)
+            or not 0 <= reference[0] < len(biological)
+            or not isinstance(reference[1], str)
+            or (len(reference) == 3 and not isinstance(reference[2], str))
+        ):
+            raise ValidationError("Invalid compact extracted-feature reference.")
+        biological_index = reference[0]
+        if biological_index in referenced_biological_indexes:
+            raise ValidationError("Invalid compact extracted-feature reference.")
+        referenced_biological_indexes.add(biological_index)
+        validated_references.append(
+            (
+                biological_index,
+                reference[1],
+                reference[2] if len(reference) == 3 else None,
+            )
+        )
+
+    profile = str(catalog["profile"])
+    expanded_biological = [
+        _expand_compact_biological_feature(
+            feature,
+            index=index,
+            profile=profile,
+        )
+        for index, feature in enumerate(biological)
+    ]
+    expanded_extracted: list[dict[str, Any]] = []
+    for biological_index, feature_id, rendered_id in validated_references:
+        projected = copy.deepcopy(expanded_biological[biological_index])
+        projected.pop("feature_index", None)
+        projected["id"] = feature_id
+        if rendered_id is not None:
+            projected["rendered_feature_svg_id"] = rendered_id
+        expanded_extracted.append(projected)
+
+    expanded_features = dict(features)
+    expanded_features.pop("featureCatalog", None)
+    expanded_features["biologicalFeatures"] = expanded_biological
+    expanded_features["extractedFeatures"] = expanded_extracted
+    expanded_session["features"] = expanded_features
+    return expanded_session
+
+
 def load_session(path: str | Path) -> dict[str, Any]:
     """Load and validate a plain or gzip-compressed gbdraw GUI session JSON file."""
 
@@ -86,6 +481,7 @@ def load_session(path: str | Path) -> dict[str, Any]:
         raise ValidationError(f"Could not read session file: {session_path}") from exc
     if not isinstance(payload, dict):
         raise ValidationError("Session JSON must be an object.")
+    payload = expand_session_feature_catalog(payload)
     validate_session(payload)
     return payload
 
@@ -126,6 +522,15 @@ def validate_session(session: Mapping[str, Any]) -> None:
             raise ValidationError(
                 f"Session version {version} requires a canonical renderRequest object."
             )
+        request_schema = render_request.get("schema")
+        if not isinstance(request_schema, int) or isinstance(request_schema, bool):
+            raise ValidationError("renderRequest.schema must be an integer.")
+        from .session_request_codec import SUPPORTED_CANONICAL_REQUEST_SCHEMAS
+
+        if request_schema not in SUPPORTED_CANONICAL_REQUEST_SCHEMAS:
+            raise ValidationError(
+                f"Unsupported canonical renderRequest schema: {request_schema}."
+            )
         if not isinstance(resources, Mapping):
             raise ValidationError(
                 f"Session version {version} requires a canonical resources object."
@@ -137,6 +542,501 @@ def validate_session(session: Mapping[str, Any]) -> None:
         files = session.get("files")
         if files is None or not isinstance(files, Mapping):
             raise ValidationError("Session files are required for CLI regeneration.")
+    if version == CURRENT_SESSION_VERSION:
+        validate_current_session_artifacts(session)
+
+
+def empty_protein_identity_manifest() -> dict[str, Any]:
+    """Return an empty, valid protein identity manifest."""
+
+    return {
+        "schema": PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+        "proteinSets": {},
+        "recordAnalyses": {},
+        "recordInstances": {},
+    }
+
+
+def classify_raw_losat_cache_entry(entry: object) -> str:
+    """Classify a raw LOSAT entry without guessing its schema owner."""
+
+    if (
+        not isinstance(entry, Mapping)
+        or entry.get("kind") != "raw-losat"
+        or not isinstance(entry.get("text"), str)
+    ):
+        return "invalid"
+    schema = entry.get("schema")
+    program = str(entry.get("program") or "").lower()
+    identity_kind = entry.get("identityKind")
+    from .analysis.protein_colinearity import (
+        is_legacy_protein_losat_cache_entry,
+        is_protein_losat_cache_entry,
+    )
+
+    if is_protein_losat_cache_entry(entry):
+        return "protein-current"
+    if is_legacy_protein_losat_cache_entry(entry):
+        return "protein-legacy"
+    if (
+        schema == NUCLEOTIDE_LOSAT_CACHE_SCHEMA
+        and program != "blastp"
+        and identity_kind in {None, "nucleotide"}
+    ):
+        return "nucleotide-current"
+    return "invalid"
+
+
+def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
+    """Validate current cache, manifest, and legacy artifact boundaries."""
+
+    validate_current_web_state_field_names(session.get("config"))
+    session_version = session.get("version")
+    cache_entries = _artifact_entries(session, "losatCache")
+    protein_entries: list[Mapping[str, Any]] = []
+    seen_cache_keys: set[str] = set()
+    for index, entry in enumerate(cache_entries):
+        classification = classify_raw_losat_cache_entry(entry)
+        if classification == "protein-legacy":
+            raise ValidationError(
+                f"Session version {session_version} cannot store legacy protein "
+                "entries in losatCache; "
+                "use the matching legacyArtifacts candidate envelope."
+            )
+        if classification == "invalid":
+            raise ValidationError(
+                f"Invalid current LOSAT cache entry at losatCache.entries[{index}]."
+            )
+        assert isinstance(entry, Mapping)
+        key = entry.get("key")
+        if not isinstance(key, str) or not key:
+            raise ValidationError(
+                f"LOSAT cache entry at losatCache.entries[{index}] requires a key."
+            )
+        if key in seen_cache_keys:
+            raise ValidationError(f"Duplicate LOSAT cache key: {key!r}.")
+        seen_cache_keys.add(key)
+        if classification == "protein-current":
+            protein_entries.append(entry)
+
+    derived_entries = _artifact_entries(session, "losatDerivedCache")
+    seen_derived_keys: set[str] = set()
+    for index, entry in enumerate(derived_entries):
+        if not _is_current_derived_cache_entry(entry):
+            raise ValidationError(
+                "Invalid current derived LOSATP cache entry at "
+                f"losatDerivedCache.entries[{index}]."
+            )
+        assert isinstance(entry, Mapping)
+        key = str(entry["key"])
+        if key in seen_derived_keys:
+            raise ValidationError(f"Duplicate derived LOSATP cache key: {key!r}.")
+        seen_derived_keys.add(key)
+
+    manifest = session.get("proteinIdentityManifest")
+    validated_manifest = (
+        _validated_protein_identity_manifest(manifest)
+        if manifest is not None
+        else None
+    )
+    if manifest is not None and validated_manifest is None:
+        raise ValidationError("Invalid proteinIdentityManifest schema-2 artifact.")
+    if protein_entries and manifest is None:
+        raise ValidationError(
+            "Current protein LOSATP cache entries require proteinIdentityManifest."
+        )
+    if protein_entries:
+        assert validated_manifest is not None
+        for index, entry in enumerate(protein_entries):
+            if not _protein_raw_entry_matches_manifest(entry, validated_manifest):
+                raise ValidationError(
+                    "Protein LOSATP cache entry does not resolve through the manifest: "
+                    f"losatCache.entries[{index}]."
+                )
+    if derived_entries:
+        try:
+            validate_current_derived_protein_artifacts(
+                derived_entries,
+                manifest,
+            )
+        except ValidationError as exc:
+            raise ValidationError(
+                "Current derived LOSATP cache contains unresolved protein references."
+            ) from exc
+
+    legacy_artifacts = session.get("legacyArtifacts")
+    if legacy_artifacts is None:
+        return
+    if not isinstance(legacy_artifacts, Mapping):
+        raise ValidationError("Session legacyArtifacts must be an object when present.")
+    candidates = legacy_artifacts.get("proteinRawCandidates")
+    if candidates is not None:
+        _validate_legacy_protein_candidate_envelope(candidates)
+    derived_evidence = legacy_artifacts.get("proteinDerivedEvidence")
+    if derived_evidence is not None:
+        _validate_legacy_derived_evidence(derived_evidence)
+
+
+def migrate_persisted_web_state_field_names(config: object) -> object:
+    """Project released Web config field names without mutating persisted data."""
+
+    if not isinstance(config, Mapping):
+        return config
+
+    migrated = dict(config)
+    adv = config.get("adv")
+    if isinstance(adv, Mapping):
+        migrated_adv = dict(adv)
+        if "depth_tick_interval" in migrated_adv:
+            migrated_adv.setdefault(
+                "depth_large_tick_interval",
+                migrated_adv["depth_tick_interval"],
+            )
+            migrated_adv.pop("depth_tick_interval")
+        depth_tracks = migrated_adv.get("depth_tracks")
+        if isinstance(depth_tracks, list):
+            migrated_tracks: list[Any] = []
+            for track in depth_tracks:
+                if not isinstance(track, Mapping) or "tick_interval" not in track:
+                    migrated_tracks.append(track)
+                    continue
+                migrated_track = dict(track)
+                migrated_track.setdefault(
+                    "large_tick_interval",
+                    migrated_track["tick_interval"],
+                )
+                migrated_track.pop("tick_interval")
+                migrated_tracks.append(migrated_track)
+            migrated_adv["depth_tracks"] = migrated_tracks
+        migrated["adv"] = migrated_adv
+
+    losat = config.get("losat")
+    if isinstance(losat, Mapping):
+        blastp = losat.get("blastp")
+        if isinstance(blastp, Mapping) and "collinearMaxGeneGap" in blastp:
+            migrated_blastp = dict(blastp)
+            migrated_blastp.setdefault(
+                "collinearMaxUnitGap",
+                migrated_blastp["collinearMaxGeneGap"],
+            )
+            migrated_blastp.pop("collinearMaxGeneGap")
+            migrated_losat = dict(losat)
+            migrated_losat["blastp"] = migrated_blastp
+            migrated["losat"] = migrated_losat
+    return migrated
+
+
+def validate_current_web_state_field_names(config: object) -> None:
+    """Reject obsolete Web config names at current session write boundaries."""
+
+    if not isinstance(config, Mapping):
+        return
+    adv = config.get("adv")
+    if isinstance(adv, Mapping):
+        if "depth_tick_interval" in adv:
+            raise ValidationError(
+                "Web state field adv.depth_tick_interval is obsolete; "
+                "use adv.depth_large_tick_interval."
+            )
+        depth_tracks = adv.get("depth_tracks")
+        if isinstance(depth_tracks, list):
+            for index, track in enumerate(depth_tracks):
+                if isinstance(track, Mapping) and "tick_interval" in track:
+                    raise ValidationError(
+                        f"Web state field adv.depth_tracks[{index}].tick_interval "
+                        "is obsolete; use large_tick_interval."
+                    )
+    losat = config.get("losat")
+    blastp = losat.get("blastp") if isinstance(losat, Mapping) else None
+    if isinstance(blastp, Mapping) and "collinearMaxGeneGap" in blastp:
+        raise ValidationError(
+            "Web state field losat.blastp.collinearMaxGeneGap is obsolete; "
+            "use losat.blastp.collinearMaxUnitGap."
+        )
+
+
+def normalize_current_session_artifacts(
+    session: dict[str, Any],
+    *,
+    losat_cache_entries: Sequence[Mapping[str, Any]] | None = None,
+    losat_derived_cache_entries: Sequence[Mapping[str, Any]] | None = None,
+    protein_identity_manifest: Mapping[str, Any] | None = None,
+    legacy_protein_raw_candidates: Sequence[Mapping[str, Any]] | None = None,
+    legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] | None = None,
+) -> None:
+    """Normalize artifacts in-place for a current session writer.
+
+    Legacy protein artifacts are kept outside the current cache maps so a
+    save-before-generate round trip is lossless.
+    """
+
+    source_manifest = (
+        protein_identity_manifest
+        if protein_identity_manifest is not None
+        else session.get("proteinIdentityManifest")
+    )
+    if source_manifest is None:
+        current_manifest = empty_protein_identity_manifest()
+    elif _is_valid_protein_identity_manifest(source_manifest):
+        current_manifest = _json_clone(source_manifest)
+    else:
+        raise ValidationError("Cannot write an invalid proteinIdentityManifest.")
+
+    source_raw_entries = (
+        list(losat_cache_entries)
+        if losat_cache_entries is not None
+        else list(_artifact_entries(session, "losatCache"))
+    )
+    current_raw_entries: list[dict[str, Any]] = []
+    imported_legacy_entries: list[dict[str, Any]] = []
+    for index, entry in enumerate(source_raw_entries):
+        classification = classify_raw_losat_cache_entry(entry)
+        if classification in {"protein-current", "nucleotide-current"}:
+            current_raw_entries.append(_json_clone(entry))
+        elif classification == "protein-legacy":
+            imported_legacy_entries.append(_json_clone(entry))
+        else:
+            raise ValidationError(
+                f"Cannot write invalid LOSAT cache entry at index {index}."
+            )
+    source_derived_entries = (
+        list(losat_derived_cache_entries)
+        if losat_derived_cache_entries is not None
+        else list(_artifact_entries(session, "losatDerivedCache"))
+    )
+    current_derived_entries: list[dict[str, Any]] = []
+    imported_derived_evidence: list[dict[str, Any]] = []
+    for index, entry in enumerate(source_derived_entries):
+        if _is_current_derived_cache_entry(entry):
+            current_derived_entries.append(_json_clone(entry))
+        elif _is_derived_cache_entry(
+            entry, schema=LEGACY_LOSAT_DERIVED_CACHE_SCHEMA
+        ):
+            imported_derived_evidence.append(_json_clone(entry))
+        else:
+            raise ValidationError(
+                f"Cannot write invalid derived LOSATP cache entry at index {index}."
+            )
+    session["losatCache"] = {"entries": current_raw_entries}
+    session["losatDerivedCache"] = {"entries": current_derived_entries}
+    session["proteinIdentityManifest"] = current_manifest
+
+    existing_legacy = session.get("legacyArtifacts")
+    normalized_legacy: dict[str, Any] = {}
+    existing_candidates = (
+        existing_legacy.get("proteinRawCandidates")
+        if isinstance(existing_legacy, Mapping)
+        else None
+    )
+    candidate_entries = (
+        list(legacy_protein_raw_candidates)
+        if legacy_protein_raw_candidates is not None
+        else _legacy_candidate_entries(existing_candidates)
+    )
+    candidate_entries.extend(
+        {
+            "state": "pending",
+            "originalEntry": entry,
+            "rejectionReason": None,
+        }
+        for entry in imported_legacy_entries
+    )
+    serializable_candidates = _normalize_legacy_candidate_entries(candidate_entries)
+    if serializable_candidates:
+        normalized_legacy["proteinRawCandidates"] = {
+            "schema": LEGACY_PROTEIN_CANDIDATE_SCHEMA,
+            "entries": serializable_candidates,
+        }
+    else:
+        normalized_legacy.pop("proteinRawCandidates", None)
+
+    existing_evidence = (
+        existing_legacy.get("proteinDerivedEvidence")
+        if isinstance(existing_legacy, Mapping)
+        else None
+    )
+    evidence_entries = (
+        list(legacy_protein_derived_evidence)
+        if legacy_protein_derived_evidence is not None
+        else _legacy_derived_entries(existing_evidence)
+    )
+    evidence_entries.extend(imported_derived_evidence)
+    normalized_evidence = _normalize_legacy_derived_entries(evidence_entries)
+    if normalized_evidence:
+        normalized_legacy["proteinDerivedEvidence"] = {
+            "schema": LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
+            "entries": normalized_evidence,
+        }
+    else:
+        normalized_legacy.pop("proteinDerivedEvidence", None)
+
+    if normalized_legacy:
+        session["legacyArtifacts"] = normalized_legacy
+    else:
+        session.pop("legacyArtifacts", None)
+    validate_current_session_artifacts(session)
+
+
+def _artifact_entries(session: Mapping[str, Any], field: str) -> list[Any]:
+    container = session.get(field)
+    if container is None:
+        return []
+    if not isinstance(container, Mapping):
+        raise ValidationError(f"Session {field} must be an object when present.")
+    entries = container.get("entries", [])
+    if not isinstance(entries, list):
+        raise ValidationError(f"Session {field}.entries must be an array.")
+    return entries
+
+
+def _is_derived_cache_entry(entry: object, *, schema: int) -> bool:
+    return (
+        isinstance(entry, Mapping)
+        and entry.get("schema") == schema
+        and entry.get("kind") == "derived-losatp-payload"
+        and isinstance(entry.get("key"), str)
+        and bool(entry.get("key"))
+        and isinstance(entry.get("payload"), Mapping)
+    )
+
+
+def _is_current_derived_cache_entry(entry: object) -> bool:
+    return is_current_derived_protein_artifact(entry)
+
+
+def _validated_protein_identity_manifest(
+    manifest: object,
+) -> ProteinIdentityManifest | None:
+    if not isinstance(manifest, Mapping):
+        return None
+    try:
+        from .analysis.protein_colinearity import (
+            validate_protein_identity_manifest,
+        )
+
+        return validate_protein_identity_manifest(manifest)
+    except (ImportError, ValidationError, TypeError, ValueError):
+        return None
+
+
+def _is_valid_protein_identity_manifest(manifest: object) -> bool:
+    return _validated_protein_identity_manifest(manifest) is not None
+
+
+def _protein_raw_entry_matches_manifest(
+    entry: Mapping[str, Any],
+    manifest: ProteinIdentityManifest | Mapping[str, Any],
+) -> bool:
+    from .analysis.protein_colinearity import (
+        validate_protein_raw_entry_references,
+    )
+
+    return validate_protein_raw_entry_references(entry, manifest)
+
+
+def _validate_legacy_protein_candidate_envelope(envelope: object) -> None:
+    if not isinstance(envelope, Mapping) or envelope.get(
+        "schema"
+    ) != LEGACY_PROTEIN_CANDIDATE_SCHEMA:
+        raise ValidationError("Invalid legacy protein raw candidate envelope.")
+    entries = envelope.get("entries")
+    if not isinstance(entries, list):
+        raise ValidationError("Legacy protein raw candidate entries must be an array.")
+    from .analysis.protein_colinearity import (
+        validate_legacy_protein_raw_candidate_envelope,
+    )
+
+    validate_legacy_protein_raw_candidate_envelope(envelope)
+    for index, candidate in enumerate(entries):
+        if (
+            not isinstance(candidate, Mapping)
+            or candidate.get("state") not in {"pending", "promoted", "rejected"}
+            or classify_raw_losat_cache_entry(candidate.get("originalEntry"))
+            != "protein-legacy"
+            or (
+                candidate.get("rejectionReason") is not None
+                and not isinstance(candidate.get("rejectionReason"), str)
+            )
+        ):
+            raise ValidationError(
+                f"Invalid legacy protein raw candidate at entries[{index}]."
+            )
+
+
+def _validate_legacy_derived_evidence(envelope: object) -> None:
+    if not isinstance(envelope, Mapping) or envelope.get(
+        "schema"
+    ) != LEGACY_LOSAT_DERIVED_CACHE_SCHEMA:
+        raise ValidationError("Invalid legacy protein derived evidence envelope.")
+    entries = envelope.get("entries")
+    if not isinstance(entries, list) or not all(
+        _is_derived_cache_entry(entry, schema=LEGACY_LOSAT_DERIVED_CACHE_SCHEMA)
+        for entry in entries
+    ):
+        raise ValidationError("Invalid legacy protein derived evidence entries.")
+
+
+def _legacy_candidate_entries(envelope: object) -> list[Mapping[str, Any]]:
+    if envelope is None:
+        return []
+    _validate_legacy_protein_candidate_envelope(envelope)
+    assert isinstance(envelope, Mapping)
+    return list(envelope["entries"])
+
+
+def _normalize_legacy_candidate_entries(
+    entries: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for candidate in entries:
+        if not isinstance(candidate, Mapping) or candidate.get("state") == "promoted":
+            continue
+        probe = {
+            "schema": LEGACY_PROTEIN_CANDIDATE_SCHEMA,
+            "entries": [candidate],
+        }
+        _validate_legacy_protein_candidate_envelope(probe)
+        clone = _json_clone(candidate)
+        fingerprint = json.dumps(
+            clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        normalized.append(clone)
+    return normalized
+
+
+def _legacy_derived_entries(envelope: object) -> list[Mapping[str, Any]]:
+    if envelope is None:
+        return []
+    _validate_legacy_derived_evidence(envelope)
+    assert isinstance(envelope, Mapping)
+    return list(envelope["entries"])
+
+
+def _normalize_legacy_derived_entries(
+    entries: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(entries):
+        if not _is_derived_cache_entry(
+            entry, schema=LEGACY_LOSAT_DERIVED_CACHE_SCHEMA
+        ):
+            raise ValidationError(
+                f"Invalid legacy derived LOSATP evidence at index {index}."
+            )
+        clone = _json_clone(entry)
+        fingerprint = json.dumps(
+            clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        normalized.append(clone)
+    return normalized
 
 
 def session_mode(session: Mapping[str, Any]) -> str | None:
@@ -399,11 +1299,18 @@ def build_session_json(
     embedded_files: Mapping[str, Any],
     generated_at: datetime,
     losat_cache_entries: Sequence[Mapping[str, Any]] | None = None,
+    losat_derived_cache_entries: Sequence[Mapping[str, Any]] | None = None,
+    protein_identity_manifest: Mapping[str, Any] | None = None,
+    legacy_protein_raw_candidates: Sequence[Mapping[str, Any]] | None = None,
+    legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] | None = None,
     canonical_request: DiagramRequest | None = None,
 ) -> dict[str, Any]:
     """Build a GUI-loadable session JSON payload from a CLI run."""
 
+    source_version: int | None = None
     if context.source_session is not None:
+        validate_session(context.source_session)
+        source_version = int(context.source_session["version"])
         payload: dict[str, Any] = _json_clone(context.source_session)
     else:
         payload = {}
@@ -419,6 +1326,11 @@ def build_session_json(
     config = payload.get("config")
     if not isinstance(config, dict):
         config = _minimal_config_from_cli_args(context)
+        payload["config"] = config
+    elif source_version is not None and source_version < CURRENT_SESSION_VERSION:
+        migrated_config = migrate_persisted_web_state_field_names(config)
+        assert isinstance(migrated_config, dict)
+        config = migrated_config
         payload["config"] = config
     _update_config_prefix(config, context.output_prefix)
 
@@ -443,10 +1355,6 @@ def build_session_json(
     ]
     payload.setdefault("features", {})
     payload.setdefault("orthogroupState", {})
-    if losat_cache_entries is not None:
-        payload["losatCache"] = {"entries": _json_clone(list(losat_cache_entries))}
-    else:
-        payload.setdefault("losatCache", {})
     if context.mode == "linear":
         _populate_linear_session_fields_from_cli_context(payload, context)
     payload["cliInvocation"] = {
@@ -466,53 +1374,98 @@ def build_session_json(
         ).to_dict()
         payload["renderRequest"] = canonical["renderRequest"]
         payload["resources"] = canonical["resources"]
-    elif context.source_session is not None and isinstance(
-        context.source_session.get("renderRequest"), Mapping
-    ) and isinstance(context.source_session.get("resources"), Mapping):
-        payload["renderRequest"] = _json_clone(context.source_session["renderRequest"])
-        payload["resources"] = _json_clone(context.source_session["resources"])
     else:
         raise ValidationError(
             f"A canonical typed request is required to write a version {CURRENT_SESSION_VERSION} session."
         )
+    normalize_current_session_artifacts(
+        payload,
+        losat_cache_entries=losat_cache_entries,
+        losat_derived_cache_entries=losat_derived_cache_entries,
+        protein_identity_manifest=protein_identity_manifest,
+        legacy_protein_raw_candidates=legacy_protein_raw_candidates,
+        legacy_protein_derived_evidence=legacy_protein_derived_evidence,
+    )
+    validate_session(payload)
     return payload
 
 
-def write_session_json(path: str | Path, payload: Mapping[str, Any]) -> None:
-    """Write plain or ``.gz`` session JSON with an atomic replacement."""
+def write_session_json(
+    path: str | Path,
+    payload: Mapping[str, Any],
+    *,
+    overwrite: bool = True,
+) -> None:
+    """Write plain or ``.gz`` session JSON through a same-directory stage."""
+
+    expanded_payload = expand_session_feature_catalog(payload)
+    validate_session(expanded_payload)
+    serialized_payload = compact_session_feature_catalog(expanded_payload)
 
     output_path = Path(path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
+    temp_path: Path | None = None
+    temp_fd: int | None = None
     try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_fd, temp_name = tempfile.mkstemp(
+            prefix=f".{output_path.name}.",
+            suffix=".tmp",
+            dir=output_path.parent,
+        )
+        temp_path = Path(temp_name)
         if output_path.suffix.lower() == ".gz":
-            with temp_path.open("wb") as raw_file:
+            raw_file = os.fdopen(temp_fd, "wb")
+            temp_fd = None
+            with raw_file:
                 with gzip.GzipFile(
                     filename="",
                     mode="wb",
                     fileobj=raw_file,
-                    compresslevel=6,
+                    compresslevel=9,
                     mtime=0,
                 ) as compressed_file:
                     with io.TextIOWrapper(compressed_file, encoding="utf-8") as text_file:
                         json.dump(
-                            payload,
+                            serialized_payload,
                             text_file,
                             ensure_ascii=False,
                             separators=(",", ":"),
                         )
+                raw_file.flush()
+                os.fsync(raw_file.fileno())
         else:
-            temp_path.write_text(
-                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                encoding="utf-8",
-            )
-        temp_path.replace(output_path)
+            text_file = os.fdopen(temp_fd, "w", encoding="utf-8")
+            temp_fd = None
+            with text_file:
+                json.dump(
+                    serialized_payload,
+                    text_file,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                text_file.flush()
+                os.fsync(text_file.fileno())
+        commit_staged_output_file(
+            temp_path,
+            output_path,
+            overwrite=overwrite,
+        )
+    except FileExistsError as exc:
+        raise ValidationError(
+            f"Session output already exists: {output_path}. "
+            "Pass overwrite=True to replace it."
+        ) from exc
     except OSError as exc:
         raise ValidationError(f"Could not write session sidecar: {output_path}") from exc
     finally:
+        if temp_fd is not None:
+            try:
+                os.close(temp_fd)
+            except OSError:
+                pass
         try:
-            if temp_path.exists():
-                temp_path.unlink()
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
         except OSError:
             pass
 
@@ -533,6 +1486,128 @@ def get_session_slot(session: Mapping[str, Any], slot: str) -> Any:
                 raise ValidationError(f"Session file binding slot is missing: {slot}")
             current = current[part]
     return current
+
+
+def _canonicalize_legacy_session_cli_args(
+    args: Sequence[str],
+    *,
+    mode: Literal["circular", "linear"],
+) -> tuple[list[str], dict[int, int]]:
+    replacements = {
+        "--depth": "--depth_track",
+        "--depth_tick_interval": "--depth_large_tick_interval",
+        "--gc_content_tick_interval": "--gc_content_large_tick_interval",
+        "--feature_table": "--feature_visibility_table",
+        "--annotation-table": "--annotation_table",
+        "--losatp-bin": "--losatp_bin",
+        "--ncbi-blastp-bin": "--ncbi_blastp_bin",
+        "--losatp-threads": "--losatp_threads",
+        "--protein-blastp-mode": "--protein_blastp_mode",
+        "--protein-blastp-max-hits": "--protein_blastp_max_hits",
+        "--protein-blastp-candidate-limit": "--protein_blastp_candidate_limit",
+        "--align-orthogroup-feature": "--align_orthogroup_feature",
+        "--collinear-unit-mode": "--collinear_unit_mode",
+        "--collinear-search-scope": "--collinear_search_scope",
+        "--collinear-min-anchors": "--collinear_min_anchors",
+        "--collinear_max_gene_gap": "--collinear_max_unit_gap",
+        "--collinear-max-unit-gap": "--collinear_max_unit_gap",
+        "--collinear-max-gene-gap": "--collinear_max_unit_gap",
+        "--collinear-max-diagonal-drift": "--collinear_max_diagonal_drift",
+        "--collinear-max-conflicts-in-merge-gap": "--collinear_max_conflicts_in_merge_gap",
+        "--collinear-max-paralog-links-per-orthogroup": (
+            "--collinear_max_paralog_links_per_orthogroup"
+        ),
+        "--collinear-color-mode": "--collinear_color_mode",
+        "--keep-definition-left-aligned": "--keep_definition_left_aligned",
+        "--pairwise-match-style": "--pairwise_match_style",
+        "--definition-line-style": "--definition_line_style",
+        "--record-subtitle": "--record_subtitle",
+        "--circular-track-slot": "--circular_track_slot",
+    }
+    if mode == "circular":
+        replacements.update(
+            {
+                "--suppress_gc": "--no-gc",
+                "--suppress_skew": "--no-skew",
+            }
+        )
+    else:
+        replacements.update(
+            {
+                "--show_gc": "--gc",
+                "--show_skew": "--skew",
+            }
+        )
+
+    canonical_args: list[str] = []
+    source_to_canonical_index: dict[int, int] = {}
+    for source_index, raw_token in enumerate(args):
+        token = str(raw_token)
+        if token == "--show_depth":
+            continue
+        option, separator, inline_value = (
+            token.partition("=")
+            if token.startswith("--")
+            else (token, "", "")
+        )
+        option = replacements.get(option, option)
+        if separator:
+            if mode == "circular" and option == "--circular_track_slot":
+                inline_value = _migrate_legacy_circular_slot_cli_value(inline_value)
+            if option == "--multi_record_size_mode" and inline_value == "sqrt":
+                inline_value = "auto"
+            elif mode == "linear" and option == "--label_placement":
+                inline_value = {
+                    "on_feature": "above_feature",
+                }.get(inline_value, inline_value)
+            elif mode == "linear" and option == "--track_layout":
+                inline_value = {
+                    "spreadout": "above",
+                    "tuckin": "below",
+                }.get(inline_value, inline_value)
+            token = f"{option}={inline_value}"
+        else:
+            token = option
+            if canonical_args:
+                previous_option = canonical_args[-1].partition("=")[0]
+                if previous_option == "--multi_record_size_mode" and token == "sqrt":
+                    token = "auto"
+                elif (
+                    mode == "linear"
+                    and previous_option == "--label_placement"
+                    and token == "on_feature"
+                ):
+                    token = "above_feature"
+                elif mode == "linear" and previous_option == "--track_layout":
+                    token = {"spreadout": "above", "tuckin": "below"}.get(token, token)
+                elif mode == "circular" and previous_option == "--circular_track_slot":
+                    token = _migrate_legacy_circular_slot_cli_value(token)
+        source_to_canonical_index[source_index] = len(canonical_args)
+        canonical_args.append(token)
+    return canonical_args, source_to_canonical_index
+
+
+def _migrate_legacy_circular_slot_cli_value(value: str) -> str:
+    """Move retired slot fields into the private persisted-data transport."""
+
+    head, separator, raw_options = str(value).partition("@")
+    if not separator:
+        return str(value)
+    migrated: list[str] = []
+    for raw_part in raw_options.split(","):
+        part = raw_part.strip()
+        if not part or "=" not in part:
+            migrated.append(part)
+            continue
+        raw_key, raw_value = part.split("=", 1)
+        key = raw_key.strip().lower()
+        if key in {"strict", "compress", "reserve"}:
+            continue
+        if key == "spacing":
+            migrated.append(f"__gbdraw_legacy_spacing={raw_value.strip()}")
+        else:
+            migrated.append(part)
+    return head if not migrated else f"{head}@{','.join(migrated)}"
 
 
 def _session_cli_invocation_to_args(
@@ -571,12 +1646,48 @@ def _session_cli_invocation_to_args(
         )
         run_args[binding.argIndex] = str(materialized)
 
-    _restore_cli_table_paths(session, run_args, temp_dir=temp_dir)
+    session_version = int(session.get("version", 0))
+    migrate_legacy_cli = session_version < CURRENT_SESSION_VERSION
+    _restore_cli_table_paths(
+        session,
+        run_args,
+        temp_dir=temp_dir,
+        migrate_legacy_cli=migrate_legacy_cli,
+    )
+
+    if migrate_legacy_cli:
+        run_args, _ = _canonicalize_legacy_session_cli_args(run_args, mode=mode)
+        invocation_args, invocation_index_map = _canonicalize_legacy_session_cli_args(
+            invocation_args,
+            mode=mode,
+        )
+        remapped_bindings: list[SessionFileBinding] = []
+        for binding in file_bindings:
+            if binding.argIndex not in invocation_index_map:
+                raise ValidationError(
+                    "cliInvocation.fileBindings cannot reference a removed legacy CLI flag."
+                )
+            remapped_bindings.append(
+                SessionFileBinding(
+                    argIndex=invocation_index_map[binding.argIndex],
+                    slot=binding.slot,
+                    name=binding.name,
+                )
+            )
+        file_bindings = remapped_bindings
 
     run_args = _apply_option_override(run_args, "-o", "--output", output_override)
     run_args = _apply_option_override(run_args, "-f", "--format", format_override)
     invocation_args = _apply_option_override(invocation_args, "-o", "--output", output_override)
     invocation_args = _apply_option_override(invocation_args, "-f", "--format", format_override)
+    run_args = migrate_legacy_repeat_feature_shape_args(
+        run_args,
+        session_version=session_version,
+    )
+    invocation_args = migrate_legacy_repeat_feature_shape_args(
+        invocation_args,
+        session_version=session_version,
+    )
 
     return SessionRunSpec(
         mode=mode,
@@ -605,7 +1716,23 @@ def _gui_session_to_cli_args(
     if not isinstance(ui, Mapping):
         ui = {}
     form = config.get("form") if isinstance(config.get("form"), Mapping) else {}
-    adv = config.get("adv") if isinstance(config.get("adv"), Mapping) else {}
+    adv = dict(config.get("adv")) if isinstance(config.get("adv"), Mapping) else {}
+    if int(session.get("version", 0)) <= 30:
+        effective_features = adv.get("features")
+        if not isinstance(effective_features, list):
+            effective_features = [
+                "CDS",
+                "rRNA",
+                "tRNA",
+                "tmRNA",
+                "ncRNA",
+                "misc_RNA",
+                "repeat_region",
+            ]
+        if "repeat_region" in effective_features:
+            feature_shapes = dict(adv.get("feature_shapes") or {})
+            feature_shapes.setdefault("repeat_region", "rectangle")
+            adv["feature_shapes"] = feature_shapes
 
     run_args: list[str] = []
     invocation_args: list[str] = []
@@ -657,6 +1784,7 @@ def _restore_cli_table_paths(
     run_args: list[str],
     *,
     temp_dir: Path,
+    migrate_legacy_cli: bool = False,
 ) -> None:
     files = session.get("files")
     if not isinstance(files, Mapping):
@@ -687,6 +1815,19 @@ def _restore_cli_table_paths(
                 role=f"arg{arg_index}",
             )
             run_args[arg_index] = str(table_path)
+
+        table_kind = str(table_entry.get("kind") or "").strip()
+        preceding_option = (
+            str(run_args[arg_index - 1]) if arg_index > 0 else ""
+        )
+        if (
+            migrate_legacy_cli
+            and (
+                table_kind == "circular_track"
+                or preceding_option == "--circular_track_table"
+            )
+        ):
+            _migrate_legacy_circular_track_table(table_path)
 
         dependencies = table_entry.get("dependencies")
         if not isinstance(dependencies, list) or not dependencies:
@@ -764,6 +1905,77 @@ def _rewrite_tsv_path_cells(
         raise ValidationError(f"Could not rewrite restored TSV table: {table_path}") from exc
 
 
+def _migrate_legacy_circular_track_table(table_path: Path) -> None:
+    """Move a persisted Circular table's spacing column to reader-only params."""
+
+    try:
+        with table_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.reader(handle, delimiter="\t"))
+    except OSError as exc:
+        raise ValidationError(
+            f"Could not read restored Circular track table: {table_path}"
+        ) from exc
+    if not rows:
+        return
+
+    header_index = next(
+        (
+            index
+            for index, cells in enumerate(rows)
+            if cells and any(str(cell).strip() for cell in cells)
+        ),
+        None,
+    )
+    if header_index is None:
+        return
+    header = [str(cell).strip() for cell in rows[header_index]]
+    if "spacing" not in header:
+        return
+
+    spacing_index = header.index("spacing")
+    if "params" not in header:
+        header.append("params")
+    params_index = header.index("params")
+    migrated_rows: list[list[str]] = []
+    for index, cells in enumerate(rows):
+        if index < header_index:
+            migrated_rows.append([str(cell) for cell in cells])
+            continue
+        if index == header_index:
+            migrated_rows.append(
+                [column for column in header if column != "spacing"]
+            )
+            continue
+        values = [str(cell) for cell in cells]
+        while len(values) < len(header):
+            values.append("")
+        values = values[: len(header)]
+        spacing = values[spacing_index].strip()
+        if spacing:
+            legacy_param = f"__gbdraw_legacy_spacing={spacing}"
+            existing_params = values[params_index].strip()
+            values[params_index] = (
+                f"{existing_params},{legacy_param}"
+                if existing_params
+                else legacy_param
+            )
+        migrated_rows.append(
+            [
+                value
+                for column, value in zip(header, values, strict=True)
+                if column != "spacing"
+            ]
+        )
+    try:
+        with table_path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+            writer.writerows(migrated_rows)
+    except OSError as exc:
+        raise ValidationError(
+            f"Could not migrate restored Circular track table: {table_path}"
+        ) from exc
+
+
 def _append_common_gui_args(
     run_args: list[str],
     invocation_args: list[str],
@@ -781,6 +1993,15 @@ def _append_common_gui_args(
     features = adv.get("features")
     if isinstance(features, list) and features:
         _append_pair(run_args, invocation_args, "-k", ",".join(str(item) for item in features if item))
+    feature_shapes = adv.get("feature_shapes")
+    if isinstance(feature_shapes, Mapping):
+        for feature_type, rendering in feature_shapes.items():
+            _append_pair(
+                run_args,
+                invocation_args,
+                "--feature_shape",
+                f"{str(feature_type).strip()}={str(rendering).strip().lower()}",
+            )
     for key, option in (
         ("window_size", "--window"),
         ("step_size", "--step"),
@@ -853,9 +2074,9 @@ def _append_circular_gui_args(
     elif labels_mode == "both":
         _append_pair(run_args, invocation_args, "--labels", "both")
     if form.get("suppress_gc") is True:
-        _append_flag(run_args, invocation_args, "--suppress_gc")
+        _append_flag(run_args, invocation_args, "--no-gc")
     if form.get("suppress_skew") is True:
-        _append_flag(run_args, invocation_args, "--suppress_skew")
+        _append_flag(run_args, invocation_args, "--no-skew")
     if form.get("multi_record_canvas") is True:
         _append_flag(run_args, invocation_args, "--multi_record_canvas")
     for key, option in (
@@ -875,6 +2096,11 @@ def _append_circular_gui_args(
     ):
         value = adv.get(key)
         if value not in (None, "", False):
+            if (
+                key == "multi_record_size_mode"
+                and str(value).strip().lower() == "sqrt"
+            ):
+                value = "auto"
             _append_pair(run_args, invocation_args, option, str(value))
 
     input_type = str(ui.get("cInputType") or "gb")
@@ -952,9 +2178,9 @@ def _append_linear_gui_args(
     if form.get("align_center") is True:
         _append_flag(run_args, invocation_args, "--align_center")
     if form.get("show_gc") is True:
-        _append_flag(run_args, invocation_args, "--show_gc")
+        _append_flag(run_args, invocation_args, "--gc")
     if form.get("show_skew") is True:
-        _append_flag(run_args, invocation_args, "--show_skew")
+        _append_flag(run_args, invocation_args, "--skew")
     if form.get("normalize_length") is True:
         _append_flag(run_args, invocation_args, "--normalize_length")
     if _string_or_none(form.get("legend")) and form.get("legend") != "right":
@@ -983,9 +2209,13 @@ def _append_linear_gui_args(
     ):
         value = adv.get(key)
         if value not in (None, "", False):
+            if key == "label_placement" and str(value).strip().lower() == "on_feature":
+                value = "above_feature"
             _append_pair(run_args, invocation_args, option, str(value))
     if _string_or_none(form.get("linear_track_layout")):
-        _append_pair(run_args, invocation_args, "--track_layout", str(form.get("linear_track_layout")))
+        layout = str(form.get("linear_track_layout")).strip().lower()
+        layout = {"spreadout": "above", "tuckin": "below"}.get(layout, layout)
+        _append_pair(run_args, invocation_args, "--track_layout", layout)
     if form.get("linear_ruler_on_axis") is True:
         _append_flag(run_args, invocation_args, "--ruler_on_axis")
     _append_linear_definition_line_style_args(run_args, invocation_args, adv)
@@ -1078,8 +2308,6 @@ def _append_linear_gui_args(
                     + (f"[{track_index}]" if isinstance(linear_seqs[record_index].get("depth"), list) else ""),
                     temp_dir=temp_dir,
                 )
-        if track_count:
-            _append_flag(run_args, invocation_args, "--show_depth")
 
 
 def _append_linear_definition_line_style_args(
@@ -1247,7 +2475,7 @@ def _append_linear_gui_blastp_args(
         return
     for key, option in (
         ("collinearMinAnchors", "--collinear_min_anchors"),
-        ("collinearMaxGeneGap", "--collinear_max_gene_gap"),
+        ("collinearMaxUnitGap", "--collinear_max_unit_gap"),
         ("collinearMaxDiagonalDrift", "--collinear_max_diagonal_drift"),
         ("collinearMaxConflictsInMergeGap", "--collinear_max_conflicts_in_merge_gap"),
         ("collinearUnitMode", "--collinear_unit_mode"),
@@ -1256,6 +2484,12 @@ def _append_linear_gui_blastp_args(
         ("collinearMaxParalogLinksPerOrthogroup", "--collinear_max_paralog_links_per_orthogroup"),
     ):
         value = blastp_cfg.get(key)
+        if (
+            key == "collinearMaxUnitGap"
+            and value in (None, "")
+            and int(session.get("version", 0)) < CURRENT_SESSION_VERSION
+        ):
+            value = blastp_cfg.get("collinearMaxGeneGap")
         if value not in (None, "", False):
             _append_pair(run_args, invocation_args, option, str(value))
 
@@ -1287,8 +2521,6 @@ def _append_depth_gui_options(
             slot=slot,
             temp_dir=temp_dir,
         )
-    if entries:
-        _append_flag(run_args, invocation_args, "--show_depth")
 
 
 def _append_materialized_file_option(
@@ -1573,7 +2805,7 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
             "orthogroupMembershipMode": "anchor_core_v1",
             "orthogroupMemberMaxHits": 5,
             "collinearMinAnchors": 1,
-            "collinearMaxGeneGap": 0,
+            "collinearMaxUnitGap": 0,
             "collinearMaxDiagonalDrift": 0,
             "collinearMaxConflictsInMergeGap": 1,
             "collinearMaxParalogLinksPerOrthogroup": 2,
@@ -1597,9 +2829,9 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
                     default_when_absent="none",
                 ),
                 "multi_record_canvas": "--multi_record_canvas" in args,
-                "suppress_gc": "--suppress_gc" in args,
-                "suppress_skew": "--suppress_skew" in args,
-                "show_depth": "--show_depth" in args or "--depth" in args or "--depth_track" in args,
+                "suppress_gc": "--no-gc" in args,
+                "suppress_skew": "--no-skew" in args,
+                "show_depth": "--depth_track" in args,
             }
         )
         adv["plot_title_position"] = _option_value(args, "--plot_title_position") or "none"
@@ -1613,9 +2845,9 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
                 "linear_ruler_on_axis": "--ruler_on_axis" in args,
                 "align_center": "--align_center" in args,
                 "keep_definition_left_aligned": "--keep_definition_left_aligned" in args,
-                "show_gc": "--show_gc" in args,
-                "show_skew": "--show_skew" in args,
-                "show_depth": "--show_depth" in args or "--depth" in args or "--depth_track" in args,
+                "show_gc": "--gc" in args,
+                "show_skew": "--skew" in args,
+                "show_depth": "--depth_track" in args,
                 "normalize_length": "--normalize_length" in args,
                 "show_labels_linear": _optional_choice_option_value(
                     args,
@@ -2077,7 +3309,7 @@ def _populate_depth_cli_config(args: Sequence[str], adv: dict[str, Any]) -> None
         "depth_step_size": ("--depth_step", "--depth-step"),
         "depth_min": ("--depth_min", "--depth-min"),
         "depth_max": ("--depth_max", "--depth-max"),
-        "depth_tick_interval": (
+        "depth_large_tick_interval": (
             "--depth_large_tick_interval",
             "--depth_tick_interval",
             "--depth-large-tick-interval",
@@ -2261,7 +3493,7 @@ def _populate_linear_cli_config(
         )
         blastp["candidateLimit"] = candidate_limit if candidate_limit not in (None, "none") else None
         blastp["collinearMinAnchors"] = _option_value(args, "--collinear_min_anchors", "--collinear-min-anchors") or 1
-        blastp["collinearMaxGeneGap"] = (
+        blastp["collinearMaxUnitGap"] = (
             _option_value(
                 args,
                 "--collinear_max_unit_gap",
@@ -2391,13 +3623,56 @@ def _cli_option_key(option: str) -> str:
     return option.lstrip("-").replace("-", "_")
 
 
+def migrate_legacy_repeat_feature_shape_args(
+    args: Sequence[str],
+    *,
+    session_version: int,
+) -> list[str]:
+    """Preserve the old repeat rectangle for non-canonical v27-30 replay."""
+
+    migrated = [str(arg) for arg in args]
+    if int(session_version) > 30:
+        return migrated
+    features_raw = _option_value(migrated, "-k", "--features")
+    effective_features = (
+        {item.strip() for item in features_raw.split(",") if item.strip()}
+        if features_raw is not None
+        else {
+            "CDS",
+            "rRNA",
+            "tRNA",
+            "tmRNA",
+            "ncRNA",
+            "misc_RNA",
+            "repeat_region",
+        }
+    )
+    if (
+        "repeat_region" in effective_features
+        and "repeat_region" not in _feature_shapes_from_cli_args(migrated)
+    ):
+        insertion_index = next(
+            (
+                index
+                for index, token in enumerate(migrated)
+                if token in {"-f", "--format"} or token.startswith("--format=")
+            ),
+            len(migrated),
+        )
+        migrated[insertion_index:insertion_index] = [
+            "--feature_shape",
+            "repeat_region=rectangle",
+        ]
+    return migrated
+
+
 def _feature_shapes_from_cli_args(args: Sequence[str]) -> dict[str, str]:
     shapes: dict[str, str] = {}
     for assignment in _option_all_values(args, "--feature_shape", "--feature-shape"):
         feature_type, separator, shape = str(assignment).partition("=")
         feature_type = feature_type.strip()
         shape = shape.strip().lower()
-        if separator and feature_type and shape in {"arrow", "rectangle"}:
+        if separator and feature_type and shape in {"arrow", "rectangle", "underlay"}:
             shapes[feature_type] = shape
     return shapes
 
@@ -2526,21 +3801,38 @@ __all__ = [
     "CANONICAL_SESSION_MIN_VERSION",
     "DEPTH_FILE_ENCODING",
     "DEPTH_FILE_SCHEMA",
+    "FEATURE_CATALOG_ENCODING",
+    "FEATURE_CATALOG_SCHEMA",
+    "LEGACY_LOSAT_DERIVED_CACHE_SCHEMA",
+    "LEGACY_PROTEIN_CANDIDATE_SCHEMA",
+    "LOSAT_DERIVED_CACHE_SCHEMA",
+    "NUCLEOTIDE_LOSAT_CACHE_SCHEMA",
+    "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
+    "PROTEIN_LOSAT_CACHE_SCHEMA",
     "SESSION_FORMAT",
     "SUPPORTED_SESSION_VERSIONS",
     "SessionBuildContext",
     "SessionFileBinding",
     "SessionRunSpec",
     "build_session_json",
+    "classify_raw_losat_cache_entry",
+    "compact_session_feature_catalog",
     "decode_depth_payload",
     "encode_depth_text",
+    "empty_protein_identity_manifest",
+    "expand_session_feature_catalog",
     "get_session_slot",
     "load_session",
     "materialize_embedded_file",
+    "migrate_persisted_web_state_field_names",
+    "migrate_legacy_repeat_feature_shape_args",
+    "normalize_current_session_artifacts",
     "safe_embedded_filename",
     "serialize_file_entry",
     "session_mode",
     "session_to_cli_args",
     "validate_session",
+    "validate_current_session_artifacts",
+    "validate_current_web_state_field_names",
     "write_session_json",
 ]

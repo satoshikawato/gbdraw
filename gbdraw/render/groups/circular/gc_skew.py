@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Dict
-
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
@@ -25,11 +23,11 @@ class GcSkewGroup:
         radius: float,
         track_width: float,
         skew_config: GcSkewConfigurator,
-        config_dict: Dict,
         track_id: str,
+        *,
+        cfg: GbdrawConfig,
         norm_factor_override: float | None = None,
         group_id: str | None = None,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         self.gb_record: SeqRecord = gb_record
         self.gc_df: DataFrame = gc_df
@@ -37,9 +35,7 @@ class GcSkewGroup:
         self.track_width: float = track_width
         self.skew_config: GcSkewConfigurator = skew_config
         self.record_len: int = len(self.gb_record.seq)
-        self.skew_group = Group(id=group_id or "skew")
-        self.config_dict = config_dict
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
+        self.skew_group = Group(id=group_id or "skew", debug=False)
         self.track_type = cfg.canvas.circular.track_type
         self.length_threshold = cfg.labels.length_threshold.circular
         self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
@@ -61,6 +57,7 @@ class GcSkewGroup:
             self.norm_factor,
             self.dinucleotide,
             record_identifier=self.gb_record.id,
+            group_identifier=str(self.skew_group.attribs.get("id", "skew")),
         )
 
     def get_group(self) -> Group:

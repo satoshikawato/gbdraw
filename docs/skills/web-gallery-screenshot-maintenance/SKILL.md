@@ -26,24 +26,46 @@ Then inspect the target tutorial JSON and media directory:
 - `gbdraw/web/gallery/tutorials/<example-id>.json`
 - `gbdraw/web/gallery/media/<example-id>/`
 
+## Overwrite Policy
+
+- Treat `gbdraw/web/gallery/sessions/`, `sources/`, `examples/`, `thumbnails/`,
+  and `examples.json` as generator-owned outputs. When a Gallery refresh is in
+  scope, overwrite all dirty or uncommitted copies in those paths with the current
+  generator output; do not preserve, merge, or restore their previous bytes.
+- Inspect the target inventory before running a broad refresh and regenerate from
+  the declared source inputs. If correctness also requires a code, test, or
+  documentation change, replace the dirty in-scope implementation as needed.
+- Keep unrelated working-tree files out of scope. The overwrite rule does not
+  authorize broad cleanup elsewhere in the repository.
+
 ## Audit Workflow
 
 1. Audit screenshots, tutorial writing, and structured content together. Do not treat a screenshot pass as complete until the tutorial also satisfies the Writing Rules and Structured Content Rules below.
 2. Enumerate only media referenced by tutorial JSON first. Treat unreferenced media as cleanup candidates after visible screenshots are fixed.
 3. Compare each referenced screenshot with its operation text and caption.
-4. Check adjacent operation screenshots for parent/child duplication. Remove the child operation/media only when the broader crop is already compact and readable at Gallery size, clearly shows the child controls, and adds no unrelated area merely to absorb the child image. Otherwise keep focused crops or recrop the shared panel.
-5. Hash or otherwise compare referenced screenshots after the visual pass. Pixel-identical screenshots inside the same tutorial are acceptable only when they are intentionally reused across non-adjacent, clearly different contexts; otherwise consolidate the operation, recrop one image, or delete the duplicate media.
-6. Classify each screenshot as:
+4. In the audited scope, mark task-specific input, setting, and record-row
+   operations with `dataDependent: true`. Their media must live under the
+   current example's media directory, and their capture metadata must declare
+   the exact session, expected app state, and values visible in the crop. Mark
+   a cross-example mode or other data-independent crop with
+   `genericMedia: true`; never use that escape hatch for a file, organism,
+   accession, result, or example-specific setting.
+5. Check adjacent operation screenshots for parent/child duplication. Remove the child operation/media only when the broader crop is already compact and readable at Gallery size, clearly shows the child controls, and adds no unrelated area merely to absorb the child image. Otherwise keep focused crops or recrop the shared panel.
+6. Hash or otherwise compare referenced screenshots after the visual pass. Pixel-identical screenshots inside the same tutorial are acceptable only when they are intentionally reused across non-adjacent, clearly different contexts; otherwise consolidate the operation, recrop one image, or delete the duplicate media.
+7. Classify each screenshot as:
    - `keep`: real UI/result crop, readable, caption matches.
    - `recrop`: correct state but poor extent, blurry text, missing context, or too much page.
    - `replace`: final preview or stale/empty crop used for an input/edit/upload/setting operation.
    - `add`: operation needs an extra crop to avoid one overloaded screenshot.
-7. Review tutorial writing and structure: remove generic Requirements, avoid unnecessary Files tab steps, keep pre-generation setup, generated-result inspection, and post-generation edits separate, and omit redundant operation `title`/`body` when a clear step plus media caption already conveys the action.
-8. Review structured content: convert repeated-field setup lists, file mappings, record metadata, track recipes, and color rules to tables when rows share the same fields; keep simple one-column checklists as bullets.
-9. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes. For every recrop or replacement, also compare the old and new images side by side at the same displayed size. Reject the replacement when it makes the operated control less compact, removes a useful selected target, or adds page area without adding information needed for the documented action.
-10. Record screenshot, writing, and structured-content decisions in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
-11. After tutorial references are fixed, scan `gbdraw/web/gallery/media/` for WebP files unreferenced by tutorial JSON. If tests or docs still refer to an otherwise stale media fixture, update them to use current referenced media before deleting the stale file.
-12. Keep batches small. Do not migrate every tutorial in one risky change.
+8. Review tutorial writing and structure: remove generic Requirements, avoid unnecessary Files tab steps, keep pre-generation setup, generated-result inspection, and post-generation edits separate, and omit redundant operation `title`/`body` when a clear step plus media caption already conveys the action.
+9. Review structured content: convert repeated-field setup lists, file mappings, record metadata, track recipes, and color rules to tables when rows share the same fields; keep simple one-column checklists as bullets.
+10. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes. For every recrop or replacement, also compare the old and new images side by side at the same displayed size. Reject the replacement when it makes the operated control less compact, removes a useful selected target, or adds page area without adding information needed for the documented action.
+11. Record screenshot, writing, and structured-content decisions in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
+12. After tutorial references are fixed, scan `gbdraw/web/gallery/media/` for WebP files unreferenced by tutorial JSON. If tests or docs still refer to an otherwise stale media fixture, update them to use current referenced media before deleting the stale file.
+13. Keep batches small. Do not migrate every tutorial in one risky change.
+    For an explicitly exhaustive audit, batching must not reduce semantic
+    coverage: do not omit required captures, assertions, or focused crops to
+    save model tokens, runtime, or image count.
 
 ## Screenshot Rules
 
@@ -53,6 +75,10 @@ Use the real UI the user operates.
 - Tutorial media must render as appropriately scaled thumbnails in the Gallery, while click-to-open behavior must show the original image itself at natural bitmap size. Do not use a framed page-like modal, captions, headers, or extra white shell around the opened image.
 - If a screenshot is unreadable in the Gallery, fix the source capture density, crop extent, or thumbnail/lightbox behavior. Do not rely on browser zoom, CSS upscaling, or a larger wrapper around the same low-resolution bitmap.
 - Mode selector screenshots must show the real Circular/Linear control with the active choice readable.
+- Do not reuse another example's data-dependent crop. A shared mode selector
+  or equally data-independent control may be reused only when the operation
+  declares `genericMedia: true` and the crop contains no example-specific
+  file, metadata, setting, or result.
 - File uploads must show the real uploader/input card the user operates, not a reconstructed list of file chips. The crop must include the uploaded file and the neighboring per-record controls that are visible in the actual row.
 - When the session or command uses per-record metadata that affects the figure, such as `--record_label`, `--record_subtitle`, `definition`, `record_subtitle`, organism/strain, subtitle/title, region, reverse complement, or LOSAT filename, include those fields in both the tutorial table/text and the upload-row crop. Do not split file upload and record label/title entry into disconnected screenshots when the values live in the same input card.
 - For tall multi-file upload workflows, keep the full file order and metadata as a tutorial table and use one representative real row crop with the file chip and relevant metadata fields, rather than one unreadable crop of every row.
@@ -95,6 +121,12 @@ Use Playwright against the current app or Gallery state. If `@playwright/test` i
 
 Capture standards:
 
+- Treat capture metadata as a declarative test contract. A
+  `dataDependent: true` operation must use the example's explicit
+  `capture.session`, declare exact `capture.assertAppState` paths, and list the
+  expected `capture.visibleControls` and/or `capture.visibleText`. The capture
+  tool must verify that those controls, selected values, checked states, and
+  identity text are inside the final crop before writing the WebP.
 - For restored-session captures, assert critical control values in the browser before saving the crop when the operation depends on exact row/order/selector state. Multi-record Record Order crops, for example, should verify `#1@1, #2@1, #3@2, #4@2, #5@2, #6@2` rather than trusting the restored page by sight.
 - For restored-session label or popup captures, assert representative label text in both `results[0].content` and the relevant feature/orthogroup metadata before saving. For qualifier-priority examples, check `qualifierPriorityRules`, feature `label`/`display_label`, and orthogroup overrides or candidates instead of trusting a visual crop alone.
 - For representative upload-row crops, assert both the file order and the row's metadata values in app state before capture; do not trust visible labels alone because input values may be clipped in the DOM text.

@@ -10,60 +10,45 @@ from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
 from typing import Optional
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from Bio import SeqIO  # type: ignore[reportMissingImports]
-from .analysis.depth import read_depth_tsv  # type: ignore[reportMissingImports]
-from .analysis.depth_tracks import (  # type: ignore[reportMissingImports]
-    depth_track_count,
-    normalize_depth_tracks,
-)
 from .io.cli_tables import (
     read_circular_track_table,
-    read_conservation_table,
-    read_records_table,
 )
-from .io.genome import load_gbks, load_gff_fasta
-from .io.regions import apply_region_specs, parse_region_specs
-from .io.colors import load_default_colors, read_color_table
 from .config.toml import load_config_toml
-from .render.export import parse_formats, save_figure
-from .render.formats import INTERACTIVE_SVG_FORMAT
-from .render.interactive_svg import InteractiveSvgContext
-from .render.interactive_context import build_interactive_svg_context
-from .api.diagram import (  # type: ignore[reportMissingImports]
-    assemble_circular_diagram_from_record,
-    assemble_circular_diagram_from_records,
-)
+from .render.export import parse_formats
 from .api.options import (
     AnnotationOptions,
+    CircularDiagramOptions,
     CircularMultiRecordOptions,
+    CircularOutputOptions,
+    CircularRequestTrackOptions,
     ColorOptions,
-    DiagramOptions,
-    OutputOptions,
-    TrackOptions,
 )
-from .annotations import read_annotation_table
+from .api.request_render import (
+    CircularBatchRenderResult,
+    CircularBatchRequestPlan,
+    RequestRenderResult,
+    build_request_plan_diagram,
+    plan_request,
+    render_prepared_request,
+    render_request,
+)
+from .api.record_planning import (
+    depth_track_inputs_from_cli,
+    record_input_manifest_from_paths,
+    record_input_manifest_from_table,
+)
 from .api.requests import (
+    CircularBatchOutputPolicy,
+    CircularBatchRequest,
     CircularDiagramRequest,
-    InMemoryRecordSource,
-    RecordInput,
+    RecordCardinality,
     RenderOutputRequest,
 )
-from .config.modify import suppress_gc_content_and_skew, modify_config_dict  # type: ignore[reportMissingImports]
-from .config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from .core.sequence import determine_output_file_prefix  # type: ignore[reportMissingImports]
-from .labels.filtering import (
-    read_filter_list_file,
-    read_label_override_file,
-    read_qualifier_priority_file,
-)  # type: ignore[reportMissingImports]
-from .io.record_select import parse_record_selector
+from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from .layout.record_placement import parse_record_row_position
 from .features.shapes import parse_feature_shape_overrides
-from .features.visibility import (
-    read_feature_visibility_file,
-    resolve_candidate_feature_types,
-)
 from .exceptions import ValidationError
+from .mode_profiles import CIRCULAR_MODE_PROFILE, ComparisonThresholds
 from .tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     ScalarSpec,
@@ -76,10 +61,13 @@ from .cli_utils.common import (
     _add_block_stroke_args,
     _add_comparison_filter_args,
     _add_depth_axis_args,
+    _add_depth_track_arg,
     _add_depth_track_label_color_args,
     _add_depth_track_tick_args,
     _add_feature_shape_arg,
     _add_format_arg,
+    _add_overwrite_arg,
+    _add_gc_skew_toggle_args,
     _add_gc_content_axis_args,
     _add_legend_size_args,
     add_analysis_args,
@@ -91,19 +79,22 @@ from .cli_utils.common import (
     validate_input_args,
     validate_label_args,
     handle_output_formats,
-    calculate_window_step,
-    load_records_table_records as _load_records_table_records,
-    record_major_depth_track_files_from_cli as _record_major_depth_track_files_from_cli,
 )
 from .cli_utils.session import (
     DiagramRunResult,
+    RenderedSvg,
     add_session_args,
+    diagram_request_output_paths,
+    diagram_request_rendered_svgs,
+    parse_session_pre_args,
+    preflight_session_sidecar_if_requested,
+    render_canonical_session_if_present,
+    resolve_session_sidecar_path,
+    save_session_sidecar_if_requested,
+)
+from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
-    make_rendered_svg,
-    parse_session_pre_args,
-    render_canonical_session_if_present,
-    save_session_sidecar_if_requested,
 )
 from .session_io import load_session, session_to_cli_args
 
@@ -112,88 +103,56 @@ logger = logging.getLogger()
 setup_logging()
 
 
-def _build_interactive_svg_context(
-    records,
-    selected_features,
-    *,
-    feature_table=None,
-    color_table=None,
-    default_colors=None,
-    annotations=None,
-    conservation_sequence_sources=None,
-) -> InteractiveSvgContext:
-    try:
-        comparison_sequence_records = []
-        for path in conservation_sequence_sources or []:
-            if not path:
-                comparison_sequence_records.append([])
-                continue
-            try:
-                comparison_sequence_records.append(list(SeqIO.parse(str(path), "fasta")))
-            except Exception as source_exc:
-                logger.warning(
-                    "WARNING: Comparison FASTA could not be embedded in interactive SVG: %s",
-                    source_exc,
-                )
-                comparison_sequence_records.append([])
-        return build_interactive_svg_context(
-            records,
-            selected_features_set=selected_features,
-            feature_table=feature_table,
-            color_table=color_table,
-            default_colors=default_colors,
-            annotations=annotations,
-            mode="circular",
-            comparison_sequence_records=comparison_sequence_records,
-        )
-    except Exception as exc:
-        logger.warning(
-            "WARNING: Rich interactive feature metadata could not be generated; "
-            "falling back to rendered SVG feature metadata. %s",
-            exc,
-        )
-        return InteractiveSvgContext()
+def _circular_cli_record_cardinality() -> RecordCardinality:
+    """Preserve the CLI contract that every direct input entry is rendered."""
+
+    return RecordCardinality.ALL
 
 
 
 
 def _parse_multi_record_position_arg(value: str) -> str:
-    raw = str(value or "").strip()
-    if not raw:
-        raise argparse.ArgumentTypeError(
-            "multi_record_position does not allow empty entries."
-        )
-    if "@" not in raw:
-        raise argparse.ArgumentTypeError(
-            f"multi_record_position entry '{raw}' must be in '<selector>@<row>' format."
-        )
-    selector_text, row_text = raw.rsplit("@", 1)
-    selector_text = selector_text.strip()
-    row_text = row_text.strip()
-    if not selector_text:
-        raise argparse.ArgumentTypeError(
-            f"multi_record_position entry '{raw}' must include a selector before '@'."
-        )
-    if not row_text.isdigit() or int(row_text) <= 0:
-        raise argparse.ArgumentTypeError(
-            f"multi_record_position entry '{raw}' must use a positive integer row."
-        )
     try:
-        selector = parse_record_selector(selector_text)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from exc
-    if selector is None:
-        raise argparse.ArgumentTypeError(
-            f"multi_record_position selector '{selector_text}' is invalid."
+        selector_text, row = parse_record_row_position(
+            value,
+            _compatibility="circular",
         )
-    return f"{selector_text}@{int(row_text)}"
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return f"{selector_text}@{row}"
+
+
+def _render_output_request(
+    output_prefix: str,
+    formats: list[str],
+    *,
+    overwrite: bool,
+) -> RenderOutputRequest:
+    """Split a CLI path prefix into the typed output directory and basename."""
+
+    prefix_path = Path(str(output_prefix))
+    output_directory = (
+        prefix_path.parent
+        if prefix_path.parent != Path(".")
+        else None
+    )
+    return RenderOutputRequest(
+        output_prefix=prefix_path.name,
+        output_directory=output_directory,
+        formats=tuple(formats),
+        overwrite=overwrite,
+    )
 
 
 
 
 
 
-def _get_args(args) -> argparse.Namespace:
+def _get_args(
+    args,
+    *,
+    _allow_legacy_track_transport: bool = False,
+) -> argparse.Namespace:
     """
     Parses command-line arguments for generating circular genome diagrams.
 
@@ -226,6 +185,7 @@ def _get_args(args) -> argparse.Namespace:
         '--output',
         help='output file prefix (default: accession number of the sequence)',
         type=str)
+    _add_overwrite_arg(parser)
     add_color_args(parser)
     add_analysis_args(parser)
     parser.add_argument(
@@ -280,25 +240,12 @@ def _get_args(args) -> argparse.Namespace:
         help='Label font size (optional; default: 14 (pt) for genomes <= 50 kb, 8 for genomes >= 50 kb)',
         type=float)
     _add_format_arg(parser)
-    parser.add_argument(
-        '--suppress_gc',
-        help='Suppress GC content track (default: False).',
-        action='store_true')
-    parser.add_argument(
-        '--suppress_skew',
-        help='Suppress GC skew track (default: False).',
-        action='store_true')
-    parser.add_argument(
-        '--depth',
-        help='Depth TSV file in samtools depth format (reference, position, depth).',
-        type=str)
-    parser.add_argument(
-        '--depth_track',
-        metavar='DEPTH',
-        help='Repeatable logical depth track. Provide one file for all records or one file per record.',
-        type=str,
-        nargs='+',
-        action='append')
+    _add_gc_skew_toggle_args(
+        parser,
+        show_gc_default=CIRCULAR_MODE_PROFILE.show_gc,
+        show_skew_default=CIRCULAR_MODE_PROFILE.show_skew,
+    )
+    _add_depth_track_arg(parser, mode="circular")
     _add_depth_track_label_color_args(parser)
     _add_depth_track_tick_args(parser)
     parser.add_argument(
@@ -366,9 +313,9 @@ def _get_args(args) -> argparse.Namespace:
         action='store_true')
     parser.add_argument(
         '--multi_record_size_mode',
-        help='Size mode for multi-record circular canvas ("auto", "linear", "equal"; "sqrt" is accepted as an alias of "auto"; default: "auto").',
+        help='Size mode for multi-record circular canvas ("auto", "linear", "equal"; default: "auto").',
         type=str,
-        choices=['auto', 'linear', 'equal', 'sqrt'],
+        choices=['auto', 'linear', 'equal'],
         default='auto')
     parser.add_argument(
         '--multi_record_min_radius_ratio',
@@ -472,7 +419,7 @@ def _get_args(args) -> argparse.Namespace:
         type=str)
     parser.add_argument(
         '--circular_track_slot',
-        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Omitted built-in slot geometry inherits --track_type; use r, w, spacing, side, and z for explicit overrides. The annotations renderer requires set_id from --annotation_table; overlay annotations also require anchor_slot and layer. Implicit inside numeric/depth slots auto-compress and never move outside automatically.',
+        help='Circular track slot spec: <slot_id>:<renderer>@key=value,key=value. Can be repeated. Omitted built-in slot geometry inherits --track_type; use r, w, inner_gap_px, outer_gap_px, side, and z for explicit overrides. The annotations renderer requires set_id from --annotation_table; overlay annotations also require anchor_slot and layer. Implicit inside numeric/depth slots auto-compress and never move outside automatically.',
         action='append',
         default=[])
     parser.add_argument(
@@ -559,10 +506,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_window must be > 0")
     if args.depth_step is not None and args.depth_step <= 0:
         parser.error("--depth_step must be > 0")
-    if args.depth and args.depth_track:
-        parser.error("--depth cannot be combined with --depth_track")
-    if args.show_depth and not (args.depth or args.depth_track):
-        parser.error("--show_depth requires --depth or --depth_track")
     if args.conservation_ring_width is not None and args.conservation_ring_width <= 0:
         parser.error("--conservation_ring_width must be > 0")
     if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
@@ -571,14 +514,15 @@ def _get_args(args) -> argparse.Namespace:
         not math.isfinite(float(args.center_reserved_radius)) or args.center_reserved_radius < 0
     ):
         parser.error("--center_reserved_radius must be a finite number >= 0")
-    if args.alignment_length < 0:
-        parser.error("--alignment_length must be >= 0")
-    if not math.isfinite(float(args.identity)) or args.identity < 0 or args.identity > 100:
-        parser.error("--identity must be a finite number in [0, 100]")
-    if not math.isfinite(float(args.evalue)) or args.evalue < 0:
-        parser.error("--evalue must be a finite number >= 0")
-    if not math.isfinite(float(args.bitscore)):
-        parser.error("--bitscore must be a finite number")
+    try:
+        ComparisonThresholds(
+            evalue=args.evalue,
+            bitscore=args.bitscore,
+            identity=args.identity,
+            alignment_length=args.alignment_length,
+        )
+    except ValidationError as exc:
+        parser.error(str(exc))
     if args.conservation_labels and not args.conservation_blast:
         parser.error("--conservation_labels requires --conservation_blast")
     if args.conservation_colors and not args.conservation_blast:
@@ -593,8 +537,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_max must be >= 0")
     if args.depth_min is not None and args.depth_max is not None and args.depth_min > args.depth_max:
         parser.error("--depth_min must be <= --depth_max")
-    if args.depth_tick_interval is not None and args.depth_tick_interval <= 0:
-        parser.error("--depth_tick_interval must be > 0")
     if args.depth_large_tick_interval is not None and args.depth_large_tick_interval <= 0:
         parser.error("--depth_large_tick_interval must be > 0")
     if args.depth_small_tick_interval is not None and args.depth_small_tick_interval <= 0:
@@ -632,9 +574,13 @@ def _get_args(args) -> argparse.Namespace:
             parser.error(str(exc))
     if args.circular_track_slot:
         try:
-            circular_track_slots_for_validation = parse_circular_track_slots(args.circular_track_slot)
+            circular_track_slots_for_validation = parse_circular_track_slots(
+                args.circular_track_slot,
+                _allow_legacy_transport=_allow_legacy_track_transport,
+            )
         except Exception as exc:
             parser.error(str(exc))
+        args.circular_track_slot = circular_track_slots_for_validation
     if args.circular_track_axis_index is not None:
         try:
             normalize_circular_track_slots_with_axis(
@@ -682,6 +628,7 @@ def circular_main(cmd_args) -> None:
                 mode="circular",
                 output_override=session_request.output,
                 format_override=session_request.format,
+                overwrite=session_request.overwrite,
                 save_session=session_request.save_session,
                 session_output=session_request.session_output,
             ):
@@ -693,7 +640,18 @@ def circular_main(cmd_args) -> None:
                 output_override=session_request.output,
                 format_override=session_request.format,
             )
-            args = _get_args(list(run_spec.args))
+            args = _get_args(
+                list(run_spec.args),
+                _allow_legacy_track_transport=True,
+            )
+            args.overwrite = session_request.overwrite
+            args.save_session = session_request.save_session
+            args.session_output = session_request.session_output
+            args._allow_legacy_track_transport = True
+            args._require_canonical_session = bool(
+                session_request.save_session
+                or session_request.session_output
+            )
             run_result = run_circular_from_namespace(args)
             save_session_sidecar_if_requested(
                 save_session=session_request.save_session,
@@ -703,6 +661,7 @@ def circular_main(cmd_args) -> None:
                 source_session=session,
                 cli_invocation_args=run_spec.cli_invocation_args,
                 file_bindings=run_spec.file_bindings,
+                overwrite=session_request.overwrite,
             )
         return
 
@@ -714,6 +673,7 @@ def circular_main(cmd_args) -> None:
         output_prefix=args.output,
         run_result=run_result,
         cmd_args=cmd_args,
+        overwrite=bool(args.overwrite),
     )
 
 
@@ -735,10 +695,19 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     multi_record_min_radius_ratio: float = args.multi_record_min_radius_ratio
     multi_record_column_gap_ratio: float = args.multi_record_column_gap_ratio
     multi_record_row_gap_ratio: float = args.multi_record_row_gap_ratio
-    records_table = read_records_table(args.records_table) if args.records_table else None
+    record_manifest = (
+        record_input_manifest_from_table(args.records_table)
+        if args.records_table
+        else record_input_manifest_from_paths(
+            gbk_paths=args.gbk,
+            gff_paths=args.gff,
+            fasta_paths=args.fasta,
+            cardinalities=_circular_cli_record_cardinality(),
+        )
+    )
     multi_record_positions: list[str] = (
-        records_table.multi_record_positions()
-        if records_table
+        []
+        if args.records_table
         else [str(position) for position in (args.multi_record_position or [])]
     )
     plot_title: str = str(args.plot_title or "").strip()
@@ -748,17 +717,15 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     keep_full_definition_with_plot_title: bool = args.keep_full_definition_with_plot_title
     center_reserved_radius: Optional[float] = args.center_reserved_radius
     label_font_size: Optional[float] = args.label_font_size
-    suppress_gc: bool = args.suppress_gc
-    suppress_skew: bool = args.suppress_skew
-    depth_file: str | None = args.depth
+    show_gc: bool = args.show_gc
+    show_skew: bool = args.show_skew
     depth_track_groups: list[list[str]] | None = args.depth_track
     depth_track_labels: list[str] | None = list(args.depth_track_label or []) or None
     depth_track_colors: list[str] | None = list(args.depth_track_color or []) or None
     depth_track_large_tick_intervals: list[str] | None = list(args.depth_track_large_tick_interval or []) or None
     depth_track_small_tick_intervals: list[str] | None = list(args.depth_track_small_tick_interval or []) or None
     depth_track_tick_font_sizes: list[str] | None = list(args.depth_track_tick_font_size or []) or None
-    show_depth: bool = bool(args.show_depth or depth_file or depth_track_groups)
-    depth_table: DataFrame | None = read_depth_tsv(depth_file) if depth_file else None
+    show_depth: bool = bool(depth_track_groups)
     depth_color: str | None = args.depth_color
     depth_width: Optional[float] = args.depth_width
     depth_window: Optional[int] = args.depth_window
@@ -769,32 +736,14 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     depth_normalize: bool | None = args.depth_normalize
     depth_show_axis: bool | None = args.depth_show_axis
     depth_show_ticks: bool | None = args.depth_show_ticks
-    depth_tick_interval: Optional[float] = args.depth_tick_interval
     depth_large_tick_interval: Optional[float] = args.depth_large_tick_interval
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
-    conservation_table = read_conservation_table(args.conservation_table) if args.conservation_table else None
-    conservation_blast_files: list[str] | None = (
-        conservation_table.conservation_blast_files
-        if conservation_table
-        else list(args.conservation_blast or []) or None
-    )
-    conservation_sequence_sources: list[str | None] | None = (
-        conservation_table.comparison_fasta_files
-        if conservation_table
-        else list(args.conservation_fasta or []) or None
-    )
+    conservation_blast_files = list(args.conservation_blast or []) or None
+    conservation_sequence_sources = list(args.conservation_fasta or []) or None
     conservation_reference: str = args.conservation_reference
-    conservation_labels: list[str] | None = (
-        conservation_table.labels
-        if conservation_table
-        else list(args.conservation_labels or []) or None
-    )
-    conservation_colors: list[str] | None = (
-        conservation_table.colors
-        if conservation_table
-        else list(args.conservation_colors or []) or None
-    )
+    conservation_labels = list(args.conservation_labels or []) or None
+    conservation_colors = list(args.conservation_colors or []) or None
     conservation_ring_width: Optional[float] = args.conservation_ring_width
     conservation_ring_gap: Optional[float] = args.conservation_ring_gap
     evalue: float = args.evalue
@@ -804,18 +753,14 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     labels_mode: str = args.labels
     label_rendering: str = args.label_rendering
     circular_label_placement: str = args.label_placement
-    show_labels: bool = labels_mode != "none"
     resolve_overlaps: bool = args.resolve_overlaps
-    allow_inner_labels: bool = labels_mode == "both"
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
     qualifier_priority_path: str = args.qualifier_priority
     label_table_path: str = args.label_table
     feature_table_path: str = args.feature_table
-    color_table: Optional[DataFrame] = read_color_table(color_table_path)
-    feature_table: Optional[DataFrame] = read_feature_visibility_file(feature_table_path)
     annotation_options = (
-        AnnotationOptions(sets=read_annotation_table(args.annotation_table, mode="circular"))
+        AnnotationOptions(table_file=args.annotation_table)
         if args.annotation_table
         else None
     )
@@ -825,10 +770,23 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     legend_box_size = args.legend_box_size
     legend_font_size = args.legend_font_size
     feature_width: Optional[float] = args.feature_width
-    circular_track_table = read_circular_track_table(args.circular_track_table) if args.circular_track_table else None
+    allow_legacy_track_transport = bool(
+        getattr(args, "_allow_legacy_track_transport", False)
+    )
+    circular_track_table = (
+        read_circular_track_table(
+            args.circular_track_table,
+            _allow_legacy_transport=allow_legacy_track_transport,
+        )
+        if args.circular_track_table
+        else None
+    )
     circular_track_order: str | None = None if circular_track_table else args.circular_track_order
-    circular_track_slot_specs: list[str] = (
-        list(circular_track_table.slot_specs)
+    circular_track_slot_specs: list[str | CircularTrackSlot] = (
+        parse_circular_track_slots(
+            circular_track_table.slot_specs,
+            _allow_legacy_transport=allow_legacy_track_transport,
+        )
         if circular_track_table
         else list(args.circular_track_slot or [])
     )
@@ -852,74 +810,20 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     gc_skew_radius: Optional[float] = args.gc_skew_radius
     if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
         raise ValidationError("plot_title_font_size must be > 0")
-    if records_table:
-        if records_table.input_kind == "gbk":
-            args.gbk = records_table.gbk_files
-            args.gff = None
-            args.fasta = None
-        else:
-            args.gbk = None
-            args.gff = records_table.gff_files
-            args.fasta = records_table.fasta_files
-        gb_records = _load_records_table_records(
-            records_table,
-            mode="circular",
-            selected_features_set=selected_features_set,
-            color_table=color_table,
-            feature_table=feature_table,
-            gbk_loader=load_gbks,
-            gff_loader=load_gff_fasta,
-        )
-        records_table_region_specs = parse_region_specs(records_table.row_scoped_region_specs())
-        if records_table_region_specs:
-            try:
-                gb_records = apply_region_specs(gb_records, records_table_region_specs, log=logger)
-            except ValueError as exc:
-                logger.error(f"ERROR: {exc}")
-                raise ValidationError(str(exc)) from exc
-    elif args.gbk:
-        gb_records = load_gbks(args.gbk, "circular")
-    elif args.gff and args.fasta:
-        candidate_feature_types, keep_all_features = resolve_candidate_feature_types(
-            selected_features_set,
-            color_table=color_table,
-            feature_visibility_table=feature_table,
-        )
-        gb_records = load_gff_fasta(
-            args.gff,
-            args.fasta,
-            "circular",
-            candidate_feature_types,
-            keep_all_features=keep_all_features,
-        )
-    else:
-        # This case should not be reached due to arg validation
-        logger.error("Invalid input file configuration.")
-        raise ValidationError("Invalid input file configuration.")
-    depth_track_files = _record_major_depth_track_files_from_cli(
+    depth_tracks = depth_track_inputs_from_cli(
         depth_track_groups,
-        record_count=len(gb_records),
+        labels=depth_track_labels,
+        colors=depth_track_colors,
+        large_tick_intervals=depth_track_large_tick_intervals,
+        small_tick_intervals=depth_track_small_tick_intervals,
+        tick_font_sizes=depth_track_tick_font_sizes,
     )
-    logical_depth_track_count = max(
-        (len(row) for row in (depth_track_files or [])),
-        default=0,
-    )
+    logical_depth_track_count = len(depth_tracks or ())
 
     outer_label_x_radius_offset: Optional[float] = args.outer_label_x_radius_offset
     outer_label_y_radius_offset: Optional[float] = args.outer_label_y_radius_offset
     inner_label_x_radius_offset: Optional[float] = args.inner_label_x_radius_offset
     inner_label_y_radius_offset: Optional[float] = args.inner_label_y_radius_offset
-    if (
-        circular_label_placement == "horizontal"
-        and allow_inner_labels
-        and not (suppress_gc and suppress_skew)
-    ):
-
-        suppress_gc = True
-        suppress_skew = True
-        logger.warning(
-            "WARNING: --labels both requires suppressing GC and skew tracks. Suppressing GC and skew tracks.")  #
-
     user_defined_default_colors: str = args.default_colors
     block_stroke_color: Optional[str] = args.block_stroke_color
     block_stroke_width: Optional[float] = args.block_stroke_width
@@ -946,92 +850,111 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
-    if qualifier_priority_path:
-        filtering_cfg["qualifier_priority_df"] = read_qualifier_priority_file(qualifier_priority_path)
-    else:
-        filtering_cfg["qualifier_priority_df"] = None
-    if label_whitelist:
-        filtering_cfg["whitelist_df"] = read_filter_list_file(label_whitelist)
-    else:
-        filtering_cfg["whitelist_df"] = None
-    if label_table_path:
-        filtering_cfg["label_override_df"] = read_label_override_file(label_table_path)
-    else:
-        filtering_cfg["label_override_df"] = None
 
     palette: str = args.palette
-    default_colors: Optional[DataFrame] = load_default_colors(
-        user_defined_default_colors, palette)
 
-    show_gc, show_skew = suppress_gc_content_and_skew(
-        suppress_gc, suppress_skew)
-
+    filtering_override = dict(filtering_cfg)
+    if label_blacklist is not None:
+        filtering_override["blacklist_keywords"] = (
+            [keyword.strip() for keyword in label_blacklist.split(",") if keyword.strip()]
+            if isinstance(label_blacklist, str)
+            else label_blacklist
+        )
+    gc_large_tick_interval = (
+        gc_content_large_tick_interval
+        if gc_content_large_tick_interval is not None
+        else gc_content_tick_interval
+    )
+    override_candidates: dict[str, object | None] = {
+        "objects.features.block_stroke_color": block_stroke_color,
+        "objects.axis.circular.stroke_color": axis_stroke_color,
+        "objects.features.line_stroke_color": line_stroke_color,
+        "labels.circular.scope": (
+            "outer" if labels_mode == "out" else labels_mode
+        ),
+        "canvas.circular.track_type": track_type,
+        "canvas.strandedness": strandedness,
+        "canvas.resolve_overlaps": resolve_overlaps,
+        "canvas.show_gc": show_gc,
+        "objects.gc_content.mode": gc_content_mode,
+        "objects.gc_content.min_percent": gc_content_min_percent,
+        "objects.gc_content.max_percent": gc_content_max_percent,
+        "objects.gc_content.show_axis": gc_content_show_axis,
+        "objects.gc_content.show_ticks": gc_content_show_ticks,
+        "objects.gc_content.large_tick_interval": gc_large_tick_interval,
+        "objects.gc_content.small_tick_interval": gc_content_small_tick_interval,
+        "objects.gc_content.tick_font_size": gc_content_tick_font_size,
+        "canvas.show_skew": show_skew,
+        "canvas.show_depth": show_depth,
+        "objects.depth.fill_color": depth_color,
+        "objects.depth.min_depth": depth_min,
+        "objects.depth.max_depth": depth_max,
+        "objects.depth.normalize": depth_normalize,
+        "objects.depth.show_axis": depth_show_axis,
+        "objects.depth.show_ticks": depth_show_ticks,
+        "objects.depth.large_tick_interval": depth_large_tick_interval,
+        "objects.depth.small_tick_interval": depth_small_tick_interval,
+        "objects.depth.tick_font_size": depth_tick_font_size,
+        "objects.depth.share_axis": depth_share_axis,
+        "objects.definition.circular.font_size": definition_font_size,
+        "objects.definition.circular.plot_title_font_size": plot_title_font_size,
+        "labels.rendering": label_rendering,
+        "labels.circular.placement": circular_label_placement,
+        "labels.filtering.raw": filtering_override,
+        "labels.unified_adjustment.outer_labels.x_radius_offset": outer_label_x_radius_offset,
+        "labels.unified_adjustment.outer_labels.y_radius_offset": outer_label_y_radius_offset,
+        "labels.unified_adjustment.inner_labels.x_radius_offset": inner_label_x_radius_offset,
+        "labels.unified_adjustment.inner_labels.y_radius_offset": inner_label_y_radius_offset,
+        "objects.scale.interval": scale_interval,
+        "objects.ticks.tick_labels.font_size": tick_label_font_size,
+        "labels.spacing.circular": circular_label_spacing,
+    }
+    for width_path in (
+        "objects.features.block_stroke_width.short",
+        "objects.features.block_stroke_width.long",
+    ):
+        override_candidates[width_path] = block_stroke_width
+    for width_path in (
+        "objects.axis.circular.stroke_width.short",
+        "objects.axis.circular.stroke_width.long",
+    ):
+        override_candidates[width_path] = axis_stroke_width
+    for width_path in (
+        "objects.features.line_stroke_width.short",
+        "objects.features.line_stroke_width.long",
+    ):
+        override_candidates[width_path] = line_stroke_width
+    for font_path in (
+        "labels.font_size.short",
+        "labels.font_size.long",
+    ):
+        override_candidates[font_path] = label_font_size
+    for size_path in (
+        "objects.legends.color_rect_size.short",
+        "objects.legends.color_rect_size.long",
+    ):
+        override_candidates[size_path] = legend_box_size
+    for size_path in (
+        "objects.legends.font_size.short",
+        "objects.legends.font_size.long",
+    ):
+        override_candidates[size_path] = legend_font_size
+    if definition_font_size is not None:
+        override_candidates["objects.definition.circular.interval"] = (
+            int(float(definition_font_size) + 2.0)
+        )
     config_dict = modify_config_dict(
         config_dict,
-        block_stroke_color=block_stroke_color,
-        block_stroke_width=block_stroke_width,
-        circular_axis_stroke_color=axis_stroke_color,
-        circular_axis_stroke_width=axis_stroke_width,
-        line_stroke_color=line_stroke_color,
-        line_stroke_width=line_stroke_width,
-        show_labels=show_labels,
-        track_type=track_type,
-        strandedness=strandedness,
-        resolve_overlaps=resolve_overlaps,
-        show_gc=show_gc,
-        gc_content_mode=gc_content_mode,
-        gc_content_min_percent=gc_content_min_percent,
-        gc_content_max_percent=gc_content_max_percent,
-        gc_content_show_axis=gc_content_show_axis,
-        gc_content_show_ticks=gc_content_show_ticks,
-        gc_content_tick_interval=gc_content_tick_interval,
-        gc_content_large_tick_interval=gc_content_large_tick_interval,
-        gc_content_small_tick_interval=gc_content_small_tick_interval,
-        gc_content_tick_font_size=gc_content_tick_font_size,
-        show_skew=show_skew,
-        show_depth=show_depth,
-        depth_color=depth_color,
-        depth_min=depth_min,
-        depth_max=depth_max,
-        depth_normalize=depth_normalize,
-        depth_show_axis=depth_show_axis,
-        depth_show_ticks=depth_show_ticks,
-        depth_tick_interval=depth_tick_interval,
-        depth_large_tick_interval=depth_large_tick_interval,
-        depth_small_tick_interval=depth_small_tick_interval,
-        depth_tick_font_size=depth_tick_font_size,
-        depth_share_axis=depth_share_axis,
-        allow_inner_labels=allow_inner_labels,
-        circular_definition_font_size=definition_font_size,
-        plot_title_font_size=plot_title_font_size,
-        label_font_size=label_font_size,
-        label_rendering=label_rendering,
-        circular_label_placement=circular_label_placement,
-        label_blacklist=label_blacklist,
-        label_whitelist=label_whitelist,
-        label_table=label_table_path,
-        outer_label_x_radius_offset=outer_label_x_radius_offset,
-        outer_label_y_radius_offset=outer_label_y_radius_offset,
-        inner_label_x_radius_offset=inner_label_x_radius_offset,
-        inner_label_y_radius_offset=inner_label_y_radius_offset,
-        scale_interval=scale_interval,
-        tick_label_font_size=tick_label_font_size,
-        circular_label_spacing=circular_label_spacing,
-        legend_box_size=legend_box_size,
-        legend_font_size=legend_font_size
+        {
+            path: value
+            for path, value in override_candidates.items()
+            if value is not None
+        },
     )
 
     out_formats: list[str] = parse_formats(args.format)
     out_formats = handle_output_formats(out_formats)
-    record_count: int = 0
-    outputs = []
-    track_slot_geometry_records = []
-    session_feature_metadata = []
-
-
-
-    cfg = GbdrawConfig.from_dict(config_dict)
-    legacy_geometry_requested = any(
+    shortcut_geometry_requested = any(
         value is not None
         for value in (
             feature_width,
@@ -1042,10 +965,10 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             gc_skew_radius,
         )
     )
-    if circular_track_slot_specs and legacy_geometry_requested:
+    if circular_track_slot_specs and shortcut_geometry_requested:
         slot_source_option = "--circular_track_table" if circular_track_table else "--circular_track_slot"
         raise ValidationError(
-            f"Legacy circular geometry options cannot be combined with {slot_source_option}; "
+            f"Circular geometry shortcut options cannot be combined with {slot_source_option}; "
             "put r= and/or w= on the matching circular track slot."
         )
 
@@ -1061,7 +984,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             show_skew=show_skew,
             dinucleotide=dinucleotide,
         )
-    elif legacy_geometry_requested:
+    elif shortcut_geometry_requested:
         circular_track_slots_or_none = circular_track_slots_from_order(
             "features,ticks,depth,gc_content,gc_skew",
             show_depth=show_depth,
@@ -1094,288 +1017,175 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             updated_slots.append(slot)
         circular_track_slots_or_none = updated_slots
 
-    separate_record_depth_tracks = None
-    separate_depth_track_count = 0
-    if depth_track_files is not None and not (multi_record_canvas and len(gb_records) > 1):
-        separate_record_depth_tracks = normalize_depth_tracks(
-            gb_records,
-            depth_table=depth_table,
-            depth_track_files=depth_track_files,
-            depth_track_labels=depth_track_labels,
-            depth_track_colors=depth_track_colors,
-            depth_track_large_tick_intervals=depth_track_large_tick_intervals,
-            depth_track_small_tick_intervals=depth_track_small_tick_intervals,
-            depth_track_tick_font_sizes=depth_track_tick_font_sizes,
-        )
-        separate_depth_track_count = depth_track_count(separate_record_depth_tracks)
+    canonical_config = copy.deepcopy(config_dict)
 
-    if multi_record_canvas and len(gb_records) > 1:
-        first_accession = gb_records[0].id if gb_records else "out"
-        outfile_prefix = output_prefix if output_prefix is not None else first_accession
-        canvas = assemble_circular_diagram_from_records(
-            gb_records,
-            conservation_blast_files=conservation_blast_files,
-            conservation_reference=conservation_reference,
-            conservation_labels=conservation_labels,
-            conservation_colors=conservation_colors,
-            conservation_ring_width=conservation_ring_width,
-            conservation_ring_gap=conservation_ring_gap,
-            config_dict=config_dict,
-            color_table=color_table,
-            default_colors=default_colors,
-            selected_features_set=selected_features_set,
-            feature_table=feature_table,
-            feature_shapes=feature_shapes or None,
-            output_prefix=outfile_prefix,
-            legend=legend,
-            dinucleotide=dinucleotide,
-            window=manual_window,
-            step=manual_step,
-            depth_window=depth_window,
-            depth_step=depth_step,
-            depth_table=depth_table,
-            depth_track_files=depth_track_files,
-            depth_track_labels=depth_track_labels,
-            depth_track_colors=depth_track_colors,
-            depth_track_large_tick_intervals=depth_track_large_tick_intervals,
-            depth_track_small_tick_intervals=depth_track_small_tick_intervals,
-            depth_track_tick_font_sizes=depth_track_tick_font_sizes,
-            species=species,
-            strain=strain,
-            plot_title=plot_title,
-            plot_title_position=plot_title_position,
-            plot_title_font_size=plot_title_font_size,
-            keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
-            center_reserved_radius=center_reserved_radius,
-            multi_record_size_mode=multi_record_size_mode,
-            multi_record_min_radius_ratio=multi_record_min_radius_ratio,
-            multi_record_column_gap_ratio=multi_record_column_gap_ratio,
-            multi_record_row_gap_ratio=multi_record_row_gap_ratio,
-            multi_record_positions=multi_record_positions or None,
-            cfg=cfg,
+    request_options = CircularDiagramOptions(
+        config=canonical_config,
+        colors=ColorOptions(
+            color_table_file=color_table_path or None,
+            default_colors_palette=palette,
+            default_colors_file=user_defined_default_colors or None,
+        ),
+        tracks=CircularRequestTrackOptions(
             circular_track_slots=circular_track_slots_or_none,
             circular_track_axis_index=circular_track_axis_index,
-            annotation_options=annotation_options,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-        )
-        if INTERACTIVE_SVG_FORMAT in out_formats:
-            interactive_context = _build_interactive_svg_context(
-                gb_records,
-                selected_features_set,
-                feature_table=feature_table,
-                color_table=color_table,
-                default_colors=default_colors,
-                annotations=annotation_options,
-                conservation_sequence_sources=conservation_sequence_sources,
-            )
-            save_figure(
-                canvas,
+            center_reserved_radius=center_reserved_radius,
+        ),
+        annotations=annotation_options,
+        output=CircularOutputOptions(
+            legend=legend,
+            plot_title_position=plot_title_position,
+        ),
+        selected_features_set=tuple(selected_features_set),
+        feature_visibility_table_file=feature_table_path or None,
+        label_whitelist_file=label_whitelist or None,
+        qualifier_priority_file=qualifier_priority_path or None,
+        label_override_file=label_table_path or None,
+        feature_shapes=feature_shapes or None,
+        dinucleotide=dinucleotide,
+        window=manual_window,
+        step=manual_step,
+        depth_window=depth_window,
+        depth_step=depth_step,
+        depth_tracks=depth_tracks,
+        conservation_blast_files=conservation_blast_files,
+        conservation_fasta_files=conservation_sequence_sources,
+        conservation_table_file=args.conservation_table,
+        conservation_reference=conservation_reference,
+        conservation_labels=conservation_labels,
+        conservation_colors=conservation_colors,
+        conservation_ring_width=conservation_ring_width,
+        conservation_ring_gap=conservation_ring_gap,
+        plot_title=plot_title or None,
+        plot_title_font_size=plot_title_font_size,
+        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+        species=species or None,
+        strain=strain or None,
+        evalue=evalue,
+        bitscore=bitscore,
+        identity=identity,
+        alignment_length=alignment_length,
+    )
+    request_records = record_manifest.records
+
+    if multi_record_canvas:
+        canonical_request = CircularDiagramRequest(
+            records=request_records,
+            options=request_options,
+            layout=CircularMultiRecordOptions(
+                multi_record_size_mode=multi_record_size_mode,
+                multi_record_min_radius_ratio=multi_record_min_radius_ratio,
+                multi_record_column_gap_ratio=multi_record_column_gap_ratio,
+                multi_record_row_gap_ratio=multi_record_row_gap_ratio,
+                multi_record_positions=multi_record_positions or None,
+            ),
+            output=_render_output_request(
+                output_prefix or "out",
                 out_formats,
-                interactive_context=interactive_context,
+                overwrite=args.overwrite,
             )
-            session_feature_metadata.extend(interactive_context.features)
-        else:
-            save_figure(canvas, out_formats)
-        rendered_svg = make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name)
+            if output_prefix is not None
+            else replace(
+                _render_output_request(
+                    "out",
+                    out_formats,
+                    overwrite=args.overwrite,
+                ),
+                resolve_prefix_from_first_record=True,
+            ),
+            record_options=record_manifest.record_options,
+            grouping="grid",
+        )
+    else:
+        canonical_request = CircularBatchRequest(
+            records=request_records,
+            options=request_options,
+            output_policy=CircularBatchOutputPolicy(
+                output_prefix=output_prefix,
+                formats=tuple(out_formats),
+                overwrite=args.overwrite,
+            ),
+            record_options=record_manifest.record_options,
+        )
+
+    needs_sidecar_preflight = bool(args.save_session or args.session_output)
+    if needs_sidecar_preflight:
+        request_plan = plan_request(canonical_request)
+        materialized_request = request_plan.request
+        sidecar_path = resolve_session_sidecar_path(
+            explicit_path=args.session_output,
+            output_prefix=args.output,
+            outputs=diagram_request_rendered_svgs(materialized_request),
+        )
+        preflight_session_sidecar_if_requested(
+            save_session=True,
+            session_output=str(sidecar_path),
+            output_prefix=None,
+            diagram_output_paths=diagram_request_output_paths(
+                materialized_request
+            ),
+            overwrite=bool(args.overwrite),
+        )
+        batch_outputs_preflighted = isinstance(
+            request_plan,
+            CircularBatchRequestPlan,
+        )
+        request_plan.preflight_outputs()
+        prepared = build_request_plan_diagram(request_plan)
+        rendered = render_prepared_request(
+            prepared,
+            batch_outputs_preflighted=batch_outputs_preflighted,
+        )
+    else:
+        rendered = render_request(canonical_request)
+    if isinstance(rendered, CircularBatchRenderResult):
+        rendered_items = rendered.items
+    elif isinstance(rendered, RequestRenderResult):
+        rendered_items = (rendered,)
+    else:  # pragma: no cover - render_request exhausts the Circular result union.
+        raise ValidationError("Circular request renderer returned an unsupported result.")
+
+    materialized_request = rendered.request
+
+    outputs: list[RenderedSvg] = []
+    track_slot_geometry_records = []
+    session_feature_metadata = []
+    session_biological_feature_metadata = []
+    for result_index, rendered_item in enumerate(rendered_items):
+        if not rendered_item.output_paths:
+            raise ValidationError("Circular request renderer did not produce an SVG output.")
+        svg_path = Path(rendered_item.output_paths[0])
+        rendered_svg = RenderedSvg(
+            output_prefix=str(svg_path.with_suffix("")),
+            svg_path=svg_path,
+            result_name=rendered_item.request.output.output_prefix,
+        )
+        outputs.append(rendered_svg)
         track_slot_geometry_records.extend(
             collect_track_slot_geometry_records(
-                canvas,
-                result_index=len(outputs),
+                rendered_item.drawing,
+                result_index=result_index,
                 result_name=rendered_svg.svg_path.name,
             )
         )
-        outputs.append(rendered_svg)
-    else:
-        for gb_record in gb_records:
-            record_count += 1
-            accession = gb_record.id
-            seq_length = len(gb_record.seq)
-            window, step = calculate_window_step(seq_length, cfg, manual_window, manual_step)
-
-            outfile_prefix = determine_output_file_prefix(gb_records, output_prefix, record_count, accession)
-            record_depth_track_specs = (
-                separate_record_depth_tracks[record_count - 1]
-                if separate_record_depth_tracks is not None
-                else None
+        interactive_context = rendered_item.interactive_context
+        if interactive_context is not None:
+            session_feature_metadata.extend(interactive_context.features)
+            session_biological_feature_metadata.extend(
+                interactive_context.biological_features
             )
-            canvas = assemble_circular_diagram_from_record(
-                gb_record,
-                conservation_blast_files=conservation_blast_files,
-                conservation_reference=conservation_reference,
-                conservation_labels=conservation_labels,
-                conservation_colors=conservation_colors,
-                conservation_ring_width=conservation_ring_width,
-                conservation_ring_gap=conservation_ring_gap,
-                config_dict=config_dict,
-                color_table=color_table,
-                default_colors=default_colors,
-                selected_features_set=selected_features_set,
-                feature_table=feature_table,
-                feature_shapes=feature_shapes or None,
-                output_prefix=outfile_prefix,
-                legend=legend,
-                dinucleotide=dinucleotide,
-                window=window,
-                step=step,
-                depth_window=depth_window,
-                depth_step=depth_step,
-                depth_table=depth_table if record_depth_track_specs is None else None,
-                depth_track_files=None,
-                depth_track_labels=(depth_track_labels if record_depth_track_specs is None else None),
-                depth_track_colors=(depth_track_colors if record_depth_track_specs is None else None),
-                depth_track_large_tick_intervals=(
-                    depth_track_large_tick_intervals if record_depth_track_specs is None else None
-                ),
-                depth_track_small_tick_intervals=(
-                    depth_track_small_tick_intervals if record_depth_track_specs is None else None
-                ),
-                depth_track_tick_font_sizes=(
-                    depth_track_tick_font_sizes if record_depth_track_specs is None else None
-                ),
-                species=species,
-                strain=strain,
-                plot_title=plot_title,
-                plot_title_position=plot_title_position,
-                plot_title_font_size=plot_title_font_size,
-                keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
-                center_reserved_radius=center_reserved_radius,
-                cfg=cfg,
-                circular_track_slots=circular_track_slots_or_none,
-                circular_track_axis_index=circular_track_axis_index,
-                annotation_options=annotation_options,
-                evalue=evalue,
-                bitscore=bitscore,
-                identity=identity,
-                alignment_length=alignment_length,
-                _precomputed_depth_track_specs=record_depth_track_specs,
-                _precomputed_depth_track_count=(
-                    separate_depth_track_count if record_depth_track_specs is not None else None
-                ),
-            )
-            if INTERACTIVE_SVG_FORMAT in out_formats:
-                interactive_context = _build_interactive_svg_context(
-                    [gb_record],
-                    selected_features_set,
-                    feature_table=feature_table,
-                    color_table=color_table,
-                    default_colors=default_colors,
-                    annotations=annotation_options,
-                    conservation_sequence_sources=conservation_sequence_sources,
-                )
-                save_figure(
-                    canvas,
-                    out_formats,
-                    interactive_context=interactive_context,
-                )
-                session_feature_metadata.extend(interactive_context.features)
-            else:
-                save_figure(canvas, out_formats)
-            rendered_svg = make_rendered_svg(outfile_prefix, Path(str(outfile_prefix)).name)
-            track_slot_geometry_records.extend(
-                collect_track_slot_geometry_records(
-                    canvas,
-                    result_index=len(outputs),
-                    result_name=rendered_svg.svg_path.name,
-                )
-            )
-            outputs.append(rendered_svg)
-
-    canonical_request = None
-    if len(gb_records) == 1 or multi_record_canvas:
-        canonical_config = copy.deepcopy(config_dict)
-        canonical_filtering = canonical_config["labels"]["filtering"]
-        qualifier_priority_table = canonical_filtering.pop("qualifier_priority_df", None)
-        label_whitelist_table = canonical_filtering.pop("whitelist_df", None)
-        label_override_table = canonical_filtering.pop("label_override_df", None)
-        request_prefix = Path(outputs[0].output_prefix).name if outputs else "out"
-        canonical_request = CircularDiagramRequest(
-            records=tuple(
-                RecordInput(source=InMemoryRecordSource(record))
-                for record in gb_records
-            ),
-            options=DiagramOptions(
-                config=canonical_config,
-                colors=ColorOptions(
-                    color_table=color_table,
-                    default_colors=default_colors,
-                    default_colors_palette=palette,
-                ),
-                tracks=TrackOptions(
-                    circular_track_slots=circular_track_slots_or_none,
-                    circular_track_axis_index=circular_track_axis_index,
-                    center_reserved_radius=center_reserved_radius,
-                ),
-                annotations=annotation_options,
-                output=OutputOptions(
-                    output_prefix=request_prefix,
-                    legend=legend,
-                    plot_title_position=plot_title_position,
-                ),
-                selected_features_set=tuple(selected_features_set),
-                feature_visibility_table=feature_table,
-                label_whitelist_table=label_whitelist_table,
-                qualifier_priority_table=qualifier_priority_table,
-                label_override_table=label_override_table,
-                feature_shapes=feature_shapes or None,
-                dinucleotide=dinucleotide,
-                window=manual_window,
-                step=manual_step,
-                depth_window=depth_window,
-                depth_step=depth_step,
-                depth_table=depth_table,
-                depth_track_files=depth_track_files,
-                depth_track_labels=depth_track_labels,
-                depth_track_colors=depth_track_colors,
-                depth_track_large_tick_intervals=depth_track_large_tick_intervals,
-                depth_track_small_tick_intervals=depth_track_small_tick_intervals,
-                depth_track_tick_font_sizes=depth_track_tick_font_sizes,
-                conservation_blast_files=conservation_blast_files,
-                conservation_reference=conservation_reference,
-                conservation_labels=conservation_labels,
-                conservation_colors=conservation_colors,
-                conservation_ring_width=conservation_ring_width,
-                conservation_ring_gap=conservation_ring_gap,
-                plot_title=plot_title or None,
-                plot_title_font_size=plot_title_font_size,
-                keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
-                species=species or None,
-                strain=strain or None,
-                evalue=evalue,
-                bitscore=bitscore,
-                identity=identity,
-                alignment_length=alignment_length,
-            ),
-            layout=(
-                CircularMultiRecordOptions(
-                    multi_record_size_mode=multi_record_size_mode,
-                    multi_record_min_radius_ratio=multi_record_min_radius_ratio,
-                    multi_record_column_gap_ratio=multi_record_column_gap_ratio,
-                    multi_record_row_gap_ratio=multi_record_row_gap_ratio,
-                    multi_record_positions=multi_record_positions or None,
-                )
-                if multi_record_canvas
-                else None
-            ),
-            output=RenderOutputRequest(
-                output_prefix=request_prefix,
-                formats=tuple(out_formats),
-                overwrite=True,
-            ),
-        )
 
     return DiagramRunResult(
         mode="circular",
         render_formats=tuple(out_formats),
         outputs=tuple(outputs),
         feature_metadata=tuple(session_feature_metadata),
+        biological_feature_metadata=tuple(session_biological_feature_metadata),
         run_metadata=build_track_slot_geometry_run_metadata(
             mode="circular",
             records=track_slot_geometry_records,
         ),
-        canonical_request=canonical_request,
+        canonical_request=materialized_request,
     )
 
 if __name__ == "__main__":

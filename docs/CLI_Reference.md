@@ -4,6 +4,23 @@
 
 This reference mirrors the current command help from `python -m gbdraw.cli` and lists the available options and defaults.
 
+Every diagram run writes a base `.svg` and any additional requested formats.
+Both commands validate that complete target set before rendering and refuse to
+replace an existing file by default. Pass `--overwrite` to replace existing
+regular files selected by the current command. Directories, special files,
+dangling symlinks, and invalid parents are rejected even with that flag. Output
+generation is sequential rather than transactional, so formats completed before
+a later conversion error remain. Overwrite permission applies only to the
+current invocation and is not restored from a saved session.
+
+The current boolean spelling is symmetric in both modes:
+`--gc` / `--no-gc` and `--skew` / `--no-skew`. Depth files use repeatable
+`--depth_track`. Current multiword long options otherwise use the underscore
+spelling shown below.
+
+For retired options, compatibility aliases, and saved-session migration rules,
+see [Session and request compatibility](./SESSION_COMPATIBILITY.md#retired-inputs).
+
 ## Main command
 
 ```text
@@ -34,6 +51,7 @@ Options (examples):
   --gff                Input GFF3 file(s) (requires --fasta; mutually exclusive with --gbk)
   --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)
   -o, --output         Output file prefix (optional)
+  --overwrite          Replace existing output files (default: refuse)
   -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)
   --records_table      TSV manifest for row-based input records
   --multi_record_position  Linear record placement as SELECTOR@ROW (repeatable)
@@ -55,12 +73,14 @@ Additional Information:
 
 ## Circular mode
 
+<!-- BEGIN GENERATED CIRCULAR HELP -->
+
 ```text
-usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
-              [--fasta [FASTA_FILE ...]] [--records_table TSV] [-o OUTPUT] [-p PALETTE] [-t TABLE]
-              [-d DEFAULT_COLORS] [-n NT] [-w WINDOW] [-s STEP]
-              [--species SPECIES] [--strain STRAIN] [-k FEATURES]
-              [--feature_shape TYPE=SHAPE]
+usage: gbdraw circular [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
+              [--fasta [FASTA_FILE ...]] [--records_table TSV] [-o OUTPUT]
+              [--overwrite] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS]
+              [-n NT] [-w WINDOW] [-s STEP] [--species SPECIES]
+              [--strain STRAIN] [-k FEATURES] [--feature_shape TYPE=SHAPE]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -72,25 +92,40 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--keep_full_definition_with_plot_title]
               [--center_reserved_radius CENTER_RESERVED_RADIUS]
-              [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--suppress_gc]
-              [--suppress_skew]
+              [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--gc | --no-gc]
+              [--skew | --no-skew] [--depth_track DEPTH [DEPTH ...]]
+              [--depth_track_label LABEL [LABEL ...]]
+              [--depth_track_color COLOR [COLOR ...]]
+              [--depth_track_large_tick_interval VALUE [VALUE ...]]
+              [--depth_track_small_tick_interval VALUE [VALUE ...]]
+              [--depth_track_tick_font_size VALUE [VALUE ...]]
               [--conservation_blast BLAST [BLAST ...]]
               [--conservation_table TSV]
               [--conservation_fasta FASTA [FASTA ...]]
               [--conservation_reference {query,subject,auto}]
               [--conservation_labels LABEL [LABEL ...]]
+              [--conservation_colors COLOR [COLOR ...]]
               [--conservation_ring_width CONSERVATION_RING_WIDTH]
               [--conservation_ring_gap CONSERVATION_RING_GAP]
               [--evalue EVALUE] [--bitscore BITSCORE] [--identity IDENTITY]
               [--alignment_length ALIGNMENT_LENGTH]
-              [-l LEGEND] [--multi_record_canvas]
-              [--multi_record_size_mode {auto,linear,equal,sqrt}]
+              [--depth_color DEPTH_COLOR] [--depth_width DEPTH_WIDTH]
+              [--depth_window DEPTH_WINDOW] [--depth_step DEPTH_STEP]
+              [--share_depth_axis] [--depth_min DEPTH_MIN]
+              [--depth_max DEPTH_MAX] [--depth_log_scale]
+              [--no_depth_log_scale] [--show_depth_axis] [--hide_depth_axis]
+              [--show_depth_ticks] [--hide_depth_ticks]
+              [--depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL]
+              [--depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL]
+              [--depth_tick_font_size DEPTH_TICK_FONT_SIZE] [-l LEGEND]
+              [--multi_record_canvas]
+              [--multi_record_size_mode {auto,linear,equal}]
               [--multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO]
               [--multi_record_column_gap_ratio MULTI_RECORD_COLUMN_GAP_RATIO]
               [--multi_record_row_gap_ratio MULTI_RECORD_ROW_GAP_RATIO]
               [--multi_record_position MULTI_RECORD_POSITION]
               [--plot_title_position {none,top,bottom}] [--separate_strands]
-              [--track_type TRACK_TYPE] [--resolve_overlaps]
+              [--track_type {tuckin,middle,spreadout}] [--resolve_overlaps]
               [--labels [{none,out,both}]]
               [--label_rendering {auto,embedded_only,external_only}]
               [--label_placement {horizontal,radial}]
@@ -98,16 +133,20 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
               [--label_table LABEL_TABLE]
-              [--feature_visibility_table FEATURE_VISIBILITY_TABLE]
+              [--feature_visibility_table FEATURE_TABLE]
+              [--annotation_table ANNOTATION_TABLE]
               [--outer_label_x_radius_offset OUTER_LABEL_X_RADIUS_OFFSET]
               [--outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET]
               [--inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET]
               [--inner_label_y_radius_offset INNER_LABEL_Y_RADIUS_OFFSET]
               [--scale_interval SCALE_INTERVAL]
+              [--tick_label_font_size TICK_LABEL_FONT_SIZE]
+              [--circular_label_spacing CIRCULAR_LABEL_SPACING]
               [--feature_width FEATURE_WIDTH]
               [--circular_track_order CIRCULAR_TRACK_ORDER]
               [--circular_track_slot CIRCULAR_TRACK_SLOT]
               [--circular_track_table TSV]
+              [--circular_track_axis_index CIRCULAR_TRACK_AXIS_INDEX]
               [--gc_content_width GC_CONTENT_WIDTH]
               [--gc_content_radius GC_CONTENT_RADIUS]
               [--gc_content_mode {deviation,percent}]
@@ -122,7 +161,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--gc_skew_width GC_SKEW_WIDTH]
               [--gc_skew_radius GC_SKEW_RADIUS]
               [--legend_box_size LEGEND_BOX_SIZE]
-              [--legend_font_size LEGEND_FONT_SIZE]
+              [--legend_font_size LEGEND_FONT_SIZE] [--session SESSION]
+              [--save_session] [--session_output PATH]
 
 Generate genome diagrams in PNG/PDF/SVG/PS/EPS. By default, diagrams for
 multiple entries are saved separately. Use --multi_record_canvas to place
@@ -135,10 +175,12 @@ options:
                         GFF3 file (instead of --gbk; --fasta is required)
   --fasta [FASTA_FILE ...]
                         FASTA file (required with --gff)
-  --records_table TSV   TSV manifest for row-based input records and
-                        circular placement metadata.
+  --records_table TSV   TSV manifest for row-based input records and circular
+                        placement metadata.
   -o, --output OUTPUT   output file prefix (default: accession number of the
                         sequence)
+  --overwrite           Replace existing output files (default: refuse to
+                        overwrite).
   -p, --palette PALETTE
                         Palette name (default: default)
   -t, --table TABLE     color table (optional)
@@ -156,8 +198,8 @@ options:
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
   --feature_shape TYPE=SHAPE
-                        Feature shape override (repeatable): TYPE=SHAPE where
-                        SHAPE is arrow or rectangle.
+                        Feature rendering override (repeatable): TYPE=SHAPE
+                        where SHAPE is arrow, rectangle, or underlay.
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -186,16 +228,36 @@ options:
                         Keep the full species/strain center label when a
                         circular plot title is shown (default: False).
   --center_reserved_radius CENTER_RESERVED_RADIUS
-                        Override the center-label reserved radius for
-                        circular track packing (in px; must be >= 0).
+                        Override the center-label reserved radius for circular
+                        track packing (in px; must be >= 0).
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 14 (pt) for
                         genomes <= 50 kb, 8 for genomes >= 50 kb)
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
-                        interactive_svg, png, pdf, eps, ps; default: svg).
-                        PNG/PDF/EPS/PS require CairoSVG.
-  --suppress_gc         Suppress GC content track (default: False).
-  --suppress_skew       Suppress GC skew track (default: False).
+                        interactive_svg, png, pdf, eps, ps; default: svg;
+                        png/pdf/eps/ps require CairoSVG).
+  --gc                  Show the GC content track.
+  --no-gc               Hide the GC content track.
+  --skew                Show the GC skew track.
+  --no-skew             Hide the GC skew track.
+  --depth_track DEPTH [DEPTH ...]
+                        Repeatable logical depth track. Provide one file for
+                        all records or one file per record.
+  --depth_track_label LABEL [LABEL ...]
+                        Depth track label(s). Provide one label or one per
+                        --depth_track.
+  --depth_track_color COLOR [COLOR ...]
+                        Depth track fill color(s). Provide one color or one
+                        per --depth_track.
+  --depth_track_large_tick_interval VALUE [VALUE ...]
+                        Depth track large tick interval(s). Provide one value
+                        or one per --depth_track.
+  --depth_track_small_tick_interval VALUE [VALUE ...]
+                        Depth track small tick interval(s). Provide one value
+                        or one per --depth_track.
+  --depth_track_tick_font_size VALUE [VALUE ...]
+                        Depth track tick font size(s). Provide one value or
+                        one per --depth_track.
   --conservation_blast BLAST [BLAST ...]
                         Precomputed BLAST outfmt 6/7 file(s) for circular
                         similarity rings.
@@ -207,21 +269,19 @@ options:
                         --conservation_blast for interactive span export.
   --conservation_reference {query,subject,auto}
                         BLAST side containing displayed circular reference
-                        coordinates. Use "subject" for BLAST generated as
-                        comparison FASTA query against displayed genome
-                        subject. Default: "auto".
+                        coordinates.
   --conservation_labels LABEL [LABEL ...]
-                        Labels for similarity rings, aligned by logical
-                        source index.
+                        Labels for similarity rings, aligned by logical source
+                        index.
   --conservation_colors COLOR [COLOR ...]
-                        Colors for similarity rings, aligned by logical
-                        source index. Accepts SVG color names or #RRGGBB.
+                        Colors for similarity rings, aligned by logical source
+                        index. Accepts SVG color names or #RRGGBB.
   --conservation_ring_width CONSERVATION_RING_WIDTH
                         Similarity ring width for circular mode (in px; must
                         be > 0).
   --conservation_ring_gap CONSERVATION_RING_GAP
-                        Similarity ring gap for circular mode (in px; must
-                        be > 0).
+                        Similarity ring gap for circular mode (in px; must be
+                        > 0).
   --evalue EVALUE       Maximum BLAST e-value retained for similarity rings
                         (default: 1e-5).
   --bitscore BITSCORE   Minimum BLAST bitscore retained for similarity rings
@@ -229,18 +289,50 @@ options:
   --identity IDENTITY   Minimum BLAST identity percentage retained for
                         similarity rings (default: 70).
   --alignment_length ALIGNMENT_LENGTH
-                        Minimum BLAST alignment length retained for
-                        similarity rings (default: 0).
+                        Minimum BLAST alignment length retained for similarity
+                        rings (default: 0).
+  --depth_color DEPTH_COLOR
+                        Depth track fill color (optional; default: #4A90E2).
+  --depth_width DEPTH_WIDTH
+                        Depth track width for circular mode (in px; must be >
+                        0).
+  --depth_window DEPTH_WINDOW
+                        Depth aggregation window size. Defaults to one tenth
+                        of the GC/skew window, with a 100 bp minimum.
+  --depth_step DEPTH_STEP
+                        Depth aggregation step size. Defaults to one tenth of
+                        the GC/skew step.
+  --share_depth_axis    Use one depth y-axis scale across records.
+  --depth_min DEPTH_MIN
+                        Minimum depth for clipping/normalization (optional;
+                        must be >= 0).
+  --depth_max DEPTH_MAX
+                        Maximum depth for clipping/normalization (optional;
+                        must be >= 0).
+  --depth_log_scale     Render depth coverage on a log10 scale (IGV-style).
+  --no_depth_log_scale  Render depth coverage on a linear scale.
+  --show_depth_axis     Show depth coverage axis line, ticks, and labels.
+  --hide_depth_axis     Hide depth coverage axis line, ticks, and labels.
+  --show_depth_ticks    Show depth coverage axis ticks and labels.
+  --hide_depth_ticks    Hide depth coverage axis ticks and labels.
+  --depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL
+                        Depth coverage large tick interval in x coverage units
+                        (optional; must be > 0).
+  --depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL
+                        Depth coverage small tick interval in x coverage units
+                        (optional; must be > 0; hidden by default).
+  --depth_tick_font_size DEPTH_TICK_FONT_SIZE
+                        Depth coverage tick label font size (optional; must be
+                        > 0).
   -l, --legend LEGEND   Legend position (default: "right"; "left", "right",
                         "top", "bottom", "upper_left", "upper_right",
                         "lower_left", "lower_right", "none")
   --multi_record_canvas
                         Place multiple records on one shared canvas using
                         automatic grid layout (default: False).
-  --multi_record_size_mode {auto,linear,equal,sqrt}
+  --multi_record_size_mode {auto,linear,equal}
                         Size mode for multi-record circular canvas ("auto",
-                        "linear", "equal"; "sqrt" is accepted as an alias of
-                        "auto"; default: "auto").
+                        "linear", "equal"; default: "auto").
   --multi_record_min_radius_ratio MULTI_RECORD_MIN_RADIUS_RATIO
                         Minimum radius ratio for multi-record scaling (0 <
                         ratio <= 1; default: 0.55).
@@ -259,10 +351,9 @@ options:
                         Plot title position in circular mode ("none", "top",
                         "bottom"; default: "none").
   --separate_strands    Separate strands (default: False).
-  --track_type TRACK_TYPE
-                        Circular preset for legacy/simple layout. Choices:
-                        "tuckin", "middle", "spreadout". Ignored when
-                        explicit --circular_track_slot layouts are supplied.
+  --track_type {tuckin,middle,spreadout}
+                        Circular track preset. Custom track slots inherit
+                        omitted geometry from this preset.
   --resolve_overlaps    Resolve overlapping features by placing them on
                         separate tracks (default: False). Useful for plasmid
                         visualization.
@@ -271,19 +362,16 @@ options:
                         "both" (outside+inside), or "none" (hidden). Default:
                         "none".
   --label_rendering {auto,embedded_only,external_only}
-                        Label rendering policy. "auto" embeds labels that fit
-                        and routes the rest externally; "embedded_only" drops
+                        Label rendering policy: "auto" embeds fitting labels
+                        and routes others externally; "embedded_only" drops
                         external labels; "external_only" forces labels outside
                         feature bodies. Default: "auto".
   --label_placement {horizontal,radial}
-                        External circular label placement. "horizontal" keeps
-                        text level; "radial" aligns text with the circle radius
-                        and keeps left-half text readable. Default:
-                        "horizontal".
+                        External circular label placement: "horizontal" or
+                        "radial". Default: "horizontal".
   --label_whitelist LABEL_WHITELIST
-                        Path to a TSV file for label whitelisting by regex
-                        pattern (optional); mutually exclusive with
-                        --label_blacklist
+                        path to a file for label whitelisting (optional);
+                        mutually exclusive with --label_blacklist
   --label_blacklist LABEL_BLACKLIST
                         Comma-separated keywords for label blacklisting
                         (optional); mutually exclusive with --label_whitelist
@@ -293,7 +381,7 @@ options:
   --label_table LABEL_TABLE
                         Path to a TSV file defining post-filter label text
                         overrides (optional)
-  --feature_visibility_table FEATURE_VISIBILITY_TABLE
+  --feature_visibility_table FEATURE_TABLE
                         Path to a TSV file defining per-feature visibility
                         overrides (optional)
   --annotation_table, --annotation-table ANNOTATION_TABLE
@@ -314,33 +402,35 @@ options:
   --scale_interval SCALE_INTERVAL
                         Manual scale interval for circular mode (in bp).
                         Overrides automatic calculation.
+  --tick_label_font_size TICK_LABEL_FONT_SIZE
+                        Tick label font size for circular mode (optional;
+                        float; default: 14 (pt)).
+  --circular_label_spacing CIRCULAR_LABEL_SPACING
+                        Circular label-to-label vertical spacing in px
+                        (optional; float; must be > 0).
   --feature_width FEATURE_WIDTH
                         Feature track width for circular mode (in px; must be
                         > 0).
   --circular_track_order CIRCULAR_TRACK_ORDER
-                        Comma-separated circular slot order. Omitted slot
-                        geometry inherits the selected --track_type preset for
-                        each record; explicit slot fields override it.
+                        Comma-separated circular slot order. Omitted built-in
+                        slot geometry inherits --track_type.
   --circular_track_slot CIRCULAR_TRACK_SLOT
                         Circular track slot spec:
                         <slot_id>:<renderer>@key=value,key=value. Can be
-                        repeated. Use r=<radius>, w=<width>,
-                        inner_gap_px=<px>, and outer_gap_px=<px>. The legacy
-                        spacing=<scalar> field is still accepted as a
-                        compatibility alias for both gaps. ri/ro/gap are
-                        obsolete. side and z are slot fields. If r, w, gap,
-                        side, or standard renderer params are
-                        omitted for built-in slots, they inherit the active
-                        --track_type preset at render time. Inside numeric/depth
-                        slots with no explicit r or w auto-compress when needed
-                        and never move outside automatically. z only controls
-                        SVG layering. The annotations renderer requires
-                        set_id. Use lane_gap_px, padding_px, overflow,
-                        show_labels, and optional style_override parameters.
-                        An overlay also requires anchor_slot and layer.
+                        repeated. Omitted built-in slot geometry inherits
+                        --track_type; use r, w, inner_gap_px, outer_gap_px,
+                        side, and z for explicit overrides. The annotations
+                        renderer requires set_id from --annotation_table;
+                        overlay annotations also require anchor_slot and
+                        layer. Implicit inside numeric/depth slots auto-
+                        compress and never move outside automatically.
   --circular_track_table TSV
                         TSV manifest for circular track slots and axis
                         placement.
+  --circular_track_axis_index CIRCULAR_TRACK_AXIS_INDEX
+                        Axis boundary index for --circular_track_slot order.
+                        Slots before this index render outside; slots at or
+                        after it render inside.
   --gc_content_width GC_CONTENT_WIDTH
                         GC content track width for circular mode (in px; must
                         be > 0).
@@ -348,49 +438,43 @@ options:
                         GC content track center radius for circular mode (as a
                         ratio of base radius; must be > 0).
   --gc_content_mode {deviation,percent}
-                        GC content display mode. deviation keeps the existing
-                        mean-centered track. percent draws absolute GC
-                        percentage as a baseline area track.
+                        GC content display mode: deviation (current centered
+                        behavior) or percent (absolute 0-100% area track).
   --gc_content_min_percent GC_CONTENT_MIN_PERCENT
-                        Minimum GC percent for percent-mode clipping/axis.
+                        Minimum GC percent for percent-mode clipping/axis
+                        (optional; finite number).
   --gc_content_max_percent GC_CONTENT_MAX_PERCENT
-                        Maximum GC percent for percent-mode clipping/axis.
+                        Maximum GC percent for percent-mode clipping/axis
+                        (optional; finite number).
   --gc_content_tick_interval GC_CONTENT_TICK_INTERVAL
-                        GC content percent-mode large tick interval; alias for
-                        --gc_content_large_tick_interval.
+                        GC content percent-mode large tick interval (optional;
+                        must be > 0; alias for
+                        --gc_content_large_tick_interval).
   --gc_content_large_tick_interval GC_CONTENT_LARGE_TICK_INTERVAL
-                        GC content percent-mode large tick interval.
+                        GC content percent-mode large tick interval (optional;
+                        must be > 0).
   --gc_content_small_tick_interval GC_CONTENT_SMALL_TICK_INTERVAL
-                        GC content percent-mode small tick interval.
+                        GC content percent-mode small tick interval (optional;
+                        must be > 0; hidden by default).
   --gc_content_tick_font_size GC_CONTENT_TICK_FONT_SIZE
-                        GC content percent-mode tick label font size.
-  --show_gc_content_axis, --hide_gc_content_axis
-                        Show or hide the GC content percent-mode axis.
-  --show_gc_content_ticks, --hide_gc_content_ticks
-                        Show or hide GC content percent-mode ticks and labels.
+                        GC content percent-mode tick label font size
+                        (optional; must be > 0).
+  --show_gc_content_axis
+                        Show GC content percent-mode axis line, ticks, and
+                        labels.
+  --hide_gc_content_axis
+                        Hide GC content percent-mode axis line, ticks, and
+                        labels.
+  --show_gc_content_ticks
+                        Show GC content percent-mode axis ticks and labels.
+  --hide_gc_content_ticks
+                        Hide GC content percent-mode axis ticks and labels.
   --gc_skew_width GC_SKEW_WIDTH
                         GC skew track width for circular mode (in px; must be
                         > 0).
   --gc_skew_radius GC_SKEW_RADIUS
                         GC skew track center radius for circular mode (as a
                         ratio of base radius; must be > 0).
-  --depth DEPTH         Depth TSV file in samtools depth format. Implies
-                        --show_depth.
-  --depth_track DEPTH [DEPTH ...]
-                        Repeatable logical depth track. In circular mode,
-                        provide one file for a single record, or one file per
-                        record when using --multi_record_canvas.
-  --depth_track_label LABEL [LABEL ...]
-                        Depth track label(s). Provide one label or one per
-                        --depth_track.
-  --depth_track_color COLOR [COLOR ...]
-                        Depth track fill color(s). Provide one color or one
-                        per --depth_track.
-  --show_depth          Show depth coverage track. Required only when no depth
-                        file option is supplied.
-  --depth_width DEPTH_WIDTH
-                        Depth track width for circular mode (in px; must be
-                        > 0).
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes <= 50 kb, 20 for genomes >= 50
@@ -398,24 +482,56 @@ options:
   --legend_font_size LEGEND_FONT_SIZE
                         Legend font size (optional; float; default: 20 (pt)
                         for genomes <= 50 kb, 16 for genomes >= 50 kb).
+  --session SESSION     Regenerate a diagram from a plain or gzip-compressed
+                        gbdraw GUI session JSON file.
+  --save_session        Write one GUI-loadable .gbdraw-session.json sidecar
+                        for this run.
+  --session_output PATH
+                        Write the session sidecar to PATH; use a .gz suffix
+                        for gzip compression; implies --save_session.
 ```
+
+<!-- END GENERATED CIRCULAR HELP -->
+
+For fresh Circular input, output names are derived from record IDs when
+`--output` is omitted. An ID used this way must be one filename component:
+directory separators, absolute paths, `.` or `..`, ASCII control characters,
+and Windows-reserved device, stream, or wildcard names are rejected. Pass an
+explicit `--output` path or prefix for such records.
+Session replay keeps its saved prefix unless an output override is supplied.
 
 Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for these rings, so provide precomputed BLAST output.
 
 For `interactive_svg`, add one `--conservation_fasta` value per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
 
+## Feature rendering
+
+`--feature_shape TYPE=SHAPE` accepts three rendering policies and may be repeated:
+
+- `arrow` draws a strand-aware foreground glyph.
+- `rectangle` draws a non-directional foreground glyph.
+- `underlay` removes the feature from overlap lanes and feature labels, then highlights the full feature-track band behind foreground features.
+
+Fresh configurations render `CDS`, `rRNA`, `tRNA`, `tmRNA`, `ncRNA`, and `misc_RNA` as arrows, `repeat_region` as an underlay, and other feature types as rectangles. Restore the earlier repeat appearance with `--feature_shape repeat_region=rectangle`. Underlays keep the feature's resolved palette or specific-rule color and remain in the feature legend, interactive metadata, and protein-matching inputs.
+
+A rendering assignment does not make a feature visible. The selected feature list, specific color rules, and feature visibility table retain their existing precedence; `off` still hides the feature, while a matching `show` or specific color rule can reveal an otherwise unselected type and use its assigned rendering.
+
+Automatic feature underlays are derived at render time and are not annotation rows. A custom track stack must contain exactly one enabled `features` slot when a visible underlay exists; the underlay is anchored to that slot's actual ID. Manual annotation `highlight` rows remain independently editable and may intentionally overlap an automatic underlay.
+
 ## TSV manifest inputs
 
 ### Region annotations
 
-Both modes accept `--annotation_table PATH` (alias `--annotation-table`). The table requires `set_id`, `id`, and `mark`; `mark` is `line`, `bracket`, or `band`. Each row must provide exactly one target:
+Both modes accept `--annotation_table PATH` (alias `--annotation-table`). The table requires `set_id`, `id`, and `mark`; `mark` is `line`, `bracket`, `band`, or `highlight`. Each row must provide exactly one target:
 
 - coordinate: `start` and `end`, with optional `record`, `coordinate_space`, `wraps_origin`, and `out_of_bounds`;
 - feature: `feature_selector`, with optional `record`, `envelope`, and `circular_path`.
 
 Coordinates are 1-based and inclusive. Separate multiple feature selectors with semicolons. Optional display columns are `label`, `lane`, `legend_label`, `stroke`, `stroke_width`, `stroke_dasharray`, `line_cap`, `fill`, `fill_opacity`, `hatch_angle`, `hatch_spacing`, `hatch_color`, `hatch_width`, `hatch_cross`, `label_color`, `label_font_size`, `label_orientation`, `label_position`, and `label_offset`.
 
-Bind a set to a custom slot with `set_id=<set_id>`. When annotations are supplied without custom slots, one outside/above annotation slot is synthesized for each set while the normal default tracks remain present.
+Bind a set to a custom slot with `set_id=<set_id>`. Without custom slots, `highlight` marks are automatically drawn as an underlay behind the feature track. Other marks receive an outside/above annotation slot while the normal default tracks remain present. Mixed sets are split automatically between those placements.
+
+`lane` is the zero-based collision-avoidance row within an annotation track. Leave it blank for deterministic automatic packing. Use `0` for the first row, `1` for the second, and so on only when a fixed row is required. Highlights always cover the full feature band, so `lane` does not apply to them.
 
 The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate or unknown column names are rejected, and relative paths resolve against the table file.
 
@@ -589,12 +705,20 @@ gbdraw circular \
   --evalue 1e-30 \
   --identity 90 \
   --alignment_length 100 \
-  --suppress_gc \
-  --suppress_skew \
+  --no-gc \
+  --no-skew \
   --track_type spreadout \
   -o WSSV_genome_comparison \
   -f interactive_svg
 ```
+
+The single-track geometry options `--feature_width`, `--depth_width`,
+`--gc_content_width`, `--gc_content_radius`, `--gc_skew_width`, and
+`--gc_skew_radius` are supported CLI and Web shortcuts. The CLI converts each
+value to `w` or `r` on the matching built-in slot. These options may accompany
+`--circular_track_order`, but they cannot be combined with
+`--circular_track_slot` or `--circular_track_table`. Put the geometry directly
+on each explicit slot in those forms.
 
 ### `--circular_track_table`
 
@@ -609,7 +733,6 @@ Allowed columns:
 | `side` | optional | `outside`, `axis`, or `inside`. If omitted, rows default to `inside`, except the first `features` row may become `axis` when no explicit axis row exists. |
 | `r` | optional | Slot radius scalar. Values may be ratios such as `0.8`, percentages such as `80%`, or pixels such as `200px`. |
 | `w` | optional | Slot width scalar, using the same scalar syntax as `r`. |
-| `spacing` | optional | Compatibility scalar for both circular gaps. Do not combine with `inner_gap_px` or `outer_gap_px`. |
 | `inner_gap_px` | optional | Numeric inner gap in pixels, without a unit. |
 | `outer_gap_px` | optional | Numeric outer gap in pixels, without a unit. |
 | `z` | optional | Integer SVG layering order. |
@@ -617,7 +740,7 @@ Allowed columns:
 
 Only one row may use `side=axis`, and it must use `renderer=features`. That row defines the circular axis boundary and is converted internally to a split feature slot. Rows with `side=outside` are placed before the axis boundary, and rows with `side=inside` are placed after it. Relative row order is preserved within each side group.
 
-Do not put slot identity, renderer, placement, geometry, layering, or generic state keys in `params`. Reserved keys and aliases include `id`, `renderer`, `type`, `side`, `r`, `radius`, `w`, `width`, `spacing`, `inner_gap_px`, `outer_gap_px`, `z`, `z_index`, `zindex`, `enabled`, `show`, `visible`, `strict`, `compress`, and `reserve`. Feature rows also reserve `lane_direction` and `lanes`; use the table's `side` column and Axis row to select the feature lane. Renderer-specific keys such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout` remain valid.
+Do not put slot identity, renderer, placement, geometry, layering, or generic state keys in `params`. Reserved keys and aliases include `id`, `renderer`, `type`, `side`, `r`, `radius`, `w`, `width`, `inner_gap_px`, `outer_gap_px`, `z`, `z_index`, `zindex`, `enabled`, `show`, and `visible`. Retired Circular keys `spacing`, `strict`, `compress`, and `reserve` are rejected whether supplied as slot fields or parameters. Feature rows also reserve `lane_direction` and `lanes`; use the table's `side` column and Axis row to select the feature lane. Renderer-specific keys such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout` remain valid.
 
 ```tsv
 id	renderer	side	r	w	params
@@ -654,28 +777,34 @@ gbdraw circular \
   -f interactive_svg
 ```
 
-Depth tracks can be supplied with the legacy `--depth` option or the repeatable
-`--depth_track` option. `--depth` keeps the single-track SVG IDs `depth` and
-`depth_axis`. Multiple `--depth_track` groups render as `depth_1`,
-`depth_2`, and so on. Each `--depth_track` group is one logical track; provide
-one file to reuse it for every record, or one file per record.
+Depth tracks use repeatable `--depth_track` groups. Each group is one logical
+track; provide one file to reuse it for every record, or one file per record.
+Semantic SVG track hooks identify the renderer and logical slot; internal ID
+spelling is deterministic but is not a cross-version selector contract.
 
 ## Linear mode
 
+<!-- BEGIN GENERATED LINEAR HELP -->
+
 ```text
-usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
+usage: gbdraw linear [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [--records_table TSV]
               [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
-              [--comparisons_table TSV] [-b [BLAST ...]] [-t TABLE]
-              [--losatp_bin LOSATP_BIN]
-              [--ncbi_blastp_bin NCBI_BLASTP_BIN]
+              [--comparisons_table TSV] [-b [BLAST ...]]
+              [--losatp_bin LOSATP_BIN] [--ncbi_blastp_bin NCBI_BLASTP_BIN]
               [--losatp_threads LOSATP_THREADS]
               [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
+              [--protein_blastp_max_hits PROTEIN_BLASTP_MAX_HITS]
+              [--protein_blastp_candidate_limit PROTEIN_BLASTP_CANDIDATE_LIMIT]
+              [--align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE]
+              [--collinear_search_scope {adjacent,all}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
+              [--collinear_max_diagonal_drift COLLINEAR_MAX_DIAGONAL_DRIFT]
               [--collinear_color_mode {average_identity,orientation,orientation_identity}]
-              [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT] [-n NT] [-w WINDOW]
-              [-s STEP] [--separate_strands] [--show_gc]
+              [-t TABLE] [-p PALETTE] [-d DEFAULT_COLORS] [-o OUTPUT]
+              [--overwrite] [-n NT] [-w WINDOW] [-s STEP] [--separate_strands]
+              [--gc | --no-gc] [--skew | --no-skew]
               [--gc_content_mode {deviation,percent}]
               [--gc_content_min_percent GC_CONTENT_MIN_PERCENT]
               [--gc_content_max_percent GC_CONTENT_MAX_PERCENT]
@@ -685,12 +814,27 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--gc_content_tick_font_size GC_CONTENT_TICK_FONT_SIZE]
               [--show_gc_content_axis] [--hide_gc_content_axis]
               [--show_gc_content_ticks] [--hide_gc_content_ticks]
-              [--show_skew]
-              [--align_center] [--keep_definition_left_aligned]
-              [--evalue EVALUE] [--bitscore BITSCORE]
-              [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
-              [--pairwise_match_style {ribbon,curve}]
-              [-k FEATURES] [--feature_shape TYPE=SHAPE]
+              [--depth_track DEPTH [DEPTH ...]]
+              [--depth_track_label LABEL [LABEL ...]]
+              [--depth_track_color COLOR [COLOR ...]]
+              [--depth_track_height PX [PX ...]]
+              [--depth_track_large_tick_interval VALUE [VALUE ...]]
+              [--depth_track_small_tick_interval VALUE [VALUE ...]]
+              [--depth_track_tick_font_size VALUE [VALUE ...]]
+              [--depth_color DEPTH_COLOR] [--depth_height DEPTH_HEIGHT]
+              [--depth_window DEPTH_WINDOW] [--depth_step DEPTH_STEP]
+              [--share_depth_axis] [--depth_min DEPTH_MIN]
+              [--depth_max DEPTH_MAX] [--depth_log_scale]
+              [--no_depth_log_scale] [--show_depth_axis] [--hide_depth_axis]
+              [--show_depth_ticks] [--hide_depth_ticks]
+              [--depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL]
+              [--depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL]
+              [--depth_tick_font_size DEPTH_TICK_FONT_SIZE] [--align_center]
+              [--keep_definition_left_aligned] [--evalue EVALUE]
+              [--bitscore BITSCORE] [--identity IDENTITY]
+              [--alignment_length ALIGNMENT_LENGTH]
+              [--pairwise_match_style {ribbon,curve}] [-k FEATURES]
+              [--feature_shape TYPE=SHAPE]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -698,25 +842,30 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--line_stroke_color LINE_STROKE_COLOR]
               [--line_stroke_width LINE_STROKE_WIDTH]
               [--definition_font_size DEFINITION_FONT_SIZE]
+              [--definition_line_style LINE:KEY=VALUE]
               [--plot_title PLOT_TITLE]
               [--plot_title_position {center,top,bottom}]
               [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--record_label RECORD_LABEL]
+              [--record_subtitle RECORD_SUBTITLE] [--show_replicon]
+              [--hide_accession] [--hide_length]
               [--label_font_size LABEL_FONT_SIZE]
               [--label_placement {auto,above_feature}]
               [--label_rendering {auto,embedded_only,external_only}]
               [--label_rotation LABEL_ROTATION]
+              [--linear_label_spacing LINEAR_LABEL_SPACING]
               [--track_layout {above,middle,below}] [--track_axis_gap AUTO|PX]
               [--linear_track_order LINEAR_TRACK_ORDER]
               [--linear_track_slot SLOT]
               [--linear_track_axis_index LINEAR_TRACK_AXIS_INDEX]
               [--ruler_on_axis] [-f FORMAT] [-l LEGEND]
-              [--show_labels [{all,first,orthogroup_top,none}]] [--resolve_overlaps]
-              [--label_whitelist LABEL_WHITELIST |
+              [--show_labels [{all,first,orthogroup_top,none}]]
+              [--resolve_overlaps] [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
               [--qualifier_priority QUALIFIER_PRIORITY]
               [--label_table LABEL_TABLE]
-              [--feature_visibility_table FEATURE_VISIBILITY_TABLE]
+              [--feature_visibility_table FEATURE_TABLE]
+              [--annotation_table ANNOTATION_TABLE]
               [--feature_height FEATURE_HEIGHT] [--gc_height GC_HEIGHT]
               [--comparison_height COMPARISON_HEIGHT]
               [--scale_style {bar,ruler}]
@@ -729,7 +878,8 @@ usage: cli.py [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE] [--normalize_length]
               [--region REGION] [--record_id RECORD_ID]
-              [--reverse_complement REVERSE_COMPLEMENT]
+              [--reverse_complement REVERSE_COMPLEMENT] [--session SESSION]
+              [--save_session] [--session_output PATH]
 
 Generate plot in PNG/PDF/SVG/PS/EPS.
 
@@ -762,25 +912,40 @@ options:
                         (default: use automatic runtime resolution).
   --losatp_threads LOSATP_THREADS
                         Threads passed to the selected protein blastp runtime
-                        for
-                        --protein_blastp_mode pairwise/orthogroup/collinear
-                        (default: runtime default).
+                        for --protein_blastp_mode
+                        pairwise/orthogroup/collinear (default: runtime
+                        default).
   --protein_blastp_mode {none,pairwise,orthogroup,collinear}
                         Protein blastp comparison mode: none, pairwise
                         adjacent ribbons, all-record similarity groups
                         (orthogroup), or collinear blocks (default: none).
+  --protein_blastp_max_hits PROTEIN_BLASTP_MAX_HITS
+                        Maximum distinct subject protein hits per query
+                        protein for pairwise protein blastp display links
+                        (default: 5).
+  --protein_blastp_candidate_limit PROTEIN_BLASTP_CANDIDATE_LIMIT
+                        Optional protein blastp candidate cap per query; use
+                        'none' for no cap (default: none).
+  --align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE
+                        Align linear records by the gbdraw similarity group
+                        containing this feature SVG hash or protein ID.
   --collinear_search_scope {adjacent,all}
-                        Collinear protein blastp scope: adjacent input pairs
-                        or all record pairs. With multi-record rows, all
-                        renders only pairs across adjacent rows (default:
-                        adjacent).
+                        Collinear protein blastp scope: adjacent displayed
+                        records/rows or all record pairs. With multi-record
+                        rows, adjacent searches every cross-record pair
+                        between neighboring rows; all uses every pair as
+                        grouping evidence but renders only pairs across
+                        adjacent rows (default: adjacent).
   --collinear_min_anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
-                        Collinear block. The default 1 includes singleton
-                        links.
-  --collinear_max_unit_gap, --collinear_max_gene_gap COLLINEAR_MAX_UNIT_GAP
+                        Collinear block; 1 allows singleton links (default:
+                        1).
+  --collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP
                         Maximum unit gap between neighboring collinear anchors
                         (default: 0).
+  --collinear_max_diagonal_drift COLLINEAR_MAX_DIAGONAL_DRIFT
+                        Maximum order-space diagonal drift allowed within or
+                        between collinear runs (default: 0).
   --collinear_color_mode {average_identity,orientation,orientation_identity}
                         Collinear ribbon color mode: average_identity,
                         orientation, or orientation_identity (default:
@@ -791,6 +956,8 @@ options:
   -d, --default_colors DEFAULT_COLORS
                         TSV file that overrides the color palette (optional)
   -o, --output OUTPUT   output file prefix (default: out)
+  --overwrite           Replace existing output files (default: refuse to
+                        overwrite).
   -n, --nt NT           dinucleotide skew (default: GC).
   -w, --window WINDOW   window size (optional; default: 1kb for genomes < 1Mb,
                         10kb for genomes <10Mb, 100kb for genomes >=10Mb)
@@ -799,35 +966,102 @@ options:
   --separate_strands    separate forward and reverse strands (default: False).
                         Features of undefined strands are shown on the forward
                         strand.
-  --show_gc             plot GC content below genome (default: False).
+  --gc                  Show the GC content track.
+  --no-gc               Hide the GC content track.
+  --skew                Show the GC skew track.
+  --no-skew             Hide the GC skew track.
   --gc_content_mode {deviation,percent}
-                        GC content display mode. deviation keeps the existing
-                        mean-centered track. percent draws absolute GC
-                        percentage as a baseline area track.
+                        GC content display mode: deviation (current centered
+                        behavior) or percent (absolute 0-100% area track).
   --gc_content_min_percent GC_CONTENT_MIN_PERCENT
-                        Minimum GC percent for percent-mode clipping/axis.
+                        Minimum GC percent for percent-mode clipping/axis
+                        (optional; finite number).
   --gc_content_max_percent GC_CONTENT_MAX_PERCENT
-                        Maximum GC percent for percent-mode clipping/axis.
+                        Maximum GC percent for percent-mode clipping/axis
+                        (optional; finite number).
   --gc_content_tick_interval GC_CONTENT_TICK_INTERVAL
-                        GC content percent-mode large tick interval; alias for
-                        --gc_content_large_tick_interval.
+                        GC content percent-mode large tick interval (optional;
+                        must be > 0; alias for
+                        --gc_content_large_tick_interval).
   --gc_content_large_tick_interval GC_CONTENT_LARGE_TICK_INTERVAL
-                        GC content percent-mode large tick interval.
+                        GC content percent-mode large tick interval (optional;
+                        must be > 0).
   --gc_content_small_tick_interval GC_CONTENT_SMALL_TICK_INTERVAL
-                        GC content percent-mode small tick interval.
+                        GC content percent-mode small tick interval (optional;
+                        must be > 0; hidden by default).
   --gc_content_tick_font_size GC_CONTENT_TICK_FONT_SIZE
-                        GC content percent-mode tick label font size.
-  --show_gc_content_axis, --hide_gc_content_axis
-                        Show or hide the GC content percent-mode axis.
-  --show_gc_content_ticks, --hide_gc_content_ticks
-                        Show or hide GC content percent-mode ticks and labels.
-  --show_skew           plot GC skew below genome (default: False).
+                        GC content percent-mode tick label font size
+                        (optional; must be > 0).
+  --show_gc_content_axis
+                        Show GC content percent-mode axis line, ticks, and
+                        labels.
+  --hide_gc_content_axis
+                        Hide GC content percent-mode axis line, ticks, and
+                        labels.
+  --show_gc_content_ticks
+                        Show GC content percent-mode axis ticks and labels.
+  --hide_gc_content_ticks
+                        Hide GC content percent-mode axis ticks and labels.
+  --depth_track DEPTH [DEPTH ...]
+                        Repeatable logical depth track. Provide one file for
+                        all records or one file per input record.
+  --depth_track_label LABEL [LABEL ...]
+                        Depth track label(s). Provide one label or one per
+                        --depth_track.
+  --depth_track_color COLOR [COLOR ...]
+                        Depth track fill color(s). Provide one color or one
+                        per --depth_track.
+  --depth_track_height PX [PX ...]
+                        Linear depth track height(s) in px. Provide one value
+                        or one per --depth_track.
+  --depth_track_large_tick_interval VALUE [VALUE ...]
+                        Depth track large tick interval(s). Provide one value
+                        or one per --depth_track.
+  --depth_track_small_tick_interval VALUE [VALUE ...]
+                        Depth track small tick interval(s). Provide one value
+                        or one per --depth_track.
+  --depth_track_tick_font_size VALUE [VALUE ...]
+                        Depth track tick font size(s). Provide one value or
+                        one per --depth_track.
+  --depth_color DEPTH_COLOR
+                        Depth track fill color (optional; default: #4A90E2).
+  --depth_height DEPTH_HEIGHT
+                        Depth track height for linear mode (in px; must be >
+                        0).
+  --depth_window DEPTH_WINDOW
+                        Depth aggregation window size. Defaults to one tenth
+                        of the GC/skew window, with a 100 bp minimum.
+  --depth_step DEPTH_STEP
+                        Depth aggregation step size. Defaults to one tenth of
+                        the GC/skew step.
+  --share_depth_axis    Use one depth y-axis scale across records.
+  --depth_min DEPTH_MIN
+                        Minimum depth for clipping/normalization (optional;
+                        must be >= 0).
+  --depth_max DEPTH_MAX
+                        Maximum depth for clipping/normalization (optional;
+                        must be >= 0).
+  --depth_log_scale     Render depth coverage on a log10 scale (IGV-style).
+  --no_depth_log_scale  Render depth coverage on a linear scale.
+  --show_depth_axis     Show depth coverage axis line, ticks, and labels.
+  --hide_depth_axis     Hide depth coverage axis line, ticks, and labels.
+  --show_depth_ticks    Show depth coverage axis ticks and labels.
+  --hide_depth_ticks    Hide depth coverage axis ticks and labels.
+  --depth_large_tick_interval DEPTH_LARGE_TICK_INTERVAL
+                        Depth coverage large tick interval in x coverage units
+                        (optional; must be > 0).
+  --depth_small_tick_interval DEPTH_SMALL_TICK_INTERVAL
+                        Depth coverage small tick interval in x coverage units
+                        (optional; must be > 0; hidden by default).
+  --depth_tick_font_size DEPTH_TICK_FONT_SIZE
+                        Depth coverage tick label font size (optional; must be
+                        > 0).
   --align_center        Align genomes to the center (default: False).
   --keep_definition_left_aligned
-                        Keep linear record definitions in the left column. With
-                        multi-record rows, the leading record label becomes the
-                        row definition while remaining record text stays above
-                        its record (default: False).
+                        Keep linear record definitions in the left column.
+                        With multi-record rows, the leading record label
+                        becomes the row definition while remaining record text
+                        stays above its record (default: False).
   --evalue EVALUE       evalue threshold (default=1e-2)
   --bitscore BITSCORE   bitscore threshold (default=50)
   --identity IDENTITY   identity threshold (default=0)
@@ -841,8 +1075,8 @@ options:
                         Comma-separated list of feature keys to draw (default:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
   --feature_shape TYPE=SHAPE
-                        Feature shape override (repeatable): TYPE=SHAPE where
-                        SHAPE is arrow or rectangle.
+                        Feature rendering override (repeatable): TYPE=SHAPE
+                        where SHAPE is arrow, rectangle, or underlay.
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -863,6 +1097,11 @@ options:
   --definition_font_size DEFINITION_FONT_SIZE
                         Definition font size (optional; float; default: 24 pt
                         for genomes <= 50 kb, 10 pt for genomes >= 50 kb)
+  --definition_line_style LINE:KEY=VALUE
+                        Definition line style override (repeatable):
+                        LINE:weight=bold,color=#000000,size=12. Lines:
+                        name/species/record_label, subtitle/record_subtitle,
+                        replicon, accession, length/coordinates.
   --plot_title PLOT_TITLE
                         Shared plot title text (optional).
   --plot_title_position {center,top,bottom}
@@ -872,8 +1111,18 @@ options:
                         Shared plot title font size (optional; float; default:
                         32).
   --record_label RECORD_LABEL
-                        Override the top record-label line (repeatable; order
+                        Optional top record-label line (for example
+                        organism/strain; repeatable; order matches input
+                        records)
+  --record_subtitle RECORD_SUBTITLE
+                        Optional second record-label line (repeatable; order
                         matches input records)
+  --show_replicon       Show inferred replicon labels in linear record-label
+                        blocks (default: False).
+  --hide_accession      Hide accession labels in linear record-label blocks
+                        (default: False).
+  --hide_length         Hide length/coordinate labels in linear record-label
+                        blocks (default: False).
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 24 pt for genomes
                         <= 50 kb, 5 pt for genomes >= 50 kb)
@@ -883,19 +1132,22 @@ options:
                         draws labels above features (or below negative-strand
                         features when --separate_strands is used).
   --label_rendering {auto,embedded_only,external_only}
-                        Label rendering policy. "auto" embeds labels that fit
-                        and routes the rest externally; "embedded_only" drops
+                        Label rendering policy: "auto" embeds fitting labels
+                        and routes others externally; "embedded_only" drops
                         external labels; "external_only" forces labels outside
-                        feature bodies. Non-auto values cannot be combined with
-                        --label_placement above_feature.
+                        feature bodies. Cannot be combined with
+                        --label_placement above_feature except as "auto".
+                        Default: "auto".
   --label_rotation LABEL_ROTATION
                         Linear label rotation in degrees (optional; float;
                         default: 0). In above_feature mode, rotated labels
                         start from the feature midpoint.
+  --linear_label_spacing LINEAR_LABEL_SPACING
+                        Linear label-to-label vertical spacing in px
+                        (optional; float; must be > 0).
   --track_layout {above,middle,below}
                         Linear track layout mode ("above", "middle", or
-                        "below"; default: "middle"). Aliases: "spreadout" ->
-                        "above", "tuckin" -> "below".
+                        "below"; default: "middle").
   --track_axis_gap AUTO|PX
                         Gap between axis and nearest feature edge in pixels
                         for above/below layouts. Use 'auto' to derive it from
@@ -906,18 +1158,17 @@ options:
   --linear_track_slot SLOT
                         Linear custom track slot:
                         <slot_id>:<renderer>@key=value,key=value. Repeat to
-                        add slots. The annotations renderer requires set_id.
-                        Use h for explicit height; an overlay also requires
-                        anchor_slot and layer. The anchor must name an enabled
-                        drawable, non-annotation slot in the complete stack.
+                        add slots. The annotations renderer requires set_id
+                        from --annotation_table; overlay annotations also
+                        require anchor_slot and layer.
   --linear_track_axis_index LINEAR_TRACK_AXIS_INDEX
                         Axis boundary index for linear custom track slots.
   --ruler_on_axis       Use each record axis as the ruler in linear mode.
                         Effective only with --scale_style ruler and
                         --track_layout above|below.
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
-                        interactive_svg, png, pdf, eps, ps; default: svg).
-                        PNG/PDF/EPS/PS require CairoSVG.
+                        interactive_svg, png, pdf, eps, ps; default: svg;
+                        png/pdf/eps/ps require CairoSVG).
   -l, --legend LEGEND   Legend position (default: "right"; "right", "left",
                         "top", "bottom", "none")
   --show_labels [{all,first,orthogroup_top,none}]
@@ -927,9 +1178,8 @@ options:
                         'none' (no labels). Default: 'none'
   --resolve_overlaps    Resolve overlaps (experimental; default: False).
   --label_whitelist LABEL_WHITELIST
-                        Path to a TSV file for label whitelisting by regex
-                        pattern (optional); mutually exclusive with
-                        --label_blacklist
+                        path to a file for label whitelisting (optional);
+                        mutually exclusive with --label_blacklist
   --label_blacklist LABEL_BLACKLIST
                         Comma-separated keywords for label blacklisting
                         (optional); mutually exclusive with --label_whitelist
@@ -939,7 +1189,7 @@ options:
   --label_table LABEL_TABLE
                         Path to a TSV file defining post-filter label text
                         overrides (optional)
-  --feature_visibility_table FEATURE_VISIBILITY_TABLE
+  --feature_visibility_table FEATURE_TABLE
                         Path to a TSV file defining per-feature visibility
                         overrides (optional)
   --annotation_table, --annotation-table ANNOTATION_TABLE
@@ -952,23 +1202,6 @@ options:
   --gc_height GC_HEIGHT
                         GC content/skew vertical width (optional; float;
                         default: 20 (pixels, 96 dpi))
-  --depth DEPTH [DEPTH ...]
-                        Depth TSV file(s) in samtools depth format. Provide
-                        one file for all records or one file per input record.
-  --depth_track DEPTH [DEPTH ...]
-                        Repeatable logical depth track. Each group accepts one
-                        shared file or one file per input record.
-  --depth_track_label LABEL [LABEL ...]
-                        Depth track label(s). Provide one label or one per
-                        --depth_track.
-  --depth_track_color COLOR [COLOR ...]
-                        Depth track fill color(s). Provide one color or one
-                        per --depth_track.
-  --show_depth          Show depth coverage track. Required only when no depth
-                        file option is supplied.
-  --depth_height DEPTH_HEIGHT
-                        Depth track height for linear mode (in px; must be
-                        > 0).
   --comparison_height COMPARISON_HEIGHT
                         Comparison block height (optional; float; optional;
                         default: 60 (pixels, 96 dpi))
@@ -1018,7 +1251,16 @@ options:
                         Reverse complement record per input file (repeatable;
                         order matches input files). Accepted values: 1/0,
                         true/false, yes/no.
+  --session SESSION     Regenerate a diagram from a plain or gzip-compressed
+                        gbdraw GUI session JSON file.
+  --save_session        Write one GUI-loadable .gbdraw-session.json sidecar
+                        for this run.
+  --session_output PATH
+                        Write the session sidecar to PATH; use a .gz suffix
+                        for gzip compression; implies --save_session.
 ```
+
+<!-- END GENERATED LINEAR HELP -->
 
 `--resolve_overlaps` assigns overlapping genomic features to additional lanes.
 Linear layout measures those lanes and their labels per record, then repacks
@@ -1065,8 +1307,8 @@ gbdraw linear \
 The placeholder is a missing value, not a zero-coverage table. gbdraw omits
 the Depth group and quantitative axis for that record while preserving the
 logical index used by labels, colors, shared axes, and custom track slots. In
-Linear mode it also retains the missing slot's reserve band, so that cell does
-not compact or renumber the record's stack.
+Linear mode the missing cell reserves no vertical geometry, so later numeric
+tracks compact without renumbering the logical series.
 
 For `--protein_blastp_mode`, gbdraw first uses a bundled native LOSAT binary
 when one is available. The current package bundles LOSAT for Linux x86_64.

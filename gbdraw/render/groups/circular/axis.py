@@ -16,16 +16,14 @@ class AxisGroup:
     def __init__(
         self,
         radius: float,
-        config_dict: dict,
         canvas_config: dict,
-        cfg: GbdrawConfig | None = None,
+        *,
+        cfg: GbdrawConfig,
     ) -> None:
         self.radius: float = radius
         self.axis_group = Group(id="Axis")
-        self.config_dict = config_dict
         self.canvas_config = canvas_config
         self.length_param = self.canvas_config.length_param
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.stroke_color = cfg.objects.axis.circular.stroke_color
         self.stroke_width = cfg.objects.axis.circular.stroke_width.for_length_param(self.length_param)
         self.add_elements_to_group()

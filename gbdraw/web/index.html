@@ -1300,9 +1300,9 @@
                                 <div v-else class="space-y-2">
                                     <div class="grid grid-cols-2 gap-1">
                                         <div class="col-span-2">
-                                            <label class="text-[9px] flex items-center">blastp mode <help-tip text="Pairwise draws top protein hits, Orthogroups keeps reciprocal best-hit groups, and Collinear mode clusters selected edge links into span ribbons."></help-tip></label>
+                                            <label class="text-[9px] flex items-center">blastp mode <help-tip text="Pairwise draws top protein hits, Similarity groups keeps reciprocal best-hit groups, and Collinear mode clusters selected edge links into span ribbons."></help-tip></label>
                                             <select v-model="losat.blastp.mode" @change="losat.blastp.mode === 'collinear' && (adv.pairwise_match_style = 'curve')" class="form-input px-1 py-0.5 text-xs">
-                                                <option value="orthogroup">Orthogroups</option>
+                                                <option value="orthogroup">Similarity groups</option>
                                                 <option value="collinear">Collinear blocks</option>
                                                 <option value="pairwise">Pairwise</option>
                                             </select>
@@ -1313,8 +1313,8 @@
                                         </div>
                                         <template v-if="losat.blastp.mode === 'collinear'">
                                             <div>
-                                                <label class="text-[9px] flex items-center">Max unit gap <help-tip text="Maximum CDS-order gap between neighboring Orthogroup RBH anchors that can be merged into one span ribbon."></help-tip></label>
-                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxGeneGap" class="form-input px-1 py-0.5 text-xs">
+                                                <label class="text-[9px] flex items-center">Max unit gap <help-tip text="Maximum CDS-order gap between neighboring similarity-group RBH anchors that can be merged into one span ribbon."></help-tip></label>
+                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Min block genes <help-tip text="Minimum connected genes required for a Collinear ribbon. Use 1 to include singleton links."></help-tip></label>
@@ -1336,7 +1336,7 @@
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Diagonal drift <help-tip text="Maximum order-space diagonal drift allowed when merging neighboring Orthogroup RBH anchors."></help-tip></label>
+                                                <label class="text-[9px] flex items-center">Diagonal drift <help-tip text="Maximum order-space diagonal drift allowed when merging neighboring similarity-group RBH anchors."></help-tip></label>
                                                 <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxDiagonalDrift" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
@@ -1346,20 +1346,20 @@
                                         </template>
                                         <div class="col-span-2 grid grid-cols-2 gap-1 pt-2 border-t border-slate-200">
                                             <div>
-                                                <label class="text-[9px] flex items-center">Bitscore <help-tip text="Minimum LOSATP blastp bitscore retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
-                                                <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" placeholder="50">
+                                                <label class="text-[9px] flex items-center">Bitscore <help-tip text="Minimum LOSATP blastp bitscore retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
+                                                <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))">
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">E-value <help-tip text="Maximum LOSATP blastp e-value retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
-                                                <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input px-1 py-0.5 text-xs" placeholder="1e-2">
+                                                <label class="text-[9px] flex items-center">E-value <help-tip text="Maximum LOSATP blastp e-value retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
+                                                <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'evalue'))">
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Minimum Identity <help-tip text="Minimum LOSATP blastp percent identity retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
-                                                <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" placeholder="0">
+                                                <label class="text-[9px] flex items-center">Minimum Identity <help-tip text="Minimum LOSATP blastp percent identity retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
+                                                <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'identity'))">
                                             </div>
                                             <div>
-                                                <label class="text-[9px] flex items-center">Minimum Length <help-tip text="Minimum LOSATP blastp alignment length retained before Pairwise, Orthogroup, or Collinear reduction."></help-tip></label>
-                                                <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" placeholder="0">
+                                                <label class="text-[9px] flex items-center">Minimum Length <help-tip text="Minimum LOSATP blastp alignment length retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
+                                                <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))">
                                             </div>
                                         </div>
                                     </div>
@@ -1691,7 +1691,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-brackets-curly"></i> Region Annotations <help-tip text="Create reusable coordinate- or feature-targeted annotation sets, then add an Annotations row in Custom Track Slots."></help-tip></summary>
+                        <summary><i class="ph ph-brackets-curly"></i> Region Annotations <help-tip text="Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement."></help-tip></summary>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()"><i class="ph ph-plus"></i> Add set</button>
@@ -1744,8 +1744,11 @@
                                     </div>
                                     <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
                                         <input v-model="item.label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Label">
-                                        <select v-model="item.mark" class="form-input px-1 py-0.5 text-[10px]"><option value="line">Line</option><option value="bracket">Bracket</option><option value="band">Band</option></select>
-                                        <input type="number" min="0" v-model.number="item.lane" class="form-input w-14 px-1 py-0.5 text-[10px]" placeholder="Lane">
+                                        <select v-model="item.mark" class="form-input px-1 py-0.5 text-[10px]"><option value="highlight">Highlight (behind features)</option><option value="band">Band (annotation lane)</option><option value="line">Line</option><option value="bracket">Bracket</option></select>
+                                        <div class="flex items-center gap-0.5">
+                                            <input type="number" min="0" v-model.number="item.lane" :disabled="item.mark === 'highlight'" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" placeholder="Auto" aria-label="Annotation lane">
+                                            <help-tip text="Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band."></help-tip>
+                                        </div>
                                     </div>
                                     <div class="grid grid-cols-3 gap-1 items-center">
                                         <input type="color" v-model="set.defaultStyle.stroke" class="form-input h-7 p-0" title="Stroke color">
@@ -1832,19 +1835,19 @@
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
                                         <label class="input-label text-[10px]">Bitscore</label>
-                                        <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input form-input-compact" placeholder="50">
+                                        <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('circular', 'min_bitscore') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'min_bitscore'))">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">E-value</label>
-                                        <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input form-input-compact" placeholder="1e-2">
+                                        <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('circular', 'evalue') : String($event.target.value).trim()" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'evalue'))">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Minimum Identity</label>
-                                        <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                        <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('circular', 'identity') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'identity'))">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Minimum Length</label>
-                                        <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                        <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('circular', 'alignment_length') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'alignment_length'))">
                                     </div>
                                 </div>
                             </div>
@@ -1917,8 +1920,8 @@
                     <div class="card-header"><i class="ph ph-sliders"></i> Basic</div>
                     <div class="space-y-2">
                         <div>
-                            <label class="input-label">Output Prefix <help-tip text="Prefix for output files. Leave empty to use the record name (e.g., NC_000xxx)."></help-tip></label>
-                            <input type="text" v-model="form.prefix" class="form-input" placeholder="Optional (Default: Record ID)">
+                            <label class="input-label">Output Prefix <help-tip :text="mode === 'circular' ? 'Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.' : 'Prefix for output files. Leave empty to use out.'"></help-tip></label>
+                            <input type="text" v-model="form.prefix" class="form-input" :placeholder="mode === 'circular' ? 'Optional (Default: Record ID)' : 'Optional (Default: out)'">
                         </div>
 
                         <template v-if="mode === 'circular'">
@@ -2809,6 +2812,8 @@
                                     <option value="bottom">Bottom</option>
                                     <option value="upper_left" v-if="mode === 'circular'">Upper Left</option>
                                     <option value="upper_right" v-if="mode === 'circular'">Upper Right</option>
+                                    <option value="lower_left" v-if="mode === 'circular'">Lower Left</option>
+                                    <option value="lower_right" v-if="mode === 'circular'">Lower Right</option>
                                     <option value="none">None</option>
                                 </select>
                             </div>
@@ -2856,7 +2861,7 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The CLI uses the selected palette directly; a -d override file is generated only for colors changed from that palette."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The selected palette supplies unchanged colors; colors you edit override it."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline">Reset</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
@@ -2971,7 +2976,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-shapes"></i> Features <help-tip text="Select which feature types to draw, how they are shaped, and how feature geometry, blocks, and lines are styled."></help-tip></summary>
+                        <summary><i class="ph ph-shapes"></i> Features <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <label class="input-label adv-section-title">Feature Types <help-tip text="Select which feature types to draw."></help-tip></label>
@@ -2982,10 +2987,12 @@
                                             :value="getFeatureShape(f)"
                                             @change="setFeatureShape(f, $event.target.value)"
                                             class="border border-blue-200 rounded px-1 py-0 text-[9px] bg-white text-slate-700"
-                                            title="Feature shape"
+                                            title="Feature rendering"
+                                            :aria-label="`Rendering for ${f}`"
                                         >
                                             <option value="arrow">Arrow</option>
                                             <option value="rectangle">Rectangle</option>
+                                            <option value="underlay">Underlay</option>
                                         </select>
                                         <button @click="removeFeature(f)" class="text-slate-400 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors">
                                             <i class="ph ph-x"></i>
@@ -3005,7 +3012,7 @@
 
                             <div>
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <label class="input-label adv-section-title mb-0">Feature Visibility <help-tip text="Rules are written as the CLI feature visibility table. The row order is the matching priority. Off hides and removes a feature from protein comparison inputs; Exclude from matching only removes it from protein comparison inputs."></help-tip></label>
+                                    <label class="input-label adv-section-title mb-0">Feature Visibility <help-tip text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></label>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
@@ -3135,16 +3142,16 @@
                         <summary><i class="ph ph-text-t"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
-                                <label class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Orthogroup Record' requires LOSATP orthogroup or collinear mode."></help-tip></label>
+                                <label class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Similarity Group Record' requires LOSATP similarity-group or collinear mode."></help-tip></label>
                                 <select v-model="form.show_labels_linear" class="form-input text-xs py-1">
                                     <option value="none">None</option>
                                     <option value="all">All Records</option>
                                     <option value="first">First Record Only</option>
-                                    <option value="orthogroup_top" :disabled="!(blastSource === 'losat' && losatProgram === 'blastp' && (losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear')) && form.show_labels_linear !== 'orthogroup_top'">Top Orthogroup Record</option>
+                                    <option value="orthogroup_top" :disabled="!(blastSource === 'losat' && losatProgram === 'blastp' && (losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear')) && form.show_labels_linear !== 'orthogroup_top'">Top Similarity Group Record</option>
                                 </select>
                             </div>
                             <div v-else>
-                                <label class="input-label text-[10px] mb-1">Label Mode <help-tip text="Set circular label placement. 'Out' places labels outside, 'Both' places labels outside and inside (GC/skew are auto-suppressed by CLI in this mode)."></help-tip></label>
+                                <label class="input-label text-[10px] mb-1">Label Mode <help-tip text="Set circular label placement. 'Out' places labels outside; 'Both' places labels outside and inside. With horizontal inner labels, implicit GC content and GC skew tracks are hidden to avoid overlap."></help-tip></label>
                                 <select v-model="form.labels_mode" class="form-input text-xs py-1">
                                     <option value="none">None</option>
                                     <option value="out">Out</option>
@@ -3397,7 +3404,7 @@
                                 </label>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for the scale label text. Used by bar style and by ruler labels unless the CLI-only ruler override is used."></help-tip></label>
+                                        <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for scale label text. Used by bar style and ruler labels."></help-tip></label>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_font_size, 'scaleFontSize')" :text="autoValueText('scaleFontSize')">
                                             <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
@@ -3596,19 +3603,19 @@
                             <div v-if="!(blastSource === 'losat' && losatProgram === 'blastp')" class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <label class="input-label text-[10px]">Bitscore</label>
-                                    <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? 50 : Number($event.target.value)" class="form-input form-input-compact" placeholder="50">
+                                    <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))">
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">E-value</label>
-                                    <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? '1e-2' : String($event.target.value).trim()" class="form-input form-input-compact" placeholder="1e-2">
+                                    <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'evalue'))">
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Minimum Identity</label>
-                                    <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                    <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'identity'))">
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Minimum Length</label>
-                                    <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? 0 : Number($event.target.value)" class="form-input form-input-compact" placeholder="0">
+                                    <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))">
                                 </div>
                             </div>
                         </div>
@@ -4135,19 +4142,19 @@
                         <div v-if="canUseClickedOrthogroupActions" class="grid grid-cols-2 gap-2">
                             <button @click="openClickedOrthogroupInEditor"
                                     class="px-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Open orthogroup editor">
+                                    title="Open similarity-group editor">
                                 <i class="ph ph-sidebar-simple"></i>
                                 <span>Open</span>
                             </button>
                             <button @click="alignByClickedOrthogroup"
                                     class="px-2 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Align by this orthogroup">
+                                    title="Align by this similarity group">
                                 <i class="ph ph-arrows-left-right"></i>
                                 <span>Align</span>
                             </button>
                             <button @click="highlightClickedOrthogroup"
                                     class="px-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Highlight orthogroup">
+                                    title="Highlight similarity group">
                                 <i class="ph ph-target"></i>
                                 <span>Highlight</span>
                             </button>
@@ -4155,14 +4162,14 @@
                                     :disabled="!selectedOrthogroupAlignmentFeature"
                                     class="px-2 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                                     :class="selectedOrthogroupAlignmentFeature ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'"
-                                    title="Reset orthogroup alignment">
+                                    title="Reset similarity-group alignment">
                                 <i class="ph ph-arrow-counter-clockwise"></i>
                                 <span>Reset</span>
                             </button>
                         </div>
                         <div v-if="clickedOrthogroupDetail" class="border-y border-slate-100 py-3">
                             <div class="flex items-center justify-between mb-2">
-                                <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Orthogroup</div>
+                                <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Similarity group</div>
                                 <div class="text-[10px] text-slate-500">{{ clickedOrthogroupDetail.id }}</div>
                             </div>
                             <div class="mb-3">
@@ -4230,9 +4237,9 @@
                             </div>
                             <div v-if="clickedOrthogroupDetail.currentMember" class="text-xs text-slate-600 mb-3">
                                 <div class="text-[10px] text-slate-400 mb-1">Current member</div>
-                                <div class="font-medium truncate">{{ clickedOrthogroupDetail.currentMember.label || clickedFeature.label }}</div>
+                                <div class="font-medium truncate">{{ clickedOrthogroupDetail.currentMember.product || clickedOrthogroupDetail.currentMember.note || clickedOrthogroupDetail.currentMember.displayProteinId || 'Member' }}</div>
                                 <div class="font-mono text-[10px] text-slate-500 break-all">
-                                    {{ clickedOrthogroupDetail.currentMember.sourceProteinId || clickedFeature.sourceProteinId || clickedOrthogroupDetail.currentMember.proteinId || clickedFeature.proteinId }}
+                                    {{ clickedOrthogroupDetail.currentMember.displayProteinId || '' }}
                                 </div>
                                 <div class="text-[10px] text-slate-500">
                                     {{ clickedOrthogroupDetail.currentMember.recordId || '' }}
@@ -4262,7 +4269,7 @@
                                                     {{ Number(member.start) + 1 }}..{{ member.end }}
                                                     <span v-if="member.strand">({{ member.strand }})</span>
                                                 </td>
-                                                <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.sourceProteinId || member.proteinId }}</td>
+                                                <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.displayProteinId || '' }}</td>
                                                 <td class="px-2 py-1 min-w-[10rem]">{{ member.product || member.note || '' }}</td>
                                                 <td class="px-2 py-1 whitespace-nowrap">
                                                     <div class="grid grid-cols-2 gap-1 w-24">
@@ -4369,7 +4376,7 @@
                                 <option value="exclude_matching">Exclude from matching (leave visibility unchanged)</option>
                             </select>
                             <p class="text-[10px] text-slate-400 mt-1">
-                                Choose a scope when orthogroup, product, or protein ID rules are available.
+                                Choose a scope when similarity-group, product, or protein ID rules are available.
                             </p>
                         </div>
                         </div>
@@ -4712,13 +4719,13 @@
                                 <div v-if="section.blockOrthogroups && section.blockOrthogroups.length"
                                      class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
                                     <div class="bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase text-slate-500">
-                                        Orthogroups covered
+                                        Similarity groups covered
                                     </div>
                                     <div class="overflow-auto custom-scrollbar max-h-52">
                                         <table class="min-w-[54rem] w-full text-xs">
                                             <thead class="bg-white sticky top-0">
                                                 <tr class="text-[10px] uppercase text-slate-400">
-                                                    <th class="text-left font-semibold px-3 py-2">OG ID</th>
+                                                    <th class="text-left font-semibold px-3 py-2">Group ID</th>
                                                     <th class="text-left font-semibold px-3 py-2">Display name</th>
                                                     <th class="text-left font-semibold px-3 py-2">Members</th>
                                                     <th class="text-left font-semibold px-3 py-2">Record coverage</th>
@@ -4748,7 +4755,7 @@
                                 <div v-if="section.memberRows && section.memberRows.length"
                                      class="mt-3 border border-slate-100 rounded-lg overflow-hidden">
                                     <div class="flex items-center justify-between gap-2 bg-slate-50 px-3 py-2">
-                                        <div class="text-[10px] font-semibold uppercase text-slate-500">Orthogroup members</div>
+                                        <div class="text-[10px] font-semibold uppercase text-slate-500">Similarity-group members</div>
                                         <div class="flex items-center gap-1">
                                             <button type="button"
                                                     @click="copyText(section.memberNtFasta)"
@@ -5280,7 +5287,7 @@
                                   orthogroupCount === 0 ? 'opacity-40 cursor-not-allowed hover:bg-transparent' : ''
                                 ]">
                             <i class="ph ph-tree-structure"></i>
-                            <span>Orthogroups</span>
+                            <span>Similarity groups</span>
                         </button>
                     </div>
 
@@ -5418,13 +5425,13 @@
                     <div v-show="rightDrawerTab === 'orthogroups'" class="flex-1 min-h-0 flex flex-col">
                         <div class="px-4 py-2 border-b border-slate-100 bg-white shrink-0 space-y-2">
                             <div class="flex items-center justify-between text-xs">
-                                <span class="font-semibold text-slate-600">{{ orthogroupCount }} orthogroups</span>
+                                <span class="font-semibold text-slate-600">{{ orthogroupCount }} similarity groups</span>
                                 <span class="text-[10px] text-slate-500 truncate max-w-[180px]" :title="selectedAlignmentTargetLabel">
                                     Align: {{ selectedAlignmentTargetLabel || 'none' }}
                                 </span>
                             </div>
                             <div class="grid grid-cols-[1fr_120px] gap-2">
-                                <input v-model="orthogroupSearch" data-history-ignore placeholder="Search orthogroups..." class="form-input text-xs w-full">
+                                <input v-model="orthogroupSearch" data-history-ignore placeholder="Search similarity groups..." class="form-input text-xs w-full">
                                 <select v-model="orthogroupSortMode" data-history-ignore class="form-select text-xs w-full">
                                     <option value="id">ID</option>
                                     <option value="name">Name</option>
@@ -5455,7 +5462,7 @@
                                     <span v-if="isOrthogroupRenamed(group)" class="text-blue-600 font-medium">Edited</span>
                                 </div>
                             </button>
-                            <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-400 text-xs">No orthogroups found</div>
+                            <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-400 text-xs">No similarity groups found</div>
                         </div>
 
                         <div v-if="selectedOrthogroup" class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 custom-scrollbar">
@@ -5470,7 +5477,7 @@
                                     <input type="text"
                                            :value="resolveOrthogroupName(selectedOrthogroup)"
                                            @input="setOrthogroupNameOverride(selectedOrthogroup.id, $event.target.value)"
-                                           placeholder="Rename this orthogroup"
+                                           placeholder="Rename this similarity group"
                                            class="form-input text-sm w-full">
                                 </div>
                                 <div>
@@ -5588,7 +5595,7 @@
                                                         {{ Number(member.start) + 1 }}..{{ member.end }}
                                                         <span v-if="member.strand">({{ member.strand }})</span>
                                                     </td>
-                                                    <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.sourceProteinId || member.proteinId }}</td>
+                                                    <td class="px-2 py-1 font-mono whitespace-nowrap">{{ member.displayProteinId || '' }}</td>
                                                     <td class="px-2 py-1 min-w-[10rem]">{{ member.product || member.note || '' }}</td>
                                                     <td class="px-2 py-1 whitespace-nowrap">
                                                         <div class="grid grid-cols-2 gap-1 w-24">

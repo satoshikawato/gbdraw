@@ -1,8 +1,8 @@
 """Public canonical session document lifecycle.
 
-Version 31 sessions carry a CLI-independent ``renderRequest`` and a mapping of
-embedded resources.  Resource paths exposed by :class:`MaterializedSession`
-are temporary and are valid only while the materialization context is active.
+Canonical sessions carry a CLI-independent ``renderRequest`` and a mapping of
+embedded resources. Resource paths exposed by :class:`MaterializedSession` are
+temporary and are valid only while the materialization context is active.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.render.output_paths import preflight_output_paths
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     CANONICAL_SESSION_MIN_VERSION,
@@ -27,14 +28,19 @@ from gbdraw.session_io import (
     SESSION_FORMAT,
     _read_session_text,
     _reject_duplicate_json_keys,
+    expand_session_feature_catalog,
     materialize_embedded_file,
+    normalize_current_session_artifacts,
     safe_embedded_filename,
     validate_session,
     write_session_json,
 )
 
 if TYPE_CHECKING:
-    from gbdraw.api.request_render import RequestRenderResult
+    from gbdraw.api.request_render import (
+        CircularBatchRenderResult,
+        RequestRenderResult,
+    )
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.session_request_codec import CanonicalRequestResource
 
@@ -44,9 +50,6 @@ _RESOURCE_REQUIRED_FIELDS = frozenset(
     {"kind", "name", "type", "size", "encoding", "data"}
 )
 _RESOURCE_OPTIONAL_FIELDS = frozenset({"lastModified"})
-_LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32
-
-
 class SessionError(ValidationError):
     """Base error for the public session bridge."""
 
@@ -79,7 +82,7 @@ class SessionDocument:
     source_path: Path | None = None
 
     def __post_init__(self) -> None:
-        cloned = copy.deepcopy(dict(self._data))
+        cloned = expand_session_feature_catalog(copy.deepcopy(dict(self._data)))
         _validate_document(cloned)
         object.__setattr__(self, "_data", cloned)
         if self.source_path is not None:
@@ -301,10 +304,11 @@ def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
         CanonicalRequestCodecError,
         decode_canonical_request,
     )
+    from gbdraw.api.session_compat import canonical_payload_for_session_decode
 
     try:
         return decode_canonical_request(
-            _canonical_payload_for_decode(document, payload),
+            canonical_payload_for_session_decode(document.version, payload),
             resource_paths=materialized.resource_paths,
             output_directory=materialized.output_directory,
         )
@@ -312,13 +316,18 @@ def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
         raise SessionConversionError(str(exc)) from exc
 
 
-def render_session(materialized: MaterializedSession) -> RequestRenderResult:
+def render_session(
+    materialized: MaterializedSession,
+) -> RequestRenderResult | CircularBatchRenderResult:
     """Decode and render a canonical session while its resources are active."""
 
-    from gbdraw.api.request_render import render_request
+    from gbdraw.api.session_compat import render_session_compatible_request
 
     try:
-        return render_request(session_to_request(materialized))
+        return render_session_compatible_request(
+            session_to_request(materialized),
+            materialized.document.to_dict(),
+        )
     except SessionError:
         raise
     except Exception as exc:
@@ -342,14 +351,15 @@ def build_session_document(
         CanonicalRequestCodecError,
         encode_canonical_request,
     )
+    from gbdraw.api.request_render import resolve_request
 
     try:
-        encoded = encode_canonical_request(request)
+        encoded = encode_canonical_request(resolve_request(request))
         resources = {
             resource.resource_id: _serialize_canonical_resource(resource)
             for resource in encoded.resources
         }
-    except CanonicalRequestCodecError as exc:
+    except (CanonicalRequestCodecError, ValidationError) as exc:
         raise SessionConversionError(str(exc)) from exc
 
     adjunct_data = copy.deepcopy(dict(adjunct or {}))
@@ -372,6 +382,7 @@ def build_session_document(
     data.update(adjunct_data)
     if title is not None:
         data["title"] = str(title)
+    normalize_current_session_artifacts(data)
     return SessionDocument(data)
 
 
@@ -382,8 +393,9 @@ def save_session_document(
     title: str | None = None,
     created_at: datetime | None = None,
     adjunct: Mapping[str, Any] | None = None,
+    overwrite: bool = False,
 ) -> SessionDocument:
-    """Build and atomically write a current-version canonical session document."""
+    """Build and write a current canonical session through a staged commit."""
 
     document = build_session_document(
         request,
@@ -392,7 +404,14 @@ def save_session_document(
         adjunct=adjunct,
     )
     try:
-        write_session_json(path, document._data)
+        output_path = Path(path)
+        preflight_output_paths((output_path,), overwrite=True)
+        if (output_path.exists() or output_path.is_symlink()) and not overwrite:
+            raise ValidationError(
+                f"Session output already exists: {output_path}. "
+                "Pass overwrite=True to replace it."
+            )
+        write_session_json(path, document._data, overwrite=overwrite)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     return document
@@ -404,10 +423,42 @@ def with_request_output(
     output_prefix: str | None = None,
     output_directory: str | Path | None = None,
     formats: str | tuple[str, ...] | None = None,
+    overwrite: bool | None = None,
 ) -> DiagramRequest:
     """Return a request with caller-owned replay output overrides."""
 
-    from gbdraw.api.requests import RenderOutputRequest
+    from gbdraw.api.requests import CircularBatchRequest, RenderOutputRequest
+
+    if isinstance(request, CircularBatchRequest):
+        item_count = len(request.outputs)
+        if output_prefix is None:
+            prefixes = tuple(output.output_prefix for output in request.outputs)
+        elif item_count == 1:
+            prefixes = (output_prefix,)
+        else:
+            prefixes = tuple(
+                f"{output_prefix}_{index}"
+                for index in range(1, item_count + 1)
+            )
+        outputs = tuple(
+            RenderOutputRequest(
+                output_prefix=prefix,
+                output_directory=(
+                    output_directory
+                    if output_directory is not None
+                    else current.output_directory
+                ),
+                formats=formats if formats is not None else current.formats,
+                overwrite=current.overwrite if overwrite is None else overwrite,
+                interactive_metadata_policy=current.interactive_metadata_policy,
+            )
+            for prefix, current in zip(
+                prefixes,
+                request.outputs,
+                strict=True,
+            )
+        )
+        return replace(request, outputs=outputs)
 
     current = request.output
     updated = RenderOutputRequest(
@@ -418,7 +469,7 @@ def with_request_output(
             else current.output_directory
         ),
         formats=formats if formats is not None else current.formats,
-        overwrite=current.overwrite,
+        overwrite=current.overwrite if overwrite is None else overwrite,
         interactive_metadata_policy=current.interactive_metadata_policy,
     )
     return replace(request, output=updated)
@@ -517,97 +568,6 @@ def _materialize_resources(
                 f"Canonical resource {resource_id!r} could not be materialized: {exc}"
             ) from exc
     return result
-
-
-def _canonical_payload_for_decode(
-    document: SessionDocument,
-    payload: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Return a detached payload with legacy slot semantics preserved."""
-
-    detached = copy.deepcopy(dict(payload))
-    if document.version > _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION:
-        return detached
-
-    diagram_options = detached.get("diagramOptions")
-    if not isinstance(diagram_options, Mapping):
-        return detached
-    detached_diagram_options = dict(diagram_options)
-    detached["diagramOptions"] = detached_diagram_options
-
-    tracks = detached_diagram_options.get("tracks")
-    if not isinstance(tracks, Mapping):
-        return detached
-    detached_tracks = dict(tracks)
-    detached_diagram_options["tracks"] = detached_tracks
-
-    slots = detached_tracks.get("linearTrackSlots")
-    if not isinstance(slots, list):
-        return detached
-    detached_tracks["linearTrackSlots"] = [
-        _migrate_legacy_linear_track_slot(slot) for slot in slots
-    ]
-    return detached
-
-
-def _migrate_legacy_linear_track_slot(slot: Any) -> Any:
-    """Remove v1 no-op feature geometry without changing other slot fields."""
-
-    if isinstance(slot, str):
-        return _migrate_legacy_linear_track_slot_spec(slot)
-    if not isinstance(slot, Mapping):
-        return slot
-
-    migrated = copy.deepcopy(dict(slot))
-    if (
-        migrated.get("kind") == "linearTrackSlot"
-        and str(migrated.get("renderer", "")).strip().lower() == "features"
-    ):
-        if "height" in migrated:
-            migrated["height"] = None
-        if "spacing" in migrated:
-            migrated["spacing"] = None
-    return migrated
-
-
-def _migrate_legacy_linear_track_slot_spec(spec: str) -> str:
-    """Strip height/spacing tokens from one v1 feature slot specification."""
-
-    head, separator, options = spec.partition("@")
-    if ":" not in head:
-        return spec
-    renderer = head.split(":", 1)[1].strip().lower()
-    if not separator:
-        return spec
-
-    option_parts = options.split(",")
-    parsed_parts: list[tuple[str, str]] = []
-    has_legacy_geometry = False
-    for part in option_parts:
-        stripped = part.strip()
-        if not stripped:
-            parsed_parts.append(("", part))
-            continue
-        if "=" not in stripped:
-            return spec
-        raw_key, raw_value = stripped.split("=", 1)
-        key = raw_key.strip().lower()
-        parsed_parts.append((key, part))
-        if key in {"h", "height", "spacing"}:
-            has_legacy_geometry = True
-        if key in {"renderer", "type"}:
-            renderer = raw_value.strip().lower()
-
-    if renderer != "features" or not has_legacy_geometry:
-        return spec
-    retained = [
-        part
-        for key, part in parsed_parts
-        if key not in {"h", "height", "spacing"}
-    ]
-    if not any(part.strip() for part in retained):
-        return head
-    return f"{head}@{','.join(retained)}"
 
 
 def _serialize_canonical_resource(

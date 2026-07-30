@@ -11,7 +11,7 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-session-request-'));
 await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
-const { buildCanonicalSessionRequest, projectCanonicalSessionRequest } = await import(
+const { buildCanonicalRenderRequest, projectCanonicalSessionRequest } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
 const {
@@ -22,6 +22,15 @@ const {
   parseLinearTrackSlotSpecs
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'linear-track-slots.js'))
+);
+const {
+  buildCircularTrackSlotSpec,
+  migrateLegacyCircularTrackSlot,
+  migrateLegacyCircularTrackSlotSpec,
+  parseCircularTrackSlotSpec,
+  resolveCircularTrackFeaturePlacement
+} = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'circular-track-slots.js'))
 );
 const { validateTrackSlotBindingInvariants } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'track-slot-validation.js'))
@@ -251,7 +260,7 @@ assert.throws(
     anchorlessRenderers: ['ticks', 'spacer'],
     depthTrackCount: 1
   }),
-  /cannot combine spacing/
+  /obsolete field 'spacing'/
 );
 assert.throws(
   () => validateTrackSlotBindingInvariants([
@@ -292,6 +301,7 @@ const state = {
     min_bitscore: 50, identity: 70, alignment_length: 0, plot_title_position: 'none',
     gc_content_mode: 'deviation', gc_content_show_axis: true, gc_content_show_ticks: true,
     depth_color: '#4A90E2', depth_show_axis: true, depth_show_ticks: true,
+    depth_large_tick_interval: 25,
     pairwise_match_style: 'ribbon', multi_record_size_mode: 'auto',
     multi_record_min_radius_ratio: 0.55, multi_record_column_gap_ratio: 0.10,
     multi_record_row_gap_ratio: 0.05, multi_record_positions: [], depth_tracks: [],
@@ -318,7 +328,7 @@ const state = {
   circularConservation: { reference: 'auto', labels: '', series: [] },
   blastSource: ref('files'),
   losatProgram: ref('blastn'),
-  losat: { blastp: {} },
+  losat: { blastp: { collinearMaxUnitGap: 2 } },
   selectedOrthogroupAlignmentFeature: ref(''),
   linearRecordLayoutEnabled: ref(false),
   linearRecordGap: ref(24),
@@ -326,6 +336,43 @@ const state = {
   linearComparisons: [],
   annotationSets: []
 };
+
+const stateForCanonicalProjection = (projection) => {
+  const config = projection.config || {};
+  const linearLayout = config.linearRecordLayout || {};
+  const palette = String(config.palette || 'default');
+  return {
+    ...state,
+    mode: ref(projection.mode),
+    cInputType: ref(projection.inputType),
+    lInputType: ref(projection.inputType),
+    form: { ...state.form, ...structuredClone(config.form || {}) },
+    adv: { ...state.adv, ...structuredClone(config.adv || {}) },
+    losat: structuredClone(config.losat || { threadsPerJob: 'auto', blastp: {} }),
+    blastSource: ref(config.blastSource || 'files'),
+    losatProgram: ref(config.losatProgram || 'blastn'),
+    selectedOrthogroupAlignmentFeature: ref(
+      projection.pipelineState?.selectedOrthogroupAlignmentFeature || ''
+    ),
+    currentColors: ref(structuredClone(config.colors || {})),
+    selectedPalette: ref(palette),
+    paletteDefinitions: ref({ [palette]: {} }),
+    manualSpecificRules: structuredClone(config.rules || []),
+    featureVisibilityRules: ref(structuredClone(
+      projection.semanticFeatureState?.featureVisibilityManualRules || []
+    )),
+    filterMode: ref(config.filterMode || 'None'),
+    manualBlacklist: ref(String(config.blacklistText || '')),
+    manualWhitelist: structuredClone(config.whitelist || []),
+    manualPriorityRules: structuredClone(config.qualifierPriorityRules || []),
+    linearRecordLayoutEnabled: ref(Boolean(linearLayout.enabled)),
+    linearRecordGap: ref(linearLayout.recordGap ?? 24),
+    linearRecordRows: structuredClone(linearLayout.rows || []),
+    linearComparisons: structuredClone(linearLayout.comparisons || []),
+    annotationSets: structuredClone(config.annotationSets || [])
+  };
+};
+
 const genbankText = `LOCUS       WEBTEST                    4 bp    DNA     linear   UNK 01-JAN-1980
 DEFINITION  Web canonical session fixture.
 ACCESSION   WEBTEST
@@ -348,14 +395,365 @@ const genbank = {
 };
 const filesData = { c_gb: genbank, linearSeqs: [] };
 
-const canonical = buildCanonicalSessionRequest({ state, filesData });
-assert.equal(canonical.renderRequest.schema, 2);
+state.form.multi_record_canvas = true;
+const canonical = buildCanonicalRenderRequest({ state, filesData });
+state.form.multi_record_canvas = false;
+assert.equal(canonical.renderRequest.schema, 5);
 assert.equal(canonical.renderRequest.mode, 'circular');
+assert.equal(canonical.renderRequest.grouping, 'grid');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
 assert.equal(canonical.resources['record-1-genbank'].kind, 'genbank');
+assert.equal(canonical.resources['record-1-genbank'].name, 'record-1-genbank-input.gb');
 assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
+assert.equal(canonical.webFiles.resourceOriginalNames['record-1-genbank'], 'input.gb');
+assert.equal(canonical.webFiles.circularInputOriginalName, 'input.gb');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
-assert.equal(canonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'horizontal');
+assert.equal(canonical.renderRequest.output.overwrite, false);
+assert.deepEqual(canonical.renderRequest.diagramOptions.output, {
+  legend: 'right',
+  plotTitlePosition: 'none'
+});
+assert.equal(
+  Object.prototype.hasOwnProperty.call(
+    canonical.renderRequest.diagramOptions.output,
+    'outputPrefix'
+  ),
+  false
+);
+const circularConfigOverrides = canonical.renderRequest.diagramOptions.configOverrides;
+assert.ok(Object.keys(circularConfigOverrides).every((path) => path.includes('.')));
+assert.ok(Object.values(circularConfigOverrides).every((value) => value !== null));
+assert.equal(circularConfigOverrides['labels.circular.scope'], 'none');
+assert.equal(circularConfigOverrides['labels.circular.placement'], 'horizontal');
+assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
+assert.equal(canonical.renderRequest.diagramOptions.evalue, 1e-5);
+assert.equal(canonical.renderRequest.diagramOptions.bitscore, 50);
+assert.equal(canonical.renderRequest.diagramOptions.identity, 70);
+assert.equal(canonical.renderRequest.diagramOptions.alignmentLength, 0);
+assert.equal(
+  circularConfigOverrides['objects.depth.large_tick_interval'],
+  25
+);
+assert.equal(projectCanonicalSessionRequest(canonical).config.adv.depth_large_tick_interval, 25);
+state.form.labels_mode = 'out';
+const outerLabelsCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(
+  outerLabelsCanonical.renderRequest.diagramOptions.configOverrides[
+    'labels.circular.scope'
+  ],
+  'outer'
+);
+assert.equal(
+  projectCanonicalSessionRequest(outerLabelsCanonical).config.form.labels_mode,
+  'out'
+);
+state.form.labels_mode = 'both';
+const bothLabelsCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(
+  bothLabelsCanonical.renderRequest.diagramOptions.configOverrides[
+    'labels.circular.scope'
+  ],
+  'both'
+);
+assert.equal(
+  projectCanonicalSessionRequest(bothLabelsCanonical).config.form.labels_mode,
+  'both'
+);
+state.form.labels_mode = 'none';
+
+state.circularRecordList.value = [{ selector: '#1', record_id: 'single.id' }];
+state.form.prefix = '';
+const implicitSingleCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(implicitSingleCanonical.renderRequest.grouping, 'single');
+assert.equal(implicitSingleCanonical.webFiles.circularOutputPrefixExplicit, false);
+assert.deepEqual(
+  implicitSingleCanonical.renderRequest.records[0].selector,
+  { kind: 'recordId', value: 'single.id' }
+);
+assert.equal(implicitSingleCanonical.renderRequest.output.prefix, 'single.id');
+assert.equal(projectCanonicalSessionRequest(implicitSingleCanonical).config.form.prefix, '');
+
+state.form.prefix = 'release.v1';
+const explicitSingleCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(explicitSingleCanonical.renderRequest.output.prefix, 'release.v1');
+assert.equal(explicitSingleCanonical.webFiles.circularOutputPrefixExplicit, true);
+assert.equal(
+  projectCanonicalSessionRequest(explicitSingleCanonical).config.form.prefix,
+  'release.v1'
+);
+
+const explicitOneRecordBatch = structuredClone(explicitSingleCanonical);
+explicitOneRecordBatch.renderRequest.grouping = 'batch';
+explicitOneRecordBatch.renderRequest.output = [
+  explicitOneRecordBatch.renderRequest.output
+];
+const oneRecordBatchProjection = projectCanonicalSessionRequest(
+  explicitOneRecordBatch
+);
+assert.equal(
+  oneRecordBatchProjection.config.adv.circular_grouping_intent,
+  'batch'
+);
+Object.assign(state.form, oneRecordBatchProjection.config.form);
+Object.assign(state.adv, oneRecordBatchProjection.config.adv);
+const resavedOneRecordBatch = buildCanonicalRenderRequest({
+  state,
+  filesData: oneRecordBatchProjection.files
+});
+assert.equal(resavedOneRecordBatch.renderRequest.grouping, 'batch');
+assert.equal(Array.isArray(resavedOneRecordBatch.renderRequest.output), true);
+assert.equal(
+  resavedOneRecordBatch.renderRequest.output.every(
+    (entry) => entry.overwrite === false
+  ),
+  true
+);
+state.adv.circular_grouping_intent = 'auto';
+
+const namingRecords = [
+  { selector: '#1', record_id: 'dup' },
+  { selector: '#2', record_id: 'dup_2' },
+  { selector: '#3', record_id: 'dup' }
+];
+state.circularRecordList.value = namingRecords;
+state.form.prefix = '';
+const implicitBatchCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(implicitBatchCanonical.renderRequest.grouping, 'batch');
+assert.deepEqual(
+  implicitBatchCanonical.renderRequest.output.map((output) => output.prefix),
+  ['dup', 'dup_2', 'dup_3']
+);
+assert.equal(
+  projectCanonicalSessionRequest(implicitBatchCanonical).config.form.prefix,
+  ''
+);
+assert.equal(
+  projectCanonicalSessionRequest(implicitBatchCanonical).config.form.multi_record_canvas,
+  false
+);
+
+state.form.prefix = 'release.v1';
+const explicitBatchCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.deepEqual(
+  explicitBatchCanonical.renderRequest.output.map((output) => output.prefix),
+  ['release.v1_1', 'release.v1_2', 'release.v1_3']
+);
+assert.equal(
+  projectCanonicalSessionRequest(explicitBatchCanonical).config.form.prefix,
+  'release.v1'
+);
+
+state.form.prefix = '';
+state.form.multi_record_canvas = true;
+const gridCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(gridCanonical.renderRequest.grouping, 'grid');
+assert.equal(gridCanonical.renderRequest.output.prefix, 'dup');
+assert.equal(projectCanonicalSessionRequest(gridCanonical).config.form.multi_record_canvas, true);
+
+for (const schema of [3, 4]) {
+  const branchOnlyCanonical = structuredClone(implicitBatchCanonical);
+  branchOnlyCanonical.renderRequest.schema = schema;
+  assert.throws(
+    () => projectCanonicalSessionRequest(branchOnlyCanonical),
+    /Unsupported canonical renderRequest schema/
+  );
+}
+const missingCurrentGrouping = structuredClone(canonical);
+delete missingCurrentGrouping.renderRequest.grouping;
+assert.throws(
+  () => projectCanonicalSessionRequest(missingCurrentGrouping),
+  /grouping/
+);
+
+state.form.prefix = 'web-session';
+state.form.multi_record_canvas = false;
+state.circularRecordList.value = [];
+
+state.adv.multi_record_size_mode = 'sqrt';
+assert.throws(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  /Circular multi-record size mode/
+);
+state.adv.multi_record_size_mode = 'auto';
+state.form.linear_track_layout = 'tuckin';
+assert.throws(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  /Linear track layout/
+);
+state.form.linear_track_layout = 'middle';
+state.adv.label_placement = 'on_feature';
+assert.throws(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  /Linear label placement/
+);
+state.adv.label_placement = 'auto';
+state.adv.circular_track_slots = [
+  { id: 'stale', renderer: 'dinucleotide_skew', spacing: null, params: {} }
+];
+assert.throws(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  /obsolete/
+);
+state.adv.circular_track_slots = [];
+
+state.adv.depth_tick_interval = 10;
+assert.throws(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  /depth_tick_interval is obsolete/
+);
+delete state.adv.depth_tick_interval;
+state.adv.depth_tracks = [{ tick_interval: 10 }];
+assert.throws(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  /tick_interval is obsolete/
+);
+state.adv.depth_tracks = [];
+state.losat.blastp.collinearMaxGeneGap = 3;
+assert.throws(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  /collinearMaxGeneGap is obsolete/
+);
+delete state.losat.blastp.collinearMaxGeneGap;
+
+for (const obsoleteKey of ['spacing', 'strict', 'compress', 'reserve']) {
+  assert.throws(
+    () => buildCircularTrackSlotSpec({
+      id: `obsolete_${obsoleteKey}`,
+      renderer: 'dinucleotide_skew',
+      side: 'inside',
+      [obsoleteKey]: obsoleteKey === 'spacing' ? '5' : true,
+      params: { nt: 'GC' }
+    }),
+    /obsolete/
+  );
+  assert.throws(
+    () => parseCircularTrackSlotSpec(
+      `obsolete_${obsoleteKey}:dinucleotide_skew@${obsoleteKey}=true`
+    ),
+    /obsolete/
+  );
+}
+const migratedLegacyCircularObject = migrateLegacyCircularTrackSlot({
+  id: 'legacy_object',
+  renderer: 'dinucleotide_skew',
+  spacing: '5px',
+  strict: true,
+  params: { nt: 'GC', compress: true, reserve: true }
+});
+assert.equal(migratedLegacyCircularObject.spacing, undefined);
+assert.equal(migratedLegacyCircularObject.strict, undefined);
+assert.equal(migratedLegacyCircularObject.params.compress, undefined);
+assert.equal(migratedLegacyCircularObject.params.reserve, undefined);
+assert.equal(migratedLegacyCircularObject.inner_gap_px, '5px');
+assert.equal(migratedLegacyCircularObject.outer_gap_px, '5px');
+const migratedLegacyCircularSpec = migrateLegacyCircularTrackSlotSpec(
+  'legacy_spec:dinucleotide_skew@spacing=4,strict=true,compress=true,reserve=true'
+);
+assert.equal(
+  migratedLegacyCircularSpec,
+  'legacy_spec:dinucleotide_skew@inner_gap_px=4,outer_gap_px=4'
+);
+
+state.adv.circular_track_slots_axis_index = 2;
+const circularSlotsDisabled = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(circularSlotsDisabled.renderRequest.diagramOptions.tracks.circularTrackSlots, null);
+assert.equal(circularSlotsDisabled.renderRequest.diagramOptions.tracks.circularTrackAxisIndex, null);
+state.adv.circular_track_slots_axis_index = null;
+
+const circularFeaturePresetCases = [
+  { preset: 'middle', laneDirection: 'split', side: 'overlay', axisIndex: 0 },
+  { preset: 'tuckin', laneDirection: 'inside', side: 'inside', axisIndex: 0 },
+  { preset: 'spreadout', laneDirection: 'outside', side: 'outside', axisIndex: 1 }
+];
+for (const { preset, laneDirection, side, axisIndex } of circularFeaturePresetCases) {
+  const featureSlot = {
+    id: 'features',
+    renderer: 'features',
+    enabled: true,
+    width: null,
+    radius: null,
+    inner_gap_px: null,
+    outer_gap_px: null,
+    side,
+    z: 0,
+    params: { lane_direction: laneDirection }
+  };
+  assert.deepEqual(
+    resolveCircularTrackFeaturePlacement(featureSlot, preset),
+    { laneDirection, side }
+  );
+  const liveSpec = buildCircularTrackSlotSpec(featureSlot, state.adv.nt, preset);
+  assert.match(liveSpec, new RegExp(`(?:@|,)lane_direction=${laneDirection}(?:,|$)`));
+
+  state.form.track_type = preset;
+  state.adv.circular_track_slots_enabled = true;
+  state.adv.circular_track_slots_axis_index = axisIndex;
+  state.adv.circular_track_slots = [featureSlot];
+  const presetCanonical = buildCanonicalRenderRequest({ state, filesData });
+  const canonicalSpec = presetCanonical.renderRequest.diagramOptions.tracks.circularTrackSlots[0];
+  assert.equal(canonicalSpec, liveSpec);
+
+  const presetProjection = projectCanonicalSessionRequest(presetCanonical);
+  const projectedFeature = presetProjection.config.adv.circular_track_slots[0];
+  assert.deepEqual(
+    resolveCircularTrackFeaturePlacement(projectedFeature, preset),
+    { laneDirection, side }
+  );
+  assert.equal(
+    buildCircularTrackSlotSpec(projectedFeature, state.adv.nt, preset),
+    canonicalSpec
+  );
+}
+
+for (const explicitLaneDirection of ['inside', 'outside', 'split']) {
+  const explicitSide = explicitLaneDirection === 'split' ? 'overlay' : explicitLaneDirection;
+  const explicitSlot = {
+    id: 'features',
+    renderer: 'features',
+    enabled: true,
+    side: explicitSide,
+    params: { lane_direction: explicitLaneDirection }
+  };
+  for (const preset of ['middle', 'tuckin', 'spreadout']) {
+    const spec = buildCircularTrackSlotSpec(explicitSlot, 'GC', preset);
+    assert.match(spec, new RegExp(`(?:@|,)lane_direction=${explicitLaneDirection}(?:,|$)`));
+    const parsed = parseCircularTrackSlotSpec(spec, 0, 'GC', preset);
+    assert.deepEqual(
+      resolveCircularTrackFeaturePlacement(parsed, preset),
+      { laneDirection: explicitLaneDirection, side: explicitSide }
+    );
+  }
+}
+
+state.form.track_type = 'tuckin';
+state.adv.circular_track_slots_enabled = false;
+state.adv.circular_track_slots_axis_index = null;
+state.adv.circular_track_slots = [];
+
+const legacyRepeatCanonical = structuredClone(canonical);
+legacyRepeatCanonical.renderRequest.schema = 2;
+legacyRepeatCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+legacyRepeatCanonical.renderRequest.diagramOptions.selectedFeaturesSet = ['repeat_region'];
+delete legacyRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region;
+assert.equal(
+  projectCanonicalSessionRequest(legacyRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  'rectangle'
+);
+
+const currentRepeatCanonical = structuredClone(canonical);
+currentRepeatCanonical.renderRequest.diagramOptions.selectedFeaturesSet = ['repeat_region'];
+delete currentRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region;
+assert.equal(
+  projectCanonicalSessionRequest(currentRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  'underlay'
+);
+
+const explicitRepeatCanonical = structuredClone(currentRepeatCanonical);
+explicitRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region = 'underlay';
+assert.equal(
+  projectCanonicalSessionRequest(explicitRepeatCanonical).config.adv.feature_shapes.repeat_region,
+  'underlay'
+);
 
 state.paletteDefinitions.value = { default: { CDS: '#cccccc' } };
 state.currentColors.value = { CDS: '#112233' };
@@ -371,7 +769,16 @@ state.featureVisibilityRules.value = [{
   qualifier: 'gene', value: '^alpha$', action: 'off'
 }];
 state.labelTextFeatureOverrides.f1 = 'Renamed alpha';
-const semanticCanonical = buildCanonicalSessionRequest({ state, filesData });
+const semanticCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: {
+    ...filesData,
+    d_color: { name: 'original-default-colors.tsv' },
+    t_color: { name: 'original-specific-colors.tsv' },
+    whitelist: { name: 'original-whitelist.tsv' },
+    qualifier_priority: { name: 'original-priority.tsv' }
+  }
+});
 const semanticProjection = projectCanonicalSessionRequest(semanticCanonical);
 assert.deepEqual(semanticProjection.config.colors, { CDS: '#112233' });
 assert.equal(semanticProjection.config.colorsAreOverrides, true);
@@ -388,6 +795,20 @@ assert.equal(semanticProjection.config.filterMode, 'Whitelist');
 assert.equal(semanticProjection.semanticFeatureState.featureVisibilityManualRules.length, 1);
 assert.equal(semanticProjection.semanticFeatureState.labelOverrideRows.length, 1);
 assert.equal(semanticProjection.semanticFeatureState.labelOverrideRows[0].labelText, 'Renamed alpha');
+assert.deepEqual(
+  {
+    dColor: semanticProjection.files.d_color.name,
+    tColor: semanticProjection.files.t_color.name,
+    whitelist: semanticProjection.files.whitelist.name,
+    priority: semanticProjection.files.qualifier_priority.name
+  },
+  {
+    dColor: 'original-default-colors.tsv',
+    tColor: 'original-specific-colors.tsv',
+    whitelist: 'original-whitelist.tsv',
+    priority: 'original-priority.tsv'
+  }
+);
 state.paletteDefinitions.value = { default: {} };
 state.currentColors.value = {};
 state.manualSpecificRules.splice(0);
@@ -426,9 +847,20 @@ assert.throws(
 );
 
 const blastTable = { ...genbank, name: 'hits.tsv', data: btoa('ref\tcmp\t99\t4\t0\t0\t1\t4\t4\t1\t1e-20\t50\n') };
+const blastTableB = { ...genbank, name: 'hits-b.tsv', data: btoa('ref\tcmp_b\t98\t4\t0\t0\t1\t4\t4\t1\t1e-18\t45\n') };
 const comparisonFasta = { ...genbank, name: 'comparison.fna', data: btoa('>cmp\nAACCGG\n') };
+const comparisonFastaB = {
+  ...comparisonFasta,
+  name: 'comparison-b.fna',
+  data: btoa('>cmp_b\nTTGGCC\n')
+};
+state.circularConservation.source = 'upload';
+state.circularConservation.reference = 'subject';
+state.circularConservation.labels = 'Comparison';
 state.circularConservation.series = [{ label: 'Comparison', color: '#E15759' }];
-const conservationCanonical = buildCanonicalSessionRequest({
+state.circularConservation.ring_width = 14;
+state.circularConservation.ring_gap = 3;
+const conservationCanonical = buildCanonicalRenderRequest({
   state,
   filesData: {
     ...filesData,
@@ -436,13 +868,230 @@ const conservationCanonical = buildCanonicalSessionRequest({
     c_conservation_sequence_sources: [comparisonFasta],
   },
 });
-assert.equal(conservationCanonical.renderRequest.diagramOptions.conservationSequenceSources, undefined);
-assert.deepEqual(conservationCanonical.webFiles.conservationSequenceSources, ['conservation-sequence-sources-1']);
+assert.deepEqual(
+  conservationCanonical.renderRequest.diagramOptions.conservationFastaFiles,
+  [{ resourceId: 'conservation-fasta-files-1', representation: 'file' }]
+);
+assert.equal(conservationCanonical.webFiles.conservationSequenceSources, undefined);
 assert.equal(
   projectCanonicalSessionRequest(conservationCanonical).files.c_conservation_sequence_sources[0].data,
   comparisonFasta.data
 );
+const conservationProjection = projectCanonicalSessionRequest(conservationCanonical);
+assert.equal(conservationProjection.config.circularConservation.enabled, true);
+assert.equal(conservationProjection.config.circularConservation.source, 'upload');
+assert.equal(conservationProjection.config.circularConservation.reference, 'subject');
+assert.equal(conservationProjection.config.circularConservation.labels, 'Comparison');
+assert.equal(conservationProjection.config.circularConservation.ring_width, 14);
+assert.equal(conservationProjection.config.circularConservation.ring_gap, 3);
+assert.deepEqual(
+  conservationProjection.config.circularConservation.series.map((entry) => ({
+    sourceIndex: entry.sourceIndex,
+    label: entry.label,
+    color: entry.color
+  })),
+  [{ sourceIndex: 0, label: 'Comparison', color: '#e15759' }]
+);
+assert.equal(
+  conservationProjection.config.circularConservation.series[0].fileName,
+  conservationProjection.files.c_conservation_blasts[0].name
+);
+
+state.circularConservation.labels = 'Stale A,Stale B';
+state.circularConservation.series = [
+  { sourceIndex: 1, label: 'Edited B', color: '#4E79A7' },
+  { sourceIndex: 0, label: 'Edited A', color: '#E15759' }
+];
+const reorderedUploadCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable, blastTableB],
+    c_conservation_sequence_sources: [comparisonFasta, comparisonFastaB]
+  }
+});
+assert.deepEqual(
+  reorderedUploadCanonical.renderRequest.diagramOptions.conservationLabels,
+  ['Edited B', 'Edited A']
+);
+assert.deepEqual(
+  reorderedUploadCanonical.renderRequest.diagramOptions.conservationColors,
+  ['#4e79a7', '#e15759']
+);
+assert.deepEqual(
+  reorderedUploadCanonical.renderRequest.diagramOptions.conservationBlastFiles
+    .map((ref) => reorderedUploadCanonical.resources[ref.resourceId].data),
+  [blastTableB.data, blastTable.data]
+);
+assert.deepEqual(
+  reorderedUploadCanonical.renderRequest.diagramOptions.conservationFastaFiles
+    .map((ref) => reorderedUploadCanonical.resources[ref.resourceId].data),
+  [comparisonFastaB.data, comparisonFasta.data]
+);
+const reorderedUploadProjection = projectCanonicalSessionRequest(reorderedUploadCanonical);
+assert.deepEqual(
+  reorderedUploadProjection.config.circularConservation.series.map((entry) => entry.label),
+  ['Edited B', 'Edited A']
+);
+
+state.circularConservation.source = 'losat';
+state.circularConservation.series = [
+  { sourceIndex: 1, label: 'Comparison B', color: '#4E79A7' },
+  { sourceIndex: 0, label: 'Comparison A', color: '#E15759' }
+];
+const losatConservationCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable],
+    c_conservation_fastas: [comparisonFasta, comparisonFastaB]
+  }
+});
+assert.equal(
+  losatConservationCanonical.renderRequest.diagramOptions.conservationBlastFiles,
+  undefined
+);
+assert.deepEqual(
+  losatConservationCanonical.webFiles.conservationLosatFastaSources,
+  [
+    'conservation-losat-fasta-files-1',
+    'conservation-losat-fasta-files-2'
+  ]
+);
+assert.equal(
+  losatConservationCanonical.resources['conservation-losat-fasta-files-1'].data,
+  comparisonFastaB.data
+);
+assert.deepEqual(
+  projectCanonicalSessionRequest(losatConservationCanonical)
+    .files.c_conservation_fastas.map((file) => file.data),
+  [comparisonFastaB.data, comparisonFasta.data]
+);
+const losatReplayCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable, blastTableB],
+    c_conservation_blasts_source: 'losat-cache',
+    c_conservation_fastas: [comparisonFasta, comparisonFastaB]
+  }
+});
+assert.equal(
+  losatReplayCanonical.renderRequest.diagramOptions.conservationBlastFiles.length,
+  2
+);
+assert.deepEqual(
+  losatReplayCanonical.renderRequest.diagramOptions.conservationBlastFiles
+    .map((ref) => losatReplayCanonical.resources[ref.resourceId].data),
+  [blastTableB.data, blastTable.data]
+);
+assert.deepEqual(
+  losatReplayCanonical.renderRequest.diagramOptions.conservationLabels,
+  ['Comparison B', 'Comparison A']
+);
+assert.equal(losatReplayCanonical.webFiles.conservationBlastSource, 'losat-cache');
+assert.deepEqual(
+  losatReplayCanonical.webFiles.conservationLosatFastaSources
+    .map((resourceId) => losatReplayCanonical.resources[resourceId].data),
+  [comparisonFastaB.data, comparisonFasta.data]
+);
+const losatReplayProjection = projectCanonicalSessionRequest(losatReplayCanonical);
+assert.equal(losatReplayProjection.files.c_conservation_blasts_source, 'losat-cache');
+const mixedFastaCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable, blastTableB],
+    c_conservation_blasts_source: 'losat-cache',
+    c_conservation_fastas: [comparisonFasta, null]
+  }
+});
+assert.deepEqual(
+  mixedFastaCanonical.webFiles.conservationLosatFastaSources,
+  [null, 'conservation-losat-fasta-files-2']
+);
+const mixedFastaProjection = projectCanonicalSessionRequest(mixedFastaCanonical);
+assert.equal(mixedFastaProjection.files.c_conservation_fastas.length, 2);
+assert.equal(mixedFastaProjection.files.c_conservation_fastas[0], null);
+assert.equal(
+  mixedFastaProjection.files.c_conservation_fastas[1].data,
+  comparisonFasta.data
+);
+const mixedFastaRebuilt = buildCanonicalRenderRequest({
+  state: {
+    ...stateForCanonicalProjection(mixedFastaProjection),
+    circularConservation: {
+      ...structuredClone(mixedFastaProjection.config.circularConservation),
+      source: 'losat'
+    }
+  },
+  filesData: mixedFastaProjection.files
+});
+assert.deepEqual(
+  mixedFastaRebuilt.webFiles.conservationLosatFastaSources,
+  [null, 'conservation-losat-fasta-files-2']
+);
+const missingFastasCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable, blastTableB],
+    c_conservation_blasts_source: 'losat-cache',
+    c_conservation_fastas: []
+  }
+});
+assert.deepEqual(
+  missingFastasCanonical.webFiles.conservationLosatFastaSources,
+  [null, null]
+);
+const missingFastasProjection = projectCanonicalSessionRequest(
+  missingFastasCanonical
+);
+assert.deepEqual(
+  missingFastasProjection.files.c_conservation_fastas,
+  [null, null]
+);
+const missingFastasRebuilt = buildCanonicalRenderRequest({
+  state: {
+    ...stateForCanonicalProjection(missingFastasProjection),
+    circularConservation: {
+      ...structuredClone(missingFastasProjection.config.circularConservation),
+      source: 'losat'
+    }
+  },
+  filesData: missingFastasProjection.files
+});
+assert.deepEqual(
+  missingFastasRebuilt.webFiles.conservationLosatFastaSources,
+  [null, null]
+);
+state.circularConservation = {
+  ...losatReplayProjection.config.circularConservation,
+  source: 'losat'
+};
+const losatResavedCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: losatReplayProjection.files
+});
+assert.equal(
+  losatResavedCanonical.renderRequest.diagramOptions.conservationBlastFiles.length,
+  2
+);
+const oldDerivedSession = structuredClone(losatReplayCanonical);
+delete oldDerivedSession.webFiles.conservationBlastSource;
+assert.equal(
+  projectCanonicalSessionRequest({
+    ...oldDerivedSession,
+    storedConfig: { circularConservation: { source: 'losat' } }
+  }).files.c_conservation_blasts_source,
+  'losat-cache'
+);
+state.circularConservation.source = 'upload';
+state.circularConservation.reference = 'auto';
+state.circularConservation.labels = '';
 state.circularConservation.series = [];
+state.circularConservation.ring_width = null;
+state.circularConservation.ring_gap = null;
 
 state.annotationSets = [{
   id: 'review',
@@ -459,7 +1108,7 @@ state.annotationSets = [{
   },
   legendLabel: null
 }];
-const annotationCanonical = buildCanonicalSessionRequest({ state, filesData });
+const annotationCanonical = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(annotationCanonical.renderRequest.diagramOptions.annotations.sets[0].id, 'review');
 assert.equal(projectCanonicalSessionRequest(annotationCanonical).config.annotationSets[0].annotations[0].id, 'window');
 assert.equal(
@@ -470,17 +1119,125 @@ assert.equal(
 state.annotationSets = [];
 
 state.adv.circular_label_placement = 'radial';
-const radialCanonical = buildCanonicalSessionRequest({ state, filesData });
-assert.equal(radialCanonical.renderRequest.diagramOptions.configOverrides.circular_label_placement, 'radial');
+state.adv.outer_label_x_offset = 0.9;
+state.adv.outer_label_y_offset = 0.91;
+state.adv.inner_label_x_offset = 0.97;
+state.adv.inner_label_y_offset = 0.98;
+const radialCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(
+  radialCanonical.renderRequest.diagramOptions.configOverrides['labels.circular.placement'],
+  'radial'
+);
+assert.equal(
+  radialCanonical.renderRequest.diagramOptions.configOverrides[
+    'labels.unified_adjustment.outer_labels.x_radius_offset'
+  ],
+  0.9
+);
 
 const projection = projectCanonicalSessionRequest(canonical);
 assert.equal(projection.mode, 'circular');
 assert.equal(projection.inputType, 'gb');
 assert.equal(projection.files.c_gb.data, genbank.data);
+assert.equal(projection.files.c_gb.name, 'input.gb');
 assert.equal(projection.config.form.prefix, 'web-session');
+assert.equal(projection.config.form.labels_mode, 'none');
 assert.equal(projection.config.adv.circular_label_placement, 'horizontal');
+assert.equal(projection.config.adv.evalue, '0.00001');
+assert.equal(projection.config.adv.min_bitscore, 50);
+assert.equal(projection.config.adv.identity, 70);
+assert.equal(projection.config.adv.alignment_length, 0);
+const legacyCircularLabelScope = structuredClone(canonical);
+legacyCircularLabelScope.renderRequest.schema = 2;
+legacyCircularLabelScope.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+legacyCircularLabelScope.renderRequest.diagramOptions.configOverrides = {
+  show_labels: true,
+  allow_inner_labels: true
+};
+assert.equal(
+  projectCanonicalSessionRequest(legacyCircularLabelScope).config.form.labels_mode,
+  'both'
+);
+const intermediateCircularLabelScope = structuredClone(canonical);
+intermediateCircularLabelScope.renderRequest.diagramOptions.configOverrides = {
+  'canvas.circular.show_labels': true,
+  'canvas.circular.allow_inner_labels': false
+};
+assert.equal(
+  projectCanonicalSessionRequest(intermediateCircularLabelScope).config.form.labels_mode,
+  'out'
+);
+const legacyOutputCanonical = structuredClone(canonical);
+legacyOutputCanonical.renderRequest.schema = 2;
+legacyOutputCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored-nested';
+assert.equal(
+  projectCanonicalSessionRequest(legacyOutputCanonical).config.form.prefix,
+  'web-session'
+);
+const missingLegacyOutputPrefix = structuredClone(legacyOutputCanonical);
+delete missingLegacyOutputPrefix.renderRequest.diagramOptions.output.outputPrefix;
+assert.throws(
+  () => projectCanonicalSessionRequest(missingLegacyOutputPrefix),
+  /outputPrefix/
+);
+const currentWithLegacyOutputPrefix = structuredClone(canonical);
+currentWithLegacyOutputPrefix.renderRequest.diagramOptions.output.outputPrefix = 'stale';
+assert.throws(
+  () => projectCanonicalSessionRequest(currentWithLegacyOutputPrefix),
+  /outputPrefix/
+);
+const legacyCircularOptions = structuredClone(legacyOutputCanonical);
+legacyCircularOptions.renderRequest.layout = { multiRecordSizeMode: 'sqrt' };
+assert.equal(
+  projectCanonicalSessionRequest(legacyCircularOptions).config.adv.multi_record_size_mode,
+  'auto'
+);
+const currentCircularOptions = structuredClone(canonical);
+currentCircularOptions.renderRequest.layout = { multiRecordSizeMode: 'sqrt' };
+assert.throws(
+  () => projectCanonicalSessionRequest(currentCircularOptions),
+  /Circular multi-record size mode/
+);
+for (const schema of [1, 2]) {
+  const sparseCircularCanonical = structuredClone(canonical);
+  sparseCircularCanonical.renderRequest.schema = schema;
+  sparseCircularCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+  delete sparseCircularCanonical.renderRequest.diagramOptions.evalue;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.bitscore;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.identity;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.alignmentLength;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.selectedFeaturesSet;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.config;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.configOverrides;
+  const sparseCircularProjection = projectCanonicalSessionRequest(sparseCircularCanonical);
+  assert.equal(sparseCircularProjection.config.adv.evalue, '0.00001');
+  assert.equal(sparseCircularProjection.config.adv.min_bitscore, 50);
+  assert.equal(sparseCircularProjection.config.adv.identity, 70);
+  assert.equal(sparseCircularProjection.config.adv.alignment_length, 0);
+  assert.deepEqual(
+    sparseCircularProjection.config.adv.features,
+    ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'repeat_region']
+  );
+  assert.equal(sparseCircularProjection.config.form.suppress_gc, false);
+  assert.equal(sparseCircularProjection.config.form.suppress_skew, false);
+}
+const repeatedResourcePrefix = structuredClone(canonical);
+repeatedResourcePrefix.resources['record-1-genbank'].name =
+  'record-1-genbank-record-1-genbank-original.gb';
+delete repeatedResourcePrefix.webFiles.resourceOriginalNames;
+delete repeatedResourcePrefix.webFiles.circularInputOriginalName;
+assert.equal(projectCanonicalSessionRequest(repeatedResourcePrefix).files.c_gb.name, 'original.gb');
 const radialProjection = projectCanonicalSessionRequest(radialCanonical);
 assert.equal(radialProjection.config.adv.circular_label_placement, 'radial');
+assert.deepEqual(
+  {
+    outerX: radialProjection.config.adv.outer_label_x_offset,
+    outerY: radialProjection.config.adv.outer_label_y_offset,
+    innerX: radialProjection.config.adv.inner_label_x_offset,
+    innerY: radialProjection.config.adv.inner_label_y_offset
+  },
+  { outerX: 0.9, outerY: 0.91, innerX: 0.97, innerY: 0.98 }
+);
 
 const customTrackProjection = projectCanonicalSessionRequest({
   renderRequest: {
@@ -510,7 +1267,6 @@ assert.deepEqual(customTrackProjection.config.adv.circular_track_slots[1], {
   enabled: true,
   width: '20px',
   radius: '0.65',
-  spacing: null,
   inner_gap_px: '1',
   outer_gap_px: '1',
   side: 'inside',
@@ -524,6 +1280,82 @@ assert.deepEqual(customTrackProjection.config.adv.circular_track_slots[1], {
   }
 });
 
+const legacyCircularSlotsCanonical = structuredClone(canonical);
+legacyCircularSlotsCanonical.renderRequest.schema = 2;
+legacyCircularSlotsCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+legacyCircularSlotsCanonical.renderRequest.diagramOptions.tracks = {
+  circularTrackSlots: [
+    {
+      id: 'legacy_object',
+      renderer: 'dinucleotide_skew',
+      side: 'inside',
+      spacing: { value: 5, unit: 'px' },
+      strict: true,
+      params: { nt: 'GC', reserve: true }
+    },
+    'legacy_spec:dinucleotide_content@side=inside,spacing=4,compress=true,nt=AT'
+  ],
+  circularTrackAxisIndex: 0,
+  centerReservedRadius: null
+};
+const legacyCircularSlotsProjection = projectCanonicalSessionRequest(
+  legacyCircularSlotsCanonical
+);
+assert.deepEqual(
+  legacyCircularSlotsProjection.config.adv.circular_track_slots.map((slot) => ({
+    id: slot.id,
+    inner: slot.inner_gap_px,
+    outer: slot.outer_gap_px
+  })),
+  [
+    { id: 'legacy_object', inner: '5', outer: '5' },
+    { id: 'legacy_spec', inner: '4', outer: '4' }
+  ]
+);
+const currentCircularObjectSlot = structuredClone(canonical);
+currentCircularObjectSlot.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+  { id: 'old', renderer: 'dinucleotide_skew', spacing: 5, params: {} }
+];
+assert.throws(
+  () => projectCanonicalSessionRequest(currentCircularObjectSlot),
+  /obsolete/
+);
+const currentStructuredCircularSlot = structuredClone(canonical);
+currentStructuredCircularSlot.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+  {
+    id: 'current',
+    renderer: 'dinucleotide_skew',
+    innerGapPx: { value: 2, unit: 'px' },
+    outerGapPx: { value: 3, unit: 'px' },
+    params: {}
+  }
+];
+assert.deepEqual(
+  projectCanonicalSessionRequest(
+    currentStructuredCircularSlot
+  ).config.adv.circular_track_slots[0],
+  {
+    id: 'current',
+    renderer: 'dinucleotide_skew',
+    enabled: true,
+    width: null,
+    radius: null,
+    inner_gap_px: '2',
+    outer_gap_px: '3',
+    side: null,
+    z: 0,
+    params: {}
+  }
+);
+const currentCircularStringSlot = structuredClone(canonical);
+currentCircularStringSlot.renderRequest.diagramOptions.tracks.circularTrackSlots = [
+  'old:dinucleotide_skew@reserve=true'
+];
+assert.throws(
+  () => projectCanonicalSessionRequest(currentCircularStringSlot),
+  /obsolete/
+);
+
 const secondGenbank = {
   ...genbank,
   name: 'second.gb',
@@ -532,6 +1364,7 @@ const secondGenbank = {
 const multiCircularProjection = projectCanonicalSessionRequest({
   renderRequest: {
     ...canonical.renderRequest,
+    grouping: 'grid',
     records: [
       canonical.renderRequest.records[0],
       { ...canonical.renderRequest.records[0], source: { kind: 'genbank', resourceId: 'record-2-genbank' } }
@@ -550,16 +1383,155 @@ assert.match(combinedCircularGenbank, /WEBTWO/);
 state.mode.value = 'linear';
 state.lInputType.value = 'gb';
 state.adv.comparison_height = 42.5;
+state.adv.linear_track_slots_axis_index = 2;
 const linearFilesData = {
   linearSeqs: [
-    { uid: 'first', gb: genbank, region_record_id: '', region_start: null, region_end: null, region_reverse: false },
-    { uid: 'second', gb: genbank, region_record_id: 'RecA', region_start: null, region_end: null, region_reverse: false },
-    { uid: 'third', gb: genbank, region_record_id: '#2', region_start: 10, region_end: 20, region_reverse: true }
+    {
+      uid: 'first', gb: genbank, losat_gencode: 11, losat_filename: 'first-to-second.losat.tsv',
+      region_record_id: '', region_start: null, region_end: null, region_reverse: false
+    },
+    {
+      uid: 'second', gb: genbank, losat_gencode: 4, losat_filename: 'second-to-third.losat.tsv',
+      region_record_id: 'RecA', region_start: null, region_end: null, region_reverse: false
+    },
+    {
+      uid: 'third', gb: genbank, losat_gencode: 1, losat_filename: '',
+      region_record_id: '#2', region_start: 10, region_end: 20, region_reverse: true
+    }
   ],
   linearComparisons: []
 };
-const linearCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
-assert.equal(linearCanonical.renderRequest.diagramOptions.configOverrides.comparison_height, 42.5);
+state.form.prefix = '';
+const linearDefaultCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
+assert.equal(linearDefaultCanonical.renderRequest.grouping, 'single');
+assert.equal(linearDefaultCanonical.renderRequest.output.prefix, 'out');
+state.form.prefix = 'web-session';
+const linearCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
+assert.ok(
+  Object.keys(linearCanonical.renderRequest.diagramOptions.configOverrides)
+    .every((path) => path.includes('.'))
+);
+assert.ok(
+  Object.values(linearCanonical.renderRequest.diagramOptions.configOverrides)
+    .every((value) => value !== null)
+);
+assert.equal(
+  linearCanonical.renderRequest.diagramOptions.configOverrides['labels.linear.scope'],
+  'none'
+);
+state.adv.block_stroke_width = 2;
+state.adv.def_font_size = 16;
+state.adv.label_font_size = 14;
+state.adv.linear_definition_line_styles = {
+  name: { font_size: 13, font_weight: 'bold', fill: '#112233' }
+};
+const styledLinearCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: linearFilesData
+});
+const styledLinearOverrides = styledLinearCanonical.renderRequest.diagramOptions.configOverrides;
+assert.equal(styledLinearOverrides['objects.features.block_stroke_width.short'], 2);
+assert.equal(styledLinearOverrides['objects.features.block_stroke_width.long'], 2);
+assert.equal(styledLinearOverrides['objects.definition.linear.font_size.short'], 16);
+assert.equal(styledLinearOverrides['objects.definition.linear.font_size.long'], 16);
+assert.equal(styledLinearOverrides['labels.font_size.linear.short'], 14);
+assert.equal(styledLinearOverrides['labels.font_size.linear.long'], 14);
+assert.equal(
+  styledLinearOverrides['objects.definition.linear.line_styles.name.font_size'],
+  13
+);
+assert.equal(
+  styledLinearOverrides['objects.definition.linear.line_styles.name.font_weight'],
+  'bold'
+);
+assert.equal(
+  styledLinearOverrides['objects.definition.linear.line_styles.name.fill'],
+  '#112233'
+);
+assert.equal(
+  Object.prototype.hasOwnProperty.call(
+    styledLinearOverrides,
+    'objects.definition.linear.line_styles'
+  ),
+  false
+);
+delete state.adv.block_stroke_width;
+delete state.adv.def_font_size;
+delete state.adv.label_font_size;
+delete state.adv.linear_definition_line_styles;
+const legacyLinearOptions = structuredClone(linearCanonical);
+legacyLinearOptions.renderRequest.schema = 2;
+legacyLinearOptions.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+legacyLinearOptions.renderRequest.diagramOptions.configOverrides = {
+  label_placement: 'on_feature',
+  linear_track_layout: 'spreadout',
+  show_labels: 'first'
+};
+const legacyLinearOptionsProjection = projectCanonicalSessionRequest(
+  legacyLinearOptions
+);
+assert.equal(
+  legacyLinearOptionsProjection.config.adv.label_placement,
+  'above_feature'
+);
+assert.equal(
+  legacyLinearOptionsProjection.config.form.linear_track_layout,
+  'above'
+);
+assert.equal(
+  legacyLinearOptionsProjection.config.form.show_labels_linear,
+  'first'
+);
+const intermediateLinearLabelScope = structuredClone(linearCanonical);
+intermediateLinearLabelScope.renderRequest.diagramOptions.configOverrides = {
+  'canvas.linear.show_labels': 'orthogroup_top'
+};
+assert.equal(
+  projectCanonicalSessionRequest(intermediateLinearLabelScope)
+    .config.form.show_labels_linear,
+  'orthogroup_top'
+);
+const currentLinearOptions = structuredClone(linearCanonical);
+currentLinearOptions.renderRequest.diagramOptions.configOverrides.label_placement = 'on_feature';
+assert.throws(
+  () => projectCanonicalSessionRequest(currentLinearOptions),
+  /Linear label placement/
+);
+currentLinearOptions.renderRequest.diagramOptions.configOverrides.label_placement = 'auto';
+currentLinearOptions.renderRequest.diagramOptions.configOverrides.linear_track_layout = 'tuckin';
+assert.throws(
+  () => projectCanonicalSessionRequest(currentLinearOptions),
+  /Linear track layout/
+);
+assert.equal(
+  linearCanonical.renderRequest.diagramOptions.configOverrides[
+    'objects.axis.linear.stroke_color'
+  ],
+  'lightgray'
+);
+state.form.linear_ruler_on_axis = true;
+const rulerAxisCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
+assert.equal(
+  rulerAxisCanonical.renderRequest.diagramOptions.configOverrides[
+    'objects.axis.linear.stroke_color'
+  ],
+  'dimgray'
+);
+state.form.linear_ruler_on_axis = false;
+assert.deepEqual(linearCanonical.webFiles.linearRecordMetadata, [
+  { recordKey: 'first', losatGencode: 11, losatFilename: 'first-to-second.losat.tsv' },
+  { recordKey: 'second', losatGencode: 4, losatFilename: 'second-to-third.losat.tsv' },
+  { recordKey: 'third', losatGencode: 1, losatFilename: '' }
+]);
+assert.equal(linearCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots, null);
+assert.equal(linearCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, null);
+state.adv.linear_track_slots_axis_index = null;
+assert.equal(
+  linearCanonical.renderRequest.diagramOptions.configOverrides[
+    'canvas.linear.comparison_height'
+  ],
+  42.5
+);
 assert.equal(linearCanonical.renderRequest.records[0].selector, null);
 assert.deepEqual(linearCanonical.renderRequest.records[1].selector, { kind: 'recordId', value: 'RecA' });
 assert.equal(linearCanonical.renderRequest.records[2].selector, null);
@@ -578,7 +1550,7 @@ state.linearRecordLayoutEnabled.value = true;
 state.linearRecordGap.value = 30;
 state.linearRecordRows.splice(0, state.linearRecordRows.length,
   { uid: 'first', row: 1 }, { uid: 'second', row: 1 }, { uid: 'third', row: 2 });
-const arrangedCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+const arrangedCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.deepEqual(arrangedCanonical.renderRequest.layout, {
   recordGapPx: 30,
   multiRecordPositions: ['#1@1', '#2@1', '#3@2']
@@ -588,18 +1560,364 @@ state.losatProgram.value = 'blastp';
 linearFilesData.linearComparisons = [{
   id: 'selected-losat-pair', queryUid: 'first', subjectUid: 'third', source: 'losat', file: null
 }];
-const losatPairCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
+const losatPairCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 const generatedProtein = losatPairCanonical.renderRequest.comparisons.find(
   (comparison) => comparison.kind === 'generatedProteinComparison'
 );
 assert.deepEqual(generatedProtein.pairs, [{ queryRecordIndex: 0, subjectRecordIndex: 2 }]);
 assert.equal(
+  generatedProtein.settings.collinearityParams.parameters.maxUnitGap,
+  2
+);
+assert.equal(
   projectCanonicalSessionRequest(losatPairCanonical).files.linearComparisons[0].source,
   'losat'
 );
+state.selectedOrthogroupAlignmentFeature.value = 'resolved-feature-anchor';
+const resolvedProteinPlotTitlePosition = state.adv.plot_title_position;
+state.adv.plot_title_position = 'bottom';
+const resolvedProteinCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: linearFilesData,
+  resolvedComparisons: [{
+    kind: 'precomputedProteinComparison',
+    queryRecordIndex: 0,
+    subjectRecordIndex: 2,
+    rows: [{
+      query: 'protein-a',
+      subject: 'protein-b',
+      identity: 95,
+      alignment_length: 20,
+      mismatches: 1,
+      gap_opens: 0,
+      qstart: 10,
+      qend: 30,
+      sstart: 50,
+      send: 70,
+      evalue: 1e-20,
+      bitscore: 120,
+      group_kind: 'orthogroup',
+      group_scope: 'cross_record'
+    }]
+  }]
+});
+const resolvedProtein = resolvedProteinCanonical.renderRequest.comparisons.find(
+  (comparison) => comparison.kind === 'precomputedProteinComparison'
+);
+assert.equal(resolvedProtein.queryRecordIndex, 0);
+assert.equal(resolvedProtein.subjectRecordIndex, 2);
+const resolvedProteinSettings = resolvedProteinCanonical.renderRequest.comparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+);
+assert.ok(resolvedProteinSettings);
+assert.equal(resolvedProteinSettings.mode, 'none');
+assert.deepEqual(resolvedProteinSettings.pairs, []);
+assert.equal(
+  resolvedProteinSettings.settings.alignOrthogroupFeature,
+  'resolved-feature-anchor'
+);
+const resolvedProteinTsv = Buffer.from(
+  resolvedProteinCanonical.resources[resolvedProtein.resourceId].data,
+  'base64'
+).toString('utf8');
+assert.match(resolvedProteinTsv, /group_kind/);
+assert.match(resolvedProteinTsv, /cross_record/);
+const resolvedProteinProjection = projectCanonicalSessionRequest(
+  resolvedProteinCanonical
+);
+assert.deepEqual(
+  resolvedProteinProjection.files.linearComparisons,
+  [],
+  'precomputed protein tables must not be projected as nucleotide uploads'
+);
+assert.deepEqual(
+  resolvedProteinProjection.files.linearCanonicalComparisons.map(
+    (comparison) => comparison.kind
+  ),
+  ['precomputedProteinComparison', 'generatedProteinComparison']
+);
+assert.equal(
+  resolvedProteinProjection.config.losat.blastp.collinearMaxUnitGap,
+  2
+);
+assert.equal(
+  resolvedProteinProjection.pipelineState.selectedOrthogroupAlignmentFeature,
+  'resolved-feature-anchor'
+);
+state.blastSource.value = resolvedProteinProjection.config.blastSource;
+state.losatProgram.value = resolvedProteinProjection.config.losatProgram;
+state.losat = structuredClone(resolvedProteinProjection.config.losat);
+state.selectedOrthogroupAlignmentFeature.value =
+  resolvedProteinProjection.pipelineState.selectedOrthogroupAlignmentFeature;
+const resolvedProteinRoundTripCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: resolvedProteinProjection.files
+});
+const roundTripPrecomputed = resolvedProteinRoundTripCanonical.renderRequest.comparisons.find(
+  (comparison) => comparison.kind === 'precomputedProteinComparison'
+);
+const roundTripGenerated = resolvedProteinRoundTripCanonical.renderRequest.comparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+);
+assert.deepEqual(
+  {
+    encoding: roundTripPrecomputed.encoding,
+    queryRecordIndex: roundTripPrecomputed.queryRecordIndex,
+    subjectRecordIndex: roundTripPrecomputed.subjectRecordIndex
+  },
+  {
+    encoding: resolvedProtein.encoding,
+    queryRecordIndex: resolvedProtein.queryRecordIndex,
+    subjectRecordIndex: resolvedProtein.subjectRecordIndex
+  }
+);
+assert.equal(
+  Buffer.from(
+    resolvedProteinRoundTripCanonical.resources[roundTripPrecomputed.resourceId].data,
+    'base64'
+  ).toString('utf8'),
+  resolvedProteinTsv
+);
+assert.deepEqual(roundTripGenerated, resolvedProteinSettings);
+const orthogroupResourceText = '{"schema":1,"valueKind":"orthogroupResult","value":{}}\n';
+const collinearityResourceText = '{"schema":1,"valueKind":"blocks","value":[]}\n';
+const resolvedWithMetadataCanonical = structuredClone(resolvedProteinCanonical);
+resolvedWithMetadataCanonical.resources['orthogroup-result-test'] = {
+  kind: 'orthogroup-result',
+  name: 'orthogroups.json',
+  type: 'application/json',
+  size: new TextEncoder().encode(orthogroupResourceText).byteLength,
+  lastModified: 0,
+  encoding: 'base64',
+  data: btoa(orthogroupResourceText)
+};
+resolvedWithMetadataCanonical.resources['collinearity-result-test'] = {
+  kind: 'collinearity-result',
+  name: 'collinearity.json',
+  type: 'application/json',
+  size: new TextEncoder().encode(collinearityResourceText).byteLength,
+  lastModified: 0,
+  encoding: 'base64',
+  data: btoa(collinearityResourceText)
+};
+const generatedMetadataIndex =
+  resolvedWithMetadataCanonical.renderRequest.comparisons.findIndex(
+    (comparison) => comparison.kind === 'generatedProteinComparison'
+  );
+resolvedWithMetadataCanonical.renderRequest.comparisons.splice(
+  generatedMetadataIndex,
+  0,
+  {
+    kind: 'orthogroupResult',
+    resourceId: 'orthogroup-result-test',
+    encoding: 'canonicalJson'
+  },
+  {
+    kind: 'collinearityResult',
+    resourceId: 'collinearity-result-test',
+    encoding: 'canonicalJson',
+    valueKind: 'blocks'
+  }
+);
+const resolvedWithMetadataProjection = projectCanonicalSessionRequest(
+  resolvedWithMetadataCanonical
+);
+const resolvedWithFreshTable = buildCanonicalRenderRequest({
+  state: stateForCanonicalProjection(resolvedWithMetadataProjection),
+  filesData: resolvedWithMetadataProjection.files,
+  resolvedComparisons: [{
+    kind: 'precomputedProteinComparison',
+    queryRecordIndex: 0,
+    subjectRecordIndex: 2,
+    rows: [{
+      query: 'fresh-a',
+      subject: 'fresh-b',
+      identity: 88,
+      alignment_length: 10,
+      mismatches: 1,
+      gap_opens: 0,
+      qstart: 1,
+      qend: 10,
+      sstart: 1,
+      send: 10,
+      evalue: 1e-10,
+      bitscore: 80
+    }]
+  }]
+});
+assert.deepEqual(
+  resolvedWithFreshTable.renderRequest.comparisons.map(
+    (comparison) => comparison.kind
+  ),
+  [
+    'orthogroupResult',
+    'collinearityResult',
+    'precomputedProteinComparison',
+    'generatedProteinComparison'
+  ]
+);
+const rebuiltOrthogroups = resolvedWithFreshTable.renderRequest.comparisons.find(
+  (comparison) => comparison.kind === 'orthogroupResult'
+);
+const rebuiltCollinearity = resolvedWithFreshTable.renderRequest.comparisons.find(
+  (comparison) => comparison.kind === 'collinearityResult'
+);
+assert.equal(
+  Buffer.from(
+    resolvedWithFreshTable.resources[rebuiltOrthogroups.resourceId].data,
+    'base64'
+  ).toString('utf8'),
+  orthogroupResourceText
+);
+assert.equal(rebuiltCollinearity.valueKind, 'blocks');
+assert.equal(
+  Buffer.from(
+    resolvedWithFreshTable.resources[rebuiltCollinearity.resourceId].data,
+    'base64'
+  ).toString('utf8'),
+  collinearityResourceText
+);
+const typedCanonicalFiles = structuredClone(resolvedWithMetadataProjection.files);
+typedCanonicalFiles.linearCanonicalComparisons =
+  typedCanonicalFiles.linearCanonicalComparisons.filter(
+    (comparison) => [
+      'orthogroupResult',
+      'collinearityResult'
+    ].includes(comparison.kind)
+  );
+const typedCanonicalState = stateForCanonicalProjection(
+  resolvedWithMetadataProjection
+);
+typedCanonicalState.blastSource.value = 'files';
+typedCanonicalState.losatProgram.value = 'blastn';
+const typedCanonicalResult = buildCanonicalRenderRequest({
+  state: typedCanonicalState,
+  filesData: typedCanonicalFiles
+});
+assert.deepEqual(
+  typedCanonicalResult.renderRequest.comparisons.map(
+    (comparison) => comparison.kind
+  ),
+  [
+    'orthogroupResult',
+    'collinearityResult'
+  ],
+  'direct typed canonical results must not require Web protein-pipeline state'
+);
+const inactiveProteinState = stateForCanonicalProjection(
+  resolvedWithMetadataProjection
+);
+inactiveProteinState.blastSource.value = 'files';
+inactiveProteinState.losatProgram.value = 'blastn';
+const withoutStaleProteinArtifacts = buildCanonicalRenderRequest({
+  state: inactiveProteinState,
+  filesData: resolvedWithMetadataProjection.files
+});
+assert.equal(
+  withoutStaleProteinArtifacts.renderRequest.comparisons.some(
+    (comparison) => [
+      'precomputedProteinComparison',
+      'orthogroupResult',
+      'collinearityResult',
+      'generatedProteinComparison'
+    ].includes(comparison.kind)
+  ),
+  false,
+  'saved protein artifacts must not leak into an active nucleotide pipeline'
+);
+state.selectedOrthogroupAlignmentFeature.value = '';
+state.adv.plot_title_position = resolvedProteinPlotTitlePosition;
 
 const linearProjection = projectCanonicalSessionRequest(linearCanonical);
 assert.equal(linearProjection.config.adv.comparison_height, 42.5);
+assert.equal(linearProjection.config.form.show_labels_linear, 'none');
+let sparseLinearCanonical;
+for (const schema of [1, 2]) {
+  sparseLinearCanonical = structuredClone(linearCanonical);
+  sparseLinearCanonical.renderRequest.schema = schema;
+  sparseLinearCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
+  delete sparseLinearCanonical.renderRequest.diagramOptions.evalue;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.bitscore;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.identity;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.alignmentLength;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.selectedFeaturesSet;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.config;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.configOverrides;
+  const sparseLinearProjection = projectCanonicalSessionRequest(sparseLinearCanonical);
+  assert.equal(sparseLinearProjection.config.adv.evalue, '0.00001');
+  assert.equal(sparseLinearProjection.config.adv.min_bitscore, 50);
+  assert.equal(sparseLinearProjection.config.adv.identity, 70);
+  assert.equal(sparseLinearProjection.config.adv.alignment_length, 0);
+  assert.deepEqual(
+    sparseLinearProjection.config.adv.features,
+    ['CDS', 'rRNA', 'tRNA', 'tmRNA', 'ncRNA', 'misc_RNA', 'repeat_region']
+  );
+  assert.equal(sparseLinearProjection.config.form.show_gc, true);
+  assert.equal(sparseLinearProjection.config.form.show_skew, true);
+  assert.equal(sparseLinearProjection.config.adv.axis_stroke_color, 'gray');
+}
+const nullOverrideSparseLinear = structuredClone(sparseLinearCanonical);
+nullOverrideSparseLinear.renderRequest.diagramOptions.configOverrides = {
+  show_gc: null,
+  show_skew: null,
+  linear_axis_stroke_color: null
+};
+const nullOverrideSparseLinearProjection = projectCanonicalSessionRequest(
+  nullOverrideSparseLinear
+);
+assert.equal(nullOverrideSparseLinearProjection.config.form.show_gc, true);
+assert.equal(nullOverrideSparseLinearProjection.config.form.show_skew, true);
+assert.equal(nullOverrideSparseLinearProjection.config.adv.axis_stroke_color, 'gray');
+
+const sparseCurrentLinear = structuredClone(linearCanonical);
+delete sparseCurrentLinear.renderRequest.diagramOptions.evalue;
+delete sparseCurrentLinear.renderRequest.diagramOptions.bitscore;
+delete sparseCurrentLinear.renderRequest.diagramOptions.identity;
+delete sparseCurrentLinear.renderRequest.diagramOptions.alignmentLength;
+delete sparseCurrentLinear.renderRequest.diagramOptions.selectedFeaturesSet;
+delete sparseCurrentLinear.renderRequest.diagramOptions.config;
+delete sparseCurrentLinear.renderRequest.diagramOptions.configOverrides;
+const sparseCurrentLinearProjection = projectCanonicalSessionRequest(sparseCurrentLinear);
+assert.equal(sparseCurrentLinearProjection.config.adv.evalue, '1e-2');
+assert.equal(sparseCurrentLinearProjection.config.adv.min_bitscore, 50);
+assert.equal(sparseCurrentLinearProjection.config.adv.identity, 0);
+assert.equal(sparseCurrentLinearProjection.config.adv.alignment_length, 0);
+assert.equal(sparseCurrentLinearProjection.config.form.show_gc, false);
+assert.equal(sparseCurrentLinearProjection.config.form.show_skew, false);
+assert.equal(sparseCurrentLinearProjection.config.adv.axis_stroke_color, 'lightgray');
+
+const explicitLinearThresholds = structuredClone(sparseLinearCanonical);
+explicitLinearThresholds.renderRequest.diagramOptions.evalue = 0;
+explicitLinearThresholds.renderRequest.diagramOptions.bitscore = 0;
+explicitLinearThresholds.renderRequest.diagramOptions.identity = 0;
+explicitLinearThresholds.renderRequest.diagramOptions.alignmentLength = 1;
+explicitLinearThresholds.renderRequest.diagramOptions.selectedFeaturesSet = [];
+explicitLinearThresholds.renderRequest.diagramOptions.configOverrides = {
+  show_gc: false,
+  show_skew: false,
+  linear_axis_stroke_color: ''
+};
+const explicitLinearProjection = projectCanonicalSessionRequest(explicitLinearThresholds);
+assert.equal(explicitLinearProjection.config.adv.evalue, '0');
+assert.equal(explicitLinearProjection.config.adv.min_bitscore, 0);
+assert.equal(explicitLinearProjection.config.adv.identity, 0);
+assert.equal(explicitLinearProjection.config.adv.alignment_length, 1);
+assert.deepEqual(explicitLinearProjection.config.adv.features, []);
+assert.equal(explicitLinearProjection.config.form.show_gc, false);
+assert.equal(explicitLinearProjection.config.form.show_skew, false);
+assert.equal(explicitLinearProjection.config.adv.axis_stroke_color, '');
+assert.deepEqual(
+  linearProjection.files.linearSeqs.map((seq) => seq.gb.name),
+  ['input.gb', 'input.gb', 'input.gb']
+);
+assert.deepEqual(
+  linearProjection.files.linearSeqs.map((seq) => seq.losat_gencode),
+  [11, 4, 1]
+);
+assert.deepEqual(
+  linearProjection.files.linearSeqs.map((seq) => seq.losat_filename),
+  ['first-to-second.losat.tsv', 'second-to-third.losat.tsv', '']
+);
 assert.deepEqual(
   linearProjection.files.linearSeqs.map((seq) => seq.region_record_id),
   ['', 'RecA', '#2']
@@ -608,13 +1926,154 @@ assert.equal(linearProjection.files.linearSeqs[2].region_start, 10);
 assert.equal(linearProjection.files.linearSeqs[2].region_end, 20);
 assert.equal(linearProjection.files.linearSeqs[2].region_reverse, true);
 
+const pythonConfigCanonical = structuredClone(linearCanonical);
+delete pythonConfigCanonical.renderRequest.diagramOptions.configOverrides;
+pythonConfigCanonical.renderRequest.diagramOptions.config = {
+  canvas: {
+    show_gc: true,
+    show_skew: true,
+    show_depth: false,
+    show_labels: 'orthogroup_top',
+    strandedness: true,
+    resolve_overlaps: true,
+    circular: { track_type: 'spreadout', allow_inner_labels: false },
+    linear: {
+      align_center: true,
+      keep_definition_left_aligned: true,
+      track_layout: 'above',
+      track_axis_gap: 7,
+      ruler_on_axis: true,
+      comparison_height: 31,
+      default_cds_height: { short: 23, long: 23 },
+      default_gc_height: 18,
+      depth_height: 12,
+      normalize_length: true
+    }
+  },
+  labels: {
+    rendering: 'auto',
+    font_size: { short: 13, long: 13, linear: { short: 15, long: 15 } },
+    spacing: { circular: 4, linear: 5 },
+    circular: { placement: 'radial' },
+    linear: { placement: 'above_feature', rotation: 30 },
+    filtering: { blacklist_keywords: ['hypothetical'] },
+    unified_adjustment: {
+      outer_labels: { x_radius_offset: 0.9, y_radius_offset: 0.91 },
+      inner_labels: { x_radius_offset: 0.97, y_radius_offset: 0.98 }
+    }
+  },
+  objects: {
+    features: {
+      block_stroke_color: '#111111', block_stroke_width: { short: 1, long: 1 },
+      line_stroke_color: '#222222', line_stroke_width: { short: 2, long: 2 }
+    },
+    axis: {
+      circular: { stroke_color: '#333333', stroke_width: { short: 3, long: 3 } },
+      linear: { stroke_color: '#444444', stroke_width: { short: 4, long: 4 } }
+    },
+    definition: {
+      linear: {
+        font_size: { short: 16, long: 16 },
+        show_replicon: true,
+        show_accession: false,
+        show_length: false,
+        line_styles: { name: { font_weight: 'bold', fill: '#112233' } }
+      },
+      circular: { font_size: 18, plot_title_font_size: 30 }
+    },
+    legends: { color_rect_size: { short: 17, long: 17 }, font_size: { short: 19, long: 19 } },
+    scale: {
+      style: 'bar',
+      font_size: { short: 21, long: 21 },
+      ruler_label_font_size: { short: 22, long: 22 }
+    },
+    blast_match: { style: 'curve' }
+  }
+};
+const pythonConfigProjection = projectCanonicalSessionRequest(pythonConfigCanonical);
+assert.equal(pythonConfigProjection.config.form.separate_strands, true);
+assert.equal(pythonConfigProjection.config.form.align_center, true);
+assert.equal(pythonConfigProjection.config.form.keep_definition_left_aligned, true);
+assert.equal(pythonConfigProjection.config.form.linear_track_layout, 'above');
+assert.equal(pythonConfigProjection.config.form.linear_ruler_on_axis, true);
+assert.equal(pythonConfigProjection.config.form.normalize_length, true);
+assert.equal(pythonConfigProjection.config.form.show_labels_linear, 'orthogroup_top');
+assert.equal(pythonConfigProjection.config.adv.comparison_height, 31);
+assert.equal(pythonConfigProjection.config.adv.track_axis_gap, 7);
+assert.equal(pythonConfigProjection.config.adv.linear_show_replicon, true);
+assert.equal(pythonConfigProjection.config.adv.linear_show_accession, false);
+assert.equal(pythonConfigProjection.config.adv.linear_show_length, false);
+assert.equal(pythonConfigProjection.config.adv.block_stroke_width, 1);
+assert.equal(pythonConfigProjection.config.adv.block_stroke_color, '#111111');
+assert.equal(pythonConfigProjection.config.adv.line_stroke_width, 2);
+assert.equal(pythonConfigProjection.config.adv.line_stroke_color, '#222222');
+assert.equal(pythonConfigProjection.config.adv.axis_stroke_width, 4);
+assert.equal(pythonConfigProjection.config.adv.axis_stroke_color, '#444444');
+assert.equal(pythonConfigProjection.config.adv.def_font_size, 16);
+assert.equal(pythonConfigProjection.config.adv.feature_height, 23);
+assert.equal(pythonConfigProjection.config.adv.label_font_size, 15);
+assert.equal(pythonConfigProjection.config.adv.label_placement, 'above_feature');
+assert.equal(pythonConfigProjection.config.adv.legend_box_size, 17);
+assert.equal(pythonConfigProjection.config.adv.legend_font_size, 19);
+assert.equal(pythonConfigProjection.config.adv.scale_font_size, 21);
+assert.deepEqual(
+  pythonConfigProjection.config.adv.linear_definition_line_styles,
+  { name: { font_weight: 'bold', fill: '#112233' } }
+);
+assert.equal(pythonConfigProjection.config.adv.pairwise_match_style, 'curve');
+assert.equal(pythonConfigProjection.config.blacklistText, 'hypothetical');
+
+const rulerFontCanonical = structuredClone(pythonConfigCanonical);
+rulerFontCanonical.renderRequest.diagramOptions.config.objects.scale.style = 'ruler';
+assert.equal(projectCanonicalSessionRequest(rulerFontCanonical).config.adv.scale_font_size, 22);
+
+const pythonCircularConfigCanonical = structuredClone(canonical);
+delete pythonCircularConfigCanonical.renderRequest.diagramOptions.configOverrides;
+pythonCircularConfigCanonical.renderRequest.diagramOptions.config = structuredClone(
+  pythonConfigCanonical.renderRequest.diagramOptions.config
+);
+pythonCircularConfigCanonical.renderRequest.diagramOptions.config.canvas.show_labels = true;
+const pythonCircularConfigProjection = projectCanonicalSessionRequest(pythonCircularConfigCanonical);
+assert.equal(pythonCircularConfigProjection.config.adv.axis_stroke_width, 3);
+assert.equal(pythonCircularConfigProjection.config.adv.axis_stroke_color, '#333333');
+assert.equal(pythonCircularConfigProjection.config.adv.def_font_size, 18);
+assert.equal(pythonCircularConfigProjection.config.adv.plot_title_font_size, 30);
+assert.equal(pythonCircularConfigProjection.config.adv.label_font_size, 13);
+assert.equal(pythonCircularConfigProjection.config.adv.outer_label_x_offset, 0.9);
+assert.equal(pythonCircularConfigProjection.config.adv.outer_label_y_offset, 0.91);
+assert.equal(pythonCircularConfigProjection.config.adv.inner_label_x_offset, 0.97);
+assert.equal(pythonCircularConfigProjection.config.adv.inner_label_y_offset, 0.98);
+
+const emptyBlacklistCanonical = structuredClone(pythonConfigCanonical);
+emptyBlacklistCanonical.renderRequest.diagramOptions.config.labels.filtering.blacklist_keywords = [];
+const emptyBlacklistProjection = projectCanonicalSessionRequest(emptyBlacklistCanonical);
+assert.equal(emptyBlacklistProjection.config.filterMode, 'None');
+assert.equal(emptyBlacklistProjection.config.blacklistText, '');
+
+const explicitOverrideCanonical = structuredClone(pythonConfigCanonical);
+explicitOverrideCanonical.renderRequest.diagramOptions.configOverrides = {
+  'canvas.strandedness': false,
+  'canvas.linear.align_center': false,
+  'canvas.linear.keep_definition_left_aligned': false
+};
+const explicitOverrideProjection = projectCanonicalSessionRequest(explicitOverrideCanonical);
+assert.equal(explicitOverrideProjection.config.form.separate_strands, false);
+assert.equal(explicitOverrideProjection.config.form.align_center, false);
+assert.equal(explicitOverrideProjection.config.form.keep_definition_left_aligned, false);
+
 state.adv.comparison_height = null;
-const autoHeightCanonical = buildCanonicalSessionRequest({ state, filesData: linearFilesData });
-assert.equal(autoHeightCanonical.renderRequest.diagramOptions.configOverrides.comparison_height, null);
+const autoHeightCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
+assert.equal(
+  Object.prototype.hasOwnProperty.call(
+    autoHeightCanonical.renderRequest.diagramOptions.configOverrides,
+    'canvas.linear.comparison_height'
+  ),
+  false
+);
 assert.equal(projectCanonicalSessionRequest(autoHeightCanonical).config.adv.comparison_height, null);
 state.adv.comparison_height = -2;
 assert.throws(
-  () => buildCanonicalSessionRequest({ state, filesData: linearFilesData }),
+  () => buildCanonicalRenderRequest({ state, filesData: linearFilesData }),
   /Pairwise Match Height must be Auto or a positive finite number/
 );
 const historicalInvalidHeight = structuredClone(linearCanonical);
@@ -632,17 +2091,21 @@ assert.equal(
 );
 state.adv.comparison_height = 42.5;
 
+const depthAText = 'position\tdepth\n1\t10\n';
 const depthA = {
   ...genbank,
   name: 'sample-a.depth.tsv',
   type: 'text/tab-separated-values',
-  data: btoa('position\tdepth\n1\t10\n')
+  size: new TextEncoder().encode(depthAText).byteLength,
+  data: btoa(depthAText)
 };
+const depthBText = 'position\tdepth\n1\t20\n';
 const depthB = {
   ...genbank,
   name: 'sample-b.depth.tsv',
   type: 'text/tab-separated-values',
-  data: btoa('position\tdepth\n1\t20\n')
+  size: new TextEncoder().encode(depthBText).byteLength,
+  data: btoa(depthBText)
 };
 state.form.show_depth = true;
 state.adv.resolve_overlaps = true;
@@ -673,16 +2136,22 @@ const circularSparseFilesData = {
   ],
   linearSeqs: []
 };
-const circularSparseCanonical = buildCanonicalSessionRequest({
+const circularSparseCanonical = buildCanonicalRenderRequest({
   state,
   filesData: circularSparseFilesData
 });
 assert.equal(circularSparseCanonical.renderRequest.records.length, 2);
 assert.deepEqual(
-  circularSparseCanonical.renderRequest.diagramOptions.depthTrackFiles.map((row) => (
-    row.map((entry) => Boolean(entry?.resourceId))
+  circularSparseCanonical.renderRequest.diagramOptions.depthTracks.map((track) => (
+    track.source.map((entry) => Boolean(entry?.resourceId))
   )),
   [[true, false], [false, true]]
+);
+assert.equal(
+  circularSparseCanonical.renderRequest.diagramOptions.depthTracks.every(
+    (track) => track.height === null
+  ),
+  true
 );
 const circularSparseProjection = projectCanonicalSessionRequest(circularSparseCanonical);
 assert.deepEqual(
@@ -697,18 +2166,18 @@ assert.deepEqual(circularSparseProjection.config.adv.depth_tracks.map((track) =>
   'Sample A',
   'Sample B'
 ]);
-const circularSparseRebuilt = buildCanonicalSessionRequest({
+const circularSparseRebuilt = buildCanonicalRenderRequest({
   state,
   filesData: circularSparseProjection.files
 });
 assert.deepEqual(
-  circularSparseRebuilt.renderRequest.diagramOptions.depthTrackFiles.map((row) => (
-    row.map((entry) => Boolean(entry?.resourceId))
+  circularSparseRebuilt.renderRequest.diagramOptions.depthTracks.map((track) => (
+    track.source.map((entry) => Boolean(entry?.resourceId))
   )),
   [[true, false], [false, true]]
 );
 
-const circularLegacyFlatCanonical = buildCanonicalSessionRequest({
+const circularLegacyFlatCanonical = buildCanonicalRenderRequest({
   state,
   filesData: {
     c_gb: combinedGenbank,
@@ -717,13 +2186,19 @@ const circularLegacyFlatCanonical = buildCanonicalSessionRequest({
   }
 });
 assert.deepEqual(
-  circularLegacyFlatCanonical.renderRequest.diagramOptions.depthTrackFiles.map((row) => (
-    row.map((entry) => Boolean(entry?.resourceId))
-  )),
+  circularLegacyFlatCanonical.renderRequest.diagramOptions.depthTracks.map(
+    (track) => Boolean(track.source?.resourceId)
+  ),
+  [true, true]
+);
+assert.deepEqual(
+  projectCanonicalSessionRequest(circularLegacyFlatCanonical).files.c_depth.map(
+    (row) => row.map((entry) => Boolean(entry))
+  ),
   [[true, true], [true, true]]
 );
 assert.throws(
-  () => buildCanonicalSessionRequest({
+  () => buildCanonicalRenderRequest({
     state,
     filesData: {
       c_gb: combinedGenbank,
@@ -735,8 +2210,18 @@ assert.throws(
 );
 
 state.mode.value = 'linear';
+state.adv.plot_title_position = 'bottom';
 state.form.multi_record_canvas = false;
 state.circularRecordList.value = [];
+const nullOnlyDepthCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: {
+    ...linearFilesData,
+    linearSeqs: linearFilesData.linearSeqs.map((seq) => ({ ...seq, depth: [null] }))
+  }
+});
+assert.equal(nullOnlyDepthCanonical.renderRequest.diagramOptions.depthTrackFiles, undefined);
+assert.equal(nullOnlyDepthCanonical.renderRequest.diagramOptions.depthTracks, undefined);
 state.adv.linear_track_slots_enabled = true;
 state.adv.linear_track_slots_axis_index = 1;
 state.adv.linear_track_slots = [
@@ -757,14 +2242,80 @@ const sparseDepthFilesData = {
     depth: index === 0 ? [depthA, null] : [null, depthB]
   }))
 };
-const sparseDepthCanonical = buildCanonicalSessionRequest({ state, filesData: sparseDepthFilesData });
-assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles.length, 2);
-assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[0].length, 2);
-assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[0][1], null);
-assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTrackFiles[1][0], null);
+const sparseDepthCanonical = buildCanonicalRenderRequest({ state, filesData: sparseDepthFilesData });
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTracks.length, 2);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTracks[0].source.length, 2);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTracks[0].source[1], null);
+assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.depthTracks[1].source[0], null);
 assert.deepEqual(
-  sparseDepthCanonical.renderRequest.diagramOptions.depthTrackLabels,
+  sparseDepthCanonical.renderRequest.diagramOptions.depthTracks.map((track) => track.label),
   ['Sample A', 'Sample B']
+);
+[
+  'depthTrackFiles',
+  'depthTrackLabels',
+  'depthTrackColors',
+  'depthTrackHeights',
+  'depthTrackLargeTickIntervals',
+  'depthTrackSmallTickIntervals',
+  'depthTrackTickFontSizes'
+].forEach((fieldName) => {
+  assert.equal(
+    Object.hasOwn(sparseDepthCanonical.renderRequest.diagramOptions, fieldName),
+    false
+  );
+});
+const mixedCanonicalDepth = structuredClone(sparseDepthCanonical);
+mixedCanonicalDepth.renderRequest.diagramOptions.depthTrackFiles = [
+  [sparseDepthCanonical.renderRequest.diagramOptions.depthTracks[0].source[0], null],
+  [null, sparseDepthCanonical.renderRequest.diagramOptions.depthTracks[1].source[1]]
+];
+assert.throws(
+  () => projectCanonicalSessionRequest(mixedCanonicalDepth),
+  /depthTracks cannot be combined with legacy depth fields: depthTrackFiles/
+);
+const wrongCanonicalDepthCardinality = structuredClone(sparseDepthCanonical);
+wrongCanonicalDepthCardinality.renderRequest.diagramOptions.depthTracks[0].source =
+  wrongCanonicalDepthCardinality.renderRequest.diagramOptions.depthTracks[0].source.slice(0, 1);
+assert.throws(
+  () => projectCanonicalSessionRequest(wrongCanonicalDepthCardinality),
+  /one source per displayed record \(2\)/
+);
+const emptyCanonicalDepth = structuredClone(sparseDepthCanonical);
+emptyCanonicalDepth.renderRequest.diagramOptions.depthTracks[0].source = [null, null];
+assert.throws(
+  () => projectCanonicalSessionRequest(emptyCanonicalDepth),
+  /logical track index 0.*no source/
+);
+const circularDepthHeight = structuredClone(circularSparseCanonical);
+circularDepthHeight.renderRequest.diagramOptions.depthTracks[0].height = 12;
+assert.throws(
+  () => projectCanonicalSessionRequest(circularDepthHeight),
+  /height must be null for Circular requests/
+);
+const missingCanonicalDepthField = structuredClone(sparseDepthCanonical);
+delete missingCanonicalDepthField.renderRequest.diagramOptions.depthTracks[0].label;
+assert.throws(
+  () => projectCanonicalSessionRequest(missingCanonicalDepthField),
+  /missing required field\(s\): label/
+);
+const blankCanonicalDepthLabel = structuredClone(sparseDepthCanonical);
+blankCanonicalDepthLabel.renderRequest.diagramOptions.depthTracks[0].label = ' ';
+assert.throws(
+  () => projectCanonicalSessionRequest(blankCanonicalDepthLabel),
+  /label must be null or a non-empty string/
+);
+const nonStringCanonicalDepthColor = structuredClone(sparseDepthCanonical);
+nonStringCanonicalDepthColor.renderRequest.diagramOptions.depthTracks[0].color = 123;
+assert.throws(
+  () => projectCanonicalSessionRequest(nonStringCanonicalDepthColor),
+  /color must be null or a non-empty string/
+);
+const unknownCanonicalDepthField = structuredClone(sparseDepthCanonical);
+unknownCanonicalDepthField.renderRequest.diagramOptions.depthTracks[0].legacyLabel = 'old';
+assert.throws(
+  () => projectCanonicalSessionRequest(unknownCanonicalDepthField),
+  /contains unknown field\(s\): legacyLabel/
 );
 assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 1);
 assert.deepEqual(
@@ -854,7 +2405,7 @@ state.adv.linear_track_slots = [
   { id: 'features', renderer: 'features', enabled: true, side: 'overlay', params: {} },
   { id: 'depth_b', renderer: 'depth', enabled: true, side: 'below', params: { track_index: 1 } }
 ];
-const filteredAxisCanonical = buildCanonicalSessionRequest({ state, filesData: sparseDepthFilesData });
+const filteredAxisCanonical = buildCanonicalRenderRequest({ state, filesData: sparseDepthFilesData });
 assert.equal(filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 0);
 assert.deepEqual(
   filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots.map((slot) => slot.split(':')[0]),
@@ -873,6 +2424,10 @@ if (projectSessionIndex >= 0) {
   const projectedSession = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
     resources: session.resources,
+    webFiles: session.webFiles,
+    legacyFiles: session.files,
+    storedConfig: session.config,
+    fileBindings: session.cliInvocation?.fileBindings,
     linearTrackSlotSchemaVersion: Number(session.version) <= 32 ? 1 : 2
   });
   assert.ok(['circular', 'linear'].includes(projectedSession.mode));
@@ -880,6 +2435,101 @@ if (projectSessionIndex >= 0) {
     projectedSession.files.c_gb || projectedSession.files.linearSeqs.length > 0,
     'projected session must restore at least one input record'
   );
+  if (sessionPath.includes('hepatoplasmataceae_')) {
+    assert.deepEqual(
+      projectedSession.files.linearSeqs.map((sequence) => sequence.gb.name),
+      ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']
+    );
+    assert.equal(projectedSession.config.filterMode, 'None');
+  }
+  if (sessionPath.includes('majanivirus_orthogroup')) {
+    assert.equal(projectedSession.files.d_color.name, 'modified_default_colors.tsv');
+    assert.equal(projectedSession.files.t_color.name, 'majani_custom_color_table.tsv');
+    assert.equal(projectedSession.config.adv.def_font_size, 18);
+    assert.equal(projectedSession.config.adv.block_stroke_width, 1);
+    assert.equal(projectedSession.config.adv.line_stroke_width, 2);
+    assert.equal(projectedSession.config.adv.legend_box_size, 18);
+    assert.equal(projectedSession.config.adv.legend_font_size, 18);
+  }
+  if (sessionPath.includes('tobacco-chloroplast')) {
+    assert.equal(projectedSession.files.t_color.name, 'chloroplast_specific_table.tsv');
+    assert.equal(projectedSession.files.qualifier_priority.name, 'qualifier_priority.tsv');
+    assert.equal(projectedSession.config.adv.def_font_size, 28);
+    assert.equal(projectedSession.config.adv.block_stroke_width, 1);
+    assert.equal(projectedSession.config.adv.block_stroke_color, 'black');
+    assert.equal(projectedSession.config.adv.line_stroke_width, 2);
+    assert.equal(projectedSession.config.adv.axis_stroke_width, 3);
+    assert.equal(projectedSession.config.adv.outer_label_x_offset, 0.9);
+    assert.equal(projectedSession.config.adv.outer_label_y_offset, 0.9);
+    assert.equal(projectedSession.config.adv.inner_label_x_offset, 0.975);
+    assert.equal(projectedSession.config.adv.inner_label_y_offset, 0.975);
+  }
+  if (sessionPath.includes('vibrio-harveyi-group-collinear')) {
+    assert.equal(projectedSession.files.linearSeqs.length, 11);
+    assert.equal(
+      projectedSession.files.linearSeqs[0].gb.name,
+      'NZ_CP125875.1__GCF_030060435.1_ASM3006043v1_genomic.gbff'
+    );
+    assert.equal(projectedSession.config.adv.block_stroke_width, 0);
+    assert.equal(projectedSession.config.adv.line_stroke_width, 1);
+    assert.equal(projectedSession.config.adv.axis_stroke_width, 2);
+    assert.equal(projectedSession.config.adv.def_font_size, 16);
+    assert.equal(projectedSession.config.filterMode, 'None');
+  }
+  if (sessionPath.includes('python-canonical-depth')) {
+    assert.deepEqual(
+      projectedSession.files.linearSeqs.map((sequence) => sequence.depth.map(Boolean)),
+      [[true, true], [true, false]]
+    );
+    assert.deepEqual(
+      projectedSession.config.adv.depth_tracks,
+      [
+        {
+          label: 'Shared',
+          color: '#112233',
+          height: 18,
+          large_tick_interval: 10,
+          small_tick_interval: null,
+          tick_font_size: null
+        },
+        {
+          label: 'Sparse',
+          color: '#445566',
+          height: 24,
+          large_tick_interval: null,
+          small_tick_interval: 5,
+          tick_font_size: 9
+        }
+      ]
+    );
+  }
+  if (sessionPath.includes('WSSV_genome_comparison')) {
+    assert.equal(projectedSession.files.c_conservation_blasts.length, 20);
+    assert.equal(projectedSession.files.c_conservation_blasts_source, 'losat-cache');
+    assert.equal((projectedSession.files.c_conservation_fastas || []).length, 20);
+  }
 }
 
-if (process.argv.includes('--print')) console.log(JSON.stringify(canonical));
+const roundTripSessionIndex = process.argv.indexOf('--round-trip-session');
+if (roundTripSessionIndex >= 0) {
+  const sessionPath = process.argv[roundTripSessionIndex + 1];
+  if (!sessionPath) throw new Error('--round-trip-session requires a JSON path.');
+  const session = JSON.parse(await readFile(sessionPath, 'utf8'));
+  const sessionProjection = projectCanonicalSessionRequest({
+    renderRequest: session.renderRequest,
+    resources: session.resources,
+    webFiles: session.webFiles || {},
+    legacyFiles: session.files || null,
+    storedConfig: session.config || null
+  });
+  console.log(JSON.stringify(buildCanonicalRenderRequest({
+    state: stateForCanonicalProjection(sessionProjection),
+    filesData: sessionProjection.files
+  })));
+} else if (process.argv.includes('--print-resolved-protein')) {
+  console.log(JSON.stringify(resolvedProteinRoundTripCanonical));
+} else if (process.argv.includes('--print-depth')) {
+  console.log(JSON.stringify(sparseDepthCanonical));
+} else if (process.argv.includes('--print')) {
+  console.log(JSON.stringify(canonical));
+}

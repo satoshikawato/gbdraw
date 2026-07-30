@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,13 +14,37 @@ const {
   buildLegendIntents,
   diffLegendIntents
 } = await import(pathToFileURL(join(tempRoot, 'app', 'specific-color-rules.js')));
-const { parseTransformXY } = await import(
+const {
+  COMPARISON_LEGEND_SELECTOR,
+  PAIRWISE_LEGEND_SELECTOR,
+  getComparisonLegendGroup,
+  getLegendChildById,
+  parseTransformXY
+} = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'utils.js'))
 );
 
 assert.equal(SPECIFIC_COLOR_FILE_OWNER, 'specific-color-file');
 assert.deepEqual(parseTransformXY('translate(12.5,-3.25)'), { x: 12.5, y: -3.25 });
 assert.deepEqual(parseTransformXY('translate(.5 2e1)'), { x: 0.5, y: 20 });
+assert.match(COMPARISON_LEGEND_SELECTOR, /^\[data-gbdraw-role="comparison-legend"\]/);
+assert.doesNotMatch(PAIRWISE_LEGEND_SELECTOR, /conservation_identity_legend/);
+
+const comparisonLegend = {
+  id: 'pairwise_legend_h',
+  getAttribute: (name) => name === 'data-gbdraw-role' ? 'comparison-legend' : null
+};
+const parent = { children: [comparisonLegend] };
+assert.equal(getLegendChildById(parent, 'pairwise_legend'), comparisonLegend);
+assert.equal(getComparisonLegendGroup(parent), comparisonLegend);
+
+const svgStylesSource = await readFile(join(tempRoot, 'app', 'svg-styles.js'), 'utf8');
+const repositionSource = await readFile(
+  join(tempRoot, 'app', 'legend-layout', 'reposition-actions.js'),
+  'utf8'
+);
+assert.match(svgStylesSource, /querySelectorAll\(PAIRWISE_LEGEND_SELECTOR\)/);
+assert.match(repositionSource, /querySelector\(PAIRWISE_LEGEND_SELECTOR\)/);
 
 const rules = [
   { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' },

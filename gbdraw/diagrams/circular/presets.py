@@ -15,6 +15,7 @@ from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...tracks.circular import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     NUMERIC_CIRCULAR_TRACK_RENDERERS,
+    _internal_circular_track_slot,
     circular_track_slots_with_axis_side,
     tick_label_layout_from_sides,
 )
@@ -59,11 +60,6 @@ class CircularFeatureSlotDefaults:
     lane_direction: CircularFeatureLaneDirection
     radius: ScalarSpec | None
     width: ScalarSpec | None
-
-
-@dataclass(frozen=True)
-class CircularLabelArenaDefaults:
-    preset: CircularTrackPreset
 
 
 @dataclass(frozen=True)
@@ -159,7 +155,8 @@ def _numeric_slot(
         side="inside",
         radius=radius,
         width=_scalar_px(_default_numeric_width_px(renderer, context)),
-        spacing=_scalar_px(max(1.0, 0.01 * float(context.canvas_config.radius))),
+        inner_gap_px=max(1.0, 0.01 * float(context.canvas_config.radius)),
+        outer_gap_px=max(1.0, 0.01 * float(context.canvas_config.radius)),
         params=dict(params or {}),
     )
 
@@ -224,7 +221,8 @@ def _tick_slot_for_preset(
         side=placement_side,
         radius=None,
         width=_scalar_px(tick_width_px),
-        spacing=_scalar_px(max(1.0, 0.01 * base_radius)),
+        inner_gap_px=max(1.0, 0.01 * base_radius),
+        outer_gap_px=max(1.0, 0.01 * base_radius),
         params={
             "tick_label_layout": tick_label_layout_from_sides(label_side, tick_side),
             "preset": preset,
@@ -249,7 +247,8 @@ def circular_track_slots_for_preset(
                 side="overlay" if feature_defaults.lane_direction == "split" else feature_defaults.lane_direction,
                 radius=feature_defaults.radius,
                 width=feature_defaults.width,
-                spacing=_scalar_px(max(1.0, 0.01 * float(context.canvas_config.radius))),
+                inner_gap_px=max(1.0, 0.01 * float(context.canvas_config.radius)),
+                outer_gap_px=max(1.0, 0.01 * float(context.canvas_config.radius)),
                 params={
                     "lane_direction": feature_defaults.lane_direction,
                     "stack_preset": normalized,
@@ -308,13 +307,6 @@ def circular_radial_plan_for_preset(
     )
 
 
-def _slot_requests_pure_auto(slot: CircularTrackSlot, renderer: str) -> bool:
-    """Retired compatibility hook; geometry-free built-ins inherit the preset."""
-
-    del slot, renderer
-    return False
-
-
 def _slot_uses_builtin_preset_lane(slot: CircularTrackSlot, renderer: str) -> bool:
     if renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
         return str(slot.id) in _NUMERIC_PRESET_SLOT_IDS
@@ -331,7 +323,6 @@ def _slot_is_blank_unmatched_numeric_duplicate(slot: CircularTrackSlot, renderer
         and slot.side is None
         and slot.radius is None
         and slot.width is None
-        and slot.spacing is None
         and slot.inner_gap_px is None
         and slot.outer_gap_px is None
     )
@@ -391,15 +382,6 @@ def _inherited_width_for_renderer(
     return None
 
 
-def _auto_stack_side_from_feature_order(
-    slots: Sequence[CircularTrackSlot],
-) -> dict[int, str]:
-    del slots
-    # Row order controls only stacking/order. Placement side comes from the
-    # preset or an explicit side override, not from moving a row in the editor.
-    return {}
-
-
 def _overlay_slot_on_preset_lane(
     slot: CircularTrackSlot,
     *,
@@ -407,44 +389,37 @@ def _overlay_slot_on_preset_lane(
     geometry_slot: CircularTrackSlot | None,
     params_slot: CircularTrackSlot | None,
     context: CircularPresetContext,
-    auto_stack_side: str | None = None,
 ) -> CircularTrackSlot:
     params = _inherited_params_for_slot(slot, params_slot)
-    if slot.side is None and renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS | {"ticks", "spacer"}:
-        params["_stack_side_auto"] = True
     side = slot.side
     if side is None and not (
         renderer == "features"
         and ("lane_direction" in params or "lanes" in params)
     ):
-        side = auto_stack_side or (geometry_slot.side if geometry_slot is not None else None)
-    if (
+        side = geometry_slot.side if geometry_slot is not None else None
+    auto_compress = (
         renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
         and slot.radius is None
         and slot.width is None
         and str(side or "inside").strip().lower() == "inside"
-    ):
-        params["_auto_compress"] = True
-    if (
+    )
+    preferred_anchor_radius = (
+        geometry_slot.radius
+        if (
         renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
         and slot.radius is None
         and geometry_slot is not None
         and geometry_slot.radius is not None
         and str(side or "inside").strip().lower() == "inside"
-    ):
-        params["_preferred_anchor_radius"] = geometry_slot.radius
-    explicit_gap = slot.inner_gap_px is not None or slot.outer_gap_px is not None
-    return replace(
+        )
+        else None
+    )
+    overlaid = replace(
         slot,
         renderer=renderer,
         side=side,
         radius=slot.radius,
         width=slot.width if slot.width is not None else _inherited_width_for_renderer(renderer, params_slot, context),
-        spacing=(
-            slot.spacing
-            if slot.spacing is not None
-            else (None if explicit_gap else (geometry_slot.spacing if geometry_slot is not None else None))
-        ),
         inner_gap_px=(
             slot.inner_gap_px
             if slot.inner_gap_px is not None
@@ -457,6 +432,13 @@ def _overlay_slot_on_preset_lane(
         ),
         params=params,
     )
+    if auto_compress or preferred_anchor_radius is not None:
+        return _internal_circular_track_slot(
+            overlaid,
+            auto_compress=auto_compress,
+            preferred_anchor_radius=preferred_anchor_radius,
+        )
+    return overlaid
 
 
 def circular_track_slots_from_preset_order(
@@ -488,23 +470,18 @@ def circular_track_slots_from_preset_order(
             renderer = _normalized_renderer(slot.renderer)
             if _slot_is_blank_unmatched_numeric_duplicate(slot, renderer):
                 renderer_has_blank_unmatched_duplicates[renderer] = True
-    auto_stack_side_by_index = _auto_stack_side_from_feature_order(slots)
-
     layout_slots: list[CircularTrackSlot] = []
     preferred_ids: set[str] = set()
 
-    for slot_index, slot in enumerate(slots):
+    for slot in slots:
         renderer = _normalized_renderer(slot.renderer)
         geometry_slot: CircularTrackSlot | None = None
         params_slot: CircularTrackSlot | None = None
         prefers_numeric_auto_group = False
-        auto_stack_side = auto_stack_side_by_index.get(slot_index)
-
         has_extra_numeric_renderer = bool(renderer_has_blank_unmatched_duplicates.get(renderer, False))
         if (
             slot.enabled
             and not has_extra_numeric_renderer
-            and not _slot_requests_pure_auto(slot, renderer)
             and _slot_uses_builtin_preset_lane(slot, renderer)
         ):
             geometry_slot = preset_by_id.get(str(slot.id))
@@ -521,7 +498,6 @@ def circular_track_slots_from_preset_order(
                 and slot.radius is None
                 and geometry_slot is not None
                 and geometry_slot.radius is not None
-                and (auto_stack_side is None or auto_stack_side == "inside")
             )
 
         overlaid = _overlay_slot_on_preset_lane(
@@ -530,7 +506,6 @@ def circular_track_slots_from_preset_order(
             geometry_slot=geometry_slot,
             params_slot=params_slot,
             context=context,
-            auto_stack_side=auto_stack_side,
         )
         layout_slots.append(overlaid)
         if (
@@ -545,25 +520,15 @@ def circular_track_slots_from_preset_order(
     )
 
 
-def circular_label_arena_defaults_for_preset(
-    preset: str,
-    context: CircularPresetContext,
-) -> CircularLabelArenaDefaults:
-    del context
-    return CircularLabelArenaDefaults(preset=normalize_circular_track_preset(preset))
-
-
 __all__ = [
     "CircularFeatureLaneDirection",
     "CircularFeatureSlotDefaults",
-    "CircularLabelArenaDefaults",
     "CircularPresetContext",
     "CircularPresetRadialPlan",
     "CircularTrackPreset",
     "circular_radial_plan_for_preset",
     "circular_feature_lane_direction_for_preset",
     "circular_feature_slot_defaults_for_preset",
-    "circular_label_arena_defaults_for_preset",
     "circular_track_slots_from_preset_order",
     "circular_track_slots_for_preset",
     "normalize_circular_track_preset",

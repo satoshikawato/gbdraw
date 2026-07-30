@@ -5,6 +5,11 @@ import {
 } from '../app/feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData } from './json-clone.js';
+import { replaceLayoutPreferences } from '../app/layout-preferences.js';
+import {
+  isResourceBackedCanonicalComparison,
+  mapResourceBackedCanonicalComparison
+} from './canonical-comparisons.js';
 
 export { cloneJsonData };
 
@@ -115,14 +120,7 @@ const buildFallbackUiStateData = (state) => ({
   generatedMode: getRef(state.generatedMode, 'circular'),
   generatedMultiRecordCanvas: Boolean(getRef(state.generatedMultiRecordCanvas, false)),
   generatedCircularPlotTitlePosition: getRef(state.generatedCircularPlotTitlePosition, 'none'),
-  circularLegendPosition: getRef(state.circularLegendPosition, 'left'),
-  linearLegendPosition: getRef(state.linearLegendPosition, 'bottom'),
-  circularPlotTitlePosition: getRef(state.circularPlotTitlePosition, 'none'),
-  linearPlotTitlePosition: getRef(state.linearPlotTitlePosition, 'bottom'),
-  circularSingleRecordLegendPosition: getRef(state.circularSingleRecordLegendPosition, 'left'),
-  circularSingleRecordPlotTitlePosition: getRef(state.circularSingleRecordPlotTitlePosition, 'none'),
-  circularMultiRecordLegendPosition: getRef(state.circularMultiRecordLegendPosition, null),
-  circularMultiRecordPlotTitlePosition: getRef(state.circularMultiRecordPlotTitlePosition, null),
+  layoutPreferences: clonePlainObject(state.layoutPreferences),
   autoLabelReflow: Boolean(getRef(state.autoLabelReflowEnabled, false)),
   paletteInstantPreviewEnabled: Boolean(getRef(state.paletteInstantPreviewEnabled, false)),
   appliedPaletteName: getRef(state.appliedPaletteName, 'default'),
@@ -156,22 +154,7 @@ const applyFallbackUiStateData = (state, ui = {}) => {
   if (ui.generatedCircularPlotTitlePosition) {
     setRef(state.generatedCircularPlotTitlePosition, ui.generatedCircularPlotTitlePosition);
   }
-  if (ui.circularLegendPosition) setRef(state.circularLegendPosition, ui.circularLegendPosition);
-  if (ui.linearLegendPosition) setRef(state.linearLegendPosition, ui.linearLegendPosition);
-  if (ui.circularPlotTitlePosition) setRef(state.circularPlotTitlePosition, ui.circularPlotTitlePosition);
-  if (ui.linearPlotTitlePosition) setRef(state.linearPlotTitlePosition, ui.linearPlotTitlePosition);
-  if (Object.prototype.hasOwnProperty.call(ui, 'circularSingleRecordLegendPosition')) {
-    setRef(state.circularSingleRecordLegendPosition, ui.circularSingleRecordLegendPosition);
-  }
-  if (Object.prototype.hasOwnProperty.call(ui, 'circularSingleRecordPlotTitlePosition')) {
-    setRef(state.circularSingleRecordPlotTitlePosition, ui.circularSingleRecordPlotTitlePosition);
-  }
-  if (Object.prototype.hasOwnProperty.call(ui, 'circularMultiRecordLegendPosition')) {
-    setRef(state.circularMultiRecordLegendPosition, ui.circularMultiRecordLegendPosition);
-  }
-  if (Object.prototype.hasOwnProperty.call(ui, 'circularMultiRecordPlotTitlePosition')) {
-    setRef(state.circularMultiRecordPlotTitlePosition, ui.circularMultiRecordPlotTitlePosition);
-  }
+  replaceLayoutPreferences(state.layoutPreferences, ui.layoutPreferences);
   if (state.canvasPadding && ui.canvasPadding) {
     state.canvasPadding.top = Number(ui.canvasPadding.top) || 0;
     state.canvasPadding.right = Number(ui.canvasPadding.right) || 0;
@@ -295,8 +278,23 @@ const buildFilesData = (state, fileStore) => ({
   c_fasta: fileStore.describeValue(state.files?.c_fasta),
   c_depth: fileStore.describeValue(state.files?.c_depth),
   c_conservation_blasts: fileStore.describeValue(state.files?.c_conservation_blasts || []),
+  c_conservation_blasts_source: state.files?.c_conservation_blasts_source === 'losat-cache'
+    ? 'losat-cache'
+    : null,
   c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
   c_conservation_sequence_sources: fileStore.describeValue(state.files?.c_conservation_sequence_sources || []),
+  linearCanonicalComparisons: (
+    Array.isArray(state.files?.linearCanonicalComparisons)
+      ? state.files.linearCanonicalComparisons
+      : []
+  ).map((comparison) => (
+    isResourceBackedCanonicalComparison(comparison)
+      ? {
+          ...mapResourceBackedCanonicalComparison(comparison),
+          file: fileStore.describeValue(comparison.file)
+        }
+      : cloneJsonData(comparison)
+  )),
   d_color: fileStore.describeValue(state.files?.d_color),
   t_color: fileStore.describeValue(state.files?.t_color),
   blacklist: fileStore.describeValue(state.files?.blacklist),
@@ -335,11 +333,21 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
   state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
     ? restore(filesData.c_conservation_blasts).filter(Boolean)
     : [];
+  state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
+    ? 'losat-cache'
+    : null;
   state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
-    ? restore(filesData.c_conservation_fastas).filter(Boolean)
+    ? restore(filesData.c_conservation_fastas)
     : [];
   state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
     ? restore(filesData.c_conservation_sequence_sources)
+    : [];
+  state.files.linearCanonicalComparisons = Array.isArray(filesData?.linearCanonicalComparisons)
+    ? filesData.linearCanonicalComparisons.map((comparison) => (
+        isResourceBackedCanonicalComparison(comparison)
+          ? mapResourceBackedCanonicalComparison(comparison, restore)
+          : cloneJsonData(comparison)
+      ))
     : [];
   state.files.d_color = restore(filesData?.d_color);
   state.files.t_color = restore(filesData?.t_color);

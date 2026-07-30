@@ -1,35 +1,32 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""
-Circular label placement utilities.
-
-This module contains the circular/arc-based label placement logic that used to live in
-`gbdraw.labels.placement`.
-"""
+"""Circular and arc-based label placement utilities."""
 
 from __future__ import annotations
 
 import math
 from functools import lru_cache
-from typing import TYPE_CHECKING
 
 from ..features.coordinates import get_strand
 from .filtering import preprocess_label_filtering
-from .policy import normalize_label_rendering
 from .circular_candidates import build_circular_label_candidates
-from .circular_horizontal import keep_horizontal_layout
 from .circular_radial import place_radial_labels
-from ..config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ..config.models import (  # type: ignore[reportMissingImports]
+    CircularRenderProfile,
+    GbdrawConfig,
+)
 from ..core.text import calculate_bbox_dimensions
 from ..core.sequence import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
-from ..layout.circular import calculate_feature_position_factors_circular
+from ..layout.circular import (
+    CircularFeatureLayout,
+    CircularRadialLayout,
+    calculate_feature_position_factors_circular,
+    feature_radius_intervals,
+)
 from ..layout.spatial import Aabb, candidate_aabb_pairs
 from ..svg.arrows import calculate_circular_arrow_length
-
-if TYPE_CHECKING:
-    from ..diagrams.circular.radial_layout import CircularFeatureLayout, CircularRadialLayout
 
 # Keep dense large-font labels from being pushed excessively far from features.
 MIN_BBOX_GAP_RATIO = 0.01
@@ -51,7 +48,6 @@ LEADER_START_ORDER_GAP_CANDIDATES = (1.0, 0.75, 0.5, 0.25, 0.0)
 MIN_OUTER_LABEL_ANCHOR_CLEARANCE_PX = 6.0
 MIN_OUTER_LABEL_TEXT_CLEARANCE_PX = 13.0
 OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX = 3.0
-OUTER_LABEL_FEATURE_CLEARANCE_SAMPLE_CAP_DEG = 18.0
 RESOLVE_OVERLAP_MARGIN_EXTRA_PX = 4.2
 LEADER_LABEL_COLLISION_MARGIN_PX = 0.8
 LEADER_LABEL_SHIFT_STEP_DEG = 0.25
@@ -1230,18 +1226,17 @@ def _build_feature_radius_intervals(
     total_length: int,
     radius: float,
     track_ratio: float,
-    cfg: GbdrawConfig,
+    profile: CircularRenderProfile,
     *,
     feature_track_ratio_factor_override: float | None = None,
     feature_layout: CircularFeatureLayout | None = None,
     track_preset: str | None = None,
 ) -> list[tuple[float, float, float, float]]:
     """Build local genome intervals as (start, end, inner_radius_px, outer_radius_px)."""
+    cfg = profile.config
     if total_length <= 0:
         return []
     if feature_layout is not None:
-        from ..diagrams.circular.radial_layout import feature_radius_intervals
-
         return feature_radius_intervals(feature_dict, total_length, feature_layout)
 
     length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
@@ -1252,7 +1247,7 @@ def _build_feature_radius_intervals(
     )
     cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
     track_type = _normalize_circular_track_preset(track_preset or cfg.canvas.circular.track_type)
-    strandedness = cfg.canvas.strandedness
+    strandedness = profile.strandedness
 
     intervals: list[tuple[float, float, float, float]] = []
     total_length_float = float(total_length)
@@ -1309,7 +1304,7 @@ def _build_outer_feature_radius_intervals(
     total_length: int,
     radius: float,
     track_ratio: float,
-    cfg: GbdrawConfig,
+    profile: CircularRenderProfile,
     *,
     feature_track_ratio_factor_override: float | None = None,
     feature_layout: CircularFeatureLayout | None = None,
@@ -1321,7 +1316,7 @@ def _build_outer_feature_radius_intervals(
         total_length,
         radius,
         track_ratio,
-        cfg,
+        profile,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         feature_layout=feature_layout,
         track_preset=track_preset,
@@ -1334,7 +1329,7 @@ def _build_inner_feature_radius_intervals(
     total_length: int,
     radius: float,
     track_ratio: float,
-    cfg: GbdrawConfig,
+    profile: CircularRenderProfile,
     *,
     feature_track_ratio_factor_override: float | None = None,
     feature_layout: CircularFeatureLayout | None = None,
@@ -1346,7 +1341,7 @@ def _build_inner_feature_radius_intervals(
         total_length,
         radius,
         track_ratio,
-        cfg,
+        profile,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         feature_layout=feature_layout,
         track_preset=track_preset,
@@ -1386,41 +1381,6 @@ def _min_inner_feature_radius_at_position(
             if min_inner_radius is None or inner_radius < min_inner_radius:
                 min_inner_radius = inner_radius
     return 0.0 if min_inner_radius is None else float(min_inner_radius)
-
-
-def _sample_label_genome_positions(label: dict, total_length: int) -> list[float]:
-    """Sample genome positions covered by a label for local feature clearance checks."""
-    if total_length <= 0:
-        return []
-
-    start_x = float(label.get("start_x", 0.0))
-    start_y = float(label.get("start_y", 0.0))
-    radius = math.hypot(start_x, start_y)
-    if radius <= 1e-9:
-        middle = float(label.get("middle", 0.0))
-        return [middle % float(total_length)]
-
-    base_angle_deg = math.degrees(math.atan2(start_y, start_x))
-    width_px = max(0.0, float(label.get("width_px", 0.0)))
-    half_span_deg = 0.5 * math.degrees(width_px / radius) if width_px > 0.0 else 0.0
-    half_span_deg = min(OUTER_LABEL_FEATURE_CLEARANCE_SAMPLE_CAP_DEG, half_span_deg)
-
-    sampled_angles = [base_angle_deg]
-    if half_span_deg >= 0.2:
-        sampled_angles.extend([base_angle_deg - half_span_deg, base_angle_deg + half_span_deg])
-    if half_span_deg >= 4.0:
-        sampled_angles.extend(
-            [
-                base_angle_deg - (0.5 * half_span_deg),
-                base_angle_deg + (0.5 * half_span_deg),
-            ]
-        )
-
-    sampled_positions: list[float] = []
-    for sampled_angle in sampled_angles:
-        angle_mod = (sampled_angle + 90.0) % 360.0
-        sampled_positions.append((angle_mod / 360.0) * float(total_length))
-    return sampled_positions
 
 
 def _label_genome_intervals_for_clearance(label: dict, total_length: int) -> list[tuple[float, float]]:
@@ -4263,15 +4223,14 @@ def rearrange_labels_fc(
     feature_radius,
     total_length,
     genome_len,
-    config_dict,
+    cfg: GbdrawConfig,
     strands,
     is_outer,
+    inner_labels_enabled: bool,
     arena_outer_radius: float | None = None,
     spacing_px: float | None = None,
-    cfg: GbdrawConfig | None = None,
     track_preset: str | None = None,
 ):
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
     track_type = _normalize_circular_track_preset(track_preset or cfg.canvas.circular.track_type)
 
     if is_outer:
@@ -4355,7 +4314,6 @@ def rearrange_labels_fc(
     legacy_score = None
     legacy_with_leaders: list[dict] | None = None
     legacy_leader_collisions: int | None = None
-    allow_inner_labels = bool(cfg.canvas.circular.allow_inner_labels)
     is_dense = len(sorted_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD
 
     # Very dense sets are better handled by the legacy strategy: it keeps labels
@@ -4376,7 +4334,7 @@ def rearrange_labels_fc(
             )
             if legacy_leader_collisions == 0:
                 return legacy_with_leaders
-        if is_outer and (not allow_inner_labels) and legacy_score[0] == 0:
+        if is_outer and (not inner_labels_enabled) and legacy_score[0] == 0:
             return _assign_leader_start_points(candidate_legacy, total_length)
         if is_outer and legacy_score[0] == 0 and legacy_score[2] == 0:
             return _assign_leader_start_points(candidate_legacy, total_length)
@@ -4452,54 +4410,6 @@ def rearrange_labels_fc(
     return _assign_leader_start_points(best_labels, total_length)
 
 
-def _coalesce_origin_spanning_label_segment(
-    feature_object,
-    total_length: int,
-) -> tuple[int, int, str] | None:
-    """
-    Return a merged origin-spanning segment for boundary-touching two-block features.
-
-    This mirrors circular feature path coalescing so label midpoint logic stays
-    consistent with rendered feature geometry.
-    """
-    if total_length <= 0:
-        return None
-
-    block_coords = [coord for coord in feature_object.location if coord.kind == "block"]
-    if len(block_coords) != 2:
-        return None
-
-    starts = [int(coord.start) for coord in block_coords]
-    ends = [int(coord.end) for coord in block_coords]
-    if min(starts) > 1 or max(ends) < int(total_length):
-        return None
-
-    left_blocks = [coord for coord in block_coords if int(coord.start) <= 1]
-    right_blocks = [coord for coord in block_coords if int(coord.end) >= int(total_length)]
-    if len(left_blocks) != 1 or len(right_blocks) != 1 or left_blocks[0] is right_blocks[0]:
-        return None
-
-    merged_start = max(starts)
-    merged_end = min(ends)
-    if merged_start <= merged_end:
-        return None
-
-    return merged_start, merged_end, str(block_coords[0].strand)
-
-
-def _segment_midpoint_bp(
-    segment_start: int,
-    segment_end: int,
-    total_length: int,
-) -> float:
-    """Return segment midpoint in bp, supporting origin-spanning segments."""
-    if segment_start <= segment_end or total_length <= 0:
-        return float(segment_start + segment_end) / 2.0
-
-    span_bp = (float(total_length) - float(segment_start)) + float(segment_end)
-    return float((float(segment_start) + (0.5 * span_bp)) % float(total_length))
-
-
 def _segment_span_bp(
     segment_start: int,
     segment_end: int,
@@ -4544,8 +4454,7 @@ def prepare_label_list(
     total_length,
     radius,
     track_ratio,
-    config_dict,
-    cfg: GbdrawConfig | None = None,
+    profile: CircularRenderProfile,
     *,
     outer_arena: tuple[float, float] | None = None,
     feature_track_ratio_factor_override: float | None = None,
@@ -4556,13 +4465,13 @@ def prepare_label_list(
     label_font_size: float | None = None,
     _candidate_cache: dict[str, object] | None = None,
 ):
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    cfg = profile.config
     embedded_labels = []
     outer_labels = []
     inner_labels = []
     label_filtering = cfg.labels.filtering.as_dict()
     label_filtering = preprocess_label_filtering(label_filtering)
-    label_rendering = normalize_label_rendering(cfg.labels.rendering)
+    label_rendering = profile.label_rendering
     length_threshold = cfg.labels.length_threshold.circular
     length_param = determine_length_parameter(total_length, length_threshold)
     track_type = _normalize_circular_track_preset(track_preset or cfg.canvas.circular.track_type)
@@ -4573,10 +4482,11 @@ def prepare_label_list(
     )
     if lane_direction not in {"inside", "outside", "split"}:
         lane_direction = _lane_direction_from_preset(track_type)
-    strandedness = cfg.canvas.strandedness
+    strandedness = profile.strandedness
+    resolve_overlaps = profile.resolve_overlaps
 
     strands = "separate" if strandedness else "single"
-    allow_inner_labels = cfg.canvas.circular.allow_inner_labels
+    inner_labels_enabled = profile.inner_labels_enabled
     radius_factor = cfg.labels.radius_factor[track_type][strands][length_param]
     inner_radius_factor = cfg.labels.inner_radius_factor[track_type][strands][length_param]
 
@@ -4597,13 +4507,13 @@ def prepare_label_list(
     cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
     feature_band_width_px = float(radius) * float(cds_ratio)
     effective_anchor_clearance_px = _effective_outer_middle_anchor_clearance_px(
-        resolve_overlaps=bool(cfg.canvas.resolve_overlaps),
+        resolve_overlaps=resolve_overlaps,
         strandedness=bool(strandedness),
         lane_direction=lane_direction,
         feature_band_width_px=feature_band_width_px,
     )
     effective_text_clearance_px = _effective_outer_text_clearance_px(
-        resolve_overlaps=bool(cfg.canvas.resolve_overlaps),
+        resolve_overlaps=resolve_overlaps,
         strandedness=bool(strandedness),
         lane_direction=lane_direction,
         feature_band_width_px=feature_band_width_px,
@@ -4675,7 +4585,7 @@ def prepare_label_list(
             feature_middle_y: float = feature_center_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
             feature_anchor_x: float = feature_middle_x
             feature_anchor_y: float = feature_middle_y
-            is_outer_label = (feature_object.strand == "positive") or (allow_inner_labels is False)
+            is_outer_label = (feature_object.strand == "positive") or (inner_labels_enabled is False)
             longest_segment_bp = _segment_span_bp(
                 longest_segment_start,
                 longest_segment_end,
@@ -4686,7 +4596,7 @@ def prepare_label_list(
                 and longest_segment_bp < circular_arrow_length_bp
             )
             if is_outer_label:
-                if cfg.canvas.resolve_overlaps and not strandedness and not is_short_directional_feature:
+                if resolve_overlaps and not strandedness and not is_short_directional_feature:
                     # Raised feature tracks look disconnected when leaders target the track center.
                     # Anchor to the outer edge so feature-to-label distance reads more naturally.
                     feature_anchor_x = feature_outer_radius * math.cos(
@@ -4699,7 +4609,7 @@ def prepare_label_list(
                     # Use the inner edge of the arena as the "anchor" radius for leader lines.
                     anchor_radius = float(outer_arena[0])
                     middle_radius = anchor_radius
-                    if cfg.canvas.resolve_overlaps and not strandedness:
+                    if resolve_overlaps and not strandedness:
                         middle_radius = max(
                             float(middle_radius),
                             float(
@@ -4715,7 +4625,7 @@ def prepare_label_list(
                         )
                 else:
                     middle_radius = radius_factor * radius
-                    if cfg.canvas.resolve_overlaps and not strandedness:
+                    if resolve_overlaps and not strandedness:
                         middle_radius = max(
                             float(middle_radius),
                             float(
@@ -4732,7 +4642,7 @@ def prepare_label_list(
                 middle_x = middle_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
                 middle_y = middle_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
             else:
-                if cfg.canvas.resolve_overlaps and not strandedness and not is_short_directional_feature:
+                if resolve_overlaps and not strandedness and not is_short_directional_feature:
                     # For displaced inner features, anchor leaders on the inner edge so lines
                     # do not cross over raised feature bodies.
                     feature_anchor_x = feature_inner_radius * math.cos(
@@ -4743,7 +4653,7 @@ def prepare_label_list(
                     )
                 middle_x = (inner_radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
                 middle_y = (inner_radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
-                if cfg.canvas.resolve_overlaps and not strandedness:
+                if resolve_overlaps and not strandedness:
                     label_entry["max_inner_start_radius_px"] = max(
                         0.0,
                         feature_inner_radius
@@ -4799,7 +4709,7 @@ def prepare_label_list(
                 embedded_labels.append(label_entry)
             else:
                 if label_entry["middle"] > (total_length / 2):
-                    if feature_object.strand == "positive" or allow_inner_labels is False:
+                    if feature_object.strand == "positive" or inner_labels_enabled is False:
                         label_entry["is_inner"] = False
                         outer_labels.append(label_entry)
                     else:
@@ -4807,14 +4717,14 @@ def prepare_label_list(
                         inner_labels.append(label_entry)
 
                 else:
-                    if feature_object.strand == "positive" or allow_inner_labels is False:
+                    if feature_object.strand == "positive" or inner_labels_enabled is False:
                         label_entry["is_inner"] = False
                         outer_labels.append(label_entry)
                     else:
                         label_entry["is_inner"] = True
                         inner_labels.append(label_entry)
 
-    if cfg.labels.circular.placement == "radial":
+    if profile.label_placement == "radial":
         outer_reserved_radius_px = 0.0
         if outer_arena is not None:
             outer_reserved_radius_px = max(float(outer_arena[0]), float(outer_arena[1]))
@@ -4851,7 +4761,7 @@ def prepare_label_list(
 
         radial_result = place_radial_labels(
             outer_labels,
-            inner_labels if allow_inner_labels else (),
+            inner_labels if inner_labels_enabled else (),
             total_length=total_length,
             spacing_px=label_spacing_px,
             outer_reserved_radius_px=outer_reserved_radius_px,
@@ -4874,23 +4784,23 @@ def prepare_label_list(
         radius,
         total_length,
         length_param,
-        config_dict,
+        cfg,
         strands,
         is_outer=True,
+        inner_labels_enabled=inner_labels_enabled,
         arena_outer_radius=(float(outer_arena[1]) if outer_arena is not None else None),
         spacing_px=label_spacing_px,
-        cfg=cfg,
         track_preset=track_type,
     )
     feature_outer_radius_intervals: list[tuple[float, float, float]] | None = None
     feature_inner_radius_intervals: list[tuple[float, float, float]] | None = None
-    if cfg.canvas.resolve_overlaps and not strandedness:
+    if resolve_overlaps and not strandedness:
         feature_outer_radius_intervals = _build_outer_feature_radius_intervals(
             feature_dict,
             total_length,
             radius,
             track_ratio,
-            cfg,
+            profile,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
             feature_layout=feature_layout,
             track_preset=track_type,
@@ -4900,7 +4810,7 @@ def prepare_label_list(
             total_length,
             radius,
             track_ratio,
-            cfg,
+            profile,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
             feature_layout=feature_layout,
             track_preset=track_type,
@@ -4980,20 +4890,20 @@ def prepare_label_list(
             total_length,
         )
     inner_labels_rearranged = []
-    if allow_inner_labels:
+    if inner_labels_enabled:
         inner_labels_rearranged = rearrange_labels_fc(
             inner_labels,
             radius,
             total_length,
             length_param,
-            config_dict,
+            cfg,
             strands,
             is_outer=False,
+            inner_labels_enabled=inner_labels_enabled,
             spacing_px=label_spacing_px,
-            cfg=cfg,
             track_preset=track_type,
         )
-        if (not cfg.canvas.resolve_overlaps) and len(inner_labels_rearranged) >= 2:
+        if (not resolve_overlaps) and len(inner_labels_rearranged) >= 2:
             inner_labels_rearranged = _rebalance_inner_labels_strict_order(
                 inner_labels_rearranged,
                 total_length,
@@ -5079,7 +4989,7 @@ def prepare_label_list(
         key=lambda label: float(label["middle"]),
     )
     label_list_fc = embedded_labels + external_labels_ordered
-    return list(keep_horizontal_layout(label_list_fc).labels)
+    return label_list_fc
 
 
 __all__ = [

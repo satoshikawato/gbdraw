@@ -8,18 +8,12 @@ except ImportError:
 from importlib import resources
 import json
 import traceback
-import glob
-import os
-import io
-import contextlib
-import logging
-from gbdraw.circular import _get_args as _get_circular_args, run_circular_from_namespace
-from gbdraw.linear import _get_args as _get_linear_args, run_linear_from_namespace
 from gbdraw.web_support.feature_metadata import (
     extract_features_from_genbank_json,
     extract_features_from_gff_fasta_json,
 )
 from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload as _serialize_shared_orthogroups_payload
+from gbdraw.web_support.request_render import render_embedded_canonical_web_request
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -89,158 +83,24 @@ def get_palettes_json():
     except:
         return "{}"
 
-def run_gbdraw_wrapper(mode, args, virtual_blast_files_json=None):
-    for f in glob.glob("*.svg"):
-        try:
-            os.remove(f)
-        except:
-            pass
-
-    full_args = args + ["-f", "svg"]
-    stdout_buf = io.StringIO()
-    stderr_buf = io.StringIO()
-    original_load_comparisons = None
-    assemble_module = None
-    run_result = None
-
-    def _collect_output():
-        stdout_text = stdout_buf.getvalue()
-        stderr_text = stderr_buf.getvalue()
-        stdout_text = stdout_text.strip() if stdout_text else ""
-        stderr_text = stderr_text.strip() if stderr_text else ""
-        return stdout_text, stderr_text
-
-    def _build_error(err_type, message, traceback_text=None, code=None):
-        stdout_text, stderr_text = _collect_output()
-        payload = {"type": err_type, "message": message}
-        if code is not None:
-            payload["code"] = code
-        if traceback_text:
-            payload["traceback"] = traceback_text
-        if stderr_text:
-            payload["stderr"] = stderr_text
-        if stdout_text:
-            payload["stdout"] = stdout_text
-        return {"error": payload}
-
-    def _install_virtual_blast_loader():
-        nonlocal original_load_comparisons, assemble_module
-        if not virtual_blast_files_json:
-            return
-        try:
-            payload = json.loads(str(virtual_blast_files_json))
-        except Exception:
-            payload = []
-        virtual_files = {
-            str(item.get("path", "")): item
-            for item in payload
-            if isinstance(item, dict) and str(item.get("path", ""))
-        }
-        if not virtual_files:
-            return
-
-        import pandas as pd
-        from io import StringIO
-        from gbdraw.diagrams.linear import assemble as _assemble_module
-        from gbdraw.io.comparisons import COMPARISON_COLUMNS, filter_comparison_dataframe
-
-        assemble_module = _assemble_module
-        original_load_comparisons = _assemble_module.load_comparisons
-
-        def _load_comparisons_from_virtual_files(comparison_files, blast_config):
-            comparison_list = []
-            fallback_files = []
-            for comparison_file in comparison_files:
-                comparison_path = str(comparison_file)
-                if comparison_path not in virtual_files:
-                    fallback_files.append(comparison_file)
-                    continue
-                try:
-                    virtual_entry = virtual_files[comparison_path]
-                    comparison_rows = virtual_entry.get("rows") if isinstance(virtual_entry, dict) else None
-                    comparison_text = str(virtual_entry.get("text", "")) if isinstance(virtual_entry, dict) else str(virtual_entry)
-                    if isinstance(comparison_rows, list):
-                        if comparison_rows:
-                            df = pd.DataFrame.from_records(comparison_rows)
-                        else:
-                            df = pd.DataFrame(columns=COMPARISON_COLUMNS)
-                    elif not comparison_text.strip():
-                        comparison_list.append(pd.DataFrame(columns=COMPARISON_COLUMNS))
-                        continue
-                    else:
-                        df = pd.read_csv(
-                            StringIO(comparison_text),
-                            sep=chr(9),
-                            comment="#",
-                            names=COMPARISON_COLUMNS,
-                        )
-                    comparison_list.append(filter_comparison_dataframe(df, blast_config))
-                except ValueError as e:
-                    logging.getLogger(__name__).warning(
-                        f"WARNING: Error parsing comparison file {comparison_path}. It may be corrupt or in the wrong format. Error: {e}"
-                    )
-                except Exception as e:
-                    logging.getLogger(__name__).error(
-                        f"ERROR: An unexpected error occurred while processing {comparison_path}: {e}"
-                    )
-            if fallback_files:
-                comparison_list.extend(original_load_comparisons(fallback_files, blast_config))
-            return comparison_list
-
-        _assemble_module.load_comparisons = _load_comparisons_from_virtual_files
-
-    original_streams = []
+def run_canonical_request_wrapper(request_json, resources_json, workspace):
     try:
-        _install_virtual_blast_loader()
-        for handler in logging.getLogger().handlers:
-            if isinstance(handler, logging.StreamHandler):
-                original_streams.append((handler, handler.stream))
-                handler.setStream(stdout_buf)
-        with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
-            if mode == 'circular':
-                run_result = run_circular_from_namespace(_get_circular_args(full_args))
-            else:
-                run_result = run_linear_from_namespace(_get_linear_args(full_args))
-    except SystemExit as e:
-        code = getattr(e, "code", None)
-        if code != 0:
-            if isinstance(code, int):
-                message = f"Exit with status {code}"
-            elif code is None:
-                message = "SystemExit"
-            else:
-                message = str(code)
-            return json.dumps(_build_error("SystemExit", message, code=code))
+        payload = json.loads(str(request_json))
+        resources = json.loads(str(resources_json))
+        result = render_embedded_canonical_web_request(
+            payload,
+            resources=resources,
+            workspace=str(workspace),
+        )
+        return json.dumps(result)
     except Exception as e:
-        err_type = e.__class__.__name__
-        message = str(e) if str(e) else "Unhandled exception"
-        return json.dumps(_build_error(err_type, message, traceback_text=traceback.format_exc()))
-    finally:
-        for handler, stream in original_streams:
-            handler.setStream(stream)
-        if assemble_module is not None and original_load_comparisons is not None:
-            assemble_module.load_comparisons = original_load_comparisons
-
-    files = []
-    if run_result is not None:
-        for output in getattr(run_result, "outputs", ()) or ():
-            svg_path = str(getattr(output, "svg_path", ""))
-            if svg_path:
-                files.append(svg_path)
-    if not files:
-        files = sorted(glob.glob("*.svg"))
-    if not files:
-        return json.dumps(_build_error("OutputError", "No output files generated."))
-    results = []
-    for fname in files:
-        with open(fname, "r") as f:
-            results.append({"name": os.path.basename(fname), "content": f.read()})
-    metadata = {}
-    if run_result is not None:
-        raw_metadata = getattr(run_result, "run_metadata", {}) or {}
-        if isinstance(raw_metadata, dict):
-            metadata.update(raw_metadata)
-    return json.dumps({"results": results, "metadata": metadata})
+        return json.dumps({
+            "error": {
+                "type": e.__class__.__name__,
+                "message": str(e) if str(e) else "Unhandled exception",
+                "traceback": traceback.format_exc(),
+            }
+        })
 
 def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
     """Extract the first record as FASTA for LOSAT input."""
@@ -539,13 +399,12 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         records = load_gff_fasta(
             [path],
             [fasta_path],
-            "linear",
             selected_features_set=["CDS"],
             keep_all_features=True,
-            load_comparison=True,
             record_selectors=[_normalize_web_record_selector(record_selector) or ""],
             reverse_flags=[reverse],
         )
+        records = records[:1]
     else:
         raise ValueError(f"Unsupported format: {fmt}")
     if region_spec:
@@ -583,43 +442,30 @@ def _serialize_cds_protein(protein, record=None):
         "feature_hash_end": getattr(protein, "feature_hash_end", None),
         "feature_hash_strand": getattr(protein, "feature_hash_strand", None),
         "feature_hash_parts": [list(part) for part in (getattr(protein, "feature_hash_parts", ()) or ())],
+        "location_operator": getattr(protein, "location_operator", ""),
+        "source_feature_position": getattr(protein, "source_feature_position", None),
+        "same_location_ordinal": getattr(protein, "same_location_ordinal", None),
+        "feature_analysis_id": getattr(protein, "feature_analysis_id", None),
+        "display_alias": getattr(protein, "display_alias", None),
+        "runtime_handle": getattr(protein, "runtime_handle", None),
+        "aa_sha256": getattr(protein, "aa_sha256", None),
+        "record_instance_key": getattr(protein, "record_instance_key", None),
+        "record_analysis_id": getattr(protein, "record_analysis_id", None),
+        "protein_set_hash": getattr(protein, "protein_set_hash", None),
+        "runtime_binding_hash": getattr(protein, "runtime_binding_hash", None),
+        "display_binding_hash": getattr(protein, "display_binding_hash", None),
         "coord_base": coord_base,
         "coord_step": coord_step,
         "coord_length": len(record.seq) if record is not None else 0,
     }
 
-def _safe_web_protein_id_token(value):
-    import re
-
-    text = str(value or "").strip()
-    text = re.sub(r"[^A-Za-z0-9_.-]+", "_", text)
-    text = text.strip("._-")
-    return text or "record"
-
-def _with_stable_web_protein_ids(proteins, record_instance_key):
-    from dataclasses import replace
-    import hashlib
-
-    record_key = _safe_web_protein_id_token(record_instance_key)
-    remapped = []
-    used = set()
-    for protein in proteins:
-        strand = protein.strand if protein.strand in {-1, 1} else 0
-        aa_hash = hashlib.sha256(str(protein.sequence or "").encode()).hexdigest()[:12]
-        base_id = f"p_{record_key}_{int(protein.start)}_{int(protein.end)}_{strand}_{aa_hash}"
-        protein_id = base_id
-        suffix = 2
-        while protein_id in used:
-            protein_id = f"{base_id}_{suffix}"
-            suffix += 1
-        used.add(protein_id)
-        remapped.append(replace(protein, protein_id=protein_id))
-    return remapped
-
 def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None):
     """Extract CDS proteins and coordinate metadata for LOSATP blastp."""
     try:
-        from gbdraw.analysis.protein_colinearity import extract_cds_proteins, proteins_to_fasta
+        from gbdraw.analysis.protein_colinearity import (
+            extract_protein_identity_manifest,
+            proteins_to_fasta,
+        )
         from gbdraw.features.visibility import compile_feature_visibility_rules, read_feature_visibility_file
 
         record = _load_single_linear_record_for_proteins(
@@ -636,19 +482,23 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
                 read_feature_visibility_file(feature_visibility_table_path)
             )
         record_index_offset = int(record_index) if record_index is not None else 0
-        result = extract_cds_proteins(
+        stable_record_key = record_instance_key
+        if _is_blank_or_js_nullish(stable_record_key):
+            stable_record_key = f"record-{record_index_offset + 1}"
+        normalized_selector = _normalize_web_record_selector(record_selector) or None
+        normalized_region = None if _is_blank_or_js_nullish(region_spec) else str(region_spec)
+        result = extract_protein_identity_manifest(
             [record],
+            record_instance_keys=[str(stable_record_key)],
+            record_source_ids=[str(record.id)],
+            record_selectors=[normalized_selector],
+            regions=[normalized_region],
             record_index_offset=record_index_offset,
-            prefer_source_ids=False,
             feature_visibility_rules=feature_visibility_rules,
         )
         proteins = result.proteins_by_record[0] if result.proteins_by_record else []
         if not proteins:
             return json.dumps({"error": f"No CDS proteins found in {record.id}"})
-        stable_record_key = record_instance_key
-        if _is_blank_or_js_nullish(stable_record_key):
-            stable_record_key = f"r{record_index_offset + 1:04d}_{record.id}"
-        proteins = _with_stable_web_protein_ids(proteins, stable_record_key)
         protein_map = {
             protein.protein_id: _serialize_cds_protein(protein, record)
             for protein in proteins
@@ -659,6 +509,12 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             "record_length": len(record.seq),
             "protein_count": len(proteins),
             "protein_map": protein_map,
+            "identity_manifest": result.identity_manifest.to_dict(),
+            "protein_set_hash": result.protein_set_hashes[0],
+            "record_analysis_id": result.record_analysis_ids[0],
+            "record_instance_key": result.record_instance_keys[0],
+            "runtime_binding_hash": result.runtime_binding_hashes[0],
+            "display_binding_hash": result.display_binding_hashes[0],
         })
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
@@ -723,7 +579,7 @@ def _build_web_cds_protein_map(raw_map):
             "strand": strand,
             "label": str(data.get("label") or protein_id),
             "protein_length": int(data.get("protein_length") or 0),
-            "sequence": "",
+            "sequence": str(data.get("sequence") or ""),
             "source_protein_id": data.get("source_protein_id"),
             "feature_svg_id": data.get("feature_svg_id"),
         }
@@ -751,6 +607,29 @@ def _build_web_cds_protein_map(raw_map):
                     kwargs[optional_int_field] = int(raw_value)
         if "feature_hash_parts" in supported_fields:
             kwargs["feature_hash_parts"] = _normalize_web_feature_hash_parts(data.get("feature_hash_parts"))
+        for optional_int_field in ("source_feature_position", "same_location_ordinal"):
+            if optional_int_field in supported_fields:
+                raw_value = data.get(optional_int_field)
+                kwargs[optional_int_field] = (
+                    int(raw_value) if raw_value is not None and raw_value != "" else None
+                )
+        for optional_string_field in (
+            "location_operator",
+            "feature_analysis_id",
+            "display_alias",
+            "runtime_handle",
+            "aa_sha256",
+            "record_instance_key",
+            "record_analysis_id",
+            "protein_set_hash",
+            "runtime_binding_hash",
+            "display_binding_hash",
+        ):
+            if optional_string_field in supported_fields:
+                raw_value = data.get(optional_string_field)
+                kwargs[optional_string_field] = (
+                    str(raw_value) if raw_value is not None else None
+                )
         for tuple_field in ("db_xref", "parent_ids"):
             if tuple_field in supported_fields:
                 raw_values = data.get(tuple_field) or ()
@@ -760,6 +639,194 @@ def _build_web_cds_protein_map(raw_map):
                     kwargs[tuple_field] = (str(raw_values),) if str(raw_values).strip() else ()
         protein_map[str(protein_id)] = CdsProtein(**kwargs)
     return protein_map
+
+def _web_ordered_proteins_from_fasta(raw_map, fasta_text):
+    from Bio import SeqIO
+    from dataclasses import replace
+    from io import StringIO
+
+    protein_map = _build_web_cds_protein_map(raw_map)
+    records = list(SeqIO.parse(StringIO(str(fasta_text or "")), "fasta"))
+    record_ids = [str(record.id) for record in records]
+    if len(record_ids) != len(set(record_ids)):
+        raise ValueError("Protein FASTA contains duplicate transport IDs.")
+    if set(record_ids) != set(protein_map):
+        raise ValueError("Protein FASTA and protein map contain different transport IDs.")
+    return [
+        replace(protein_map[str(record.id)], sequence=str(record.seq))
+        for record in records
+    ]
+
+def promote_legacy_losatp_cache_candidates(
+    candidates_json,
+    query_fasta,
+    subject_fasta,
+    query_protein_map_json,
+    subject_protein_map_json,
+    identity_manifest_json,
+    expected_options_json,
+):
+    """Verify and copy one legacy schema-2 protein entry into schema 4."""
+    try:
+        from gbdraw.analysis.protein_colinearity import (
+            promote_legacy_protein_raw_cache_entries,
+        )
+
+        raw_candidates = json.loads(str(candidates_json))
+        query_map = json.loads(str(query_protein_map_json))
+        subject_map = json.loads(str(subject_protein_map_json))
+        manifest = json.loads(str(identity_manifest_json))
+        options = json.loads(str(expected_options_json))
+        candidate_indexes = []
+        entries = []
+        for relative_index, candidate in enumerate(raw_candidates if isinstance(raw_candidates, list) else []):
+            if not isinstance(candidate, dict) or not isinstance(candidate.get("entry"), dict):
+                continue
+            candidate_indexes.append(int(candidate.get("candidateIndex", relative_index)))
+            entries.append(candidate["entry"])
+
+        scan = promote_legacy_protein_raw_cache_entries(
+            entries,
+            query_proteins=_web_ordered_proteins_from_fasta(query_map, query_fasta),
+            subject_proteins=_web_ordered_proteins_from_fasta(subject_map, subject_fasta),
+            query_fasta=str(query_fasta),
+            subject_fasta=str(subject_fasta),
+            identity_manifest=manifest,
+            expected_args=options.get("args") or [],
+            expected_program=str(options.get("program") or "blastp"),
+            expected_outfmt=str(options.get("outfmt") or "6"),
+        )
+        rejections = [
+            {
+                "candidateIndex": candidate_indexes[rejection.candidate_index],
+                "reason": rejection.reason,
+            }
+            for rejection in scan.rejections
+        ]
+        if scan.promotion is None:
+            return json.dumps({"status": "no-match", "rejections": rejections})
+        promotion = scan.promotion
+        protein_id_map = {}
+        old_rows = [
+            line.split("\t")
+            for line in str(entries[promotion.candidate_index].get("text") or "").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        new_rows = [
+            line.split("\t")
+            for line in promotion.rewritten_tsv.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        for old_row, new_row in zip(old_rows, new_rows):
+            if len(old_row) < 2 or len(new_row) < 2:
+                continue
+            protein_id_map[old_row[0]] = new_row[0]
+            protein_id_map[old_row[1]] = new_row[1]
+        return json.dumps({
+            "status": "promoted",
+            "candidateIndex": candidate_indexes[promotion.candidate_index],
+            "entry": promotion.entry,
+            "text": promotion.rewritten_tsv,
+            "proteinIdMap": protein_id_map,
+            "rejections": rejections,
+        })
+    except Exception:
+        return json.dumps({"status": "error", "error": traceback.format_exc()})
+
+def resolve_legacy_protein_reference_map_json(
+    protein_records_json,
+    identity_manifest_json,
+    reference_ids_json,
+):
+    """Resolve legacy Web p_r_ artifact references through current identity."""
+    try:
+        from gbdraw.analysis.protein_colinearity import (
+            build_legacy_protein_reference_map,
+            validate_protein_identity_manifest,
+        )
+
+        raw_records = json.loads(str(protein_records_json))
+        if not isinstance(raw_records, list):
+            raise ValueError("Protein records must be a JSON array.")
+        manifest = validate_protein_identity_manifest(
+            json.loads(str(identity_manifest_json))
+        )
+        reference_ids = json.loads(str(reference_ids_json))
+        if not isinstance(reference_ids, list):
+            raise ValueError("Legacy protein references must be a JSON array.")
+        protein_maps = []
+        for raw_record in raw_records:
+            if not isinstance(raw_record, dict):
+                raise ValueError("Protein record payloads must be JSON objects.")
+            proteins = _web_ordered_proteins_from_fasta(
+                raw_record.get("proteinMap") or {},
+                raw_record.get("fasta") or "",
+            )
+            protein_maps.append({
+                protein.protein_id: protein
+                for protein in proteins
+            })
+        extraction = _build_web_protein_extraction(
+            protein_maps,
+            identity_manifest=manifest,
+        )
+        protein_id_map = build_legacy_protein_reference_map(
+            extraction,
+            [str(reference) for reference in reference_ids],
+        )
+        return json.dumps({
+            "status": "resolved",
+            "proteinIdMap": protein_id_map,
+        })
+    except Exception:
+        return json.dumps({"status": "error", "error": traceback.format_exc()})
+
+def build_protein_losat_cache_key_json(
+    identity_manifest_json,
+    query_record_instance_key,
+    subject_record_instance_key,
+    expected_options_json,
+):
+    """Build the directional schema-4 key with the Python identity owner."""
+    try:
+        from gbdraw.analysis.protein_colinearity import (
+            build_protein_losat_cache_key,
+            build_protein_losat_pair_identity,
+        )
+
+        manifest = json.loads(str(identity_manifest_json))
+        options = json.loads(str(expected_options_json))
+        pair_identity = build_protein_losat_pair_identity(
+            manifest,
+            query_record_instance_key=str(query_record_instance_key),
+            subject_record_instance_key=str(subject_record_instance_key),
+        )
+        return json.dumps({
+            "key": build_protein_losat_cache_key(
+                pair_identity,
+                args=options.get("args") or [],
+                program=str(options.get("program") or "blastp"),
+                outfmt=str(options.get("outfmt") or "6"),
+            )
+        })
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
+def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
+    """Hydrate one internal schema-4 protein TSV for user download."""
+    try:
+        from gbdraw.analysis.protein_colinearity import hydrate_protein_losat_tsv
+
+        entry = json.loads(str(entry_json))
+        manifest = json.loads(str(identity_manifest_json))
+        text = hydrate_protein_losat_tsv(entry, manifest)
+        return json.dumps({
+            "status": "ok",
+            "text": text,
+            "utf8Bytes": len(text.encode("utf-8")),
+        })
+    except Exception:
+        return json.dumps({"status": "error", "error": traceback.format_exc()})
 
 def _build_display_web_cds_protein_map(raw_map, view_transform):
     normalized = _normalize_web_view_transform(view_transform)
@@ -791,7 +858,7 @@ def _build_display_web_cds_protein_map(raw_map, view_transform):
         display_map[str(protein_id)] = display_data
     return _build_web_cds_protein_map(display_map)
 
-def _build_web_protein_extraction(protein_maps):
+def _build_web_protein_extraction(protein_maps, identity_manifest=None):
     from gbdraw.analysis.protein_colinearity import ProteinExtractionResult
 
     combined = {}
@@ -805,7 +872,11 @@ def _build_web_protein_extraction(protein_maps):
         proteins_by_record[int(protein.record_index)].append(protein)
     for record_proteins in proteins_by_record:
         record_proteins.sort(key=lambda protein: (int(protein.start), int(protein.end), int(protein.feature_index), str(protein.protein_id)))
-    return ProteinExtractionResult(proteins_by_record=proteins_by_record, protein_map=combined)
+    return ProteinExtractionResult(
+        proteins_by_record=proteins_by_record,
+        protein_map=combined,
+        identity_manifest=identity_manifest,
+    )
 
 def _clean_json_scalar(value):
     try:
@@ -828,7 +899,7 @@ def _dataframe_json_rows(df):
     return rows
 
 def _serialize_orthogroups_payload(orthogroups):
-    return _serialize_shared_orthogroups_payload(orthogroups, include_stable_feature_ids=False)
+    return _serialize_shared_orthogroups_payload(orthogroups, include_stable_feature_ids=True)
 
 def _web_orthogroup_member_display_metadata(record_payloads):
     metadata = {}
@@ -890,7 +961,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     identity=0,
     alignment_length=0,
     collinear_min_anchors=1,
-    collinear_max_gene_gap=0,
+    collinear_max_unit_gap=0,
     collinear_unit_mode="auto",
     collinear_color_mode="orientation",
     collinear_anchor_mode="rbh",
@@ -1004,7 +1075,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             str(normalized_membership_mode),
             str(normalized_member_max_hits),
             str(collinear_min_anchors),
-            str(collinear_max_gene_gap),
+            str(collinear_max_unit_gap),
             str(collinear_unit_mode),
             str(collinear_color_mode),
             normalized_collinear_anchor_mode,
@@ -1136,7 +1207,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 directional_tables[(query_index, subject_index)] = item["hits"]
             params = LosslessCollinearityParameters(
                 min_anchors=_collinear_int(collinear_min_anchors, 1),
-                max_unit_gap=_collinear_int(collinear_max_gene_gap, 0),
+                max_unit_gap=_collinear_int(collinear_max_unit_gap, 0),
                 max_diagonal_drift=_collinear_int(collinear_max_diagonal_drift, 0),
                 max_conflicts=_collinear_int(collinear_max_conflicts_in_merge_gap, 1),
             )
@@ -1351,19 +1422,10 @@ def list_sequence_records(path, format):
         return json.dumps({"error": traceback.format_exc()})
 
 def list_gff_fasta_records(gff_path, fasta_path):
-    """List records in the same FASTA order used by diagram generation."""
+    """List every FASTA record available to paired GFF3 diagram generation."""
     try:
-        from gbdraw.io.genome import load_gff_fasta
-        records = load_gff_fasta(
-            [gff_path],
-            [fasta_path],
-            "linear",
-            selected_features_set=(),
-            keep_all_features=False,
-            load_comparison=False,
-            record_selectors=[""],
-            reverse_flags=[False],
-        )
+        from Bio import SeqIO
+        records = list(SeqIO.parse(fasta_path, "fasta"))
         payload = [
             {
                 "selector": f"#{idx + 1}",
@@ -1407,6 +1469,8 @@ def regenerate_definition_svgs(
     from Bio import SeqIO
     from gbdraw.render.groups.circular.definition import DefinitionGroup
     from gbdraw.canvas import CircularCanvasConfigurator
+    from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
+    from gbdraw.svg.ids import definition_group_svg_id
     from importlib import resources
 
     try:
@@ -1419,6 +1483,8 @@ def regenerate_definition_svgs(
             config_dict["objects"]["definition"]["circular"]["font_size"] = float(font_size)
         if not _is_blank_or_js_nullish(plot_title_font_size):
             config_dict["objects"]["definition"]["circular"]["plot_title_font_size"] = float(plot_title_font_size)
+        cfg = GbdrawConfig.from_dict(config_dict)
+        render_profile = CircularRenderProfile(cfg)
 
         # Parse the GenBank file
         records = list(SeqIO.parse(gb_path, "genbank"))
@@ -1433,11 +1499,16 @@ def regenerate_definition_svgs(
         keep_full_definition = bool(keep_full_definition_with_plot_title)
 
         definitions = []
+        record_count = len(records)
+        record_id_counts = {}
+        for record in records:
+            raw_record_id = str(record.id)
+            record_id_counts[raw_record_id] = record_id_counts.get(raw_record_id, 0) + 1
         for index, record in enumerate(records):
             # Create canvas config
             canvas_config = CircularCanvasConfigurator(
                 output_prefix=f"temp_{index}",
-                config_dict=config_dict,
+                profile=render_profile,
                 legend="none",
                 gb_record=record,
             )
@@ -1446,14 +1517,29 @@ def regenerate_definition_svgs(
                 profile = "full"
             else:
                 profile = "record_summary" if bool(multi_record_canvas) or show_plot_title else "full"
+            raw_record_id = str(record.id)
+            has_duplicate_record_id = record_id_counts[raw_record_id] > 1
+            definition_group_id = (
+                definition_group_svg_id(
+                    raw_record_id,
+                    mode="circular",
+                    record_index=index,
+                    record_count=record_count,
+                )
+                if has_duplicate_record_id
+                else None
+            )
             def_group = DefinitionGroup(
                 gb_record=record,
                 canvas_config=canvas_config,
-                config_dict=config_dict,
                 species=species if species else None,
                 strain=strain if strain else None,
                 plot_title=None,
                 definition_profile=profile,
+                definition_group_id=definition_group_id,
+                record_index=index,
+                record_count=record_count if has_duplicate_record_id else 1,
+                cfg=cfg,
             )
 
             group = def_group.get_group()
@@ -1468,19 +1554,19 @@ def regenerate_definition_svgs(
         if show_plot_title:
             shared_canvas_config = CircularCanvasConfigurator(
                 output_prefix="temp_shared",
-                config_dict=config_dict,
+                profile=render_profile,
                 legend="none",
                 gb_record=records[0],
             )
             shared_group = DefinitionGroup(
                 gb_record=records[0],
                 canvas_config=shared_canvas_config,
-                config_dict=config_dict,
                 species=species if species else None,
                 strain=strain if strain else None,
                 plot_title=normalized_plot_title if normalized_plot_title else None,
                 definition_profile="shared_common",
                 definition_group_id="plot_title",
+                cfg=cfg,
             )
             definitions.append(
                 {
@@ -1534,7 +1620,7 @@ def regenerate_definition_svg(
         }
     )
 
-def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None):
+def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from GenBank file for UI display."""
     return extract_features_from_genbank_json(
         gb_path,
@@ -1543,19 +1629,20 @@ def extract_features_from_genbank(gb_path, region_spec=None, record_selector=Non
         reverse_flag=reverse_flag,
         selected_features=selected_features,
         feature_visibility_table_path=feature_visibility_table_path,
+        include_biological_features=include_biological_features,
     )
 
-def extract_features_from_gff_fasta(gff_path, fasta_path, mode="linear", region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None):
+def extract_features_from_gff_fasta(gff_path, fasta_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from paired GFF3 and FASTA files for UI display."""
     return extract_features_from_gff_fasta_json(
         gff_path,
         fasta_path,
-        mode=mode,
         region_spec=region_spec,
         record_selector=record_selector,
         reverse_flag=reverse_flag,
         selected_features=selected_features,
         feature_visibility_table_path=feature_visibility_table_path,
+        include_biological_features=include_biological_features,
     )
 
 `;

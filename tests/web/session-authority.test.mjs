@@ -23,12 +23,13 @@ const {
 
 assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
   'cliInvocation', 'config', 'createdAt', 'editorState', 'features', 'files', 'format',
-  'losatCache', 'losatDerivedCache', 'orthogroupState', 'renderRequest', 'resources',
-  'results', 'title', 'ui', 'version', 'webFiles'
+  'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'orthogroupState',
+  'proteinIdentityManifest', 'renderRequest', 'resources',
+  'results', 'runMetadata', 'title', 'ui', 'version', 'webFiles'
 ].sort());
 
 const session = {
-  format: 'gbdraw-session', version: 33, createdAt: 'now', title: 'Canonical',
+  format: 'gbdraw-session', version: 39, createdAt: 'now', title: 'Canonical',
   renderRequest: {}, resources: {}, webFiles: {}, config: {}, files: {},
   ui: {
     mode: 'linear', legend: 'left', linearPlotTitlePosition: 'top', zoom: 1.5,
@@ -39,21 +40,49 @@ const session = {
     featureVisibilityManualRules: [{ action: 'off' }], labelTextFeatureOverrides: { f1: 'stored' }
   },
   editorState: { legend: { entries: [] } }, results: [{ name: 'preview', content: '<svg/>' }],
-  orthogroupState: {}, losatCache: {}, losatDerivedCache: {}, cliInvocation: null
+  orthogroupState: {}, losatCache: {}, losatDerivedCache: {},
+  proteinIdentityManifest: {
+    schema: 2,
+    proteinSets: {},
+    recordAnalyses: {},
+    recordInstances: {}
+  },
+  legacyArtifacts: { proteinRawCandidates: { schema: 1, entries: [] } },
+  runMetadata: { trackSlotGeometry: { schema: 1, records: [] } },
+  cliInvocation: null
 };
-validateSessionAuthorityInventory(session, 33);
+validateSessionAuthorityInventory(session, 39);
 assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
+  legend: 'left',
+  linearPlotTitlePosition: 'top',
   zoom: 1.5,
   canvasPan: { x: 3, y: 4 },
   downloadDpi: 300
 });
+const layoutPreferences = {
+  circular: {
+    single: { legend: 'left', plotTitlePosition: 'none' },
+    multi: { legend: 'right', plotTitlePosition: 'bottom' }
+  },
+  linear: { legend: 'bottom', plotTitlePosition: 'top' }
+};
+assert.deepEqual(
+  projectWebOnlyEditorMetadata({ ui: { layoutPreferences } }).ui,
+  { layoutPreferences }
+);
 assert.deepEqual(projectArtifactState(session).features, {
   extractedFeatures: [{ id: 'f1' }]
 });
 assert.deepEqual(projectArtifactState(session).ui, { generatedLegendPosition: 'right' });
+assert.deepEqual(
+  projectArtifactState(session).proteinIdentityManifest,
+  session.proteinIdentityManifest
+);
+assert.deepEqual(projectArtifactState(session).legacyArtifacts, session.legacyArtifacts);
+assert.deepEqual(projectArtifactState(session).runMetadata, session.runMetadata);
 assert.equal(projectDocumentMetadata(session).title, 'Canonical');
 assert.throws(
-  () => validateSessionAuthorityInventory({ ...session, unknownField: true }, 33),
+  () => validateSessionAuthorityInventory({ ...session, unknownField: true }, 39),
   /unclassified top-level field.*unknownField/
 );
 assert.doesNotThrow(() => validateSessionAuthorityInventory({ ...session, unknownField: true }, 30));

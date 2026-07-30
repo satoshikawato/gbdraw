@@ -4,7 +4,7 @@
   "title": "Plot CDS protein-similarity links across five Hepatoplasmataceae genomes",
   "summary": "Run LOSATP in the browser, assign CDS-derived proteins to gbdraw similarity groups, and draw links between group members in five Hepatoplasmataceae genomes.",
   "appMode": "Linear",
-  "primaryWorkflow": "LOSATP similarity groups (Orthogroups mode)",
+  "primaryWorkflow": "LOSATP similarity groups",
   "downloads": [
     {
       "label": "AP027078",
@@ -97,17 +97,33 @@
             "src": "./media/hepatoplasmataceae_orthogroup/manual-03-01-browser-losat.webp",
             "alt": "LOSAT settings panel with Run LOSAT, LOSATP, and browser thread controls.",
             "caption": "Choose Run LOSAT and LOSATP, then use the thread settings in the table."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "clipSelectors": ["[data-capture='linear-blast-source']", "[data-capture='linear-losat-settings']"],
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "waitForSelector": "[data-capture='linear-losat-settings']"
           }
         }
       ]
     },
     {
-      "title": "Select the Orthogroups mode",
-      "body": "Use Orthogroups to draw links between proteins assigned to the same gbdraw similarity group rather than combining anchors into collinear blocks.",
+      "title": "Select Similarity groups",
+      "body": "Use Similarity groups to draw links between proteins assigned to the same gbdraw visualization group rather than combining anchors into collinear blocks.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["blastp mode", "Orthogroups"],
+          ["blastp mode", "Similarity groups"],
           ["Bitscore", "50"],
           ["E-value", "1e-2"],
           ["Minimum Identity", "0"],
@@ -117,12 +133,12 @@
       "note": "gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records. These groups support visualization but are not phylogeny-based orthology assignments. The companion collinear tutorial combines compatible runs of the same protein-match anchors into collinear blocks.",
       "operations": [
         {
-          "title": "Orthogroups mode controls",
-          "body": "Open the blastp mode selector and choose Orthogroups.",
+          "title": "Similarity groups mode controls",
+          "body": "Open the blastp mode selector and choose Similarity groups.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-04-01-orthogroups-mode.webp",
-            "alt": "LOSAT Settings panel with the blastp mode menu open and the Orthogroups option highlighted.",
-            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Orthogroups option."
+            "alt": "LOSAT Settings panel with the blastp mode menu open and the Similarity groups option highlighted.",
+            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Similarity groups option."
           },
           "capture": {
             "source": "webapp",
@@ -134,19 +150,35 @@
               "left": 80
             },
             "openSelect": {
-              "selectedLabel": "Orthogroups",
-              "options": ["Orthogroups", "Collinear blocks", "Pairwise"],
+              "selectedLabel": "Similarity groups",
+              "options": ["Similarity groups", "Collinear blocks", "Pairwise"],
               "label": "blastp mode"
             }
           }
         },
         {
-          "title": "Orthogroups threshold settings",
+          "title": "Similarity-group threshold settings",
           "body": "Use the LOSATP threshold values in the table.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-04-02-orthogroup-settings.webp",
-            "alt": "LOSAT Settings panel with Orthogroups mode and the visible threshold controls.",
+            "alt": "LOSAT Settings panel with Similarity groups mode and the visible threshold controls.",
             "caption": "Set Bitscore to 50, E-value to 1e-2, Minimum Identity to 0, and Minimum Length to 0."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "clipSelectors": ["[data-capture='linear-losat-settings']"],
+            "cropPadding": {
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "waitForSelector": "[data-capture='linear-losat-settings']"
           }
         }
       ]
@@ -257,12 +289,11 @@
               },
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\")) throw new Error('Orthogroup target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; app.svgContainer.style.transform = 'translate(-110px, -30px) scale(1.15)';"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\")) throw new Error('Similarity-group target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.canvasPan) { app.canvasPan.x = -970; app.canvasPan.y = 0; }"
               },
               {
-                "type": "click",
-                "selector": "[data-gbdraw-pairwise-match-id='comparison1_match331']",
-                "force": true
+                "type": "evaluate",
+                "script": "const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\"); const rect = target?.getBoundingClientRect(); if (!target || !rect) throw new Error('Similarity-group click target is unavailable.'); target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2, view: window }));"
               },
               {
                 "type": "waitForSelector",
@@ -270,12 +301,12 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['og_244', '30s ribosomal protein s11', 'orthogroup id', 'members', 'record coverage', 'ap027078.1']) { if (!text.includes(expected)) throw new Error(`Orthogroup popup is missing: ${expected}`); } if (!rect || !popup) throw new Error('Orthogroup target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 500, rect.top - 80)); }"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['og_244', '30s ribosomal protein s11', 'similarity group id', 'members', 'record coverage', 'ap027078.1']) { if (!text.includes(expected)) throw new Error(`Similarity-group popup is missing: ${expected}`); } if (!rect || !popup) throw new Error('Similarity-group target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 500, rect.top - 80)); }"
               },
               {"type": "wait", "ms": 250},
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const section = popup?.querySelector('.pairwise-match-popup-section'); const title = section?.querySelector('.pairwise-match-popup-section-title'); const rows = Array.from(section?.querySelectorAll('.pairwise-match-popup-row') || []).slice(0, 4); if (!popup || !title || rows.length !== 4) throw new Error('Compact orthogroup summary not found.'); popup.children[0]?.setAttribute('data-capture', 'hepat-og-popup-header'); title.setAttribute('data-capture', 'hepat-og-popup-summary-title'); rows.forEach((row, index) => row.setAttribute('data-capture', `hepat-og-popup-summary-row-${index + 1}`));"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const section = popup?.querySelector('.pairwise-match-popup-section'); const title = section?.querySelector('.pairwise-match-popup-section-title'); const rows = Array.from(section?.querySelectorAll('.pairwise-match-popup-row') || []).slice(0, 5); if (!popup || !title || rows.length !== 5) throw new Error('Compact similarity-group summary not found.'); popup.children[0]?.setAttribute('data-capture', 'hepat-og-popup-header'); title.setAttribute('data-capture', 'hepat-og-popup-summary-title'); rows.forEach((row, index) => row.setAttribute('data-capture', `hepat-og-popup-summary-row-${index + 1}`));"
               }
             ],
             "highlightSelector": "[data-gbdraw-pairwise-match-id='comparison1_match331']",
@@ -313,11 +344,11 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector('[data-gbdraw-feature-id=fe826bac7]')) throw new Error('DnaA feature target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; app.svgContainer.style.transform = 'translate(-90px, -30px) scale(1.15)';"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector('[data-gbdraw-stable-feature-id=fe826bac7]')) throw new Error('DnaA feature target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; app.svgContainer.style.transform = 'translate(-90px, -30px) scale(1.15)';"
               },
               {
                 "type": "click",
-                "selector": "[data-gbdraw-feature-id='fe826bac7']",
+                "selector": "[data-gbdraw-stable-feature-id='fe826bac7']",
                 "force": true
               },
               {
@@ -326,7 +357,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 70; }"
+                "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-stable-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 70; }"
               },
               {
                 "type": "wait",
@@ -334,10 +365,10 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1513 (+)', 'og_1', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const labels = ['Record ID', 'Feature type', 'Location', 'Orthogroup ID', 'Protein ID']; const detailRows = Array.from(popup?.querySelectorAll('.feature-popup-body .border-b') || []); const rows = labels.map((label) => detailRows.find((row) => row.firstElementChild?.textContent?.trim() === label)); if (rows.some((row) => !row)) throw new Error('Compact DnaA detail rows not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); rows.forEach((row, index) => row.setAttribute('data-capture', `dnaa-popup-row-${index + 1}`));"
+                "script": "const popup = document.querySelector('.feature-popup'); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); for (const expected of ['chromosomal replication initiator protein dnaa', 'ap027078.1', 'cds', '101..1513 (+)', 'og_1', 'bdu67348.1']) { if (!text.includes(expected)) throw new Error(`Feature popup is missing: ${expected}`); } const labels = ['Record ID', 'Feature type', 'Location', 'Similarity group ID', 'Protein ID']; const detailRows = Array.from(popup?.querySelectorAll('.feature-popup-body .border-b') || []); const rows = labels.map((label) => detailRows.find((row) => row.firstElementChild?.textContent?.trim() === label)); if (rows.some((row) => !row)) throw new Error('Compact DnaA detail rows not found.'); popup.children[0]?.setAttribute('data-capture', 'dnaa-popup-header'); popup.children[1]?.setAttribute('data-capture', 'dnaa-popup-tabs'); rows.forEach((row, index) => row.setAttribute('data-capture', `dnaa-popup-row-${index + 1}`));"
               }
             ],
-            "highlightSelector": "[data-gbdraw-feature-id='fe826bac7']",
+            "highlightSelector": "[data-gbdraw-stable-feature-id='fe826bac7']",
             "clipSelectors": ["[data-capture='dnaa-popup-header']", "[data-capture='dnaa-popup-tabs']", "[data-capture^='dnaa-popup-row-']"],
             "cropPadding": {
               "top": 18,
@@ -388,7 +419,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check input order, blastp mode Orthogroups, Pairwise Match Style, Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
+      "body": "Check input order, blastp mode Similarity groups, Pairwise Match Style, Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
     }
   ],
   "related": [

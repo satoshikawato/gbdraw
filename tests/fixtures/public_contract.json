@@ -4,6 +4,8 @@
       "CircularLayout",
       "CircularOptions",
       "CircularTrackOptions",
+      "ComparisonRingOptions",
+      "ComparisonRingTrackOptions",
       "ConservationOptions",
       "ConservationTrackOptions",
       "DepthTrackOptions",
@@ -22,16 +24,16 @@
       "read_genbank",
       "read_gff"
     ],
-    "contract_sha256": "d6632a221a429157e5ac65c02f46b46b857237c4383ef734a9c95f784901d0c6"
+    "contract_sha256": "46bfd19c2d6b358478f0e6d5aa074f4081c381038a4686204ec3ccd7c7d0a0ac"
   },
   "circular_cli": {
-    "actions_sha256": "dd613bc94de976c916518236a82f0396fc85ebf89fe6ffc6a04bd24484c31692",
-    "defaults_sha256": "c14f96d346099b2b8f28554932afff7bd95d0ec9989d684d695d1e2fa73fb322",
-    "representative_sha256": "118847070a0dca5bce92fa6b10cb146d0788750840527d06b2496fa539904453"
+    "actions_sha256": "54aee4379427034c900626656d5e16a1f9664f4102828d3f09096d4559f9189d",
+    "defaults_sha256": "e5d96b741b59f8180c38a0dac5634cf52d4deb29bbb71da45d7353676dff279a",
+    "representative_sha256": "281856023d46a2bbc1b211fb4a614871e9fca2af6721f9706798e22f41230ed4"
   },
   "linear_cli": {
-    "actions_sha256": "bc4a31c4f9cb696c96bd4f0a916b117dd73ce36f53b98884031c9961f2a887b8",
-    "defaults_sha256": "34e62e6d88c081b049b2c4f0fa65124dc52f3ad8a21a03c3646f31bcd4ff039a",
-    "representative_sha256": "e3944b3365f76970d6ac215535ad23278f8c5aec6281296c123453d075348704"
+    "actions_sha256": "5375fd575448fc489624c9951ca6f38b367356abb5fd631102c44f2e07f24eca",
+    "defaults_sha256": "4cbaf149c50826ad6ef4bc6bc4dd8300e80be2e7b2c7c458ce65dd95d4773940",
+    "representative_sha256": "dfe8f3b754055f81d6e6d12d98bbf0998de4f332f6b456df91c3efa4796746ea"
   }
 }

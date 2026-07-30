@@ -2,17 +2,17 @@
   "id": "WSSV_genome_comparison",
   "version": 1,
   "title": "Session-based WSSV comparison case study",
-  "summary": "Load the bundled session first to inspect a White spot syndrome virus reference and 20 prepared BLAST/LOSAT comparison rings. The displayed prepared-input command documents provenance; it is not a directly runnable public recipe.",
+  "summary": "Load the bundled session to inspect a White spot syndrome virus reference and 20 prepared BLAST/LOSAT comparison rings. The session includes every companion FASTA used for the rings. The displayed prepared-input command documents provenance; it is not a directly runnable public recipe.",
   "appMode": "Circular",
   "primaryWorkflow": "Circular nucleotide-similarity rings with LOSAT blastn",
-  "requirements": ["Start by loading the bundled Gallery session. A manual rebuild requires all 20 prepared comparison assemblies, and several are available only inside that session."],
+  "requirements": ["Start by loading the bundled Gallery session. It restores the reference, all 20 comparison FASTAs, settings, cached LOSAT output, and saved result. External downloads are needed only for an independent rebuild."],
   "downloads": [
     {
       "label": "Bundled Gallery session",
       "source": "Gallery artifact",
       "href": "./sessions/WSSV_genome_comparison.gbdraw-session.json",
       "targetName": "WSSV_genome_comparison.gbdraw-session.json",
-      "note": "This is the primary path: load the session to inspect the completed result, settings, prepared inputs, and cached LOSAT output without rebuilding the external dataset."
+      "note": "This is the primary path: load the session to restore the completed result, settings, reference, all 20 comparison FASTAs, and cached LOSAT output."
     },
     {
       "label": "AP027280",
@@ -171,14 +171,14 @@
   "manualSteps": [
     {
       "title": "Load the bundled session first",
-      "body": "Open gbdraw.app, choose Load Settings / Session, and load WSSV_genome_comparison.gbdraw-session.json from Files. Inspect the restored result and settings before deciding whether the external input preparation is necessary for your work.",
+      "body": "Open gbdraw.app, choose Load Settings / Session, and load WSSV_genome_comparison.gbdraw-session.json from Files. The load restores the reference, all 20 comparison FASTAs, settings, cached LOSAT output, and saved result.",
       "operations": [
         {
-          "body": "Use the restored session as the complete inspection path; the following steps document the optional prepared-input rebuild.",
+          "body": "Use the restored session as the complete inspection path. The following steps document an optional independent rebuild.",
           "media": {
             "src": "./thumbnails/WSSV_genome_comparison.webp",
             "alt": "Completed WSSV circular comparison restored from the bundled Gallery session.",
-            "caption": "The bundled session restores the completed 20-ring comparison without requiring the external preparation workflow."
+            "caption": "The bundled session restores the completed 20-ring comparison and all companion FASTAs."
           }
         }
       ]

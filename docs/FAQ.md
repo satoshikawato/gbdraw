@@ -35,6 +35,14 @@ Use a feature-specific color table with `-t`. This matches selected features by 
 
 See [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md) and [Recipes](./RECIPES.md).
 
+## Why does a web app color edit create a qualifier rule for some labels and `hash` rules for others?
+
+When you choose **Apply to all label** or **Apply to all source label**, the web app first tries to represent the selected group as one exact feature-specific rule. For example, CDS features labeled `wsv360-like protein` can become a `product` rule with the pattern `^wsv360-like protein$`. The app does this only when every selected feature resolves to the same feature type, qualifier, and value; that rule matches exactly the selected group among the loaded features; and existing specific rules do not make precedence ambiguous. Regex metacharacters in the value are escaped before the pattern is anchored, so the exact-label selection does not accidentally become a broader regex.
+
+If a single qualifier rule would be unsafe—for example, because the displayed label was manually edited, different features obtain that label from different qualifiers, or the rule would also match an unselected feature—the app keeps one `hash` rule per feature. `hash` is normally an exact feature selector rather than a GenBank qualifier. This fallback preserves the selected scope when the features have distinct generated identities. Both forms appear under **Specific Rules (-t)** and are sent to **Generate Diagram**, which keeps regenerated colors and legends consistent with the preview.
+
+Exact duplicate records are a special case: identical feature type, record ID, coordinates, and strand produce the same generated `hash`. The editor can distinguish their rendered `_record_N` instances in the current preview, but **Generate Diagram** cannot reconstruct a one-instance-only color rule from identical biological identities. Use a distinguishing qualifier when available, or edit the duplicate instances together.
+
 ## How do I mark a coordinate range or a group of features?
 
 Use `--annotation_table` and bind each `set_id` to an `annotations` custom track slot. Coordinate targets are 1-based and inclusive. Feature targets use the qualifiers already loaded from GenBank or GFF3, such as `locus_tag=ABC_001`.
@@ -50,6 +58,28 @@ The most common causes are:
 3. Filtering thresholds such as `--evalue`, `--bitscore`, `--identity`, or `--alignment_length` are too strict
 
 See [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
+
+## Why did gbdraw rerun LOSATP after I loaded a session?
+
+A protein-search cache hit requires the same amino-acid sequences, selected
+proteins, record and feature bindings, direction, program, and meaningful search
+arguments. A changed filename or display label does not invalidate the raw
+search. Changed biological input or search settings do, and only the affected
+record pair is rerun.
+
+## Why does Save Raw LOSAT TSV not contain the internal `h_` IDs?
+
+Those handles are session-internal references. For a generated protein result,
+**Save Raw LOSAT TSV** resolves them to readable protein or feature aliases. If
+any handle cannot be resolved safely, the download fails rather than exposing
+an internal ID. Uploaded comparison TSV is never rewritten.
+
+The full cache and export contract is documented in
+[Session and request compatibility](./SESSION_COMPATIBILITY.md#saved-protein-comparison-results).
+
+## Why is there less empty space between Linear comparison rows?
+
+Automatic spacing now treats record bodies, comparison corridors, and definition text as separate X-aware constraints and uses the largest required clearance. A left-side definition block is not added to a plot-column comparison corridor when their horizontal ranges do not overlap, and `--comparison_height` is reserved only at boundaries crossed by a comparison. The value remains a minimum clear corridor; dense labels or tracks can still require more space.
 
 ## What if one record has no Depth TSV for a sample?
 

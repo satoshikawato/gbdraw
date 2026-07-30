@@ -101,10 +101,10 @@ def _serialize_member(
 ) -> dict[str, object]:
     record_index = int(member.record_index)
     stable_feature_svg_id = str(member.feature_svg_id or "")
-    feature_svg_id = (
+    rendered_feature_svg_id = (
         feature_id_mapper(record_index, stable_feature_svg_id)
         if feature_id_mapper is not None and stable_feature_svg_id
-        else stable_feature_svg_id
+        else ""
     )
     start = int(member.start)
     end = int(member.end)
@@ -119,7 +119,7 @@ def _serialize_member(
         "recordId": member.record_id,
         "featureIndex": member.feature_index,
         "label": member.label,
-        "featureSvgId": feature_svg_id,
+        "featureSvgId": stable_feature_svg_id,
         "start": start,
         "end": end,
         "strand": _strand_display(member.strand),
@@ -142,6 +142,9 @@ def _serialize_member(
     if include_stable_feature_ids:
         payload["stableFeatureSvgId"] = stable_feature_svg_id
         payload["stable_feature_svg_id"] = stable_feature_svg_id
+    if rendered_feature_svg_id:
+        payload["renderedFeatureSvgId"] = rendered_feature_svg_id
+        payload["rendered_feature_svg_id"] = rendered_feature_svg_id
     return payload
 
 
@@ -255,6 +258,8 @@ def enrich_features_with_orthogroups(
 
     feature_index: dict[tuple[int, str], dict[str, object]] = {}
     feature_index_by_svg_id: dict[str, dict[str, object]] = {}
+    global_feature_owners: dict[str, tuple[int, object]] = {}
+    ambiguous_svg_ids: set[str] = set()
     for group in orthogroups:
         if not isinstance(group, Mapping):
             continue
@@ -266,24 +271,47 @@ def enrich_features_with_orthogroups(
                 member.get("stableFeatureSvgId") or member.get("stable_feature_svg_id")
             ).strip()
             record_index = _int_or_none(member.get("recordIndex"))
-            if not feature_svg_id or record_index is None:
+            member_feature_ids = {
+                feature_id
+                for feature_id in (feature_svg_id, stable_feature_svg_id)
+                if feature_id
+            }
+            if not member_feature_ids or record_index is None:
                 continue
             entry = _build_feature_index_entry(group, member)
-            feature_index[(record_index, feature_svg_id)] = entry
-            feature_index_by_svg_id.setdefault(feature_svg_id, entry)
-            if stable_feature_svg_id:
-                feature_index.setdefault((record_index, stable_feature_svg_id), entry)
-                feature_index_by_svg_id.setdefault(stable_feature_svg_id, entry)
+            owner = (record_index, member.get("featureIndex"))
+            for member_feature_id in member_feature_ids:
+                feature_index.setdefault((record_index, member_feature_id), entry)
+                if member_feature_id in ambiguous_svg_ids:
+                    continue
+                existing_owner = global_feature_owners.get(member_feature_id)
+                if existing_owner is not None and existing_owner != owner:
+                    feature_index_by_svg_id.pop(member_feature_id, None)
+                    ambiguous_svg_ids.add(member_feature_id)
+                    continue
+                global_feature_owners[member_feature_id] = owner
+                feature_index_by_svg_id[member_feature_id] = entry
 
     enriched: list[dict[str, object]] = []
     for feature in features:
         next_feature = dict(feature)
         svg_id = _text(next_feature.get("svg_id")).strip()
         stable_svg_id = _text(
-            next_feature.get("stable_svg_id") or next_feature.get("stableFeatureSvgId")
+            next_feature.get("stable_feature_id")
+            or next_feature.get("stable_svg_id")
+            or next_feature.get("stableFeatureSvgId")
         ).strip()
-        record_index = _int_or_none(
-            next_feature.get("record_idx", next_feature.get("recordIndex"))
+        record_index = next(
+            (
+                parsed
+                for value in (
+                    next_feature.get("record_idx"),
+                    next_feature.get("record_index"),
+                    next_feature.get("recordIndex"),
+                )
+                if (parsed := _int_or_none(value)) is not None
+            ),
+            None,
         )
         entry = None
         if svg_id and record_index is not None:

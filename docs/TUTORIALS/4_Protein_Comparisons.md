@@ -129,6 +129,24 @@ Do not combine `-b/--blast` with `--protein_blastp_mode`. The CLI rejects that c
 
 For Python workflows with multi-record rows, use `LinearComparisonOptions(protein_mode="pairwise", pairs=((0, 2), (1, 3)))` to run only the declared record pairs. Pair indices are zero-based and must connect adjacent layout rows. Omitting `pairs` preserves adjacent-record behavior. See the [Python API linear example](../PYTHON_API.md#linear-diagrams-and-comparisons).
 
+## 7. When a saved protein search is reused
+
+A saved protein search is reused when the amino-acid sequences, selected
+proteins, record and feature bindings, query/subject direction, program, and
+meaningful search arguments still match. Renaming an upload or resource,
+changing a display-only label, or saving and loading the same biological inputs
+does not invalidate the raw result. Display metadata may still be rebuilt.
+
+Changing a sequence, protein set, binding, feature location or strand, or search
+setting invalidates the affected record pair. gbdraw reruns only that pair.
+
+**Save Raw LOSAT TSV** writes readable protein or feature aliases rather than
+session-internal identifiers. It fails instead of producing a partially resolved
+download. User-uploaded comparison TSV is left unchanged.
+
+For exact version, cache-schema, identity, and migration rules, see
+[Session and request compatibility](../SESSION_COMPATIBILITY.md#saved-protein-comparison-results).
+
 [< Back to the guide index](./TUTORIALS.md)
 [< Previous: Set feature colors and labels](./3_Advanced_Customization.md) | [Next: Use TSV manifests >](./5_Table_Driven_Inputs.md)
 

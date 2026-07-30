@@ -129,6 +129,19 @@ Click **Load Session**, then choose the `.gbdraw-session.json` file to restore i
 
 The web app's **Save Session** action downloads a lossless gzip-compressed `.gbdraw-session.json.gz` file. **Load Session** accepts both this compressed form and the uncompressed `.gbdraw-session.json` files written by the CLI.
 
+Supported older sessions can be loaded and replayed in the same diagram mode.
+Some older sessions remain CLI-replay inputs rather than typed API inputs.
+Current sessions preserve canonical inputs, settings, output ownership, and
+saved protein-search results without parallel legacy fields.
+
+For the exact accepted versions and migration boundaries, see
+[Session and request compatibility](../SESSION_COMPATIBILITY.md).
+
+If you add CSS or JavaScript around an exported SVG, use the documented
+[`data-gbdraw-*` semantic hooks](../SVG_SEMANTIC_HOOKS.md). Internal SVG `id`
+spelling is deterministic within one gbdraw version but is not a cross-version
+selector contract.
+
 ![Local gbdraw web app after loading a session, with the embedded GenBank input, circular settings, and saved result restored](./images/tutorial-8-loaded-session.png)
 
 [< Back to the guide index](./TUTORIALS.md)

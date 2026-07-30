@@ -28,11 +28,24 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./feature-utils.js", "./feature-utils.mjs"),
         encoding="utf-8",
     )
+    color_utils_path = tmp_path / "color-utils.mjs"
+    color_utils_path.write_text(
+        (WEB_ROOT / "js" / "app" / "color-utils.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    conservation_series_path = tmp_path / "conservation-series.mjs"
+    conservation_series_path.write_text(
+        (WEB_ROOT / "js" / "app" / "conservation-series.js")
+        .read_text(encoding="utf-8")
+        .replace("./color-utils.js", "./color-utils.mjs"),
+        encoding="utf-8",
+    )
     match_sequences_path = tmp_path / "match-sequences.mjs"
     match_sequences_path.write_text(
         (WEB_ROOT / "js" / "app" / "match-sequences.js")
         .read_text(encoding="utf-8")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./conservation-series.js", "./conservation-series.mjs"),
         encoding="utf-8",
     )
     losat_normalization_path = tmp_path / "losat-normalization.mjs"
@@ -150,8 +163,8 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
 
         const sectionTitles = payload.sections.map((section) => section.title);
         assert(!sectionTitles.includes('Alignment'), `Alignment section leaked: ${{JSON.stringify(sectionTitles)}}`);
-        assert(!sectionTitles.includes('Orthogroup'), `Single-OG section leaked: ${{JSON.stringify(sectionTitles)}}`);
-        assert(sectionTitles.includes('Orthogroups covered'), `Block OG section missing: ${{JSON.stringify(sectionTitles)}}`);
+        assert(!sectionTitles.includes('Similarity group'), `Single-group section leaked: ${{JSON.stringify(sectionTitles)}}`);
+        assert(sectionTitles.includes('Similarity groups covered'), `Block group section missing: ${{JSON.stringify(sectionTitles)}}`);
         assert(sectionTitles.includes('Query'), `Query section missing: ${{JSON.stringify(sectionTitles)}}`);
         assert(sectionTitles.includes('Subject'), `Subject section missing: ${{JSON.stringify(sectionTitles)}}`);
         assert(!sectionTitles.includes('Query feature'), `Old Query feature title leaked: ${{JSON.stringify(sectionTitles)}}`);
@@ -161,8 +174,8 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         for (const forbidden of ['Match ID', 'Unit ID', 'Query unit', 'Subject unit']) {{
           assert(!labels.includes(forbidden), `${{forbidden}} leaked: ${{JSON.stringify(labels)}}`);
         }}
-        assert(!labels.includes('Orthogroup ID'), `Long block Orthogroup ID leaked: ${{JSON.stringify(labels)}}`);
-        assert(labels.includes('Number of orthogroups covered'), `Orthogroup count missing: ${{JSON.stringify(labels)}}`);
+        assert(!labels.includes('Similarity group ID'), `Long block similarity group ID leaked: ${{JSON.stringify(labels)}}`);
+        assert(labels.includes('Number of similarity groups covered'), `Similarity-group count missing: ${{JSON.stringify(labels)}}`);
 
         const query = payload.sections.find((section) => section.title === 'Query');
         const subject = payload.sections.find((section) => section.title === 'Subject');
@@ -219,23 +232,40 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(duplicateQuery.featureRows[0].subLabel === 'HPAVJP_0240', JSON.stringify(duplicateQuery.featureRows[0]));
         assert(!duplicateQuery.featureRows[0].subLabel.includes(' / HPAVJP_0240'), JSON.stringify(duplicateQuery.featureRows[0]));
 
-        const blockOgSection = payload.sections.find((section) => section.title === 'Orthogroups covered');
-        assert(rowValue(blockOgSection, 'Number of orthogroups covered') === '2', JSON.stringify(blockOgSection.rows));
+        const runtimeOnlyHandle = 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa';
+        const runtimeOnlyAttrs = new Map(Object.entries({{
+          'data-gbdraw-pairwise-match-id': 'comparison3_match5',
+          'data-match-kind': 'pairwise',
+          'data-query-record-id': 'record_runtime',
+          'data-qstart': '1',
+          'data-qend': '30',
+          'data-query-protein-id': runtimeOnlyHandle
+        }}));
+        const runtimeOnlyPayload = buildPairwiseMatchPayload({{
+          style: {{}},
+          getAttribute: (name) => runtimeOnlyAttrs.get(name) || ''
+        }}, {{ featureLookup: new Map() }});
+        const runtimeOnlyQuery = runtimeOnlyPayload.sections.find((section) => section.title === 'Query');
+        assert(runtimeOnlyQuery, JSON.stringify(runtimeOnlyPayload.sections));
+        assert(!JSON.stringify(runtimeOnlyQuery).includes(runtimeOnlyHandle), JSON.stringify(runtimeOnlyQuery));
+
+        const blockOgSection = payload.sections.find((section) => section.title === 'Similarity groups covered');
+        assert(rowValue(blockOgSection, 'Number of similarity groups covered') === '2', JSON.stringify(blockOgSection.rows));
         assert(payload.blockOrthogroupCount === 2, JSON.stringify(payload));
         assert(payload.blockOrthogroups.length === 2, JSON.stringify(payload.blockOrthogroups));
         assert(payload.blockOrthogroups[0].id === 'og_1', JSON.stringify(payload.blockOrthogroups));
         assert(payload.blockOrthogroups[0].displayName === 'orthogroup display', JSON.stringify(payload.blockOrthogroups[0]));
         assert(payload.blockOrthogroups[0].queryMember === 'WP_000001.1', JSON.stringify(payload.blockOrthogroups[0]));
         assert(payload.blockOrthogroups[0].subjectMember === 'SLOCUS_001', JSON.stringify(payload.blockOrthogroups[0]));
-        assert(payload.blockOrthogroups[0].detailRows.some((row) => row.label === 'Orthogroup ID' && row.value === 'og_1'), JSON.stringify(payload.blockOrthogroups[0].detailRows));
+        assert(payload.blockOrthogroups[0].detailRows.some((row) => row.label === 'Similarity group ID' && row.value === 'og_1'), JSON.stringify(payload.blockOrthogroups[0].detailRows));
         assert(payload.blockOrthogroups[1].id === 'og_2', JSON.stringify(payload.blockOrthogroups));
         assert(payload.blockOrthogroups[1].queryMember === 'WP_000002.1', JSON.stringify(payload.blockOrthogroups[1]));
         assert(payload.blockOrthogroups[1].subjectMember === 'SLOCUS_002', JSON.stringify(payload.blockOrthogroups[1]));
 
         const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
         assert(hoverLabels.includes('Identity'), JSON.stringify(hoverLabels));
-        assert(hoverLabels.includes('Orthogroups'), JSON.stringify(hoverLabels));
-        assert(!hoverLabels.includes('Orthogroup'), JSON.stringify(hoverLabels));
+        assert(hoverLabels.includes('Similarity groups'), JSON.stringify(hoverLabels));
+        assert(!hoverLabels.includes('Similarity group'), JSON.stringify(hoverLabels));
         """,
         encoding="utf-8",
     )

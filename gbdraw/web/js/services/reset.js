@@ -9,6 +9,7 @@ import {
   createDefaultPriorityRule,
   createDefaultSpecificRule
 } from '../state.js';
+import { createDefaultLayoutPreferences } from '../app/layout-preferences.js';
 
 const clonePlain = (value) => {
   if (Array.isArray(value)) return value.map((entry) => clonePlain(entry));
@@ -59,23 +60,11 @@ const resetPaletteState = (state) => {
 };
 
 const resetLayoutPreferenceState = (state) => {
-  state.circularLegendPosition.value = 'left';
-  state.linearLegendPosition.value = 'bottom';
-  state.circularPlotTitlePosition.value = 'none';
-  state.linearPlotTitlePosition.value = 'bottom';
-  state.circularSingleRecordLegendPosition.value = 'left';
-  state.circularSingleRecordPlotTitlePosition.value = 'none';
-  state.circularMultiRecordLegendPosition.value = null;
-  state.circularMultiRecordPlotTitlePosition.value = null;
+  const defaults = createDefaultLayoutPreferences();
+  Object.assign(state.layoutPreferences.circular.single, defaults.circular.single);
+  Object.assign(state.layoutPreferences.circular.multi, defaults.circular.multi);
+  Object.assign(state.layoutPreferences.linear, defaults.linear);
   state.suppressCircularMultiRecordDefaults.value = false;
-
-  if (state.mode.value === 'linear') {
-    state.form.legend = 'bottom';
-    state.adv.plot_title_position = 'bottom';
-  } else {
-    state.form.legend = 'left';
-    state.adv.plot_title_position = 'none';
-  }
 };
 
 const resetRuleDraftState = (state) => {
@@ -134,7 +123,8 @@ const resetEditorDraftState = (state) => {
 
 export const resetSettings = (state) => {
   replaceReactiveObject(state.form, createDefaultForm());
-  replaceReactiveObject(state.adv, createDefaultAdv());
+  replaceReactiveObject(state.adv, createDefaultAdv(state.mode.value));
+  state.modeProfileStateManager?.reset?.(state.mode.value, state.adv);
   replaceReactiveObject(state.losat, createDefaultLosat());
   replaceReactiveObject(state.circularConservation, createDefaultCircularConservation());
   replaceReactiveArray(state.annotationSets);

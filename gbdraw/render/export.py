@@ -7,6 +7,7 @@ import importlib
 import os
 import sys
 import logging
+import warnings
 from types import ModuleType
 from typing import List
 
@@ -26,16 +27,6 @@ from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 logger = logging.getLogger(__name__)
 
 _cairosvg_module: ModuleType | None = None
-
-
-class _LazyCairoSvgAvailability:
-    """Bool-like compatibility proxy that resolves CairoSVG only on demand."""
-
-    def __bool__(self) -> bool:
-        return has_cairosvg()
-
-    def __repr__(self) -> str:
-        return str(has_cairosvg())
 
 
 def _load_cairosvg() -> ModuleType | None:
@@ -60,9 +51,6 @@ def get_cairosvg() -> ModuleType:
     return cairosvg_module
 
 
-CAIROSVG_AVAILABLE = _LazyCairoSvgAvailability()
-
-
 def parse_formats(out_formats: str) -> list[str]:
     return parse_format_string(out_formats, logger=logger)
 
@@ -73,13 +61,18 @@ def save_figure(
     *,
     interactive_context: InteractiveSvgContext | None = None,
 ) -> None:
+    """Save a figure using the deprecated warning-and-skip export contract.
+
+    Use :func:`gbdraw.api.save_figure_to` for strict file export or
+    :func:`gbdraw.api.render_to_bytes` for in-memory output.
     """
-    Saves the rendered figure.
-    Logic:
-      1. Always save SVG (base format).
-      2. If Pyodide (Web), skip conversion (JS handles it).
-      3. If CLI, try CairoSVG. If not available, warn and skip.
-    """
+    warnings.warn(
+        "gbdraw.render.export.save_figure() is deprecated and will be removed "
+        "in gbdraw 0.16; use gbdraw.api.save_figure_to() or "
+        "gbdraw.api.render_to_bytes().",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     base_filename = os.path.splitext(canvas.filename)[0]
     svg_filename = resolve_format_output_path(base_filename, SVG_FORMAT)
 
@@ -152,7 +145,6 @@ def save_figure(
 
 
 __all__ = [
-    "CAIROSVG_AVAILABLE",
     "get_cairosvg",
     "has_cairosvg",
     "parse_formats",

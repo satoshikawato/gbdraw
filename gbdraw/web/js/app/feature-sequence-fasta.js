@@ -1,4 +1,7 @@
-import { normalizeStringArray } from './feature-utils.js';
+import {
+  isInternalProteinDisplayId,
+  normalizeStringArray
+} from './feature-utils.js';
 
 const FASTA_LINE_WIDTH = 60;
 
@@ -48,6 +51,16 @@ const firstFeatureText = (feature, keys) => {
   return '';
 };
 
+const firstFeatureDisplayText = (feature, keys) => {
+  for (const key of keys) {
+    const value = getFeatureValues(feature, key)
+      .map((entry) => normalizeHeaderText(entry))
+      .find((entry) => entry && !isInternalProteinDisplayId(entry));
+    if (value) return value;
+  }
+  return '';
+};
+
 const sequenceText = (value) => String(value || '').replace(/\s+/g, '').trim();
 
 export const wrapFastaSequence = (sequence, width = FASTA_LINE_WIDTH) => {
@@ -74,7 +87,7 @@ const getFeatureOrganism = (feature) =>
   firstFeatureText(feature, ['organism', 'source_organism', 'record_organism']);
 
 const getFeatureDescription = (feature) => {
-  const label = firstFeatureText(feature, [
+  const label = firstFeatureDisplayText(feature, [
     'product',
     'protein',
     'gene',
@@ -124,7 +137,7 @@ const getNucleotideFastaId = (feature) => {
 };
 
 const getProteinFastaId = (feature) =>
-  firstFeatureText(feature, [
+  firstFeatureDisplayText(feature, [
     'source_protein_id',
     'protein_id',
     'locus_tag',

@@ -12,10 +12,13 @@ from svgwrite.text import Text  # type: ignore[reportMissingImports]
 from gbdraw.annotations import (
     AnnotationTrackParams,
     ResolvedAnnotationTrack,
+    apply_feature_underlay_dom_attributes,
     effective_annotation_style,
+    is_auto_feature_underlay,
 )
 from gbdraw.render.drawers.linear.annotations import annotation_dom_id
 from gbdraw.render.patterns import ensure_hatch_pattern
+from gbdraw.svg.ids import stable_svg_id
 
 
 def _point(position: float, total_length: int, radius: float) -> tuple[float, float]:
@@ -63,8 +66,14 @@ def draw_circular_annotation_track(
     side: str,
     font_family: str,
     params: AnnotationTrackParams,
+    dom_group_id: str | None = None,
+    semantic_slot_id: str | None = None,
 ) -> Group:
-    group = Group(id=f"gbdraw-annotation-track-{track.slot_id}-{record_index + 1}", debug=False)
+    group_id = dom_group_id or f"gbdraw-annotation-track-{track.slot_id}-{record_index + 1}"
+    group = Group(id=group_id, debug=False)
+    if semantic_slot_id:
+        group.attribs["data-gbdraw-slot-id"] = str(semantic_slot_id)
+        group.attribs["data-gbdraw-slot-renderer"] = "annotations"
     placements = [item for item in track.placements if item.annotation.record_index == record_index]
     lane_count = max((item.lane for item in placements), default=-1) + 1
     usable = max(1.0, outer_radius_px - inner_radius_px - 2.0 * params.padding_px)
@@ -72,6 +81,7 @@ def draw_circular_annotation_track(
 
     for placement in placements:
         annotation = placement.annotation
+        auto_feature_underlay = is_auto_feature_underlay(annotation)
         style = effective_annotation_style(annotation, params)
         if side == "inside":
             lane_outer = outer_radius_px - params.padding_px - placement.lane * lane_width
@@ -89,28 +99,38 @@ def draw_circular_annotation_track(
             ),
             debug=False,
         )
-        item_group.attribs.update(
-            {
-                "data-gbdraw-annotation-id": annotation.id,
-                "data-gbdraw-annotation-set-id": track.set_id,
-                "data-gbdraw-annotation-track-id": track.slot_id,
-                "data-gbdraw-record-id": record_id,
-                "data-gbdraw-record-index": str(record_index),
-                "data-gbdraw-annotation-mark": annotation.mark,
-                "data-gbdraw-annotation-label": annotation.label,
-            }
-        )
+        if not auto_feature_underlay:
+            item_group.attribs.update(
+                {
+                    "data-gbdraw-annotation-id": annotation.id,
+                    "data-gbdraw-annotation-set-id": track.set_id,
+                    "data-gbdraw-annotation-track-id": track.slot_id,
+                    "data-gbdraw-record-id": record_id,
+                    "data-gbdraw-record-index": str(record_index),
+                    "data-gbdraw-annotation-mark": annotation.mark,
+                    "data-gbdraw-annotation-label": annotation.label,
+                }
+            )
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
+        part_count = sum(
+            len(_safe_segments(start, end, record_length))
+            for start, end in annotation.segments
+        )
+        part_index = 0
         for raw_start, raw_end in annotation.segments:
             for start, end in _safe_segments(raw_start, raw_end, record_length):
-                if annotation.mark == "band":
-                    fill = ensure_hatch_pattern(drawing, style.hatch) if style.hatch else (style.fill or "none")
+                part_index += 1
+                if annotation.mark in {"band", "highlight"}:
+                    fill = ensure_hatch_pattern(drawing, style.hatch) if style.hatch else (
+                        style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
+                    )
                     path = Path(
                         d=_band_path(start, end, record_length, lane_inner, lane_outer),
                         fill=fill,
                         fill_opacity=style.fill_opacity,
-                        stroke=style.stroke,
-                        stroke_width=style.stroke_width,
+                        stroke="none" if auto_feature_underlay else style.stroke,
+                        stroke_width=0 if auto_feature_underlay else style.stroke_width,
+                        debug=False,
                     )
                 else:
                     path = Path(
@@ -119,9 +139,20 @@ def draw_circular_annotation_track(
                         stroke=style.stroke,
                         stroke_width=style.stroke_width,
                         stroke_linecap="round",
+                        debug=False,
                     )
                 if dash:
                     path.attribs["stroke-dasharray"] = dash
+                if auto_feature_underlay:
+                    apply_feature_underlay_dom_attributes(
+                        path,
+                        annotation,
+                        record_id=record_id,
+                        record_index=record_index,
+                        part_index=part_index,
+                        part_count=part_count,
+                        include_stable_id=False,
+                    )
                 item_group.add(path)
                 if annotation.mark == "bracket" and style.line_cap != "none":
                     cap = min(5.0, 0.35 * lane_width)
@@ -164,7 +195,11 @@ def draw_circular_annotation_track(
         group.add(item_group)
     if track.clipped:
         group.attribs["data-gbdraw-annotation-clipped"] = "true"
-        clip_id = f"gbdraw-annotation-clip-{track.slot_id}-{record_index + 1}"
+        clip_id = (
+            stable_svg_id("annotation_clip", "circular", group_id)
+            if dom_group_id
+            else f"gbdraw-annotation-clip-{track.slot_id}-{record_index + 1}"
+        )
         ring = Path(
             d=(
                 f"M {outer_radius_px:g},0 A {outer_radius_px:g},{outer_radius_px:g} 0 1 0 "

@@ -1,327 +1,210 @@
-# CLAUDE.md
+# Web application maintenance
 
-This file provides guidance to Claude Code (claude.ai/code) when working with the gbdraw web application.
+Read the repository-level `CLAUDE.md` first. This file describes the intended
+Web architecture and its ownership boundaries. It deliberately avoids line
+numbers and implementation-size snapshots because those become stale quickly.
 
-## Overview
+## Non-negotiable properties
 
-`index.html` is the **SPA entry point** and loads ES modules from `gbdraw/web/js` (no build step). `gbdraw/web/js/app.js` mounts Vue and delegates to modules under `gbdraw/web/js/app/` (setup, Pyodide, run analysis, watchers, plus feature subfolders such as `legend/`, `legend-layout/`, and `feature-editor/`). The app runs gbdraw entirely in the browser using WebAssembly. No server is required - all genome data processing happens client-side via Pyodide (Python compiled to WebAssembly).
+- The Web UI is a single-page app with no JavaScript build step.
+- `index.html` owns markup, local styles, and templates. ES modules live under
+  `gbdraw/web/js/`.
+- All runtime assets are served from the same origin. Do not add a CDN or other
+  runtime network dependency.
+- Genome inputs and rendered results stay in the browser. Generation must not
+  upload user data.
+- Generated SVG is sanitized before insertion into the preview.
+- The browser wheel is generated and gitignored. Prepare it when packaging or
+  wheel-dependent tests need it; never edit it by hand.
 
-- **File size:** `index.html` contains HTML/CSS/templates; JavaScript lives under `gbdraw/web/js/`
-- **Location:** `gbdraw/web/index.html`
-- **Served by:** `gbdraw gui` command or hosted at https://gbdraw.app/
+## Runtime data flow
 
-## Quick Reference
+The canonical generation path is:
+
+```text
+index.html
+  -> app.js and app/app-setup.js
+  -> reactive state
+  -> services/session-request.js builds one canonical schema-5 render request
+  -> app/run-analysis.js validates and orchestrates optional LOSAT work
+  -> services/diagram-generation.js dispatches the request and resources
+  -> workers/diagram-generation-worker.js owns Pyodide rendering
+  -> typed request decoding and render_request()
+  -> sanitized preview, interactive editing, export, and session save
+```
+
+Do not introduce a second argv-shaped generation contract. Fresh generation,
+saved sessions, and replay must converge on the typed render-request boundary.
+JavaScript owns browser state and resource bytes; Python owns request validation,
+planning, loading, diagram assembly, and rendering.
+
+The application may have two Pyodide runtimes:
+
+- The module worker owns diagram rendering and generation-time feature
+  extraction. Heavy rendering must not return to the main thread.
+- The main-thread runtime may serve small UI helpers that have not yet moved,
+  such as palette data or isolated compatibility helpers. It is not an
+  alternative render path.
+
+LOSAT workers are separate from the diagram-generation worker. Threaded LOSAT
+is available only when the page is cross-origin isolated; keep a single-thread
+fallback.
+
+## Module ownership
+
+| Area | Owner |
+|---|---|
+| Vue mount and exports | `js/app.js` |
+| Composition and dependency wiring | `js/app/app-setup.js` |
+| Reactive state and computed values | `js/state.js` |
+| Generate-button orchestration | `js/app/run-analysis.js` |
+| Canonical request/session projection | `js/services/session-request.js` |
+| Save/load coordination | `js/services/config.js` |
+| Render-worker client and lifecycle | `js/services/diagram-generation.js` |
+| Pyodide typed rendering | `js/workers/diagram-generation-worker.js` |
+| LOSAT dispatch and workers | `js/services/losat.js`, `js/workers/losat-*` |
+| SVG/PNG/PDF downloads | `js/services/export.js` |
+| Preview SVG sanitization | `js/state.js` |
+| Feature-editor entry point | `js/app/feature-editor.js` |
+| Feature-editor helpers | `js/app/feature-editor/` |
+| Legend entry point | `js/app/legend.js` |
+| Legend helpers | `js/app/legend/` |
+| Legend/diagram positioning | `js/app/legend-layout.js`, `js/app/legend-layout/` |
+| Gallery data, media, and tutorials | `gallery/` |
+
+Keep top-level `create*` entry points in `js/app/*.js`. Put larger,
+single-purpose helpers in the matching subfolder instead of growing another
+general utility module.
+
+## Request and session boundary
+
+`services/session-request.js` is the projection boundary between reactive UI
+state and the persisted/rendered model. It owns:
+
+- canonical request schema and resource descriptors;
+- Circular `single`, `grid`, and `batch` grouping;
+- Linear record/group topology;
+- output-prefix and per-batch output projection;
+- explicit track-slot projection;
+- the current `ui.layoutPreferences` representation.
+
+`services/config.js` coordinates user-facing save and load actions. It must not
+grow a parallel model of render fields. Compatibility migrations are reader
+concerns: normalize supported old data once, then use the current model. Do not
+write retired fields into new sessions.
+
+Explicit track slots are authoritative when enabled. Legacy flat controls are
+compatibility inputs, not a second source of truth. Preserve empty positions in
+per-record depth and comparison inputs when those positions carry alignment
+meaning.
+
+See `docs/SESSION_COMPATIBILITY.md` for accepted versions and migration limits.
+
+## Modes and output topology
+
+- Circular `single` renders one record.
+- Circular `grid` renders several records in one figure; a one-record grid is
+  valid.
+- Circular `batch` renders one output per record and has one resolved output
+  target per item.
+- Linear renders one ordered multi-record layout. Record groups and explicit
+  comparison pairs affect topology and must survive session round trips.
+
+The preview and download layers consume render results; they must not infer a
+different grouping from the number of uploaded files.
+
+## Assets, CSP, and privacy
+
+Vue, Pyodide, styling, fonts, icons, DOMPurify, and export libraries are vendored
+under `gbdraw/web/vendor/` or otherwise packaged locally. Keep the Content
+Security Policy in `index.html` aligned with actual same-origin needs. Adding an
+external host to the CSP is not a substitute for vendoring a dependency.
+
+Do not log genome sequence, full uploaded file contents, or generated
+comparison rows. Error messages should identify the failed stage and safe
+resource label without exposing private data.
+
+Generated SVG must pass through the shared sanitization profile before preview
+or interactive editing. Event-handler attributes, scripts, foreign content,
+and unsafe URL schemes remain forbidden.
+
+## Changing a setting
+
+Before adding or changing a control, trace its complete lifecycle:
+
+1. Declare its reactive state and default in the appropriate state/setup owner.
+2. Bind the visible control and its help text.
+3. Project it once into the canonical request.
+4. Decode and validate it in the typed Python request layer if it is new.
+5. Preserve it through session save/load when it is user-owned state.
+6. Add focused state/request/session tests and a browser assertion when visual
+   behavior changes.
+7. Update Gallery tutorial captures when the control is part of a documented
+   workflow.
+
+Do not add a diagram argv builder. Project each control once at the canonical
+request boundary instead of duplicating it in configuration and session modules.
+
+## Gallery ownership
+
+`gbdraw/web/gallery/index.html` is generated from
+`gbdraw/web/gallery/examples.json`. Tutorial instructions live under
+`gbdraw/web/gallery/tutorials/`; screenshots and thumbnails live under
+`gbdraw/web/gallery/media/` and `thumbnails/`.
+
+Use `tools/build_web_gallery.py` for generated gallery markup. Use
+`tools/capture_gallery_tutorial_screenshots.py` for declarative tutorial
+captures. Data-dependent captures must load the example's own session, declare
+the expected app state, and prove that the controls or data identity named by
+the instruction are visible in the final crop.
+
+Read `docs/skills/web-gallery-screenshot-maintenance/SKILL.md` before editing
+Gallery tutorials or screenshots.
+
+## Local build and verification
 
 ```bash
-# Run locally
-gbdraw gui                    # Opens browser at http://localhost:<free port>
-
-# Prepare the generated local browser wheel (version must match pyproject.toml)
+gbdraw gui
 python tools/prepare_browser_wheel.py
-
-# Refresh the cache-bust token when preparing a deployable web bundle
 python tools/prepare_browser_wheel.py --refresh-cache-bust
-
-# Build distributions after the browser wheel is prepared
 python -m build
-
-# Test in browser
-# Open DevTools Console (F12) to see Pyodide output and errors
+pytest tests/ -v -m "not slow"
 ```
 
-### Playwright Verification
+Refresh the cache-bust token only when preparing a deployable bundle.
 
-- Do not skip browser verification solely because this repo has no local `node_modules/`, `package.json`, or `@playwright/test`. Check for Python/conda Playwright as well:
-  - `command -v playwright && playwright --version`
-  - `python -c "from playwright.sync_api import sync_playwright; print('python playwright ok')"`
-- The JS specs in `tests/web/*.playwright.spec.js` need Node's `@playwright/test`; verify with `node -e "console.log(require.resolve('@playwright/test'))"` before running them.
-- If `@playwright/test` is not installed, use Python Playwright for focused browser assertions against `gbdraw/web/index.html` or a local server.
-- In Codex/agent sandboxes, Chromium may be installed but fail to launch with `sandbox_host_linux.cc ... Operation not permitted`. Request/run the browser check with the required sandbox escalation and report the real result.
+When browser verification matters, check both Playwright installations:
 
-### Key File References
-
-| Section | File | Description |
-|---------|------|-------------|
-| CSP Header | gbdraw/web/index.html | Content Security Policy |
-| CSS Styles | gbdraw/web/index.html | TailwindCSS custom classes |
-| Vue App Template | gbdraw/web/index.html | HTML structure |
-| App Entry | gbdraw/web/js/app.js | Mounts Vue and delegates to app setup |
-| App Setup | gbdraw/web/js/app/app-setup.js | Composition root and module wiring |
-| Pyodide Init | gbdraw/web/js/app/pyodide.js | Pyodide startup + wheel install |
-| Run Analysis | gbdraw/web/js/app/run-analysis.js | Build args + execute gbdraw + extract features |
-| Legend Management | gbdraw/web/js/app/legend.js | Legend actions (entry point; helpers under `gbdraw/web/js/app/legend/`) |
-| Legend Layout | gbdraw/web/js/app/legend-layout.js | Legend/diagram positioning + canvas padding (entry point; helpers under `gbdraw/web/js/app/legend-layout/`) |
-| Feature Editor | gbdraw/web/js/app/feature-editor.js | Feature color editor logic (entry point; helpers under `gbdraw/web/js/app/feature-editor/`) |
-| Watchers | gbdraw/web/js/app/watchers.js | Vue watch hooks and lifecycle wiring |
-| State Management | gbdraw/web/js/state.js | Reactive refs and computed |
-| Components | gbdraw/web/js/components.js | HelpTip / FileUploader |
-| Export Functions | gbdraw/web/js/services/export.js | PDF/PNG/SVG download |
-| Config I/O | gbdraw/web/js/services/config.js | Save/load settings |
-| PNG Helper | gbdraw/web/js/utils/png.js | DPI injection |
-
-## Technology Stack
-
-### Core Libraries (CDN)
-| Library | Version | Purpose |
-|---------|---------|---------|
-| Vue.js 3 | 3.5.25 | Reactive UI framework |
-| Pyodide | 0.29.0 | Python WebAssembly runtime |
-| TailwindCSS | CDN | Utility-first CSS styling |
-| jsPDF | 3.0.3 | PDF generation |
-| svg2pdf.js | 2.6.0 | SVG to PDF conversion |
-| DOMPurify | 3.2.7 | XSS protection for SVG output |
-| Phosphor Icons | 2.1.2 | Icon library |
-
-### Fonts
-- Inter (Latin)
-- Noto Sans JP (Japanese support)
-
-## Architecture
-
-```
-index.html
-├── <head>
-│   ├── Content Security Policy (CSP)
-│   ├── CDN script imports
-│   └── TailwindCSS styles & custom CSS
-├── <body>
-│   ├── Vue app container (#app)
-│   │   ├── Loading overlay (Pyodide init)
-│   │   ├── Processing overlay
-│   │   ├── Header (mode toggle, config save/load)
-│   │   ├── Left Panel (4 columns)
-│   │   │   ├── Input Genomes card
-│   │   │   ├── Basic card
-│   │   │   ├── Colors / Labels / Features (collapsible)
-│   │   │   ├── Mode-specific Layout / Title&Legend / Axis & Scale / Pairwise Match cards
-│   │   │   ├── Styles (collapsible)
-│   │   │   ├── About & Citation (collapsible)
-│   │   │   └── Generate button
-│   │   └── Right Panel (8 columns)
-│   │       ├── Error display
-│   │       ├── Result preview (SVG container with zoom)
-│   │       ├── Floating controls (zoom, padding, reset)
-│   │       ├── Feature Color Picker Popup
-│   │       ├── Legend Editor (slide-out drawer)
-│   │       └── Feature Color Editor (slide-out drawer)
-│   ├── Vue component templates (HelpTip, FileUploader)
-│   └── Main Vue application script
+```bash
+command -v playwright && playwright --version
+python -c "from playwright.sync_api import sync_playwright; print('python playwright ok')"
+node -e "console.log(require.resolve('@playwright/test'))"
 ```
 
-## Key Features
+The JavaScript specs under `tests/web/` require Node's `@playwright/test`. If it
+is unavailable, use Python Playwright for focused browser checks. In an agent
+sandbox, Chromium may fail with `sandbox_host_linux.cc ... Operation not
+permitted`; rerun the same check with the required sandbox escalation.
 
-### 1. Serverless Architecture
-- **Pyodide** loads a Python environment in-browser
-- gbdraw wheel is installed dynamically (version must match `pyproject.toml`)
-- All processing (genome parsing, SVG generation) runs locally
-- **Privacy:** Genomic data never leaves the user's device
-- The browser wheel under `gbdraw/web/` is generated and gitignored; prepare it before wheel-dependent tests or packaging, and refresh the cache-bust token only for deploy-style builds
+For offline packaging, test that the wheel version matches `pyproject.toml`,
+all runtime URLs are local, CSP allows the required worker/runtime behavior, and
+the app reaches a ready state without external network access.
 
-### 2. Dual Mode Support
-- **Circular mode:** Single genome with track type options (tuckin/middle/spreadout)
-- **Linear mode:** Multi-genome comparison with BLAST tracks
+## Debugging principles
 
-### 3. Interactive SVG Editing (Post-generation)
-- **Drag & Drop:** Reposition legend and diagram elements
-- **Feature Click:** Change individual feature colors with popup picker
-- **Legend Editor:** Reorder, rename, delete legend entries
-- **Legend Layout:** Reflows entries after edits, aligns pairwise legends, and expands the canvas for tall vertical legends
-- **Canvas Padding:** Adjust whitespace (top/right/bottom/left)
+- Treat request validation failures as boundary errors, not reasons to bypass
+  the typed request path.
+- Keep worker errors structured enough for the main thread to distinguish
+  initialization, resource transfer, validation, LOSAT, render, and export
+  failures.
+- Revoke object URLs and terminate superseded workers so repeated generation
+  does not leak browser memory.
+- Preserve cancellation and stale-result guards when changing async code.
+- Verify both Circular and Linear modes after shared state or request changes.
 
-### 4. Color Management
-- **Default Colors (-d):** Base palette with 16+ presets
-- **Specific Rules (-t):** Regex-based conditional coloring
-- **Feature Overrides:** Per-feature color customization
-- **Dual Legend Support:** Horizontal and vertical legends synchronized in linear mode
+Related project documentation:
 
-## State Management
-
-### Key Reactive State (Vue refs)
-```javascript
-// System state
-pyodideReady            // Pyodide initialization status
-processing              // Diagram generation in progress
-errorLog                // Error messages
-
-// Results
-results                 // Array of {name, content} SVG outputs
-selectedResultIndex     // Currently viewed result
-svgContent              // Computed sanitized SVG
-
-// UI state
-mode                    // 'circular' | 'linear'
-zoom                    // Preview zoom level
-showFeaturePanel        // Feature color editor visibility
-showLegendPanel         // Legend editor visibility
-
-// Legend state
-legendEntries           // Extracted legend entries [{caption, color, yPos}]
-addedLegendCaptions     // Set of manually added legend captions
-
-// Feature editor state
-extractedFeatures       // Features from last generation
-featureColorOverrides   // {featureKey: {color, caption}}
-```
-
-### Form Data Structure
-```javascript
-form = {
-    prefix, species, strain,      // Metadata
-    track_type,                   // 'tuckin' | 'middle' | 'spreadout'
-    legend,                       // Position: 'right' | 'left' | 'none' | ...
-    scale_style,                  // 'bar' | 'ruler' (linear)
-    labels_mode,                  // 'none' | 'out' | 'both' (circular)
-    show_labels_linear,           // 'none' | 'all' | 'first'
-    separate_strands,
-    suppress_gc, suppress_skew,   // Circular options
-    show_gc, show_skew,           // Linear options
-}
-
-adv = {
-    features,                     // Array of feature types to draw
-    window_size, step_size, nt,   // GC calculation
-    def_font_size, label_font_size,
-    // Stroke settings, legend settings, etc.
-}
-```
-
-## Key JavaScript Functions
-
-### Main Entry Points
-| Function | File | Description |
-|----------|------|-------------|
-| `runAnalysis()` | gbdraw/web/js/app/run-analysis.js | Main diagram generation |
-| `downloadSVG()` | gbdraw/web/js/services/export.js | SVG export |
-| `downloadPNG()` | gbdraw/web/js/services/export.js | PNG export via canvas |
-| `downloadPDF()` | gbdraw/web/js/services/export.js | PDF export via jsPDF |
-
-### Legend Management
-| Function | File | Description |
-|----------|------|-------------|
-| `getAllFeatureLegendGroups(svg)` | gbdraw/web/js/app/legend.js | Get all legend groups (handles dual legends) |
-| `getVisibleFeatureLegendGroup(svg)` | gbdraw/web/js/app/legend.js | Select the active legend group when dual legends are present |
-| `addLegendEntry(caption, color)` | gbdraw/web/js/app/legend.js | Add entry to all legend groups |
-| `removeLegendEntry(caption)` | gbdraw/web/js/app/legend.js | Remove entry from all legend groups |
-| `compactLegendEntries(svg)` | gbdraw/web/js/app/legend.js | Reflow legend entries after add/remove |
-| `updatePairwiseLegendPositions(svg)` | gbdraw/web/js/app/legend.js | Keep pairwise legend aligned with feature legend layout |
-| `expandCanvasForVerticalLegend(svg)` | gbdraw/web/js/app/legend.js | Extend viewBox when a vertical legend would clip |
-| `reflowSingleLegendLayout(svg, layout, maxWidthOverride)` | gbdraw/web/js/app/legend.js | Reflow a single legend layout (horizontal/vertical) |
-| `extractLegendEntries()` | gbdraw/web/js/app/legend.js | Extract entries for Legend Editor panel |
-| `moveLegendEntryUp/Down(idx)` | gbdraw/web/js/app/legend.js | Reorder entries |
-
-### Feature Color Editing
-| Function | File | Description |
-|----------|------|-------------|
-| `setFeatureColor()` | gbdraw/web/js/app/feature-editor.js | Set color and update rules |
-| `applyInstantPreview()` | gbdraw/web/js/app/feature-editor.js | Update SVG instantly |
-| `updateClickedFeatureColor()` | gbdraw/web/js/app/feature-editor.js | Handle popup color change |
-
-### Drag & Drop
-| Function | File | Description |
-|----------|------|-------------|
-| `startLegendDrag(e)` / `onLegendDrag(e)` / `endLegendDrag()` | gbdraw/web/js/app/legend.js | Legend positioning |
-| `startDiagramDrag(e)` / `onDiagramDrag(e)` / `endDiagramDrag()` | gbdraw/web/js/app/legend-layout.js | Diagram element positioning |
-| `parseTransform(str)` | gbdraw/web/js/app/legend-layout.js | Extract x,y from transform attribute |
-| `resetAllPositions()` | gbdraw/web/js/app/legend-layout.js | Reset to original positions |
-
-## Python Integration
-
-### Pyodide Initialization Flow
-1. Load Pyodide runtime
-2. Install micropip
-3. Load gbdraw wheel from same origin
-4. Install Python dependencies (biopython, svgwrite, pandas, fonttools, bcbio-gff)
-5. Initialize helper functions
-6. Mark `pyodideReady = true`
-
-### Python Helper Functions (loaded in Pyodide)
-Defined in `gbdraw/web/js/app/python-helpers.js` and executed during Pyodide init.
-```python
-get_palettes_json()              # Load color palettes from TOML
-run_gbdraw_wrapper()             # Execute circular or linear mode
-generate_legend_entry_svg()      # Generate SVG for dynamic legend entry
-extract_features_from_genbank()  # Extract features for UI color editor
-```
-
-### File System Access Pattern
-```javascript
-// Write file to Pyodide virtual FS (gbdraw/web/js/app/pyodide.js)
-const writeFileToFs = async (fileObj, path) => {
-    const buffer = await fileObj.arrayBuffer();
-    pyodide.FS.writeFile(path, new Uint8Array(buffer));
-};
-
-// Read Python results via JSON
-const resultJson = pyodide.runPython("run_gbdraw_wrapper('circular', args)");
-const results = JSON.parse(resultJson);
-```
-
-## Security Considerations
-
-### Content Security Policy (lines 5-17)
-```
-default-src 'self';
-script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com ...;
-style-src 'self' 'unsafe-inline' https://fonts.googleapis.com ...;
-connect-src 'self' https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org ...;
-frame-ancestors 'none';
-```
-
-### SVG Sanitization
-All generated SVG passes through DOMPurify:
-- `FORBID_TAGS: ['style', 'script', 'foreignObject', 'iframe', 'animate', ...]`
-- `FORBID_ATTR: ['onload', 'onclick', 'onerror', ...]`
-
-### Regex Validation
-User-provided regex patterns are validated:
-- Length check (warn if >50 chars)
-- ReDoS pattern detection
-- Try-catch around `new RegExp()`
-
-## Development Notes
-
-### Modifying the UI
-- CSS: Tailwind utility classes inline + custom classes in `<style>` block
-- Custom classes: `.card`, `.btn-*`, `.form-input`, etc. (lines 43-72)
-- Colors: Slate palette with Blue/Indigo accents
-- Collapsible sections: `<details>` element with custom styling
-
-### Adding New Settings
-1. Add reactive state to `setup()` function (~line 1339)
-2. Add form element in appropriate card
-3. Include in args array passed to Python (~line 6840)
-4. Update Python-side handling if needed
-
-### Debugging
-- Browser DevTools Console shows Pyodide output
-- `[DEBUG]` prefixed logs for incremental edit tracking
-- Vue DevTools compatible
-- Check `errorLog.value` for Python exceptions
-
-### Common Issues
-1. **"Pyodide not ready"**: Wait for initialization (~5-15 seconds on first load)
-2. **Memory errors**: Large genomes may exhaust browser memory
-3. **Wheel version mismatch**: Ensure wheel version matches `pyproject.toml`
-4. **CSP errors**: Check CDN URLs in CSP header if adding new dependencies
-
-## File Dependencies
-
-When deploying:
-- `index.html` (this file)
-- `gbdraw-X.X.X-py3-none-any.whl` (Python wheel, same origin)
-- CDN dependencies (Vue, Pyodide, TailwindCSS, icons, jsPDF, DOMPurify)
-
-## Known Limitations
-
-1. **Memory:** Large genomes may exhaust browser memory
-2. **Performance:** Initial Pyodide load takes 5-15 seconds
-3. **Fonts:** Custom fonts require paths accessible to Pyodide
-4. **CairoSVG:** Not available in browser (PNG/PDF use canvas instead)
-5. **Incremental Updates:** Some edits require full regeneration
-
-## Related Files
-
-- `gbdraw/cli.py` - CLI entry point with `gui` command
-- `gbdraw/data/config.toml` - Default configuration values
-- `gbdraw/data/color_palettes.toml` - Color palette definitions
-- Parent project: See `CLAUDE.md` in project root
+- `CLAUDE.md`
+- `docs/TYPED_API.md`
+- `docs/SESSION_COMPATIBILITY.md`
+- `docs/SVG_SEMANTIC_HOOKS.md`

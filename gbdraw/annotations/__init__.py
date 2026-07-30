@@ -8,6 +8,18 @@ from .layout import (
     layout_annotation_track,
 )
 from .legend import sync_annotation_legend_entries
+from .feature_underlays import (
+    AUTO_FEATURE_RENDERED_ID,
+    AUTO_FEATURE_STABLE_ID,
+    AUTO_FEATURE_UNDERLAY_KIND,
+    AUTO_FEATURE_UNDERLAY_SET_ID,
+    AUTO_FEATURE_UNDERLAY_SLOT_ID,
+    apply_feature_underlay_dom_attributes,
+    feature_underlay_anchor_slot_id,
+    feature_underlay_slot_id,
+    is_auto_feature_underlay,
+    merge_feature_underlays,
+)
 from .models import (
     AnnotationOptions,
     AnnotationSet,
@@ -25,12 +37,23 @@ from .models import (
     effective_annotation_style,
     parse_feature_selector,
 )
-from .resolve import resolve_annotation_set, resolve_annotations
+from .resolve import (
+    annotation_midpoint,
+    merge_annotation_segments,
+    resolve_annotation_set,
+    resolve_annotations,
+)
 
 __all__ = [
     "AnnotationOptions",
     "AnnotationSet",
     "AnnotationTrackParams",
+    "AUTO_FEATURE_RENDERED_ID",
+    "AUTO_FEATURE_STABLE_ID",
+    "AUTO_FEATURE_UNDERLAY_KIND",
+    "AUTO_FEATURE_UNDERLAY_SET_ID",
+    "AUTO_FEATURE_UNDERLAY_SLOT_ID",
+    "apply_feature_underlay_dom_attributes",
     "CoordinateSpan",
     "FeatureSelector",
     "FeatureSpan",
@@ -43,10 +66,16 @@ __all__ = [
     "ResolvedRegionAnnotation",
     "ResolutionWarning",
     "annotation_sets_from_dataframe",
+    "annotation_midpoint",
     "annotation_track_params_from_mapping",
     "effective_annotation_style",
+    "feature_underlay_anchor_slot_id",
+    "feature_underlay_slot_id",
     "assign_annotation_lanes",
     "layout_annotation_track",
+    "is_auto_feature_underlay",
+    "merge_annotation_segments",
+    "merge_feature_underlays",
     "parse_feature_selector",
     "read_annotation_table",
     "resolve_annotation_set",

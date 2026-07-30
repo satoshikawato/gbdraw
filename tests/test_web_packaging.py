@@ -21,7 +21,16 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from gbdraw.session_io import CURRENT_SESSION_VERSION, load_session
+from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
+    LOSAT_DERIVED_CACHE_SCHEMA,
+    NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+    PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+    PROTEIN_LOSAT_CACHE_SCHEMA,
+    SUPPORTED_SESSION_VERSIONS,
+    load_session,
+)
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -45,9 +54,13 @@ BROWSER_WHEEL_FORBIDDEN_FILES = {
     "gbdraw/web/index.html",
     "gbdraw/web/open-source-notices.html",
 }
+BROWSER_WHEEL_ALLOWED_FILES = {
+    "gbdraw/web/js/services/standalone-interactivity-assets.js",
+}
 BROWSER_WHEEL_REQUIRED_RUNTIME_DATA = {
     "gbdraw/data/color_palettes.toml",
     "gbdraw/data/config.toml",
+    "gbdraw/web/js/services/standalone-interactivity-assets.js",
 }
 GALLERY_SESSION_FILES = [
     "BGC0000708-BGC0000713.gbdraw-session.json",
@@ -84,7 +97,64 @@ GALLERY_LOSAT_CACHE_SESSION_FILES = {
 }
 GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
+    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+    "majanivirus_orthogroup.gbdraw-session.json.gz",
+    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
 }
+
+
+def _write_pairwise_popup_test_module(tmp_path: Path) -> Path:
+    feature_utils_path = tmp_path / "feature-utils.mjs"
+    feature_utils_path.write_text(
+        (WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
+    sequence_fasta_path.write_text(
+        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js")
+        .read_text(encoding="utf-8")
+        .replace("./feature-utils.js", "./feature-utils.mjs"),
+        encoding="utf-8",
+    )
+    color_utils_path = tmp_path / "color-utils.mjs"
+    color_utils_path.write_text(
+        (WEB_ROOT / "js" / "app" / "color-utils.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    conservation_series_path = tmp_path / "conservation-series.mjs"
+    conservation_series_path.write_text(
+        (WEB_ROOT / "js" / "app" / "conservation-series.js")
+        .read_text(encoding="utf-8")
+        .replace("./color-utils.js", "./color-utils.mjs"),
+        encoding="utf-8",
+    )
+    normalization_path = tmp_path / "losat-normalization.mjs"
+    normalization_path.write_text(
+        (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    match_sequences_path = tmp_path / "match-sequences.mjs"
+    match_sequences_path.write_text(
+        (WEB_ROOT / "js" / "app" / "match-sequences.js")
+        .read_text(encoding="utf-8")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./conservation-series.js", "./conservation-series.mjs"),
+        encoding="utf-8",
+    )
+    module_path = tmp_path / "pairwise-match-popup.mjs"
+    module_path.write_text(
+        (WEB_ROOT / "js" / "app" / "pairwise-match-popup.js")
+        .read_text(encoding="utf-8")
+        .replace("./feature-utils.js", "./feature-utils.mjs")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./losat-normalization.js", "./losat-normalization.mjs")
+        .replace("./match-sequences.js", "./match-sequences.mjs"),
+        encoding="utf-8",
+    )
+    return module_path
+
+
 def _load_verify_module():
     module_path = REPO_ROOT / "tools" / "verify_gui_offline.py"
     spec = importlib.util.spec_from_file_location("verify_gui_offline", module_path)
@@ -265,7 +335,10 @@ def test_browser_wheel_excludes_hosted_web_assets() -> None:
         name
         for name in names
         if name in BROWSER_WHEEL_FORBIDDEN_FILES
-        or any(name.startswith(prefix) for prefix in BROWSER_WHEEL_FORBIDDEN_PREFIXES)
+        or (
+            name not in BROWSER_WHEEL_ALLOWED_FILES
+            and any(name.startswith(prefix) for prefix in BROWSER_WHEEL_FORBIDDEN_PREFIXES)
+        )
         or (name.startswith("gbdraw/web/gbdraw-") and name.endswith(".whl"))
     )
     assert forbidden == []
@@ -278,6 +351,8 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     package_data_patterns = build_support.get_package_data_patterns(include_browser_wheel=True)
 
     assert all("web/gallery" not in pattern for pattern in package_data_patterns)
+    assert "web/js/services/*.js" in package_data_patterns
+    assert (WEB_ROOT / "js" / "services" / "canonical-comparisons.js").is_file()
     assert "gbdraw/web/gallery" not in (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
     assert "gbdraw/web/gallery/" in build_support._BROWSER_WHEEL_FORBIDDEN_PREFIXES
 
@@ -312,6 +387,7 @@ def test_linear_record_selector_source_contract() -> None:
     assert "linearRecordSelectorDisabled(seq)" in index_html
     assert "def list_sequence_records(path, format):" in helper_js
     assert "def list_gff_fasta_records(gff_path, fasta_path):" in helper_js
+    assert 'records = list(SeqIO.parse(fasta_path, "fasta"))' in helper_js
     assert "load_gff_fasta(" in helper_js
     assert 'format_map = {"genbank": "genbank", "fasta": "fasta"}' in helper_js
     assert "def list_genbank_records(" not in helper_js
@@ -335,7 +411,9 @@ def test_web_run_info_tab_source_contract() -> None:
     assert "const lastRunInfo = ref(null);" in state_js
     assert "buildRunInfo({" in run_analysis_js
     assert "resultPanelTab.value = 'preview';" in run_analysis_js
-    assert "if (activePaletteName !== 'default') args.push('-p', activePaletteName);" in run_analysis_js
+    assert "args: ['--session', canonicalReplayPath]" in run_analysis_js
+    assert "request: canonical.renderRequest" in run_analysis_js
+    assert "args.push(" not in run_analysis_js
     assert "const dContent = buildDefaultColorOverrideTsv({" in run_analysis_js
     assert "if (dContent.trim() !== '') {" in run_analysis_js
     assert "cliInvocation: exportableCliInvocation" in config_js
@@ -349,12 +427,126 @@ def test_web_run_info_helper_builds_display_commands() -> None:
     subprocess.run([node, "tests/web/run-info.test.mjs"], check=True, cwd=REPO_ROOT)
 
 
-def test_web_cli_arg_helpers_omit_default_values() -> None:
+def test_web_definition_line_style_state_normalization() -> None:
     node = shutil.which("node")
     if node is None:
         pytest.skip("node is not available")
 
-    subprocess.run([node, "tests/web/cli-args.test.mjs"], check=True, cwd=REPO_ROOT)
+    subprocess.run(
+        [node, "tests/web/definition-line-style-state.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+
+def test_web_feature_rendering_contract() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run([node, "tests/web/feature-shapes.test.mjs"], check=True, cwd=REPO_ROOT)
+
+
+def test_web_runtime_capabilities_replace_source_probes() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(
+        encoding="utf-8"
+    )
+    worker_source = (
+        WEB_ROOT / "js" / "workers" / "diagram-generation-worker.js"
+    ).read_text(encoding="utf-8")
+    generation_source = (
+        WEB_ROOT / "js" / "services" / "diagram-generation.js"
+    ).read_text(encoding="utf-8")
+    index_source = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+
+    assert "inspect.getsource" not in run_source
+    assert '_get_args(["--help"])' not in run_source
+    assert "getLinearLabelOptionSupport" not in run_source
+    assert "getFeatureShapeOptionSupport" not in run_source
+    assert "getCircularMultiRecordCanvasOptionSupport" not in run_source
+    assert "getLinearTrackSlotOptionSupport" not in run_source
+    assert "get_web_runtime_capabilities" in worker_source
+    assert "capabilities: initialized.capabilities" in worker_source
+    assert "validateWebRuntimeCapabilities(data.capabilities)" in generation_source
+
+    user_facing_source = f"{run_source}\n{index_source}"
+    for internal_phrase in (
+        "Current gbdraw wheel",
+        "Rebuild and redeploy",
+        "CLI feature visibility table",
+        "suppressed by CLI",
+        "CLI uses the selected palette",
+        "CLI-only ruler override",
+        "override file is generated",
+    ):
+        assert internal_phrase not in user_facing_source
+
+
+def test_web_generation_uses_the_canonical_typed_request_transport() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(
+        encoding="utf-8"
+    )
+    worker_source = (
+        WEB_ROOT / "js" / "workers" / "diagram-generation-worker.js"
+    ).read_text(encoding="utf-8")
+    helper_source = (
+        WEB_ROOT / "js" / "app" / "python-helpers.js"
+    ).read_text(encoding="utf-8")
+
+    assert "buildCanonicalRenderRequest({" in run_source
+    assert "request: canonical.renderRequest" in run_source
+    assert "resources: canonical.resources" in run_source
+    assert "args: ['--session', canonicalReplayPath]" in run_source
+    assert "let args = [];" not in run_source
+    assert "args.push(" not in run_source
+    assert "args.lastIndexOf(" not in run_source
+    assert "generationFileMap" not in run_source
+    for retired_builder in (
+        "selectedFeatureShapes",
+        "appendDepthStyleArgs",
+        "appendDepthTrackMetadataArgs",
+        "buildModeTrackVisibilityArgs",
+        "buildModeBlastFilterArgs",
+        "buildRecordSelectorArgs",
+        "buildReverseComplementArgs",
+    ):
+        assert retired_builder not in run_source
+    assert not (WEB_ROOT / "js" / "app" / "cli-args.js").exists()
+    assert "run_canonical_request_wrapper" in worker_source
+    assert "render_embedded_canonical_web_request" in helper_source
+    for retired_transport in (
+        "run_gbdraw_wrapper",
+        "virtualBlastFiles",
+        "_get_circular_args",
+        "_get_linear_args",
+        "_install_virtual_blast_loader",
+        "_assemble_module.load_comparisons =",
+    ):
+        assert retired_transport not in f"{run_source}\n{worker_source}\n{helper_source}"
+
+
+def test_web_runtime_capability_validation() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/runtime-capabilities.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+
+def test_web_pyodide_startup_failure_is_user_safe() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/pyodide-startup.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
 
 
 def test_web_canonical_session_request_codec() -> None:
@@ -363,24 +555,74 @@ def test_web_canonical_session_request_codec() -> None:
         pytest.skip("node is not available")
 
     subprocess.run([node, "tests/web/session-request.test.mjs"], check=True, cwd=REPO_ROOT)
-    subprocess.run(
-        [
-            node,
-            "tests/web/session-request.test.mjs",
-            "--project-session",
-            str(
-                GALLERY_ROOT
-                / "sessions"
-                / "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz"
-            ),
-        ],
-        check=True,
-        cwd=REPO_ROOT,
-    )
+    for session_name in (
+        "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+        "majanivirus_orthogroup.gbdraw-session.json.gz",
+        "tobacco-chloroplast.gbdraw-session.json",
+        "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+    ):
+        subprocess.run(
+            [
+                node,
+                "tests/web/session-request.test.mjs",
+                "--project-session",
+                str(GALLERY_ROOT / "sessions" / session_name),
+            ],
+            check=True,
+            cwd=REPO_ROOT,
+        )
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(
         encoding="utf-8"
     )
     assert "files: serializedFiles" not in config_source
+
+
+def test_web_gallery_session_migration() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/gallery-session-migration.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+
+def test_web_session_import_rejects_invalid_losat_cache_artifacts() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/session-losat-cache-validation.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+
+def test_web_losat_cache_reference_validation() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/losat-cache.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+
+
+def test_web_derived_losat_cache_identity_invalidation() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/run-analysis-derived-cache.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
 
 
 def test_web_losat_settings_preserve_requested_thread_count() -> None:
@@ -459,6 +701,7 @@ def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    session_request_js = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     helper_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
     worker_js = (WEB_ROOT / "js" / "workers" / "diagram-generation-worker.js").read_text(encoding="utf-8")
     svg_actions_js = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
@@ -471,13 +714,14 @@ def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     assert "'transcript'" in state_js
     assert "{svg_id: 'on' | 'off' | 'exclude_matching'}" in state_js
     assert "/web_feature_visibility_table.tsv" in run_analysis_js
-    assert "args.push('--feature_visibility_table', featureVisibilityTablePath);" in run_analysis_js
     assert "serializeFeatureVisibilityRules(featureVisibilityRules?.value || [])" in run_analysis_js
+    assert "serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || [])" in session_request_js
+    assert "diagramOptions.featureVisibilityTableFile = fileRef(resources.addText(" in session_request_js
     assert "featureVisibility: featureVisibilityCacheKey" in run_analysis_js
     assert "featureVisibilityTsv: featureVisibilityCacheKey" in run_analysis_js
     assert "featureVisibilityTablePath || null" in worker_js
     assert "feature_visibility_table_path=None" in helper_js
-    assert "extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None)" in helper_js
+    assert "extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False)" in helper_js
     assert "feature_visibility_rules=feature_visibility_rules" in helper_js
     assert "if (mode === 'off')" in svg_actions_js
     assert "mode === 'off' || mode === 'suppress'" not in svg_actions_js
@@ -504,7 +748,10 @@ def test_web_linear_definition_line_styles_contract() -> None:
     app_setup_js = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
-    cli_args_js = (WEB_ROOT / "js" / "app" / "cli-args.js").read_text(encoding="utf-8")
+    session_request_js = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
+    definition_style_js = (
+        WEB_ROOT / "js" / "app" / "definition-line-style-state.js"
+    ).read_text(encoding="utf-8")
 
     assert "Definition Line Styles" in index_html
     assert "Subtitle / title (optional)" in index_html
@@ -518,12 +765,11 @@ def test_web_linear_definition_line_styles_contract() -> None:
     assert "linear_definition_line_styles: createDefaultLinearDefinitionLineStyles()" in state_js
     assert "record_subtitle: seq.record_subtitle ?? ''" in config_js
     assert "normalizeDefinitionLineStyleState" in config_js
-    assert "buildDefinitionLineStyleAssignments" in run_analysis_js
-    assert "args.push('--record_subtitle', subtitle);" in run_analysis_js
-    assert "definition_line_style" in run_analysis_js
-    assert "args.push('--definition_line_style', assignment);" in run_analysis_js
-    assert "'subtitle'" in cli_args_js
-    assert "color=${style.fill}" in cli_args_js
+    assert "normalizeDefinitionLineStyleState" in run_analysis_js
+    assert "presentationPayload({ label: seq.definition, subtitle: seq.record_subtitle })" in session_request_js
+    assert "Object.entries(LINEAR_DEFINITION_STYLE_PATHS)" in session_request_js
+    assert "'subtitle'" in definition_style_js
+    assert "fill: normalizeDefinitionLineFill(entry.fill)" in definition_style_js
 
 
 def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
@@ -541,6 +787,9 @@ def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
     assert "Evidence scope" in index_html
     assert "ribbons are still emitted only between adjacent display rows" in index_html
     assert "Merge conflicts" in index_html
+    assert 'v-model.number="losat.blastp.collinearMaxUnitGap"' in index_html
+    assert "collinearMaxUnitGap: 0" in state_js
+    assert "collinearMaxGeneGap" not in state_js
     assert "export const normalizeCollinearAnchorMode = (_value) => 'rbh';" in normalizer_js
     assert "delete cloned.blastp.collinearAnchorMode;" in config_js
     assert "collinearBlockMergeGap" not in state_js
@@ -548,7 +797,10 @@ def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
     assert "delete state.losat.blastp.collinearBlockMergeGap;" in config_js
     assert "delete state.losat.blastp.collinearSingletonMergeGap;" in config_js
     assert "losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode" in run_analysis_js
+    assert "losat.blastp.collinearMaxUnitGap" in run_analysis_js
     assert "losat.blastp.collinearMaxConflictsInMergeGap" in run_analysis_js
+    assert "collinear_max_unit_gap=0" in helper_js
+    assert "collinear_max_gene_gap" not in helper_js
     assert "max_conflicts=_collinear_int(collinear_max_conflicts_in_merge_gap, 1)" in helper_js
     assert "collinear_block_merge_gap=50" not in helper_js
     assert "collinear_singleton_merge_gap=25" not in helper_js
@@ -683,7 +935,7 @@ def test_web_record_local_orthogroup_scope_survives_state_and_ui_layers() -> Non
     assert "state.orthogroups.value = groups;" in config_js
     assert "orthogroupScope" in config_js
     assert "orthogroupScope" in run_analysis_js
-    assert "Species-specific orthogroup" in normalizer_js
+    assert "Record-specific similarity group" in normalizer_js
     assert "Collinearity-backed global evidence" in normalizer_js
     assert "Local collinear group" in normalizer_js
     assert "groupMetadataScopeLabel(orthogroupScope(groupOrId))" in orthogroups_js
@@ -696,11 +948,14 @@ def test_web_run_analysis_orthogroup_top_label_mode_is_wired() -> None:
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    session_request_js = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
 
     assert '<option value="orthogroup_top"' in index_html
-    assert "Top Orthogroup Record" in index_html
+    assert "Top Similarity Group Record" in index_html
     assert "losat.blastp.mode === 'orthogroup' || losat.blastp.mode === 'collinear'" in index_html
-    assert "if (form.show_labels_linear === 'orthogroup_top') args.push('orthogroup_top');" in run_analysis_js
+    assert "[MODE_LABEL_SCOPE_PATHS[state.mode.value]]" in session_request_js
+    assert "form.show_labels_linear" in session_request_js
+    assert "args.push(" not in run_analysis_js
     assert "show_labels_linear: 'none'" in state_js
     assert "form: state.form" in config_js
 
@@ -713,11 +968,14 @@ def test_web_losatp_derived_payload_cache_is_persisted_separately() -> None:
     assert "const losatDerivedCache = ref(new Map());" in state_js
     assert "losatDerivedCache:" in config_js
     assert "serializeLosatDerivedCache()" in config_js
-    assert "applyLosatDerivedCache(data.losatDerivedCache?.entries)" in config_js
+    assert "applyLosatDerivedCache(" in config_js
+    assert "proteinIdentityManifest" in config_js
+    assert "legacyArtifacts?.proteinRawCandidates" in config_js
     assert "kind: 'derived-losatp-payload'" in config_js
     assert "buildLosatDerivedPayloadCachePayload({" in run_analysis_js
-    assert "getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey)" in run_analysis_js
-    assert "setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey" in run_analysis_js
+    assert "convertedPayload = getLosatDerivedCacheEntry(" in run_analysis_js
+    assert "setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {" in run_analysis_js
+    assert "manifest: proteinIdentityManifest.value" in run_analysis_js
 
 
 def test_web_losatp_orthogroup_and_collinear_blastp_omit_hsp_cap() -> None:
@@ -761,6 +1019,14 @@ def test_gallery_csp_allows_same_origin_tutorial_media() -> None:
 def test_open_source_notices_are_generated() -> None:
     subprocess.run(
         [sys.executable, "tools/generate_open_source_notices.py", "--check"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+
+def test_open_source_notices_generator_does_not_require_runtime_dependencies() -> None:
+    subprocess.run(
+        [sys.executable, "-S", "tools/generate_open_source_notices.py", "--check"],
         cwd=REPO_ROOT,
         check=True,
     )
@@ -986,7 +1252,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert '"format":"gbdraw-session"' in session_prefix
         version_match = re.search(r'"version":(\d+)', session_prefix)
         assert version_match is not None
-        assert int(version_match.group(1)) in {32, CURRENT_SESSION_VERSION}
+        assert int(version_match.group(1)) in SUPPORTED_SESSION_VERSIONS
         assert "gbdraw-gallery-interactive-script" not in svg_source
         assert "data-gbdraw-gallery" not in svg_source
         assert "window.parent" not in svg_source
@@ -1014,6 +1280,61 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert any(feature.get("qualifiers") for feature in features)
             assert any(feature.get("location_parts") for feature in features)
             assert all(feature.get("nucleotide_sequence") for feature in features)
+            assigned_orthogroups = {
+                str(feature.get("orthogroup_id") or "")
+                for feature in features
+                if feature.get("orthogroup_id")
+            }
+            if assigned_orthogroups:
+                orthogroups = {
+                    str(group.get("id") or ""): group
+                    for group in payload.get("orthogroups", [])
+                }
+                assert assigned_orthogroups <= orthogroups.keys()
+                rendered_features_by_id = {
+                    str(feature["svg_id"]): feature for feature in features
+                }
+                biological_features = payload.get("biological_features") or features
+                biological_features_by_key = {
+                    (
+                        int(
+                            feature.get(
+                                "record_idx",
+                                feature.get("record_index", feature.get("recordIndex", -1)),
+                            )
+                        ),
+                        str(
+                            feature.get("stable_feature_id")
+                            or feature.get("stable_svg_id")
+                            or feature.get("svg_id")
+                            or ""
+                        ),
+                    ): feature
+                    for feature in biological_features
+                }
+                for orthogroup_id in assigned_orthogroups:
+                    members = orthogroups[orthogroup_id].get("members", [])
+                    assert members
+                    for member in members:
+                        stable_id = str(
+                            member.get("stable_feature_svg_id")
+                            or member.get("stableFeatureSvgId")
+                            or member.get("feature_svg_id")
+                            or member.get("featureSvgId")
+                            or ""
+                        )
+                        record_index = int(
+                            member.get("record_index", member.get("recordIndex", -1))
+                        )
+                        feature = biological_features_by_key[(record_index, stable_id)]
+                        assert feature.get("nucleotide_sequence")
+                        rendered_id = str(
+                            member.get("rendered_feature_svg_id")
+                            or member.get("renderedFeatureSvgId")
+                            or ""
+                        )
+                        if rendered_id:
+                            assert rendered_id in rendered_features_by_id
 
         assert thumbnail_header.startswith(b"RIFF")
         assert b"WEBP" in thumbnail_header
@@ -1139,9 +1460,17 @@ def test_feature_popup_metadata_ui_is_wired_without_new_dependencies() -> None:
     assert "nucleotide_sequence" in feature_metadata_source
     assert "amino_acid_sequence" in feature_metadata_source
     assert '"organism": organism' in feature_metadata_source
-    assert '"source_protein_id": _first_qualifier_value(feat.qualifiers, "protein_id")' in feature_metadata_source
+    assert re.search(
+        r'"source_protein_id":\s*_first_qualifier_value\(\s*'
+        r'feat\.qualifiers,\s*"protein_id"\s*\)',
+        feature_metadata_source,
+    )
     assert '"gene_id": _first_qualifier_value(feat.qualifiers, "gene_id")' in feature_metadata_source
-    assert '"old_locus_tag": _first_qualifier_value(feat.qualifiers, "old_locus_tag")' in feature_metadata_source
+    assert re.search(
+        r'"old_locus_tag":\s*_first_qualifier_value\(\s*'
+        r'feat\.qualifiers,\s*"old_locus_tag"\s*\)',
+        feature_metadata_source,
+    )
     assert "sanitizeExtractedFeaturesForSession(state.extractedFeatures.value)" in config_source
 
 
@@ -1200,19 +1529,34 @@ def test_web_session_feature_metadata_recovery_source_contract() -> None:
 
 
 def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None:
+    observed_losat_cache_sessions = set()
+    observed_losat_derived_cache_sessions = set()
+
     for session_name in GALLERY_SESSION_FILES:
         session_path = GALLERY_ROOT / "sessions" / session_name
         session = load_session(session_path)
         features = session.get("features", {}).get("extractedFeatures", [])
         svg_text = "\n".join(result.get("content", "") for result in session.get("results", []))
+        rendered_stable_feature_ids = {
+            match
+            for match in re.findall(
+                r"data-gbdraw-stable-feature-id=[\"']([^\"']+)[\"']",
+                svg_text,
+            )
+        }
         rendered_feature_ids = {
-            re.sub(r"__part\d+$", "", match)
-            for match in re.findall(r"data-gbdraw-feature-id=[\"']([^\"']+)[\"']", svg_text)
+            re.sub(r"_record_\d+$", "", match)
+            for match in re.findall(
+                r"data-gbdraw-feature-id=[\"']([^\"']+)[\"']",
+                svg_text,
+            )
         }
         feature_ids = {
             candidate
             for feature in features
             for candidate in (
+                str(feature.get("stable_feature_id") or ""),
+                str(feature.get("stable_svg_id") or ""),
                 str(feature.get("svg_id") or ""),
                 re.sub(r"_record_\d+$", "", str(feature.get("svg_id") or "")),
             )
@@ -1221,21 +1565,54 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
         pairwise_ids = set(re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text))
         collinearity_ids = set(re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text))
 
-        assert session.get("version") in {32, CURRENT_SESSION_VERSION}, session_name
+        assert session.get("version") == CURRENT_SESSION_VERSION, session_name
+        assert (
+            session.get("renderRequest", {}).get("schema")
+            == CANONICAL_REQUEST_SCHEMA
+        ), session_name
+        assert (
+            session.get("proteinIdentityManifest", {}).get("schema")
+            == PROTEIN_IDENTITY_MANIFEST_SCHEMA
+        ), session_name
         assert "files" not in session, session_name
         assert features, session_name
         assert session.get("results"), session_name
         assert "orthogroupState" in session, session_name
-        assert rendered_feature_ids, session_name
-        assert rendered_feature_ids <= feature_ids, session_name
+        resolved_rendered_feature_ids = (
+            rendered_stable_feature_ids or rendered_feature_ids
+        )
+        assert resolved_rendered_feature_ids, session_name
+        assert resolved_rendered_feature_ids <= feature_ids, session_name
         if session_name in GALLERY_EDITOR_STATE_SESSION_FILES:
             assert session.get("editorState"), session_name
-        if session_name in GALLERY_LOSAT_CACHE_SESSION_FILES:
-            assert session.get("losatCache", {}).get("entries"), session_name
-        if session_name in GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES:
-            assert session.get("losatDerivedCache", {}).get("entries"), session_name
+        losat_cache_entries = session.get("losatCache", {}).get("entries", [])
+        if losat_cache_entries:
+            observed_losat_cache_sessions.add(session_name)
+            for entry in losat_cache_entries:
+                expected_schema = (
+                    PROTEIN_LOSAT_CACHE_SCHEMA
+                    if entry.get("identityKind") == "protein"
+                    else NUCLEOTIDE_LOSAT_CACHE_SCHEMA
+                )
+                assert entry.get("schema") == expected_schema, session_name
+
+        losat_derived_cache_entries = session.get("losatDerivedCache", {}).get(
+            "entries", []
+        )
+        if losat_derived_cache_entries:
+            observed_losat_derived_cache_sessions.add(session_name)
+            assert all(
+                entry.get("schema") == LOSAT_DERIVED_CACHE_SCHEMA
+                for entry in losat_derived_cache_entries
+            ), session_name
         if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
             assert pairwise_ids or collinearity_ids, session_name
+
+    assert observed_losat_cache_sessions == GALLERY_LOSAT_CACHE_SESSION_FILES
+    assert (
+        observed_losat_derived_cache_sessions
+        == GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES
+    )
 
 
 def test_tobacco_gallery_session_keeps_chloroplast_region_annotations() -> None:
@@ -1310,6 +1687,7 @@ def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path
     check_path.write_text(
         f"""
         import {{ buildFeatureSequenceFastas }} from {module_path.as_uri()!r};
+        import {{ getFeatureCaption }} from {feature_utils_path.as_uri()!r};
 
         const assert = (condition, message) => {{
           if (!condition) throw new Error(message);
@@ -1358,6 +1736,41 @@ def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path
         );
         assert(fallback.aminoAcidFasta.startsWith('>LOC_1 fallback protein\\n'), fallback.aminoAcidFasta);
         assert(fallback.aminoAcidFasta.endsWith('\\nM'), fallback.aminoAcidFasta);
+
+        const runtimeHandle = `h_${{'a'.repeat(26)}}`;
+        const displaySafe = buildFeatureSequenceFastas({{
+          source_protein_id: '',
+          protein_id: runtimeHandle,
+          locus_tag: 'LOC_SAFE',
+          amino_acid_sequence: 'MK'
+        }});
+        assert(displaySafe.aminoAcidFasta.startsWith('>LOC_SAFE'), displaySafe.aminoAcidFasta);
+        assert(!displaySafe.aminoAcidFasta.includes(runtimeHandle), displaySafe.aminoAcidFasta);
+
+        const syntheticLabel = 'gbd_r0001_cds000001';
+        assert(
+          getFeatureCaption({{ label: syntheticLabel, type: 'CDS', start: 0, end: 9 }}) === 'CDS at 0..9',
+          'Synthetic feature label leaked into the caption'
+        );
+        assert(
+          getFeatureCaption({{
+            product: runtimeHandle,
+            locus_tag: 'LOC_CAPTION_SAFE'
+          }}) === 'LOC_CAPTION_SAFE',
+          'Internal product prevented a safe caption fallback'
+        );
+
+        const safeDescription = buildFeatureSequenceFastas({{
+          source_protein_id: 'WP_SAFE_DESCRIPTION.1',
+          product: runtimeHandle,
+          locus_tag: 'LOC_DESCRIPTION_SAFE',
+          amino_acid_sequence: 'MK'
+        }}).aminoAcidFasta;
+        assert(
+          safeDescription.startsWith('>WP_SAFE_DESCRIPTION.1 LOC_DESCRIPTION_SAFE\\n'),
+          safeDescription
+        );
+        assert(!safeDescription.includes(runtimeHandle), safeDescription);
         """,
         encoding="utf-8",
     )
@@ -1397,7 +1810,7 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "data-search-match-detail",
         "gfs-button--clear",
         "gfs-match-detail",
-        "['orthogroup', 'Orthogroup']",
+        "['orthogroup', 'Similarity group']",
         "['nucleotide', 'Nucleotide']",
         "['amino-acid', 'Amino acid']",
         "var NUCLEOTIDE_IUPAC = {",
@@ -1416,7 +1829,7 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "function setActiveMatch(index, options)",
         "function clearSearch()",
         "Search match",
-        "Orthogroup members",
+        "Similarity-group members",
         "function scheduleInitialViewportRefresh()",
         "var initialView = copyViewRect(getViewRect());",
         "rectsNearlyEqual(getViewRect(), initialView)",
@@ -1564,7 +1977,8 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         assert needle not in standalone_source
 
     assert "popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'" in export_source
-    assert "features: state.extractedFeatures.value" in export_source
+    assert "state.biologicalFeatures?.value" in export_source
+    assert "features: biologicalFeatures" in export_source
     assert "editableLabels: state.editableLabels.value" in export_source
     assert "orthogroups: state.orthogroups.value" in export_source
     assert "if (!svg || state.adv.rich_feature_popup === false) return false;" not in export_source
@@ -1750,6 +2164,48 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
           popupMode: 'rich'
         }});
         assert(translationSearch.matches.join(',') === 'ftranslation', `Translation fallback failed: ${{JSON.stringify(translationSearch)}}`);
+
+        const runtimeHandle = `h_${{'a'.repeat(26)}}`;
+        const featureAnalysisId = `f_${{'b'.repeat(64)}}`;
+        // Unsupported historical long-ID shapes remain hidden at display boundaries.
+        const unsupportedLongTransportId = `record@instance|alias~f_${{'c'.repeat(64)}}`;
+        const internalFeature = {{
+          svg_id: 'finternal',
+          type: 'CDS',
+          displayLabel: runtimeHandle,
+          label: featureAnalysisId,
+          sourceProteinId: unsupportedLongTransportId,
+          proteinId: runtimeHandle,
+          qualifiers: {{
+            protein_id: [runtimeHandle, featureAnalysisId, unsupportedLongTransportId],
+            locus_tag: ['WP_SAFE_SEARCH.1']
+          }},
+          orthogroupId: 'og_internal'
+        }};
+        const internalOrthogroups = [{{
+          id: 'og_internal',
+          members: [{{
+            featureSvgId: 'finternal',
+            displayProteinId: runtimeHandle,
+            sourceProteinId: featureAnalysisId,
+            label: unsupportedLongTransportId,
+            locusTag: 'WP_SAFE_SEARCH.1'
+          }}]
+        }}];
+        const internalItems = featureSearchItems(
+          internalFeature,
+          'all',
+          '',
+          {{ popupMode: 'rich', orthogroupsById: new Map([['og_internal', internalOrthogroups[0]]]) }}
+        );
+        assert(
+          internalItems.some((item) => item.value === 'WP_SAFE_SEARCH.1'),
+          `Safe display ID missing: ${{JSON.stringify(internalItems)}}`
+        );
+        assert(
+          !internalItems.some((item) => [runtimeHandle, featureAnalysisId, unsupportedLongTransportId].includes(item.value)),
+          `Internal protein ID leaked into GUI search: ${{JSON.stringify(internalItems)}}`
+        );
         """,
         encoding="utf-8",
     )
@@ -1770,32 +2226,7 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
     if node is None:
         pytest.skip("node is not available")
 
-    feature_utils_path = tmp_path / "feature-utils.mjs"
-    feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
-    sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
-    sequence_fasta_path.write_text(
-        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8").replace("./feature-utils.js", "./feature-utils.mjs"),
-        encoding="utf-8",
-    )
-    normalization_path = tmp_path / "losat-normalization.mjs"
-    normalization_path.write_text((WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"), encoding="utf-8")
-    match_sequences_path = tmp_path / "match-sequences.mjs"
-    match_sequences_path.write_text(
-        (WEB_ROOT / "js" / "app" / "match-sequences.js")
-        .read_text(encoding="utf-8")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
-        encoding="utf-8",
-    )
-    source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
-    module_path = tmp_path / "pairwise-match-popup.mjs"
-    module_path.write_text(
-        source_path.read_text(encoding="utf-8")
-        .replace("./feature-utils.js", "./feature-utils.mjs")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("./losat-normalization.js", "./losat-normalization.mjs")
-        .replace("./match-sequences.js", "./match-sequences.mjs"),
-        encoding="utf-8",
-    )
+    module_path = _write_pairwise_popup_test_module(tmp_path)
     check_path = tmp_path / "check-pairwise-popup.mjs"
     check_path.write_text(
         f"""
@@ -1882,7 +2313,7 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         }});
 
         assert(payload.title === 'og_1:rpoB', `Unexpected title: ${{payload.title}}`);
-        assert(payload.subtitle === '', `Orthogroup popup should not duplicate subtitle: ${{payload.subtitle}}`);
+        assert(payload.subtitle === '', `Similarity-group popup should not duplicate subtitle: ${{payload.subtitle}}`);
         assert(payload.sections.map((section) => section.title).join(',') === 'Summary', JSON.stringify(payload.sections));
         const labels = payload.sections.flatMap((section) => section.rows.map((row) => row.label));
         assert(!labels.includes('Match style'), `Match style leaked: ${{JSON.stringify(labels)}}`);
@@ -1892,16 +2323,54 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         assert(!labels.includes('Subject record'), `Subject record should be omitted: ${{JSON.stringify(labels)}}`);
         assert(!labels.includes('Query interval'), `Query interval should be omitted: ${{JSON.stringify(labels)}}`);
         assert(!labels.includes('Subject interval'), `Subject interval should be omitted: ${{JSON.stringify(labels)}}`);
-        assert(labels.includes('Orthogroup ID'), `Orthogroup ID missing: ${{JSON.stringify(labels)}}`);
+        assert(labels.includes('Similarity group ID'), `Similarity group ID missing: ${{JSON.stringify(labels)}}`);
         assert(labels.includes('Display name'), `Display name missing: ${{JSON.stringify(labels)}}`);
         const summary = payload.sections[0];
         assert(summary.memberRows.length === 2, JSON.stringify(summary));
         assert(summary.memberRows.map((row) => row.proteinId).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(summary.memberRows));
         assert(summary.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tRole\\tConfidence\\tAssignment reason\\tProduct / note'), summary.memberCopyText);
         const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
-        assert(hoverLabels.includes('Orthogroup'), `Hover orthogroup row missing: ${{JSON.stringify(hoverLabels)}}`);
+        assert(hoverLabels.includes('Similarity group'), `Hover similarity-group row missing: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Query'), `Hover query row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Subject'), `Hover subject row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
+
+        const hiddenMemberPayload = buildPairwiseMatchPayload(element, {{
+          featureLookup,
+          sourceFeatures: [{{
+            svg_id: 'fh',
+            stable_svg_id: 'fh',
+            record_idx: 2,
+            record_id: 'record_hidden',
+            start: 149,
+            end: 180,
+            strand: '+',
+            product: 'hidden product',
+            qualifiers: {{ protein_id: ['WP_HIDDEN.1'], translation: ['MHIDDEN'] }},
+            nucleotide_sequence: 'ATGCCCTAA',
+            amino_acid_sequence: 'MHIDDEN'
+          }}],
+          orthogroups: [{{
+            id: 'og_1',
+            name: 'rpoB',
+            member_count: 3,
+            record_coverage_count: 3,
+            members: [
+              {{ recordId: 'record_a', recordIndex: 0, featureSvgId: 'fq', sourceProteinId: 'WP_000001.1' }},
+              {{ recordId: 'record_b', recordIndex: 1, featureSvgId: 'fs', sourceProteinId: 'WP_000002.1' }},
+              {{
+                recordId: 'record_hidden', recordIndex: 2, featureSvgId: 'fh',
+                stableFeatureSvgId: 'fh', sourceProteinId: 'WP_HIDDEN.1',
+                start: 149, end: 180, strand: '+', product: 'hidden product'
+              }}
+            ]
+          }}]
+        }});
+        const hiddenRows = hiddenMemberPayload.sections[0].memberRows;
+        assert(hiddenRows.length === 3, JSON.stringify(hiddenRows));
+        const hiddenRow = hiddenRows.find((row) => row.proteinId === 'WP_HIDDEN.1');
+        assert(hiddenRow && hiddenRow.ntFasta.includes('ATGCCCTAA'), JSON.stringify(hiddenRow));
+        assert(hiddenRow && hiddenRow.aaFasta.includes('MHIDDEN'), JSON.stringify(hiddenRow));
+        assert(hiddenRow && hiddenRow.canOpen === false, JSON.stringify(hiddenRow));
 
         const fallbackPayload = buildPairwiseMatchPayload(element, {{
           featureLookup,
@@ -1923,32 +2392,7 @@ def test_collinear_adjacent_popup_labels_local_collinear_groups(tmp_path: Path) 
     if node is None:
         pytest.skip("node is not available")
 
-    feature_utils_path = tmp_path / "feature-utils.mjs"
-    feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
-    sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
-    sequence_fasta_path.write_text(
-        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js").read_text(encoding="utf-8").replace("./feature-utils.js", "./feature-utils.mjs"),
-        encoding="utf-8",
-    )
-    normalization_path = tmp_path / "losat-normalization.mjs"
-    normalization_path.write_text((WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"), encoding="utf-8")
-    match_sequences_path = tmp_path / "match-sequences.mjs"
-    match_sequences_path.write_text(
-        (WEB_ROOT / "js" / "app" / "match-sequences.js")
-        .read_text(encoding="utf-8")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs"),
-        encoding="utf-8",
-    )
-    source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
-    module_path = tmp_path / "pairwise-match-popup.mjs"
-    module_path.write_text(
-        source_path.read_text(encoding="utf-8")
-        .replace("./feature-utils.js", "./feature-utils.mjs")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("./losat-normalization.js", "./losat-normalization.mjs")
-        .replace("./match-sequences.js", "./match-sequences.mjs"),
-        encoding="utf-8",
-    )
+    module_path = _write_pairwise_popup_test_module(tmp_path)
     check_path = tmp_path / "check-collinear-popup.mjs"
     check_path.write_text(
         f"""
@@ -1981,17 +2425,17 @@ def test_collinear_adjacent_popup_labels_local_collinear_groups(tmp_path: Path) 
         const payload = buildPairwiseMatchPayload(element, {{ featureLookup: new Map(), orthogroups: [] }});
         const sectionTitles = payload.sections.map((section) => section.title);
         assert(sectionTitles.includes('Local collinear groups'), JSON.stringify(sectionTitles));
-        assert(!sectionTitles.includes('Orthogroups covered'), JSON.stringify(sectionTitles));
+        assert(!sectionTitles.includes('Similarity groups covered'), JSON.stringify(sectionTitles));
         const groupSection = payload.sections.find((section) => section.title === 'Local collinear groups');
         const groupLabels = groupSection.rows.map((row) => row.label);
         assert(groupLabels.includes('Number of local collinear groups'), JSON.stringify(groupLabels));
         assert(payload.blockOrthogroupCount === 2, `Unexpected group count: ${{payload.blockOrthogroupCount}}`);
         const detailLabels = payload.blockOrthogroups[0].detailRows.map((row) => row.label);
         assert(detailLabels.includes('Collinear group ID'), JSON.stringify(detailLabels));
-        assert(!detailLabels.includes('Orthogroup ID'), JSON.stringify(detailLabels));
+        assert(!detailLabels.includes('Similarity group ID'), JSON.stringify(detailLabels));
         const hoverLabels = buildPairwiseMatchHoverRows(payload).map((row) => row.label);
         assert(hoverLabels.includes('Collinear groups'), JSON.stringify(hoverLabels));
-        assert(!hoverLabels.includes('Orthogroups'), JSON.stringify(hoverLabels));
+        assert(!hoverLabels.includes('Similarity groups'), JSON.stringify(hoverLabels));
         """,
         encoding="utf-8",
     )
@@ -2178,7 +2622,10 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
     assert "gallery/media/**/*" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     assert "gallery/sessions/*.gbdraw-session.json.gz" in cloudflare_module.GALLERY_REMOTE_ASSET_PATTERNS
     remote_assets = json.loads((bundle_path / "gallery" / "remote-assets.json").read_text(encoding="utf-8"))
-    assert "gallery/examples/Vnig_TUMSAT-TG-2018.svg" not in remote_assets
+    assert (
+        remote_assets["gallery/examples/Vnig_TUMSAT-TG-2018.svg"]
+        == f"{remote_base}gallery/examples/Vnig_TUMSAT-TG-2018.svg"
+    )
     assert "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz" not in remote_assets
     assert (
         remote_assets[
@@ -2191,7 +2638,9 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
         == f"{remote_base}gallery/examples/vibrio-harveyi-group-collinear.svg"
     )
     assert all("/main/" not in url for url in remote_assets.values())
-    assert (bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg").exists()
+    assert not (
+        bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg"
+    ).exists()
     assert not (
         bundle_path
         / "gallery"
@@ -2400,23 +2849,22 @@ def test_project_docs_and_citation_metadata_include_preprint_doi() -> None:
     assert "preferred-citation:" in citation_cff
 
 
-def test_web_run_analysis_wires_scale_and_tick_font_size_options() -> None:
-    source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
-    assert "tick_label_font_size" in source
-    assert '"tick_label_font_size": "--tick_label_font_size" in _source' in source
-    assert "args.push('--tick_label_font_size', adv.tick_label_font_size);" in source
-    assert "if (form.scale_style === 'ruler')" in source
+def test_web_typed_request_wires_scale_and_tick_font_size_options() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
+    assert "[CONFIG_OVERRIDE_PATHS.tickLabelFontSize]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.scaleStyle]: form.scale_style" in request_source
+    assert "inspect.getsource" not in run_source
+    assert "args.push(" not in run_source
 
 
-def test_web_linear_run_ignores_hidden_circular_species_strain_args() -> None:
-    source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
-    assert (
-        "if (mode.value === 'circular') {\n"
-        "        if (form.species) args.push('--species', form.species);\n"
-        "        if (form.strain) args.push('--strain', form.strain);\n"
-        "      }"
-    ) in source
-    assert "if (form.species) args.push('--species', form.species);\n      if (form.strain)" not in source
+def test_web_species_and_strain_are_projected_only_for_circular_requests() -> None:
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
+    circular_branch = request_source.split("if (state.mode.value === 'circular') {", 1)[1]
+    assert "diagramOptions.species = String(state.form.species || '').trim() || null;" in circular_branch
+    assert "diagramOptions.strain = String(state.form.strain || '').trim() || null;" in circular_branch
+    assert "args.push(" not in run_source
 
 
 def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() -> None:
@@ -2460,6 +2908,7 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     module_source = (WEB_ROOT / "js" / "app" / "linear-track-slots.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
@@ -2483,12 +2932,12 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "Auto values vary by record" in index_html
     assert ':disabled="adv.linear_track_slots_enabled"' in index_html
     assert 'v-model.number="entry.slot.params.track_index"' in index_html
-    assert "--linear_track_slot" in run_source
-    assert "buildLinearTrackSlotSpec" in run_source
+    assert "buildLinearTrackSlotSpec(slot)" in request_source
+    assert "linearTrackAxisIndexForEnabledSlots(" in request_source
     assert "linearSlotNeedsDepth" in run_source
     assert "validateImportedLinearTrackSlots" in config_source
     assert "LINEAR_TRACK_SLOT_SCHEMA_VERSION = 2" in module_source
-    assert "const SESSION_VERSION = 33" in config_source
+    assert f"const SESSION_VERSION = {CURRENT_SESSION_VERSION}" in config_source
     assert "migrateImportedLinearTrackSlots" in config_source
     assert "createLinearTrackSlotEditor" in module_source
     assert "linearTrackStackEntries" in app_setup_source
@@ -2496,14 +2945,33 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "linearTrackSlotEditor.reconcileLinearTrackSlotsFromSimpleControls" not in app_setup_source
     assert "linearTrackSlotUsesPresetGeometry(entry.slot)" in index_html
     assert "linearTrackSlotUsesPresetGeometry: linearTrackSlotEditor.linearTrackSlotUsesPresetGeometry" in app_setup_source
-    assert "args.push('--ruler_label_font_size', adv.scale_font_size);" in run_source
-    assert "args.push('--scale_font_size', adv.scale_font_size);" in run_source
+    assert "[SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize]" in request_source
+    assert "[SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.showGc]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.showSkew]" in request_source
+    assert "args.push(" not in run_source
+
+
+def test_web_output_prefix_help_is_mode_aware() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
+
+    assert "Leave empty to use record IDs" in index_html
+    assert "Leave empty to use out." in index_html
+    assert "Optional (Default: Record ID)" in index_html
+    assert "Optional (Default: out)" in index_html
+    assert ':placeholder="mode === \'circular\' ?' in index_html
+    assert "const explicitPrefix = explicitOutputPrefix(state.form.prefix);" in request_source
+    assert "resolveCircularBatchPrefixes(circularOutputRecords, explicitPrefix)" in request_source
+    assert "args.push(" not in run_source
 
 
 def test_web_wires_gc_content_percent_options() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "gc_content_mode: 'deviation'" in state_source
@@ -2513,14 +2981,13 @@ def test_web_wires_gc_content_percent_options() -> None:
     assert "state.adv.gc_content_mode" in config_source
     assert "state.adv.gc_content_min_percent" in config_source
     assert "state.adv.gc_content_max_percent" in config_source
-    assert "appendGcContentPercentArgs" in run_source
+    assert "normalizeGcContentPercentState" in run_source
     assert "if (adv.gc_content_mode !== 'percent') return;" in run_source
-    assert "args.push('--gc_content_mode', 'percent');" in run_source
-    assert "args.push('--gc_content_min_percent', String(minPercent));" in run_source
-    assert "args.push('--gc_content_max_percent', String(maxPercent));" in run_source
-    assert "args.push('--gc_content_large_tick_interval', adv.gc_content_tick_interval);" in run_source
-    assert "args.push('--hide_gc_content_axis');" in run_source
-    assert "args.push('--hide_gc_content_ticks');" in run_source
+    assert "[CONFIG_OVERRIDE_PATHS.gcContentMode]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.gcContentMinPercent]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval]" in request_source
+    assert "args.push(" not in run_source
     assert 'v-model="adv.gc_content_mode"' in index_html
     assert "GC Content Mode" in index_html
     assert "adv.gc_content_mode === 'percent'" in index_html
@@ -2529,6 +2996,7 @@ def test_web_wires_gc_content_percent_options() -> None:
 
 def test_web_wires_addable_depth_tracks() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
@@ -2537,6 +3005,8 @@ def test_web_wires_addable_depth_tracks() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "depth_tracks: []" in state_source
+    assert "depth_large_tick_interval: null" in state_source
+    assert "depth_tick_interval: null" not in state_source
     assert "normalizeDepthTracks(state.adv.depth_tracks, state.adv)" in config_source
     assert "getDepthTrackFileBaseName" in depth_tracks_source
     assert "getDepthTrackLabelFromFile" in depth_tracks_source
@@ -2589,21 +3059,22 @@ def test_web_wires_addable_depth_tracks() -> None:
     )[0]
     assert "setOptionalNumberInputValue" in definition_size_block
     assert "Number(value)" not in definition_size_block
-    assert "depthTrackConfigAt(index, file)" in run_source
     assert "syncDepthSlotLegendLabelsFromTrackConfigs" in run_source
     assert "syncDepthSlotLabels({" in run_source
     assert "slot.params.legend_label = label;" in depth_state_source
-    assert "args.push('--depth_track_label', ...labels);" in run_source
-    assert "args.push('--depth_track_color', ...colors);" in run_source
-    assert "args.push('--depth_track_height', ...heights);" in run_source
-    assert "args.push('--depth_track_large_tick_interval', ...largeTicks);" in run_source
-    assert "args.push('--depth_track_small_tick_interval', ...smallTicks);" in run_source
-    assert "args.push('--depth_track_tick_font_size', ...tickFontSizes);" in run_source
-    assert "depthPaths.push('');" in run_source
+    assert "const buildDepthResources" in request_source
+    assert "const sources = rows.map((row) => row[trackIndex] || null);" in request_source
+    assert "diagramOptions.depthTracks = Array.from" in request_source
+    assert "canonicalOptionalPositiveNumber(" in request_source
+    assert "source.large_tick_interval ?? source.tick_interval" not in run_source
+    assert "source.large_tick_interval ?? source.tick_interval" not in depth_state_source
+    assert "validateDepthStyleSettings" in run_source
+    assert "args.push(" not in run_source
 
 
 def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     slot_source = (WEB_ROOT / "js" / "app" / "circular-track-slots.js").read_text(encoding="utf-8")
@@ -2616,16 +3087,18 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "createDefaultCircularTrackSlots()" in state_source
     assert "state.adv.center_reserved_radius = normalizeNonNegativeNumberOrNull(state.adv.center_reserved_radius);" in config_source
     assert "inferLegacyAxisIndexFromFeature(normalizedSlots, state.form.track_type)" in config_source
-    assert '"circular_track_slot": "--circular_track_slot" in _source' in run_source
-    assert '"circular_track_axis_index": "--circular_track_axis_index" in _source' in run_source
-    assert '"center_reserved_radius": "--center_reserved_radius" in _source' in run_source
-    assert "args.push('--track_type', form.track_type);" in run_source
-    assert "args.push('--center_reserved_radius', String(normalizedCenterReservedRadius));" in run_source
+    assert "buildCanonicalRenderRequest({" in run_source
+    assert "request: canonical.renderRequest" in run_source
+    assert "resources: canonical.resources" in run_source
+    assert "[CONFIG_OVERRIDE_PATHS.trackType]: form.track_type" in request_source
+    assert "centerReservedRadius: circular ? optionalNumber(state.adv.center_reserved_radius) : null" in request_source
     assert "applyCircularSuppressControlsToSlots" in run_source
-    assert "if (form.suppress_gc) args.push('--suppress_gc');" in run_source
-    assert "if (form.suppress_skew) args.push('--suppress_skew');" in run_source
-    assert "args.push('--circular_track_axis_index', String(adv.circular_track_slots_axis_index));" in run_source
-    assert "buildCircularTrackSlotSpec(slot, adv.nt, form.track_type, {" in run_source
+    assert "[CONFIG_OVERRIDE_PATHS.showGc]" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.showSkew]" in request_source
+    assert "circularTrackAxisIndex: circular && state.adv.circular_track_slots_enabled" in request_source
+    assert "buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type)" in request_source
+    assert "args.push(" not in run_source
+    assert "forceSplitLane" not in run_source
     assert "applyCircularTrackOrderPlacements(" in run_source
     assert "if (useCircularTrackSlots)" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
@@ -2690,6 +3163,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
 
 def test_web_wires_circular_conservation_options() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     slot_source = (WEB_ROOT / "js" / "app" / "circular-track-slots.js").read_text(encoding="utf-8")
@@ -2734,20 +3208,18 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "type=\"color\" v-model=\"circularConservation.series[row.index].color\"" in index_html
     assert ":multiple=\"true\"" in index_html
     assert "props: ['label', 'accept', 'modelValue', 'small', 'multiple']" in components_source
-    assert '"conservation_blast": "--conservation_blast" in _source' in run_source
-    assert '"records_table": "--records_table" in _source' in run_source
-    assert '"conservation_table": "--conservation_table" in _source' in run_source
-    assert '"circular_track_table": "--circular_track_table" in _source' in run_source
-    assert '"conservation_colors": "--conservation_colors" in _source' in run_source
+    assert "inspect.getsource" not in run_source
+    assert "resolvedCircularConservation" in run_source
     assert "runCircularLosatConservation" in run_source
     assert "buildConservationSeries" in run_source
     assert "program: circularLosatProgram" in run_source
     assert "circularLosatProgram === 'tblastx'" in run_source
-    assert "args.push('--conservation_colors', ...colors);" in run_source
-    assert "args.push('--conservation_blast', ...conservationBlastPaths);" in run_source
-    assert "args.push('--conservation_reference', conservationReference);" in run_source
+    assert "diagramOptions.conservationBlastFiles = resolvedCircularConservation.map" in request_source
+    assert "diagramOptions.conservationColors = resolvedCircularConservation.map" in request_source
+    assert "diagramOptions.conservationReference = String(" in request_source
+    assert "args.push(" not in run_source
     assert "flow: 'circular-conservation'" in run_source
-    assert "conservationReference = 'subject';" in run_source
+    assert "circularConservation.reference = 'subject';" in run_source
     assert "'sequence_conservation'" in slot_source
 
 
@@ -2884,7 +3356,13 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
     source_path = WEB_ROOT / "js" / "app" / "linear-track-slots.js"
     module_path = tmp_path / "linear-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["depth-track-state.js", "color-utils.js", "track-slot-colors.js", "track-slot-display.js"]:
+    for dependency in [
+        "depth-track-state.js",
+        "color-utils.js",
+        "track-slot-colors.js",
+        "track-slot-display.js",
+        "current-option-values.js",
+    ]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -3085,7 +3563,8 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
           buildCircularTrackSlotSpec,
           createDefaultCircularTrackSlots,
           createCircularTrackSlotEditor,
-          estimateCircularConservationLayoutWarning
+          estimateCircularConservationLayoutWarning,
+          migrateLegacyCircularTrackSlot
         }} from {module_path.as_uri()!r};
         import {{ normalizeConservationSeriesColor }} from './conservation-series.js';
         import {{ formatCircularWidthValue }} from './track-slot-display.js';
@@ -3144,20 +3623,35 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         if (formatCircularWidthValue('50px') !== '50 px' || formatCircularWidthValue('0.15') !== '0.15 R') {{
           throw new Error('Circular width display did not distinguish px and radius factors');
         }}
-        const legacySpacingSpec = buildCircularTrackSlotSpec(
-          {{
+        let rejectedLegacySpacing = false;
+        try {{
+          buildCircularTrackSlotSpec({{
             id: 'gc_skew',
             renderer: 'dinucleotide_skew',
             side: 'inside',
             spacing: '5',
             params: {{ nt: 'GC' }}
-          }},
+          }}, 'GC', 'tuckin', {{ includeSide: false }});
+        }} catch (error) {{
+          rejectedLegacySpacing = /obsolete/.test(String(error?.message || error));
+        }}
+        if (!rejectedLegacySpacing) {{
+          throw new Error('Fresh circular slot builder accepted obsolete spacing');
+        }}
+        const legacySpacingSpec = buildCircularTrackSlotSpec(
+          migrateLegacyCircularTrackSlot({{
+            id: 'gc_skew',
+            renderer: 'dinucleotide_skew',
+            side: 'inside',
+            spacing: '5',
+            params: {{ nt: 'GC', strict: true, compress: true, reserve: true }}
+          }}),
           'GC',
           'tuckin',
           {{ includeSide: false }}
         );
         if (!legacySpacingSpec.includes('inner_gap_px=5') || !legacySpacingSpec.includes('outer_gap_px=5') || legacySpacingSpec.includes('spacing=')) {{
-          throw new Error(`Legacy circular spacing was not converted to physical gaps: ${{legacySpacingSpec}}`);
+          throw new Error(`Reader-only circular spacing migration did not produce physical gaps: ${{legacySpacingSpec}}`);
         }}
         const defaultSkewSpec = buildCircularTrackSlotSpec(
           {{
@@ -3239,8 +3733,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         const middleFeatureSpec = buildCircularTrackSlotSpec(
           middleFeature,
           defaultState.adv.nt,
-          defaultState.form.track_type,
-          {{ includeSide: false, forceSplitLane: true }}
+          defaultState.form.track_type
         );
         if (defaultState.form.track_type !== 'middle' || middleFeature?.side !== 'overlay' || middleFeature?.params?.lane_direction !== 'split') {{
           throw new Error(`Reset to Middle did not put Feature on the Axis: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
@@ -3799,6 +4292,8 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
     assert "const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;" in config_source
     assert "const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;" in config_source
     assert "adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION" in config_source
+    assert "migrateImportedCircularTrackSlots" in config_source
+    assert "migratePersistedWebOptionValues" in config_source
     assert "validateImportedCircularTrackSlots(migrated);" in config_source
     assert "isLegacyConfigPayload(data)" in config_source
     assert "validateImportedCircularTrackSlots(restoredConfig," in config_source
@@ -3813,6 +4308,10 @@ def test_web_config_rejects_obsolete_circular_track_slot_import_shapes() -> None
         "outerRadius",
         "outer_radius",
         "placement",
+        "spacing",
+        "strict",
+        "compress",
+        "reserve",
     ]:
         assert f"'{obsolete_key}'" in config_source
 
@@ -3871,7 +4370,8 @@ def test_web_session_uses_structured_depth_file_codec(tmp_path: Path) -> None:
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     assert "depth: await serializeDepthFile(seq.depth)" in config_source
     assert "c_depth: await serializeDepthFile(state.files.c_depth)" in config_source
-    assert "await downloadCompressedSession(sessionData, sessionFilename);" in config_source
+    assert "await downloadCompressedSession(" in config_source
+    assert "compactSessionFeatureCatalog(sessionData)" in config_source
 
 
 def test_web_config_persists_manual_qualifier_priority_rules() -> None:
@@ -4035,6 +4535,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         assert "gbdraw/web/js/app/record-discovery.js" in outer_names
         assert "gbdraw/web/js/app/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
+        assert "gbdraw/web/js/services/canonical-comparisons.js" in outer_names
         assert "gbdraw/web/js/app/annotations/record-catalog.js" in outer_names
         assert "gbdraw/web/js/app/annotations/record-selector.js" in outer_names
         assert "gbdraw/web/js/app/annotations/validation.js" in outer_names
@@ -4048,6 +4549,10 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
     )
     if not _can_bind_loopback():
         pytest.skip("loopback sockets are not permitted in this environment")
+    worker_source = (
+        WEB_ROOT / "js" / "workers" / "diagram-generation-worker.js"
+    ).read_text(encoding="utf-8")
+    assert "pyodide.FS.analyzePath(workspace).exists" in worker_source
 
     from Bio import SeqIO
     from Bio.Seq import Seq
@@ -4118,7 +4623,16 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
         assert page.evaluate("() => window.__GBDRAW_APP__.linearSeqs[0].region_record_id") == "RecB"
 
         result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
-        assert result["status"] == "ok"
+        assert result["status"] == "ok", page.evaluate(
+            """() => ({
+                result: window.__GBDRAW_APP__.errorLog,
+                dialogs: window.__gbdrawDialogMessages,
+                workerStatus: window.__GBDRAW_APP__.diagramGenerationWorkerStatus
+            })"""
+        )
+        assert page.evaluate(
+            "() => window.__GBDRAW_APP__.diagramGenerationWorkerReady"
+        )
         svg_content = page.evaluate("() => String(window.__GBDRAW_APP__.results[0]?.content || '')")
         assert "567 bp" in svg_content
         assert "1,234 bp" not in svg_content
@@ -4131,7 +4645,10 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
             }"""
         )
         region_result = page.evaluate("async () => await window.__GBDRAW_APP__.runAnalysis()")
-        assert region_result["status"] == "ok"
+        assert region_result["status"] == "ok", region_result
+        assert page.evaluate(
+            "() => window.__GBDRAW_APP__.diagramGenerationWorkerReady"
+        )
         region_svg = page.evaluate("() => String(window.__GBDRAW_APP__.results[0]?.content || '')")
         assert "10-20" in region_svg
 
@@ -4185,6 +4702,205 @@ def test_linear_record_selector_browser_flow(tmp_path: Path) -> None:
             "FastaA (4 bp)",
             "FastaB (6 bp)",
         ]
+        browser.close()
+
+
+@pytest.mark.slow
+def test_web_session_round_trip_preserves_losat_and_source_names(tmp_path: Path) -> None:
+    playwright_sync_api = pytest.importorskip(
+        "playwright.sync_api",
+        reason="playwright is not available in this environment",
+    )
+    if not _can_bind_loopback():
+        pytest.skip("loopback sockets are not permitted in this environment")
+
+    session_path = tmp_path / "losat-round-trip.gbdraw-session.json.gz"
+    historical_session_path = (
+        GALLERY_ROOT / "sessions" / "hepatoplasmataceae_collinear.gbdraw-session.json.gz"
+    )
+    historical_session = load_session(historical_session_path)
+    historical_losat = json.loads(json.dumps(historical_session["config"]["losat"]))
+    if historical_losat.get("parallelWorkers") is None:
+        historical_losat.pop("parallelWorkers", None)
+    historical_blastp = historical_losat.get("blastp", {})
+    assert "collinearMaxGeneGap" not in historical_blastp
+    custom_losat = {
+        "outfmt": "6",
+        "parallelWorkers": "3",
+        "executionMode": "threaded",
+        "totalThreadBudget": "12",
+        "threadsPerJob": "4",
+        "blastn": {"task": "dc-megablast"},
+        "blastp": {
+            "mode": "collinear",
+            "maxHits": 17,
+            "candidateLimit": None,
+            "orthogroupMembershipMode": "anchor_core_v1",
+            "orthogroupMemberMaxHits": 13,
+            "collinearMinAnchors": 4,
+            "collinearMaxUnitGap": 6,
+            "collinearMaxDiagonalDrift": 2,
+            "collinearMaxConflictsInMergeGap": 3,
+            "collinearMaxParalogLinksPerOrthogroup": 7,
+            "collinearColorMode": "orientation_identity",
+            "collinearUnitMode": "locus",
+            "collinearAnchorMode": "rbh",
+            "collinearSearchScope": "all",
+        },
+    }
+    genbank_template = """LOCUS       {record_id} 4 bp DNA linear UNK 01-JAN-1980
+DEFINITION  Session round-trip fixture.
+ACCESSION   {record_id}
+VERSION     {record_id}
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 atgc
+//
+"""
+
+    ensure_prepared_browser_wheel()
+    with _serve_repo_root() as base_url, playwright_sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__GBDRAW_APP__")
+        page.evaluate(
+            """({ losat, firstText, secondText }) => {
+                window.__gbdrawDialogMessages = [];
+                window.alert = (message) => window.__gbdrawDialogMessages.push(String(message || ''));
+                window.confirm = () => true;
+                const app = window.__GBDRAW_APP__;
+                app.mode = 'linear';
+                app.sessionTitle = 'LOSAT round trip';
+                app.blastSource = 'losat';
+                app.losatProgram = 'blastp';
+                Object.assign(app.losat, losat);
+                Object.assign(app.adv, {
+                    rich_feature_popup: false,
+                    feature_width_circular: 12,
+                    depth_width_circular: 0.15,
+                    gc_content_width_circular: 0.16,
+                    gc_content_radius_circular: 0.61,
+                    gc_skew_width_circular: 0.17,
+                    gc_skew_radius_circular: 0.49
+                });
+                app.setLinearSeqPrimaryFile(0, 'gb', new File([firstText], 'first-original.gbk'));
+                app.addLinearSeq();
+                app.setLinearSeqPrimaryFile(1, 'gb', new File([secondText], 'second-original.gbk'));
+                app.linearSeqs[0].losat_gencode = 11;
+                app.linearSeqs[0].losat_filename = 'first-vs-second.losat.tsv';
+                app.linearSeqs[1].losat_gencode = 4;
+            }""",
+            {
+                "losat": custom_losat,
+                "firstText": genbank_template.format(record_id="FIRST"),
+                "secondText": genbank_template.format(record_id="SECOND"),
+            },
+        )
+
+        with page.expect_download() as download_info:
+            page.get_by_role("button", name="Save Session", exact=True).click()
+        download_info.value.save_as(session_path)
+
+        page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                app.blastSource = 'files';
+                app.losatProgram = 'blastn';
+                app.losat.executionMode = 'serial';
+                app.losat.threadsPerJob = 'auto';
+            }"""
+        )
+        page.locator('input[type="file"][accept^=".json,"]').set_input_files(str(session_path))
+        page.wait_for_function(
+            """() => window.__gbdrawDialogMessages
+                .includes('Session loaded successfully!')""",
+            timeout=60_000,
+        )
+        restored = page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                return {
+                    blastSource: app.blastSource,
+                    losatProgram: app.losatProgram,
+                    losat: JSON.parse(JSON.stringify(app.losat)),
+                    webOnlyAdv: {
+                        richFeaturePopup: app.adv.rich_feature_popup,
+                        featureWidth: app.adv.feature_width_circular,
+                        depthWidth: app.adv.depth_width_circular,
+                        gcContentWidth: app.adv.gc_content_width_circular,
+                        gcContentRadius: app.adv.gc_content_radius_circular,
+                        gcSkewWidth: app.adv.gc_skew_width_circular,
+                        gcSkewRadius: app.adv.gc_skew_radius_circular
+                    },
+                    sequences: app.linearSeqs.map((sequence) => ({
+                        gbName: sequence.gb?.name || '',
+                        losatGencode: sequence.losat_gencode,
+                        losatFilename: sequence.losat_filename
+                    }))
+                };
+            }"""
+        )
+        assert restored == {
+            "blastSource": "losat",
+            "losatProgram": "blastp",
+            "losat": custom_losat,
+            "webOnlyAdv": {
+                "richFeaturePopup": False,
+                "featureWidth": 12,
+                "depthWidth": 0.15,
+                "gcContentWidth": 0.16,
+                "gcContentRadius": 0.61,
+                "gcSkewWidth": 0.17,
+                "gcSkewRadius": 0.49,
+            },
+            "sequences": [
+                {
+                    "gbName": "first-original.gbk",
+                    "losatGencode": 11,
+                    "losatFilename": "first-vs-second.losat.tsv",
+                },
+                {
+                    "gbName": "second-original.gbk",
+                    "losatGencode": 4,
+                    "losatFilename": "",
+                },
+            ],
+        }
+
+        page.evaluate("() => { window.__gbdrawDialogMessages = []; }")
+        page.locator('input[type="file"][accept^=".json,"]').set_input_files(
+            str(historical_session_path)
+        )
+        page.wait_for_function(
+            """() => window.__gbdrawDialogMessages
+                .includes('Session loaded successfully!') &&
+                window.__GBDRAW_APP__?.linearSeqs?.length === 5""",
+            timeout=60_000,
+        )
+        historical_restored = page.evaluate(
+            """() => {
+                const app = window.__GBDRAW_APP__;
+                return {
+                    blastSource: app.blastSource,
+                    losatProgram: app.losatProgram,
+                    losat: JSON.parse(JSON.stringify(app.losat)),
+                    genbankNames: app.linearSeqs.map((sequence) => sequence.gb?.name || '')
+                };
+            }"""
+        )
+        assert historical_restored == {
+            "blastSource": "losat",
+            "losatProgram": "blastp",
+            "losat": historical_losat,
+            "genbankNames": [
+                "AP027078.gb",
+                "AP027131.gb",
+                "AP027133.gb",
+                "AP027132.gb",
+                "NZ_CP006932.gb",
+            ],
+        }
         browser.close()
 
 
@@ -4295,7 +5011,7 @@ def test_linear_gff_feature_click_and_selection_smoke(tmp_path: Path) -> None:
 
 
 @pytest.mark.slow
-def test_gallery_session_restore_smoke() -> None:
+def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
     playwright_sync_api = pytest.importorskip(
         "playwright.sync_api",
         reason="playwright is not available in this environment",
@@ -4322,7 +5038,10 @@ def test_gallery_session_restore_smoke() -> None:
         )
         page.on("pageerror", lambda error: console_errors.append(str(error)))
 
-        for session_name in GALLERY_SESSION_FILES:
+        def import_session_in_fresh_page(
+            session_path: Path,
+            session_label: str,
+        ) -> None:
             page.goto(f"{base_url}/gbdraw/web/index.html", wait_until="domcontentloaded")
             page.wait_for_function("() => window.__GBDRAW_APP__")
             page.evaluate(
@@ -4334,24 +5053,40 @@ def test_gallery_session_restore_smoke() -> None:
                 }"""
             )
             page.locator('input[accept^=".json,"]').first.set_input_files(
-                str(GALLERY_ROOT / "sessions" / session_name)
+                str(session_path)
             )
             page.wait_for_function(
                 "() => Array.isArray(window.__gbdrawDialogMessages) && window.__gbdrawDialogMessages.length > 0",
                 timeout=180_000,
             )
             dialog_message = page.evaluate("() => window.__gbdrawDialogMessages.at(-1)")
-            page.wait_for_function(
-                """() => {
-                    const app = window.__GBDRAW_APP__;
-                    return Array.isArray(app?.results) &&
-                        app.results.length > 0 &&
-                        !app.featureExtractionPending;
-                }""",
-                timeout=180_000,
+            assert dialog_message == "Session loaded successfully!", (
+                session_label,
+                dialog_message,
+                console_errors,
+            )
+            try:
+                page.wait_for_function(
+                    """() => {
+                        const app = window.__GBDRAW_APP__;
+                        return Array.isArray(app?.results) &&
+                            app.results.length > 0 &&
+                            !app.featureExtractionPending;
+                    }""",
+                    timeout=180_000,
+                )
+            except playwright_sync_api.TimeoutError:
+                pytest.fail(
+                    f"{session_label} did not restore a completed SVG result; "
+                    f"console errors: {console_errors!r}"
+                )
+
+        for session_name in GALLERY_SESSION_FILES:
+            import_session_in_fresh_page(
+                GALLERY_ROOT / "sessions" / session_name,
+                session_name,
             )
 
-            assert dialog_message == "Session loaded successfully!"
             summary = page.evaluate(
                 """() => {
                     const app = window.__GBDRAW_APP__;
@@ -4371,6 +5106,257 @@ def test_gallery_session_restore_smoke() -> None:
             assert summary["status"] == "summary-ready", session_name
             assert summary["featureExtractionError"] in (None, ""), session_name
             assert summary["extractedCount"] > 0, session_name
+
+            if session_name == "WSSV_genome_comparison.gbdraw-session.json":
+                conservation_state = page.evaluate(
+                    """async () => {
+                        const app = window.__GBDRAW_APP__;
+                        const fastaFiles = Array.isArray(
+                            app.files?.c_conservation_fastas
+                        )
+                            ? app.files.c_conservation_fastas
+                            : [];
+                        const fastaHeaders = await Promise.all(
+                            fastaFiles.map(async (file) => {
+                                if (!file || typeof file.text !== 'function') return null;
+                                const firstHeader = String(await file.text())
+                                    .split(/\\r?\\n/)
+                                    .find((line) => line.startsWith('>')) || '';
+                                return firstHeader
+                                    .slice(1)
+                                    .trim()
+                                    .split(/\\s+/)[0] || null;
+                            })
+                        );
+                        return {
+                            enabled: app.circularConservation?.enabled === true,
+                            source: String(app.circularConservation?.source || ''),
+                            series: (app.circularConservation?.series || []).map(
+                                (entry) => ({
+                                    sourceIndex: Number(entry?.sourceIndex),
+                                    fileName: String(entry?.fileName || ''),
+                                    label: String(entry?.label || '')
+                                })
+                            ),
+                            blastCount: app.files?.c_conservation_blasts?.length || 0,
+                            blastNames: (app.files?.c_conservation_blasts || [])
+                                .map((file) => String(file?.name || '')),
+                            blastSource: String(
+                                app.files?.c_conservation_blasts_source || ''
+                            ),
+                            comparisonFastaCount:
+                                fastaFiles.length,
+                            fastaNames: fastaFiles.map(
+                                (file) => file ? String(file.name || '') : null
+                            ),
+                            fastaHeaders
+                        };
+                    }"""
+                )
+                assert conservation_state["enabled"] is True
+                assert conservation_state["source"] == "losat"
+                assert len(conservation_state["series"]) == 20
+                assert conservation_state["blastCount"] == 20
+                assert conservation_state["blastSource"] == "losat-cache"
+                assert conservation_state["comparisonFastaCount"] == 20
+                assert conservation_state["fastaNames"] == [
+                    name for name in conservation_state["fastaNames"] if name
+                ]
+                assert conservation_state["fastaHeaders"] == [
+                    header for header in conservation_state["fastaHeaders"] if header
+                ]
+                assert [
+                    entry["sourceIndex"] for entry in conservation_state["series"]
+                ] == list(range(20))
+                assert [
+                    entry["fileName"] for entry in conservation_state["series"]
+                ] == conservation_state["blastNames"]
+
+                round_trip_path = tmp_path / "WSSV-round-trip.gbdraw-session.json.gz"
+                with page.expect_download() as download_info:
+                    page.get_by_role(
+                        "button", name="Save Session", exact=True
+                    ).click()
+                download_info.value.save_as(round_trip_path)
+                round_trip = load_session(round_trip_path)
+                options = round_trip["renderRequest"]["diagramOptions"]
+                assert len(options["conservationBlastFiles"]) == 20
+                assert options["conservationLabels"] == [
+                    entry["label"] for entry in conservation_state["series"]
+                ]
+                assert round_trip["webFiles"]["conservationBlastSource"] == "losat-cache"
+                assert "conservationFastaFiles" not in options
+                fasta_resource_ids = round_trip["webFiles"][
+                    "conservationLosatFastaSources"
+                ]
+                assert len(fasta_resource_ids) == 20
+                assert all(fasta_resource_ids)
+                original_names = round_trip["webFiles"].get(
+                    "resourceOriginalNames",
+                    {},
+                )
+                expected_fasta_names = [
+                    original_names.get(
+                        resource_id,
+                        round_trip["resources"][resource_id]["name"],
+                    )
+                    for resource_id in fasta_resource_ids
+                ]
+                assert expected_fasta_names == conservation_state["fastaNames"]
+
+                import_session_in_fresh_page(
+                    round_trip_path,
+                    "fresh WSSV round trip",
+                )
+                restored_conservation = page.evaluate(
+                    """async () => {
+                        const app = window.__GBDRAW_APP__;
+                        const fastaFiles = Array.isArray(
+                            app.files?.c_conservation_fastas
+                        )
+                            ? app.files.c_conservation_fastas
+                            : [];
+                        const fastaHeaders = await Promise.all(
+                            fastaFiles.map(async (file) => {
+                                if (!file || typeof file.text !== 'function') return null;
+                                const firstHeader = String(await file.text())
+                                    .split(/\\r?\\n/)
+                                    .find((line) => line.startsWith('>')) || '';
+                                return firstHeader
+                                    .slice(1)
+                                    .trim()
+                                    .split(/\\s+/)[0] || null;
+                            })
+                        );
+                        const matchBySource = new Map();
+                        document.querySelectorAll(
+                            'path[data-match-kind="homology"][data-source-index]'
+                        ).forEach((element) => {
+                            const sourceIndex = Number(
+                                element.getAttribute('data-source-index')
+                            );
+                            if (
+                                Number.isInteger(sourceIndex) &&
+                                !matchBySource.has(sourceIndex)
+                            ) {
+                                matchBySource.set(sourceIndex, element);
+                            }
+                        });
+                        const popupLookups = [];
+                        for (let sourceIndex = 0; sourceIndex < 20; sourceIndex += 1) {
+                            const element = matchBySource.get(sourceIndex);
+                            if (!element) {
+                                popupLookups.push({
+                                    sourceIndex,
+                                    found: false
+                                });
+                                continue;
+                            }
+                            const rect = element.getBoundingClientRect();
+                            element.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window,
+                                clientX: rect.left + (rect.width / 2),
+                                clientY: rect.top + (rect.height / 2)
+                            }));
+                            await new Promise((resolve) => requestAnimationFrame(resolve));
+                            const payload = app.clickedPairwiseMatch;
+                            const entries = Array.isArray(
+                                payload?.sequenceBundle?.entries
+                            )
+                                ? payload.sequenceBundle.entries
+                                : [];
+                            const comparison = entries.find(
+                                (entry) => entry?.span?.displayRole === 'Comparison'
+                            );
+                            const reference = entries.find(
+                                (entry) => entry?.span?.displayRole === 'Reference'
+                            );
+                            popupLookups.push({
+                                sourceIndex,
+                                found: true,
+                                matchId: String(
+                                    payload?.id || payload?.matchId || ''
+                                ),
+                                entryCount: entries.length,
+                                comparisonRecordId: String(
+                                    comparison?.span?.recordId || ''
+                                ),
+                                comparisonAvailable:
+                                    comparison?.available === true,
+                                referenceAvailable:
+                                    reference?.available === true,
+                                combinedAvailable: Boolean(
+                                    payload?.sequenceBundle?.combinedFasta
+                                )
+                            });
+                        }
+                        return {
+                            series: (app.circularConservation?.series || []).map(
+                                (entry) => ({
+                                    sourceIndex: Number(entry?.sourceIndex),
+                                    fileName: String(entry?.fileName || ''),
+                                    label: String(entry?.label || '')
+                                })
+                            ),
+                            blastNames: (app.files?.c_conservation_blasts || [])
+                                .map((file) => String(file?.name || '')),
+                            fastaNames: fastaFiles.map(
+                                (file) => file ? String(file.name || '') : null
+                            ),
+                            fastaHeaders,
+                            popupLookups
+                        };
+                    }"""
+                )
+                assert restored_conservation["fastaNames"] == expected_fasta_names
+                assert (
+                    restored_conservation["fastaHeaders"]
+                    == conservation_state["fastaHeaders"]
+                )
+                assert [
+                    entry["sourceIndex"]
+                    for entry in restored_conservation["series"]
+                ] == list(range(20))
+                assert [
+                    entry["fileName"] for entry in restored_conservation["series"]
+                ] == restored_conservation["blastNames"]
+                assert len(restored_conservation["popupLookups"]) == 20
+                for source_index, lookup in enumerate(
+                    restored_conservation["popupLookups"]
+                ):
+                    assert lookup["sourceIndex"] == source_index
+                    assert lookup["found"] is True
+                    assert lookup["matchId"]
+                    assert lookup["entryCount"] == 2
+                    assert lookup["comparisonAvailable"] is True
+                    assert lookup["referenceAvailable"] is True
+                    assert lookup["combinedAvailable"] is True
+                    assert (
+                        lookup["comparisonRecordId"]
+                        == restored_conservation["fastaHeaders"][source_index]
+                    )
+
+                comparison_download_path = (
+                    tmp_path / "WSSV-restored-comparison-span.fna"
+                )
+                comparison_download_button = page.locator(
+                    '.pairwise-match-popup '
+                    'button[title="Download comparison span FASTA"]'
+                )
+                assert comparison_download_button.is_enabled()
+                with page.expect_download() as comparison_download_info:
+                    comparison_download_button.click()
+                comparison_download_info.value.save_as(comparison_download_path)
+                downloaded_fasta = comparison_download_path.read_text(
+                    encoding="utf-8"
+                )
+                assert downloaded_fasta.startswith(">")
+                assert (
+                    restored_conservation["fastaHeaders"][-1]
+                    in downloaded_fasta.splitlines()[0]
+                )
 
             if session_name == "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz":
                 multi_record_positions = page.evaluate(

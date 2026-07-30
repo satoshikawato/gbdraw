@@ -110,6 +110,7 @@ def print_help_message() -> NoReturn:
     print("  --gff                Input GFF3 file(s) (requires --fasta; mutually exclusive with --gbk)")
     print("  --fasta              Input FASTA file(s) (required with --gff; mutually exclusive with --gbk)")
     print("  -o, --output         Output file prefix (optional)")
+    print("  --overwrite          Replace existing output files (default: refuse)")
     print("  -b, --blast          BLAST result file in tab-separated format (-outfmt 6 or 7) (optional; implemented for linear mode only)")
     print("  --protein_blastp_mode {none,pairwise,orthogroup,collinear}  Run protein blastp comparisons for linear diagrams")
     print("  --losatp_threads N   Pass thread count to the selected protein blastp runtime")
@@ -162,12 +163,11 @@ def main() -> None:
             print("Launching gbdraw GUI (Local Mode)...")
             start_local_server(str(web_dir))
         else:
-            print("Oops! It seems like you entered an invalid command.")
-            print("Please use 'circular' or 'linear' followed by the respective options.")
-            print("For example:")
-            print("  gbdraw circular --gbk input.gb")
-            print("  gbdraw linear --gbk input.gb")
-            print("  gbdraw gui")
+            print(
+                f"Unknown command {sys.argv[1]!r}. Choose circular, linear, or gui; "
+                "run gbdraw --help for usage.",
+                file=sys.stderr,
+            )
             sys.exit(1)
     except GbdrawError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

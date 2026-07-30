@@ -1,375 +1,309 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Mapping
+"""Schema-derived updates for the typed gbdraw configuration."""
 
-from gbdraw.definition_line_styles import DEFINITION_LINE_KINDS, DEFINITION_LINE_STYLE_PROPERTIES
+from __future__ import annotations
+
+from copy import deepcopy
+from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
+from dataclasses import asdict, fields, is_dataclass
+from functools import lru_cache
+from numbers import Integral, Real
+from types import UnionType
+from typing import Any, Literal, Mapping, Union, get_args, get_origin, get_type_hints
+
 from gbdraw.exceptions import ValidationError
-from gbdraw.labels.circular_types import normalize_circular_label_placement
 
 from .models import GbdrawConfig  # type: ignore[reportMissingImports]
 
-def suppress_gc_content_and_skew(suppress_gc: bool, suppress_skew: bool) -> tuple[bool, bool]:
-    show_gc, show_skew = True, True
-    if suppress_gc is True:
-        show_gc = False
-    if suppress_skew is True:
-        show_skew = False
-    return show_gc, show_skew
+
+def _nested_dataclass_type(annotation: object) -> type | None:
+    if isinstance(annotation, type) and is_dataclass(annotation):
+        return annotation
+    if get_origin(annotation) not in {Union, UnionType}:
+        return None
+    nested = {
+        member
+        for member in get_args(annotation)
+        if isinstance(member, type) and is_dataclass(member)
+    }
+    non_dataclass = {
+        member
+        for member in get_args(annotation)
+        if member is not type(None)
+        and not (isinstance(member, type) and is_dataclass(member))
+    }
+    if len(nested) == 1 and not non_dataclass:
+        return next(iter(nested))
+    return None
 
 
-def update_config_value(config_dict, path, value):
-    keys = path.split(".")
-    for key in keys[:-1]:
-        config_dict = config_dict.setdefault(key, {})
-    config_dict[keys[-1]] = value
+@lru_cache(maxsize=1)
+def _config_override_schema() -> tuple[dict[str, object], frozenset[str]]:
+    """Return leaf annotations and non-leaf paths from ``GbdrawConfig``."""
 
+    leaves: dict[str, object] = {}
+    branches: set[str] = set()
 
-def update_linear_definition_line_styles(
-    config_dict,
-    line_styles: Mapping[str, Mapping[str, object]] | None,
-) -> None:
-    if line_styles is None:
-        return
-    for line_kind, style in line_styles.items():
-        if line_kind not in DEFINITION_LINE_KINDS:
-            raise ValidationError(f"unknown linear definition line style kind: {line_kind}")
-        if not isinstance(style, Mapping):
-            raise ValidationError("linear definition line style entries must be mappings")
-        for property_key, value in style.items():
-            if property_key not in DEFINITION_LINE_STYLE_PROPERTIES:
-                raise ValidationError(f"unknown linear definition line style property: {property_key}")
-            if value is None:
+    def visit(config_type: type, prefix: tuple[str, ...] = ()) -> None:
+        annotations = get_type_hints(config_type)
+        for config_field in fields(config_type):
+            path_parts = (*prefix, config_field.name)
+            path = ".".join(path_parts)
+            annotation = annotations[config_field.name]
+            nested_type = _nested_dataclass_type(annotation)
+            if nested_type is None:
+                leaves[path] = annotation
                 continue
-            update_config_value(
-                config_dict,
-                f"objects.definition.linear.line_styles.{line_kind}.{property_key}",
-                value,
+            branches.add(path)
+            visit(nested_type, path_parts)
+
+    visit(GbdrawConfig)
+    return leaves, frozenset(branches)
+
+
+def canonical_config_override_paths() -> frozenset[str]:
+    """Return every canonical dotted leaf path accepted as an override."""
+
+    leaves, _branches = _config_override_schema()
+    return frozenset(leaves)
+
+
+def config_to_raw_dict(config: GbdrawConfig) -> dict[str, Any]:
+    """Return a lossless raw representation of a typed configuration."""
+
+    if not isinstance(config, GbdrawConfig):
+        raise ValidationError("config must be GbdrawConfig")
+    raw = asdict(config)
+    # ``LabelsFilteringConfig.raw`` owns extension values such as DataFrames.
+    # ``asdict`` nests that mapping under ``raw`` and deep-copies its derived
+    # fields separately, which is not the input shape expected by from_dict().
+    raw["labels"]["filtering"] = deepcopy(config.labels.filtering.as_dict())
+    return raw
+
+
+def _literal_value_matches(value: object, candidate: object) -> bool:
+    return type(value) is type(candidate) and value == candidate
+
+
+def _matches_literal_domain(annotation: object, value: object) -> bool:
+    origin = get_origin(annotation)
+    if origin is Literal:
+        return any(
+            _literal_value_matches(value, candidate)
+            for candidate in get_args(annotation)
+        )
+    if origin in {Union, UnionType}:
+        for member in get_args(annotation):
+            if get_origin(member) is Literal and _matches_literal_domain(member, value):
+                return True
+            if member is type(None) and value is None:
+                return True
+            if isinstance(member, type) and isinstance(value, member):
+                return True
+        return False
+    return True
+
+
+def _has_literal_domain(annotation: object) -> bool:
+    origin = get_origin(annotation)
+    if origin is Literal:
+        return True
+    if origin in {Union, UnionType}:
+        return any(_has_literal_domain(member) for member in get_args(annotation))
+    return False
+
+
+def _literal_domain_values(annotation: object) -> tuple[object, ...]:
+    origin = get_origin(annotation)
+    if origin is Literal:
+        return get_args(annotation)
+    if origin in {Union, UnionType}:
+        return tuple(
+            value
+            for member in get_args(annotation)
+            for value in _literal_domain_values(member)
+        )
+    return ()
+
+
+def _matches_annotation(annotation: object, value: object) -> bool:
+    if annotation is Any:
+        return True
+    origin = get_origin(annotation)
+    if origin is Literal:
+        return _matches_literal_domain(annotation, value)
+    if origin in {Union, UnionType}:
+        return any(
+            _matches_annotation(member, value)
+            for member in get_args(annotation)
+        )
+    if annotation is bool:
+        return type(value) is bool
+    if annotation is int:
+        return not isinstance(value, bool) and isinstance(value, Integral)
+    if annotation is float:
+        return not isinstance(value, bool) and isinstance(value, Real)
+    if annotation is str:
+        return isinstance(value, str)
+    if origin in {dict, Mapping, MappingABC}:
+        if not isinstance(value, MappingABC):
+            return False
+        key_annotation, value_annotation = get_args(annotation) or (Any, Any)
+        return all(
+            _matches_annotation(key_annotation, key)
+            and _matches_annotation(value_annotation, item)
+            for key, item in value.items()
+        )
+    if origin in {list, tuple, SequenceABC}:
+        if isinstance(value, (str, bytes)) or not isinstance(value, SequenceABC):
+            return False
+        item_annotations = get_args(annotation)
+        if not item_annotations:
+            return True
+        if origin is tuple and len(item_annotations) > 1 and item_annotations[-1] is not Ellipsis:
+            return len(value) == len(item_annotations) and all(
+                _matches_annotation(item_annotation, item)
+                for item_annotation, item in zip(item_annotations, value)
             )
+        item_annotation = item_annotations[0]
+        return all(_matches_annotation(item_annotation, item) for item in value)
+    if annotation is type(None):
+        return value is None
+    if isinstance(annotation, type):
+        return isinstance(value, annotation)
+    return True
+
+
+def _validate_override_path(path: object) -> tuple[str, object]:
+    leaves, branches = _config_override_schema()
+    if not isinstance(path, str) or not path:
+        raise ValidationError("Config override paths must be non-empty strings.")
+    if path in branches:
+        raise ValidationError(
+            f"Config override path {path!r} is not a leaf field."
+        )
+    try:
+        return path, leaves[path]
+    except KeyError as exc:
+        raise ValidationError(f"Unknown config override path: {path!r}.") from exc
+
+
+def _set_raw_config_path(
+    raw_config: dict[str, Any],
+    path: str,
+    value: object,
+) -> None:
+    # Filtering ``raw`` is the one typed field whose serialized representation
+    # replaces its parent mapping rather than adding a same-named child.
+    if path == "labels.filtering.raw":
+        if not isinstance(value, Mapping):
+            raise ValidationError(
+                "Config override 'labels.filtering.raw' must be a mapping."
+            )
+        raw_config["labels"]["filtering"] = deepcopy(dict(value))
+        return
+
+    keys = path.split(".")
+    target: dict[str, Any] = raw_config
+    for key in keys[:-1]:
+        child = target.setdefault(key, {})
+        if not isinstance(child, dict):
+            raise ValidationError(
+                f"Config override path {path!r} crosses non-mapping field {key!r}."
+            )
+        target = child
+    target[keys[-1]] = deepcopy(value)
+
+
+def validate_config_overrides(
+    overrides: Mapping[str, object] | None,
+) -> tuple[tuple[str, object], ...]:
+    """Validate a canonical override mapping without applying it."""
+
+    if overrides is not None and not isinstance(overrides, Mapping):
+        raise ValidationError("config overrides must be a mapping or None.")
+
+    validated: list[tuple[str, object]] = []
+    for raw_path, value in dict(overrides or {}).items():
+        path, annotation = _validate_override_path(raw_path)
+        if _has_literal_domain(annotation) and not _matches_literal_domain(
+            annotation,
+            value,
+        ):
+            allowed = ", ".join(
+                repr(candidate)
+                for candidate in _literal_domain_values(annotation)
+            )
+            raise ValidationError(
+                f"Invalid value {value!r} for config override {path!r}; "
+                f"allowed literal values: {allowed}."
+            )
+        if not _matches_annotation(annotation, value):
+            raise ValidationError(
+                f"Invalid value {value!r} for config override {path!r}; "
+                f"expected {annotation!r}."
+            )
+        validated.append((path, value))
+    return tuple(validated)
+
+
+def _apply_validated_config_overrides(
+    config_dict: Mapping[str, Any],
+    overrides: Mapping[str, object] | None,
+) -> dict[str, Any]:
+    """Apply schema-valid overrides without reparsing the source or result."""
+
+    updated = deepcopy(dict(config_dict))
+    validated = list(validate_config_overrides(overrides))
+
+    # Replacing filtering.raw first makes typed sibling paths deterministic,
+    # independent of the input mapping's insertion order.
+    validated.sort(key=lambda item: item[0] != "labels.filtering.raw")
+    for path, value in validated:
+        _set_raw_config_path(updated, path, value)
+    return updated
 
 
 def modify_config_dict(
-    config_dict,
-    block_stroke_width=None,
-    block_stroke_color=None,
-    circular_axis_stroke_color=None,
-    circular_axis_stroke_width=None,
-    linear_axis_stroke_color=None,
-    linear_axis_stroke_width=None,
-    line_stroke_color=None,
-    line_stroke_width=None,
-    gc_stroke_color=None,
-    linear_definition_font_size=None,
-    linear_definition_line_styles=None,
-    linear_definition_show_replicon=None,
-    linear_definition_show_accession=None,
-    linear_definition_show_length=None,
-    circular_definition_font_size=None,
-    plot_title_font_size=None,
-    label_font_size=None,
-    circular_label_spacing=None,
-    circular_label_placement=None,
-    linear_label_spacing=None,
-    label_rendering=None,
-    label_placement=None,
-    label_rotation=None,
-    show_gc=None,
-    gc_content_mode=None,
-    gc_content_min_percent=None,
-    gc_content_max_percent=None,
-    gc_content_show_axis=None,
-    gc_content_show_ticks=None,
-    gc_content_tick_interval=None,
-    gc_content_large_tick_interval=None,
-    gc_content_small_tick_interval=None,
-    gc_content_tick_font_size=None,
-    gc_content_percent_background_color=None,
-    gc_content_percent_background_opacity=None,
-    gc_content_percent_border_color=None,
-    gc_content_percent_border_width=None,
-    show_skew=None,
-    show_depth=None,
-    depth_color=None,
-    depth_height=None,
-    depth_min=None,
-    depth_max=None,
-    depth_normalize=None,
-    depth_show_axis=None,
-    depth_show_ticks=None,
-    depth_tick_interval=None,
-    depth_large_tick_interval=None,
-    depth_small_tick_interval=None,
-    depth_tick_font_size=None,
-    depth_share_axis=None,
-    show_labels=None,
-    align_center=None,
-    keep_definition_left_aligned=None,
-    linear_track_layout=None,
-    linear_track_axis_gap=None,
-    linear_ruler_on_axis=None,
-    cicular_width_with_labels=None,
-    track_type=None,
-    strandedness=None,
-    resolve_overlaps=None,
-    allow_inner_labels=None,
-    label_radius_offset=None,
-    label_blacklist=None,
-    label_whitelist=None,
-    qualifier_priority=None,
-    label_table=None,
-    outer_label_x_radius_offset=None,
-    outer_label_y_radius_offset=None,
-    inner_label_x_radius_offset=None,
-    inner_label_y_radius_offset=None,
-    comparison_height=None,
-    font_family=None,
-    default_cds_height=None,
-    gc_height=None,
-    scale_style=None,
-    scale_stroke_color=None,
-    scale_label_color=None,
-    scale_stroke_width=None,
-    scale_font_size=None,
-    ruler_label_font_size=None,
-    scale_interval=None,
-    tick_label_font_size=None,
-    blast_color_min=None,
-    blast_color_max=None,
-    pairwise_match_style=None,
-    legend_box_size=None,
-    legend_font_size=None,
-    normalize_length=None,
-) -> dict:
+    config_dict: Mapping[str, Any],
+    overrides: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    """Apply canonical dotted leaf overrides to a raw configuration.
 
-    if circular_label_placement is not None:
-        circular_label_placement = normalize_circular_label_placement(circular_label_placement)
+    Accepted paths are derived recursively from the ``GbdrawConfig`` dataclass
+    hierarchy. Flat aliases are intentionally not accepted.
+    """
 
-    cfg = GbdrawConfig.from_dict(config_dict)
+    if not isinstance(config_dict, Mapping):
+        raise ValidationError("config_dict must be a mapping.")
 
-    label_font_size_circular_long = (
-        label_font_size if label_font_size is not None else cfg.labels.font_size.long
-    )
-    label_font_size_circular_short = (
-        label_font_size if label_font_size is not None else cfg.labels.font_size.short
-    )
-    label_font_size_linear_long = (
-        label_font_size if label_font_size is not None else cfg.labels.font_size.linear.long
-    )
-    label_font_size_linear_short = (
-        label_font_size if label_font_size is not None else cfg.labels.font_size.linear.short
-    )
+    # Validate the source before updating it, while preserving raw top-level
+    # metadata that is outside the typed rendering configuration.
+    try:
+        GbdrawConfig.from_dict(config_dict)
+    except ValidationError:
+        raise
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValidationError(f"Invalid configuration: {exc}") from exc
 
-    if linear_definition_font_size is not None:
-        linear_definition_font_size_short = linear_definition_font_size
-        linear_definition_font_size_long = linear_definition_font_size
-    else:
-        linear_definition_font_size_short = cfg.objects.definition.linear.font_size.short
-        linear_definition_font_size_long = cfg.objects.definition.linear.font_size.long
+    updated = _apply_validated_config_overrides(config_dict, overrides)
 
-    if default_cds_height is not None:
-        default_cds_height_short = default_cds_height
-        default_cds_height_long = default_cds_height
-    else:
-        default_cds_height_short = cfg.canvas.linear.default_cds_height.short
-        default_cds_height_long = cfg.canvas.linear.default_cds_height.long
-
-    if circular_definition_font_size is not None:
-        circular_definition_font_interval = float(circular_definition_font_size) + 2
-    else:
-        circular_definition_font_interval = None
-
-    if legend_box_size is not None:
-        legend_box_size_short = legend_box_size
-        legend_box_size_long = legend_box_size
-    else:
-        legend_box_size_short = cfg.objects.legends.color_rect_size.short
-        legend_box_size_long = cfg.objects.legends.color_rect_size.long
-
-    if legend_font_size is not None:
-        legend_font_size_short = legend_font_size
-        legend_font_size_long = legend_font_size
-    else:
-        legend_font_size_short = cfg.objects.legends.font_size.short
-        legend_font_size_long = cfg.objects.legends.font_size.long
-
-    if scale_font_size is not None:
-        scale_font_size_short = scale_font_size
-        scale_font_size_long = scale_font_size
-    else:
-        scale_font_size_short = cfg.objects.scale.font_size.short
-        scale_font_size_long = cfg.objects.scale.font_size.long
-
-    if ruler_label_font_size is not None:
-        ruler_label_font_size_short = ruler_label_font_size
-        ruler_label_font_size_long = ruler_label_font_size
-    else:
-        ruler_label_font_size_short = cfg.objects.scale.ruler_label_font_size.short
-        ruler_label_font_size_long = cfg.objects.scale.ruler_label_font_size.long
-
-    if linear_axis_stroke_width is not None:
-        linear_axis_stroke_width_short = linear_axis_stroke_width
-        linear_axis_stroke_width_long = linear_axis_stroke_width
-    else:
-        linear_axis_stroke_width_short = cfg.objects.axis.linear.stroke_width.short
-        linear_axis_stroke_width_long = cfg.objects.axis.linear.stroke_width.long
-
-    if line_stroke_width is not None:
-        line_stroke_width_short = line_stroke_width
-        line_stroke_width_long = line_stroke_width
-    else:
-        line_stroke_width_short = cfg.objects.features.line_stroke_width.short
-        line_stroke_width_long = cfg.objects.features.line_stroke_width.long
-
-    if block_stroke_width is not None:
-        block_stroke_width_short = block_stroke_width
-        block_stroke_width_long = block_stroke_width
-    else:
-        block_stroke_width_short = cfg.objects.features.block_stroke_width.short
-        block_stroke_width_long = cfg.objects.features.block_stroke_width.long
-
-    if circular_axis_stroke_width is not None:
-        circular_axis_stroke_width_short = circular_axis_stroke_width
-        circular_axis_stroke_width_long = circular_axis_stroke_width
-    else:
-        circular_axis_stroke_width_short = cfg.objects.axis.circular.stroke_width.short
-        circular_axis_stroke_width_long = cfg.objects.axis.circular.stroke_width.long
-
-    mapping = {
-        "block_stroke_width_short": "objects.features.block_stroke_width.short",
-        "block_stroke_width_long": "objects.features.block_stroke_width.long",
-        "block_stroke_color": "objects.features.block_stroke_color",
-        "circular_axis_stroke_color": "objects.axis.circular.stroke_color",
-        "circular_axis_stroke_width_short": "objects.axis.circular.stroke_width.short",
-        "circular_axis_stroke_width_long": "objects.axis.circular.stroke_width.long",
-        "linear_axis_stroke_color": "objects.axis.linear.stroke_color",
-        "linear_axis_stroke_width_short": "objects.axis.linear.stroke_width.short",
-        "linear_axis_stroke_width_long": "objects.axis.linear.stroke_width.long",
-        "line_stroke_color": "objects.features.line_stroke_color",
-        "line_stroke_width_short": "objects.features.line_stroke_width.short",
-        "line_stroke_width_long": "objects.features.line_stroke_width.long",
-        "gc_stroke_color": "objects.gc_content.stroke_color",
-        "gc_content_mode": "objects.gc_content.mode",
-        "gc_content_min_percent": "objects.gc_content.min_percent",
-        "gc_content_max_percent": "objects.gc_content.max_percent",
-        "gc_content_show_axis": "objects.gc_content.show_axis",
-        "gc_content_show_ticks": "objects.gc_content.show_ticks",
-        "gc_content_tick_interval": "objects.gc_content.large_tick_interval",
-        "gc_content_large_tick_interval": "objects.gc_content.large_tick_interval",
-        "gc_content_small_tick_interval": "objects.gc_content.small_tick_interval",
-        "gc_content_tick_font_size": "objects.gc_content.tick_font_size",
-        "gc_content_percent_background_color": "objects.gc_content.percent_background_color",
-        "gc_content_percent_background_opacity": "objects.gc_content.percent_background_opacity",
-        "gc_content_percent_border_color": "objects.gc_content.percent_border_color",
-        "gc_content_percent_border_width": "objects.gc_content.percent_border_width",
-        "show_gc": "canvas.show_gc",
-        "show_skew": "canvas.show_skew",
-        "show_depth": "canvas.show_depth",
-        "depth_color": "objects.depth.fill_color",
-        "depth_height": "canvas.linear.depth_height",
-        "depth_min": "objects.depth.min_depth",
-        "depth_max": "objects.depth.max_depth",
-        "depth_normalize": "objects.depth.normalize",
-        "depth_show_axis": "objects.depth.show_axis",
-        "depth_show_ticks": "objects.depth.show_ticks",
-        "depth_tick_interval": "objects.depth.tick_interval",
-        "depth_large_tick_interval": "objects.depth.large_tick_interval",
-        "depth_small_tick_interval": "objects.depth.small_tick_interval",
-        "depth_tick_font_size": "objects.depth.tick_font_size",
-        "depth_share_axis": "objects.depth.share_axis",
-        "show_labels": "canvas.show_labels",
-        "align_center": "canvas.linear.align_center",
-        "keep_definition_left_aligned": "canvas.linear.keep_definition_left_aligned",
-        "linear_track_layout": "canvas.linear.track_layout",
-        "linear_track_axis_gap": "canvas.linear.track_axis_gap",
-        "linear_ruler_on_axis": "canvas.linear.ruler_on_axis",
-        "cicular_width_with_labels": "canvas.circular.width.with_labels",
-        "track_type": "canvas.circular.track_type",
-        "strandedness": "canvas.strandedness",
-        "resolve_overlaps": "canvas.resolve_overlaps",
-        "allow_inner_labels": "canvas.circular.allow_inner_labels",
-        "label_radius_offset": "labels.radius_factor",
-        "label_blacklist": "labels.filtering.blacklist_keywords",
-        "label_whitelist": "labels.filtering.whitelist_df",
-        "qualifier_priority": "labels.filtering.qualifier_priority_df",
-        "label_table": "labels.filtering.label_override_df",
-        "outer_label_x_radius_offset": "labels.unified_adjustment.outer_labels.x_radius_offset",
-        "outer_label_y_radius_offset": "labels.unified_adjustment.outer_labels.y_radius_offset",
-        "inner_label_x_radius_offset": "labels.unified_adjustment.inner_labels.x_radius_offset",
-        "inner_label_y_radius_offset": "labels.unified_adjustment.inner_labels.y_radius_offset",
-        "comparison_height": "canvas.linear.comparison_height",
-        "font_family": "objects.text.font_family",
-        "default_cds_height_short": "canvas.linear.default_cds_height.short",
-        "default_cds_height_long": "canvas.linear.default_cds_height.long",
-        "gc_height": "canvas.linear.default_gc_height",
-        "scale_style": "objects.scale.style",
-        "scale_stroke_color": "objects.scale.stroke_color",
-        "scale_label_color": "objects.scale.label_color",
-        "scale_stroke_width": "objects.scale.stroke_width",
-        "scale_font_size_short": "objects.scale.font_size.short",
-        "scale_font_size_long": "objects.scale.font_size.long",
-        "ruler_label_font_size_short": "objects.scale.ruler_label_font_size.short",
-        "ruler_label_font_size_long": "objects.scale.ruler_label_font_size.long",
-        "scale_interval": "objects.scale.interval",
-        "tick_label_font_size": "objects.ticks.tick_labels.font_size",
-        "blast_color_min": "objects.blast_match.min_color",
-        "blast_color_max": "objects.blast_match.max_color",
-        "pairwise_match_style": "objects.blast_match.style",
-        "legend_box_size_short": "objects.legends.color_rect_size.short",
-        "legend_box_size_long": "objects.legends.color_rect_size.long",
-        "legend_font_size_short": "objects.legends.font_size.short",
-        "legend_font_size_long": "objects.legends.font_size.long",
-        "label_font_size_circular_short": "labels.font_size.short",
-        "label_font_size_circular_long": "labels.font_size.long",
-        "label_font_size_linear_short": "labels.font_size.linear.short",
-        "label_font_size_linear_long": "labels.font_size.linear.long",
-        "circular_label_spacing": "labels.spacing.circular",
-        "circular_label_placement": "labels.circular.placement",
-        "linear_label_spacing": "labels.spacing.linear",
-        "label_rendering": "labels.rendering",
-        "label_placement": "labels.linear.placement",
-        "label_rotation": "labels.linear.rotation",
-        "linear_definition_font_size_short": "objects.definition.linear.font_size.short",
-        "linear_definition_font_size_long": "objects.definition.linear.font_size.long",
-        "linear_definition_show_replicon": "objects.definition.linear.show_replicon",
-        "linear_definition_show_accession": "objects.definition.linear.show_accession",
-        "linear_definition_show_length": "objects.definition.linear.show_length",
-        "circular_definition_font_size": "objects.definition.circular.font_size",
-        "plot_title_font_size": "objects.definition.circular.plot_title_font_size",
-        "circular_definition_font_interval": "objects.definition.circular.interval",
-        "normalize_length": "canvas.linear.normalize_length",
-    }
-
-    for param, path in mapping.items():
-        value = locals()[param]
-        if value is not None:
-            # Convert label_blacklist string to list if needed
-            if param == "label_blacklist" and isinstance(value, str):
-                value = [kw.strip() for kw in value.split(",") if kw.strip()]
-            # Skip updating whitelist/priority/label-override tables if they're already DataFrames
-            # (they were processed from file paths before this function was called)
-            # Also skip if the value is an empty string and existing value is None or DataFrame
-            if param in ["label_whitelist", "qualifier_priority", "label_table"]:
-                keys = path.split(".")
-                target_dict = config_dict
-                for key in keys[:-1]:
-                    target_dict = target_dict.setdefault(key, {})
-                existing_value = target_dict.get(keys[-1])
-                # If existing value is a DataFrame, don't overwrite it with a string
-                if existing_value is not None and hasattr(existing_value, 'empty'):
-                    continue
-                # If value is empty string and existing is None, skip (empty string means "no file")
-                if value == "" and existing_value is None:
-                    continue
-            update_config_value(config_dict, path, value)
-
-    update_linear_definition_line_styles(config_dict, linear_definition_line_styles)
-
-    return config_dict
+    try:
+        GbdrawConfig.from_dict(updated)
+    except ValidationError:
+        raise
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValidationError(
+            f"Invalid value for config override: {exc}"
+        ) from exc
+    return updated
 
 
 __all__ = [
+    "canonical_config_override_paths",
+    "config_to_raw_dict",
     "modify_config_dict",
-    "suppress_gc_content_and_skew",
-    "update_config_value",
-    "update_linear_definition_line_styles",
+    "validate_config_overrides",
 ]

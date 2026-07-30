@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pandas as pd
@@ -14,8 +15,10 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.genome import load_gff_fasta
 from gbdraw.io.regions import apply_region_specs, parse_region_specs
+from gbdraw.svg.ids import definition_group_svg_id
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
 from gbdraw.web_support.feature_metadata import extract_features_from_gff_fasta_payload
+from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 from gbdraw.features.visibility import compile_feature_visibility_rules, should_render_feature
 
 
@@ -86,6 +89,25 @@ def test_python_helpers_blank_or_js_nullish_accepts_pyodide_sentinels(
         assert is_blank(value) is False  # type: ignore[operator]
 
 
+def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatching(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    from gbdraw.diagrams.linear import assemble
+
+    marker = tmp_path / "keep.svg"
+    marker.write_text("<svg />", encoding="utf-8")
+    original_loader = assemble.load_comparisons
+    wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
+
+    payload = json.loads(wrapper("{}", "{}", str(tmp_path / "render")))  # type: ignore[operator]
+
+    assert payload["error"]["type"]
+    assert payload["error"]["message"]
+    assert assemble.load_comparisons is original_loader
+    assert marker.exists()
+
+
 def test_regenerate_definition_svgs_accepts_nullish_font_sizes(
     tmp_path: Path,
     python_helpers_namespace: dict[str, object],
@@ -149,6 +171,42 @@ def test_regenerate_definition_svgs_reports_invalid_font_size_strings(
     assert "not-a-number" in payload["error"] or "could not convert" in payload["error"]
 
 
+def test_regenerate_definition_svgs_matches_duplicate_definition_id_contract(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    records = [
+        SeqRecord(Seq("ATGAAATAA"), id="123/unsafe", name=f"Duplicate{index}")
+        for index in range(2)
+    ]
+    for record in records:
+        record.annotations["molecule_type"] = "DNA"
+    path = tmp_path / "duplicates.gb"
+    SeqIO.write(records, path, "genbank")
+    parsed_record_ids = [record.id for record in SeqIO.parse(path, "genbank")]
+    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
+
+    payload = json.loads(regenerate(str(path), multi_record_canvas=True))  # type: ignore[operator]
+
+    assert "error" not in payload
+    definitions = payload["definitions"]
+    assert [entry["record_index"] for entry in definitions] == [0, 1]
+    assert [entry["definition_group_id"] for entry in definitions] == [
+        definition_group_svg_id(
+            record_id,
+            mode="circular",
+            record_index=index,
+            record_count=2,
+        )
+        for index, record_id in enumerate(parsed_record_ids)
+    ]
+    for index, (entry, record_id) in enumerate(zip(definitions, parsed_record_ids)):
+        group = ET.fromstring(entry["svg"])
+        assert group.attrib["data-gbdraw-role"] == "record-definition"
+        assert group.attrib["data-gbdraw-record-id"] == record_id
+        assert group.attrib["data-gbdraw-record-index"] == str(index)
+
+
 def test_importable_feature_metadata_matches_pyodide_wrapper(
     tmp_path: Path,
     python_helpers_namespace: dict[str, object],
@@ -180,7 +238,6 @@ def test_gff_fasta_feature_metadata_includes_nested_rendered_features(
     payload = extract_features_from_gff_fasta_payload(
         gff_path,
         fasta_path,
-        mode="linear",
         selected_features=["CDS"],
     )
     features = payload["features"]
@@ -195,7 +252,6 @@ def test_gff_fasta_feature_metadata_includes_nested_rendered_features(
     rendered_records = load_gff_fasta(
         [str(gff_path)],
         [str(fasta_path)],
-        mode="linear",
         selected_features_set={"CDS"},
     )
     assert features[0]["svg_id"] == compute_feature_hash(
@@ -207,7 +263,6 @@ def test_gff_fasta_feature_metadata_includes_nested_rendered_features(
         python_helpers_namespace["extract_features_from_gff_fasta"](  # type: ignore[operator]
             str(gff_path),
             str(fasta_path),
-            "linear",
             None,
             None,
             None,
@@ -344,6 +399,10 @@ def test_web_feature_extraction_region_uses_absolute_display_coordinates(
         {"start": 9, "end": 20, "strand": "+", "display": "10..20"}
     ]
     assert feature["svg_id"] == compute_feature_hash(
+        record.features[0],
+        record_id=record.id,
+    )
+    assert feature["rendered_feature_svg_id"] == compute_feature_hash(
         cropped_record.features[0],
         record_id=cropped_record.id,
     )
@@ -367,10 +426,14 @@ def test_web_feature_extraction_region_reverse_uses_absolute_display_coordinates
 
     assert feature["start"] == 89
     assert feature["end"] == 99
-    assert feature["strand"] == "-"
+    assert feature["strand"] == "+"
     assert feature["location_parts"] == [
-        {"start": 89, "end": 99, "strand": "-", "display": "90..99"}
+        {"start": 89, "end": 99, "strand": "+", "display": "90..99"}
     ]
+    assert feature["svg_id"] == compute_feature_hash(
+        record.features[0],
+        record_id=record.id,
+    )
 
 
 def test_web_feature_selector_record_location_matches_visibility_rule(
@@ -440,3 +503,48 @@ def test_web_feature_selector_safety_scope_precedes_visibility_filtering(
     scope_types = [entry["feature_type"] for entry in payload["selector_safety_scope"]]
     assert scope_types == ["CDS", "misc_feature"]
     assert payload["selector_safety_scope"][0]["selector"]["qualifiers"]["locus_tag"] == ["HIDDEN_0006"]
+
+
+def test_biological_feature_catalog_keeps_features_excluded_from_rendering() -> None:
+    hidden_cds = SeqFeature(
+        FeatureLocation(0, 9, strand=1),
+        type="CDS",
+        qualifiers={
+            "locus_tag": ["HIDDEN_0007"],
+            "protein_id": ["WP_HIDDEN.1"],
+            "translation": ["MK"],
+        },
+    )
+    visible_trna = SeqFeature(
+        FeatureLocation(12, 21, strand=-1),
+        type="tRNA",
+        qualifiers={"locus_tag": ["VISIBLE_0007"]},
+    )
+    record = SeqRecord(
+        Seq("ATGAAATAAGGGTTTCCCAAA"),
+        id="NC_000007",
+        features=[hidden_cds, visible_trna],
+    )
+
+    legacy_payload = extract_features_from_records_payload(
+        [record],
+        selected_features=["tRNA"],
+    )
+    payload = extract_features_from_records_payload(
+        [record],
+        selected_features=["tRNA"],
+        include_biological_features=True,
+    )
+
+    assert "biological_features" not in legacy_payload
+    assert payload["features"] == legacy_payload["features"]
+    assert [feature["type"] for feature in payload["features"]] == ["tRNA"]
+    assert [feature["type"] for feature in payload["biological_features"]] == [
+        "CDS",
+        "tRNA",
+    ]
+    hidden = payload["biological_features"][0]
+    assert hidden["feature_index"] == 0
+    assert hidden["svg_id"] == hidden["stable_feature_id"] == hidden["stable_svg_id"]
+    assert hidden["nucleotide_sequence"] == "ATGAAATAA"
+    assert hidden["amino_acid_sequence"] == "MK"

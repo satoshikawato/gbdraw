@@ -51,6 +51,6 @@ export const groupMetadataScopeLabel = (value) => {
   const scope = normalizeGroupMetadataScope(value);
   if (scope === 'global_collinear') return 'Collinearity-backed global evidence';
   if (scope === 'adjacent_local') return 'Local collinear group';
-  if (scope === 'record_local') return 'Species-specific orthogroup';
-  return 'Cross-record orthogroup';
+  if (scope === 'record_local') return 'Record-specific similarity group';
+  return 'Cross-record similarity group';
 };

@@ -25,8 +25,8 @@ gbdraw linear \
   --gbk MjeNMV.gb MelaMJNV.gb \
   --track_layout below \
   --track_axis_gap auto \
-  --show_gc \
-  --show_skew \
+  --gc \
+  --skew \
   -o majani_tracks_below \
   -f svg
 ```
@@ -35,7 +35,7 @@ This writes `majani_tracks_below.svg`. Use `--track_axis_gap 12` when you want a
 
 Add `--resolve_overlaps` when overlapping genomic features should use additional lanes. gbdraw measures the resulting feature lanes and labels for each record, then moves GC, skew, Depth, and other non-overlay tracks outward only when they need more clearance. Records with different feature occupancy can therefore use different vertical track positions. In the web app, the `middle` choice is labeled **Features on axis**.
 
-In a comparison diagram, ribbons attach directly to the outer edges of the two records' painted exclusion bands. Empty reservations, including missing Depth cells, do not move those endpoints. `--comparison_height` is the minimum clear corridor between the painted edges. Taller painted occupancy moves the record axes apart without placing ribbons through the track stacks; other row or definition spacing can make the corridor larger than the minimum.
+In a comparison diagram, ribbons attach directly to the outer edges of the two records' painted exclusion bands. Empty reservations, including missing Depth cells, do not move those endpoints. `--comparison_height` is the minimum clear corridor between the painted edges. Automatic row spacing evaluates the body, active comparison corridor, and definition text as separate horizontal collision bands, then uses the largest applicable clearance. It does not add all three reservations together. A comparison corridor is reserved only at a row boundary that an actual comparison crosses; left-column definition text does not enlarge plot spacing when their horizontal ranges do not overlap.
 
 ![Two majanivirus records with feature, GC content, and GC skew tracks placed below each record axis](../../examples/tutorial-7-track-layout-below.svg)
 
@@ -111,22 +111,22 @@ For simple ordering, use `--linear_track_order`:
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb \
-  --show_gc \
-  --show_skew \
+  --gc \
+  --skew \
   --linear_track_order gc_skew,gc_content,features \
   -o MjeNMV_linear_track_order \
   -f svg
 ```
 
-Keep `--show_gc`, `--show_skew`, or `--show_depth` when the order includes the corresponding numeric track; disabled tracks are skipped.
+Keep `--gc` or `--skew` when the order includes the corresponding GC track, and provide at least one `--depth_track` group when it includes Depth; disabled or data-less tracks are skipped.
 
 Use `--linear_track_slot` when a track needs explicit height, spacing, side, or renderer parameters:
 
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb \
-  --show_gc \
-  --show_skew \
+  --gc \
+  --skew \
   --linear_track_slot features:features@side=overlay,h=60px \
   --linear_track_slot gc_content:gc_content@h=24px,spacing=8px \
   --linear_track_slot gc_skew:gc_skew@h=24px,spacing=8px \
@@ -139,7 +139,7 @@ The axis index is the boundary in the slot list. Here the feature slot overlays 
 
 For a feature slot, `h` is the minimum reserved height, not the feature glyph thickness. The actual reservation is the larger of the measured feature-and-label band and the configured `h`; use `--feature_height` to change the glyph thickness itself. Feature-slot `spacing` is the clearance between that reserved band and the adjacent track farther from the axis. With `h` left automatic, the measured reservation and resulting track positions are record-specific.
 
-For a Depth slot, `track_index=0` selects the first repeated `--depth_track` group, `track_index=1` selects the second, and so on. It must be a zero-based non-negative integer for a logical Depth series that exists somewhere in the diagram; negative, fractional, nonnumeric, and globally out-of-range values are rejected. Moving the slot above or below the axis changes its vertical position without changing the selected depth series. If that series has no file for one record, gbdraw omits the depth area, axis, and ticks for that record while retaining the slot band. See [Plot read depth and other numeric tracks](./6_Depth_Quantitative_Tracks.md#3-compare-depth-across-records) for an empty-placeholder example.
+For a Depth slot, `track_index=0` selects the first repeated `--depth_track` group, `track_index=1` selects the second, and so on. It must be a zero-based non-negative integer for a logical Depth series that exists somewhere in the diagram; negative, fractional, nonnumeric, and globally out-of-range values are rejected. Moving the slot above or below the axis changes its vertical position without changing the selected depth series. If that series has no file for one record, gbdraw omits the depth area, axis, and ticks and reserves no vertical geometry for that cell. Later numeric tracks compact without renumbering the logical series. See [Plot read depth and other numeric tracks](./6_Depth_Quantitative_Tracks.md#3-compare-depth-across-records) for an empty-placeholder example.
 
 When a custom stack is active, its enabled Depth slots are authoritative for the legend. Entries follow slot order, `legend_label` overrides the selected logical series title, and series without an enabled slot are omitted. A selected sparse series is still listed when its data exists only in a later record.
 
@@ -218,7 +218,7 @@ gbdraw linear \
   --ruler_on_axis \
   --scale_interval 750000 \
   --separate_strands \
-  --show_gc \
+  --gc \
   --hide_accession \
   --hide_length \
   --definition_font_size 8 \

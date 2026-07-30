@@ -132,6 +132,10 @@ def prepare_legend_table(
     used_color_rules: Optional[Set[Tuple[str, str]]] = None,
     default_used_features: Optional[Set[str]] = None,
     depth_config=None,
+    *,
+    show_gc: bool,
+    show_skew: bool,
+    show_depth: bool,
 ):
     """
     Prepare the legend table for the diagram.
@@ -151,18 +155,15 @@ def prepare_legend_table(
     features_present: List[str] = features_present
     block_stroke_color: str = feature_config.block_stroke_color
     block_stroke_width: float = feature_config.block_stroke_width
-    show_gc = gc_config.show_gc
     gc_stroke_color: str = gc_config.stroke_color
     gc_stroke_width: float = gc_config.stroke_width
     gc_high_fill_color: str = gc_config.high_fill_color
     gc_low_fill_color: str = gc_config.low_fill_color
-    show_skew = skew_config.show_skew
     skew_high_fill_color: str = skew_config.high_fill_color
     skew_low_fill_color: str = skew_config.low_fill_color
     skew_stroke_color: str = skew_config.stroke_color
     skew_stroke_width: float = skew_config.stroke_width
     dinucleotide = gc_config.dinucleotide
-    show_depth = bool(getattr(depth_config, "show_depth", False)) if depth_config is not None else False
     feature_specific_colors = dict()
     default_used_features = default_used_features or set()
     if color_table is not None and not color_table.empty:
@@ -290,9 +291,12 @@ def prepare_legend_table(
         if identity_legend_entries:
             for entry in identity_legend_entries:
                 label = str(entry["label"])
+                min_color = entry["min_color"]
+                if float(blast_config.identity) >= 100:
+                    min_color = entry["max_color"]
                 legend_table[label] = {
                     "type": "gradient",
-                    "min_color": entry["min_color"],
+                    "min_color": min_color,
                     "max_color": entry["max_color"],
                     "stroke": "none",
                     "width": 0,
@@ -302,9 +306,12 @@ def prepare_legend_table(
             identity_legend_label = str(
                 getattr(blast_config, "pairwise_identity_legend_label", "Pairwise match identity")
             )
+            min_color = blast_config.min_color
+            if float(blast_config.identity) >= 100:
+                min_color = blast_config.max_color
             legend_table[identity_legend_label] = {
                 "type": "gradient",
-                "min_color": blast_config.min_color,
+                "min_color": min_color,
                 "max_color": blast_config.max_color,
                 "stroke": "none",
                 "width": 0,

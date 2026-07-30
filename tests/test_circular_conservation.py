@@ -15,8 +15,10 @@ from gbdraw.analysis.conservation import (
     load_conservation_sources,
     normalize_conservation_tracks_for_record,
 )
+from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_circular_diagram_from_record, build_circular_diagram
-from gbdraw.api.options import DiagramOptions
+from gbdraw.api.options import CircularDiagramOptions
+from gbdraw.configurators import LegendMeasurement
 from gbdraw.core.text import calculate_bbox_dimensions
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -40,6 +42,17 @@ def _record(record_id: str = "rec1", length: int = 120) -> SeqRecord:
 
 def _comparison_frame(rows: list[tuple[object, ...]]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=COMPARISON_COLUMNS)
+
+
+def _conservation_group_id(svg: str, label: str) -> str | None:
+    matching = [
+        element.get("id")
+        for element in ET.fromstring(svg).iter()
+        if element.tag.rsplit("}", 1)[-1] == "g"
+        and element.get("data-track-label") == label
+    ]
+    assert len(matching) <= 1
+    return matching[0] if matching else None
 
 
 def _hit(
@@ -79,6 +92,42 @@ def _translate_xy_or_zero(transform: str | None) -> tuple[float, float]:
     if not transform:
         return 0.0, 0.0
     return _translate_xy(transform)
+
+
+def _circular_legend_measurement(
+    canvas_config: SimpleNamespace,
+    legend_config: SimpleNamespace,
+    legend_table: dict,
+) -> LegendMeasurement:
+    layout = build_circular_legend_layout(
+        legend_table,
+        legend_position=canvas_config.legend_position,
+        canvas_width=float(
+            getattr(canvas_config, "total_width", legend_config.legend_width)
+        ),
+        font_family=legend_config.font_family,
+        font_size=float(legend_config.font_size),
+        dpi=int(canvas_config.dpi),
+        color_rect_size=float(legend_config.color_rect_size),
+        legend_width=float(legend_config.legend_width),
+        pairwise_legend_width=float(legend_config.pairwise_legend_width),
+    )
+    return LegendMeasurement(
+        font_family=legend_config.font_family,
+        font_weight="normal",
+        font_size=float(legend_config.font_size),
+        color_rect_size=float(legend_config.color_rect_size),
+        dpi=int(canvas_config.dpi),
+        legend_width=layout.width,
+        legend_height=layout.height,
+        total_feature_legend_width=layout.feature_width,
+        pairwise_legend_width=layout.pairwise_legend_width,
+        num_of_lines=layout.num_lines,
+        num_of_columns=layout.num_columns,
+        num_of_items_per_line=layout.num_items_per_line,
+        has_gradient=layout.has_gradient,
+        circular_layout=layout,
+    )
 
 
 def _text_x_bounds(text: ET.Element, x_offset: float, dpi: int) -> tuple[float, float]:
@@ -298,6 +347,7 @@ def test_sequence_conservation_slot_rejects_overlay_side() -> None:
 def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
+        cfg=apply_config_overrides(None, None),
         conservation_dataframes=[
             _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
         ],
@@ -309,7 +359,11 @@ def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_Reference_A"' in svg
+    assert (_conservation_group_id(svg, "Reference A") or "").startswith(
+        "track_slot_"
+    )
+    assert 'data-gbdraw-slot-id="conservation_1"' in svg
+    assert 'data-gbdraw-slot-renderer="sequence_conservation"' in svg
     assert 'data-track-label="Reference A"' in svg
     assert 'data-reference-record-id="rec1"' in svg
     assert 'data-gbdraw-match-id="homology_ring1_hit1"' in svg
@@ -325,6 +379,7 @@ def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
 def test_circular_api_renders_source_colored_conservation_ring() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
+        cfg=apply_config_overrides(None, None),
         conservation_dataframes=[
             _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
         ],
@@ -335,7 +390,9 @@ def test_circular_api_renders_source_colored_conservation_ring() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_barcode13"' in svg
+    assert (_conservation_group_id(svg, "barcode13") or "").startswith(
+        "track_slot_"
+    )
     assert 'data-track-label="barcode13"' in svg
     assert 'data-track-color="#e15759"' in svg
     assert 'data-legend-key="barcode13"' in svg
@@ -372,7 +429,17 @@ def test_circular_multi_conservation_gradient_legend_uses_compact_linear_layout(
     }
 
     drawing = Drawing(debug=False)
-    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    drawing.add(
+        CircularLegendGroup(
+            canvas_config,
+            _circular_legend_measurement(
+                canvas_config,
+                legend_config,
+                legend_table,
+            ),
+            legend_table,
+        ).get_group()
+    )
     root = ET.fromstring(drawing.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
     legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
@@ -440,7 +507,17 @@ def test_circular_vertical_conservation_legend_centers_feature_and_gradient_bloc
     }
 
     drawing = Drawing(debug=False)
-    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    drawing.add(
+        CircularLegendGroup(
+            canvas_config,
+            _circular_legend_measurement(
+                canvas_config,
+                legend_config,
+                legend_table,
+            ),
+            legend_table,
+        ).get_group()
+    )
     root = ET.fromstring(drawing.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
 
@@ -511,7 +588,17 @@ def test_circular_bottom_conservation_legend_centers_feature_and_gradient_blocks
     }
 
     drawing = Drawing(debug=False)
-    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    drawing.add(
+        CircularLegendGroup(
+            canvas_config,
+            _circular_legend_measurement(
+                canvas_config,
+                legend_config,
+                legend_table,
+            ),
+            legend_table,
+        ).get_group()
+    )
     root = ET.fromstring(drawing.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
 
@@ -563,7 +650,17 @@ def test_circular_bottom_multi_conservation_layout_height_contains_gradient_bloc
     )
 
     drawing = Drawing(debug=False)
-    drawing.add(CircularLegendGroup(canvas_config, legend_config, legend_table).get_group())
+    drawing.add(
+        CircularLegendGroup(
+            canvas_config,
+            _circular_legend_measurement(
+                canvas_config,
+                legend_config,
+                legend_table,
+            ),
+            legend_table,
+        ).get_group()
+    )
     root = ET.fromstring(drawing.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
 
@@ -606,7 +703,7 @@ def test_circular_api_bottom_multi_conservation_legend_fits_viewbox() -> None:
         conservation_ring_gap=1,
         legend="bottom",
         selected_features_set=[],
-        config_overrides={"show_gc": False, "show_skew": False},
+        cfg=apply_config_overrides(None, {"canvas.show_gc": False, "canvas.show_skew": False}),
     )
     root = ET.fromstring(canvas.tostring())
     ns = {"svg": "http://www.w3.org/2000/svg"}
@@ -626,6 +723,7 @@ def test_circular_api_bottom_multi_conservation_legend_fits_viewbox() -> None:
 def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
+        cfg=apply_config_overrides(None, None),
         conservation_dataframes=[
             _comparison_frame([_hit(subject="rec1", sstart=1, send=60)]),
             _comparison_frame([_hit(subject="rec1", sstart=61, send=120)]),
@@ -650,14 +748,17 @@ def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_Reference_B"' in svg
-    assert 'id="conservation_Reference_A"' in svg
-    assert svg.index('id="conservation_Reference_B"') < svg.index('id="conservation_Reference_A"')
+    reference_b_id = _conservation_group_id(svg, "Reference B")
+    reference_a_id = _conservation_group_id(svg, "Reference A")
+    assert reference_b_id is not None
+    assert reference_a_id is not None
+    assert svg.index(f'id="{reference_b_id}"') < svg.index(f'id="{reference_a_id}"')
 
 
 def test_circular_api_keeps_axis_derived_side_for_conservation_slot() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
+        cfg=apply_config_overrides(None, None),
         conservation_dataframes=[
             _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
         ],
@@ -677,13 +778,16 @@ def test_circular_api_keeps_axis_derived_side_for_conservation_slot() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_Outer_conservation"' in svg
+    assert (_conservation_group_id(svg, "Outer conservation") or "").startswith(
+        "track_slot_"
+    )
     assert 'data-track-label="Outer conservation"' in svg
 
 
 def test_disabled_explicit_conservation_slot_suppresses_auto_insert() -> None:
     canvas = assemble_circular_diagram_from_record(
         _record(),
+        cfg=apply_config_overrides(None, None),
         conservation_dataframes=[
             _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
         ],
@@ -701,13 +805,13 @@ def test_disabled_explicit_conservation_slot_suppresses_auto_insert() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_Hidden_reference"' not in svg
+    assert _conservation_group_id(svg, "Hidden reference") is None
 
 
 def test_circular_diagram_options_forward_conservation_dataframe() -> None:
     canvas = build_circular_diagram(
         _record(),
-        options=DiagramOptions(
+        options=CircularDiagramOptions(
             conservation_dataframes=[
                 _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
             ],
@@ -720,7 +824,9 @@ def test_circular_diagram_options_forward_conservation_dataframe() -> None:
     )
     svg = canvas.tostring()
 
-    assert 'id="conservation_Option_ring"' in svg
+    assert (_conservation_group_id(svg, "Option ring") or "").startswith(
+        "track_slot_"
+    )
     assert 'data-track-label="Option ring"' in svg
     assert 'data-track-color="#ff0000"' in svg
 
@@ -729,6 +835,7 @@ def test_circular_api_rejects_nonpositive_conservation_geometry() -> None:
     with pytest.raises(ValidationError, match="conservation_ring_gap must be > 0"):
         assemble_circular_diagram_from_record(
             _record(),
+            cfg=apply_config_overrides(None, None),
             conservation_dataframes=[
                 _comparison_frame([_hit(subject="rec1")])
             ],

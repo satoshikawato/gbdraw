@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from numbers import Integral
-from typing import Any, Collection, Sequence
+from typing import Any, Collection, Literal, Sequence
 
 
 @dataclass
@@ -13,6 +13,44 @@ class CircularTrackSlotParseError(ValueError):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.message}: {self.raw!r}"
+
+
+def parse_track_slot_text(
+    raw: str,
+    *,
+    mode: Literal["circular", "linear"],
+    error_type: type[ValueError],
+) -> tuple[str, str, str, str]:
+    """Parse the mode-neutral raw/head portion of one track-slot token."""
+
+    original = raw
+    text = str(raw).strip()
+    if not text or text.startswith("#"):
+        raise error_type("empty/comment line", original)
+    text = strip_inline_comment(text)
+    if "@" in text:
+        head, options = text.split("@", 1)
+        options = options.strip()
+    else:
+        head, options = text, ""
+    if ":" not in head:
+        suffix = (
+            "; shortcut slot strings are no longer supported"
+            if mode == "circular"
+            else ""
+        )
+        raise error_type(
+            f"{mode} track slots require '<slot_id>:<renderer>@...'{suffix}",
+            original,
+        )
+    slot_id_raw, renderer_raw = head.split(":", 1)
+    slot_id = slot_id_raw.strip()
+    renderer = renderer_raw.strip()
+    if not slot_id:
+        raise error_type(f"missing {mode} track slot id", original)
+    if not renderer:
+        raise error_type(f"missing {mode} track renderer", original)
+    return original, slot_id, renderer, options
 
 
 def parse_bool(raw: object) -> bool:
@@ -112,6 +150,7 @@ __all__ = [
     "CircularTrackSlotParseError",
     "parse_bool",
     "parse_nonnegative_integer",
+    "parse_track_slot_text",
     "split_kv_list",
     "validate_overlay_annotation_anchors",
 ]

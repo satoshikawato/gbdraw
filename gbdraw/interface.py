@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import wraps
+from inspect import Parameter, signature
 from os import PathLike
 from pathlib import Path
 from typing import Literal, Mapping, Sequence, TypeAlias
@@ -16,7 +19,6 @@ from gbdraw.analysis.collinearity import (
     CollinearityAnchorMode,
     CollinearityBlock,
     CollinearityColorMode,
-    CollinearityParameters,
     CollinearityResult,
     CollinearitySearchScope,
     LosslessCollinearityParameters,
@@ -27,27 +29,44 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
 )
 from gbdraw.annotations import AnnotationOptions
-from gbdraw.api.diagram import (
-    build_circular_diagram as _build_circular_diagram,
-    build_circular_multi_diagram as _build_circular_multi_diagram,
-    build_linear_diagram as _build_linear_diagram,
-)
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
 from gbdraw.api.options import (
+    CircularDiagramOptions as _CircularDiagramOptions,
     CircularMultiRecordOptions as _CircularLayout,
+    CircularOutputOptions as _CircularOutputOptions,
+    CircularRequestTrackOptions as _CircularRequestTrackOptions,
     ColorOptions as _ColorOptions,
-    DiagramOptions as _DiagramOptions,
+    LinearDiagramOptions as _LinearDiagramOptions,
     LinearMultiRecordOptions as _LinearLayout,
-    OutputOptions as _OutputOptions,
-    TrackOptions as _TrackOptions,
+    LinearOutputOptions as _LinearOutputOptions,
+    LinearRequestTrackOptions as _LinearRequestTrackOptions,
+    _validate_center_reserved_radius,
+    _validate_track_configuration,
+)
+from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.api.request_render import (
+    PreparedDiagramRequest as _PreparedDiagramRequest,
+    build_prepared_interactive_context as _build_prepared_interactive_context,
+    build_request_diagram as _build_request_diagram,
+)
+from gbdraw.api.requests import (
+    CircularDiagramRequest as _CircularDiagramRequest,
+    InMemoryRecordSource as _InMemoryRecordSource,
+    LinearDiagramRequest as _LinearDiagramRequest,
+    RecordInput as _RecordInput,
 )
 from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
-from gbdraw.features.visibility import read_feature_visibility_file
-from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.config.models import GbdrawConfig
-from gbdraw.render.interactive_context import build_interactive_svg_context
+from gbdraw.mode_profiles import (
+    CIRCULAR_MODE_PROFILE,
+    ComparisonThresholds,
+    DEFAULT_FEATURE_TYPES,
+    LINEAR_MODE_PROFILE,
+)
+from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT, normalize_format_token
+from gbdraw.render.interactive_context import require_interactive_svg_metadata
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
 
@@ -60,7 +79,7 @@ RecordCollection: TypeAlias = SeqRecord | Sequence[SeqRecord]
 class FeatureOptions:
     """Feature selection, colors, visibility, and shape overrides."""
 
-    types: Sequence[str] | None = None
+    types: Sequence[str] | None = DEFAULT_FEATURE_TYPES
     color_table: TableSource | None = None
     default_colors: TableSource | None = None
     palette: str = "default"
@@ -88,12 +107,58 @@ class TitleOptions:
 
 @dataclass(frozen=True)
 class Thresholds:
-    """Filters shared by comparison and conservation inputs."""
+    """Optional comparison filters resolved by the owning diagram mode."""
 
-    evalue: float = 1e-5
-    bitscore: float = 50.0
-    identity: float = 70.0
-    alignment_length: int = 0
+    evalue: float | None = None
+    bitscore: float | None = None
+    identity: float | None = None
+    alignment_length: int | None = None
+
+    def __post_init__(self) -> None:
+        validated = ComparisonThresholds(
+            evalue=0.0 if self.evalue is None else self.evalue,
+            bitscore=0.0 if self.bitscore is None else self.bitscore,
+            identity=0.0 if self.identity is None else self.identity,
+            alignment_length=(
+                0 if self.alignment_length is None else self.alignment_length
+            ),
+        )
+        for field_name in (
+            "evalue",
+            "bitscore",
+            "identity",
+            "alignment_length",
+        ):
+            if getattr(self, field_name) is not None:
+                object.__setattr__(
+                    self,
+                    field_name,
+                    getattr(validated, field_name),
+                )
+
+
+def _resolve_thresholds(
+    thresholds: Thresholds,
+    defaults: ComparisonThresholds,
+) -> Thresholds:
+    return Thresholds(
+        evalue=defaults.evalue if thresholds.evalue is None else thresholds.evalue,
+        bitscore=(
+            defaults.bitscore
+            if thresholds.bitscore is None
+            else thresholds.bitscore
+        ),
+        identity=(
+            defaults.identity
+            if thresholds.identity is None
+            else thresholds.identity
+        ),
+        alignment_length=(
+            defaults.alignment_length
+            if thresholds.alignment_length is None
+            else thresholds.alignment_length
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -108,6 +173,19 @@ class DepthTrackOptions:
     small_tick_interval: float | str | None = None
     tick_font_size: float | str | None = None
 
+    def __post_init__(self) -> None:
+        source = self.source
+        if isinstance(source, (DataFrame, str, PathLike)):
+            _source(source, name="depth track source")
+            return
+        if isinstance(source, (str, bytes)) or not isinstance(source, Sequence):
+            raise ValidationError(
+                "DepthTrackOptions.source must be a table, path, or sequence "
+                "of tables, paths, and None values."
+            )
+        for index, item in enumerate(source):
+            _source(item, name=f"DepthTrackOptions.source[{index}]")
+
 
 @dataclass(frozen=True)
 class CircularTrackOptions:
@@ -117,6 +195,25 @@ class CircularTrackOptions:
     axis_index: int | None = None
     center_reserved_radius: float | None = None
 
+    def __post_init__(self) -> None:
+        axis_index = _validate_track_configuration(
+            self.slots,
+            axis_index=self.axis_index,
+            mode="circular",
+            expected_type=CircularTrackSlot,
+            slots_field_name="CircularTrackOptions.slots",
+            axis_field_name="CircularTrackOptions.axis_index",
+        )
+        object.__setattr__(self, "axis_index", axis_index)
+        object.__setattr__(
+            self,
+            "center_reserved_radius",
+            _validate_center_reserved_radius(
+                self.center_reserved_radius,
+                field_name="CircularTrackOptions.center_reserved_radius",
+            ),
+        )
+
 
 @dataclass(frozen=True)
 class LinearTrackOptions:
@@ -125,16 +222,47 @@ class LinearTrackOptions:
     slots: Sequence[str | LinearTrackSlot] | None = None
     axis_index: int | None = None
 
+    def __post_init__(self) -> None:
+        axis_index = _validate_track_configuration(
+            self.slots,
+            axis_index=self.axis_index,
+            mode="linear",
+            expected_type=LinearTrackSlot,
+            slots_field_name="LinearTrackOptions.slots",
+            axis_field_name="LinearTrackOptions.axis_index",
+        )
+        object.__setattr__(self, "axis_index", axis_index)
+
 
 @dataclass(frozen=True)
 class CircularLayout:
     """Grid layout used automatically when a circular diagram has multiple records."""
 
-    size: Literal["linear", "auto", "equal", "sqrt"] = "auto"
+    size: Literal["linear", "auto", "equal"] = "auto"
     min_radius_ratio: float = 0.55
     column_gap_ratio: float = 0.10
     row_gap_ratio: float = 0.05
     positions: Sequence[str] | None = None
+
+    def __post_init__(self) -> None:
+        normalized = self._legacy()
+        object.__setattr__(self, "size", normalized.multi_record_size_mode)
+        object.__setattr__(
+            self,
+            "min_radius_ratio",
+            normalized.multi_record_min_radius_ratio,
+        )
+        object.__setattr__(
+            self,
+            "column_gap_ratio",
+            normalized.multi_record_column_gap_ratio,
+        )
+        object.__setattr__(
+            self,
+            "row_gap_ratio",
+            normalized.multi_record_row_gap_ratio,
+        )
+        object.__setattr__(self, "positions", normalized.multi_record_positions)
 
     def _legacy(self) -> _CircularLayout:
         return _CircularLayout(
@@ -153,6 +281,11 @@ class LinearLayout:
     record_gap: float = 24.0
     positions: Sequence[str] | None = None
 
+    def __post_init__(self) -> None:
+        normalized = self._legacy()
+        object.__setattr__(self, "record_gap", normalized.record_gap_px)
+        object.__setattr__(self, "positions", normalized.multi_record_positions)
+
     def _legacy(self) -> _LinearLayout:
         return _LinearLayout(
             record_gap_px=self.record_gap,
@@ -161,8 +294,8 @@ class LinearLayout:
 
 
 @dataclass(frozen=True)
-class ConservationTrackOptions:
-    """One circular sequence-conservation ring."""
+class ComparisonRingTrackOptions:
+    """One circular comparison ring drawn from sequence-similarity hits."""
 
     source: TableSource
     label: str | None = None
@@ -171,13 +304,18 @@ class ConservationTrackOptions:
 
 
 @dataclass(frozen=True)
-class ConservationOptions:
-    """Circular conservation rings and their shared geometry."""
+class ComparisonRingOptions:
+    """Circular sequence-similarity comparison rings and their shared geometry."""
 
-    tracks: Sequence[ConservationTrackOptions] = ()
+    tracks: Sequence[ComparisonRingTrackOptions] = ()
     reference: Literal["query", "subject", "auto"] = "auto"
     ring_width: float | None = None
     ring_gap: float | None = None
+
+
+# Compatibility aliases for the original package-root names.
+ConservationTrackOptions = ComparisonRingTrackOptions
+ConservationOptions = ComparisonRingOptions
 
 
 @dataclass(frozen=True)
@@ -192,7 +330,7 @@ class LinearComparisonOptions:
     pairs: Sequence[tuple[int, int]] | None = None
     match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
-    collinearity_params: CollinearityParameters | LosslessCollinearityParameters | None = None
+    collinearity_params: LosslessCollinearityParameters | None = None
     collinearity_unit: CollinearityUnitMode | str = "auto"
     collinearity_anchor: CollinearityAnchorMode | str = "rbh"
     collinearity_scope: CollinearitySearchScope | str = "adjacent"
@@ -226,15 +364,119 @@ class _CommonOptions:
     thresholds: Thresholds = field(default_factory=Thresholds)
 
 
+def _validate_common_options(options: _CommonOptions) -> None:
+    expected_types = (
+        ("features", options.features, FeatureOptions),
+        ("labels", options.labels, LabelOptions),
+        ("title", options.title, TitleOptions),
+        ("thresholds", options.thresholds, Thresholds),
+    )
+    for field_name, value, expected_type in expected_types:
+        if not isinstance(value, expected_type):
+            raise ValidationError(
+                f"{field_name} must be {expected_type.__name__}."
+            )
+    if (
+        isinstance(options.depth_tracks, (str, bytes))
+        or not isinstance(options.depth_tracks, Sequence)
+        or not all(
+            isinstance(track, DepthTrackOptions) for track in options.depth_tracks
+        )
+    ):
+        raise ValidationError(
+            "depth_tracks must contain DepthTrackOptions values."
+        )
+
+
 @dataclass(frozen=True)
 class CircularOptions(_CommonOptions):
-    """Options accepted only by :func:`draw_circular`."""
+    """Options for :func:`draw_circular`.
+
+    ``comparison_rings`` is the canonical sequence-similarity ring field.
+    ``conservation`` remains a runtime compatibility constructor and attribute alias.
+    """
 
     tracks: CircularTrackOptions = field(default_factory=CircularTrackOptions)
-    conservation: ConservationOptions = field(default_factory=ConservationOptions)
+    comparison_rings: ComparisonRingOptions | None = None
     species: str | None = None
     strain: str | None = None
     keep_full_definition_with_title: bool = False
+    thresholds: Thresholds = field(default_factory=Thresholds)
+
+    def __post_init__(self) -> None:
+        _validate_common_options(self)
+        object.__setattr__(
+            self,
+            "thresholds",
+            _resolve_thresholds(
+                self.thresholds,
+                CIRCULAR_MODE_PROFILE.comparison,
+            ),
+        )
+        if not isinstance(self.tracks, CircularTrackOptions):
+            raise ValidationError("tracks must be CircularTrackOptions.")
+        comparison_rings = self.comparison_rings
+        if comparison_rings is None:
+            comparison_rings = ComparisonRingOptions()
+        if not isinstance(comparison_rings, ComparisonRingOptions):
+            raise ValidationError(
+                "comparison_rings must be ComparisonRingOptions "
+                "(ConservationOptions is a compatibility alias)."
+            )
+        object.__setattr__(self, "comparison_rings", comparison_rings)
+        if self.title.position not in {None, "none", "top", "bottom"}:
+            raise ValidationError(
+                "Circular title position must be one of: none, top, bottom."
+            )
+        for track in self.depth_tracks:
+            if track.height is not None:
+                raise ValidationError(
+                    "Depth track height is supported only by linear diagrams."
+                )
+
+    @property
+    def conservation(self) -> ComparisonRingOptions:
+        """Compatibility attribute alias for :attr:`comparison_rings`."""
+
+        comparison_rings = self.comparison_rings
+        assert comparison_rings is not None
+        return comparison_rings
+
+
+_CIRCULAR_OPTIONS_GENERATED_INIT = CircularOptions.__init__
+_CIRCULAR_OPTIONS_INIT_SIGNATURE = signature(_CIRCULAR_OPTIONS_GENERATED_INIT)
+
+
+@wraps(_CIRCULAR_OPTIONS_GENERATED_INIT)
+def _circular_options_init(
+    self: CircularOptions,
+    *args: object,
+    conservation: ComparisonRingOptions | None = None,
+    **kwargs: object,
+) -> None:
+    bound = _CIRCULAR_OPTIONS_INIT_SIGNATURE.bind_partial(self, *args, **kwargs)
+    if conservation is not None:
+        if bound.arguments.get("comparison_rings") is not None:
+            raise ValidationError(
+                "Pass comparison_rings or the conservation compatibility alias, "
+                "not both."
+            )
+        bound.arguments["comparison_rings"] = conservation
+    _CIRCULAR_OPTIONS_GENERATED_INIT(*bound.args, **bound.kwargs)
+
+
+_circular_options_init.__signature__ = _CIRCULAR_OPTIONS_INIT_SIGNATURE.replace(  # type: ignore[attr-defined]
+    parameters=(
+        *_CIRCULAR_OPTIONS_INIT_SIGNATURE.parameters.values(),
+        Parameter(
+            "conservation",
+            kind=Parameter.KEYWORD_ONLY,
+            default=None,
+            annotation=ComparisonRingOptions | None,
+        ),
+    ),
+)
+CircularOptions.__init__ = _circular_options_init  # type: ignore[method-assign]
 
 
 @dataclass(frozen=True)
@@ -243,6 +485,26 @@ class LinearOptions(_CommonOptions):
 
     tracks: LinearTrackOptions = field(default_factory=LinearTrackOptions)
     comparisons: LinearComparisonOptions = field(default_factory=LinearComparisonOptions)
+    thresholds: Thresholds = field(default_factory=Thresholds)
+
+    def __post_init__(self) -> None:
+        _validate_common_options(self)
+        object.__setattr__(
+            self,
+            "thresholds",
+            _resolve_thresholds(
+                self.thresholds,
+                LINEAR_MODE_PROFILE.comparison,
+            ),
+        )
+        if not isinstance(self.tracks, LinearTrackOptions):
+            raise ValidationError("tracks must be LinearTrackOptions.")
+        if not isinstance(self.comparisons, LinearComparisonOptions):
+            raise ValidationError("comparisons must be LinearComparisonOptions.")
+        if self.title.position not in {None, "center", "top", "bottom"}:
+            raise ValidationError(
+                "Linear title position must be one of: center, top, bottom."
+            )
 
 
 class Diagram:
@@ -254,12 +516,23 @@ class Diagram:
         *,
         mode: Literal["circular", "linear"],
         records: Sequence[SeqRecord],
-        interactive_context: InteractiveSvgContext | None,
+        interactive_context: (
+            InteractiveSvgContext
+            | Callable[[], InteractiveSvgContext]
+            | None
+        ),
     ) -> None:
         self._drawing = drawing
         self.mode = mode
         self.records = tuple(records)
         self._interactive_context = interactive_context
+
+    def _resolve_interactive_context(self) -> InteractiveSvgContext | None:
+        if callable(self._interactive_context):
+            self._interactive_context = require_interactive_svg_metadata(
+                self._interactive_context
+            )
+        return self._interactive_context
 
     def to_bytes(self, format: str = "svg") -> bytes:
         """Return the diagram in SVG or a supported binary format."""
@@ -267,7 +540,11 @@ class Diagram:
         return render_to_bytes(
             self._drawing,
             format,
-            interactive_context=self._interactive_context,
+            interactive_context=(
+                self._resolve_interactive_context()
+                if normalize_format_token(format) == INTERACTIVE_SVG_FORMAT
+                else None
+            ),
         )
 
     def to_svg(self, *, interactive: bool = False) -> str:
@@ -287,14 +564,40 @@ class Diagram:
 
         output_path = Path(path)
         resolved_format = format or _format_from_path(output_path)
+        preflight_output_paths((output_path,), overwrite=True)
         if output_path.exists() and not overwrite:
             raise ValidationError(
-                f"Output file already exists: {output_path}. Use overwrite=True to replace it."
+                f"Output file already exists: {output_path}. "
+                "Use overwrite=True to replace it."
             )
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = self.to_bytes(resolved_format)
         try:
-            output_path.write_bytes(payload)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ExportError(
+                f"Could not prepare output directory: {output_path.parent}"
+            ) from exc
+        payload = self.to_bytes(resolved_format)
+        if overwrite and (output_path.exists() or output_path.is_symlink()):
+            try:
+                output_path.unlink()
+            except OSError as exc:
+                raise ExportError(
+                    f"Could not replace existing output file: {output_path}"
+                ) from exc
+        try:
+            with output_path.open("xb") as output_file:
+                output_file.write(payload)
+        except FileExistsError as exc:
+            message = (
+                f"Output target appeared during export: {output_path}. "
+                "Refusing to replace it."
+                if overwrite
+                else (
+                    f"Output file already exists: {output_path}. "
+                    "Use overwrite=True to replace it."
+                )
+            )
+            raise ValidationError(message) from exc
         except OSError as exc:
             raise ExportError(f"Could not write output file: {output_path}") from exc
         return output_path
@@ -341,7 +644,7 @@ def read_genbank(
 ) -> list[SeqRecord]:
     """Read all records from one or more GenBank files."""
 
-    return _load_gbks(_paths(paths), mode="linear")
+    return _load_gbks(_paths(paths))
 
 
 def read_gff(
@@ -359,7 +662,6 @@ def read_gff(
     return _load_gff_fasta(
         normalized_gff,
         normalized_fasta,
-        mode="linear",
         selected_features_set=features,
     )
 
@@ -450,10 +752,6 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
             default_colors_file=default_colors_file,
         ),
         "annotations": options.annotations,
-        "output": _OutputOptions(
-            legend=options.legend,
-            plot_title_position=options.title.position,
-        ),
         "selected_features_set": features.types,
         "feature_visibility_table": visibility_table,
         "feature_visibility_table_file": visibility_file,
@@ -480,54 +778,76 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
     return values
 
 
-def _circular_options(options: CircularOptions, *, record_count: int) -> _DiagramOptions:
+def _circular_options(
+    options: CircularOptions,
+    *,
+    record_count: int,
+) -> _CircularDiagramOptions:
     values = _base_options(options, record_count=record_count, mode="circular")
-    values["tracks"] = _TrackOptions(
+    values["tracks"] = _CircularRequestTrackOptions(
         circular_track_slots=options.tracks.slots,
         circular_track_axis_index=options.tracks.axis_index,
         center_reserved_radius=options.tracks.center_reserved_radius,
     )
-    conservation = options.conservation
-    if conservation.tracks:
+    values["output"] = _CircularOutputOptions(
+        legend=options.legend,
+        plot_title_position=options.title.position,
+    )
+    comparison_rings = options.comparison_rings
+    assert comparison_rings is not None
+    if comparison_rings.tracks:
         kinds = {
             "table" if isinstance(track.source, DataFrame) else "file"
-            for track in conservation.tracks
+            for track in comparison_rings.tracks
         }
         if len(kinds) != 1:
             raise ValidationError(
-                "Conservation tracks must use either DataFrames or paths in one diagram, not both."
+                "Comparison rings must use either DataFrames or paths in one "
+                "diagram, not both."
             )
-        sources = [track.source for track in conservation.tracks]
+        sources = [track.source for track in comparison_rings.tracks]
         if "table" in kinds:
             values["conservation_dataframes"] = sources
         else:
             values["conservation_blast_files"] = [str(source) for source in sources]
-        labels = [track.label for track in conservation.tracks]
-        colors = [track.color for track in conservation.tracks]
+        labels = [track.label for track in comparison_rings.tracks]
+        colors = [track.color for track in comparison_rings.tracks]
         if any(label is not None for label in labels):
             if any(label is None for label in labels):
-                raise ValidationError("Set labels for every conservation track or for none of them.")
+                raise ValidationError(
+                    "Set labels for every comparison ring or for none of them."
+                )
             values["conservation_labels"] = labels
         if any(color is not None for color in colors):
             if any(color is None for color in colors):
-                raise ValidationError("Set colors for every conservation track or for none of them.")
+                raise ValidationError(
+                    "Set colors for every comparison ring or for none of them."
+                )
             values["conservation_colors"] = colors
     values.update(
-        conservation_reference=conservation.reference,
-        conservation_ring_width=conservation.ring_width,
-        conservation_ring_gap=conservation.ring_gap,
+        conservation_reference=comparison_rings.reference,
+        conservation_ring_width=comparison_rings.ring_width,
+        conservation_ring_gap=comparison_rings.ring_gap,
         species=options.species,
         strain=options.strain,
         keep_full_definition_with_plot_title=options.keep_full_definition_with_title,
     )
-    return _DiagramOptions(**values)
+    return _CircularDiagramOptions(**values)
 
 
-def _linear_options(options: LinearOptions, *, record_count: int) -> _DiagramOptions:
+def _linear_options(
+    options: LinearOptions,
+    *,
+    record_count: int,
+) -> _LinearDiagramOptions:
     values = _base_options(options, record_count=record_count, mode="linear")
-    values["tracks"] = _TrackOptions(
+    values["tracks"] = _LinearRequestTrackOptions(
         linear_track_slots=options.tracks.slots,
         linear_track_axis_index=options.tracks.axis_index,
+    )
+    values["output"] = _LinearOutputOptions(
+        legend=options.legend,
+        plot_title_position=options.title.position,
     )
     comparisons = options.comparisons
     values.update(
@@ -554,34 +874,19 @@ def _linear_options(options: LinearOptions, *, record_count: int) -> _DiagramOpt
         collinear_max_paralog_links_per_orthogroup=comparisons.max_paralog_links,
         align_orthogroup_feature=comparisons.align_feature,
     )
-    return _DiagramOptions(**values)
+    return _LinearDiagramOptions(**values)
 
 
 def _interactive_context(
-    records: Sequence[SeqRecord],
+    prepared: _PreparedDiagramRequest,
     *,
     options: _CommonOptions,
-    legacy: _DiagramOptions,
-    mode: Literal["circular", "linear"],
 ) -> InteractiveSvgContext:
-    visibility_table, visibility_file = _source(
-        options.features.visibility,
-        name="feature visibility",
-    )
-    if visibility_table is None and visibility_file is not None:
-        visibility_table = read_feature_visibility_file(visibility_file)
-    color_table, color_file = _source(options.features.color_table, name="feature color table")
-    if color_table is None and color_file is not None:
-        color_table = read_color_table(color_file)
-    default_colors, default_file = _source(
-        options.features.default_colors,
-        name="default color table",
-    )
-    if default_colors is None:
-        default_colors = load_default_colors(default_file or "", options.features.palette)
     comparison_sequence_records: list[list[SeqRecord]] = []
     if isinstance(options, CircularOptions):
-        for track in options.conservation.tracks:
+        comparison_rings = options.comparison_rings
+        assert comparison_rings is not None
+        for track in comparison_rings.tracks:
             source = track.comparison_sequence_source
             if source is None:
                 comparison_sequence_records.append([])
@@ -591,18 +896,11 @@ def _interactive_context(
                 comparison_sequence_records.append(list(source))
             else:
                 comparison_sequence_records.append(list(SeqIO.parse(str(source), "fasta")))
-    return build_interactive_svg_context(
-        records,
-        selected_features_set=options.features.types,
-        feature_table=visibility_table,
-        color_table=color_table,
-        default_colors=default_colors,
-        orthogroups=legacy.orthogroups,
-        linear_rendered_feature_ids=mode == "linear",
-        annotations=options.annotations,
-        mode=mode,
+    context = _build_prepared_interactive_context(
+        prepared,
         comparison_sequence_records=comparison_sequence_records,
     )
+    return context
 
 
 def draw_circular(
@@ -617,26 +915,26 @@ def draw_circular(
     options = options or CircularOptions()
     if not isinstance(options, CircularOptions):
         raise ValidationError("draw_circular options must be CircularOptions.")
-    if len(normalized) == 1 and layout is not None:
-        raise ValidationError("CircularLayout requires at least two records.")
-    legacy = _circular_options(options, record_count=len(normalized))
-    if len(normalized) == 1:
-        drawing = _build_circular_diagram(normalized[0], options=legacy)
-    else:
-        drawing = _build_circular_multi_diagram(
-            normalized,
-            options=legacy,
-            layout=(layout or CircularLayout())._legacy(),
+    if layout is not None and not isinstance(layout, CircularLayout):
+        raise ValidationError("draw_circular layout must be CircularLayout.")
+    compiled = _circular_options(options, record_count=len(normalized))
+    prepared = _build_request_diagram(
+        _CircularDiagramRequest(
+            records=tuple(
+                _RecordInput(source=_InMemoryRecordSource(record))
+                for record in normalized
+            ),
+            options=compiled,
+            layout=layout._legacy() if layout is not None else None,
         )
+    )
     return Diagram(
-        drawing,
+        prepared.drawing,
         mode="circular",
         records=normalized,
-        interactive_context=_interactive_context(
-            normalized,
+        interactive_context=lambda: _interactive_context(
+            prepared,
             options=options,
-            legacy=legacy,
-            mode="circular",
         ),
     )
 
@@ -653,21 +951,26 @@ def draw_linear(
     options = options or LinearOptions()
     if not isinstance(options, LinearOptions):
         raise ValidationError("draw_linear options must be LinearOptions.")
-    legacy = _linear_options(options, record_count=len(normalized))
-    drawing = _build_linear_diagram(
-        normalized,
-        options=legacy,
-        layout=layout._legacy() if layout is not None else None,
+    if layout is not None and not isinstance(layout, LinearLayout):
+        raise ValidationError("draw_linear layout must be LinearLayout.")
+    compiled = _linear_options(options, record_count=len(normalized))
+    prepared = _build_request_diagram(
+        _LinearDiagramRequest(
+            records=tuple(
+                _RecordInput(source=_InMemoryRecordSource(record))
+                for record in normalized
+            ),
+            options=compiled,
+            layout=layout._legacy() if layout is not None else None,
+        )
     )
     return Diagram(
-        drawing,
+        prepared.drawing,
         mode="linear",
         records=normalized,
-        interactive_context=_interactive_context(
-            normalized,
+        interactive_context=lambda: _interactive_context(
+            prepared,
             options=options,
-            legacy=legacy,
-            mode="linear",
         ),
     )
 
@@ -676,6 +979,8 @@ __all__ = [
     "CircularLayout",
     "CircularOptions",
     "CircularTrackOptions",
+    "ComparisonRingOptions",
+    "ComparisonRingTrackOptions",
     "ConservationOptions",
     "ConservationTrackOptions",
     "DepthTrackOptions",

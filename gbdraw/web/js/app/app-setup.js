@@ -2,6 +2,7 @@ import { state, createLinearSeq, normalizeLinearSeqList, reconcileLinearSeqPairD
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import {
+  adoptCanonicalRenderArtifacts,
   applyConfigData,
   applyEditorStateData,
   applyFeatureStateData,
@@ -17,6 +18,8 @@ import {
   buildUiStateData,
   exportSession,
   importSession as importSessionFromFile,
+  SESSION_VERSION,
+  serializeFiles,
   serializeResults,
   setPreviewRuntime
 } from '../services/config.js';
@@ -30,6 +33,10 @@ import {
   disposeDiagramGenerationWorker,
   preinitializeDiagramGenerationWorker
 } from '../services/diagram-generation.js';
+import {
+  DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE,
+  DIAGRAM_ENGINE_STARTUP_MESSAGE
+} from '../services/runtime-capabilities.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
@@ -83,6 +90,8 @@ import {
   defaultConservationSeriesLabel,
   moveConservationSeriesEntry,
   normalizeFileList,
+  orderedConservationSources,
+  orderedOptionalConservationFiles,
   parseConservationLabelText,
   reconcileConservationSeries
 } from './conservation-series.js';
@@ -91,6 +100,7 @@ import {
   getDepthTrackLabelFromFile,
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
+import { comparisonProfileDefault } from '../mode-profiles.js';
 import {
   activeDepthTrackIndices,
   clearDepthTrackSourceAt,
@@ -141,8 +151,6 @@ export const createAppSetup = () => {
     canvasPan,
     canvasContainerRef,
     mode,
-    circularLegendPosition,
-    linearLegendPosition,
     cInputType,
     lInputType,
     blastSource,
@@ -1072,25 +1080,42 @@ export const createAppSetup = () => {
   );
   watch(mode, (nextMode, previousMode) => {
     if (nextMode === previousMode) return;
+    if (state.semanticFileWatchersSuppressed.value) {
+      state.modeProfileStateManager.invalidate(nextMode);
+    } else {
+      state.modeProfileStateManager.transition(adv, previousMode, nextMode);
+    }
     matchSequenceRegistry?.reset?.();
     clickedPairwiseMatch.value = null;
   });
   const isCircularConservationUploadSource = () => (
     String(circularConservation.source || '').trim().toLowerCase() === 'upload'
   );
+  const isDerivedCircularConservationReplay = () => (
+    !isCircularConservationUploadSource() &&
+    files.c_conservation_blasts_source === 'losat-cache' &&
+    normalizeFileList(files.c_conservation_blasts).length > 0
+  );
   const getCircularConservationSourceFiles = () => (
-    isCircularConservationUploadSource()
+    isCircularConservationUploadSource() || isDerivedCircularConservationReplay()
       ? normalizeFileList(files.c_conservation_blasts)
       : normalizeFileList(files.c_conservation_fastas)
   );
   const syncCircularConservationEnabled = (sourceFiles = getCircularConservationSourceFiles()) => {
     circularConservation.enabled = normalizeFileList(sourceFiles).length > 0;
   };
+  const clearDerivedCircularConservationBlasts = () => {
+    if (files.c_conservation_blasts_source !== 'losat-cache') return;
+    files.c_conservation_blasts = [];
+    files.c_conservation_blasts_source = null;
+  };
   const setCircularConservationSourceFiles = (nextFiles) => {
     const normalized = normalizeFileList(nextFiles);
     if (isCircularConservationUploadSource()) {
       files.c_conservation_blasts = normalized;
+      files.c_conservation_blasts_source = null;
     } else {
+      clearDerivedCircularConservationBlasts();
       files.c_conservation_fastas = normalized;
     }
     losatCacheInfo.value = [];
@@ -1098,12 +1123,20 @@ export const createAppSetup = () => {
   };
   const setCircularConservationUploadFiles = (nextFiles) => {
     files.c_conservation_blasts = normalizeFileList(nextFiles);
+    files.c_conservation_blasts_source = null;
     files.c_conservation_sequence_sources = [];
     losatCacheInfo.value = [];
     syncCircularConservationSeries();
   };
   const syncCircularConservationSeries = () => {
     const sourceFiles = getCircularConservationSourceFiles();
+    if (isDerivedCircularConservationReplay()) {
+      circularConservation.enabled = true;
+      if (adv.circular_track_slots_enabled === true) {
+        circularTrackSlotEditor.syncCircularConservationSlots();
+      }
+      return;
+    }
     syncCircularConservationEnabled(sourceFiles);
     const legacyLabels = parseConservationLabelText(circularConservation.labels);
     const nextSeries = reconcileConservationSeries({
@@ -1159,6 +1192,7 @@ export const createAppSetup = () => {
     const target = event?.target || null;
     const selectedFile = Array.from(target?.files || []).filter(Boolean)[0] || null;
     if (!selectedFile) return;
+    clearDerivedCircularConservationBlasts();
     files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedFile];
     losatCacheInfo.value = [];
     syncCircularConservationSeries();
@@ -1179,6 +1213,42 @@ export const createAppSetup = () => {
   const removeCircularConservationSource = (index) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= circularConservation.series.length) return;
+    if (isDerivedCircularConservationReplay()) {
+      const orderedBlasts = orderedConservationSources(
+        files.c_conservation_blasts,
+        circularConservation
+      ).map((entry) => entry.file);
+      const orderedFastas = orderedOptionalConservationFiles(
+        files.c_conservation_fastas,
+        circularConservation
+      );
+      const orderedSequenceSources = orderedOptionalConservationFiles(
+        files.c_conservation_sequence_sources,
+        circularConservation
+      );
+      orderedBlasts.splice(idx, 1);
+      orderedFastas.splice(idx, 1);
+      orderedSequenceSources.splice(idx, 1);
+      circularConservation.series.splice(idx, 1);
+      circularConservation.series.forEach((seriesEntry, seriesIndex) => {
+        seriesEntry.sourceIndex = seriesIndex;
+      });
+      circularConservation.labels = circularConservation.series
+        .map((seriesEntry) => seriesEntry.label)
+        .join(',');
+      files.c_conservation_blasts = orderedBlasts;
+      files.c_conservation_fastas = orderedFastas;
+      files.c_conservation_sequence_sources = orderedSequenceSources;
+      files.c_conservation_blasts_source = orderedBlasts.length > 0
+        ? 'losat-cache'
+        : null;
+      circularConservation.enabled = orderedBlasts.length > 0;
+      losatCacheInfo.value = [];
+      if (adv.circular_track_slots_enabled === true) {
+        circularTrackSlotEditor.syncCircularConservationSlots();
+      }
+      return;
+    }
     const entry = circularConservation.series[idx];
     const sourceFiles = getCircularConservationSourceFiles();
     const descriptors = conservationSourceDescriptors(sourceFiles);
@@ -1201,6 +1271,7 @@ export const createAppSetup = () => {
     () => [
       circularConservation.source,
       files.c_conservation_blasts,
+      files.c_conservation_blasts_source,
       files.c_conservation_fastas,
       circularConservation.labels
     ],
@@ -1256,6 +1327,9 @@ export const createAppSetup = () => {
     state,
     getPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
+    serializeCanonicalFiles: serializeFiles,
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts,
     refreshFeatureOverrides: featureActions.refreshFeatureOverrides,
     resetPreviewViewport,
     validateAnnotationTargets: ({ loadComparison }) => {
@@ -1297,10 +1371,12 @@ export const createAppSetup = () => {
         diagramGenerationWorkerReady.value = true;
         diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        diagramGenerationWorkerError.value = message;
-        diagramGenerationWorkerStatus.value = `Diagram engine failed to start: ${message}`;
-        console.error(error);
+        const userMessage = error?.name === 'DiagramRuntimeCompatibilityError'
+          ? DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE
+          : DIAGRAM_ENGINE_STARTUP_MESSAGE;
+        diagramGenerationWorkerError.value = userMessage;
+        diagramGenerationWorkerStatus.value = userMessage;
+        console.error('Diagram engine startup failed.', error);
       }
     }
   });
@@ -1677,10 +1753,28 @@ export const createAppSetup = () => {
       .find((entry) => String(entry?.id || '').trim() === orthogroupId);
     if (!group) return null;
     const members = orthogroupActions.getEnrichedOrthogroupMembers(group);
-    const currentSvgId = String(cf?.svg_id || '').trim();
-    const currentRecordIndex = Number(cf?.orthogroupMember?.recordIndex);
+    const currentStableId = String(
+      cf?.feat?.stable_feature_id ||
+      cf?.feat?.stableFeatureId ||
+      cf?.feat?.stable_svg_id ||
+      cf?.feat?.stableFeatureSvgId ||
+      cf?.feat?.svg_id ||
+      ''
+    ).trim();
+    const currentRecordIndex = Number(
+      cf?.feat?.fileIdx ??
+      cf?.orthogroupMember?.recordIndex ??
+      cf?.feat?.recordIndex ??
+      cf?.feat?.record_idx
+    );
     const currentMember = members.find((member) => (
-      String(member?.featureSvgId || '').trim() === currentSvgId &&
+      String(
+        member?.stableFeatureSvgId ||
+        member?.stable_feature_svg_id ||
+        member?.featureSvgId ||
+        member?.feature_svg_id ||
+        ''
+      ).trim() === currentStableId &&
       (!Number.isInteger(currentRecordIndex) || Number(member?.recordIndex) === currentRecordIndex)
     )) || cf.orthogroupMember || null;
     const membersByRecord = orthogroupActions.groupOrthogroupMembersByRecord(members);
@@ -1853,7 +1947,7 @@ export const createAppSetup = () => {
     const selectedGroup = selectedPairwiseBlockOrthogroup.value;
     if (!selectedGroup) return sections;
     const selectedSection = {
-      title: 'Selected orthogroup',
+      title: 'Selected similarity group',
       rows: Array.isArray(selectedGroup.detailRows) ? selectedGroup.detailRows : [],
       memberRows: Array.isArray(selectedGroup.memberRows) ? selectedGroup.memberRows : [],
       memberCopyText: selectedGroup.memberCopyText || '',
@@ -1873,7 +1967,7 @@ export const createAppSetup = () => {
     selectedPairwiseBlockOrthogroupId.value = String(group?.id || '').trim();
   };
   const openPairwiseFeatureRow = (row, event) => {
-    if (!row?.feature?.svg_id) return;
+    if (!row?.canOpen || !row?.feature) return;
     openFeatureEditorForFeature(row.feature, event);
   };
 
@@ -2331,6 +2425,7 @@ export const createAppSetup = () => {
       });
     }
     linearSeqs.splice(0, linearSeqs.length, ...next);
+    files.linearCanonicalComparisons = [];
     losatCacheInfo.value = [];
     linearReorderNotice.value = buildLinearReorderNotice({ clearedBlastSlots, clearedLosatNames, actionLabel });
   };
@@ -2366,6 +2461,7 @@ export const createAppSetup = () => {
         return;
       }
       seq.gb = nextValue;
+      files.linearCanonicalComparisons = [];
       losatCacheInfo.value = [];
       linearReorderNotice.value = '';
       return;
@@ -2378,6 +2474,7 @@ export const createAppSetup = () => {
     }
 
     seq[field] = nextValue;
+    files.linearCanonicalComparisons = [];
     losatCacheInfo.value = [];
     linearReorderNotice.value = '';
   };
@@ -2538,6 +2635,7 @@ export const createAppSetup = () => {
     linearRecordSelectorWarning: linearRecordSelector.warningFor,
     form,
     adv,
+    comparisonProfileDefault,
     comparisonHeightValidationError,
     optionalNumberInputValue,
     setOptionalNumberInputValue,

@@ -4,12 +4,25 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from typing import Any, Collection, Literal, Mapping, Sequence, TypeAlias
+from typing import Any, Collection, Literal, Mapping, Sequence
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ...configurators import DepthConfigurator  # type: ignore[reportMissingImports]
 from ...exceptions import ValidationError  # type: ignore[reportMissingImports]
+from ...layout.circular import (  # type: ignore[reportMissingImports]
+    CircularAxisLayout,
+    CircularFeatureLane,
+    CircularFeatureLayout,
+    CircularFeatureStackMetrics,
+    CircularRadialLayout,
+    CircularResolvedSlot,
+    CircularTickLayout,
+    LAYOUT_EPSILON,
+    RadialBand,
+    band_union,
+    bands_overlap,
+)
 from ...layout.circular_depth_axis import (  # type: ignore[reportMissingImports]
     DepthAxisFootprint,
     resolve_depth_axis_footprint,
@@ -30,7 +43,6 @@ from .presets import normalize_circular_track_preset  # type: ignore[reportMissi
 
 logger = logging.getLogger(__name__)
 
-LAYOUT_EPSILON = 1e-6
 TRACK_SPACING_MULTIPLIER = 1.2
 MIN_NUMERIC_WIDTH_PX = 10.0
 MIN_NUMERIC_WIDTH_FRACTION = 0.55
@@ -44,183 +56,6 @@ PREFERRED_MIN_NUMERIC_WIDTH_FRACTION = 0.4
 PREFERRED_MIN_SKEW_WIDTH_FRACTION = 0.4
 
 PlacementPolicy = Literal["hard", "preferred", "auto", "overlay"]
-
-
-@dataclass(frozen=True)
-class RadialBand:
-    inner_px: float
-    outer_px: float
-
-    def __post_init__(self) -> None:
-        inner, outer = sorted((max(0.0, float(self.inner_px)), max(0.0, float(self.outer_px))))
-        object.__setattr__(self, "inner_px", inner)
-        object.__setattr__(self, "outer_px", outer)
-
-    @property
-    def width_px(self) -> float:
-        return max(0.0, float(self.outer_px) - float(self.inner_px))
-
-    @property
-    def center_px(self) -> float:
-        return (float(self.inner_px) + float(self.outer_px)) / 2.0
-
-    def expanded(self, spacing_px: float) -> "RadialBand":
-        spacing = max(0.0, float(spacing_px))
-        return RadialBand(max(0.0, self.inner_px - spacing), self.outer_px + spacing)
-
-    def expanded_sides(self, inner_gap_px: float, outer_gap_px: float) -> "RadialBand":
-        inner_gap = max(0.0, float(inner_gap_px))
-        outer_gap = max(0.0, float(outer_gap_px))
-        return RadialBand(max(0.0, self.inner_px - inner_gap), self.outer_px + outer_gap)
-
-
-@dataclass(frozen=True)
-class CircularFeatureLane:
-    track_id: int
-    strand_group: str
-    inner_px: float
-    center_px: float
-    outer_px: float
-
-    @property
-    def band_px(self) -> RadialBand:
-        return RadialBand(self.inner_px, self.outer_px)
-
-
-@dataclass(frozen=True)
-class CircularFeatureStackMetrics:
-    lane_count: int
-    lane_width_px: float
-    lane_spacing_px: float
-    band_width_px: float
-    center_radius_px: float
-    inner_radius_px: float
-    outer_radius_px: float
-    lane_centers_by_track_id: Mapping[int, float]
-
-
-@dataclass(frozen=True)
-class CircularFeatureLayout:
-    anchor_radius_px: float
-    width_px: float
-    lanes_by_track_id: Mapping[int, CircularFeatureLane]
-    primary_band_px: RadialBand
-    all_band_px: RadialBand
-    stack_metrics: CircularFeatureStackMetrics | None = None
-
-    def lane_for_track_id(self, track_id: int) -> CircularFeatureLane:
-        if int(track_id) in self.lanes_by_track_id:
-            return self.lanes_by_track_id[int(track_id)]
-        if 0 in self.lanes_by_track_id:
-            return self.lanes_by_track_id[0]
-        return next(iter(self.lanes_by_track_id.values()))
-
-
-@dataclass(frozen=True)
-class CircularAxisLayout:
-    radius_px: float
-    stroke_width_px: float
-
-
-@dataclass(frozen=True)
-class CircularTickLayout:
-    anchor_radius_px: float
-    tick_band_px: RadialBand
-    label_band_px: RadialBand | None
-    reserved_band_px: RadialBand
-    track_preset: str
-    label_side: str
-    tick_side: str
-    tick_length_px: float | None
-
-
-@dataclass(frozen=True)
-class CircularFeatureLabelLayout:
-    side: str
-    reserved_band_px: RadialBand
-    labels: tuple[Mapping[str, Any], ...] = ()
-
-
-CircularSlotPayload: TypeAlias = CircularFeatureLayout | CircularTickLayout | CircularFeatureLabelLayout
-
-
-@dataclass(frozen=True)
-class CircularResolvedSlot:
-    slot_index: int
-    id: str
-    renderer: str
-    side: str
-    z: int
-    anchor_radius_px: float | None
-    anchor_offset_px: float | None
-    requested_width_px: float | None
-    resolved_width_px: float | None
-    packing_band_px: RadialBand | None
-    draw_band_px: RadialBand | None
-    reserved_band_px: RadialBand | None
-    inner_gap_px: float
-    outer_gap_px: float
-    params: Mapping[str, Any]
-    payload: CircularSlotPayload | None = None
-    explicit_anchor: bool = False
-    explicit_width: bool = False
-    compressed: bool = False
-
-    @property
-    def center_radius_px(self) -> float:
-        if self.draw_band_px is not None:
-            return float(self.draw_band_px.center_px)
-        return float(self.anchor_radius_px or 0.0)
-
-    @property
-    def draw_inner_radius_px(self) -> float:
-        return float(self.draw_band_px.inner_px) if self.draw_band_px is not None else 0.0
-
-    @property
-    def draw_outer_radius_px(self) -> float:
-        return float(self.draw_band_px.outer_px) if self.draw_band_px is not None else 0.0
-
-    @property
-    def reserved_inner_radius_px(self) -> float:
-        return float(self.reserved_band_px.inner_px) if self.reserved_band_px is not None else 0.0
-
-    @property
-    def reserved_outer_radius_px(self) -> float:
-        return float(self.reserved_band_px.outer_px) if self.reserved_band_px is not None else 0.0
-
-    @property
-    def draw_width_px(self) -> float:
-        return float(self.draw_band_px.width_px) if self.draw_band_px is not None else 0.0
-
-    @property
-    def reserved_width_px(self) -> float:
-        return float(self.reserved_band_px.width_px) if self.reserved_band_px is not None else 0.0
-
-
-@dataclass(frozen=True)
-class CircularRadialLayout:
-    axis: CircularAxisLayout
-    slots: tuple[CircularResolvedSlot, ...]
-    definition_reserved_band_px: RadialBand | None
-    outer_content_radius_px: float
-
-    @property
-    def features(self) -> CircularFeatureLayout | None:
-        for slot in self.slots:
-            if slot.renderer == "features" and isinstance(slot.payload, CircularFeatureLayout):
-                return slot.payload
-        return None
-
-    @property
-    def ticks(self) -> CircularTickLayout | None:
-        for slot in self.slots:
-            if slot.renderer == "ticks" and isinstance(slot.payload, CircularTickLayout):
-                return slot.payload
-        return None
-
-    @property
-    def tracks(self) -> tuple[CircularResolvedSlot, ...]:
-        return tuple(slot for slot in self.slots if slot.renderer not in {"features", "ticks", "feature_labels"})
 
 
 @dataclass(frozen=True)
@@ -251,23 +86,6 @@ class _RadialSlotIntent:
     reserve: bool
     placement_policy: PlacementPolicy
     params: Mapping[str, Any]
-
-
-def band_union(bands: Sequence[RadialBand]) -> RadialBand | None:
-    non_empty = [band for band in bands if band.width_px > LAYOUT_EPSILON]
-    if not non_empty:
-        return None
-    return RadialBand(
-        min(float(band.inner_px) for band in non_empty),
-        max(float(band.outer_px) for band in non_empty),
-    )
-
-
-def bands_overlap(a: RadialBand, b: RadialBand) -> bool:
-    return (
-        float(a.inner_px) < (float(b.outer_px) - LAYOUT_EPSILON)
-        and float(a.outer_px) > (float(b.inner_px) + LAYOUT_EPSILON)
-    )
 
 
 def _band_from_center_width(center_px: float, width_px: float) -> RadialBand:
@@ -305,9 +123,18 @@ def _preset_from_lane_direction(lane_direction: str | None) -> str:
     return "tuckin"
 
 
-def _feature_track_ids(feature_dict: Mapping[str, Any] | None) -> tuple[int, ...]:
+def _feature_track_ids(
+    feature_dict: Mapping[str, Any] | None,
+    *,
+    strandedness: bool = False,
+    include_nominal_lanes: bool = False,
+) -> tuple[int, ...]:
     if not feature_dict:
-        return (0,)
+        return (
+            (0, -1)
+            if include_nominal_lanes and strandedness
+            else (0,)
+        )
     track_ids = {
         int(getattr(feature_object, "feature_track_id", 0))
         for feature_object in feature_dict.values()
@@ -471,6 +298,7 @@ def build_circular_feature_layout(
     strandedness: bool,
     anchor_radius_px: float | None = None,
     lane_spacing_px: float | None = None,
+    include_nominal_lanes: bool = False,
 ) -> CircularFeatureLayout | None:
     width = max(0.0, float(width_px))
     direction = (
@@ -478,7 +306,11 @@ def build_circular_feature_layout(
         if lane_direction is not None
         else _lane_direction_from_legacy_track_type(track_type)
     )
-    track_ids = _feature_track_ids(feature_dict)
+    track_ids = _feature_track_ids(
+        feature_dict,
+        strandedness=bool(strandedness),
+        include_nominal_lanes=include_nominal_lanes,
+    )
     metrics = measure_circular_feature_stack(
         axis_radius_px=float(axis_radius_px),
         lane_width_px=width,
@@ -517,23 +349,6 @@ def build_circular_feature_layout(
     )
 
 
-def feature_radii_for_object(
-    feature_object: Any,
-    feature_layout: CircularFeatureLayout,
-) -> tuple[float, float, float]:
-    lane = feature_layout.lane_for_track_id(int(getattr(feature_object, "feature_track_id", 0)))
-    return float(lane.inner_px), float(lane.center_px), float(lane.outer_px)
-
-
-def feature_radii_for_coordinate(
-    feature_object: Any,
-    coordinate: Any,
-    feature_layout: CircularFeatureLayout,
-) -> tuple[float, float, float]:
-    del coordinate
-    return feature_radii_for_object(feature_object, feature_layout)
-
-
 def _tick_layout_from_params(
     *,
     axis_radius_px: float,
@@ -563,7 +378,7 @@ def _tick_layout_from_params(
             total_len=int(total_length),
             size="large",
             track_type=tick_preset,
-            strandedness=bool(cfg.canvas.strandedness),
+            strandedness=canvas_config.profile.strandedness,
             tick_track_channel_override=tick_track_channel_override,
             tick_side=tick_side,
             tick_length_px=tick_length_px,
@@ -576,7 +391,7 @@ def _tick_layout_from_params(
         center_radius_px=float(anchor_radius_px),
         total_len=int(total_length),
         track_type=tick_preset,
-        strandedness=bool(cfg.canvas.strandedness),
+        strandedness=canvas_config.profile.strandedness,
         font_size=float(cfg.objects.ticks.tick_labels.font_size),
         font_family=str(cfg.objects.text.font_family),
         dpi=int(canvas_config.dpi),
@@ -628,21 +443,6 @@ def _default_spacing_px(axis_radius_px: float) -> float:
     return max(1.0, 0.01 * float(axis_radius_px))
 
 
-def _preferred_anchor_radius_px(params: Mapping[str, Any], axis_radius_px: float) -> float | None:
-    raw = params.get("_preferred_anchor_radius")
-    if raw is None:
-        return None
-    if hasattr(raw, "resolve"):
-        try:
-            return float(raw.resolve(float(axis_radius_px)))
-        except (TypeError, ValueError):
-            return None
-    try:
-        return float(raw)
-    except (TypeError, ValueError):
-        return None
-
-
 def _slot_intents(
     slots: Sequence[CircularTrackSlot],
     *,
@@ -656,9 +456,10 @@ def _slot_intents(
     for slot in normalize_circular_track_slots(slots):
         radius_px = slot.radius.resolve(axis_radius_px) if slot.radius is not None else None
         preferred_anchor_px = (
-            _preferred_anchor_radius_px(slot.params, axis_radius_px)
+            slot.preferred_anchor_radius.resolve(axis_radius_px)
             if (
                 radius_px is None
+                and slot.preferred_anchor_radius is not None
                 and slot.id in preferred_ids
                 and slot.side == "inside"
                 and slot.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
@@ -670,8 +471,8 @@ def _slot_intents(
             width_px = _default_width_px(slot.renderer, canvas_config=canvas_config, cfg=cfg)
         default_gap_px = _default_spacing_px(axis_radius_px)
         spacing_px = (
-            float(slot.spacing.resolve(axis_radius_px))
-            if slot.spacing is not None
+            float(slot.legacy_spacing.resolve(axis_radius_px))
+            if slot.legacy_spacing is not None
             else default_gap_px
         )
         inner_gap_px = (
@@ -721,10 +522,10 @@ def _slot_intents(
                 width_px=max(0.0, float(width_px)),
                 explicit_anchor=explicit_anchor,
                 explicit_width=slot.width is not None,
-                explicit_spacing=slot.spacing is not None,
+                explicit_spacing=slot.legacy_spacing is not None,
                 spacing_px=max(0.0, float(legacy_spacing_px)),
-                explicit_inner_gap=slot.spacing is not None or slot.inner_gap_px is not None,
-                explicit_outer_gap=slot.spacing is not None or slot.outer_gap_px is not None,
+                explicit_inner_gap=slot.legacy_spacing is not None or slot.inner_gap_px is not None,
+                explicit_outer_gap=slot.legacy_spacing is not None or slot.outer_gap_px is not None,
                 inner_gap_px=max(0.0, float(inner_gap_px)),
                 outer_gap_px=max(0.0, float(outer_gap_px)),
                 z=slot.z,
@@ -763,7 +564,7 @@ def _measure_radial_slot(
             width_px=resolved_width,
             track_type=str(feature_preset) if feature_preset is not None else None,
             lane_direction=str(intent.params.get("lane_direction", "inside")),
-            strandedness=bool(cfg.canvas.strandedness),
+            strandedness=canvas_config.profile.strandedness,
             anchor_radius_px=anchor_radius_px,
             lane_spacing_px=float(intent.spacing_px),
         )
@@ -1905,7 +1706,6 @@ def resolve_circular_radial_layout(
     *,
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
-    cfg: GbdrawConfig,
     slots: Sequence[CircularTrackSlot],
     feature_dict: Mapping[str, Any] | None = None,
     show_features: bool = True,
@@ -1917,6 +1717,7 @@ def resolve_circular_radial_layout(
     depth_config: DepthConfigurator | None = None,
 ) -> CircularRadialLayout:
     del show_features, show_ticks, feature_track_ratio_factor_override
+    cfg = canvas_config.profile.config
     axis_radius_px = float(canvas_config.radius)
     axis = CircularAxisLayout(
         radius_px=axis_radius_px,
@@ -2302,12 +2103,23 @@ def resolve_circular_radial_layout(
             if anchor_band is not None
             else float(anchor.anchor_radius_px or axis_radius_px)
         )
-        width = max(0.0, float(resolved.resolved_width_px or intent.width_px))
+        cover_anchor = str(intent.params.get("cover_anchor", "false")).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        width = (
+            float(anchor_band.width_px)
+            if cover_anchor and anchor_band is not None
+            else max(0.0, float(resolved.resolved_width_px or intent.width_px))
+        )
         draw_band = _band_from_center_width(anchor_radius, width)
         anchored = replace(
             resolved,
             anchor_radius_px=anchor_radius,
             anchor_offset_px=anchor_radius - axis_radius_px,
+            resolved_width_px=width,
             packing_band_px=None,
             draw_band_px=draw_band,
             reserved_band_px=None,
@@ -2334,68 +2146,7 @@ def resolve_circular_radial_layout(
     )
 
 
-def feature_band_bounds_px(feature_layout: CircularFeatureLayout | None) -> tuple[float, float] | None:
-    if feature_layout is None:
-        return None
-    return float(feature_layout.all_band_px.inner_px), float(feature_layout.all_band_px.outer_px)
-
-
-def feature_radius_intervals(
-    feature_dict: Mapping[str, Any],
-    total_length: int,
-    feature_layout: CircularFeatureLayout,
-) -> list[tuple[float, float, float, float]]:
-    if total_length <= 0:
-        return []
-
-    intervals: list[tuple[float, float, float, float]] = []
-    total_length_float = float(total_length)
-    for feature_object in feature_dict.values():
-        lane = feature_layout.lane_for_track_id(int(getattr(feature_object, "feature_track_id", 0)))
-        feature_location_list = getattr(feature_object, "location", [])
-        list_of_coordinates = getattr(feature_object, "coordinates", [])
-
-        for coordinate_idx, coordinate in enumerate(list_of_coordinates):
-            if (
-                coordinate_idx < len(feature_location_list)
-                and getattr(feature_location_list[coordinate_idx], "kind", None) == "line"
-            ):
-                continue
-
-            coordinate_start_raw = int(coordinate.start)
-            coordinate_end_raw = int(coordinate.end)
-            if coordinate_start_raw == coordinate_end_raw:
-                continue
-
-            coordinate_start = float(coordinate_start_raw % total_length)
-            coordinate_end = float(coordinate_end_raw % total_length)
-            if coordinate_end_raw > coordinate_start_raw and coordinate_end_raw <= total_length:
-                coordinate_end = float(coordinate_end_raw)
-
-            if coordinate_start < coordinate_end:
-                intervals.append((coordinate_start, coordinate_end, lane.inner_px, lane.outer_px))
-            else:
-                intervals.append((coordinate_start, total_length_float, lane.inner_px, lane.outer_px))
-                intervals.append((0.0, coordinate_end, lane.inner_px, lane.outer_px))
-    return intervals
-
-
 __all__ = [
-    "RadialBand",
-    "CircularFeatureLane",
-    "CircularFeatureLayout",
-    "CircularAxisLayout",
-    "CircularTickLayout",
-    "CircularFeatureLabelLayout",
-    "CircularResolvedSlot",
-    "CircularSlotPayload",
-    "CircularRadialLayout",
-    "band_union",
-    "bands_overlap",
     "build_circular_feature_layout",
-    "feature_band_bounds_px",
-    "feature_radii_for_coordinate",
-    "feature_radii_for_object",
-    "feature_radius_intervals",
     "resolve_circular_radial_layout",
 ]

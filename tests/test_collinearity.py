@@ -15,11 +15,11 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.analysis.collinearity as collinearity_module
+import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
-    CollinearityParameters,
     CollinearityResult,
     LosslessCollinearityParameters,
     build_collinearity_blocks_from_hits,
@@ -35,14 +35,21 @@ from gbdraw.analysis.collinearity import (
     normalize_collinearity_search_scope,
     orthogroup_edges_to_lossless_collinearity_anchors,
 )
-from gbdraw.api import assemble_linear_diagram_from_records
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.diagram import assemble_linear_diagram_from_records
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
     convert_protein_hits_to_genomic_links,
     extract_cds_proteins,
     select_rbh_orthogroup_edges_from_directional_hits,
 )
+from gbdraw.canvas import LinearCanvasConfigurator
+from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
+from gbdraw.configurators import (
+    LegendDrawingConfigurator,
+    LegendMeasurement,
+)
 from gbdraw.configurators.blast import BlastMatchConfigurator
 from gbdraw.core.color import interpolate_color
 from gbdraw.core.text import calculate_bbox_dimensions
@@ -52,6 +59,37 @@ from gbdraw.legend.table import prepare_legend_table
 from gbdraw.render.groups.linear.legend import LegendGroup
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 from gbdraw.exceptions import ValidationError
+
+
+def _linear_legend_measurement(
+    legend_position: str,
+    legend_table: dict[str, dict[str, object]],
+) -> tuple[LinearCanvasConfigurator, LegendMeasurement, GbdrawConfig]:
+    cfg = GbdrawConfig.from_dict(
+        load_config_toml("gbdraw.data", "config.toml")
+    )
+    profile = LinearRenderProfile(cfg)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=1_000,
+        profile=profile,
+        legend=legend_position,
+    )
+    configurator = LegendDrawingConfigurator(
+        color_table=None,
+        default_colors=None,
+        selected_features_set=[],
+        profile=profile,
+        gc_config=None,
+        skew_config=None,
+        feature_config=None,
+        canvas_config=canvas_config,
+    )
+    return (
+        canvas_config,
+        configurator.measure_legend(legend_table, canvas_config),
+        cfg,
+    )
 
 
 def _record(record_id: str, features: list[SeqFeature]) -> SeqRecord:
@@ -222,30 +260,31 @@ def test_deduplicate_unit_pair_anchors_keeps_strongest_hit() -> None:
 
 
 @pytest.mark.linear
-def test_collinearity_parameters_validates_block_evalue() -> None:
-    CollinearityParameters(block_evalue=None).validate()
-    CollinearityParameters(block_evalue=0).validate()
-    CollinearityParameters(block_evalue=1e-3).validate()
+def test_lossless_collinearity_parameters_validate_domains() -> None:
+    LosslessCollinearityParameters().validate()
 
-    with pytest.raises(ValidationError, match="collinear_block_evalue"):
-        CollinearityParameters(block_evalue=-1).validate()
+    with pytest.raises(ValidationError, match="collinear_max_unit_gap"):
+        LosslessCollinearityParameters(max_unit_gap=-1).validate()
+    with pytest.raises(ValidationError, match="collinear_merge_orientation"):
+        LosslessCollinearityParameters(merge_orientation="invalid").validate()  # type: ignore[arg-type]
 
 
 @pytest.mark.linear
-def test_collinearity_blocks_are_called_without_block_evalue_acceptance() -> None:
+def test_collinearity_blocks_are_called_with_lossless_parameters() -> None:
     anchors = [_anchor(index, index) for index in range(8)]
     result = call_collinearity_blocks(
         anchors,
-        params=CollinearityParameters(min_anchors=5, max_gene_gap=1),
+        params=LosslessCollinearityParameters(min_anchors=5, max_unit_gap=1),
     )
 
     assert len(result.blocks) == 1
-    assert result.blocks[0].kind == "syntenic"
+    assert result.blocks[0].kind == "cluster"
     assert result.blocks[0].block_evalue is None
 
 
 @pytest.mark.linear
 def test_collinearity_block_evalue_uses_genomic_coordinates_not_unit_order() -> None:
+    assert "calculate_collinearity_block_evalue" in collinearity_module.__all__
     positions = [100, 110, 120, 130, 1100]
     anchors = [
         _anchor(
@@ -281,7 +320,7 @@ def test_collinearity_block_evalue_uses_genomic_coordinates_not_unit_order() -> 
 def test_pairwise_singleton_anchor_is_emitted_by_default() -> None:
     result = call_collinearity_blocks(
         [_anchor(0, 0)],
-        params=CollinearityParameters(),
+        params=LosslessCollinearityParameters(),
     )
 
     assert len(result.blocks) == 1
@@ -294,7 +333,7 @@ def test_min_anchors_drops_singleton_blocks() -> None:
     anchor = _anchor(0, 0)
     result = call_collinearity_blocks(
         [anchor],
-        params=CollinearityParameters(min_anchors=2),
+        params=LosslessCollinearityParameters(min_anchors=2),
     )
 
     assert result.blocks == ()
@@ -303,7 +342,11 @@ def test_min_anchors_drops_singleton_blocks() -> None:
 
 @pytest.mark.linear
 def test_native_block_caller_detects_plus_and_minus_orientation() -> None:
-    params = CollinearityParameters(min_anchors=3, max_gene_gap=1, block_evalue=None)
+    params = LosslessCollinearityParameters(
+        min_anchors=3,
+        max_unit_gap=1,
+        merge_orientation="order",
+    )
 
     plus = call_collinearity_blocks([_anchor(0, 0), _anchor(1, 1), _anchor(2, 2)], params=params)
     minus = call_collinearity_blocks([_anchor(0, 2), _anchor(1, 1), _anchor(2, 0)], params=params)
@@ -317,7 +360,7 @@ def test_native_block_caller_detects_plus_and_minus_orientation() -> None:
 
 @pytest.mark.linear
 def test_single_anchor_block_orientation_uses_feature_strands() -> None:
-    params = CollinearityParameters(min_anchors=1, max_gene_gap=0, block_evalue=2)
+    params = LosslessCollinearityParameters(min_anchors=1, max_unit_gap=0)
 
     same_strand = call_collinearity_blocks(
         [_anchor(0, 0, query_strand=1, subject_strand=1)],
@@ -407,11 +450,9 @@ def test_build_blocks_from_hits_one_to_one_removes_query_to_many_noise() -> None
         [_hit_row("sb0", "qa0", bitscore=300), _hit_row("sb1", "qa0", bitscore=250)],
         columns=COMPARISON_COLUMNS,
     )
-    params = CollinearityParameters(
+    params = LosslessCollinearityParameters(
         min_anchors=1,
-        max_gene_gap=0,
-        nearby_duplicate_window=0,
-        block_evalue=2,
+        max_unit_gap=0,
     )
 
     all_hits = build_collinearity_blocks_from_hits(
@@ -465,11 +506,9 @@ def test_build_blocks_from_hits_rbh_uses_reverse_best_hits() -> None:
         [_hit_row("sb0", "qa0", bitscore=300), _hit_row("sb1", "qa0", bitscore=400)],
         columns=COMPARISON_COLUMNS,
     )
-    params = CollinearityParameters(
+    params = LosslessCollinearityParameters(
         min_anchors=1,
-        max_gene_gap=0,
-        nearby_duplicate_window=0,
-        block_evalue=2,
+        max_unit_gap=0,
     )
 
     one_to_one = build_collinearity_blocks_from_hits(
@@ -642,7 +681,7 @@ def test_build_blocks_from_hits_maps_proteins_to_units() -> None:
         [hits],
         extraction,
         records=records,
-        params=CollinearityParameters(min_anchors=3, max_gene_gap=1, block_evalue=None),
+        params=LosslessCollinearityParameters(min_anchors=3, max_unit_gap=1),
         anchor_mode="one_to_one",
         reverse_hits_by_pair=[reverse_hits],
     )
@@ -1715,13 +1754,13 @@ def test_native_tsv_parser_resolves_records_and_units_and_writer_round_trips() -
     result = parse_native_collinearity_tsv(
         text,
         records,
-        params=CollinearityParameters(min_anchors=2),
+        params=LosslessCollinearityParameters(min_anchors=2),
     )
     written = write_native_collinearity_tsv(result)
     reparsed = parse_native_collinearity_tsv(
         StringIO(written).getvalue(),
         records,
-        params=CollinearityParameters(min_anchors=2),
+        params=LosslessCollinearityParameters(min_anchors=2),
     )
 
     assert result.blocks[0].block_id == "block_a"
@@ -1817,53 +1856,36 @@ def test_native_tsv_parser_rejects_conflicting_block_evalues() -> None:
         parse_native_collinearity_tsv(
             text,
             records,
-            params=CollinearityParameters(min_anchors=2),
+            params=LosslessCollinearityParameters(min_anchors=2),
         )
 
 
 @pytest.mark.linear
-def test_linear_cli_builds_collinearity(
+def test_linear_cli_forwards_collinearity_options(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     records = [_record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"]})]), _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"]})])]
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(linear_cli_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(linear_cli_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "load_default_colors", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(linear_cli_module, "read_feature_visibility_file", lambda _path: None)
-    monkeypatch.setattr(linear_cli_module, "save_figure", lambda _canvas, _formats: None)
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
 
-    def fake_build(*_args, **kwargs):
-        captured["collinearity_params"] = kwargs["params"]
-        captured["unit_mode"] = kwargs["unit_mode"]
-        captured["edge_mode"] = kwargs["edge_mode"]
-        captured["search_scope"] = kwargs["search_scope"]
-        captured["orthogroup_membership_mode"] = kwargs["orthogroup_membership_mode"]
-        captured["orthogroup_member_max_hits"] = kwargs["orthogroup_member_max_hits"]
-        captured["max_paralog_links_per_orthogroup"] = kwargs["max_paralog_links_per_orthogroup"]
-        anchor = _anchor(0, 0)
-        return CollinearityResult(
-            blocks=(
-                CollinearityBlock(
-                    block_id="block_0001",
-                    query_record_index=0,
-                    subject_record_index=1,
-                    orientation="plus",
-                    score=50.0,
-                    anchors=(anchor,),
-                ),
-            )
+    def fake_render_request(request, **_kwargs):
+        resolved = request_render_module.resolve_request(request)
+        captured["canonical_request"] = resolved
+        return SimpleNamespace(
+            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
+            interactive_context=None,
+            records=tuple(item.source.record for item in resolved.records),
+            losat_cache_entries=(),
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=None,
+            request=resolved,
         )
 
-    def fake_assemble(*_args, **kwargs):
-        captured["protein_comparisons"] = kwargs.get("protein_comparisons")
-        captured["protein_blastp_mode"] = kwargs.get("protein_blastp_mode")
-        return kwargs.get("canvas") or object()
-
-    monkeypatch.setattr(linear_cli_module, "build_orthogroup_collinearity_blocks", fake_build)
-    monkeypatch.setattr(linear_cli_module, "assemble_linear_diagram_from_records", fake_assemble)
+    monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
 
     linear_cli_module.linear_main(
         [
@@ -1889,22 +1911,22 @@ def test_linear_cli_builds_collinearity(
         ]
     )
 
-    params = captured["collinearity_params"]
+    options = captured["canonical_request"].options
+    params = options.collinearity_params
     assert isinstance(params, LosslessCollinearityParameters)
     assert params.min_anchors == 1
     assert params.max_unit_gap == 0
     assert params.max_diagonal_drift == 0
     assert params.max_conflicts == 3
-    assert captured["unit_mode"] == "cds"
-    assert captured["edge_mode"] == "rbh"
-    assert captured["search_scope"] == "all"
-    assert captured["orthogroup_membership_mode"] == "anchor_core_v1"
-    assert captured["orthogroup_member_max_hits"] == 5
-    assert captured["max_paralog_links_per_orthogroup"] == 2
-    assert captured["protein_blastp_mode"] == "none"
-    comparisons = captured["protein_comparisons"]
-    assert isinstance(comparisons, list)
-    assert comparisons[0].iloc[0]["collinearity_color_mode"] == "orientation"
+    assert options.collinearity_unit_mode == "cds"
+    assert options.collinearity_anchor_mode == "rbh"
+    assert options.collinearity_search_scope == "all"
+    assert options.orthogroup_membership_mode == "anchor_core_v1"
+    assert options.orthogroup_member_max_hits == 5
+    assert options.collinear_max_paralog_links_per_orthogroup == 2
+    assert options.protein_blastp_mode == "collinear"
+    assert options.protein_comparisons is None
+    assert options.collinearity_color_mode == "orientation"
 
 
 @pytest.mark.linear
@@ -1983,6 +2005,30 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
         assert f"--{option_name}" in help_text
     for option_name in hidden_option_names:
         assert f"--{option_name}" not in help_text
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    "option_args",
+    [
+        ["--losatp-bin", "losatp"],
+        ["--losatp-threads", "2"],
+        ["--protein-blastp-mode", "pairwise"],
+        ["--collinear-min-anchors", "1"],
+        ["--collinear-max-unit-gap", "0"],
+        ["--collinear-color-mode", "orientation"],
+        ["--keep-definition-left-aligned"],
+        ["--pairwise-match-style", "ribbon"],
+        ["--save-session"],
+        ["--session-output", "session.json"],
+        ["--collinear_max_gene_gap", "3"],
+    ],
+)
+def test_linear_cli_rejects_removed_hidden_aliases(
+    option_args: list[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        linear_cli_module._get_args(["--gbk", "dummy.gb", *option_args])
 
 
 @pytest.mark.linear
@@ -2652,7 +2698,9 @@ def test_blast_configurator_reads_collinearity_colors_from_default_colors() -> N
         identity=0,
         alignment_length=0,
         sequence_length_dict={},
-        config_dict=load_config_toml("gbdraw.data", "config.toml"),
+        profile=LinearRenderProfile(
+            GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+        ),
         default_colors_df=default_colors,
     )
 
@@ -2679,7 +2727,9 @@ def test_blast_configurator_accepts_plus_max_collinearity_color_alias() -> None:
         identity=0,
         alignment_length=0,
         sequence_length_dict={},
-        config_dict=load_config_toml("gbdraw.data", "config.toml"),
+        profile=LinearRenderProfile(
+            GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+        ),
         default_colors_df=default_colors,
     )
 
@@ -2723,6 +2773,9 @@ def test_orientation_collinearity_suppresses_pairwise_identity_legend() -> None:
         [],
         blast_config=blast_config,
         has_blast=True,
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert "Pairwise match identity" not in legend_table
@@ -2766,6 +2819,9 @@ def test_average_identity_collinearity_legend_uses_average_identity_label() -> N
         [],
         blast_config=blast_config,
         has_blast=True,
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert "Average identity" in legend_table
@@ -2821,6 +2877,9 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
         [],
         blast_config=blast_config,
         has_blast=True,
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
     )
 
     assert "Collinear" in legend_table
@@ -2832,18 +2891,6 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
 
 @pytest.mark.linear
 def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted() -> None:
-    config_dict = load_config_toml("gbdraw.data", "config.toml")
-    canvas_config = SimpleNamespace(legend_position="bottom", total_width=800)
-    legend_config = SimpleNamespace(
-        font_family="'Liberation Sans', 'Arial', sans-serif",
-        font_weight="normal",
-        font_size=16.0,
-        color_rect_size=20.0,
-        num_of_columns=1,
-        has_gradient=True,
-        total_feature_legend_width=0.0,
-        pairwise_legend_width=160.0,
-    )
     legend_table = {
         "Collinear": {
             "type": "gradient",
@@ -2863,8 +2910,17 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
         },
     }
 
+    canvas_config, legend_measurement, cfg = _linear_legend_measurement(
+        "bottom",
+        legend_table,
+    )
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
+    legend_group = LegendGroup(
+        canvas_config,
+        legend_measurement,
+        legend_table,
+        cfg=cfg,
+    )
     drawing.add(legend_group.get_group())
     svg_text = drawing.tostring()
 
@@ -2884,25 +2940,18 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
     )
     bar_x, _ = _translate_xy(collinear_bar.get("transform"))
     label_width, _ = calculate_bbox_dimensions(
-        "Collinear", legend_config.font_family, legend_config.font_size, legend_group.dpi
+        "Collinear",
+        legend_measurement.font_family,
+        legend_measurement.font_size,
+        legend_group.dpi,
     )
-    assert bar_x == pytest.approx(label_width + 0.2 * legend_config.color_rect_size)
+    assert bar_x == pytest.approx(
+        label_width + 0.2 * legend_measurement.color_rect_size
+    )
 
 
 @pytest.mark.linear
 def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> None:
-    config_dict = load_config_toml("gbdraw.data", "config.toml")
-    canvas_config = SimpleNamespace(legend_position="right", total_width=800)
-    legend_config = SimpleNamespace(
-        font_family="'Liberation Sans', 'Arial', sans-serif",
-        font_weight="normal",
-        font_size=10.0,
-        color_rect_size=12.0,
-        num_of_columns=1,
-        has_gradient=True,
-        total_feature_legend_width=0.0,
-        pairwise_legend_width=120.0,
-    )
     feature_key = "tyrosine recombinase"
     gradient_key = "Pairwise match identity"
     legend_table = {
@@ -2922,8 +2971,17 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
         },
     }
 
+    canvas_config, legend_measurement, cfg = _linear_legend_measurement(
+        "right",
+        legend_table,
+    )
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
+    legend_group = LegendGroup(
+        canvas_config,
+        legend_measurement,
+        legend_table,
+        cfg=cfg,
+    )
     drawing.add(legend_group.get_group())
     root = ET.fromstring(drawing.tostring())
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -2931,7 +2989,7 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
     vertical_legend = root.find(".//svg:g[@id='legend_vertical']", namespace)
     assert vertical_legend is not None
     feature_legend = vertical_legend.find("svg:g[@id='feature_legend_v']", namespace)
-    pairwise_legend = vertical_legend.find("svg:g[@id='pairwise_legend']", namespace)
+    pairwise_legend = vertical_legend.find("svg:g[@id='pairwise_legend_v']", namespace)
     assert feature_legend is not None
     assert pairwise_legend is not None
 
@@ -2960,11 +3018,17 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
     title_x, _ = _translate_xy(title.get("transform"))
 
     text_width, _ = calculate_bbox_dimensions(
-        feature_key, legend_config.font_family, legend_config.font_size, legend_group.dpi
+        feature_key,
+        legend_measurement.font_family,
+        legend_measurement.font_size,
+        legend_group.dpi,
     )
-    text_x_offset = (22 / 14) * legend_config.color_rect_size
+    text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width
-    pairwise_alignment_width = legend_config.pairwise_legend_width
+    assert legend_measurement.linear_layout is not None
+    gradient_layout = legend_measurement.linear_layout.vertical.gradient
+    assert gradient_layout is not None
+    pairwise_alignment_width = gradient_layout.width
 
     assert feature_width > pairwise_alignment_width
     feature_left = feature_group_x + feature_rect_x
@@ -2978,18 +3042,6 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
 
 @pytest.mark.linear
 def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> None:
-    config_dict = load_config_toml("gbdraw.data", "config.toml")
-    canvas_config = SimpleNamespace(legend_position="right", total_width=800)
-    legend_config = SimpleNamespace(
-        font_family="'Liberation Sans', 'Arial', sans-serif",
-        font_weight="normal",
-        font_size=10.0,
-        color_rect_size=12.0,
-        num_of_columns=1,
-        has_gradient=True,
-        total_feature_legend_width=0.0,
-        pairwise_legend_width=220.0,
-    )
     feature_key = "CDS"
     gradient_key = "Pairwise match identity"
     legend_table = {
@@ -3009,8 +3061,17 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
         },
     }
 
+    canvas_config, legend_measurement, cfg = _linear_legend_measurement(
+        "right",
+        legend_table,
+    )
     drawing = Drawing(debug=False)
-    legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table)
+    legend_group = LegendGroup(
+        canvas_config,
+        legend_measurement,
+        legend_table,
+        cfg=cfg,
+    )
     drawing.add(legend_group.get_group())
     root = ET.fromstring(drawing.tostring())
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -3018,7 +3079,7 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
     vertical_legend = root.find(".//svg:g[@id='legend_vertical']", namespace)
     assert vertical_legend is not None
     feature_legend = vertical_legend.find("svg:g[@id='feature_legend_v']", namespace)
-    pairwise_legend = vertical_legend.find("svg:g[@id='pairwise_legend']", namespace)
+    pairwise_legend = vertical_legend.find("svg:g[@id='pairwise_legend_v']", namespace)
     assert feature_legend is not None
     assert pairwise_legend is not None
     pairwise_entry = pairwise_legend.find(
@@ -3032,11 +3093,17 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
     pairwise_group_x, _ = _translate_xy_or_zero(pairwise_legend.get("transform"))
 
     text_width, _ = calculate_bbox_dimensions(
-        feature_key, legend_config.font_family, legend_config.font_size, legend_group.dpi
+        feature_key,
+        legend_measurement.font_family,
+        legend_measurement.font_size,
+        legend_group.dpi,
     )
-    text_x_offset = (22 / 14) * legend_config.color_rect_size
+    text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width
-    pairwise_alignment_width = legend_config.pairwise_legend_width
+    assert legend_measurement.linear_layout is not None
+    gradient_layout = legend_measurement.linear_layout.vertical.gradient
+    assert gradient_layout is not None
+    pairwise_alignment_width = gradient_layout.width
     expected_feature_offset = (pairwise_alignment_width - feature_width) / 2
     title_x, _ = _translate_xy(title.get("transform"))
 
@@ -3066,9 +3133,12 @@ def test_blast_file_collinearity_metadata_drives_orientation_identity_legend(mon
 
     svg_text = assemble_linear_diagram_from_records(
         [_record("record_a", []), _record("record_b", [])],
+        cfg=apply_config_overrides(
+            None,
+            {"canvas.show_gc": False, "canvas.show_skew": False},
+        ),
         blast_files=["/virtual/blast_0.txt"],
         legend="bottom",
-        config_overrides={"show_gc": False, "show_skew": False},
         bitscore=0,
         identity=0,
         evalue=1,

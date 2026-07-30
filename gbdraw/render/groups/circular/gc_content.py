@@ -23,20 +23,18 @@ class GcContentGroup:
         radius: float,
         track_width: float,
         gc_config: GcContentConfigurator,
-        config_dict: dict,
         track_id: str,
+        *,
+        cfg: GbdrawConfig,
         norm_factor_override: float | None = None,
         group_id: str | None = None,
-        cfg: GbdrawConfig | None = None,
     ) -> None:
         self.group_id = group_id or "gc_content"
-        self.gc_group = Group(id=self.group_id)
+        self.gc_group = Group(id=self.group_id, debug=False)
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record
         self.record_len: int = len(self.gb_record.seq)
-        self.config_dict: dict = config_dict
-        cfg = cfg or GbdrawConfig.from_dict(config_dict)
         self.gc_df: DataFrame = gc_df
         self.track_width: float = track_width
         self.length_threshold = cfg.labels.length_threshold.circular

@@ -7,18 +7,36 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'services');
 const appSourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
+const webSourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-history-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
+await writeFile(
+  join(tempDir, 'web-ux-profile.js'),
+  await readFile(join(webSourceDir, 'web-ux-profile.js'), 'utf8'),
+  'utf8'
+);
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await mkdir(join(tempDir, 'app'), { recursive: true });
-for (const filename of ['history.js', 'history-files.js', 'history-snapshot.js', 'json-clone.js', 'svg-serialization.js']) {
+for (const filename of [
+  'canonical-comparisons.js',
+  'history.js',
+  'history-files.js',
+  'history-snapshot.js',
+  'json-clone.js',
+  'svg-serialization.js'
+]) {
   await writeFile(
     join(tempDir, 'services', filename),
     await readFile(join(sourceDir, filename), 'utf8'),
     'utf8'
   );
 }
-for (const filename of ['feature-selector.js', 'feature-visibility.js']) {
+for (const filename of [
+  'feature-selector.js',
+  'feature-visibility.js',
+  'layout-preferences.js',
+  'plot-title-position.js'
+]) {
   await writeFile(
     join(tempDir, 'app', filename),
     await readFile(join(appSourceDir, filename), 'utf8'),
@@ -34,6 +52,13 @@ const { createHistorySnapshotService } = await import(
 
 const ref = (value) => ({ value });
 const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastModified: 1 });
+const createLayoutPreferences = () => ({
+  circular: {
+    single: { legend: 'left', plotTitlePosition: 'none' },
+    multi: { legend: null, plotTitlePosition: null }
+  },
+  linear: { legend: 'bottom', plotTitlePosition: 'bottom' }
+});
 
 {
   let value = 0;
@@ -303,6 +328,9 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
 {
   const fileStore = createHistoryFileStore();
   const file = makeFile('restore.gb', 25);
+  const proteinTable = makeFile('resolved-protein.tsv', 40);
+  const orthogroupsJson = makeFile('orthogroups.json', 50);
+  const collinearityJson = makeFile('collinearity.json', 60);
   const state = {
     form: { prefix: 'before' },
     adv: { features: ['CDS'] },
@@ -312,7 +340,34 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
       c_fasta: null,
       c_depth: null,
       c_conservation_blasts: [],
-      c_conservation_fastas: [],
+      c_conservation_blasts_source: 'losat-cache',
+      c_conservation_fastas: [null, makeFile('comparison-2.fa', 30)],
+      linearCanonicalComparisons: [
+        {
+          kind: 'precomputedProteinComparison',
+          encoding: 'canonicalTsv',
+          queryRecordIndex: 0,
+          subjectRecordIndex: 2,
+          file: proteinTable
+        },
+        {
+          kind: 'orthogroupResult',
+          encoding: 'canonicalJson',
+          file: orthogroupsJson
+        },
+        {
+          kind: 'collinearityResult',
+          encoding: 'canonicalJson',
+          valueKind: 'blocks',
+          file: collinearityJson
+        },
+        {
+          kind: 'generatedProteinComparison',
+          mode: 'none',
+          pairs: [],
+          settings: { alignOrthogroupFeature: 'feature-anchor' }
+        }
+      ],
       d_color: null,
       t_color: null,
       blacklist: null,
@@ -327,6 +382,7 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
     lInputType: ref('gb'),
     downloadDpi: ref(300),
     canvasPadding: { top: 1, right: 2, bottom: 3, left: 4 },
+    layoutPreferences: createLayoutPreferences(),
     extractedFeatures: ref([]),
     featureRecordIds: ref([]),
     selectedFeatureRecordIdx: ref(0),
@@ -365,6 +421,8 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
   const snapshot = await snapshots.buildHistorySnapshot();
   state.form.prefix = 'after';
   state.files.c_gb = null;
+  state.files.c_conservation_blasts_source = null;
+  state.files.linearCanonicalComparisons = [];
   state.results.value = [{ name: 'r2', content: '<svg id="b"></svg>' }];
   state.featureColorOverrides.f1.color = '#222222';
 
@@ -373,6 +431,30 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
   await snapshots.applyHistorySnapshot(snapshot);
   assert.equal(state.form.prefix, 'before');
   assert.equal(state.files.c_gb.name, 'restore.gb');
+  assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
+  assert.equal(state.files.c_conservation_fastas.length, 2);
+  assert.equal(state.files.c_conservation_fastas[0], null);
+  assert.equal(state.files.c_conservation_fastas[1].name, 'comparison-2.fa');
+  assert.equal(
+    state.files.linearCanonicalComparisons[0].file.name,
+    'resolved-protein.tsv'
+  );
+  assert.equal(
+    state.files.linearCanonicalComparisons[1].file.name,
+    'orthogroups.json'
+  );
+  assert.equal(
+    state.files.linearCanonicalComparisons[2].valueKind,
+    'blocks'
+  );
+  assert.equal(
+    state.files.linearCanonicalComparisons[2].file.name,
+    'collinearity.json'
+  );
+  assert.equal(
+    state.files.linearCanonicalComparisons[3].settings.alignOrthogroupFeature,
+    'feature-anchor'
+  );
   assert.equal(state.results.value[0].name, 'r1');
   assert.equal(state.featureColorOverrides.f1.color, '#111111');
   assert.deepEqual(state.featureVisibilityManualRules, []);
@@ -416,6 +498,7 @@ const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastMod
     lInputType: ref('gb'),
     downloadDpi: ref(300),
     canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 },
+    layoutPreferences: createLayoutPreferences(),
     extractedFeatures: ref([]),
     featureRecordIds: ref([]),
     selectedFeatureRecordIdx: ref(0),

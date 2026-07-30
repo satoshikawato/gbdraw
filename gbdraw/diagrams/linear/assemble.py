@@ -34,7 +34,10 @@ from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
 )
 from ...analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ...config.models import (  # type: ignore[reportMissingImports]
+    GbdrawConfig,
+    LinearRenderProfile,
+)
 from ...exceptions import ValidationError
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
@@ -42,6 +45,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     GcContentConfigurator,
     GcSkewConfigurator,
     LegendDrawingConfigurator,
+    LegendMeasurement,
 )
 from ...configurators.gc import _slot_skew_config
 from ...core.text import calculate_bbox_dimensions
@@ -57,21 +61,26 @@ from ...legend.table import (  # type: ignore[reportMissingImports]
     configure_pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
 )
-from ...render.export import save_figure  # type: ignore[reportMissingImports]
 from ...layout.linear import (  # type: ignore[reportMissingImports]
+    AxisGapResolution,
+    CollisionBand,
     LinearFeatureLaneGeometry,
+    LinearRecordRenderContext,
+    LinearResolvedTrack,
+    LinearTrackLayout,
     VerticalBand,
     measure_linear_feature_lanes,
     measure_linear_label_band,
+    resolve_axis_gap,
 )
 from ...layout.linear_multi_record import (
     LinearRecordMeasurement,
     LinearRecordPlacement,
     RecordKey,
-    resolve_record_row_positions,
     solve_linear_layout,
     stable_record_keys,
 )
+from ...layout.record_placement import resolve_record_row_positions
 from ...linear_comparison import (
     LinearComparison,
     merge_linear_comparisons,
@@ -90,10 +99,13 @@ from ...annotations import (
     ResolvedAnnotationBundle,
     ResolvedAnnotationTrack,
     annotation_track_params_from_mapping,
+    feature_underlay_anchor_slot_id,
+    feature_underlay_slot_id,
     layout_annotation_track,
-    resolve_annotations,
+    merge_feature_underlays,
     sync_annotation_legend_entries,
 )
+from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.linear.annotations import draw_linear_annotation_track
 
 from .builders import (
@@ -115,17 +127,21 @@ from .orthogroup_alignment import (
 from .precalc import (
     FeatureDict,
     _precalculate_definition_metrics,
-    _precalculate_feature_dicts,
+    _precalculate_feature_layers,
     _precalculate_label_dimensions,
     _resolve_linear_diagram_label_font_size,
 )
-from ...features.colors import preprocess_color_tables, precompute_used_color_rules  # type: ignore[reportMissingImports]
+from ...features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.ids import make_linear_dom_id
+from ...svg.ids import (
+    definition_group_svg_id,
+    instance_svg_id,
+    record_group_svg_id,
+    track_slot_svg_id,
+)
 from .track_slots import (
     LinearRecordVerticalPlan,
-    LinearResolvedTrack,
     LinearSlotFootprint,
-    LinearTrackLayout,
     resolve_linear_record_vertical_plan,
     resolve_linear_track_layout,
 )
@@ -137,12 +153,36 @@ if TYPE_CHECKING:
     from ...api.options import LinearMultiRecordOptions
 
 
+def _linear_track_slot_dom_id(
+    *,
+    slot_id: str,
+    renderer: str,
+    slot_index: int,
+    record_index: int,
+    record_count: int,
+) -> str:
+    """Return the deterministic DOM ID for one rendered Linear user slot."""
+
+    group_id = track_slot_svg_id(
+        slot_id,
+        renderer=renderer,
+        slot_index=slot_index,
+    )
+    if int(record_count) <= 1:
+        return group_id
+    return instance_svg_id(
+        group_id,
+        ("linear-record", int(record_index), int(record_count)),
+    )
+
+
 def _prepare_linear_annotation_tracks(
     records: list[SeqRecord],
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
     slots: list[LinearTrackSlot] | None,
     *,
     canvas_config: LinearCanvasConfigurator,
+    profile: LinearRenderProfile,
     record_depth_tracks: list[list[DepthTrackSpec]] | None,
 ) -> tuple[
     list[LinearTrackSlot] | None,
@@ -150,50 +190,23 @@ def _prepare_linear_annotation_tracks(
     dict[str, ResolvedAnnotationTrack],
     frozenset[str],
 ]:
-    bundle = (
-        annotations
-        if isinstance(annotations, ResolvedAnnotationBundle)
-        else resolve_annotations(annotations, records, mode="linear")
-    )
-    if not bundle.set_ids and not bundle.annotations:
-        return slots, bundle, {}, frozenset()
-    set_ids = bundle.set_ids or tuple(dict.fromkeys(item.set_id for item in bundle.annotations))
-    if slots is None:
-        slots = default_linear_track_slots(
+    slots, bundle, auto_slot_ids = prepare_annotation_track_slots(
+        annotations,
+        records,
+        slots,
+        mode="linear",
+        default_slots=lambda: default_linear_track_slots(
             show_features=True,
             show_depth=bool(record_depth_tracks),
             depth_track_count=max(1, depth_track_count(record_depth_tracks)),
-            show_gc=bool(canvas_config.show_gc),
-            show_skew=bool(canvas_config.show_skew),
-            track_layout=str(canvas_config.track_layout),
-        )
-        slots = [
-            LinearTrackSlot(
-                id=f"annotations_{index + 1}",
-                renderer="annotations",
-                side="above",
-                params={"set_id": set_id},
-            )
-            for index, set_id in enumerate(set_ids)
-        ] + slots
-
-    requested_set_ids = {
-        str(slot.params.get("set_id", "")).strip()
-        for slot in slots
-        if str(slot.renderer).strip().lower() == "annotations"
-    }
-    unknown = requested_set_ids - set(set_ids)
-    if unknown:
-        raise ValueError(f"Annotation track references unknown set_id(s): {', '.join(sorted(unknown))}")
-    for set_id in set_ids:
-        if set_id not in requested_set_ids:
-            logger.warning("Annotation set %s is not referenced by a linear track slot.", set_id)
-
-    auto_slot_ids = frozenset(
-        slot.id
-        for slot in slots
-        if str(slot.renderer).strip().lower() == "annotations" and slot.height is None
+            show_gc=profile.show_gc,
+            show_skew=profile.show_skew,
+            track_layout=profile.track_layout,
+        ),
+        slot_factory=LinearTrackSlot,
     )
+    if not bundle.set_ids and not bundle.annotations:
+        return slots, bundle, {}, frozenset()
     updated_slots, layouts = _layout_linear_annotation_tracks(
         records,
         slots,
@@ -267,29 +280,57 @@ def _layout_linear_annotation_tracks(
     return updated_slots, layouts
 
 
-def _is_axis_ruler_enabled(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConfig) -> bool:
-    track_layout = str(canvas_config.track_layout).strip().lower()
-    scale_style = str(cfg.objects.scale.style).strip().lower()
-    return (
-        bool(canvas_config.ruler_on_axis)
-        and scale_style == "ruler"
-        and track_layout in {"above", "below"}
+def _add_linear_feature_underlays(
+    records: list[SeqRecord],
+    feature_layers: list,
+    slots: list[LinearTrackSlot],
+    bundle: ResolvedAnnotationBundle,
+    layouts: dict[str, ResolvedAnnotationTrack],
+    auto_slot_ids: frozenset[str],
+    *,
+    canvas_config: LinearCanvasConfigurator,
+) -> tuple[
+    list[LinearTrackSlot],
+    ResolvedAnnotationBundle,
+    dict[str, ResolvedAnnotationTrack],
+    frozenset[str],
+]:
+    merged, set_id = merge_feature_underlays(
+        bundle,
+        [result.underlay_features for result in feature_layers],
+        records,
+        mode="linear",
     )
-
-
-def _feature_track_layout_for_linear_slots(
-    slots: list,
-    fallback: str,
-) -> str:
-    for slot in slots:
-        if slot.renderer != "features":
-            continue
-        if slot.side == "above":
-            return "above"
-        if slot.side == "below":
-            return "below"
-        return "middle"
-    return str(fallback or "middle").strip().lower()
+    if set_id is None:
+        return slots, bundle, layouts, auto_slot_ids
+    anchor_id = feature_underlay_anchor_slot_id(slots)
+    anchor = next(slot for slot in slots if str(slot.id) == anchor_id)
+    slot_id = feature_underlay_slot_id(slots)
+    underlay_slot = LinearTrackSlot(
+        id=slot_id,
+        renderer="annotations",
+        side="overlay",
+        z=int(anchor.z) - 1,
+        params={
+            "set_id": set_id,
+            "marks": ("highlight",),
+            "anchor_slot": anchor_id,
+            "layer": "underlay",
+            "cover_anchor": True,
+            "padding_px": 0.0,
+            "show_labels": False,
+        },
+    )
+    updated_slots = [underlay_slot, *slots]
+    updated_auto_ids = frozenset((*auto_slot_ids, slot_id))
+    updated_slots, updated_layouts = _layout_linear_annotation_tracks(
+        records,
+        updated_slots,
+        merged,
+        canvas_config=canvas_config,
+        auto_slot_ids=updated_auto_ids,
+    )
+    return updated_slots, merged, updated_layouts, updated_auto_ids
 
 
 def _apply_depth_track_heights_to_linear_slots(
@@ -407,11 +448,28 @@ def _serialize_linear_track_slot_geometry(
     layout: LinearTrackLayout,
     record_plans: list[LinearRecordVerticalPlan],
     record_offsets: list[float],
+    record_collision_bands: list[tuple[CollisionBand, ...]],
+    boundary_gap_resolutions: list[AxisGapResolution],
 ) -> dict[str, Any]:
     def band_payload(band: VerticalBand | None, *, axis_y: float) -> dict[str, float] | None:
         if band is None:
             return None
         return {
+            "topPx": float(band.top_y),
+            "bottomPx": float(band.bottom_y),
+            "absoluteTopPx": axis_y + float(band.top_y),
+            "absoluteBottomPx": axis_y + float(band.bottom_y),
+        }
+
+    def collision_payload(
+        band: CollisionBand,
+        *,
+        axis_y: float,
+    ) -> dict[str, float | str]:
+        return {
+            "kind": str(band.kind),
+            "xStartPx": float(band.x_start),
+            "xEndPx": float(band.x_end),
             "topPx": float(band.top_y),
             "bottomPx": float(band.bottom_y),
             "absoluteTopPx": axis_y + float(band.top_y),
@@ -456,6 +514,14 @@ def _serialize_linear_track_slot_geometry(
                     axis_y=axis_y,
                 ),
                 "canvasBand": band_payload(plan.canvas_band, axis_y=axis_y),
+                "collisionBands": [
+                    collision_payload(band, axis_y=axis_y)
+                    for band in (
+                        record_collision_bands[record_index]
+                        if record_index < len(record_collision_bands)
+                        else ()
+                    )
+                ],
                 "slots": slots_payload,
             }
         )
@@ -464,6 +530,25 @@ def _serialize_linear_track_slot_geometry(
         "mode": "linear",
         "source": "resolved",
         "records": records_payload,
+        "axisGapConstraints": [
+            {
+                "boundaryRow": int(boundary),
+                "nextRow": int(boundary + 1),
+                "axisGapPx": float(resolution.axis_gap),
+                "clearGapPx": float(resolution.clear_gap),
+                "currentKind": (
+                    str(resolution.current_band.kind)
+                    if resolution.current_band is not None
+                    else None
+                ),
+                "nextKind": (
+                    str(resolution.next_band.kind)
+                    if resolution.next_band is not None
+                    else None
+                ),
+            }
+            for boundary, resolution in enumerate(boundary_gap_resolutions)
+        ],
     }
 
 
@@ -523,13 +608,17 @@ def _gc_config_matching_linear_depth_axis_font_size(
     return cloned
 
 
-def _axis_ruler_extents(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConfig) -> tuple[float, float]:
+def _axis_ruler_extents(
+    canvas_config: LinearCanvasConfigurator,
+    render_context: LinearRecordRenderContext,
+) -> tuple[float, float]:
     """
     Return (height_above_axis, height_below_axis) required by axis-based ruler labels.
     """
-    if not _is_axis_ruler_enabled(canvas_config, cfg):
+    if not render_context.axis_ruler_enabled:
         return 0.0, 0.0
 
+    cfg = render_context.profile.config
     font_size = cfg.objects.scale.ruler_label_font_size.for_length_param(canvas_config.length_param)
     label_height = calculate_bbox_dimensions(
         "0",
@@ -542,23 +631,26 @@ def _axis_ruler_extents(canvas_config: LinearCanvasConfigurator, cfg: GbdrawConf
         float(RULER_TICK_LENGTH),
         float(RULER_LABEL_OFFSET) + float(label_height),
     )
-    track_layout = str(canvas_config.track_layout).strip().lower()
-    if track_layout == "above":
+    if render_context.feature_track_layout == "above":
         return 0.0, protrusion
-    if track_layout == "below":
+    if render_context.feature_track_layout == "below":
         return protrusion, 0.0
     return 0.0, 0.0
 
 
 def _linear_axis_band(
     canvas_config: LinearCanvasConfigurator,
-    cfg: GbdrawConfig,
+    render_context: LinearRecordRenderContext,
 ) -> VerticalBand:
+    cfg = render_context.profile.config
     axis_stroke_width = cfg.objects.axis.linear.stroke_width.for_length_param(
         canvas_config.length_param
     )
     half_stroke = 0.5 * max(0.0, float(axis_stroke_width))
-    ruler_above, ruler_below = _axis_ruler_extents(canvas_config, cfg)
+    ruler_above, ruler_below = _axis_ruler_extents(
+        canvas_config,
+        render_context,
+    )
     return VerticalBand(
         -max(half_stroke, float(ruler_above)),
         max(half_stroke, float(ruler_below)),
@@ -702,7 +794,10 @@ def _linear_slot_footprints_for_record(
                     label_overhang = float(style.label_offset) + 0.5 * float(
                         style.label_font_size or 10.0
                     )
-                    if slot.side == "above":
+                    labels_above = slot.side == "above" or (
+                        slot.side == "overlay" and params.layer == "underlay"
+                    )
+                    if labels_above:
                         top_overhang = max(top_overhang, label_overhang)
                     else:
                         bottom_overhang = max(bottom_overhang, label_overhang)
@@ -723,34 +818,6 @@ def _linear_slot_footprints_for_record(
     return footprints, feature_center_y
 
 
-def _layout_with_preferred_origins(
-    layout: LinearTrackLayout,
-    preferred_origins: dict[str, float],
-) -> LinearTrackLayout:
-    if not preferred_origins:
-        return layout
-    return replace(
-        layout,
-        slots=tuple(
-            replace(slot, y_offset=float(preferred_origins.get(slot.id, slot.y_offset)))
-            for slot in layout.slots
-        ),
-    )
-
-
-def _default_preferred_origins(
-    layout: LinearTrackLayout,
-    canvas_config: LinearCanvasConfigurator,
-) -> dict[str, float]:
-    base = float(canvas_config.cds_padding) + float(canvas_config.vertical_padding)
-    axis_clearance = float(canvas_config.vertical_padding)
-    return {
-        slot.id: base + float(slot.y_offset) - axis_clearance
-        for slot in layout.slots
-        if slot.renderer in {"depth", "dinucleotide_content", "dinucleotide_skew"}
-    }
-
-
 def _resolved_linear_depth_heights(layout: LinearTrackLayout) -> dict[int, float]:
     heights: dict[int, float] = {}
     for slot in layout.slots:
@@ -767,6 +834,8 @@ class _LinearRecordDefinitionGeometry:
 
     local_band: VerticalBand | None = None
     row_band: VerticalBand | None = None
+    local_width: float = 0.0
+    row_width: float = 0.0
 
     @property
     def local_center_y(self) -> float | None:
@@ -787,6 +856,34 @@ def _centered_vertical_band(center_y: float, height: float) -> VerticalBand | No
         return None
     half_height = 0.5 * resolved_height
     return VerticalBand(float(center_y) - half_height, float(center_y) + half_height)
+
+
+def _definition_metrics_by_record(
+    records: list[SeqRecord],
+    canvas_config: LinearCanvasConfigurator,
+    *,
+    cfg: GbdrawConfig,
+    line_kinds_by_record: list[frozenset[str] | None] | None = None,
+) -> tuple[float, list[float], list[float]]:
+    """Return the maximum width plus record-local definition widths and heights."""
+
+    widths: list[float] = []
+    heights: list[float] = []
+    for index, record in enumerate(records):
+        line_kinds = (
+            line_kinds_by_record[index]
+            if line_kinds_by_record is not None
+            else None
+        )
+        width, record_heights, _half_heights = _precalculate_definition_metrics(
+            [record],
+            canvas_config,
+            cfg=cfg,
+            line_kinds_by_record=[line_kinds],
+        )
+        widths.append(float(width))
+        heights.append(float(record_heights[0]))
+    return max(widths, default=0.0), widths, heights
 
 
 def _linear_record_vertical_offset(
@@ -825,12 +922,17 @@ def _build_linear_record_vertical_plans(
     representative_depth_configs: dict[int, DepthConfigurator],
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
     definition_heights: list[float],
+    definition_widths: list[float],
     row_definition_heights: list[float],
+    row_definition_widths: list[float],
     multi_record_enabled: bool,
     split_row_definitions: bool,
-    has_comparisons: bool,
+    render_context: LinearRecordRenderContext,
 ) -> tuple[list[LinearRecordVerticalPlan], list[_LinearRecordDefinitionGeometry]]:
-    axis_band = _linear_axis_band(canvas_config, cfg)
+    axis_band = _linear_axis_band(
+        canvas_config,
+        render_context,
+    )
     plans: list[LinearRecordVerticalPlan] = []
     definition_geometries: list[_LinearRecordDefinitionGeometry] = []
     feature_slot_id = next(
@@ -871,11 +973,7 @@ def _build_linear_record_vertical_plans(
             else 0.0
         )
         feature_center_y += feature_origin_y
-        canvas_band = (
-            plan.comparison_exclusion_band
-            if has_comparisons
-            else plan.canvas_band
-        )
+        canvas_band = plan.canvas_band
         local_definition_height = (
             float(definition_heights[record_index])
             if record_index < len(definition_heights)
@@ -918,9 +1016,117 @@ def _build_linear_record_vertical_plans(
             _LinearRecordDefinitionGeometry(
                 local_band=local_band,
                 row_band=row_band,
+                local_width=(
+                    float(definition_widths[record_index])
+                    if record_index < len(definition_widths)
+                    else 0.0
+                ),
+                row_width=(
+                    float(row_definition_widths[record_index])
+                    if record_index < len(row_definition_widths)
+                    else 0.0
+                ),
             )
         )
     return plans, definition_geometries
+
+
+def _comparison_records_by_boundary(
+    comparisons: list[LinearComparison],
+    rows_by_record: tuple[int, ...],
+) -> dict[int, tuple[int, ...]]:
+    records_by_boundary: dict[int, set[int]] = {}
+    for comparison in comparisons:
+        query_index = int(comparison.query_record_index)
+        subject_index = int(comparison.subject_record_index)
+        query_row = int(rows_by_record[query_index])
+        subject_row = int(rows_by_record[subject_index])
+        boundary = min(query_row, subject_row)
+        records_by_boundary.setdefault(boundary, set()).update(
+            (query_index, subject_index)
+        )
+    return {
+        boundary: tuple(sorted(record_indices))
+        for boundary, record_indices in records_by_boundary.items()
+    }
+
+
+def _record_collision_bands(
+    *,
+    plan: LinearRecordVerticalPlan,
+    definition_geometry: _LinearRecordDefinitionGeometry,
+    sequence_width: float,
+    record_x: float,
+    multi_record_enabled: bool,
+    keep_definition_left_aligned: bool,
+    definition_column_width: float,
+    row_definition_width: float,
+    definition_gap: float,
+) -> tuple[CollisionBand, ...]:
+    """Build alignment-local collision domains for one placed record."""
+
+    width = max(0.0, float(sequence_width))
+    x = float(record_x)
+    bands: list[CollisionBand] = [
+        CollisionBand(
+            "body",
+            x,
+            x + width,
+            plan.record_body_band.top_y,
+            plan.record_body_band.bottom_y,
+        ),
+        CollisionBand(
+            "comparison",
+            x,
+            x + width,
+            plan.comparison_exclusion_band.top_y,
+            plan.comparison_exclusion_band.bottom_y,
+        ),
+    ]
+
+    local_band = definition_geometry.local_band
+    local_width = max(0.0, float(definition_geometry.local_width))
+    if local_band is not None and local_width > 0.0:
+        if multi_record_enabled:
+            center_x = x + (0.5 * width)
+            definition_start = center_x - (0.5 * local_width)
+            definition_end = center_x + (0.5 * local_width)
+        elif keep_definition_left_aligned:
+            definition_start = -(
+                max(0.0, float(definition_column_width))
+                + max(0.0, float(definition_gap))
+            )
+            definition_end = definition_start + local_width
+        else:
+            definition_end = x - max(0.0, float(definition_gap))
+            definition_start = definition_end - local_width
+        bands.append(
+            CollisionBand(
+                "definition",
+                definition_start,
+                definition_end,
+                local_band.top_y,
+                local_band.bottom_y,
+            )
+        )
+
+    row_band = definition_geometry.row_band
+    actual_row_width = max(0.0, float(definition_geometry.row_width))
+    if row_band is not None and actual_row_width > 0.0:
+        row_start = -(
+            max(0.0, float(definition_gap))
+            + max(0.0, float(row_definition_width))
+        )
+        bands.append(
+            CollisionBand(
+                "definition",
+                row_start,
+                row_start + actual_row_width,
+                row_band.top_y,
+                row_band.bottom_y,
+            )
+        )
+    return tuple(bands)
 
 
 def _precalculate_gc_dataframes(
@@ -963,7 +1169,6 @@ def assemble_linear_diagram(
     blast_config,
     feature_config: FeatureDrawingConfigurator,
     gc_config: GcContentConfigurator,
-    config_dict: dict,
     legend_config: LegendDrawingConfigurator,
     skew_config,
     depth_config: DepthConfigurator | None = None,
@@ -980,13 +1185,13 @@ def assemble_linear_diagram(
     linear_layout: LinearMultiRecordOptions | None = None,
     orthogroups: OrthogroupResult | None = None,
     align_orthogroup_feature: str | None = None,
-    cfg: GbdrawConfig | None = None,
 ) -> Drawing:
     """
     Assembles a linear diagram of genomic records with optional BLAST comparison data,
     and returns the SVG canvas (not saved).
     """
-    cfg = cfg or GbdrawConfig.from_dict(config_dict)
+    profile = canvas_config.profile
+    cfg = profile.config
     record_keys = stable_record_keys(records)
     ordered_record_indices, rows_by_record = resolve_record_row_positions(
         records,
@@ -1016,7 +1221,7 @@ def assemble_linear_diagram(
             records,
             depth_track_tables=[[table] for table in depth_tables],
         )
-    custom_linear_track_slots_requested = linear_track_slots is not None
+    user_slot_mode = linear_track_slots is not None
     (
         linear_track_slots,
         resolved_annotations,
@@ -1027,17 +1232,18 @@ def assemble_linear_diagram(
         annotations,
         linear_track_slots,
         canvas_config=canvas_config,
+        profile=profile,
         record_depth_tracks=record_depth_tracks,
     )
     if linear_track_slots is None:
         linear_track_slots = default_linear_track_slots(
             show_features=True,
-            show_depth=bool(canvas_config.show_depth and record_depth_tracks),
+            show_depth=bool(profile.show_depth and record_depth_tracks),
             depth_track_count=max(1, depth_track_count(record_depth_tracks)),
-            show_gc=bool(canvas_config.show_gc),
-            show_skew=bool(canvas_config.show_skew),
+            show_gc=profile.show_gc,
+            show_skew=profile.show_skew,
             dinucleotide=str(gc_config.dinucleotide),
-            track_layout=str(canvas_config.track_layout),
+            track_layout=profile.track_layout,
         )
     normalized_linear_track_slots = normalize_linear_track_slots_with_axis(
         linear_track_slots,
@@ -1047,11 +1253,6 @@ def assemble_linear_diagram(
         normalized_linear_track_slots,
         record_depth_tracks,
     )
-    canvas_config.track_layout = _feature_track_layout_for_linear_slots(
-        normalized_linear_track_slots,
-        canvas_config.track_layout,
-    )
-    axis_ruler_enabled = _is_axis_ruler_enabled(canvas_config, cfg)
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = str(plot_title_position or "bottom").strip().lower()
     if normalized_plot_title_position not in {"center", "top", "bottom"}:
@@ -1065,7 +1266,6 @@ def assemble_linear_diagram(
     if normalized_plot_title:
         plot_title_obj = PlotTitleGroup(
             normalized_plot_title,
-            config_dict,
             font_size=float(plot_title_font_size),
             cfg=cfg,
         )
@@ -1107,16 +1307,15 @@ def assemble_linear_diagram(
     comparisons = [item.matches for item in normalized_comparisons]
     has_blast = bool(normalized_comparisons)
 
-    raw_show_labels = cfg.canvas.show_labels
-    show_labels_mode = raw_show_labels if isinstance(raw_show_labels, str) else ("all" if raw_show_labels else "none")
+    label_scope = profile.label_scope
     orthogroup_label_eligibility = None
-    if show_labels_mode == "orthogroup_top":
+    if label_scope == "orthogroup_top":
         orthogroup_label_eligibility = build_orthogroup_label_eligibility(
             orthogroups=orthogroups,
             comparisons=comparisons,
         )
     if (
-        show_labels_mode == "orthogroup_top"
+        label_scope == "orthogroup_top"
         and (
             orthogroup_label_eligibility is None
             or not orthogroup_label_eligibility.member_ids_by_record
@@ -1126,34 +1325,76 @@ def assemble_linear_diagram(
             "WARNING: --show_labels orthogroup_top requires orthogroup metadata; no orthogroup-specific label suppression was applied."
         )
 
-    record_feature_dicts = _precalculate_feature_dicts(
+    record_feature_layers = _precalculate_feature_layers(
         records,
         feature_config,
         canvas_config,
-        config_dict,
-        cfg=cfg,
+        profile,
         orthogroup_label_eligibility=orthogroup_label_eligibility,
     )
+    record_feature_dicts = [
+        result.foreground_features for result in record_feature_layers
+    ]
+    (
+        linear_track_slots,
+        resolved_annotations,
+        annotation_track_layouts,
+        auto_annotation_slot_ids,
+    ) = _add_linear_feature_underlays(
+        records,
+        record_feature_layers,
+        linear_track_slots,
+        resolved_annotations,
+        annotation_track_layouts,
+        auto_annotation_slot_ids,
+        canvas_config=canvas_config,
+    )
+    normalized_linear_track_slots = normalize_linear_track_slots_with_axis(
+        linear_track_slots,
+        linear_track_axis_index,
+    )
+    normalized_linear_track_slots = _apply_depth_track_heights_to_linear_slots(
+        normalized_linear_track_slots,
+        record_depth_tracks,
+    )
+    linear_track_layout = resolve_linear_track_layout(
+        normalized_linear_track_slots,
+        canvas_config=canvas_config,
+        cfg=cfg,
+    )
+    depth_available = bool(depth_config is not None and record_depth_tracks)
+    render_context = LinearRecordRenderContext(
+        profile=profile,
+        track_layout=linear_track_layout,
+        depth_available=depth_available,
+    )
+    axis_ruler_enabled = render_context.axis_ruler_enabled
+    resolved_depth_heights_by_index = _resolved_linear_depth_heights(
+        linear_track_layout
+    )
+    primary_depth_track_index = min(resolved_depth_heights_by_index, default=0)
     record_feature_lane_geometries = [
         measure_linear_feature_lanes(
             feature_dict,
             cds_height=float(canvas_config.cds_height),
-            separate_strands=bool(canvas_config.strandedness),
-            track_layout=str(canvas_config.track_layout),
+            separate_strands=profile.strandedness,
+            track_layout=render_context.feature_track_layout,
             axis_gap=canvas_config.track_axis_gap,
             stroke_width=max(
                 float(feature_config.block_stroke_width),
                 float(feature_config.line_stroke_width),
             ),
+            include_nominal_lanes=bool(
+                record_feature_layers[index].underlay_features
+            ),
         )
-        for feature_dict in record_feature_dicts
+        for index, feature_dict in enumerate(record_feature_dicts)
     ]
     _unused_label_height, all_labels, _record_label_heights_above = _precalculate_label_dimensions(
         records,
         feature_config,
         canvas_config,
-        config_dict,
-        cfg=cfg,
+        render_context=render_context,
         precomputed_feature_dicts=record_feature_dicts,
         orthogroup_label_eligibility=orthogroup_label_eligibility,
         feature_lane_geometries=record_feature_lane_geometries,
@@ -1170,46 +1411,32 @@ def assemble_linear_diagram(
         if split_row_definitions
         else None
     )
-    max_def_width, definition_heights, _definition_half_heights = _precalculate_definition_metrics(
+    max_def_width, definition_widths, definition_heights = _definition_metrics_by_record(
         records,
-        config_dict,
         canvas_config,
         cfg=cfg,
         line_kinds_by_record=local_definition_line_kinds,
     )
     row_definition_width = 0.0
+    row_definition_widths = [0.0 for _record in records]
     row_definition_heights = [0.0 for _record in records]
     if split_row_definitions:
-        row_definition_width, row_definition_heights, _row_definition_half_heights = (
-            _precalculate_definition_metrics(
-                records,
-                config_dict,
-                canvas_config,
-                cfg=cfg,
-                line_kinds_by_record=[
-                    frozenset({"name", "subtitle"})
-                    if index in row_leading_indices
-                    else frozenset()
-                    for index in range(len(records))
-                ],
-            )
+        (
+            row_definition_width,
+            row_definition_widths,
+            row_definition_heights,
+        ) = _definition_metrics_by_record(
+            records,
+            canvas_config,
+            cfg=cfg,
+            line_kinds_by_record=[
+                frozenset({"name", "subtitle"})
+                if index in row_leading_indices
+                else frozenset()
+                for index in range(len(records))
+            ],
         )
 
-    linear_track_layout = resolve_linear_track_layout(
-        normalized_linear_track_slots,
-        canvas_config=canvas_config,
-        cfg=cfg,
-    )
-    if not custom_linear_track_slots_requested:
-        linear_track_layout = _layout_with_preferred_origins(
-            linear_track_layout,
-            _default_preferred_origins(linear_track_layout, canvas_config),
-        )
-    resolved_depth_heights_by_index = _resolved_linear_depth_heights(
-        linear_track_layout
-    )
-    primary_depth_track_index = min(resolved_depth_heights_by_index, default=0)
-    depth_enabled = bool(canvas_config.show_depth and depth_config is not None and record_depth_tracks)
     record_depth_data: list[list[DepthTrackData]] = (
         build_depth_track_dataframes(
             records,
@@ -1217,7 +1444,7 @@ def assemble_linear_diagram(
             base_config=depth_config,
             depth_df_builder=build_depth_df,
         )
-        if depth_enabled
+        if render_context.depth_enabled
         else [[] for _ in records]
     )
     record_depth_by_index = [
@@ -1229,9 +1456,6 @@ def assemble_linear_diagram(
         track.track_index: track.config
         for track in representative_depth_data
     }
-    if not depth_enabled:
-        canvas_config.show_depth = False
-
     record_vertical_plans, record_definition_geometries = _build_linear_record_vertical_plans(
         records=records,
         layout=linear_track_layout,
@@ -1246,10 +1470,12 @@ def assemble_linear_diagram(
         representative_depth_configs=representative_depth_configs,
         annotation_track_layouts=annotation_track_layouts,
         definition_heights=definition_heights,
+        definition_widths=definition_widths,
         row_definition_heights=row_definition_heights,
+        row_definition_widths=row_definition_widths,
         multi_record_enabled=multi_record_enabled,
         split_row_definitions=split_row_definitions,
-        has_comparisons=has_blast,
+        render_context=render_context,
     )
 
     canvas_config.vertical_offset = _linear_record_vertical_offset(
@@ -1282,11 +1508,11 @@ def assemble_linear_diagram(
     configure_pairwise_identity_legend_from_comparisons(blast_config, comparisons)
     legend_table: dict = {}
     legend_group: LegendGroup | None = None
+    legend_measurement: LegendMeasurement | None = None
     required_legend_height = 0.0
     if canvas_config.legend_position != "none":
-        color_map, default_color_map = preprocess_color_tables(
-            feature_config.color_table, feature_config.default_colors
-        )
+        color_map = feature_config.specific_color_rules
+        default_color_map = feature_config.default_color_map
         features_present = check_feature_presence(
             records,
             feature_config.selected_features_set,
@@ -1304,29 +1530,52 @@ def assemble_linear_diagram(
             gc_config, skew_config, feature_config, features_present, blast_config, has_blast,
             used_color_rules=used_color_rules,
             default_used_features=default_used_features,
-            depth_config=depth_config if depth_enabled and depth_track_count(record_depth_tracks) == 1 else None,
+            depth_config=(
+                depth_config
+                if render_context.depth_enabled
+                and depth_track_count(record_depth_tracks) == 1
+                else None
+            ),
+            show_gc=profile.show_gc,
+            show_skew=profile.show_skew,
+            show_depth=(
+                render_context.depth_enabled
+                and depth_track_count(record_depth_tracks) == 1
+            ),
         )
         legend_table = _sync_legend_table_for_linear_slots(
             legend_table,
             linear_track_slots=normalized_linear_track_slots,
             skew_config=skew_config,
-            depth_tracks=representative_depth_data if depth_enabled else None,
+            depth_tracks=(
+                representative_depth_data
+                if render_context.depth_enabled
+                else None
+            ),
         )
         legend_table = sync_annotation_legend_entries(
             legend_table,
             resolved_annotations,
             normalized_linear_track_slots,
         )
-        legend_config = legend_config.recalculate_legend_dimensions(legend_table, canvas_config)
-        legend_group = LegendGroup(config_dict, canvas_config, legend_config, legend_table, cfg=cfg)
-        required_legend_height = float(legend_group.legend_height)
+        legend_measurement = legend_config.measure_legend(
+            legend_table,
+            canvas_config,
+        )
+        legend_group = LegendGroup(
+            canvas_config,
+            legend_measurement,
+            legend_table,
+            cfg=cfg,
+        )
+        required_legend_height = float(legend_measurement.legend_height)
         definition_reserve_width = (
             row_definition_width
             if split_row_definitions
             else (0.0 if multi_record_enabled else max_def_width)
         )
         canvas_config.recalculate_canvas_dimensions(
-            legend_group,
+            legend_measurement,
             definition_reserve_width,
         )
     else:
@@ -1348,7 +1597,64 @@ def assemble_linear_diagram(
         )
         canvas_config.legend_offset_x = 0
         canvas_config.legend_offset_y = 0
-    record_offsets: list[float] = []
+    ordinary_row_gap = float(canvas_config.cds_padding) * 1.5
+    definition_clear_gap = max(1.0, 0.5 * float(canvas_config.vertical_padding))
+    comparison_boundary_records = _comparison_records_by_boundary(
+        normalized_comparisons,
+        rows_by_record,
+    )
+
+    if multi_record_enabled:
+        if align_orthogroup_feature:
+            raise ValidationError(
+                "align_orthogroup_feature is not supported with multiple records in one Linear row."
+            )
+        orthogroup_alignment_offsets = {index: 0.0 for index in range(len(records))}
+    else:
+        orthogroup_alignment_offsets = calculate_orthogroup_alignment_offsets(
+            records,
+            comparisons,
+            canvas_config,
+            align_orthogroup_feature,
+            orthogroups=orthogroups,
+        )
+    alignment_extents = calculate_orthogroup_alignment_canvas_extents(
+        records,
+        canvas_config,
+        orthogroup_alignment_offsets,
+    )
+
+    record_offsets_x: list[float] = []
+    if not multi_record_enabled:
+        for record_index, record in enumerate(records):
+            if normalize_length:
+                record_offset_x = 0.0
+            elif canvas_config.align_center:
+                record_offset_x = (
+                    canvas_config.alignment_width
+                    * (
+                        (canvas_config.longest_genome - len(record.seq))
+                        / canvas_config.longest_genome
+                    )
+                    / 2
+                )
+            else:
+                record_offset_x = 0.0
+            record_offset_x += orthogroup_alignment_offsets.get(record_index, 0.0)
+            record_offsets_x.append(record_offset_x)
+
+    definition_column_width = max_def_width
+    if canvas_config.keep_definition_left_aligned and record_offsets_x:
+        definition_column_width = max(
+            0.0,
+            float(max_def_width) - min(record_offsets_x),
+        )
+
+    record_offsets: list[float] = [0.0 for _record in records]
+    record_collision_bands: list[tuple[CollisionBand, ...]] = [
+        () for _record in records
+    ]
+    boundary_gap_resolutions: list[AxisGapResolution] = []
     multi_record_plan = None
 
     def resolve_first_axis_y() -> float:
@@ -1368,10 +1674,36 @@ def assemble_linear_diagram(
     current_y = resolve_first_axis_y()
 
     if multi_record_enabled:
-        def build_measurements() -> list[LinearRecordMeasurement]:
+        def build_measurements(
+            horizontal_plan=None,
+        ) -> list[LinearRecordMeasurement]:
             measurements: list[LinearRecordMeasurement] = []
             for index, record in enumerate(records):
                 record_plan = record_vertical_plans[index]
+                placement = (
+                    horizontal_plan.placement_for_index(index)
+                    if horizontal_plan is not None
+                    else None
+                )
+                collision_bands: tuple[CollisionBand, ...] = ()
+                if placement is not None:
+                    absolute_bands = _record_collision_bands(
+                        plan=record_plan,
+                        definition_geometry=record_definition_geometries[index],
+                        sequence_width=placement.sequence_width,
+                        record_x=placement.x,
+                        multi_record_enabled=True,
+                        keep_definition_left_aligned=bool(
+                            canvas_config.keep_definition_left_aligned
+                        ),
+                        definition_column_width=definition_column_width,
+                        row_definition_width=row_definition_width,
+                        definition_gap=float(canvas_config.definition_gap),
+                    )
+                    collision_bands = tuple(
+                        band.translate(x=-placement.x)
+                        for band in absolute_bands
+                    )
                 measurements.append(
                     LinearRecordMeasurement(
                         record_index=index,
@@ -1383,6 +1715,7 @@ def assemble_linear_diagram(
                         bottom_extent=record_plan.canvas_bottom_extent,
                         comparison_top_extent=record_plan.comparison_top_extent,
                         comparison_bottom_extent=record_plan.comparison_bottom_extent,
+                        collision_bands=collision_bands,
                     )
                 )
             return measurements
@@ -1402,9 +1735,9 @@ def assemble_linear_diagram(
                 align_center=bool(canvas_config.align_center),
                 first_axis_y=first_axis_y,
                 row_gap_px=float(canvas_config.cds_padding) * 1.5,
-                comparison_height=(
-                    float(canvas_config.comparison_height) if has_blast else 0.0
-                ),
+                comparison_height=float(canvas_config.configured_comparison_height),
+                definition_clear_gap=definition_clear_gap,
+                comparison_record_indices_by_boundary=comparison_boundary_records,
                 record_order=ordered_record_indices,
             )
 
@@ -1437,20 +1770,17 @@ def assemble_linear_diagram(
                 normalized_linear_track_slots,
                 record_depth_tracks,
             )
-            canvas_config.track_layout = _feature_track_layout_for_linear_slots(
-                normalized_linear_track_slots,
-                canvas_config.track_layout,
-            )
             linear_track_layout = resolve_linear_track_layout(
                 normalized_linear_track_slots,
                 canvas_config=canvas_config,
                 cfg=cfg,
             )
-            if not custom_linear_track_slots_requested:
-                linear_track_layout = _layout_with_preferred_origins(
-                    linear_track_layout,
-                    _default_preferred_origins(linear_track_layout, canvas_config),
-                )
+            render_context = LinearRecordRenderContext(
+                profile=profile,
+                track_layout=linear_track_layout,
+                depth_available=depth_available,
+            )
+            axis_ruler_enabled = render_context.axis_ruler_enabled
             resolved_depth_heights_by_index = _resolved_linear_depth_heights(
                 linear_track_layout
             )
@@ -1462,8 +1792,7 @@ def assemble_linear_diagram(
             records,
             feature_config,
             canvas_config,
-            config_dict,
-            cfg=cfg,
+            render_context=render_context,
             precomputed_feature_dicts=record_feature_dicts,
             orthogroup_label_eligibility=orthogroup_label_eligibility,
             feature_lane_geometries=record_feature_lane_geometries,
@@ -1483,10 +1812,12 @@ def assemble_linear_diagram(
             representative_depth_configs=representative_depth_configs,
             annotation_track_layouts=annotation_track_layouts,
             definition_heights=definition_heights,
+            definition_widths=definition_widths,
             row_definition_heights=row_definition_heights,
+            row_definition_widths=row_definition_widths,
             multi_record_enabled=multi_record_enabled,
             split_row_definitions=split_row_definitions,
-            has_comparisons=has_blast,
+            render_context=render_context,
         )
         canvas_config.vertical_offset = _linear_record_vertical_offset(
             record_vertical_plans,
@@ -1495,51 +1826,89 @@ def assemble_linear_diagram(
         )
         current_y = resolve_first_axis_y()
         multi_record_plan = solve_measurements(
-            build_measurements(),
+            build_measurements(multi_record_plan),
             first_axis_y=current_y,
         )
         record_offsets = [
             multi_record_plan.placement_for_index(index).axis_y
             for index in range(len(records))
         ]
+        record_offsets_x = [
+            multi_record_plan.placement_for_index(index).x
+            for index in range(len(records))
+        ]
+        record_collision_bands = [
+            _record_collision_bands(
+                plan=record_vertical_plans[index],
+                definition_geometry=record_definition_geometries[index],
+                sequence_width=multi_record_plan.placement_for_index(index).sequence_width,
+                record_x=multi_record_plan.placement_for_index(index).x,
+                multi_record_enabled=True,
+                keep_definition_left_aligned=bool(
+                    canvas_config.keep_definition_left_aligned
+                ),
+                definition_column_width=definition_column_width,
+                row_definition_width=row_definition_width,
+                definition_gap=float(canvas_config.definition_gap),
+            )
+            for index in range(len(records))
+        ]
+        boundary_gap_resolutions = list(multi_record_plan.row_gap_resolutions)
         current_y = max(record_offsets)
     else:
-        for i, _record in enumerate(records):
-            record_offsets.append(current_y)
+        for index, record in enumerate(records):
+            sequence_width = (
+                float(canvas_config.alignment_width)
+                if normalize_length
+                else float(canvas_config.alignment_width)
+                * len(record.seq)
+                / max(1, canvas_config.longest_genome)
+            )
+            record_collision_bands[index] = _record_collision_bands(
+                plan=record_vertical_plans[index],
+                definition_geometry=record_definition_geometries[index],
+                sequence_width=sequence_width,
+                record_x=record_offsets_x[index],
+                multi_record_enabled=False,
+                keep_definition_left_aligned=bool(
+                    canvas_config.keep_definition_left_aligned
+                ),
+                definition_column_width=definition_column_width,
+                row_definition_width=row_definition_width,
+                definition_gap=float(canvas_config.definition_gap),
+            )
 
-            if i >= len(records) - 1:
+        ordered_rows = tuple(ordered_record_indices)
+        for row_position, record_index in enumerate(ordered_rows):
+            record_offsets[record_index] = current_y
+            if row_position >= len(ordered_rows) - 1:
                 continue
-            current_plan = record_vertical_plans[i]
-            next_plan = record_vertical_plans[i + 1]
-            height_below_axis = current_plan.canvas_bottom_extent
-            height_above_next_axis = next_plan.canvas_top_extent
-            min_gap = (
-                float(canvas_config.comparison_height)
-                if has_blast
-                else float(canvas_config.cds_padding) * 1.5
+            next_record_index = ordered_rows[row_position + 1]
+            boundary = int(rows_by_record[record_index])
+            active_records = frozenset(
+                comparison_boundary_records.get(boundary, ())
             )
-            inter_record_space = height_below_axis + min_gap + height_above_next_axis
-            current_y += inter_record_space
 
-    if multi_record_enabled:
-        if align_orthogroup_feature:
-            raise ValidationError(
-                "align_orthogroup_feature is not supported with multiple records in one Linear row."
+            def active_bands(index: int) -> tuple[CollisionBand, ...]:
+                return tuple(
+                    band
+                    for band in record_collision_bands[index]
+                    if band.kind != "comparison" or index in active_records
+                )
+
+            resolution = resolve_axis_gap(
+                active_bands(record_index),
+                active_bands(next_record_index),
+                ordinary_row_gap=ordinary_row_gap,
+                comparison_height=float(
+                    canvas_config.configured_comparison_height
+                ),
+                definition_clear_gap=definition_clear_gap,
+                boundary_has_comparison=bool(active_records),
             )
-        orthogroup_alignment_offsets = {index: 0.0 for index in range(len(records))}
-    else:
-        orthogroup_alignment_offsets = calculate_orthogroup_alignment_offsets(
-            records,
-            comparisons,
-            canvas_config,
-            align_orthogroup_feature,
-            orthogroups=orthogroups,
-        )
-    alignment_extents = calculate_orthogroup_alignment_canvas_extents(
-        records,
-        canvas_config,
-        orthogroup_alignment_offsets,
-    )
+            boundary_gap_resolutions.append(resolution)
+            current_y += resolution.axis_gap
+        current_y = max(record_offsets, default=current_y)
 
     length_bar_group: LengthBarGroup | None = None
     length_bar_offset_x = 0.0
@@ -1549,7 +1918,6 @@ def assemble_linear_diagram(
             canvas_config.fig_width,
             canvas_config.alignment_width,
             canvas_config.longest_genome,
-            config_dict,
             canvas_config,
             cfg=cfg,
             ruler_width=alignment_extents.ruler_width,
@@ -1560,23 +1928,15 @@ def assemble_linear_diagram(
         else 0.0
     )
 
-    final_record_index = len(records) - 1 if records else -1
-    if multi_record_plan is not None:
-        final_record_height_below = max(
-            placement.bottom_extent
-            for placement in multi_record_plan.placements
-            if placement.row == multi_record_plan.row_count - 1
-        )
-    else:
-        final_record_height_below = (
-            record_vertical_plans[final_record_index].canvas_bottom_extent
-            if final_record_index >= 0
-            else 0.0
-        )
-
+    painted_content_bottom = max(
+        (
+            float(record_offsets[index]) + plan.canvas_band.bottom_y
+            for index, plan in enumerate(record_vertical_plans)
+        ),
+        default=0.0,
+    )
     canvas_config.height_below_final_record = (
-        current_y
-        + final_record_height_below
+        painted_content_bottom
         + 4 * canvas_config.vertical_padding
     )
     bottom_title_stack = (
@@ -1607,9 +1967,10 @@ def assemble_linear_diagram(
             final_height += int(required_legend_height)
     canvas_config.total_height = max(final_height, required_legend_height)
 
-    if legend_group is not None:
+    if legend_measurement is not None:
         canvas_config.recalculate_canvas_dimensions(
-            legend_group, definition_reserve_width
+            legend_measurement,
+            definition_reserve_width,
         )
 
     alignment_shift_x = alignment_extents.horizontal_shift
@@ -1622,29 +1983,6 @@ def assemble_linear_diagram(
             canvas_config.legend_offset_x += width_extension_px
         elif canvas_config.legend_position in {"top", "bottom"}:
             canvas_config.legend_offset_x += 0.5 * width_extension_px
-    record_offsets_x: list[float] = []
-    for record_index, record in enumerate(records):
-        if multi_record_plan is not None:
-            record_offsets_x.append(
-                multi_record_plan.placement_for_index(record_index).x
-            )
-            continue
-        if normalize_length:
-            record_offset_x = 0.0
-        elif canvas_config.align_center:
-            record_offset_x = (
-                canvas_config.alignment_width
-                * ((canvas_config.longest_genome - len(record.seq)) / canvas_config.longest_genome)
-                / 2
-            )
-        else:
-            record_offset_x = 0.0
-        record_offset_x += orthogroup_alignment_offsets.get(len(record_offsets_x), 0.0)
-        record_offsets_x.append(record_offset_x)
-    definition_column_width = max_def_width
-    if canvas_config.keep_definition_left_aligned and record_offsets_x:
-        definition_column_width = max(0.0, float(max_def_width) - min(record_offsets_x))
-
     record_placements: dict[int, LinearRecordPlacement] = {}
     for record_index, record in enumerate(records):
         if multi_record_plan is not None:
@@ -1685,9 +2023,14 @@ def assemble_linear_diagram(
     vertical_vb_height = canvas_config.total_height
     horizontal_vb_width = canvas_config.total_width
     horizontal_vb_height = canvas_config.total_height
-    if legend_group is not None:
-        h_legend_width, h_legend_height = legend_group.get_horizontal_dimensions()
-        v_legend_width, v_legend_height = legend_group.get_vertical_dimensions()
+    if (
+        legend_measurement is not None
+        and legend_measurement.linear_layout is not None
+    ):
+        linear_legend_layout = legend_measurement.linear_layout
+        h_legend_width = linear_legend_layout.horizontal.width
+        h_legend_height = linear_legend_layout.horizontal.height
+        v_legend_width = linear_legend_layout.vertical.width
 
         if canvas_config.legend_position in ["top", "bottom"]:
             vertical_vb_width = canvas_config.total_width - h_legend_width + v_legend_width
@@ -1712,12 +2055,16 @@ def assemble_linear_diagram(
         )
 
     if canvas_config.legend_position != "none":
-        canvas = add_legends_on_linear_canvas(canvas, config_dict, canvas_config, legend_group, legend_table)
+        canvas = add_legends_on_linear_canvas(
+            canvas,
+            canvas_config,
+            legend_group,
+            legend_table,
+        )
     if length_bar_group is not None:
         canvas = add_length_bar_on_linear_canvas(
             canvas,
             canvas_config,
-            config_dict,
             length_bar_group,
             legend_group,
             offset_x=length_bar_offset_x,
@@ -1737,12 +2084,9 @@ def assemble_linear_diagram(
 
     label_font_size = _resolve_linear_diagram_label_font_size(
         records,
-        show_labels_mode=show_labels_mode,
         canvas_config=canvas_config,
-        cfg=cfg,
+        profile=profile,
     )
-    cfg_labels_on = replace(cfg, canvas=replace(cfg.canvas, show_labels=True))
-    cfg_labels_off = replace(cfg, canvas=replace(cfg.canvas, show_labels=False))
 
     total_records = len(records)
     for count, record in enumerate(records, start=1):
@@ -1761,28 +2105,21 @@ def assemble_linear_diagram(
         offset_x = record_offsets_x[record_index] if record_index < len(record_offsets_x) else 0.0
 
         labels_for_record = all_labels[record_index] if record_index < len(all_labels) else []
-        should_show_labels = False
-        if show_labels_mode == "all":
-            should_show_labels = True
-        elif show_labels_mode == "first" and count == 1:
-            should_show_labels = True
-        elif show_labels_mode == "orthogroup_top":
-            should_show_labels = True
-        record_cfg = cfg_labels_on if should_show_labels else cfg_labels_off
         orthogroup_label_member_ids, orthogroup_label_top_member_ids = orthogroup_label_sets_for_record(
-            orthogroup_label_eligibility if show_labels_mode == "orthogroup_top" else None,
+            orthogroup_label_eligibility if label_scope == "orthogroup_top" else None,
             record_index,
         )
-        record_group_id = make_linear_dom_id(
+        record_group_id = record_group_svg_id(
             record.id,
+            mode="linear",
             record_index=record_index,
             record_count=total_records,
         )
-        definition_group_id = make_linear_dom_id(
+        definition_group_id = definition_group_svg_id(
             record.id,
+            mode="linear",
             record_index=record_index,
             record_count=total_records,
-            suffix="definition",
         )
 
         if linear_track_layout is not None:
@@ -1790,28 +2127,41 @@ def assemble_linear_diagram(
 
             for slot in sorted(linear_track_layout.slots, key=lambda item: (item.z, item.slot_index)):
                 resolved_slot = record_vertical_plan.slot_by_id(slot.id)
+                slot_group_id = (
+                    _linear_track_slot_dom_id(
+                        slot_id=str(slot.id),
+                        renderer=str(slot.renderer),
+                        slot_index=int(slot.slot_index),
+                        record_index=record_index,
+                        record_count=total_records,
+                    )
+                    if user_slot_mode
+                    else None
+                )
                 if slot.renderer == "spacer":
                     continue
                 if slot.renderer == "features":
-                    slot_feature_layout = "middle" if slot.side == "overlay" else slot.side
-                    add_record_group(
+                    canvas = add_record_group(
                         canvas,
                         record,
                         offset_y,
                         offset_x,
                         canvas_config,
                         feature_config,
-                        config_dict,
+                        feature_layers=record_feature_layers[record_index],
+                        render_context=render_context,
                         precalculated_labels=labels_for_record,
-                        cfg=record_cfg,
-                        precomputed_feature_dict=record_feature_dicts[record_index],
-                        feature_track_layout=slot_feature_layout,
                         label_font_size=label_font_size,
                         orthogroup_label_member_ids=orthogroup_label_member_ids,
                         orthogroup_label_top_member_ids=orthogroup_label_top_member_ids,
                         record_index=record_index,
                         record_count=total_records,
                         group_id=record_group_id,
+                        dom_group_id=slot_group_id,
+                        slot_id=str(slot.id) if slot_group_id is not None else None,
+                        slot_renderer=(
+                            str(slot.renderer) if slot_group_id is not None else None
+                        ),
                         placement=record_placement,
                         multi_record_layout=multi_record_enabled,
                         record_local_ruler=multi_record_enabled,
@@ -1827,6 +2177,18 @@ def assemble_linear_diagram(
                     if annotation_layout is None:
                         continue
                     params = annotation_track_params_from_mapping(slot.params)
+                    annotation_height = float(slot.height)
+                    if params.cover_anchor and any(
+                        anchor.renderer == "features"
+                        and anchor.id == params.anchor_slot
+                        for anchor in linear_track_layout.slots
+                    ):
+                        feature_band = record_feature_lane_geometries[
+                            record_index
+                        ].occupied_band
+                        if feature_band.height > 0.0:
+                            track_offset_y = float(feature_band.top_y)
+                            annotation_height = float(feature_band.height)
                     bar_length = (
                         float(sequence_width)
                         if sequence_width is not None
@@ -1846,9 +2208,13 @@ def assemble_linear_diagram(
                         bar_length_px=bar_length,
                         y_offset_px=0.0,
                         side=slot.side,
-                        height_px=slot.height,
+                        height_px=annotation_height,
                         font_family=str(cfg.objects.text.font_family),
                         params=params,
+                        dom_group_id=slot_group_id,
+                        semantic_slot_id=(
+                            str(slot.id) if slot_group_id is not None else None
+                        ),
                     )
                     annotation_group.translate(
                         offset_x + canvas_config.horizontal_offset,
@@ -1866,18 +2232,26 @@ def assemble_linear_diagram(
                         record_index=record_index,
                         record_count=total_records,
                     )
-                    add_depth_group(
+                    canvas = add_depth_group(
                         canvas,
                         record,
                         offset_y,
                         offset_x,
                         canvas_config,
                         depth_track.config,
-                        config_dict,
-                        cfg=record_cfg,
                         depth_df=depth_track.df,
                         group_id=group_id,
                         axis_group_id=f"{group_id}_axis",
+                        dom_group_id=slot_group_id,
+                        dom_axis_group_id=(
+                            f"{slot_group_id}_axis"
+                            if slot_group_id is not None
+                            else None
+                        ),
+                        slot_id=str(slot.id) if slot_group_id is not None else None,
+                        slot_renderer=(
+                            str(slot.renderer) if slot_group_id is not None else None
+                        ),
                         track_height=slot.height,
                         track_offset_y=track_offset_y,
                         sequence_width=sequence_width,
@@ -1903,17 +2277,15 @@ def assemble_linear_diagram(
                             primary_depth_track_index,
                             float(canvas_config.default_depth_height),
                         ),
-                        depth_enabled=depth_enabled,
+                        depth_enabled=render_context.depth_enabled,
                     )
-                    add_gc_content_group(
+                    canvas = add_gc_content_group(
                         canvas,
                         record,
                         offset_y,
                         offset_x,
                         canvas_config,
                         slot_gc_config,
-                        config_dict,
-                        cfg=record_cfg,
                         gc_df=shared_gc_df,
                         track_height=slot.height,
                         track_offset_y=track_offset_y,
@@ -1922,6 +2294,9 @@ def assemble_linear_diagram(
                             record_index=record_index,
                             record_count=total_records,
                         ),
+                        dom_group_id=slot_group_id,
+                        slot_id=str(slot.id),
+                        slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
                     )
                     continue
@@ -1930,15 +2305,13 @@ def assemble_linear_diagram(
                     nt = _slot_nt(slot, str(skew_config.dinucleotide))
                     per_nt_gc_dfs = record_gc_dfs_by_nt.get(nt, record_gc_dfs)
                     shared_gc_df = per_nt_gc_dfs[record_index] if record_index < len(per_nt_gc_dfs) else None
-                    add_gc_skew_group(
+                    canvas = add_gc_skew_group(
                         canvas,
                         record,
                         offset_y,
                         offset_x,
                         canvas_config,
                         _slot_skew_config(skew_config, slot, nt),
-                        config_dict,
-                        cfg=record_cfg,
                         gc_df=shared_gc_df,
                         track_height=slot.height,
                         track_offset_y=track_offset_y,
@@ -1947,6 +2320,9 @@ def assemble_linear_diagram(
                             record_index=record_index,
                             record_count=total_records,
                         ),
+                        dom_group_id=slot_group_id,
+                        slot_id=str(slot.id),
+                        slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
                     )
 
@@ -1958,10 +2334,9 @@ def assemble_linear_diagram(
                     offset_x,
                     canvas_config,
                     feature_config,
-                    config_dict,
+                    feature_layers=record_feature_layers[record_index],
+                    render_context=render_context,
                     precalculated_labels=None,
-                    cfg=record_cfg,
-                    precomputed_feature_dict=record_feature_dicts[record_index],
                     draw_features=False,
                     label_font_size=label_font_size,
                     orthogroup_label_member_ids=orthogroup_label_member_ids,
@@ -1980,9 +2355,7 @@ def assemble_linear_diagram(
                 offset_y,
                 offset_x,
                 canvas_config,
-                config_dict,
                 definition_column_width,
-                cfg=record_cfg,
                 group_id=definition_group_id,
                 placement=record_placement,
                 row_definition_width=row_definition_width,
@@ -2004,6 +2377,8 @@ def assemble_linear_diagram(
                     else None
                 ),
                 multi_record_layout=multi_record_enabled,
+                record_index=record_index,
+                record_count=total_records,
             )
             continue
 
@@ -2035,53 +2410,12 @@ def assemble_linear_diagram(
                 layout=linear_track_layout,
                 record_plans=record_vertical_plans,
                 record_offsets=record_offsets,
+                record_collision_bands=record_collision_bands,
+                boundary_gap_resolutions=boundary_gap_resolutions,
             ),
         )
 
     return canvas
 
 
-def plot_linear_diagram(
-    records: list[SeqRecord],
-    blast_files,
-    canvas_config: LinearCanvasConfigurator,
-    blast_config,
-    feature_config: FeatureDrawingConfigurator,
-    gc_config: GcContentConfigurator,
-    config_dict: dict,
-    out_formats,
-    legend_config,
-    skew_config,
-    depth_config: DepthConfigurator | None = None,
-    depth_tables: list[DataFrame | None] | None = None,
-    cfg: GbdrawConfig | None = None,
-    comparison_dataframes: list[DataFrame] | None = None,
-    orthogroups: OrthogroupResult | None = None,
-    align_orthogroup_feature: str | None = None,
-) -> Drawing:
-    """Backwards-compatible wrapper that assembles and saves a linear diagram."""
-    canvas = assemble_linear_diagram(
-        records=records,
-        blast_files=blast_files,
-        canvas_config=canvas_config,
-        blast_config=blast_config,
-        feature_config=feature_config,
-        gc_config=gc_config,
-        config_dict=config_dict,
-        legend_config=legend_config,
-        skew_config=skew_config,
-        depth_config=depth_config,
-        depth_tables=depth_tables,
-        comparison_dataframes=comparison_dataframes,
-        orthogroups=orthogroups,
-        align_orthogroup_feature=align_orthogroup_feature,
-        cfg=cfg,
-    )
-    save_figure(canvas, out_formats)
-    return canvas
-
-
-__all__ = [
-    "assemble_linear_diagram",
-    "plot_linear_diagram",
-]
+__all__ = ["assemble_linear_diagram"]

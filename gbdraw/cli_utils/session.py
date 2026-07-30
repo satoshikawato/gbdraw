@@ -18,13 +18,25 @@ from gbdraw.io.cli_tables import (
     read_comparisons_table,
     read_records_table,
 )
-from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
+from gbdraw.render.formats import (
+    SVG_FORMAT,
+    resolve_format_output_path,
+    resolve_output_paths,
+)
+from gbdraw.render.output_paths import preflight_output_paths
+from gbdraw.render.track_slot_metadata import (
+    build_track_slot_geometry_run_metadata,
+    collect_track_slot_geometry_records,
+)
 from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
     SessionBuildContext,
     SessionFileBinding,
     build_session_json,
+    migrate_persisted_web_state_field_names,
     safe_embedded_filename,
     serialize_file_entry,
+    validate_current_web_state_field_names,
     write_session_json,
 )
 
@@ -45,10 +57,16 @@ class DiagramRunResult:
     render_formats: tuple[str, ...]
     outputs: tuple[RenderedSvg, ...]
     feature_metadata: tuple[Mapping[str, Any], ...] = ()
+    orthogroup_metadata: tuple[Mapping[str, Any], ...] | None = None
     losat_cache_entries: tuple[Mapping[str, Any], ...] | None = None
+    losat_derived_cache_entries: tuple[Mapping[str, Any], ...] | None = None
+    protein_identity_manifest: Mapping[str, Any] | None = None
+    legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] | None = None
+    legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] | None = None
     linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
     run_metadata: Mapping[str, Any] = field(default_factory=dict)
     canonical_request: DiagramRequest | None = None
+    biological_feature_metadata: tuple[Mapping[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -56,6 +74,7 @@ class SessionCliRequest:
     session_path: str
     output: str | None
     format: str | None
+    overwrite: bool
     save_session: bool
     session_output: str | None
 
@@ -77,24 +96,12 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
     )
     parser.add_argument(
-        "--save-session",
-        dest="save_session",
-        help=argparse.SUPPRESS,
-        action="store_true",
-    )
-    parser.add_argument(
         "--session_output",
         metavar="PATH",
         help=(
             "Write the session sidecar to PATH; use a .gz suffix for gzip "
             "compression; implies --save_session."
         ),
-        type=str,
-    )
-    parser.add_argument(
-        "--session-output",
-        dest="session_output",
-        help=argparse.SUPPRESS,
         type=str,
     )
 
@@ -118,10 +125,9 @@ def parse_session_pre_args(
     parser.add_argument("--session", required=True)
     parser.add_argument("-o", "--output")
     parser.add_argument("-f", "--format")
+    parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--save_session", action="store_true")
-    parser.add_argument("--save-session", dest="save_session", action="store_true")
     parser.add_argument("--session_output")
-    parser.add_argument("--session-output", dest="session_output")
     namespace, unknown = parser.parse_known_args(list(cmd_args))
     if unknown:
         parser.error(
@@ -132,19 +138,10 @@ def parse_session_pre_args(
         session_path=str(namespace.session),
         output=namespace.output,
         format=namespace.format,
+        overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
     )
-
-
-def validate_session_override_args(
-    cmd_args: Sequence[str],
-    *,
-    mode: Literal["circular", "linear"],
-) -> SessionCliRequest | None:
-    """Compatibility wrapper for the documented session pre-parse helper name."""
-
-    return parse_session_pre_args(cmd_args, mode=mode)
 
 
 def resolve_session_sidecar_path(
@@ -164,8 +161,105 @@ def resolve_session_sidecar_path(
     return Path("gbdraw.gbdraw-session.json")
 
 
+def preflight_session_sidecar_if_requested(
+    *,
+    save_session: bool,
+    session_output: str | None,
+    output_prefix: str | None,
+    outputs: Sequence[RenderedSvg] = (),
+    diagram_output_paths: Sequence[str | Path] = (),
+    overwrite: bool = False,
+) -> Path | None:
+    """Reject sidecar collisions before rendering when its path is known."""
+
+    if not save_session and not session_output:
+        return None
+    if not session_output and not output_prefix and not outputs:
+        return None
+    sidecar_path = resolve_session_sidecar_path(
+        explicit_path=session_output,
+        output_prefix=output_prefix,
+        outputs=outputs,
+    )
+    preflight_output_paths((sidecar_path,), overwrite=True)
+    try:
+        sidecar_identity = sidecar_path.resolve(strict=False)
+        diagram_identities = tuple(
+            (Path(path), Path(path).resolve(strict=False))
+            for path in diagram_output_paths
+        )
+    except (OSError, ValueError) as exc:
+        raise ValidationError(
+            f"Could not resolve output path: {sidecar_path}."
+        ) from exc
+    colliding_output = next(
+        (
+            Path(path)
+            for path, identity in diagram_identities
+            if identity == sidecar_identity
+        ),
+        None,
+    )
+    if colliding_output is not None:
+        raise ValidationError(
+            f"Session output path collides with diagram output: {sidecar_path}. "
+            "Choose a distinct --session_output path."
+        )
+    if sidecar_path.exists() and not overwrite:
+        raise ValidationError(
+            f"Session output already exists: {sidecar_path}. "
+            "Use --overwrite to replace it."
+        )
+    return sidecar_path
+
+
+def diagram_request_output_paths(request: DiagramRequest) -> tuple[Path, ...]:
+    """Return every file path one resolved typed request will write."""
+
+    from gbdraw.api.requests import CircularBatchRequest
+
+    outputs = (
+        request.outputs
+        if isinstance(request, CircularBatchRequest)
+        else (request.output,)
+    )
+    return tuple(
+        Path(path)
+        for output in outputs
+        for path in resolve_output_paths(
+            str(
+                Path(output.output_directory or ".")
+                / output.output_prefix
+            ),
+            output.formats,
+            include_base_svg=True,
+        )
+    )
+
+
+def diagram_request_rendered_svgs(
+    request: DiagramRequest,
+) -> tuple[RenderedSvg, ...]:
+    """Project resolved typed outputs to the run-level SVG result contract."""
+
+    from gbdraw.api.requests import CircularBatchRequest
+
+    outputs = (
+        request.outputs
+        if isinstance(request, CircularBatchRequest)
+        else (request.output,)
+    )
+    return tuple(
+        make_rendered_svg(
+            str(Path(output.output_directory or ".") / output.output_prefix),
+            output.output_prefix,
+        )
+        for output in outputs
+    )
+
+
 def make_rendered_svg(output_prefix: str, result_name: str | None = None) -> RenderedSvg:
-    """Create a RenderedSvg result for the static SVG written by save_figure()."""
+    """Create a RenderedSvg result for a static SVG export."""
 
     svg_path = Path(resolve_format_output_path(output_prefix, SVG_FORMAT))
     return RenderedSvg(
@@ -173,57 +267,6 @@ def make_rendered_svg(output_prefix: str, result_name: str | None = None) -> Ren
         svg_path=svg_path,
         result_name=result_name or svg_path.stem,
     )
-
-
-def collect_track_slot_geometry_records(
-    canvas: Any,
-    *,
-    result_index: int,
-    result_name: str,
-) -> list[dict[str, Any]]:
-    """Copy track-slot geometry from a canvas and add run-result identity."""
-
-    geometry = getattr(canvas, "_gbdraw_track_slot_geometry", None)
-    if not isinstance(geometry, Mapping):
-        return []
-    records = geometry.get("records")
-    if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
-        return []
-    copied_records: list[dict[str, Any]] = []
-    for record in records:
-        if not isinstance(record, Mapping):
-            continue
-        copied_record = dict(record)
-        copied_record["resultIndex"] = int(result_index)
-        copied_record["resultName"] = str(result_name)
-        slots = copied_record.get("slots")
-        if isinstance(slots, Sequence) and not isinstance(slots, (str, bytes)):
-            copied_record["slots"] = [
-                dict(slot) for slot in slots if isinstance(slot, Mapping)
-            ]
-        else:
-            copied_record["slots"] = []
-        copied_records.append(copied_record)
-    return copied_records
-
-
-def build_track_slot_geometry_run_metadata(
-    *,
-    mode: Literal["circular", "linear"],
-    records: Sequence[Mapping[str, Any]],
-) -> dict[str, Any]:
-    """Build optional run metadata for resolved track-slot geometry."""
-
-    if not records:
-        return {}
-    return {
-        "trackSlotGeometry": {
-            "schema": 1,
-            "mode": mode,
-            "source": "resolved",
-            "records": [dict(record) for record in records],
-        }
-    }
 
 
 def save_session_sidecar_if_requested(
@@ -236,16 +279,33 @@ def save_session_sidecar_if_requested(
     source_session: Mapping[str, Any] | None = None,
     cli_invocation_args: Sequence[str] = (),
     file_bindings: Sequence[SessionFileBinding] = (),
+    overwrite: bool = False,
 ) -> Path | None:
     """Build and write a GUI session sidecar when requested."""
 
     if not save_session and not session_output:
         return None
-    sidecar_path = resolve_session_sidecar_path(
-        explicit_path=session_output,
+    sidecar_path = preflight_session_sidecar_if_requested(
+        save_session=save_session,
+        session_output=session_output,
         output_prefix=output_prefix,
         outputs=run_result.outputs,
+        diagram_output_paths=(
+            diagram_request_output_paths(run_result.canonical_request)
+            if run_result.canonical_request is not None
+            else tuple(
+                Path(path)
+                for output in run_result.outputs
+                for path in resolve_output_paths(
+                    output.output_prefix,
+                    run_result.render_formats,
+                    include_base_svg=True,
+                )
+            )
+        ),
+        overwrite=overwrite,
     )
+    assert sidecar_path is not None
 
     if source_session is not None:
         embedded_files = source_session.get("files")
@@ -279,16 +339,29 @@ def save_session_sidecar_if_requested(
         embedded_files=session_files,
         generated_at=datetime.now(timezone.utc),
         losat_cache_entries=run_result.losat_cache_entries,
+        losat_derived_cache_entries=run_result.losat_derived_cache_entries,
+        protein_identity_manifest=run_result.protein_identity_manifest,
+        legacy_protein_raw_candidates=run_result.legacy_protein_raw_candidates,
+        legacy_protein_derived_evidence=run_result.legacy_protein_derived_evidence,
         canonical_request=run_result.canonical_request,
     )
     payload.pop("files", None)
-    if run_result.feature_metadata:
+    if run_result.feature_metadata or run_result.biological_feature_metadata:
         features_payload = payload.setdefault("features", {})
         if isinstance(features_payload, dict):
             features_payload["extractedFeatures"] = [
                 dict(feature) for feature in run_result.feature_metadata
             ]
-    write_session_json(sidecar_path, payload)
+            features_payload["biologicalFeatures"] = [
+                dict(feature) for feature in run_result.biological_feature_metadata
+            ]
+    if run_result.orthogroup_metadata is not None:
+        orthogroup_payload = payload.setdefault("orthogroupState", {})
+        if isinstance(orthogroup_payload, dict):
+            orthogroup_payload["groups"] = [
+                dict(group) for group in run_result.orthogroup_metadata
+            ]
+    write_session_json(sidecar_path, payload, overwrite=overwrite)
     return sidecar_path
 
 
@@ -300,6 +373,7 @@ def render_canonical_session_if_present(
     format_override: str | None,
     save_session: bool,
     session_output: str | None,
+    overwrite: bool = False,
 ) -> bool:
     """Render an authoritative canonical request and bypass legacy CLI replay."""
 
@@ -334,28 +408,101 @@ def render_canonical_session_if_present(
             output_prefix=output_path.name if output_path is not None else None,
             output_directory=output_directory,
             formats=format_override,
+            overwrite=overwrite,
         )
-        rendered = _render_request(request)
-
+        replay_prefix: str | None = None
+        sidecar_path: Path | None = None
+        adjunct: dict[str, Any] | None = None
         if save_session or session_output:
+            from gbdraw.api.requests import CircularBatchRequest
+
+            if isinstance(request, CircularBatchRequest):
+                replay_prefix = (
+                    output_path.name
+                    if output_path is not None
+                    else (
+                        request.outputs[0].output_prefix
+                        if len(request.outputs) == 1
+                        else "gbdraw"
+                    )
+                )
+            else:
+                replay_prefix = request.output.output_prefix
             sidecar_path = (
                 Path(session_output)
                 if session_output
-                else output_directory / f"{request.output.output_prefix}.gbdraw-session.json"
+                else output_directory / f"{replay_prefix}.gbdraw-session.json"
             )
-            adjunct = {
-                key: value
-                for key, value in document.to_dict().items()
-                if key
-                not in {
-                    "format",
-                    "version",
-                    "createdAt",
-                    "renderRequest",
-                    "resources",
-                    "files",
-                }
+            preflight_session_sidecar_if_requested(
+                save_session=True,
+                session_output=str(sidecar_path),
+                output_prefix=None,
+                diagram_output_paths=diagram_request_output_paths(request),
+                overwrite=overwrite,
+            )
+            adjunct = _project_session_adjunct_for_current_write(
+                document.to_dict(),
+                source_version=document.version,
+            )
+            validate_current_web_state_field_names(adjunct.get("config"))
+
+        rendered = _render_request(
+            request,
+            session_document=document.to_dict(),
+        )
+
+        if sidecar_path is not None:
+            assert adjunct is not None
+            protein_id_map = getattr(rendered, "protein_id_map", None) or {}
+            losat_entries = getattr(rendered, "losat_cache_entries", ())
+            derived_entries = getattr(rendered, "losat_derived_cache_entries", ())
+            identity_manifest = getattr(rendered, "protein_identity_manifest", None)
+            legacy_raw = getattr(rendered, "legacy_protein_raw_candidates", ())
+            legacy_derived = getattr(rendered, "legacy_protein_derived_evidence", ())
+            if protein_id_map:
+                from gbdraw.api.session_compat import (
+                    rewrite_protein_artifact_references,
+                )
+
+                adjunct = rewrite_protein_artifact_references(
+                    adjunct,
+                    protein_id_map,
+                )
+            for artifact_key in (
+                "losatCache",
+                "losatDerivedCache",
+                "proteinIdentityManifest",
+                "legacyArtifacts",
+            ):
+                adjunct.pop(artifact_key, None)
+            adjunct["losatCache"] = {
+                "entries": [dict(entry) for entry in losat_entries]
             }
+            adjunct["losatDerivedCache"] = {
+                "entries": [dict(entry) for entry in derived_entries]
+            }
+            adjunct["proteinIdentityManifest"] = dict(
+                identity_manifest
+                or {
+                    "schema": 2,
+                    "proteinSets": {},
+                    "recordAnalyses": {},
+                    "recordInstances": {},
+                }
+            )
+            legacy_artifacts: dict[str, Any] = {}
+            if legacy_raw:
+                legacy_artifacts["proteinRawCandidates"] = {
+                    "schema": 1,
+                    "entries": [dict(entry) for entry in legacy_raw],
+                }
+            if legacy_derived:
+                legacy_artifacts["proteinDerivedEvidence"] = {
+                    "schema": 1,
+                    "entries": [dict(entry) for entry in legacy_derived],
+                }
+            if legacy_artifacts:
+                adjunct["legacyArtifacts"] = legacy_artifacts
             svg_results = []
             for output in rendered.output_paths:
                 if output.suffix.lower() != ".svg" or not output.is_file():
@@ -367,45 +514,145 @@ def render_canonical_session_if_present(
                 )
             if svg_results:
                 adjunct["results"] = svg_results
-            interactive_context = rendered.interactive_context
-            if interactive_context is not None and interactive_context.features:
+            interactive_contexts = (
+                rendered.interactive_contexts
+                if hasattr(rendered, "interactive_contexts")
+                else (rendered.interactive_context,)
+            )
+            populated_contexts = tuple(
+                context
+                for context in interactive_contexts
+                if context is not None
+            )
+            if populated_contexts:
                 features = adjunct.get("features")
                 features = dict(features) if isinstance(features, Mapping) else {}
                 features["extractedFeatures"] = [
-                    dict(feature) for feature in interactive_context.features
+                    dict(feature)
+                    for context in populated_contexts
+                    for feature in context.features
+                ]
+                features["biologicalFeatures"] = [
+                    dict(feature)
+                    for context in populated_contexts
+                    for feature in context.biological_features
                 ]
                 adjunct["features"] = features
+            if populated_contexts:
+                orthogroup_state = adjunct.get("orthogroupState")
+                orthogroup_state = (
+                    dict(orthogroup_state)
+                    if isinstance(orthogroup_state, Mapping)
+                    else {}
+                )
+                orthogroup_state["groups"] = [
+                    dict(group)
+                    for context in populated_contexts
+                    for group in context.orthogroups
+                ]
+                adjunct["orthogroupState"] = orthogroup_state
+            drawings = (
+                rendered.drawings
+                if hasattr(rendered, "drawings")
+                else (rendered.drawing,)
+            )
+            rendered_request = rendered.request
+            result_names = (
+                tuple(output.output_prefix for output in rendered_request.outputs)
+                if isinstance(rendered_request, CircularBatchRequest)
+                else (rendered_request.output.output_prefix,)
+            )
+            geometry_records = [
+                record
+                for index, (drawing, result_name) in enumerate(
+                    zip(drawings, result_names, strict=True)
+                )
+                for record in collect_track_slot_geometry_records(
+                    drawing,
+                    result_index=index,
+                    result_name=str(result_name),
+                )
+            ]
+            run_metadata = build_track_slot_geometry_run_metadata(
+                mode=mode,
+                records=geometry_records,
+            )
+            if run_metadata:
+                adjunct["runMetadata"] = run_metadata
+            else:
+                adjunct.pop("runMetadata", None)
             save_session_document(
                 sidecar_path,
-                request,
-                title=str(document.to_dict().get("title") or request.output.output_prefix),
+                rendered_request,
+                title=str(document.to_dict().get("title") or replay_prefix),
                 adjunct=adjunct,
+                overwrite=overwrite,
             )
     return True
 
 
-def _render_request(request):
+def _project_session_adjunct_for_current_write(
+    session: Mapping[str, Any],
+    *,
+    source_version: int,
+) -> dict[str, Any]:
+    """Detach non-canonical state and migrate released Web-owned field names."""
+
+    adjunct = {
+        key: value
+        for key, value in session.items()
+        if key
+        not in {
+            "format",
+            "version",
+            "createdAt",
+            "renderRequest",
+            "resources",
+            "files",
+        }
+    }
+    if source_version >= CURRENT_SESSION_VERSION:
+        return adjunct
+
+    config = adjunct.get("config")
+    if isinstance(config, Mapping):
+        adjunct["config"] = migrate_persisted_web_state_field_names(config)
+    else:
+        adjunct.pop("config", None)
+    if not isinstance(adjunct.get("ui"), Mapping):
+        adjunct.pop("ui", None)
+    return adjunct
+
+
+def _render_request(request, *, session_document=None):
     """Import the request renderer lazily to keep CLI session imports lightweight."""
 
-    from gbdraw.api.request_render import render_request
+    if session_document is None:
+        from gbdraw.api.request_render import render_request
 
-    return render_request(request)
+        return render_request(request)
+    from gbdraw.api.session_compat import render_session_compatible_request
+
+    return render_session_compatible_request(request, session_document)
 
 
 def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:
-    """Remove sidecar-output-only flags before storing cliInvocation.args."""
+    """Remove sidecar controls and overwrite permission from saved CLI arguments."""
 
     result: list[str] = []
     index = 0
     while index < len(cmd_args):
         token = str(cmd_args[index])
-        if token in {"--save_session", "--save-session"}:
+        if token == "--save_session":
             index += 1
             continue
-        if token.startswith("--session_output=") or token.startswith("--session-output="):
+        if token == "--overwrite":
             index += 1
             continue
-        if token in {"--session_output", "--session-output"}:
+        if token.startswith("--session_output="):
+            index += 1
+            continue
+        if token == "--session_output":
             index += 2
             continue
         result.append(token)
@@ -481,7 +728,7 @@ def collect_embedded_files_from_cli_args(
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
             continue
-        if mode == "linear" and token in {"--gbk", "--gff", "--fasta", "-b", "--blast", "--depth"}:
+        if mode == "linear" and token in {"--gbk", "--gff", "--fasta", "-b", "--blast"}:
             values, next_index = _collect_option_values(cli_args, index + 1)
             for offset, value in enumerate(values):
                 arg_index = index + 1 + offset
@@ -497,12 +744,9 @@ def collect_embedded_files_from_cli_args(
                 elif token == "--fasta":
                     slot = f"files.linearSeqs[{seq_index}].fasta"
                     depth = False
-                elif token in {"-b", "--blast"}:
+                else:
                     slot = f"files.linearSeqs[{seq_index}].blast"
                     depth = False
-                else:
-                    slot = f"files.linearSeqs[{seq_index}].depth"
-                    depth = True
                 _set_file_slot(files, slot, value, depth=depth)
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
@@ -518,14 +762,6 @@ def collect_embedded_files_from_cli_args(
                 bindings.append(_binding(arg_index, slot, value))
             linear_depth_track_index += 1
             index = next_index
-            continue
-        if token == "--depth":
-            value_index = index + 1
-            if value_index < len(cli_args) and _is_embeddable_path(cli_args[value_index]):
-                slot = "files.c_depth"
-                _set_file_slot(files, slot, cli_args[value_index], depth=True)
-                bindings.append(_binding(value_index, slot, cli_args[value_index]))
-            index += 2
             continue
         if token in _COMMON_SINGLE_FILE_OPTIONS:
             value_index = index + 1
@@ -587,7 +823,6 @@ _COMMON_SINGLE_FILE_OPTIONS = {
     "--qualifier_priority": "files.qualifier_priority",
     "--label_table": "files.cliInputs[]",
     "--feature_visibility_table": "files.cliInputs[]",
-    "--feature_table": "files.cliInputs[]",
 }
 
 
@@ -780,11 +1015,13 @@ __all__ = [
     "build_track_slot_geometry_run_metadata",
     "collect_embedded_files_from_cli_args",
     "collect_track_slot_geometry_records",
+    "diagram_request_output_paths",
+    "diagram_request_rendered_svgs",
     "make_rendered_svg",
     "parse_session_pre_args",
+    "preflight_session_sidecar_if_requested",
     "resolve_session_sidecar_path",
     "render_canonical_session_if_present",
     "save_session_sidecar_if_requested",
     "strip_session_output_args",
-    "validate_session_override_args",
 ]

@@ -105,12 +105,54 @@ gbdraw/
 ### Entry Points
 
 1. **CLI:** `gbdraw.cli:main()` → dispatches to `circular` or `linear` subcommands
-2. **Public API:** `gbdraw.api` module exports:
-   - `assemble_circular_diagram_from_record()` - Build circular diagram from SeqRecord
-   - `assemble_linear_diagram_from_records()` - Build linear diagram from multiple SeqRecords
-   - Configurator classes (`FeatureDrawingConfigurator`, `GcContentConfigurator`, etc.)
-   - Canvas configurators (`CircularCanvasConfigurator`, `LinearCanvasConfigurator`)
-   - Track specs (`TrackSpec`, `parse_track_specs()`) - Control individual track visibility/styling
+2. **Beginner-facing Python API:** the `gbdraw` package root exports
+   `read_genbank()`, `read_gff()`, `draw_circular()`, `draw_linear()`,
+   mode-specific option types, and `Diagram`.
+3. **Typed integration API:** `gbdraw.api` exports typed request, render, session,
+   table, option, and track-slot contracts plus explicit render helpers.
+
+Low-level assemblers remain in `gbdraw.api.diagram` for internal engine use.
+Canvas and drawing configurators remain implementation details in their owner
+modules; they are not re-exported from `gbdraw.api`.
+
+Architecture changes should keep these entry points convergent:
+
+- Route the Python API, CLI, Web UI, and both diagram modes through the same
+  typed core/planner; adapters should only translate surface-specific input and output.
+- As a default, add an abstraction only when it unifies at least two real
+  execution paths and removes the superseded paths in the same change. Extend
+  existing boundaries instead of creating parallel pipelines.
+- Prefer a few stable, composable contracts over mode- or surface-specific
+  branches. Add capabilities as data at an existing boundary when practical,
+  so later extension or removal does not multiply change points.
+- Avoid repeated I/O or computation in shared layers, and protect material
+  performance changes with measurements.
+
+### Persisted-format compatibility
+
+- Compatibility readers and migrators require evidence that the old contract
+  existed in the first-parent history of `main` or in a release tag, plus a
+  representative positive fixture. Track session, request, cache, metadata, and
+  other schema namespaces separately.
+- Keep the current writer format even before it reaches `main`. If an active branch
+  advances that format again, rewrite branch-owned artifacts to the newest format
+  before merge and remove the superseded reader, migrator, fixture, test, and user
+  documentation. Do not chain migrations through or advertise branch-only
+  intermediate versions.
+
+### Working-tree overwrite policy
+
+- Uncommitted state is not a preservation requirement in this repository. When an
+  in-scope fix conflicts with dirty code, tests, documentation, fixtures, or
+  generated artifacts, replace the uncommitted implementation as needed to make
+  the result correct and internally consistent.
+- Inspect the existing diff before editing so the replacement is deliberate.
+  Keep files unrelated to the requested work out of scope; this policy does not
+  authorize broad cleanup or deletion elsewhere in the working tree.
+- Treat Gallery sessions, source SVGs, rendered examples, thumbnails, and
+  `examples.json` as generator-owned outputs. A requested Gallery refresh may
+  overwrite dirty copies directly; regenerate them from the current code and
+  declared inputs instead of merging or preserving their previous bytes.
 
 ### Data Flow
 
@@ -135,7 +177,7 @@ Main configurator classes encapsulate drawing logic:
 The `gbdraw/render/` module has a two-tier architecture:
 - **drawers/**: Low-level SVG element builders (individual shapes, paths)
 - **groups/**: High-level SVG group assemblers that compose drawers
-- **export.py**: Format conversion (`save_figure()`, `parse_formats()`)
+- **export.py**: Internal format parsing and deprecated lenient export compatibility
 
 ### Web UI Structure
 
@@ -188,7 +230,7 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 ## CI/CD
 
 - **Python versions tested:** 3.10, 3.11, 3.12
-- **Lint job:** Uses ruff for code formatting checks (currently non-blocking with `continue-on-error: true`)
+- **Lint job:** Uses Ruff 0.15.12 and blocks CI on lint failures
 - **CairoSVG job:** Separate test on Python 3.11 requiring system packages (`libcairo2-dev`, `libpango1.0-dev` on Ubuntu)
 - **Slow tests:** Only run on push to main branch
 
@@ -237,6 +279,13 @@ normal test runs do not write to `tests/reference_outputs/`.
 
 ## Documentation
 
+- Always read and apply `.agents/skills/avoid-ai-writing/SKILL.md` when auditing
+  or changing documentation, tutorials, CLI/UI text, release notes, reports, or
+  handoff/commit prose, even when the user does not name the Skill. Start with a
+  detect pass, make only targeted edits, and verify the final text again.
+- Preserve exact technical terms, UI labels, CLI options, identifiers, and
+  scientifically necessary qualifications. Do not make prose less accurate merely
+  to avoid a statistical writing pattern.
 - Main docs: `docs/DOCS.md`
 - Tutorials: `docs/TUTORIALS/`
 - CLI Reference: `docs/CLI_Reference.md`

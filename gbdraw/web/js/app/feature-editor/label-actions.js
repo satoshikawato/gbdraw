@@ -8,9 +8,19 @@ import {
 import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import { downloadTextFile } from '../../services/text-download.js';
+import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
 
-const EXCLUDED_GROUP_SELECTOR =
-  '#legend, #feature_legend, #pairwise_legend, #horizontal_legend, #vertical_legend, #length_bar, g[id="tick"], g[id^="tick_"]';
+export const EXCLUDED_GROUP_SELECTOR = [
+  '#legend',
+  '#feature_legend',
+  COMPARISON_LEGEND_SELECTOR,
+  '#horizontal_legend',
+  '#vertical_legend',
+  '#length_bar',
+  'g[data-gbdraw-slot-renderer="ticks"]',
+  'g[id="tick"]',
+  'g[id^="tick_"]'
+].join(', ');
 const EDITABLE_LABEL_SELECTOR = 'text[data-label-editable="true"]';
 
 const toNumber = (value, fallback = 0) => {
