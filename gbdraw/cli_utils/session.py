@@ -30,6 +30,7 @@ from gbdraw.render.track_slot_metadata import (
 )
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
+    CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS,
     SessionBuildContext,
     SessionFileBinding,
     build_session_json,
@@ -42,6 +43,7 @@ from gbdraw.session_io import (
 
 if TYPE_CHECKING:
     from gbdraw.api.requests import DiagramRequest
+    from gbdraw.render.interactive_svg import InteractiveSvgContext
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,7 @@ class DiagramRunResult:
     run_metadata: Mapping[str, Any] = field(default_factory=dict)
     canonical_request: DiagramRequest | None = None
     biological_feature_metadata: tuple[Mapping[str, Any], ...] = ()
+    interactive_contexts: tuple[InteractiveSvgContext | None, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -269,6 +272,87 @@ def make_rendered_svg(output_prefix: str, result_name: str | None = None) -> Ren
     )
 
 
+def _feature_catalog_for_svg_results(
+    svg_results: Sequence[tuple[str, str]],
+    contexts: Sequence[InteractiveSvgContext | None],
+) -> dict[str, object]:
+    from gbdraw.render.interactive_svg import InteractiveSvgContext
+    from gbdraw.web_support.feature_catalog import (
+        build_feature_catalog,
+        build_feature_catalog_item,
+    )
+
+    if not svg_results:
+        return build_feature_catalog([])
+    if contexts and len(contexts) != len(svg_results):
+        raise ValidationError(
+            "Session feature metadata must contain one context per Result."
+        )
+    aligned_contexts = (
+        tuple(contexts)
+        if contexts
+        else tuple(None for _ in svg_results)
+    )
+    items = []
+    for result_index, ((result_name, svg_source), context) in enumerate(
+        zip(svg_results, aligned_contexts, strict=True)
+    ):
+        if context is None:
+            items.append(
+                {
+                    "resultIndex": result_index,
+                    "resultName": result_name,
+                    "recordKeys": [],
+                    "features": [],
+                    "biologicalFeatures": [],
+                    "orthogroups": [],
+                    "annotations": [],
+                    "comparisonMatches": [],
+                }
+            )
+            continue
+        if not isinstance(context, InteractiveSvgContext):
+            raise ValidationError(
+                "Session feature metadata contains an invalid render context."
+            )
+        items.append(
+            build_feature_catalog_item(
+                svg_source,
+                context,
+                result_index=result_index,
+                result_name=result_name,
+            )
+        )
+    return build_feature_catalog(items)
+
+
+def _replace_current_derived_feature_state(
+    payload: dict[str, Any],
+    feature_catalog: Mapping[str, object],
+) -> None:
+    editor_state = payload.get("editorState")
+    editor_state = (
+        dict(editor_state) if isinstance(editor_state, Mapping) else {}
+    )
+    editor_state["featureCatalog"] = dict(feature_catalog)
+    payload["editorState"] = editor_state
+
+    features = payload.get("features")
+    features = dict(features) if isinstance(features, Mapping) else {}
+    for key in CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS:
+        features.pop(key, None)
+    payload["features"] = features
+
+    orthogroup_state = payload.get("orthogroupState")
+    orthogroup_state = (
+        dict(orthogroup_state)
+        if isinstance(orthogroup_state, Mapping)
+        else {}
+    )
+    orthogroup_state.pop("groups", None)
+    payload["orthogroupState"] = orthogroup_state
+
+
 def save_session_sidecar_if_requested(
     *,
     save_session: bool,
@@ -322,6 +406,25 @@ def save_session_sidecar_if_requested(
         )
 
     svg_results = _read_svg_results(run_result.outputs)
+    interactive_contexts = run_result.interactive_contexts
+    if not interactive_contexts and (
+        run_result.feature_metadata
+        or run_result.biological_feature_metadata
+        or run_result.orthogroup_metadata
+    ):
+        from gbdraw.render.interactive_svg import InteractiveSvgContext
+
+        interactive_contexts = (
+            InteractiveSvgContext(
+                features=run_result.feature_metadata,
+                biological_features=run_result.biological_feature_metadata,
+                orthogroups=run_result.orthogroup_metadata or (),
+            ),
+        )
+    feature_catalog = _feature_catalog_for_svg_results(
+        svg_results,
+        interactive_contexts,
+    )
     context_output_prefix = output_prefix
     if context_output_prefix is None and len(run_result.outputs) == 1:
         context_output_prefix = run_result.outputs[0].output_prefix
@@ -338,29 +441,15 @@ def save_session_sidecar_if_requested(
         svg_results=svg_results,
         embedded_files=session_files,
         generated_at=datetime.now(timezone.utc),
+        feature_catalog=feature_catalog,
         losat_cache_entries=run_result.losat_cache_entries,
-        losat_derived_cache_entries=run_result.losat_derived_cache_entries,
+        losat_derived_cache_entries=(),
         protein_identity_manifest=run_result.protein_identity_manifest,
         legacy_protein_raw_candidates=run_result.legacy_protein_raw_candidates,
         legacy_protein_derived_evidence=run_result.legacy_protein_derived_evidence,
         canonical_request=run_result.canonical_request,
     )
     payload.pop("files", None)
-    if run_result.feature_metadata or run_result.biological_feature_metadata:
-        features_payload = payload.setdefault("features", {})
-        if isinstance(features_payload, dict):
-            features_payload["extractedFeatures"] = [
-                dict(feature) for feature in run_result.feature_metadata
-            ]
-            features_payload["biologicalFeatures"] = [
-                dict(feature) for feature in run_result.biological_feature_metadata
-            ]
-    if run_result.orthogroup_metadata is not None:
-        orthogroup_payload = payload.setdefault("orthogroupState", {})
-        if isinstance(orthogroup_payload, dict):
-            orthogroup_payload["groups"] = [
-                dict(group) for group in run_result.orthogroup_metadata
-            ]
     write_session_json(sidecar_path, payload, overwrite=overwrite)
     return sidecar_path
 
@@ -449,13 +538,13 @@ def render_canonical_session_if_present(
         rendered = _render_request(
             request,
             session_document=document.to_dict(),
+            include_feature_catalog=sidecar_path is not None,
         )
 
         if sidecar_path is not None:
             assert adjunct is not None
             protein_id_map = getattr(rendered, "protein_id_map", None) or {}
             losat_entries = getattr(rendered, "losat_cache_entries", ())
-            derived_entries = getattr(rendered, "losat_derived_cache_entries", ())
             identity_manifest = getattr(rendered, "protein_identity_manifest", None)
             legacy_raw = getattr(rendered, "legacy_protein_raw_candidates", ())
             legacy_derived = getattr(rendered, "legacy_protein_derived_evidence", ())
@@ -479,7 +568,7 @@ def render_canonical_session_if_present(
                 "entries": [dict(entry) for entry in losat_entries]
             }
             adjunct["losatDerivedCache"] = {
-                "entries": [dict(entry) for entry in derived_entries]
+                "entries": []
             }
             adjunct["proteinIdentityManifest"] = dict(
                 identity_manifest
@@ -519,38 +608,19 @@ def render_canonical_session_if_present(
                 if hasattr(rendered, "interactive_contexts")
                 else (rendered.interactive_context,)
             )
-            populated_contexts = tuple(
-                context
-                for context in interactive_contexts
-                if context is not None
+            catalog_contexts = tuple(interactive_contexts)
+            catalog_results = [
+                (str(result["name"]), str(result["content"]))
+                for result in svg_results
+            ]
+            feature_catalog = _feature_catalog_for_svg_results(
+                catalog_results,
+                catalog_contexts,
             )
-            if populated_contexts:
-                features = adjunct.get("features")
-                features = dict(features) if isinstance(features, Mapping) else {}
-                features["extractedFeatures"] = [
-                    dict(feature)
-                    for context in populated_contexts
-                    for feature in context.features
-                ]
-                features["biologicalFeatures"] = [
-                    dict(feature)
-                    for context in populated_contexts
-                    for feature in context.biological_features
-                ]
-                adjunct["features"] = features
-            if populated_contexts:
-                orthogroup_state = adjunct.get("orthogroupState")
-                orthogroup_state = (
-                    dict(orthogroup_state)
-                    if isinstance(orthogroup_state, Mapping)
-                    else {}
-                )
-                orthogroup_state["groups"] = [
-                    dict(group)
-                    for context in populated_contexts
-                    for group in context.orthogroups
-                ]
-                adjunct["orthogroupState"] = orthogroup_state
+            _replace_current_derived_feature_state(
+                adjunct,
+                feature_catalog,
+            )
             drawings = (
                 rendered.drawings
                 if hasattr(rendered, "drawings")
@@ -624,16 +694,28 @@ def _project_session_adjunct_for_current_write(
     return adjunct
 
 
-def _render_request(request, *, session_document=None):
+def _render_request(
+    request,
+    *,
+    session_document=None,
+    include_feature_catalog: bool = False,
+):
     """Import the request renderer lazily to keep CLI session imports lightweight."""
 
     if session_document is None:
         from gbdraw.api.request_render import render_request
 
-        return render_request(request)
+        return render_request(
+            request,
+            include_feature_catalog=include_feature_catalog,
+        )
     from gbdraw.api.session_compat import render_session_compatible_request
 
-    return render_session_compatible_request(request, session_document)
+    return render_session_compatible_request(
+        request,
+        session_document,
+        include_feature_catalog=include_feature_catalog,
+    )
 
 
 def strip_session_output_args(cmd_args: Sequence[str]) -> list[str]:

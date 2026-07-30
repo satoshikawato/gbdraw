@@ -95,8 +95,9 @@ class FakeElement {
   }
 }
 
-const fakeSvg = (elements) => ({
-  querySelectorAll: (selector) => {
+const fakeSvg = (elements, className = '') => {
+  const root = new FakeElement(className);
+  root.querySelectorAll = (selector) => {
     if (selector === '[style]') {
       return elements.filter((element) => element.getAttribute('style') !== null);
     }
@@ -111,8 +112,9 @@ const fakeSvg = (elements) => ({
       return elements.filter((element) => element.classTokens().includes(token));
     }
     return [];
-  }
-});
+  };
+  return root;
+};
 
 assert.equal(normalizeFeatureSelectionId('feature-1__part2'), 'feature-1');
 assert.equal(
@@ -135,8 +137,13 @@ assert.equal(candidate.getAttribute('class'), null);
 
 const searchMatch = new FakeElement('gbdraw-preview-feature-search-match gbdraw-feature-selected keep');
 const cursorStyle = new FakeElement('', 'cursor: pointer; opacity: 0.8');
-stripTransientPreviewState(fakeSvg([searchMatch, cursorStyle]));
+const previewRoot = fakeSvg(
+  [searchMatch, cursorStyle],
+  'gbdraw-preview-feature-search-results-active gbdraw-preview-feature-search-updating keep-root'
+);
+stripTransientPreviewState(previewRoot);
 assert.equal(searchMatch.getAttribute('class'), 'keep');
 assert.equal(cursorStyle.getAttribute('style'), 'opacity: 0.8');
+assert.equal(previewRoot.getAttribute('class'), 'keep-root');
 
 console.log('feature selection tests passed');

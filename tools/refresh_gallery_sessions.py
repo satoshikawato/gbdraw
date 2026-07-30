@@ -5,6 +5,7 @@ import argparse
 import copy
 import gc
 import gzip
+import hashlib
 import json
 import math
 import os
@@ -50,8 +51,10 @@ SESSION_ROOT = GALLERY_ROOT / "sessions"
 SESSION_PROMOTER = REPO_ROOT / "tools" / "promote_gallery_session.mjs"
 VIBRIO_SESSION_NAME = "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
 VIBRIO_RAW_ENTRY_COUNT = 59
-VIBRIO_GZIP_HARD_LIMIT = 100_000_000
-VIBRIO_EXPANDED_HARD_LIMIT = 536_870_912
+VIBRIO_GZIP_HARD_LIMIT = 90_000_000
+VIBRIO_EXPANDED_HARD_LIMIT = 400_000_000
+VIBRIO_GZIP_REGRESSION_CEILING = 95_000_000
+VIBRIO_EXPANDED_REGRESSION_CEILING = 420_000_000
 GEOMETRY_TOLERANCE_PX = 1e-6
 LINEAR_SHARED_SPACING_RENDERERS = frozenset(
     {"features", "dinucleotide_content", "dinucleotide_skew"}
@@ -366,6 +369,16 @@ def _merge_refreshed_gallery_artifacts(
     return envelope
 
 
+def _omit_regenerable_gallery_derived_cache(
+    session_path: Path,
+    session: dict[str, Any],
+) -> None:
+    """Keep the oversized Vibrio artifact reconstructible from its raw hits."""
+
+    if session_path.name == VIBRIO_SESSION_NAME:
+        session["losatDerivedCache"] = {"entries": []}
+
+
 def _geometry_number(value: object) -> float:
     try:
         number = float(value)
@@ -646,6 +659,168 @@ def _validate_linear_reserve_geometry(
             )
 
 
+def _serialized_component_bytes(value: object) -> int:
+    if value is None:
+        return 0
+    encoder = json.JSONEncoder(
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return sum(len(chunk.encode("utf-8")) for chunk in encoder.iterencode(value))
+
+
+def _session_artifact_measurements(
+    session: Mapping[str, Any],
+    artifact_path: Path,
+) -> dict[str, int]:
+    compressed_bytes = artifact_path.stat().st_size
+    with artifact_path.open("rb") as session_file:
+        is_gzip = session_file.read(2) == b"\x1f\x8b"
+    opener = gzip.open if is_gzip else Path.open
+    with opener(artifact_path, "rb") as session_file:
+        expanded_bytes = sum(
+            len(chunk)
+            for chunk in iter(lambda: session_file.read(1024 * 1024), b"")
+        )
+
+    editor_state = session.get("editorState")
+    editor_without_catalog = (
+        dict(editor_state) if isinstance(editor_state, Mapping) else {}
+    )
+    feature_catalog = editor_without_catalog.pop("featureCatalog", None)
+    return {
+        "sessionGzipBytes": compressed_bytes,
+        "sessionExpandedBytes": expanded_bytes,
+        "resultsBytes": _serialized_component_bytes(session.get("results")),
+        "resourcesBytes": _serialized_component_bytes(
+            session.get("resources")
+        ),
+        "webFilesBytes": _serialized_component_bytes(session.get("webFiles")),
+        "featureCatalogBytes": _serialized_component_bytes(feature_catalog),
+        "editorStateBytes": _serialized_component_bytes(
+            editor_without_catalog
+        ),
+        "losatCacheBytes": _serialized_component_bytes(
+            session.get("losatCache")
+        ),
+        "losatDerivedCacheBytes": _serialized_component_bytes(
+            session.get("losatDerivedCache")
+        ),
+    }
+
+
+def _format_session_measurements(measurements: Mapping[str, int]) -> str:
+    return ", ".join(
+        f"{key}={value}" for key, value in measurements.items()
+    )
+
+
+def _validate_current_session_catalog_structure(
+    session_path: Path,
+    session: Mapping[str, Any],
+) -> None:
+    resources = session.get("resources")
+    seen_payloads: dict[str, str] = {}
+    if isinstance(resources, Mapping):
+        for resource_id, resource in resources.items():
+            if not isinstance(resource, Mapping):
+                continue
+            data = resource.get("data")
+            if not isinstance(data, str) or not data:
+                continue
+            encoding = str(resource.get("encoding") or "text")
+            hasher = hashlib.sha256()
+            hasher.update(encoding.encode("utf-8"))
+            hasher.update(b"\0")
+            for offset in range(0, len(data), 1024 * 1024):
+                hasher.update(
+                    data[offset : offset + 1024 * 1024].encode("utf-8")
+                )
+            digest = hasher.hexdigest()
+            previous = seen_payloads.get(digest)
+            if previous is not None:
+                raise ValueError(
+                    f"{session_path.name} duplicates one resource payload as "
+                    f"{previous} and {resource_id}"
+                )
+            seen_payloads[digest] = str(resource_id)
+
+    editor_state = session.get("editorState")
+    catalog = (
+        editor_state.get("featureCatalog")
+        if isinstance(editor_state, Mapping)
+        else None
+    )
+    if not isinstance(catalog, Mapping):
+        return
+    items = catalog.get("items")
+    if not isinstance(items, list):
+        return
+    rendered_allowed = {
+        "svgId",
+        "recordKey",
+        "biologicalFeatureId",
+        "fillColor",
+    }
+    duplicated_payload_keys = {
+        "qualifiers",
+        "nucleotide_sequence",
+        "nucleotideSequence",
+        "amino_acid_sequence",
+        "aminoAcidSequence",
+    }
+
+    def duplicated_keys(value: object) -> set[str]:
+        if isinstance(value, Mapping):
+            found = duplicated_payload_keys & set(value)
+            for nested in value.values():
+                found.update(duplicated_keys(nested))
+            return found
+        if isinstance(value, list):
+            found: set[str] = set()
+            for nested in value:
+                found.update(duplicated_keys(nested))
+            return found
+        return set()
+
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        biological = item.get("biologicalFeatures")
+        biological = biological if isinstance(biological, list) else []
+        biological_keys = [
+            (
+                str(feature.get("recordKey") or ""),
+                str(feature.get("biologicalFeatureId") or ""),
+            )
+            for feature in biological
+            if isinstance(feature, Mapping)
+        ]
+        if len(biological_keys) != len(set(biological_keys)):
+            raise ValueError(
+                f"{session_path.name} duplicates a biological feature payload"
+            )
+        rendered = item.get("features")
+        rendered = rendered if isinstance(rendered, list) else []
+        for feature in rendered:
+            if not isinstance(feature, Mapping):
+                continue
+            unexpected = set(feature) - rendered_allowed
+            if unexpected:
+                raise ValueError(
+                    f"{session_path.name} rendered feature duplicates "
+                    f"biological fields: {', '.join(sorted(unexpected))}"
+                )
+        duplicated = set()
+        for section in ("features", "orthogroups", "comparisonMatches"):
+            duplicated.update(duplicated_keys(item.get(section)))
+        if duplicated:
+            raise ValueError(
+                f"{session_path.name} copies biological qualifiers/sequences "
+                f"outside biologicalFeatures: {', '.join(sorted(duplicated))}"
+            )
+
+
 def _validate_staged_gallery_session(
     session_path: Path,
     session: dict[str, Any],
@@ -701,6 +876,7 @@ def _validate_staged_gallery_session(
     resources = session.get("resources")
     if not isinstance(resources, Mapping):
         raise ValueError(f"{session_path.name} has no canonical resources")
+    _validate_current_session_catalog_structure(session_path, session)
 
     manifest = session.get("proteinIdentityManifest")
     if (
@@ -722,6 +898,17 @@ def _validate_staged_gallery_session(
     if session_path.name == VIBRIO_SESSION_NAME:
         if artifact_path is None:
             raise ValueError("Vibrio size validation requires the staged session path")
+        derived_cache = session.get("losatDerivedCache")
+        retained_derived_entries = (
+            derived_cache.get("entries", [])
+            if isinstance(derived_cache, Mapping)
+            else []
+        )
+        if retained_derived_entries:
+            raise ValueError(
+                f"{session_path.name} must rebuild its derived LOSATP cache "
+                "from the retained raw cache"
+            )
         protein_entries = [
             entry
             for entry in raw_entries
@@ -742,24 +929,28 @@ def _validate_staged_gallery_session(
                 f"{session_path.name} must retain the exact "
                 f"{VIBRIO_RAW_ENTRY_COUNT}-pair protein cache"
             )
-        compressed_bytes = artifact_path.stat().st_size
-        with artifact_path.open("rb") as session_file:
-            is_gzip = session_file.read(2) == b"\x1f\x8b"
-        opener = gzip.open if is_gzip else Path.open
-        with opener(artifact_path, "rb") as session_file:
-            expanded_bytes = sum(
-                len(chunk)
-                for chunk in iter(lambda: session_file.read(1024 * 1024), b"")
-            )
-        if compressed_bytes >= VIBRIO_GZIP_HARD_LIMIT:
+        measurements = _session_artifact_measurements(
+            session,
+            artifact_path,
+        )
+        print(
+            f"Gallery session metrics [{session_path.name}]: "
+            f"{_format_session_measurements(measurements)}"
+        )
+        if measurements["sessionGzipBytes"] > VIBRIO_GZIP_HARD_LIMIT:
             raise ValueError(
-                f"{session_path.name} gzip size {compressed_bytes} exceeds "
-                f"the {VIBRIO_GZIP_HARD_LIMIT}-byte hard limit"
+                f"{session_path.name} gzip size exceeds the "
+                f"{VIBRIO_GZIP_HARD_LIMIT}-byte hard limit "
+                f"({_format_session_measurements(measurements)})"
             )
-        if expanded_bytes >= VIBRIO_EXPANDED_HARD_LIMIT:
+        if (
+            measurements["sessionExpandedBytes"]
+            > VIBRIO_EXPANDED_HARD_LIMIT
+        ):
             raise ValueError(
-                f"{session_path.name} expanded size {expanded_bytes} exceeds "
-                f"the {VIBRIO_EXPANDED_HARD_LIMIT}-byte hard limit"
+                f"{session_path.name} expanded size exceeds the "
+                f"{VIBRIO_EXPANDED_HARD_LIMIT}-byte hard limit "
+                f"({_format_session_measurements(measurements)})"
             )
     derived_cache = session.get("losatDerivedCache")
     derived_entries = (
@@ -927,6 +1118,10 @@ def _refresh_one_session(
         refreshed_payload = _merge_refreshed_gallery_artifacts(
             promoted_payload,
             rendered_payload,
+        )
+        _omit_regenerable_gallery_derived_cache(
+            session_path,
+            refreshed_payload,
         )
         del promoted_payload, rendered_payload
         gc.collect()

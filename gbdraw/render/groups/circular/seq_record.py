@@ -129,7 +129,7 @@ class SeqRecordGroup:
                 self.strandedness,
                 self.length_param,
                 feature_instance_id=(
-                    feature_object.feature_id
+                    feature_object.source_feature_index
                     if stable_feature_id
                     and feature_id_counts[stable_feature_id] > 1
                     else None

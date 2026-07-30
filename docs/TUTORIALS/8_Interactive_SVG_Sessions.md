@@ -43,7 +43,12 @@ Hover over a feature for a compact summary, or click it to open the **Details**,
 
 Interactive SVG embeds feature metadata for rendered features. Linear comparison plots can also include pairwise match metadata. Reuse the precomputed BLAST outfmt 7 table maintained in `examples/`:
 
-New exports use compact metadata schema v2. The browser reconstructs FASTA text and match-popup rows when needed, so qualifier display, sequence copy/download, search, and match popups remain available without storing duplicate pre-rendered values. Existing files that use schema v1 remain compatible with the embedded runtime and do not need conversion.
+New exports use compact metadata schema v3. Rendered SVG elements refer to one
+biological feature catalog instead of carrying duplicate qualifiers and
+sequences. The browser reconstructs FASTA text and match-popup rows when
+needed, so qualifier display, sequence copy/download, search, and match popups
+remain available. Existing files that use schema v1 or v2 remain compatible
+with the embedded runtime and do not need conversion.
 
 Click a Linear pairwise ribbon or collinear block, or a Circular Homology-ring HSP, to open the shared match popup. The sequence section can copy or download the query/reference span, the subject/comparison span, or both spans as nucleotide FASTA. Collinear export uses the complete block envelopes, which may include intergenic bases and genes that are not anchors. Feature and orthogroup-member actions remain separate.
 
@@ -128,6 +133,10 @@ gbdraw gui
 Click **Load Session**, then choose the `.gbdraw-session.json` file to restore its embedded inputs, settings, and saved result. Load the JSON sidecar, not the `.interactive.svg` file.
 
 The web app's **Save Session** action downloads a lossless gzip-compressed `.gbdraw-session.json.gz` file. **Load Session** accepts both this compressed form and the uncompressed `.gbdraw-session.json` files written by the CLI.
+
+The saved session keeps one base SVG Result for each logical diagram. Use
+**Download interactive SVG** when you need a standalone file with the
+interactive metadata and runtime embedded.
 
 Supported older sessions can be loaded and replayed in the same diagram mode.
 Some older sessions remain CLI-replay inputs rather than typed API inputs.

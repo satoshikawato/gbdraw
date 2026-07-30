@@ -1425,10 +1425,12 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     legacy_protein_raw_candidates = None
     legacy_protein_derived_evidence = None
+    include_feature_catalog = bool(args.save_session or args.session_output)
     if source_session is not None:
         render_result = render_session_compatible_request(
             canonical_request,
             source_session,
+            include_feature_catalog=include_feature_catalog,
         )
         legacy_protein_raw_candidates = (
             render_result.legacy_protein_raw_candidates
@@ -1440,6 +1442,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         render_result = render_request(
             canonical_request,
             artifacts=CurrentRequestArtifacts(),
+            include_feature_catalog=include_feature_catalog,
         )
     canvas = render_result.drawing
     interactive_context = render_result.interactive_context
@@ -1465,6 +1468,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             if interactive_context
             else ()
         ),
+        interactive_contexts=(interactive_context,),
         orthogroup_metadata=(
             tuple(interactive_context.orthogroups)
             if interactive_context is not None

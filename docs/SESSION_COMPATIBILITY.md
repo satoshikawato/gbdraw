@@ -13,16 +13,16 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 39 | 27–33 and 39 |
+| gbdraw session | 40 | 27–33 and 39–40 |
 | Canonical `renderRequest` | 5 | 1, 2, and 5 |
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
 
-The public typed-session bridge can convert session versions 31–33 and 39 to a
-typed request. Versions 27–30 remain supported only as CLI replay inputs because
-they do not contain a canonical `renderRequest`. Use the same `circular` or
-`linear` subcommand that created the session.
+The public typed-session bridge can convert session versions 31–33 and 39–40 to
+a typed request. Versions 27–30 remain supported only as CLI replay inputs
+because they do not contain a canonical `renderRequest`. Use the same
+`circular` or `linear` subcommand that created the session.
 
 `render_session()` is the compatibility boundary for canonical session replay.
 It migrates supported persisted artifacts into `CurrentRequestArtifacts`, then
@@ -45,6 +45,18 @@ is the output-prefix owner.
 Current sessions keep mode-specific layout values under
 `ui.layoutPreferences`. Supported older parallel title, legend, and grouping
 fields are migrated when read and are not written again.
+
+The Web writer stores file bytes once under `resources`. `webFiles` binds those
+resources to active and inactive input controls, so files shared by the
+committed request and an editable draft are not copied into a second payload.
+Version 39 sessions with legacy embedded `files` remain readable.
+
+`renderRequest` owns the last committed render. Web config retains inactive
+Custom Track stacks, disabled rows, draft Axis positions, and per-mode
+comparison profiles. `editorState.featureCatalog` holds the schema-3 feature
+catalog used by the saved preview and editor. Current sessions store one base
+SVG Result per logical diagram; readers collapse paired base and interactive
+Results from supported older sessions.
 
 ## Retired inputs
 

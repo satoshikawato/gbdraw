@@ -1158,7 +1158,7 @@
                                     <div>
                                         <label class="input-label text-[10px]">Depth Width <help-tip text="Depth track width in px."></help-tip></label>
                                         <auto-value-field :visible="autoValueVisible(adv.depth_width_circular, 'circularDepthWidth')" :text="autoValueText('circularDepthWidth')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_width_circular" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_width_circular" :disabled="adv.circular_track_slots_enabled" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use each Depth row width, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -2050,7 +2050,8 @@
                                             </div>
                                             <div
                                                 v-for="entry in linearTrackStackEntries()"
-                                                :key="entry.kind === 'axis' ? 'linear-axis-row' : `linear-slot-${entry.slot.id}-${entry.index}`"
+                                                :key="entry.kind === 'axis' ? 'linear-axis-row' : linearTrackSlotEditorKey(entry.slot)"
+                                                :data-capture="entry.kind === 'axis' ? 'linear-track-axis-row' : `linear-track-slot-${entry.slot.id}`"
                                             >
                                                 <div
                                                     v-if="entry.kind === 'axis'"
@@ -2085,7 +2086,7 @@
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index)" :disabled="!canMoveLinearTrackSlotAbove(entry.index)" title="Move above Axis"><i class="ph ph-arrow-line-up"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index)" :disabled="!canMoveLinearTrackSlotBelow(entry.index)" title="Move below Axis"><i class="ph ph-arrow-line-down"></i></button>
                                                             <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index)" :disabled="!canMoveLinearTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index)" title="Duplicate"><i class="ph ph-copy"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index)" :disabled="!canDuplicateLinearTrackSlot(entry.slot)" :title="canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy"></i></button>
                                                             <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index)" title="Delete"><i class="ph ph-trash"></i></button>
                                                         </div>
                                                     </div>
@@ -2133,9 +2134,32 @@
                                                             <option v-for="set in annotationSets" :key="`linear-annotation-set-${set.id}`" :value="set.id">{{ set.id }}</option>
                                                         </select>
                                                         <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]" title="Overflow behavior"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
-                                                        <input v-if="entry.slot.side === 'overlay'" v-model.trim="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" placeholder="Anchor slot id" title="Enabled drawable non-annotation slot ID; annotation chains are not allowed">
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor">
+                                                            <option value="">Select anchor</option>
+                                                            <option v-if="!linearAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">Invalid: {{ entry.slot.params.anchor_slot }}</option>
+                                                            <option v-for="option in linearAnnotationAnchorOptions(entry.slot)" :key="`linear-anchor-${linearTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
+                                                        </select>
                                                         <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" class="form-input px-1 py-0.5 text-[10px]"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
                                                         <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels"> Labels</label>
+                                                        <label v-if="entry.slot.side === 'overlay'" class="flex items-center gap-1 text-[10px]">
+                                                            <input type="checkbox" :checked="linearAnnotationCoverAnchor(entry.slot)" @change="setLinearAnnotationCoverAnchor(entry.slot, $event.target.checked)">
+                                                            Cover anchor
+                                                        </label>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">lane gap <help-tip text="Gap between annotation lanes in pixels. Default: 3."></help-tip></label>
+                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationLaneGapValue(entry.slot)" @input="setLinearAnnotationLaneGap(entry.slot, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">padding <help-tip text="Padding around annotation marks in pixels. Default: 2."></help-tip></label>
+                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationPaddingValue(entry.slot)" @input="setLinearAnnotationPadding(entry.slot, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
+                                                        </div>
+                                                        <div class="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
+                                                            <span class="text-[9px] font-medium text-slate-500">Marks</span>
+                                                            <label v-for="mark in annotationTrackMarkOptions" :key="`linear-mark-${linearTrackSlotEditorKey(entry.slot)}-${mark}`" class="inline-flex items-center gap-1 text-[9px] capitalize">
+                                                                <input type="checkbox" :checked="linearAnnotationMarkSelected(entry.slot, mark)" @change="setLinearAnnotationMarkSelected(entry.slot, mark, $event.target.checked)">
+                                                                {{ mark }}
+                                                            </label>
+                                                        </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
@@ -2166,6 +2190,9 @@
                                                     </div>
                                                     <div v-if="entry.slot.depth_binding_error" class="rounded border border-amber-200 bg-amber-50 px-1.5 py-1 text-[9px] text-amber-700">
                                                         {{ entry.slot.depth_binding_error }} Select an available series or delete this slot.
+                                                    </div>
+                                                    <div v-if="linearTrackSlotIssue(entry.slot, entry.index)" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
+                                                        {{ linearTrackSlotIssue(entry.slot, entry.index) }}
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
@@ -2225,10 +2252,13 @@
                                             <select v-model="linearTrackNewRenderer" class="form-input py-1 text-[10px] min-w-0">
                                                 <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
                                             </select>
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2 shrink-0" @click="addLinearTrackSlot(linearTrackNewRenderer)" title="Add track">
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2 shrink-0" @click="addLinearTrackSlot(linearTrackNewRenderer)" :disabled="!canAddLinearTrackRenderer(linearTrackNewRenderer)" :title="canAddLinearTrackRenderer(linearTrackNewRenderer) ? 'Add track' : 'Add a required source first or remove the conflicting Features row'">
                                                 <i class="ph ph-plus"></i>
                                                 Add track
                                             </button>
+                                        </div>
+                                        <div v-for="issue in linearTrackGlobalIssues()" :key="`linear-track-global-${issue}`" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
+                                            {{ issue }}
                                         </div>
                                     </div>
                                 </div>
@@ -2275,10 +2305,10 @@
                                     <label
                                         class="option-label flex items-center gap-2 text-xs select-none"
                                         :class="depthToggleOptionClass"
-                                        :title="canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.'"
+                                        :title="adv.circular_track_slots_enabled ? 'Custom stack Depth rows control rendering. Disable the custom stack to change this simple control.' : (canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.')"
                                     >
-                                        <input type="checkbox" v-model="form.show_depth" :disabled="!canShowDepthTrack" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Show Depth <help-tip text="Display depth coverage track from the uploaded Depth TSV file."></help-tip></span>
+                                        <input type="checkbox" v-model="form.show_depth" :disabled="adv.circular_track_slots_enabled || !canShowDepthTrack" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Show Depth <help-tip text="Simple mode only. Display depth coverage from uploaded TSV files; use Reset to copy it into the custom stack."></help-tip></span>
                                     </label>
                                 </div>
 
@@ -2288,29 +2318,37 @@
                                             <button
                                                 type="button"
                                                 class="inline-flex min-w-0 items-center gap-1 text-left select-none"
-                                                :class="adv.circular_track_slots_enabled ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
-                                                :aria-expanded="adv.circular_track_slots_enabled ? 'true' : 'false'"
+                                                :class="circularTrackSlotsPanelOpen ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
+                                                :aria-expanded="circularTrackSlotsPanelOpen ? 'true' : 'false'"
                                                 aria-controls="circular-custom-track-slots-panel"
-                                                :title="adv.circular_track_slots_enabled ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
-                                                @click="setCircularTrackSlotsEnabled(!adv.circular_track_slots_enabled)"
+                                                :title="circularTrackSlotsPanelOpen ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
+                                                @click="toggleCircularTrackSlotsPanel"
                                             >
-                                                <i class="ph" :class="adv.circular_track_slots_enabled ? 'ph-caret-down' : 'ph-caret-right'"></i>
+                                                <i class="ph" :class="circularTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'"></i>
                                                 <span class="truncate">Custom Track Slots</span>
                                             </button>
-                                            <help-tip text="Edit an explicit circular stack. Rows above Axis render outside, rows below Axis render inside, arrows reorder within the current side, and Move outside/inside crosses the Axis explicitly."></help-tip>
+                                            <help-tip text="Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside."></help-tip>
                                         </div>
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary text-[10px] py-0.5 px-2"
-                                            @click="resetCircularTrackSlotsFromSimpleControls"
-                                            :disabled="!adv.circular_track_slots_enabled"
-                                            title="Replace the current custom stack from current simple controls"
-                                        >
-                                            <i class="ph ph-arrow-counter-clockwise"></i>
-                                            Reset
-                                        </button>
+                                        <div class="flex items-center gap-2">
+                                            <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
+                                                <input type="checkbox" :checked="adv.circular_track_slots_enabled" @change="setCircularTrackSlotsEnabled($event.target.checked)" class="form-checkbox">
+                                                Use custom stack
+                                            </label>
+                                            <button
+                                                type="button"
+                                                class="btn btn-secondary text-[10px] py-0.5 px-2"
+                                                @click="resetCircularTrackSlotsFromSimpleControls"
+                                                title="Replace the current custom stack from the simple controls; this is the only action that regenerates it"
+                                            >
+                                                <i class="ph ph-arrow-counter-clockwise"></i>
+                                                Reset
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div v-if="adv.circular_track_slots_enabled" id="circular-custom-track-slots-panel" class="space-y-1.5">
+                                    <div v-if="circularTrackSlotsPanelOpen" id="circular-custom-track-slots-panel" class="space-y-1.5">
+                                        <div v-if="!adv.circular_track_slots_enabled" class="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-700">
+                                            Custom stack is saved but inactive; generation uses the simple track controls.
+                                        </div>
                                         <div class="grid grid-cols-3 gap-1">
                                             <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('tuckin')" title="Replace the current custom stack with the Tuckin template">Reset to Tuckin</button>
                                             <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('middle')" title="Replace the current custom stack with the Middle template">Reset to Middle</button>
@@ -2343,7 +2381,7 @@
                                             </div>
                                             <div
                                                 v-for="entry in circularTrackStackEntries()"
-                                                :key="entry.kind === 'axis' ? 'circular-axis-row' : `circular-slot-${entry.slot.id}-${entry.index}`"
+                                                :key="entry.kind === 'axis' ? 'circular-axis-row' : circularTrackSlotEditorKey(entry.slot)"
                                                 :data-capture="entry.kind === 'axis' ? 'circular-track-axis-row' : `circular-track-slot-${entry.slot.id}`"
                                             >
                                                 <div
@@ -2392,13 +2430,16 @@
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index)" :disabled="!canMoveCircularTrackSlotOutside(entry.index)" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index)" :disabled="!canMoveCircularTrackSlotInside(entry.index)" title="Move inside Axis"><i class="ph ph-arrow-line-down"></i></button>
                                                             <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index)" :disabled="!canMoveCircularTrackSlotToAxis(entry.index)" title="Track on Axis"><i class="ph ph-record"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" :disabled="isManagedCircularConservationSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : 'Duplicate'"><i class="ph ph-copy"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" :disabled="!canDuplicateCircularTrackSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy"></i></button>
                                                             <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" :disabled="isManagedCircularConservationSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash"></i></button>
                                                         </div>
                                                     </div>
                                                     <div v-if="circularTrackSlotHiddenBySuppress(entry.slot)" class="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-700">
                                                         <i class="ph ph-eye-slash"></i>
                                                         <span>{{ circularTrackSlotSuppressMessage(entry.slot) }}</span>
+                                                    </div>
+                                                    <div v-if="circularTrackSlotIssue(entry.slot, entry.index)" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
+                                                        {{ circularTrackSlotIssue(entry.slot, entry.index) }}
                                                     </div>
                                                     <div v-if="isManagedCircularConservationSlot(entry.slot)" class="grid grid-cols-[1.15rem_minmax(0,1fr)] gap-1.5 items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
                                                         <span class="h-4 w-4 rounded border border-slate-300" :style="{ backgroundColor: circularTrackSlotColor(entry.slot) || '#94a3b8' }"></span>
@@ -2466,11 +2507,34 @@
                                                             <option value="">Select annotation set</option>
                                                             <option v-for="set in annotationSets" :key="`circular-annotation-set-${set.id}`" :value="set.id">{{ set.id }}</option>
                                                         </select>
-                                                        <select v-model="entry.slot.side" class="form-input px-1 py-0.5 text-[10px]" title="Placement"><option value="outside">Outside axis</option><option value="inside">Inside axis</option><option value="overlay">Overlay anchor</option></select>
-                                                        <input v-if="entry.slot.side === 'overlay'" v-model.trim="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" placeholder="Anchor slot id" title="Enabled drawable non-annotation slot ID; annotation chains are not allowed">
+                                                        <select :value="entry.slot.side" @change="updateCircularTrackSlotPlacement(entry.slot, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" title="Placement"><option value="outside">Outside axis</option><option value="inside">Inside axis</option><option value="overlay">Overlay anchor</option></select>
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor">
+                                                            <option value="">Select anchor</option>
+                                                            <option v-if="!circularAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">Invalid: {{ entry.slot.params.anchor_slot }}</option>
+                                                            <option v-for="option in circularAnnotationAnchorOptions(entry.slot)" :key="`circular-anchor-${circularTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
+                                                        </select>
                                                         <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" class="form-input px-1 py-0.5 text-[10px]"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
                                                         <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
                                                         <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels"> Labels</label>
+                                                        <label v-if="entry.slot.side === 'overlay'" class="flex items-center gap-1 text-[10px]">
+                                                            <input type="checkbox" :checked="circularAnnotationCoverAnchor(entry.slot)" @change="setCircularAnnotationCoverAnchor(entry.slot, $event.target.checked)">
+                                                            Cover anchor
+                                                        </label>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">lane gap <help-tip text="Gap between annotation lanes in pixels. Default: 3."></help-tip></label>
+                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationLaneGapValue(entry.slot)" @input="setCircularAnnotationLaneGap(entry.slot, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
+                                                        </div>
+                                                        <div class="track-slot-field">
+                                                            <label class="track-slot-field-label">padding <help-tip text="Padding around annotation marks in pixels. Default: 2."></help-tip></label>
+                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationPaddingValue(entry.slot)" @input="setCircularAnnotationPadding(entry.slot, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
+                                                        </div>
+                                                        <div class="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
+                                                            <span class="text-[9px] font-medium text-slate-500">Marks</span>
+                                                            <label v-for="mark in annotationTrackMarkOptions" :key="`circular-mark-${circularTrackSlotEditorKey(entry.slot)}-${mark}`" class="inline-flex items-center gap-1 text-[9px] capitalize">
+                                                                <input type="checkbox" :checked="circularAnnotationMarkSelected(entry.slot, mark)" @change="setCircularAnnotationMarkSelected(entry.slot, mark, $event.target.checked)">
+                                                                {{ mark }}
+                                                            </label>
+                                                        </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
@@ -2545,12 +2609,16 @@
                                                     type="button"
                                                     class="btn btn-secondary text-[10px] py-1 px-2 shrink-0"
                                                     @click="addCircularTrackSlot(circularTrackNewRenderer)"
-                                                    title="Add track"
+                                                    :disabled="!canAddCircularTrackRenderer(circularTrackNewRenderer)"
+                                                    :title="canAddCircularTrackRenderer(circularTrackNewRenderer) ? 'Add track' : 'Add a required source first or remove the conflicting Features row'"
                                                 >
                                                     <i class="ph ph-plus"></i>
                                                     Add track
                                                 </button>
                                             </div>
+                                        </div>
+                                        <div v-for="issue in circularTrackGlobalIssues()" :key="`circular-track-global-${issue}`" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
+                                            {{ issue }}
                                         </div>
                                     </div>
                                 </div>
@@ -2770,18 +2838,30 @@
                                         </div>
                                         <div :class="['flex items-center gap-1 min-w-0', isDefinitionLineStyleMuted(row) ? 'opacity-50' : '']">
                                             <input
+                                                v-if="getDefinitionLineStyleColorMode(row.key) === 'color'"
                                                 type="color"
                                                 :value="getDefinitionLineStyleSwatchValue(row.key)"
                                                 @input="setDefinitionLineStyleColor(row.key, $event.target.value)"
                                                 class="h-6 w-8 p-0 border border-slate-200 rounded cursor-pointer shrink-0 bg-white"
                                                 :title="row.label + ' color'"
+                                                :aria-label="row.label + ' definition line color'"
                                             >
+                                            <span
+                                                v-else
+                                                class="h-6 w-8 px-0.5 border border-slate-200 rounded shrink-0 bg-slate-50 text-[8px] text-slate-500 inline-flex items-center justify-center"
+                                                :title="row.label + ' color: ' + (getDefinitionLineStyleColorMode(row.key) === 'none' ? 'None' : 'Auto')"
+                                                :aria-label="row.label + ' definition line color state'"
+                                                :data-definition-line-color-state="getDefinitionLineStyleColorMode(row.key)"
+                                            >
+                                                {{ getDefinitionLineStyleColorMode(row.key) === 'none' ? 'None' : 'Auto' }}
+                                            </span>
                                             <input
                                                 type="text"
                                                 :value="getDefinitionLineStyleFill(row.key)"
                                                 @input="setDefinitionLineStyleColor(row.key, $event.target.value)"
                                                 class="form-input form-input-compact min-w-0 px-1"
                                                 placeholder="Default"
+                                                :aria-label="row.label + ' definition line fill value'"
                                             >
                                         </div>
                                     </template>
@@ -2877,10 +2957,14 @@
                                 <select v-model="selectedPalette" @change="updatePalette" class="form-input form-input-compact mb-2">
                                     <option v-for="p in paletteNames" :value="p">{{ p }}</option>
                                 </select>
-                                <div class="grid grid-cols-5 gap-1.5 bg-white p-2 rounded border border-slate-200">
-                                    <div v-for="(color, feat) in currentColors" :key="feat" class="flex flex-col items-center group relative cursor-pointer">
-                                        <input type="color" v-model="currentColors[feat]" class="w-8 h-8 p-0 border-0 rounded cursor-pointer transition-transform hover:scale-110">
-                                        <span class="text-[9px] text-slate-500 mt-0.5 truncate w-full text-center" :title="feat">{{ feat }}</span>
+                                <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
+                                    <div v-for="(color, feat) in currentColors" :key="feat" class="min-w-0">
+                                        <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
+                                        <color-value-control
+                                            v-model="currentColors[feat]"
+                                            :fallback="appliedPaletteColors[feat] || '#cccccc'"
+                                            :aria-label="`${feat} feature color`">
+                                        </color-value-control>
                                     </div>
                                 </div>
 
@@ -3104,13 +3188,17 @@
                                     <div v-if="mode === 'circular'">
                                         <label class="input-label text-[10px]">Feature Track Width <help-tip text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip></label>
                                         <auto-value-field :visible="autoValueVisible(adv.feature_width_circular, 'circularFeatureWidth')" :text="autoValueText('circularFeatureWidth')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" :disabled="adv.circular_track_slots_enabled" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the Features row width, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px]">Block Stroke Color <help-tip text="Color of the outline for feature blocks."></help-tip></label>
-                                            <input type="color" v-model="adv.block_stroke_color" class="h-8 w-full p-0 border rounded">
+                                            <label class="input-label text-[10px]">Block Stroke Color <help-tip text="Use Auto for the configured default, None for no outline, or Color for an explicit value."></help-tip></label>
+                                            <color-value-control
+                                                v-model="adv.block_stroke_color"
+                                                fallback="#000000"
+                                                aria-label="Block stroke color">
+                                            </color-value-control>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label>
@@ -3121,8 +3209,12 @@
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px]">Line Stroke Color <help-tip text="Color of the lines representing introns."></help-tip></label>
-                                            <input type="color" v-model="adv.line_stroke_color" class="h-8 w-full p-0 border rounded">
+                                            <label class="input-label text-[10px]">Line Stroke Color <help-tip text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></label>
+                                            <color-value-control
+                                                v-model="adv.line_stroke_color"
+                                                fallback="#000000"
+                                                aria-label="Line stroke color">
+                                            </color-value-control>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label>
@@ -3367,8 +3459,12 @@
 
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Color of the main axis line."></help-tip></label>
-                                    <input type="color" v-model="adv.axis_stroke_color" class="h-8 w-full p-0 border rounded">
+                                    <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Use Auto for the configured default, None to hide the axis, or Color for an explicit value."></help-tip></label>
+                                    <color-value-control
+                                        v-model="adv.axis_stroke_color"
+                                        fallback="#000000"
+                                        aria-label="Axis stroke color">
+                                    </color-value-control>
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
@@ -3383,8 +3479,12 @@
                                     </auto-value-field>
                                 </div>
                                 <div>
-                                    <label class="input-label text-[10px]">Scale Line Color <help-tip text="Color of the scale bar or ruler line."></help-tip></label>
-                                    <input type="color" v-model="adv.scale_stroke_color" class="h-8 w-full p-0 border rounded">
+                                    <label class="input-label text-[10px]">Scale Line Color <help-tip text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></label>
+                                    <color-value-control
+                                        v-model="adv.scale_stroke_color"
+                                        fallback="#000000"
+                                        aria-label="Scale line color">
+                                    </color-value-control>
                                 </div>
                             </div>
 
@@ -3417,7 +3517,11 @@
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
                                         <label class="input-label text-[10px]">Ruler Label Color <help-tip text="Color of ruler tick labels."></help-tip></label>
-                                        <input type="color" v-model="adv.ruler_label_color" class="h-8 w-full p-0 border rounded">
+                                        <color-value-control
+                                            v-model="adv.ruler_label_color"
+                                            fallback="#000000"
+                                            aria-label="Ruler label color">
+                                        </color-value-control>
                                     </div>
                                 </div>
                             </div>
@@ -3444,8 +3548,12 @@
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Color of the main axis line."></help-tip></label>
-                                        <input type="color" v-model="adv.axis_stroke_color" class="h-8 w-full p-0 border rounded">
+                                        <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Use Auto for the configured default, None to hide the axis, or Color for an explicit value."></help-tip></label>
+                                        <color-value-control
+                                            v-model="adv.axis_stroke_color"
+                                            fallback="#000000"
+                                            aria-label="Axis stroke color">
+                                        </color-value-control>
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
@@ -3541,13 +3649,13 @@
                                         <div>
                                             <label class="input-label text-[10px]">GC Content Width <help-tip text="GC content track width in px."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_content_width_circular, 'circularGcWidth')" :text="autoValueText('circularGcWidth')">
-                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" :disabled="adv.circular_track_slots_enabled" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC content row width, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">GC Content Radius <help-tip text="GC content center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_content_radius_circular, 'circularGcRadius')" :text="autoValueText('circularGcRadius')">
-                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" :disabled="adv.circular_track_slots_enabled" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC content row radius, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </template>
@@ -3555,13 +3663,13 @@
                                         <div>
                                             <label class="input-label text-[10px]">GC Skew Width <help-tip text="GC skew track width in px."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_skew_width_circular, 'circularSkewWidth')" :text="autoValueText('circularSkewWidth')">
-                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" :disabled="adv.circular_track_slots_enabled" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC skew row width, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">GC Skew Radius <help-tip text="GC skew center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_skew_radius_circular, 'circularSkewRadius')" :text="autoValueText('circularSkewRadius')">
-                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" :disabled="adv.circular_track_slots_enabled" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC skew row radius, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </template>
@@ -3690,7 +3798,7 @@
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
                 <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
             </button>
-            <p v-if="!processing && (!pyodideReady || !diagramGenerationWorkerReady || diagramGenerationWorkerError)" :class="['mt-2 text-center text-xs font-mono', diagramGenerationWorkerError || (!pyodideReady && loadingStatus.startsWith('Startup Error')) ? 'text-red-600' : 'text-slate-500']" v-text="pyodideReady ? diagramGenerationWorkerStatus : loadingStatus"></p>
+            <p v-if="!processing && (!diagramGenerationWorkerReady || diagramGenerationWorkerError)" :class="['mt-2 text-center text-xs font-mono', diagramGenerationWorkerError ? 'text-red-600' : 'text-slate-500']" v-text="diagramGenerationWorkerStatus"></p>
             </div>
 
         </div>
@@ -4086,14 +4194,14 @@
                                     <div>{{ clickedFeature.orthogroupId }} - {{ clickedFeature.orthogroupMemberCount }} members</div>
                                 </div>
                             </div>
-                            <input type="color"
-                                   :value="clickedFeature.color"
-                                   @input="clickedFeature.color = $event.target.value"
-                                   @change="updateClickedFeatureColor($event.target.value)"
-                                   data-history-managed
-                                   :disabled="!canEditFeatureColor(clickedFeature.feat)"
-                                   :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
-                                   :class="['w-8 h-8 cursor-pointer border-2 border-slate-200 rounded-lg shrink-0', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
+                            <color-value-control
+                                :model-value="getFeatureColorValue(clickedFeature.feat)"
+                                :fallback="clickedFeature.color || '#cccccc'"
+                                @update:model-value="setFeatureColorValue(clickedFeature.feat, $event, clickedFeature.legendName)"
+                                data-history-managed
+                                aria-label="Feature fill color"
+                                class="w-32 shrink-0">
+                            </color-value-control>
                             <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl">
                                 <i class="ph ph-x"></i>
                             </button>
@@ -4432,12 +4540,14 @@
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
                             <div class="flex items-center gap-4">
-                                <input type="color"
-                                       :value="clickedFeature.color"
-                                       @input="clickedFeature.color = $event.target.value"
-                                       @change="updateClickedFeatureColor($event.target.value)"
-                                       data-history-managed
-                                       class="w-12 h-10 cursor-pointer border-2 border-slate-200 rounded-lg">
+                                <color-value-control
+                                    :model-value="getFeatureColorValue(clickedFeature.feat)"
+                                    :fallback="clickedFeature.color || '#cccccc'"
+                                    @update:model-value="setFeatureColorValue(clickedFeature.feat, $event, clickedFeature.legendName)"
+                                    data-history-managed
+                                    aria-label="Feature fill color"
+                                    class="w-36">
+                                </color-value-control>
                                 <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
                                 <button @click="resetClickedFeatureFillColor"
                                         data-history-managed
@@ -4450,13 +4560,14 @@
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Stroke</label>
                             <div class="flex items-center gap-4">
-                                <input type="color"
-                                       :value="clickedFeature.strokeColor || '#000000'"
-                                       @input="clickedFeature.strokeColor = $event.target.value"
-                                       @change="updateClickedFeatureStroke($event.target.value, null)"
-                                       data-history-managed
-                                       class="w-10 h-8 cursor-pointer border-2 border-slate-200 rounded-lg"
-                                       title="Stroke color">
+                                <color-value-control
+                                    :model-value="getFeatureStrokeColorValue(clickedFeature.feat)"
+                                    :fallback="clickedFeature.strokeColor || '#000000'"
+                                    @update:model-value="setClickedFeatureStrokeColorValue"
+                                    data-history-managed
+                                    aria-label="Feature stroke color"
+                                    class="w-36">
+                                </color-value-control>
                                 <input type="number"
                                        :value="clickedFeature.strokeWidth"
                                        @input="clickedFeature.strokeWidth = $event.target.value"
@@ -5337,7 +5448,13 @@
                                 </div>
                                 <div v-if="entry.showStroke" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
                                     <span class="text-slate-500 shrink-0">Stroke:</span>
-                                    <input type="color" :value="getLegendEntryStrokeColor(idx)" @change="updateLegendEntryStrokeColor(idx, $event.target.value)" class="w-6 h-5 p-0 border rounded shrink-0 cursor-pointer" title="Stroke color">
+                                    <color-value-control
+                                        :model-value="getLegendEntryStrokeColor(idx)"
+                                        fallback="#000000"
+                                        @update:model-value="setLegendEntryStrokeColorValue(idx, $event)"
+                                        aria-label="Legend stroke color"
+                                        class="w-28 shrink-0">
+                                    </color-value-control>
                                     <input type="number" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width">
                                     <button @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default">
                                         <i class="ph ph-arrow-counter-clockwise text-xs"></i>
@@ -5383,7 +5500,14 @@
                                         {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
                                     </span>
                                     <button @click.stop="openFeatureEditorFromList(feat, $event)" class="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0" title="Open feature editor">Edit</button>
-                                    <input type="color" :value="getFeatureColor(feat)" @click.stop @change="requestFeatureColorChange(feat, $event.target.value)" :disabled="!canEditFeatureColor(feat)" :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No stable identifier available'" :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
+                                    <color-value-control
+                                        :model-value="getFeatureColorValue(feat)"
+                                        :fallback="getFeatureColor(feat)"
+                                        @click.stop
+                                        @update:model-value="setFeatureColorValue(feat, $event)"
+                                        :aria-label="`Fill color for ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
+                                        class="w-28 shrink-0">
+                                    </color-value-control>
                                 </div>
                                 <p class="text-[10px] text-slate-400 truncate">
                                     <template v-if="getEditableLabelByFeatureId(feat.svg_id)">Label: {{ getEditableLabelByFeatureId(feat.svg_id).text }}</template>

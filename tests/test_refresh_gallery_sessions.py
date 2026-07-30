@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import base64
 from collections import Counter
+import gzip
 import json
 from pathlib import Path
+import subprocess
+import sys
 from xml.etree import ElementTree as ET
 
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
+import gbdraw.web_support.feature_catalog as feature_catalog_module
 from gbdraw.api import (
     CircularDiagramRequest,
     InMemoryRecordSource,
@@ -28,21 +33,35 @@ from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 import tools.prepare_interactive_gallery_assets as gallery_assets_module
 import tools.refresh_gallery_sessions as refresh_gallery_sessions_module
 from tools.prepare_interactive_gallery_assets import (
+    DECODED_METADATA_HARD_LIMIT,
+    DECODED_METADATA_REGRESSION_CEILING,
     EXAMPLES,
+    INTERACTIVE_SVG_HARD_LIMIT,
+    _catalog_location_parts,
+    _catalog_nucleotide_sequence,
+    _interactive_svg_measurements,
     _migrate_legacy_multipart_feature_ids,
     _session_interactive_context,
     _session_result_svg,
+    _validate_interactive_svg_size,
     _validate_interactive_orthogroup_payload,
     _validate_source_feature_ids,
 )
 from tools.refresh_gallery_sessions import (
+    VIBRIO_EXPANDED_HARD_LIMIT,
+    VIBRIO_EXPANDED_REGRESSION_CEILING,
     VIBRIO_EXPECTED_RAW_PAIRS,
+    VIBRIO_GZIP_HARD_LIMIT,
+    VIBRIO_GZIP_REGRESSION_CEILING,
     VIBRIO_RAW_ENTRY_COUNT,
     _gallery_file_transaction,
     _merge_refreshed_gallery_artifacts,
+    _omit_regenerable_gallery_derived_cache,
     _preserve_gallery_cli_invocation,
     _refresh_one_session,
+    _session_artifact_measurements,
     _session_path,
+    _validate_current_session_catalog_structure,
     _validate_gallery_session_inventory,
     _validate_staged_gallery_session,
     _with_interactive_svg_format,
@@ -68,6 +87,25 @@ def test_gallery_file_transaction_restores_all_outputs_on_failure(
     assert first.read_text(encoding="utf-8") == "first-original"
     assert second.read_text(encoding="utf-8") == "second-original"
     assert not created.exists()
+
+
+def test_prepare_gallery_assets_help_imports_without_circular_dependency() -> None:
+    repo_root = Path(__file__).parents[1]
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(repo_root / "tools" / "prepare_interactive_gallery_assets.py"),
+            "--help",
+        ],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "Regenerate interactive Gallery SVGs" in completed.stdout
+    assert "circular import" not in completed.stderr.lower()
 
 
 def test_with_interactive_svg_format_replaces_existing_format() -> None:
@@ -128,6 +166,187 @@ def test_session_path_prefers_existing_compressed_gallery_session() -> None:
     path = _session_path("vibrio-harveyi-group-collinear")
 
     assert path.name == "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+
+
+def test_gallery_artifact_limits_match_phase_two_targets() -> None:
+    assert INTERACTIVE_SVG_HARD_LIMIT == 41_943_040
+    assert DECODED_METADATA_HARD_LIMIT == 200_000_000
+    assert DECODED_METADATA_HARD_LIMIT <= DECODED_METADATA_REGRESSION_CEILING
+    assert DECODED_METADATA_REGRESSION_CEILING == 220_000_000
+    assert VIBRIO_GZIP_HARD_LIMIT == 90_000_000
+    assert VIBRIO_GZIP_HARD_LIMIT <= VIBRIO_GZIP_REGRESSION_CEILING
+    assert VIBRIO_GZIP_REGRESSION_CEILING == 95_000_000
+    assert VIBRIO_EXPANDED_HARD_LIMIT == 400_000_000
+    assert (
+        VIBRIO_EXPANDED_HARD_LIMIT
+        <= VIBRIO_EXPANDED_REGRESSION_CEILING
+    )
+    assert VIBRIO_EXPANDED_REGRESSION_CEILING == 420_000_000
+
+
+def test_interactive_svg_measurements_decode_compressed_schema_three() -> None:
+    payload = {
+        "schema": 3,
+        "items": [
+            {
+                "resultIndex": 0,
+                "resultName": "result",
+                "recordKeys": ["record-key"],
+                "features": [
+                    {
+                        "svgId": "rendered",
+                        "recordKey": "record-key",
+                        "biologicalFeatureId": "biological",
+                    }
+                ],
+                "biologicalFeatures": [
+                    {
+                        "recordKey": "record-key",
+                        "biologicalFeatureId": "biological",
+                    }
+                ],
+                "orthogroups": [],
+                "annotations": [],
+                "comparisonMatches": [],
+            }
+        ],
+    }
+    decoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    compressed = gzip.compress(decoded, compresslevel=9, mtime=0)
+    output = (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<metadata id="gbdraw-interactive-feature-metadata" '
+        'data-schema="3" data-encoding="gzip-base64">'
+        f"{base64.b64encode(compressed).decode('ascii')}"
+        "</metadata></svg>"
+    )
+
+    measurements = _interactive_svg_measurements(output)
+
+    assert measurements["totalInteractiveSvgBytes"] == len(
+        output.encode("utf-8")
+    )
+    assert measurements["compressedMetadataBytes"] == len(compressed)
+    assert measurements["decodedMetadataBytes"] == len(decoded)
+    assert measurements["renderedFeatureCount"] == 1
+    assert measurements["biologicalFeatureCount"] == 1
+    assert _validate_interactive_svg_size(EXAMPLES[0], output) == measurements
+
+
+def test_vibrio_gallery_interactive_svg_meets_regenerated_targets() -> None:
+    example = next(
+        example
+        for example in EXAMPLES
+        if example.id == "vibrio-harveyi-group-collinear"
+    )
+    output = example.gallery_svg_path.read_text(encoding="utf-8")
+
+    measurements = _interactive_svg_measurements(output)
+
+    assert measurements["totalInteractiveSvgBytes"] < INTERACTIVE_SVG_HARD_LIMIT
+    assert (
+        measurements["decodedMetadataBytes"]
+        <= DECODED_METADATA_HARD_LIMIT
+        <= DECODED_METADATA_REGRESSION_CEILING
+    )
+    assert (
+        0
+        < measurements["compressedMetadataBytes"]
+        < measurements["decodedMetadataBytes"]
+    )
+    assert measurements["renderedFeatureCount"] == 24_945
+    assert measurements["biologicalFeatureCount"] == 49_970
+
+
+def test_session_artifact_measurements_report_component_bytes(
+    tmp_path: Path,
+) -> None:
+    session = {
+        "results": [{"name": "result", "content": "<svg/>"}],
+        "resources": {"record": {"data": "QUJD", "encoding": "base64"}},
+        "webFiles": {"files": []},
+        "editorState": {
+            "featureCatalog": {"schema": 3, "items": []},
+            "legend": {"entries": []},
+        },
+        "losatCache": {"entries": []},
+        "losatDerivedCache": {"entries": []},
+    }
+    expanded = json.dumps(
+        session,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    artifact_path = tmp_path / "session.json.gz"
+    artifact_path.write_bytes(gzip.compress(expanded, mtime=0))
+
+    measurements = _session_artifact_measurements(session, artifact_path)
+
+    assert measurements["sessionGzipBytes"] == artifact_path.stat().st_size
+    assert measurements["sessionExpandedBytes"] == len(expanded)
+    for key in (
+        "resultsBytes",
+        "resourcesBytes",
+        "webFilesBytes",
+        "featureCatalogBytes",
+        "editorStateBytes",
+        "losatCacheBytes",
+        "losatDerivedCacheBytes",
+    ):
+        assert measurements[key] > 0
+
+
+def test_current_session_catalog_structure_rejects_duplicate_payloads(
+    tmp_path: Path,
+) -> None:
+    session_path = tmp_path / "duplicate.gbdraw-session.json"
+    item = {
+        "resultIndex": 0,
+        "resultName": "result",
+        "recordKeys": ["record-key"],
+        "features": [
+            {
+                "svgId": "rendered",
+                "recordKey": "record-key",
+                "biologicalFeatureId": "biological",
+            }
+        ],
+        "biologicalFeatures": [
+            {
+                "recordKey": "record-key",
+                "biologicalFeatureId": "biological",
+                "qualifiers": {"product": ["example"]},
+                "nucleotide_sequence": "ATG",
+            }
+        ],
+        "orthogroups": [],
+        "annotations": [],
+        "comparisonMatches": [],
+    }
+    session = {
+        "resources": {
+            "first": {"data": "QUJD", "encoding": "base64"},
+            "second": {"data": "QUJD", "encoding": "base64"},
+        },
+        "editorState": {
+            "featureCatalog": {"schema": 3, "items": [item]}
+        },
+    }
+
+    with pytest.raises(ValueError, match="duplicates one resource payload"):
+        _validate_current_session_catalog_structure(session_path, session)
+
+    session["resources"].pop("second")
+    item["features"][0]["qualifiers"] = {"product": ["duplicate"]}
+    with pytest.raises(
+        ValueError,
+        match="rendered feature duplicates biological fields",
+    ):
+        _validate_current_session_catalog_structure(session_path, session)
 
 
 def test_vibrio_gallery_session_retains_complete_compact_cache() -> None:
@@ -367,6 +586,28 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
     assert "legacyArtifacts" not in merged
 
 
+def test_vibrio_gallery_refresh_omits_regenerable_derived_cache(
+    tmp_path: Path,
+) -> None:
+    vibrio_session = {
+        "losatDerivedCache": {"entries": [{"schema": LOSAT_DERIVED_CACHE_SCHEMA}]}
+    }
+    _omit_regenerable_gallery_derived_cache(
+        tmp_path / "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+        vibrio_session,
+    )
+    assert vibrio_session["losatDerivedCache"] == {"entries": []}
+
+    other_session = {
+        "losatDerivedCache": {"entries": [{"schema": LOSAT_DERIVED_CACHE_SCHEMA}]}
+    }
+    _omit_regenerable_gallery_derived_cache(
+        tmp_path / "other.gbdraw-session.json.gz",
+        other_session,
+    )
+    assert other_session["losatDerivedCache"]["entries"]
+
+
 def _staged_geometry_session(
     *,
     mode: str,
@@ -396,6 +637,23 @@ def _staged_geometry_session(
         "renderRequest": request,
         "resources": {},
         "results": [{"name": "result", "content": "<svg></svg>"}],
+        "editorState": {
+            "featureCatalog": {
+                "schema": 3,
+                "items": [
+                    {
+                        "resultIndex": 0,
+                        "resultName": "result",
+                        "recordKeys": [],
+                        "features": [],
+                        "biologicalFeatures": [],
+                        "orthogroups": [],
+                        "annotations": [],
+                        "comparisonMatches": [],
+                    }
+                ],
+            }
+        },
         "losatCache": {"entries": []},
         "losatDerivedCache": {"entries": []},
         "proteinIdentityManifest": {
@@ -729,6 +987,23 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
         "renderRequest": {"schema": CANONICAL_REQUEST_SCHEMA, "mode": "linear"},
         "resources": {},
         "results": [{"name": "result", "content": "<svg></svg>"}],
+        "editorState": {
+            "featureCatalog": {
+                "schema": 3,
+                "items": [
+                    {
+                        "resultIndex": 0,
+                        "resultName": "result",
+                        "recordKeys": [],
+                        "features": [],
+                        "biologicalFeatures": [],
+                        "orthogroups": [],
+                        "annotations": [],
+                        "comparisonMatches": [],
+                    }
+                ],
+            }
+        },
         "losatCache": {"entries": []},
         "losatDerivedCache": {"entries": []},
         "proteinIdentityManifest": {
@@ -952,6 +1227,249 @@ def test_gallery_source_rejects_feature_metadata_without_popup_details() -> None
         _validate_source_feature_ids(EXAMPLES[0], session, source)
 
 
+def test_gallery_validators_materialize_catalog_sequence_references() -> None:
+    feature = {
+        "recordKey": "record-1",
+        "biologicalFeatureId": "f-iupac",
+        "record_id": "record-1",
+        "type": "CDS",
+        "start": 0,
+        "end": 15,
+        "location_parts": [
+            {"start": 0, "end": 4, "strand": "+"},
+            {"start": 4, "end": 15, "strand": "-"},
+        ],
+        "qualifiers": {},
+        "sequenceSourceIndex": 1,
+    }
+    item = {
+        "resultIndex": 0,
+        "resultName": "result",
+        "recordKeys": ["record-1"],
+        "features": [
+            {
+                "svgId": "f-iupac_record_1",
+                "recordKey": "record-1",
+                "biologicalFeatureId": "f-iupac",
+            }
+        ],
+        "biologicalFeatures": [feature],
+        "orthogroups": [
+            {
+                "id": "og-1",
+                "members": [
+                    {
+                        "recordKey": "record-1",
+                        "biologicalFeatureId": "f-iupac",
+                    }
+                ],
+            }
+        ],
+        "annotations": [],
+        "comparisonMatches": [],
+        "sequenceSources": [
+            {
+                "origin": "linear-record",
+                "recordIndex": 0,
+                "sequence": "AAGCTTTTTTTTTTT",
+            },
+            {
+                "origin": "linear-record",
+                "recordIndex": 0,
+                "sequence": "ACGTRYSWKMBDHVN",
+            },
+        ],
+    }
+    source = (
+        '<svg><path id="f-iupac_record_1" '
+        'data-gbdraw-feature-id="f-iupac_record_1" /></svg>'
+    )
+    session = {
+        "results": [{"name": "result", "content": source}],
+        "editorState": {
+            "featureCatalog": {"schema": 3, "items": [item]}
+        },
+    }
+
+    assert _catalog_nucleotide_sequence(feature, item) == "ACGTNBDHVKMWSRY"
+    assert _catalog_nucleotide_sequence(
+        {
+            "recordKey": "record-1",
+            "start": 0,
+            "end": 4,
+            "strand": "-",
+            "sequenceSourceIndex": 0,
+        },
+        item,
+    ) == "GCTT"
+    assert _catalog_location_parts(
+        {"start": 0, "end": 4, "strand": "-"}
+    ) == [
+        {"start": 0, "end": 4, "strand": "-", "display": "1..4"}
+    ]
+    assert _catalog_nucleotide_sequence(
+        {
+            "nucleotide_sequence": "ATG",
+            "sequenceSourceIndex": 99,
+        },
+        item,
+    ) == ""
+    _validate_source_feature_ids(EXAMPLES[0], session, source)
+    _validate_interactive_orthogroup_payload(EXAMPLES[0], item)
+
+    simple_item = json.loads(json.dumps(item))
+    simple_feature = simple_item["biologicalFeatures"][0]
+    simple_feature.pop("location_parts")
+    simple_feature["strand"] = "+"
+    simple_session = {
+        "results": [{"name": "result", "content": source}],
+        "editorState": {
+            "featureCatalog": {"schema": 3, "items": [simple_item]}
+        },
+    }
+    _validate_source_feature_ids(EXAMPLES[0], simple_session, source)
+
+    broken_item = json.loads(json.dumps(item))
+    broken_item["biologicalFeatures"][0]["location_parts"][1]["end"] = 16
+    broken_session = {
+        "results": [{"name": "result", "content": source}],
+        "editorState": {
+            "featureCatalog": {"schema": 3, "items": [broken_item]}
+        },
+    }
+    with pytest.raises(
+        ValueError,
+        match="invalid nucleotide sequence source reference",
+    ):
+        _validate_source_feature_ids(EXAMPLES[0], broken_session, source)
+    with pytest.raises(ValueError, match="has no nucleotide sequence"):
+        _validate_interactive_orthogroup_payload(EXAMPLES[0], broken_item)
+
+    unreferenced_invalid_item = json.loads(json.dumps(item))
+    unreferenced_invalid_item["sequenceSources"].append(
+        {
+            "origin": "linear-record",
+            "recordIndex": 0,
+            "sequence": "ACGT RYSW",
+        }
+    )
+    unreferenced_invalid_session = {
+        "results": [{"name": "result", "content": source}],
+        "editorState": {
+            "featureCatalog": {
+                "schema": 3,
+                "items": [unreferenced_invalid_item],
+            }
+        },
+    }
+    with pytest.raises(
+        ValueError,
+        match="invalid nucleotide sequence source reference",
+    ):
+        _validate_source_feature_ids(
+            EXAMPLES[0],
+            unreferenced_invalid_session,
+            source,
+        )
+    with pytest.raises(
+        ValueError,
+        match="invalid nucleotide sequence source",
+    ):
+        _validate_interactive_orthogroup_payload(
+            EXAMPLES[0],
+            unreferenced_invalid_item,
+        )
+
+
+def test_gallery_sequence_source_validation_is_bounded_by_source_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    feature_count = 256
+    source_sequence = "ATG" + ("A" * 100_000)
+    biological_features = [
+        {
+            "recordKey": "record-1",
+            "biologicalFeatureId": f"feature-{index}",
+            "record_id": "record-1",
+            "type": "CDS",
+            "start": 0,
+            "end": 3,
+            "strand": "+",
+            "qualifiers": {},
+            "sequenceSourceIndex": 0,
+        }
+        for index in range(feature_count)
+    ]
+    rendered_features = [
+        {
+            "svgId": f"rendered-{index}",
+            "recordKey": "record-1",
+            "biologicalFeatureId": f"feature-{index}",
+        }
+        for index in range(feature_count)
+    ]
+    item = {
+        "resultIndex": 0,
+        "resultName": "result",
+        "recordKeys": ["record-1"],
+        "features": rendered_features,
+        "biologicalFeatures": biological_features,
+        "orthogroups": [
+            {
+                "id": "og-all",
+                "members": [
+                    {
+                        "recordKey": "record-1",
+                        "biologicalFeatureId": f"feature-{index}",
+                    }
+                    for index in range(feature_count)
+                ],
+            }
+        ],
+        "annotations": [],
+        "comparisonMatches": [],
+        "sequenceSources": [
+            {
+                "origin": "linear-record",
+                "recordIndex": 0,
+                "sequence": source_sequence,
+            }
+        ],
+    }
+    source = "<svg>" + "".join(
+        (
+            f'<path id="rendered-{index}" '
+            f'data-gbdraw-feature-id="rendered-{index}" />'
+        )
+        for index in range(feature_count)
+    ) + "</svg>"
+    session = {
+        "results": [{"name": "result", "content": source}],
+        "editorState": {
+            "featureCatalog": {"schema": 3, "items": [item]}
+        },
+    }
+    validation_calls = 0
+    original = feature_catalog_module._canonical_sequence_source
+
+    def counted(source_payload: object) -> str | None:
+        nonlocal validation_calls
+        validation_calls += 1
+        return original(source_payload)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(
+        feature_catalog_module,
+        "_canonical_sequence_source",
+        counted,
+    )
+    _validate_source_feature_ids(EXAMPLES[0], session, source)
+    assert validation_calls == 1
+
+    validation_calls = 0
+    _validate_interactive_orthogroup_payload(EXAMPLES[0], item)
+    assert validation_calls == 1
+
+
 def test_gallery_payload_requires_complete_resolvable_orthogroups() -> None:
     feature = {
         "svg_id": "fstable",
@@ -1014,18 +1532,14 @@ def test_gallery_payload_requires_complete_resolvable_orthogroups() -> None:
 
 def test_gallery_payload_keeps_hidden_orthogroup_members_in_biological_catalog() -> None:
     visible = {
-        "svg_id": "fvisible_record_1",
-        "stable_svg_id": "fvisible",
-        "record_idx": 0,
-        "orthogroup_id": "og_1",
+        "recordKey": "record-1",
+        "biologicalFeatureId": "fvisible",
         "nucleotide_sequence": "ATGAAATAA",
         "amino_acid_sequence": "MK*",
     }
     hidden = {
-        "svg_id": "fhidden",
-        "stable_svg_id": "fhidden",
-        "record_idx": 1,
-        "orthogroup_id": "og_1",
+        "recordKey": "record-2",
+        "biologicalFeatureId": "fhidden",
         "nucleotide_sequence": "ATGCCCTAA",
         "amino_acid_sequence": "MP*",
     }
@@ -1034,15 +1548,12 @@ def test_gallery_payload_keeps_hidden_orthogroup_members_in_biological_catalog()
         "member_count": 2,
         "members": [
             {
-                "feature_svg_id": "fvisible",
-                "stable_feature_svg_id": "fvisible",
-                "rendered_feature_svg_id": "fvisible_record_1",
-                "record_index": 0,
+                "recordKey": "record-1",
+                "biologicalFeatureId": "fvisible",
             },
             {
-                "feature_svg_id": "fhidden",
-                "stable_feature_svg_id": "fhidden",
-                "record_index": 1,
+                "recordKey": "record-2",
+                "biologicalFeatureId": "fhidden",
             },
         ],
     }
@@ -1050,8 +1561,14 @@ def test_gallery_payload_keeps_hidden_orthogroup_members_in_biological_catalog()
     _validate_interactive_orthogroup_payload(
         EXAMPLES[0],
         {
-            "features": [visible],
-            "biological_features": [visible, hidden],
+            "features": [
+                {
+                    "svgId": "fvisible_record_1",
+                    "recordKey": "record-1",
+                    "biologicalFeatureId": "fvisible",
+                }
+            ],
+            "biologicalFeatures": [visible, hidden],
             "orthogroups": [group],
         },
     )
@@ -1061,48 +1578,77 @@ def test_gallery_payload_keeps_hidden_orthogroup_members_in_biological_catalog()
         _validate_interactive_orthogroup_payload(
             EXAMPLES[0],
             {
-                "features": [visible],
-                "biological_features": [visible, broken_hidden],
+                "features": [
+                    {
+                        "svgId": "fvisible_record_1",
+                        "recordKey": "record-1",
+                        "biologicalFeatureId": "fvisible",
+                    }
+                ],
+                "biologicalFeatures": [visible, broken_hidden],
                 "orthogroups": [group],
             },
         )
 
 
 def test_gallery_session_features_seed_biological_catalog() -> None:
-    feature = {"svg_id": "fstable_record_1", "stable_svg_id": "fstable"}
-    hidden = {"svg_id": "fhidden", "stable_svg_id": "fhidden"}
+    feature = {
+        "svgId": "fstable_record_1",
+        "recordKey": "record-1",
+        "biologicalFeatureId": "fstable",
+    }
+    biological = {
+        "recordKey": "record-1",
+        "biologicalFeatureId": "fstable",
+        "stableFeatureId": "fstable",
+    }
+    hidden = {
+        "recordKey": "record-2",
+        "biologicalFeatureId": "fhidden",
+        "stableFeatureId": "fhidden",
+    }
 
     context = _session_interactive_context(
         {
-            "features": {
-                "extractedFeatures": [feature],
-                "biologicalFeatures": [feature, hidden],
-            }
+            "results": [{"name": "result", "content": "<svg/>"}],
+            "editorState": {
+                "featureCatalog": {
+                    "schema": 3,
+                    "items": [
+                        {
+                            "resultIndex": 0,
+                            "resultName": "result",
+                            "recordKeys": ["record-1", "record-2"],
+                            "features": [feature],
+                            "biologicalFeatures": [biological, hidden],
+                            "orthogroups": [],
+                            "annotations": [],
+                            "comparisonMatches": [],
+                        }
+                    ],
+                }
+            },
         }
     )
 
     assert list(context.features) == [feature]
-    assert list(context.biological_features) == [feature, hidden]
+    assert list(context.biological_features) == [biological, hidden]
 
 
 @pytest.mark.parametrize(
     (
         "example_id",
-        "expected_rendered_features",
-        "expected_biological_features",
         "expected_groups",
         "expected_members",
         "expected_hidden_members",
     ),
     [
-        ("hepatoplasmataceae_orthogroup", 2994, 5987, 577, 2566, 0),
-        ("majanivirus_orthogroup", 999, 1008, 152, 826, 0),
+        ("hepatoplasmataceae_orthogroup", 577, 2566, 0),
+        ("majanivirus_orthogroup", 152, 826, 0),
     ],
 )
 def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
     example_id: str,
-    expected_rendered_features: int,
-    expected_biological_features: int,
     expected_groups: int,
     expected_members: int,
     expected_hidden_members: int,
@@ -1116,47 +1662,31 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
         if element.get("id") == "gbdraw-interactive-feature-metadata"
     )
     payload = json.loads(metadata.text or "{}")
+    assert payload["schema"] == 3
+    assert len(payload["items"]) == 1
+    item = payload["items"][0]
+    session_item = session["editorState"]["featureCatalog"]["items"][0]
+    assert item == session_item
 
-    features = payload["features"]
-    biological_features = payload["biological_features"]
-    svg_groups = payload["orthogroups"]
-    session_groups = session["orthogroupState"]["groups"]
+    features = item["features"]
+    biological_features = item["biologicalFeatures"]
+    svg_groups = item["orthogroups"]
+    session_groups = session_item["orthogroups"]
     svg_members = [member for group in svg_groups for member in group["members"]]
 
-    assert len(features) == expected_rendered_features
-    assert len(biological_features) == expected_biological_features
+    assert features
+    assert biological_features
     assert len(svg_groups) == expected_groups == len(session_groups)
     assert len(svg_members) == expected_members
 
-    def record_index(item: dict[str, object]) -> int:
-        value = item.get("record_index", item.get("recordIndex", item.get("record_idx", -1)))
-        return int(value)
-
-    def stable_id(item: dict[str, object]) -> str:
-        return str(
-            item.get("stable_feature_svg_id")
-            or item.get("stableFeatureSvgId")
-            or item.get("stable_feature_id")
-            or item.get("stable_svg_id")
-            or item.get("feature_svg_id")
-            or item.get("featureSvgId")
-            or item.get("svg_id")
-            or ""
-        )
-
-    def rendered_id(item: dict[str, object]) -> str:
-        return str(
-            item.get("rendered_feature_svg_id")
-            or item.get("renderedFeatureSvgId")
-            or ""
-        )
-
-    def member_keys(groups: list[dict[str, object]]) -> Counter[tuple[str, int, str]]:
+    def member_keys(
+        groups: list[dict[str, object]],
+    ) -> Counter[tuple[str, str, str]]:
         return Counter(
             (
                 str(group["id"]),
-                record_index(member),
-                stable_id(member),
+                str(member["recordKey"]),
+                str(member["biologicalFeatureId"]),
             )
             for group in groups
             for member in group["members"]  # type: ignore[index]
@@ -1165,22 +1695,50 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
     assert member_keys(svg_groups) == member_keys(session_groups)
 
     biological_by_key = {
-        (record_index(feature), stable_id(feature)): feature
+        (
+            str(feature["recordKey"]),
+            str(feature["biologicalFeatureId"]),
+        ): feature
         for feature in biological_features
     }
     assert len(biological_by_key) == len(biological_features)
     assert all(
-        (record_index(member), stable_id(member)) in biological_by_key
+        (
+            str(member["recordKey"]),
+            str(member["biologicalFeatureId"]),
+        )
+        in biological_by_key
         for member in svg_members
     )
     assert all(
-        biological_by_key[(record_index(member), stable_id(member))].get(
-            "nucleotide_sequence"
+        _catalog_nucleotide_sequence(
+            biological_by_key[
+                (
+                    str(member["recordKey"]),
+                    str(member["biologicalFeatureId"]),
+                )
+            ],
+            item,
         )
         for member in svg_members
     )
 
-    hidden_members = [member for member in svg_members if not rendered_id(member)]
+    rendered_keys = {
+        (
+            str(feature["recordKey"]),
+            str(feature["biologicalFeatureId"]),
+        )
+        for feature in features
+    }
+    hidden_members = [
+        member
+        for member in svg_members
+        if (
+            str(member["recordKey"]),
+            str(member["biologicalFeatureId"]),
+        )
+        not in rendered_keys
+    ]
     assert len(hidden_members) == expected_hidden_members
     dom_ids = {
         value
@@ -1189,6 +1747,5 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
         if value
     }
     assert all(
-        not rendered_id(member) or rendered_id(member) in dom_ids
-        for member in svg_members
+        str(feature["svgId"]) in dom_ids for feature in features
     )

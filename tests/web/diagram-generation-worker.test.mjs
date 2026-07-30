@@ -38,7 +38,7 @@ assert.throws(
   (error) => {
     const serialized = serializeError(error);
     assert.equal(serialized.name, 'TypeError');
-    assert.equal(serialized.message, 'primary JavaScript render failure');
+    assert.equal(serialized.message, 'TypeError: primary JavaScript render failure');
     assert.match(serialized.stack, /proxy destroy failed/);
     assert.match(serialized.stack, /workspace invariant failed/);
     return true;
@@ -67,3 +67,11 @@ assert.throws(
   }),
   (error) => error === workspaceError
 );
+
+const structuredError = serializeError({
+  type: 'ValidationError',
+  message: { summary: 'Annotation target is missing', details: ['row 2'] },
+  traceback: 'Traceback (most recent call last): secret input'
+});
+assert.doesNotMatch(structuredError.message, /\[object Object\]|Traceback/);
+assert.match(structuredError.message, /Annotation target is missing/);

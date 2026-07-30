@@ -524,6 +524,25 @@ def test_resolve_linear_track_layout_clears_depth_below_axis_when_features_are_a
     assert depth.y_offset == pytest.approx(canvas_config.vertical_padding)
 
 
+def test_resolve_linear_spacer_reserves_height_and_spacing_without_painting() -> None:
+    layout, canvas_config = _resolve_layout(
+        [
+            "space:spacer@side=below,h=20px,spacing=7px",
+            "depth:depth@side=below,h=10px",
+        ]
+    )
+    spacer = _layout_track(layout, "space")
+    depth = _layout_track(layout, "depth")
+
+    assert spacer.renderer == "spacer"
+    assert spacer.height == pytest.approx(20.0)
+    assert spacer.spacing_after_px == pytest.approx(7.0)
+    assert spacer.y_offset == pytest.approx(canvas_config.vertical_padding)
+    assert depth.y_offset == pytest.approx(
+        canvas_config.vertical_padding + 20.0 + 7.0
+    )
+
+
 def test_resolve_linear_track_layout_does_not_clear_depth_after_same_side_features() -> None:
     layout, _canvas_config = _resolve_layout(
         [

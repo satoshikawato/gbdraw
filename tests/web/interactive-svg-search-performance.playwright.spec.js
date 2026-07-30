@@ -102,7 +102,8 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   expect(clearMutations.length).toBeLessThanOrEqual(6);
 });
 
-test('v2 derives FASTA and amino-acid search from translation while the runtime accepts v1', async ({ page }, testInfo) => {
+test('v3 derives FASTA and the runtime still accepts v1/v2 metadata', async ({ page }, testInfo) => {
+  const v3Path = testInfo.outputPath('interactive-v3.svg');
   const v2Path = testInfo.outputPath('interactive-v2.svg');
   const v1Path = testInfo.outputPath('interactive-v1.svg');
   const generator = String.raw`
@@ -127,25 +128,49 @@ context = InteractiveSvgContext(features=[{
     "nucleotide_sequence": "ATGAAATAA",
     "amino_acid_sequence": "MPEPTIDE",
 }])
-v2 = enrich_svg(source, context)
+v3 = enrich_svg(source, context)
 with open(sys.argv[1], 'w', encoding='utf-8') as handle:
-    handle.write(v2)
-root = ET.fromstring(v2)
+    handle.write(v3)
+root = ET.fromstring(v3)
 metadata = next(item for item in root.iter() if item.tag.rsplit('}', 1)[-1] == 'metadata')
-payload = json.loads(metadata.text)
+feature = {
+    "svg_id": "fseq",
+    "record_id": "rec1",
+    "type": "CDS",
+    "start": 0,
+    "end": 9,
+    "strand": "+",
+    "qualifiers": {
+        "product": ["protein A"],
+        "protein_id": ["WP_000001.1"],
+        "translation": ["MPEPTIDE"],
+    },
+    "nucleotide_sequence": "ATGAAATAA",
+}
+payload = {
+    "schema": "gbdraw-interactive-feature-popup-v2",
+    "popup_mode": "rich",
+    "features": [feature],
+    "biological_features": [feature],
+    "orthogroups": [],
+    "matches": [],
+}
+metadata.set("data-schema", payload["schema"])
+metadata.text = json.dumps(payload, separators=(',', ':'))
+with open(sys.argv[2], 'w', encoding='utf-8') as handle:
+    handle.write(ET.tostring(root, encoding='unicode'))
 payload["schema"] = "gbdraw-interactive-feature-popup-v1"
-feature = payload["features"][0]
 feature["amino_acid_sequence"] = "MPEPTIDE"
 feature["nucleotide_fasta"] = ">rec1:1-9 protein A\nATGAAATAA"
 feature["amino_acid_fasta"] = ">WP_000001.1 protein A\nMPEPTIDE"
 metadata.set("data-schema", payload["schema"])
 metadata.text = json.dumps(payload, separators=(',', ':'))
-with open(sys.argv[2], 'w', encoding='utf-8') as handle:
+with open(sys.argv[3], 'w', encoding='utf-8') as handle:
     handle.write(ET.tostring(root, encoding='unicode'))
 `;
-  execFileSync('python', ['-c', generator, v2Path, v1Path], { cwd: process.cwd(), stdio: 'inherit' });
+  execFileSync('python', ['-c', generator, v3Path, v2Path, v1Path], { cwd: process.cwd(), stdio: 'inherit' });
 
-  for (const [schema, svgPath] of [['v2', v2Path], ['v1', v1Path]]) {
+  for (const [schema, svgPath] of [['v3', v3Path], ['v2', v2Path], ['v1', v1Path]]) {
     await page.goto(pathToFileURL(svgPath).href);
     await page.getByRole('button', { name: 'Expand feature search' }).click();
     await page.locator('[data-search-field]').selectOption('amino-acid');
@@ -349,7 +374,7 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   await expect(page.locator('.gfi-block-actions')).toHaveCount(0);
 });
 
-test('web exporter writes the same compact v2 feature and raw match contract', async ({ page }) => {
+test('legacy feature-array fallback remains readable as compact v2 metadata', async ({ page }) => {
   await page.goto(`${moduleOrigin}/blank.html`);
   const payload = await page.evaluate(async ({ origin }) => {
     const { enrichSvgWithStandaloneInteractivity } = await import(

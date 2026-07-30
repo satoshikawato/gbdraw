@@ -15,6 +15,7 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
 from ..core.record_metadata import _read_coord_map, _write_coord_map
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
+from .record_select import reverse_records
 
 logger = logging.getLogger(__name__)
 
@@ -184,21 +185,19 @@ def _crop_record_to_region(
         if sliced:
             new_record.letter_annotations = sliced
 
-    new_record.features = crop_and_shift_features(record.features, start_0, end_0)
+    new_record.features = crop_and_shift_features(
+        record.features,
+        start_0,
+        end_0,
+        coord_base=coord_base,
+        coord_step=coord_step,
+    )
     cropped_base = coord_base + (coord_step * start_0)
     cropped_step = coord_step
     _write_coord_map(new_record, base=cropped_base, step=cropped_step)
 
     if spec.reverse_complement:
-        new_record = new_record.reverse_complement(
-            id=True,
-            name=True,
-            description=True,
-            features=True,
-            annotations=True,
-            letter_annotations=True,
-            dbxrefs=True,
-        )
+        new_record = reverse_records((new_record,), True, log=log)[0]
         cropped_length = len(new_record.seq)
         rc_base = cropped_base + (cropped_step * max(0, cropped_length - 1))
         rc_step = -cropped_step

@@ -79,6 +79,114 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
   await expect(page.getByText('All adjacent-row pairs', { exact: true })).toBeVisible();
 });
 
+test('Candidate render post-processing sanitizes and reapplies stable styles before commit', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const outcome = await page.evaluate(async () => {
+    const { prepareCandidateRenderCommit } = await import('./js/app/candidate-render.js');
+    const stableKey = `record-1\u0000feature-1`;
+    const sourceResult = {
+      name: 'candidate.svg',
+      format: 'svg',
+      content: [
+        '<svg xmlns="http://www.w3.org/2000/svg">',
+        '<script>throw new Error("unsafe")</script>',
+        '<path id="rendered-1" data-gbdraw-feature-id="shared-feature"',
+        ' data-gbdraw-rendered-feature-id="rendered-1"',
+        ' data-gbdraw-feature-part="block" fill="#000000" stroke="#000000" stroke-width="1"/>',
+        '<path id="rendered-2" data-gbdraw-feature-id="shared-feature"',
+        ' data-gbdraw-rendered-feature-id="rendered-2"',
+        ' data-gbdraw-feature-part="block" fill="#000000" stroke="#000000" stroke-width="1"/>',
+        '</svg>'
+      ].join('')
+    };
+    const catalog = {
+      schema: 3,
+      items: [{
+        resultIndex: 0,
+        resultName: 'candidate.svg',
+        recordKeys: ['record-1'],
+        features: [{
+          svgId: 'rendered-1',
+          recordKey: 'record-1',
+          biologicalFeatureId: 'feature-1'
+        }, {
+          svgId: 'rendered-2',
+          recordKey: 'record-1',
+          biologicalFeatureId: 'feature-2'
+        }],
+        biologicalFeatures: [{
+          recordKey: 'record-1',
+          biologicalFeatureId: 'feature-1',
+          stableFeatureId: 'stable-feature-1',
+          type: 'CDS',
+          record_idx: 0,
+          record_id: 'record-1',
+          start: 0,
+          end: 10,
+          strand: 1,
+          qualifiers: {}
+        }, {
+          recordKey: 'record-1',
+          biologicalFeatureId: 'feature-2',
+          stableFeatureId: 'stable-feature-2',
+          type: 'CDS',
+          record_idx: 0,
+          record_id: 'record-1',
+          start: 20,
+          end: 30,
+          strand: 1,
+          qualifiers: {}
+        }],
+        orthogroups: [],
+        annotations: [],
+        comparisonMatches: []
+      }]
+    };
+    const prepared = prepareCandidateRenderCommit({
+      results: [sourceResult],
+      catalog,
+      featureColorOverrides: {
+        [stableKey]: { color: '#ff00ff', caption: 'Candidate style' }
+      },
+      featureStrokeOverrides: {
+        [stableKey]: { strokeColor: '#ff00ff', strokeWidth: 5 }
+      }
+    });
+    const svg = new DOMParser().parseFromString(
+      prepared.results[0].content,
+      'image/svg+xml'
+    );
+    const feature = svg.getElementById('rendered-1');
+    const sibling = svg.getElementById('rendered-2');
+    return {
+      sourceUnchanged:
+        sourceResult.content.includes('<script>')
+        && sourceResult.content.includes('fill="#000000"'),
+      scriptRemoved: !prepared.results[0].content.includes('<script>'),
+      fill: feature?.getAttribute('fill'),
+      stroke: feature?.getAttribute('stroke'),
+      strokeWidth: feature?.getAttribute('stroke-width'),
+      siblingFill: sibling?.getAttribute('fill'),
+      renderedBindingPreserved:
+        feature?.getAttribute('data-gbdraw-rendered-feature-id') === 'rendered-1',
+      featureCount: prepared.featureState.extractedFeatures.length
+    };
+  });
+
+  expect(outcome).toEqual({
+    sourceUnchanged: true,
+    scriptRemoved: true,
+    fill: '#ff00ff',
+    stroke: '#ff00ff',
+    strokeWidth: '5',
+    siblingFill: '#000000',
+    renderedBindingPreserved: true,
+    featureCount: 2
+  });
+});
+
 test('Label-scoped feature colors and legends survive linear regeneration', async ({ page }) => {
   test.setTimeout(240000);
   const makeGenbank = (recordId) => {
@@ -106,7 +214,6 @@ ${origin}
 
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.pyodideReady === true, null, { timeout: 180000 });
 
   await page.evaluate(({ firstRecord, secondRecord }) => {
     const app = window.__GBDRAW_APP__;
@@ -130,6 +237,11 @@ ${origin}
     firstRecord: makeGenbank('ColorRecA'),
     secondRecord: makeGenbank('ColorRecB')
   });
+  await page.waitForFunction(
+    () => window.__GBDRAW_APP__?.pyodideReady === true,
+    null,
+    { timeout: 180000 }
+  );
 
   const firstRun = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -142,12 +254,22 @@ ${origin}
     const app = window.__GBDRAW_APP__;
     const target = app.extractedFeatures.find((feature) => feature.product === 'wsv360-like protein');
     if (!target) throw new Error('Expected product feature was not extracted.');
-    await app.requestFeatureColorChange(target, '#8cf04f');
+    await app.requestFeatureColorChange(target, '#ff00ff');
     const dialog = {
       displayLabel: app.colorScopeDialog.displayLabel,
       displayLabelSiblingCount: app.colorScopeDialog.displayLabelSiblingCount
     };
     await app.handleColorScopeChoice('displayLabel');
+    app.extractedFeatures
+      .filter((feature) => feature.product === 'wsv360-like protein')
+      .forEach((feature) => {
+        const key = String(feature.stable_override_key || feature.id || '');
+        if (!key) throw new Error('Expected a stable feature override key.');
+        app.featureStrokeOverrides[key] = {
+          strokeColor: '#ff00ff',
+          strokeWidth: 5
+        };
+      });
     return {
       dialog,
       rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
@@ -163,16 +285,37 @@ ${origin}
     feat: 'CDS',
     qual: 'product',
     val: '^wsv360-like protein$',
-    color: '#8cf04f',
+    color: '#ff00ff',
     cap: 'wsv360-like protein'
   }]);
 
   const secondRun = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
+    app.editableLabels = [{
+      key: 'stale-label',
+      idx: 1,
+      text: 'stale',
+      sourceText: 'stale',
+      featureId: 'stale-feature',
+      kind: 'regular',
+      draftText: 'stale'
+    }];
     const result = await app.runAnalysis();
-    return { result, errorLog: app.errorLog };
+    await window.Vue.nextTick();
+    await window.Vue.nextTick();
+    return {
+      result,
+      errorLog: app.errorLog,
+      hasStaleEditableLabel: app.editableLabels.some(
+        (entry) => entry.key === 'stale-label'
+      )
+    };
   });
-  expect(secondRun).toEqual({ result: { status: 'ok' }, errorLog: null });
+  expect(secondRun).toEqual({
+    result: { status: 'ok' },
+    errorLog: null,
+    hasStaleEditableLabel: false
+  });
 
   const regenerated = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -181,12 +324,21 @@ ${origin}
     const featureIds = app.extractedFeatures
       .filter((feature) => feature.product === 'wsv360-like protein')
       .map((feature) => feature.svg_id);
-    const featureFills = featureIds.map((featureId) => {
+    const featureStyles = featureIds.map((featureId) => {
       const roots = [...svg.querySelectorAll('[data-gbdraw-feature-id]')]
         .filter((element) => element.getAttribute('data-gbdraw-feature-id') === featureId);
-      return [...roots, ...roots.flatMap((root) => [...root.querySelectorAll('[fill]')])]
-        .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
-        .filter((fill) => fill && fill !== 'none');
+      const elements = [...roots, ...roots.flatMap((root) => [...root.querySelectorAll('*')])];
+      return {
+        fills: elements
+          .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
+          .filter((fill) => fill && fill !== 'none'),
+        strokeColors: elements
+          .map((element) => String(element.getAttribute('stroke') || '').toLowerCase())
+          .filter(Boolean),
+        strokeWidths: elements
+          .map((element) => String(element.getAttribute('stroke-width') || ''))
+          .filter(Boolean)
+      };
     });
     const legendEntries = [...svg.querySelectorAll('[data-legend-key]')]
       .filter((entry) => entry.getAttribute('data-legend-key') === 'wsv360-like protein');
@@ -195,7 +347,7 @@ ${origin}
       .filter((fill) => fill && fill !== 'none');
     return {
       featureIds,
-      featureFills,
+      featureStyles,
       legendEntryCount: legendEntries.length,
       legendFills,
       rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
@@ -205,10 +357,145 @@ ${origin}
   });
 
   expect(regenerated.featureIds).toHaveLength(2);
-  regenerated.featureFills.forEach((fills) => expect(fills).toContain('#8cf04f'));
+  regenerated.featureStyles.forEach(({ fills, strokeColors, strokeWidths }) => {
+    expect(fills).toContain('#ff00ff');
+    expect(strokeColors).toContain('#ff00ff');
+    expect(strokeWidths).toContain('5');
+  });
   expect(regenerated.legendEntryCount).toBeGreaterThan(0);
-  expect(regenerated.legendFills).toContain('#8cf04f');
+  expect(regenerated.legendFills).toContain('#ff00ff');
   expect(regenerated.rules).toEqual(edited.rules);
+
+  const postprocessingFailure = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const targetId = String(app.extractedFeatures?.[0]?.svg_id || '');
+    app.selectedFeatureIds = new Set(targetId ? [targetId] : []);
+    app.selectedFeatureAnchorId = targetId;
+    app.editableLabels = [{
+      key: 'postprocess-rollback-label',
+      idx: 1,
+      text: 'Keep after post-processing failure',
+      sourceText: 'Original rollback label',
+      featureId: targetId,
+      kind: 'regular',
+      draftText: 'Keep after post-processing failure'
+    }];
+    const snapshot = () => JSON.stringify({
+      results: app.results,
+      resultGenerationKey: app.resultGenerationKey,
+      selectedResultIndex: app.selectedResultIndex,
+      selectedFeatureIds: [...app.selectedFeatureIds].sort(),
+      selectedFeatureAnchorId: app.selectedFeatureAnchorId,
+      featureColorOverrides: app.featureColorOverrides,
+      featureStrokeOverrides: app.featureStrokeOverrides,
+      extractedFeatures: app.extractedFeatures,
+      featureCatalog: app.featureCatalog,
+      legendEntries: app.legendEntries,
+      lastRunInfo: app.lastRunInfo,
+      appliedPaletteName: app.appliedPaletteName,
+      appliedPaletteColors: app.appliedPaletteColors,
+      pendingPaletteName: app.pendingPaletteName,
+      pendingPaletteColors: app.pendingPaletteColors,
+      editableLabels: app.editableLabels
+    });
+    const before = snapshot();
+    const originalSanitize = window.DOMPurify.sanitize;
+    let result;
+    try {
+      window.DOMPurify.sanitize = () => {
+        throw new Error('Forced candidate post-processing failure.');
+      };
+      result = await app.runAnalysis();
+    } finally {
+      window.DOMPurify.sanitize = originalSanitize;
+    }
+    await window.Vue.nextTick();
+    const beforeState = JSON.parse(before);
+    const afterState = JSON.parse(snapshot());
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      snapshotPreserved: JSON.stringify(afterState) === before,
+      changedFields: Object.keys(beforeState).filter(
+        (key) => JSON.stringify(beforeState[key]) !== JSON.stringify(afterState[key])
+      )
+    };
+  });
+  expect(postprocessingFailure).toEqual({
+    result: { status: 'error' },
+    errorSummary: 'Forced candidate post-processing failure.',
+    snapshotPreserved: true,
+    changedFields: []
+  });
+
+  const staleResponse = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.errorLog = null;
+    const snapshot = () => JSON.stringify({
+      results: app.results,
+      resultGenerationKey: app.resultGenerationKey,
+      selectedResultIndex: app.selectedResultIndex,
+      selectedFeatureIds: [...app.selectedFeatureIds].sort(),
+      selectedFeatureAnchorId: app.selectedFeatureAnchorId,
+      featureColorOverrides: app.featureColorOverrides,
+      featureStrokeOverrides: app.featureStrokeOverrides,
+      extractedFeatures: app.extractedFeatures,
+      featureCatalog: app.featureCatalog,
+      legendEntries: app.legendEntries,
+      lastRunInfo: app.lastRunInfo,
+      appliedPaletteName: app.appliedPaletteName,
+      appliedPaletteColors: app.appliedPaletteColors,
+      pendingPaletteName: app.pendingPaletteName,
+      pendingPaletteColors: app.pendingPaletteColors,
+      editableLabels: app.editableLabels
+    });
+    const before = snapshot();
+    const originalPostMessage = Worker.prototype.postMessage;
+    let delayedRunObserved = false;
+    Worker.prototype.postMessage = function delayedFirstRun(message, transfer) {
+      if (!delayedRunObserved && message?.type === 'run') {
+        delayedRunObserved = true;
+        window.setTimeout(() => {
+          originalPostMessage.call(this, message, transfer);
+        }, 1500);
+        return;
+      }
+      originalPostMessage.call(this, message, transfer);
+    };
+
+    let firstResult;
+    let secondResult;
+    try {
+      const firstRun = app.runAnalysis();
+      for (let attempt = 0; attempt < 500 && !delayedRunObserved; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2));
+      }
+      if (!delayedRunObserved) throw new Error('The first worker request was not observed.');
+      const secondRun = app.runAnalysis();
+      [firstResult, secondResult] = await Promise.all([firstRun, secondRun]);
+    } finally {
+      Worker.prototype.postMessage = originalPostMessage;
+    }
+    await window.Vue.nextTick();
+    const beforeState = JSON.parse(before);
+    const afterState = JSON.parse(snapshot());
+    return {
+      firstResult,
+      secondResult,
+      errorLog: app.errorLog,
+      snapshotPreserved: JSON.stringify(afterState) === before,
+      changedFields: Object.keys(beforeState).filter(
+        (key) => JSON.stringify(beforeState[key]) !== JSON.stringify(afterState[key])
+      )
+    };
+  });
+  expect(staleResponse).toEqual({
+    firstResult: { status: 'stale' },
+    secondResult: { status: 'error' },
+    errorLog: null,
+    snapshotPreserved: true,
+    changedFields: []
+  });
 
   const reset = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -218,7 +505,7 @@ ${origin}
     app.clickedFeature = {
       svg_id: target.svg_id,
       feat: target,
-      color: '#8cf04f'
+      color: '#ff00ff'
     };
     app.resetColorDialog.defaultColor = defaultColor;
     app.resetColorDialog.caption = 'wsv360-like protein';
@@ -264,7 +551,7 @@ ${origin}
   const siblingFills = Object.entries(thirdRun.fillsById)
     .filter(([featureId]) => featureId !== reset.targetId)
     .flatMap(([, fills]) => fills);
-  expect(siblingFills).toContain('#8cf04f');
+  expect(siblingFills).toContain('#ff00ff');
 });
 
 test('Region annotations expose and persist an explicit target-record selection', async ({ page }) => {

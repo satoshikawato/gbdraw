@@ -2,7 +2,7 @@
 
 Date: 2026-07-30
 
-Status: planned
+Status: completed (2026-07-31)
 
 Intended reader: Codex in the next implementation session. This is an internal
 execution plan, not user-facing documentation.
@@ -1402,49 +1402,49 @@ Use a fresh browser context for session tests.
 
 All items must be true:
 
-- [ ] Every P1, P2, and P3 ledger row has production code and an automated
+- [x] Every P1, P2, and P3 ledger row has production code and an automated
   regression test or an explicit API-only product decision.
-- [ ] One logical diagram produces one preview Result.
-- [ ] Interactive SVG export still provides all supported actions.
-- [ ] Custom Track row editing, panel disclosure, activation, and Reset are
+- [x] One logical diagram produces one preview Result.
+- [x] Interactive SVG export still provides all supported actions.
+- [x] Custom Track row editing, panel disclosure, activation, and Reset are
   independent and stable.
-- [ ] Every UI-representable P1-04, P1-08, and P1-09 case listed in this plan
+- [x] Every UI-representable P1-04, P1-08, and P1-09 case listed in this plan
   is rejected before worker startup; Python remains final authority for other
   semantic validation.
-- [ ] Inactive/disabled drafts and mode profiles survive a fresh-page session
+- [x] Inactive/disabled drafts and mode profiles survive a fresh-page session
   round trip.
-- [ ] Supported older sessions retain their documented behavior.
-- [ ] Python and Web current/supported Session version sets match, and the last
+- [x] Supported older sessions retain their documented behavior.
+- [x] Python and Web current/supported Session version sets match, and the last
   release-backed writer has an explicit migration.
-- [ ] The six Circular geometry controls alter request and rendered geometry.
-- [ ] Successful Generate preserves editor overrides.
-- [ ] Failed Generate preserves the last successful preview and editor state.
-- [ ] Stable overrides remain isolated across duplicate accessions, reordered
+- [x] The six Circular geometry controls alter request and rendered geometry.
+- [x] Successful Generate preserves editor overrides.
+- [x] Failed Generate preserves the last successful preview and editor state.
+- [x] Stable overrides remain isolated across duplicate accessions, reordered
   records, region display, and reverse-complement display.
-- [ ] Inactive-mode read count during Generate is zero.
-- [ ] The bridge returns the complete phase-1 catalog from prepared render data
+- [x] Inactive-mode read count during Generate is zero.
+- [x] The bridge returns the complete phase-1 catalog from prepared render data
   and the successful path does not reparse inputs.
-- [ ] Current session resources contain one copy per file payload.
-- [ ] Session warning uses actual downloadable gzip size.
-- [ ] No FASTA action exposes internal IDs.
-- [ ] No normal error panel shows `[object Object]` or a Python traceback.
-- [ ] Auto/None colors are not displayed as explicit black.
-- [ ] Largest checked-in interactive Gallery SVG is below 40 MiB.
-- [ ] Vibrio decoded metadata is at most 200,000,000 bytes; its session is at
+- [x] Current session resources contain one copy per file payload.
+- [x] Session warning uses actual downloadable gzip size.
+- [x] No FASTA action exposes internal IDs.
+- [x] No normal error panel shows `[object Object]` or a Python traceback.
+- [x] Auto/None colors are not displayed as explicit black.
+- [x] Largest checked-in interactive Gallery SVG is below 40 MiB.
+- [x] Vibrio decoded metadata is at most 200,000,000 bytes; its session is at
   most 90,000,000 gzip bytes and 400,000,000 expanded bytes.
-- [ ] Spacer and selected Annotation options are usable in both modes and
+- [x] Spacer and selected Annotation options are usable in both modes and
   session-safe.
-- [ ] Undo/Redo, Custom Track Reset, and Settings Reset preserve their declared
+- [x] Undo/Redo, Custom Track Reset, and Settings Reset preserve their declared
   scopes for inactive/disabled/P3/profile state.
-- [ ] Node suite passes.
-- [ ] Focused Python suites pass.
-- [ ] Full Chromium Playwright suite passes, or any remaining external
+- [x] Node suite passes.
+- [x] Focused Python suites pass.
+- [x] Full Chromium Playwright suite passes, or any remaining external
   environment failure is documented with evidence.
-- [ ] `pytest tests/ -v -m "not slow"` passes.
-- [ ] `ruff check gbdraw/` passes.
-- [ ] Build succeeds.
-- [ ] No unintended `tests/reference_outputs/` diff exists.
-- [ ] Production and test diffs were reviewed separately.
+- [x] `pytest tests/ -v -m "not slow"` passes.
+- [x] `ruff check gbdraw/` passes.
+- [x] Build succeeds.
+- [x] No unintended `tests/reference_outputs/` diff exists.
+- [x] Production and test diffs were reviewed separately.
 
 ## Final handoff
 

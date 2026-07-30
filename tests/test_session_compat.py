@@ -34,6 +34,7 @@ from gbdraw.api.requests import (
 from gbdraw.api.session_compat import (
     SessionCompatibleRequestRenderResult,
     adapt_session_request,
+    canonical_payload_for_session_decode,
     render_session_compatible_request,
     rewrite_protein_artifact_references,
 )
@@ -54,6 +55,66 @@ _RELEASED_SCHEMA_V2_SESSION = (
     / "sessions"
     / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
 )
+
+
+def test_version_39_multiline_conservation_labels_expand_at_compat_boundary() -> None:
+    payload = {
+        "diagramOptions": {
+            "conservationBlastFiles": [
+                {"resourceId": "comparison-1", "representation": "file"},
+                {"resourceId": "comparison-2", "representation": "file"},
+            ],
+            "conservationLabels": ["First comparison\nSecond comparison"],
+        }
+    }
+
+    migrated = canonical_payload_for_session_decode(39, payload)
+
+    assert migrated["diagramOptions"]["conservationLabels"] == [
+        "First comparison",
+        "Second comparison",
+    ]
+    assert payload["diagramOptions"]["conservationLabels"] == [
+        "First comparison\nSecond comparison"
+    ]
+
+
+@pytest.mark.parametrize("version", (33, CURRENT_SESSION_VERSION))
+def test_multiline_conservation_label_migration_is_version_39_only(
+    version: int,
+) -> None:
+    labels = ["First comparison\nSecond comparison"]
+    payload = {
+        "diagramOptions": {
+            "conservationBlastFiles": [
+                {"resourceId": "comparison-1", "representation": "file"},
+                {"resourceId": "comparison-2", "representation": "file"},
+            ],
+            "conservationLabels": labels,
+        }
+    }
+
+    migrated = canonical_payload_for_session_decode(version, payload)
+
+    assert migrated["diagramOptions"]["conservationLabels"] == labels
+
+
+def test_version_39_multiline_conservation_label_count_mismatch_stays_strict() -> None:
+    labels = ["First comparison\nSecond comparison"]
+    payload = {
+        "diagramOptions": {
+            "conservationBlastFiles": [
+                {"resourceId": "comparison-1", "representation": "file"},
+                {"resourceId": "comparison-2", "representation": "file"},
+                {"resourceId": "comparison-3", "representation": "file"},
+            ],
+            "conservationLabels": labels,
+        }
+    }
+
+    migrated = canonical_payload_for_session_decode(39, payload)
+
+    assert migrated["diagramOptions"]["conservationLabels"] == labels
 
 
 def _linear_request(

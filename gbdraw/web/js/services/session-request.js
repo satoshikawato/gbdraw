@@ -16,18 +16,21 @@ import {
   serializeFeatureVisibilityRules
 } from '../app/feature-visibility.js';
 import {
-  buildCircularTrackSlotSpec,
+  applyCircularGeometryShortcuts,
+  buildCircularTrackSlotPayload,
   CIRCULAR_TRACK_RENDERERS,
+  createDefaultCircularTrackSlots,
+  hasCircularGeometryShortcuts,
+  inferLegacyAxisIndexFromFeature,
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
 import {
-  buildLinearTrackSlotSpec,
+  buildLinearTrackSlotPayload,
   LINEAR_TRACK_RENDERERS,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-  linearTrackAxisIndexForEnabledSlots,
   migrateLinearTrackSlotsToCurrentSchema,
   parseLinearTrackSlotSpecs
 } from '../app/linear-track-slots.js';
@@ -41,7 +44,11 @@ import {
   orderedConservationSources,
   orderedOptionalConservationFiles
 } from '../app/conservation-series.js';
-import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
+import {
+  assertValidCustomTrackPlan,
+  validateCustomTrackPlan,
+  validateTrackSlotBindingInvariants
+} from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import {
@@ -243,9 +250,9 @@ const resolveCircularBatchPrefixes = (records, explicitPrefix) => {
 
 const renderOutputPayload = (prefix) => ({
   prefix,
-  formats: ['interactive_svg'],
+  formats: ['svg'],
   overwrite: false,
-  interactiveMetadataPolicy: 'auto'
+  interactiveMetadataPolicy: 'omit'
 });
 
 const optionalNumber = (value) => {
@@ -508,7 +515,7 @@ const buildRecords = ({ state, filesData, resources }) => {
   }));
 };
 
-const buildConfigOverrides = (state) => {
+const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_depth) } = {}) => {
   const { form, adv } = state;
   const circular = state.mode.value === 'circular';
   const linearLabelPlacement = circular
@@ -540,7 +547,7 @@ const buildConfigOverrides = (state) => {
     [CONFIG_OVERRIDE_PATHS.showSkew]: circular
       ? !form.suppress_skew
       : Boolean(form.show_skew),
-    [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(form.show_depth),
+    [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(depthRequested),
     [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: circular
       ? ({ none: 'none', out: 'outer', both: 'both' }[form.labels_mode] || 'none')
       : form.show_labels_linear,
@@ -759,6 +766,21 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
   }
 };
 
+const depthSourceRowsForRequest = ({ state, filesData, recordCount }) => (
+  state.mode.value === 'linear'
+    ? (filesData.linearSeqs || []).map((seq) => (
+        Array.isArray(seq.depth) ? seq.depth : (seq.depth ? [seq.depth] : [])
+      ))
+    : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount)
+);
+
+const logicalDepthTrackCountForRequest = ({ state, filesData, recordCount }) => {
+  const rows = depthSourceRowsForRequest({ state, filesData, recordCount });
+  return rows.reduce((maximum, row) => (
+    Math.max(maximum, Array.isArray(row) ? row.length : 0)
+  ), 0);
+};
+
 const buildDepthResources = ({ state, filesData, resources, diagramOptions, recordCount }) => {
   if (
     state.mode.value === 'circular' &&
@@ -769,9 +791,7 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
       `Circular Depth matrix has ${filesData.c_depth.length} record rows; expected ${recordCount}.`
     );
   }
-  const rows = state.mode.value === 'linear'
-    ? (filesData.linearSeqs || []).map((seq) => Array.isArray(seq.depth) ? seq.depth : (seq.depth ? [seq.depth] : []))
-    : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount);
+  const rows = depthSourceRowsForRequest({ state, filesData, recordCount });
   if (!rows.some((row) => row.some(Boolean))) return;
   if (rows.length !== recordCount || rows.some((row) => !Array.isArray(row))) {
     throw new Error(
@@ -830,35 +850,250 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
   });
 };
 
-const buildTracks = (state) => {
-  const circular = state.mode.value === 'circular';
-  const storedLinearAxisIndex = optionalNumber(state.adv.linear_track_slots_axis_index);
-  const emittedLinearAxisIndex = (
-    !circular &&
-    state.adv.linear_track_slots_enabled &&
-    storedLinearAxisIndex !== null
+const circularGeometryShortcutsForState = (state) => ({
+  featureWidth: state.adv.feature_width_circular,
+  depthWidth: state.adv.depth_width_circular,
+  gcContentWidth: state.adv.gc_content_width_circular,
+  gcContentRadius: state.adv.gc_content_radius_circular,
+  gcSkewWidth: state.adv.gc_skew_width_circular,
+  gcSkewRadius: state.adv.gc_skew_radius_circular
+});
+
+const annotationSetIdsForState = (state) => (
+  (Array.isArray(state.annotationSets) ? state.annotationSets : [])
+    .map((set) => String(set?.id || '').trim())
+    .filter(Boolean)
+);
+
+const visibleFeatureUnderlaysForState = (state) => {
+  const featureShapes = {
+    repeat_region: defaultFeatureRendering('repeat_region'),
+    ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
+  };
+  return Array.from(state.adv.features || [])
+    .map((featureType) => String(featureType || '').trim())
+    .filter((featureType) => (
+      (featureShapes[featureType] || defaultFeatureRendering(featureType)) === 'underlay'
+    ));
+};
+
+const automaticCircularAnnotationSlots = (state) => {
+  const slots = [];
+  (Array.isArray(state.annotationSets) ? state.annotationSets : [])
+    .forEach((set, index) => {
+      const setId = String(set?.id || '').trim();
+      if (!setId) return;
+      const marks = Array.from(new Set(
+        (Array.isArray(set.annotations) ? set.annotations : [])
+          .map((annotation) => String(annotation?.mark || '').trim().toLowerCase())
+          .filter(Boolean)
+      ));
+      const laneMarks = marks.filter((mark) => mark !== 'highlight');
+      if (laneMarks.length > 0) {
+        slots.push({
+          id: `annotations_${index + 1}`,
+          renderer: 'annotations',
+          enabled: true,
+          width: null,
+          radius: null,
+          inner_gap_px: null,
+          outer_gap_px: null,
+          side: 'outside',
+          z: 0,
+          params: { set_id: setId, marks: laneMarks }
+        });
+      }
+      if (marks.includes('highlight')) {
+        slots.push({
+          id: `annotations_${index + 1}${laneMarks.length > 0 ? '_highlight' : ''}`,
+          renderer: 'annotations',
+          enabled: true,
+          width: null,
+          radius: null,
+          inner_gap_px: null,
+          outer_gap_px: null,
+          side: 'overlay',
+          z: -1,
+          params: {
+            set_id: setId,
+            marks: ['highlight'],
+            anchor_slot: 'features',
+            layer: 'underlay',
+            cover_anchor: true,
+            padding_px: 0
+          }
+        });
+      }
+    });
+  return slots;
+};
+
+const conservationSeriesForValidation = ({
+  state,
+  filesData,
+  resolvedCircularConservation
+}) => {
+  if (state.circularConservation?.enabled !== true) return [];
+  const conservationSource = String(
+    state.circularConservation?.source || ''
+  ).trim().toLowerCase();
+  const blastsAreDerived = filesData.c_conservation_blasts_source === 'losat-cache';
+  const sourceFiles = (
+    conservationSource === 'upload' || blastsAreDerived
   )
-    ? linearTrackAxisIndexForEnabledSlots(
-        state.adv.linear_track_slots,
-        storedLinearAxisIndex
-      )
-    : null;
+    ? filesData.c_conservation_blasts
+    : filesData.c_conservation_fastas;
+  let ordered = [];
+  try {
+    ordered = orderedConservationSources(
+      Array.isArray(sourceFiles) ? sourceFiles : [],
+      state.circularConservation || {}
+    );
+  } catch {
+    ordered = [];
+  }
+  const resolved = (Array.isArray(resolvedCircularConservation)
+    ? resolvedCircularConservation
+    : []
+  ).map((entry, index) => ({
+    ...entry,
+    sourceKey: String(entry?.sourceKey || entry?.seriesKey || `resolved-${index + 1}`),
+    sourceIndex: index,
+    orderIndex: index
+  }));
+  return [...ordered, ...resolved];
+};
+
+const buildTrackPlan = ({
+  state,
+  filesData,
+  recordCount,
+  resolvedCircularConservation
+}) => {
+  const circular = state.mode.value === 'circular';
+  const depthTrackCount = logicalDepthTrackCountForRequest({
+    state,
+    filesData,
+    recordCount
+  });
+  const annotationSetIds = annotationSetIdsForState(state);
+  const visibleFeatureUnderlays = visibleFeatureUnderlaysForState(state);
+
+  if (circular && state.adv.circular_track_slots_enabled) {
+    const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
+      mode: 'circular',
+      slots: state.adv.circular_track_slots,
+      axisIndex: state.adv.circular_track_slots_axis_index,
+      trackType: state.form.track_type,
+      depthTrackCount,
+      annotationSetIds,
+      visibleFeatureUnderlays,
+      conservationSeries: conservationSeriesForValidation({
+        state,
+        filesData,
+        resolvedCircularConservation
+      })
+    }));
+    const depthRequested = validation.enabledSlots.some(
+      (slot) => slot.renderer === 'depth'
+    );
+    return {
+      depthRequested,
+      tracks: {
+        circularTrackSlots: validation.enabledSlots.map((slot) => (
+          buildCircularTrackSlotPayload(slot, state.adv.nt, state.form.track_type)
+        )),
+        circularTrackAxisIndex: validation.emittedAxisIndex,
+        linearTrackSlots: null,
+        linearTrackAxisIndex: null,
+        centerReservedRadius: optionalNumber(state.adv.center_reserved_radius)
+      }
+    };
+  }
+
+  if (!circular && state.adv.linear_track_slots_enabled) {
+    const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
+      mode: 'linear',
+      slots: state.adv.linear_track_slots,
+      axisIndex: state.adv.linear_track_slots_axis_index,
+      trackType: state.form.linear_track_layout,
+      depthTrackCount,
+      annotationSetIds,
+      visibleFeatureUnderlays: false,
+      conservationSeries: []
+    }));
+    const depthRequested = validation.enabledSlots.some(
+      (slot) => slot.renderer === 'depth'
+    );
+    return {
+      depthRequested,
+      tracks: {
+        circularTrackSlots: null,
+        circularTrackAxisIndex: null,
+        linearTrackSlots: validation.enabledSlots.map(buildLinearTrackSlotPayload),
+        linearTrackAxisIndex: validation.emittedAxisIndex,
+        centerReservedRadius: null
+      }
+    };
+  }
+
+  const depthRequested = Boolean(state.form.show_depth);
+  if (circular) {
+    const shortcuts = circularGeometryShortcutsForState(state);
+    if (hasCircularGeometryShortcuts(shortcuts)) {
+      const implicitSlots = applyCircularGeometryShortcuts(
+        createDefaultCircularTrackSlots({
+          nt: state.adv.nt,
+          showDepth: depthRequested,
+          depthTrackCount: Math.max(1, depthTrackCount),
+          showGc: !state.form.suppress_gc,
+          showSkew: !state.form.suppress_skew,
+          preset: state.form.track_type
+        }),
+        shortcuts
+      );
+      const slots = [
+        ...automaticCircularAnnotationSlots(state),
+        ...implicitSlots
+      ];
+      const axisIndex = inferLegacyAxisIndexFromFeature(
+        slots,
+        state.form.track_type
+      );
+      const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
+        mode: 'circular',
+        slots,
+        axisIndex,
+        trackType: state.form.track_type,
+        depthTrackCount,
+        annotationSetIds,
+        visibleFeatureUnderlays,
+        conservationSeries: []
+      }));
+      return {
+        depthRequested,
+        tracks: {
+          circularTrackSlots: validation.enabledSlots.map((slot) => (
+            buildCircularTrackSlotPayload(slot, state.adv.nt, state.form.track_type)
+          )),
+          circularTrackAxisIndex: validation.emittedAxisIndex,
+          linearTrackSlots: null,
+          linearTrackAxisIndex: null,
+          centerReservedRadius: optionalNumber(state.adv.center_reserved_radius)
+        }
+      };
+    }
+  }
+
   return {
-    circularTrackSlots: circular && state.adv.circular_track_slots_enabled
-      ? state.adv.circular_track_slots
-          .filter((slot) => slot?.enabled !== false)
-          .map((slot) => buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type))
-      : null,
-    circularTrackAxisIndex: circular && state.adv.circular_track_slots_enabled
-      ? optionalNumber(state.adv.circular_track_slots_axis_index)
-      : null,
-    linearTrackSlots: !circular && state.adv.linear_track_slots_enabled
-      ? state.adv.linear_track_slots
-          .filter((slot) => slot?.enabled !== false)
-          .map((slot) => buildLinearTrackSlotSpec(slot))
-      : null,
-    linearTrackAxisIndex: circular ? null : emittedLinearAxisIndex,
-    centerReservedRadius: circular ? optionalNumber(state.adv.center_reserved_radius) : null
+    depthRequested,
+    tracks: {
+      circularTrackSlots: null,
+      circularTrackAxisIndex: null,
+      linearTrackSlots: null,
+      linearTrackAxisIndex: null,
+      centerReservedRadius: circular ? optionalNumber(state.adv.center_reserved_radius) : null
+    }
   };
 };
 
@@ -1147,21 +1382,16 @@ export const buildCanonicalRenderRequest = ({
   requireCurrentCircularMultiRecordSizeMode(state.adv.multi_record_size_mode);
   requireCurrentLinearTrackLayout(state.form.linear_track_layout);
   requireCurrentLinearLabelPlacement(state.adv.label_placement);
-  (state.adv.circular_track_slots || []).forEach((slot, index) => {
-    if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
-      throw new Error(`Circular track slot #${index + 1} must be an object.`);
-    }
-    normalizeCircularTrackSlot(
-      slot,
-      index,
-      state.adv.nt,
-      state.form.track_type
-    );
-  });
   const resources = createResourceBuilder();
   const webFiles = {};
   const records = buildRecords({ state, filesData, resources });
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
+  const trackPlan = buildTrackPlan({
+    state,
+    filesData,
+    recordCount: records.length,
+    resolvedCircularConservation
+  });
   const circularGroupingIntent = ['single', 'batch'].includes(
     state.adv.circular_grouping_intent
   )
@@ -1199,8 +1429,10 @@ export const buildCanonicalRenderRequest = ({
         explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : 'out')
       );
   const diagramOptions = {
-    configOverrides: buildConfigOverrides(state),
-    tracks: buildTracks(state),
+    configOverrides: buildConfigOverrides(state, {
+      depthRequested: trackPlan.depthRequested
+    }),
+    tracks: trackPlan.tracks,
     output: {
       legend: String(state.form.legend || 'right'),
       plotTitlePosition: String(state.adv.plot_title_position || (state.mode.value === 'linear' ? 'bottom' : 'none'))
@@ -1345,7 +1577,15 @@ export const buildCanonicalRenderRequest = ({
   }
 
   addGeneratedTableResources(state, resources, diagramOptions);
-  buildDepthResources({ state, filesData, resources, diagramOptions, recordCount: records.length });
+  if (trackPlan.depthRequested) {
+    buildDepthResources({
+      state,
+      filesData,
+      resources,
+      diagramOptions,
+      recordCount: records.length
+    });
+  }
 
   [
     ['colors-default-colors-file', filesData.d_color],
@@ -1509,6 +1749,96 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   if (!entry || typeof entry !== 'object') throw new Error(`Missing canonical resource: ${resourceId}`);
   const { kind: _kind, ...file } = entry;
   return file;
+};
+
+const webBindingAsLegacyFile = (resources, binding) => {
+  if (binding === null || binding === undefined) return null;
+  if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
+    throw new Error('Web file bindings must be objects or null.');
+  }
+  const resourceId = String(binding.resourceId || '').trim();
+  if (!resourceId) throw new Error('A Web file binding requires a resourceId.');
+  const file = resourceAsLegacyFile(resources, resourceId);
+  return {
+    ...file,
+    name: normalizeOriginalResourceName(binding.name) || file.name,
+    type: String(binding.type || ''),
+    lastModified: Number(binding.lastModified) || 0
+  };
+};
+
+const webBindingValueAsLegacyFile = (resources, value) => (
+  Array.isArray(value)
+    ? value.map((item) => webBindingValueAsLegacyFile(resources, item))
+    : webBindingAsLegacyFile(resources, value)
+);
+
+const applyWebFileBindings = (files, webMetadata, resources) => {
+  const bindings = webMetadata?.bindings;
+  if (bindings === undefined || bindings === null) return files;
+  if (!bindings || typeof bindings !== 'object' || Array.isArray(bindings)) {
+    throw new Error('Session webFiles.bindings must be an object.');
+  }
+  if (bindings.schema !== 1) {
+    throw new Error('Unsupported Web file binding schema.');
+  }
+
+  const restored = { ...files };
+  [
+    'c_gb',
+    'c_gff',
+    'c_fasta',
+    'c_depth',
+    'c_conservation_blasts',
+    'c_conservation_fastas',
+    'c_conservation_sequence_sources',
+    'd_color',
+    't_color',
+    'blacklist',
+    'whitelist',
+    'qualifier_priority'
+  ].forEach((field) => {
+    if (!Object.prototype.hasOwnProperty.call(bindings, field)) return;
+    restored[field] = webBindingValueAsLegacyFile(resources, bindings[field]);
+  });
+  restored.c_conservation_blasts_source =
+    bindings.c_conservation_blasts_source === 'losat-cache' ? 'losat-cache' : null;
+
+  if (Array.isArray(bindings.linearSeqs)) {
+    restored.linearSeqs = bindings.linearSeqs.map((sequence, index) => ({
+      uid: String(sequence?.uid || `canonical-seq-${index + 1}`),
+      gb: webBindingValueAsLegacyFile(resources, sequence?.gb),
+      gff: webBindingValueAsLegacyFile(resources, sequence?.gff),
+      fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta),
+      depth: webBindingValueAsLegacyFile(resources, sequence?.depth),
+      blast: webBindingValueAsLegacyFile(resources, sequence?.blast),
+      losat_gencode: optionalPositiveInteger(sequence?.losat_gencode) || 1,
+      losat_filename: String(sequence?.losat_filename || ''),
+      definition: String(sequence?.definition || ''),
+      record_subtitle: String(sequence?.record_subtitle || ''),
+      region_record_id: String(sequence?.region_record_id || ''),
+      region_start: sequence?.region_start ?? null,
+      region_end: sequence?.region_end ?? null,
+      region_reverse: Boolean(sequence?.region_reverse)
+    }));
+  }
+  if (Array.isArray(bindings.linearComparisons)) {
+    restored.linearComparisons = bindings.linearComparisons.map((comparison, index) => ({
+      ...cloneCanonicalJsonValue(comparison),
+      id: String(comparison?.id || `linear-comparison-restored-${index + 1}`),
+      queryUid: String(comparison?.queryUid || ''),
+      subjectUid: String(comparison?.subjectUid || ''),
+      source: String(comparison?.source || 'upload'),
+      file: webBindingValueAsLegacyFile(resources, comparison?.file)
+    }));
+  }
+  if (Array.isArray(bindings.linearCanonicalComparisons)) {
+    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((comparison) => ({
+      ...cloneCanonicalJsonValue(comparison),
+      file: webBindingValueAsLegacyFile(resources, comparison?.file)
+    }));
+  }
+  return restored;
 };
 
 const cloneCanonicalJsonValue = (value) => (
@@ -2393,6 +2723,7 @@ export const projectCanonicalSessionRequest = ({
         resourceId ? resourceAsLegacyFile(resources, resourceId) : null
       ));
   }
+  Object.assign(files, applyWebFileBindings(files, webMetadata, resources));
   const explicitOverrides = Object.fromEntries(
     Object.entries(options.configOverrides || {}).filter(
       ([, value]) => value !== null && value !== undefined

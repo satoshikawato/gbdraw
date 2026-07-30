@@ -3,7 +3,12 @@ import { setClassToken } from '../services/svg-serialization.js';
 const { computed, reactive } = window.Vue;
 
 export const FEATURE_SELECTION_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
-export const SELECTABLE_FEATURE_SELECTOR = `[${FEATURE_SELECTION_ID_ATTRIBUTE}]`;
+export const RENDERED_FEATURE_SELECTION_ID_ATTRIBUTE =
+  'data-gbdraw-rendered-feature-id';
+export const SELECTABLE_FEATURE_SELECTOR = [
+  `[${RENDERED_FEATURE_SELECTION_ID_ATTRIBUTE}]`,
+  `[${FEATURE_SELECTION_ID_ATTRIBUTE}]`
+].join(', ');
 
 export const FEATURE_SELECTED_CLASS = 'gbdraw-feature-selected';
 export const FEATURE_ANCHOR_CLASS = 'gbdraw-feature-selection-anchor';
@@ -41,7 +46,10 @@ export const stripFeatureSelectionClasses = (svg) => {
 };
 
 const getElementSelectionId = (element) =>
-  normalizeFeatureSelectionId(element?.getAttribute?.(FEATURE_SELECTION_ID_ATTRIBUTE));
+  normalizeFeatureSelectionId(
+    element?.getAttribute?.(RENDERED_FEATURE_SELECTION_ID_ATTRIBUTE) ||
+    element?.getAttribute?.(FEATURE_SELECTION_ID_ATTRIBUTE)
+  );
 
 const getSelectableTargetFromPoint = (eventLike, svg) => {
   if (!svg || !Number.isFinite(eventLike?.clientX) || !Number.isFinite(eventLike?.clientY)) return null;

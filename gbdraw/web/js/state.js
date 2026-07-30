@@ -24,6 +24,7 @@ import {
   trackDefaultsForMode
 } from './mode-profiles.js';
 import { WEB_UX_PROFILE } from './web-ux-profile.js';
+import { sanitizeSvgContent } from './services/svg-sanitization.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -57,156 +58,7 @@ const svgContent = computed(() => {
 
     // Sanitize the SVG output from svgwrite to ensure safety and prevent DOMXSS
     const sanitizeStartedAt = getNow();
-    const sanitizedSvg = DOMPurify.sanitize(rawSvg, {
-      USE_PROFILES: { svg: true },
-      // Only allow main tags used by svgwrite
-      ADD_TAGS: [
-        'use',
-        'g',
-        'defs',
-        'linearGradient',
-        'radialGradient',
-        'stop',
-        'path',
-        'rect',
-        'circle',
-        'line',
-        'polyline',
-        'polygon',
-        'text',
-        'tspan'
-      ],
-      // Allowed attributes list (event handlers are automatically excluded, but can be explicitly forbidden as well)
-      ADD_ATTR: [
-        'xlink:href',
-        'href',
-        'id',
-        'class',
-        'data-definition-line-kind',
-        'data-gbdraw-feature-id',
-        'data-gbdraw-stable-feature-id',
-        'data-gbdraw-feature-part',
-        'data-gbdraw-auto-feature-underlay',
-        'data-legend-key',
-        'data-legend-owner',
-        'data-label-key',
-        'data-label-feature-id',
-        'data-label-source-text',
-        'data-label-editable',
-        'data-collinearity-block-id',
-        'data-collinearity-block-kind',
-        'data-collinearity-orientation',
-        'data-collinearity-block-evalue',
-        'data-collinearity-color-mode',
-        'data-group-kind',
-        'data-group-scope',
-        'data-collinear-group-scope',
-        'data-orthogroup-id',
-        'data-query-protein-id',
-        'data-subject-protein-id',
-        'data-query-feature-svg-id',
-        'data-subject-feature-svg-id',
-        'data-query-unit-id',
-        'data-subject-unit-id',
-        'data-gbdraw-match-id',
-        'data-gbdraw-pairwise-match-id',
-        'data-match-kind',
-        'data-query-record-index',
-        'data-subject-record-index',
-        'data-query-record-id',
-        'data-subject-record-id',
-        'data-qstart',
-        'data-qend',
-        'data-sstart',
-        'data-send',
-        'data-alignment-length',
-        'data-mismatches',
-        'data-gap-opens',
-        'data-collinearity-block-score',
-        'data-collinearity-anchor-index',
-        'data-collinearity-anchor-count',
-        'data-query-locus-id',
-        'data-subject-locus-id',
-        'data-query-display-name',
-        'data-subject-display-name',
-        'data-pairwise-match-style',
-        'data-identity-factor',
-        'data-source-index',
-        'data-track-index',
-        'data-track-label',
-        'data-track-color',
-        'data-reference-side',
-        'data-identity',
-        'data-query',
-        'data-subject',
-        'data-evalue',
-        'data-bitscore',
-        'data-orientation',
-        'data-reference-record-id',
-        'data-gbdraw-annotation-id',
-        'data-gbdraw-annotation-set-id',
-        'data-gbdraw-annotation-track-id',
-        'data-gbdraw-record-id',
-        'data-gbdraw-record-index',
-        'data-gbdraw-annotation-mark',
-        'data-gbdraw-annotation-label',
-        'data-gbdraw-role',
-        'data-gbdraw-orientation',
-        'data-annotation-set-id',
-        'data-annotation-track-id',
-        'data-annotation-record-id',
-        'data-annotation-record-index',
-        'data-annotation-mark',
-        'data-annotation-label',
-        'fill',
-        'fill-opacity',
-        'stroke',
-        'stroke-width',
-        'stroke-opacity',
-        'stroke-dasharray',
-        'stroke-linecap',
-        'stroke-linejoin',
-        'd',
-        'x',
-        'y',
-        'x1',
-        'y1',
-        'x2',
-        'y2',
-        'cx',
-        'cy',
-        'r',
-        'rx',
-        'ry',
-        'width',
-        'height',
-        'transform',
-        'viewBox',
-        'preserveAspectRatio',
-        'font-family',
-        'font-size',
-        'font-weight',
-        'text-anchor',
-        'dominant-baseline',
-        'writing-mode',
-        'letter-spacing',
-        'display'
-      ],
-      // Forbid <style> tags (to prevent breaking parent page CSS). Also forbid script-related tags.
-      FORBID_TAGS: [
-        'style',
-        'script',
-        'foreignObject',
-        'iframe',
-        'embed',
-        'object',
-        'animate',
-        'set',
-        'animateTransform',
-        'image'
-      ],
-      FORBID_ATTR: ['name', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onerror']
-    });
+    const sanitizedSvg = sanitizeSvgContent(rawSvg, DOMPurify);
     console.info(
       `post-gbdraw timing: DOMPurify.sanitize SVG: ${formatTimingMs(getNow() - sanitizeStartedAt)} (${String(rawSvg || '').length} chars)`
     );
@@ -697,6 +549,7 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
 const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
+const featureCatalog = ref(null); // Validated schema-3 metadata for committed Results
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, manualSpecificRules)
 );
@@ -1234,6 +1087,7 @@ export const state = {
   downloadDpi,
   extractedFeatures,
   biologicalFeatures,
+  featureCatalog,
   featureSelectorSafetyScope,
   featuresBySvgId,
   selectedFeatureIds,

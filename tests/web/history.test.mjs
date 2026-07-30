@@ -331,9 +331,66 @@ const createLayoutPreferences = () => ({
   const proteinTable = makeFile('resolved-protein.tsv', 40);
   const orthogroupsJson = makeFile('orthogroups.json', 50);
   const collinearityJson = makeFile('collinearity.json', 60);
+  const nestedStyleOverride = {
+    stroke: '#123456',
+    strokeWidth: 2,
+    hatch: {
+      angle: 45,
+      spacing: 4,
+      color: '#654321',
+      width: 1,
+      cross: true
+    }
+  };
+  let modeProfiles = {
+    schema: 1,
+    activeMode: 'circular',
+    profiles: {
+      circular: { values: { identity: 88 }, managed: { identity: false } },
+      linear: { values: { identity: 77 }, managed: { identity: false } }
+    }
+  };
   const state = {
     form: { prefix: 'before' },
-    adv: { features: ['CDS'] },
+    adv: {
+      features: ['CDS'],
+      circular_track_slots_enabled: true,
+      circular_track_slots_axis_index: 1,
+      circular_track_slots: [
+        {
+          id: 'notes',
+          renderer: 'annotations',
+          enabled: true,
+          side: 'outside',
+          params: {
+            set_id: 'review',
+            lane_gap_px: 5,
+            style_override: nestedStyleOverride
+          }
+        },
+        {
+          id: 'disabled_space',
+          renderer: 'spacer',
+          enabled: false,
+          side: 'inside',
+          width: '8px',
+          params: {}
+        }
+      ],
+      linear_track_slots_enabled: false,
+      linear_track_slots_axis_index: 1,
+      linear_track_slots: [
+        {
+          id: 'inactive_space',
+          renderer: 'spacer',
+          enabled: true,
+          side: 'below',
+          height: '12px',
+          spacing: '3px',
+          params: {}
+        }
+      ]
+    },
     files: {
       c_gb: file,
       c_gff: null,
@@ -411,10 +468,15 @@ const createLayoutPreferences = () => ({
     state,
     fileStore,
     nextTick: async () => {},
-    buildConfigData: () => ({ form: state.form, adv: state.adv }),
+    buildConfigData: () => ({
+      form: state.form,
+      adv: state.adv,
+      modeProfiles
+    }),
     applyConfigData: (config) => {
       state.form = { ...config.form };
       state.adv = { ...config.adv };
+      modeProfiles = structuredClone(config.modeProfiles);
     }
   });
 
@@ -425,6 +487,7 @@ const createLayoutPreferences = () => ({
   state.files.linearCanonicalComparisons = [];
   state.results.value = [{ name: 'r2', content: '<svg id="b"></svg>' }];
   state.featureColorOverrides.f1.color = '#222222';
+  modeProfiles.profiles.circular.values.identity = 70;
 
   assert.equal(snapshot.config.form.prefix, 'before');
   assert.equal(snapshot.files.c_gb.name, 'restore.gb');
@@ -457,8 +520,78 @@ const createLayoutPreferences = () => ({
   );
   assert.equal(state.results.value[0].name, 'r1');
   assert.equal(state.featureColorOverrides.f1.color, '#111111');
+  assert.equal(modeProfiles.profiles.circular.values.identity, 88);
+  assert.equal(modeProfiles.profiles.circular.managed.identity, false);
+  assert.equal(modeProfiles.profiles.linear.values.identity, 77);
   assert.deepEqual(state.featureVisibilityManualRules, []);
   assert.equal(state.canvasPadding.top, 1);
+
+  const history = createHistoryManager({
+    fileStore,
+    buildSnapshot: snapshots.buildHistorySnapshot,
+    applySnapshot: snapshots.applyHistorySnapshot
+  });
+  await history.captureBaseline('P3 baseline');
+  await history.runUndoable('Edit Annotation lane gap', () => {
+    state.adv.circular_track_slots[0].params.lane_gap_px = 9;
+  });
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+  await history.undo();
+  assert.equal(state.adv.circular_track_slots[0].params.lane_gap_px, 5);
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+  await history.redo();
+  assert.equal(state.adv.circular_track_slots[0].params.lane_gap_px, 9);
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+
+  const beforeCustomReset = structuredClone({
+    slots: state.adv.circular_track_slots,
+    axisIndex: state.adv.circular_track_slots_axis_index,
+    linearSlots: state.adv.linear_track_slots,
+    linearEnabled: state.adv.linear_track_slots_enabled
+  });
+  await history.runUndoable('Reset Circular Custom Tracks', () => {
+    state.adv.circular_track_slots.splice(
+      0,
+      state.adv.circular_track_slots.length,
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'inside',
+        params: { lane_direction: 'inside' }
+      }
+    );
+    state.adv.circular_track_slots_axis_index = 0;
+  });
+  await history.undo();
+  assert.deepEqual(state.adv.circular_track_slots, beforeCustomReset.slots);
+  assert.equal(
+    state.adv.circular_track_slots_axis_index,
+    beforeCustomReset.axisIndex
+  );
+  assert.deepEqual(state.adv.linear_track_slots, beforeCustomReset.linearSlots);
+  assert.equal(
+    state.adv.linear_track_slots_enabled,
+    beforeCustomReset.linearEnabled
+  );
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+  await history.redo();
+  assert.deepEqual(
+    state.adv.circular_track_slots.map((slot) => slot.id),
+    ['features']
+  );
 }
 
 {

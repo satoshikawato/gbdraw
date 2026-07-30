@@ -5,11 +5,10 @@ const { extname, join, normalize, resolve, sep } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
-const sessionPath = join(repoRoot, 'tests/test_inputs/2026-06-16_wssv.gbdraw-session.json');
 const bgcSessionPath = join(repoRoot, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
 const hmmtDnaPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
-const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000711.gbk');
-const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000713.gbk');
+const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
+const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000709.gbk');
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -59,6 +58,68 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await new Promise((resolveClose) => server.close(resolveClose));
+});
+
+test('diagram worker startup leaves the main helper runtime lazy', async ({ page }) => {
+  test.setTimeout(180000);
+  const genbank = readFileSync(hmmtDnaPath, 'utf8');
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.waitForFunction(
+    () => (
+      window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true &&
+      Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0
+    ),
+    null,
+    { timeout: 180000 }
+  );
+  expect(await page.evaluate(() => ({
+    pyodideReady: window.__GBDRAW_APP__.pyodideReady,
+    repeatRegion: window.__GBDRAW_APP__.currentColors.repeat_region
+  }))).toEqual({
+    pyodideReady: false,
+    repeatRegion: '#d3d3d3'
+  });
+
+  await page.evaluate((genbankText) => {
+    const originalLoadPyodide = window.loadPyodide;
+    if (typeof originalLoadPyodide !== 'function') {
+      throw new Error('Main-thread Pyodide loader is unavailable.');
+    }
+    window.__GBDRAW_MAIN_PYODIDE_LOADS__ = 0;
+    window.loadPyodide = (...args) => {
+      window.__GBDRAW_MAIN_PYODIDE_LOADS__ += 1;
+      return originalLoadPyodide(...args);
+    };
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'circular';
+    app.cInputType = 'gb';
+    app.files.c_gb = new File([genbankText], 'simple-worker-only.gbk', {
+      type: 'text/plain',
+      lastModified: 17
+    });
+  }, genbank);
+  await page.waitForTimeout(250);
+  expect(await page.evaluate(() => ({
+    loadCalls: window.__GBDRAW_MAIN_PYODIDE_LOADS__,
+    pyodideReady: window.__GBDRAW_APP__.pyodideReady
+  }))).toEqual({
+    loadCalls: 0,
+    pyodideReady: false
+  });
+
+  expect(await runDiagramWithDiagnostics(page)).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+  expect(await page.evaluate(() => ({
+    loadCalls: window.__GBDRAW_MAIN_PYODIDE_LOADS__,
+    pyodideReady: window.__GBDRAW_APP__.pyodideReady
+  }))).toEqual({
+    loadCalls: 0,
+    pyodideReady: false
+  });
 });
 
 const inspectSparseDepthResult = async (page) => page.evaluate(() => {
@@ -434,6 +495,492 @@ test('Linear custom slot panel and enable state preserve the explicit stack', as
   expect(result.afterReset).not.toBe(result.initial);
 });
 
+test('Custom Track disclosure and editable IDs preserve transient row identity in both modes', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const result = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.adv.linear_track_slots.splice(
+      0,
+      app.adv.linear_track_slots.length,
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'overlay',
+        height: '',
+        spacing: '',
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'linear_space_a',
+        renderer: 'spacer',
+        enabled: true,
+        side: 'below',
+        height: '8px',
+        spacing: '',
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'linear_space_b',
+        renderer: 'spacer',
+        enabled: true,
+        side: 'below',
+        height: '9px',
+        spacing: '',
+        z: 0,
+        params: {}
+      }
+    );
+    app.adv.linear_track_slots_axis_index = 0;
+    app.setLinearTrackSlotsEnabled(true);
+    if (!app.linearTrackSlotsPanelOpen) app.toggleLinearTrackSlotsPanel();
+    await window.Vue.nextTick();
+    const linearKeyBefore = app.linearTrackSlotEditorKey(app.adv.linear_track_slots[0]);
+    const linearInput = document.querySelector(
+      '#linear-custom-track-slots-panel input[placeholder="slot_id"]'
+    );
+    linearInput.focus();
+    linearInput.value = 'custom_features';
+    linearInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await window.Vue.nextTick();
+    const linearKeyAfter = app.linearTrackSlotEditorKey(app.adv.linear_track_slots[0]);
+    const linearFeatures = app.adv.linear_track_slots[0];
+    const linearSpaceA = app.adv.linear_track_slots[1];
+    const linearSpaceB = app.adv.linear_track_slots[2];
+    const linearOriginalKeys = new Map(
+      [linearFeatures, linearSpaceA, linearSpaceB].map((slot) => [
+        slot,
+        app.linearTrackSlotEditorKey(slot)
+      ])
+    );
+    app.moveLinearTrackSlot(2, 1);
+    linearSpaceA.renderer = 'dinucleotide_content';
+    app.updateLinearTrackSlotRenderer(linearSpaceA);
+    app.duplicateLinearTrackSlot(1);
+    const linearDuplicate = app.adv.linear_track_slots[2];
+    const linearDuplicateKey = app.linearTrackSlotEditorKey(linearDuplicate);
+    app.removeLinearTrackSlot(2);
+    const linearLifecycleKeysPreserved = (
+      app.adv.linear_track_slots.includes(linearFeatures) &&
+      app.adv.linear_track_slots.includes(linearSpaceA) &&
+      app.adv.linear_track_slots.includes(linearSpaceB) &&
+      [linearFeatures, linearSpaceA, linearSpaceB].every(
+        (slot) => app.linearTrackSlotEditorKey(slot) === linearOriginalKeys.get(slot)
+      ) &&
+      ![...linearOriginalKeys.values()].includes(linearDuplicateKey)
+    );
+
+    app.mode = 'circular';
+    app.adv.circular_track_slots.splice(
+      0,
+      app.adv.circular_track_slots.length,
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'inside',
+        width: null,
+        radius: null,
+        inner_gap_px: null,
+        outer_gap_px: null,
+        z: 0,
+        params: { lane_direction: 'inside' }
+      },
+      {
+        id: 'circular_space_a',
+        renderer: 'spacer',
+        enabled: true,
+        side: 'inside',
+        width: '8px',
+        radius: null,
+        inner_gap_px: null,
+        outer_gap_px: null,
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'circular_space_b',
+        renderer: 'spacer',
+        enabled: true,
+        side: 'inside',
+        width: '9px',
+        radius: null,
+        inner_gap_px: null,
+        outer_gap_px: null,
+        z: 0,
+        params: {}
+      }
+    );
+    app.adv.circular_track_slots_axis_index = 0;
+    app.setCircularTrackSlotsEnabled(true);
+    if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
+    await window.Vue.nextTick();
+    const circularKeyBefore = app.circularTrackSlotEditorKey(
+      app.adv.circular_track_slots[0]
+    );
+    const beforeDisclosure = JSON.stringify(app.adv.circular_track_slots);
+    for (let index = 0; index < 10; index += 1) {
+      app.toggleCircularTrackSlotsPanel();
+      app.toggleCircularTrackSlotsPanel();
+    }
+    app.setCircularTrackSlotsEnabled(false);
+    app.setCircularTrackSlotsEnabled(true);
+    await window.Vue.nextTick();
+    const disclosurePreserved =
+      beforeDisclosure === JSON.stringify(app.adv.circular_track_slots);
+    const circularInput = document.querySelector(
+      '#circular-custom-track-slots-panel input[placeholder="slot_id"]'
+    );
+    circularInput.focus();
+    circularInput.value = 'custom_circular_features';
+    circularInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await window.Vue.nextTick();
+    const circularKeyAfter = app.circularTrackSlotEditorKey(
+      app.adv.circular_track_slots[0]
+    );
+    const circularFeatures = app.adv.circular_track_slots[0];
+    const circularSpaceA = app.adv.circular_track_slots[1];
+    const circularSpaceB = app.adv.circular_track_slots[2];
+    const circularOriginalKeys = new Map(
+      [circularFeatures, circularSpaceA, circularSpaceB].map((slot) => [
+        slot,
+        app.circularTrackSlotEditorKey(slot)
+      ])
+    );
+    app.moveCircularTrackSlot(2, 1);
+    app.updateCircularTrackSlotRenderer(circularSpaceA, 'dinucleotide_content');
+    app.duplicateCircularTrackSlot(1);
+    const circularDuplicate = app.adv.circular_track_slots[2];
+    const circularDuplicateKey = app.circularTrackSlotEditorKey(circularDuplicate);
+    app.removeCircularTrackSlot(2);
+    const circularLifecycleKeysPreserved = (
+      app.adv.circular_track_slots.includes(circularFeatures) &&
+      app.adv.circular_track_slots.includes(circularSpaceA) &&
+      app.adv.circular_track_slots.includes(circularSpaceB) &&
+      [circularFeatures, circularSpaceA, circularSpaceB].every(
+        (slot) => (
+          app.circularTrackSlotEditorKey(slot) === circularOriginalKeys.get(slot)
+        )
+      ) &&
+      ![...circularOriginalKeys.values()].includes(circularDuplicateKey)
+    );
+
+    return {
+      linearId: app.adv.linear_track_slots[0].id,
+      linearKeyBefore,
+      linearKeyAfter,
+      linearLifecycleKeysPreserved,
+      circularId: app.adv.circular_track_slots[0].id,
+      circularKeyBefore,
+      circularKeyAfter,
+      circularLifecycleKeysPreserved,
+      disclosurePreserved
+    };
+  });
+
+  expect(result.linearId).toBe('custom_features');
+  expect(result.linearKeyAfter).toBe(result.linearKeyBefore);
+  expect(result.linearLifecycleKeysPreserved).toBe(true);
+  expect(result.circularId).toBe('custom_circular_features');
+  expect(result.circularKeyAfter).toBe(result.circularKeyBefore);
+  expect(result.circularLifecycleKeysPreserved).toBe(true);
+  expect(result.disclosurePreserved).toBe(true);
+});
+
+test('Color value controls preserve Auto, None, and named colors', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const result = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.currentColors.repeat_region = 'red';
+    app.adv.block_stroke_color = 'none';
+    app.adv.line_stroke_color = null;
+    await window.Vue.nextTick();
+
+    const select = (label) => document.querySelector(`select[aria-label="${label} mode"]`);
+    const picker = (label) => document.querySelector(`input[aria-label="${label}"]`);
+    const changeMode = async (label, value) => {
+      const control = select(label);
+      control.value = value;
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      await window.Vue.nextTick();
+    };
+    const snapshot = (label) => ({
+      mode: select(label)?.value || '',
+      picker: picker(label)?.value || '',
+      disabled: Boolean(picker(label)?.disabled)
+    });
+
+    const initial = {
+      repeat: snapshot('repeat_region feature color'),
+      block: snapshot('Block stroke color'),
+      line: snapshot('Line stroke color')
+    };
+
+    await changeMode('repeat_region feature color', 'none');
+    const repeatNone = app.currentColors.repeat_region;
+    await changeMode('repeat_region feature color', 'auto');
+    const repeatAuto = app.currentColors.repeat_region;
+
+    app.adv.block_stroke_color = 'navy';
+    await window.Vue.nextTick();
+    const blockNamed = snapshot('Block stroke color');
+    await changeMode('Block stroke color', 'none');
+    const blockNone = app.adv.block_stroke_color;
+
+    await changeMode('Line stroke color', 'color');
+    const lineColor = app.adv.line_stroke_color;
+    await changeMode('Line stroke color', 'auto');
+    const lineAuto = app.adv.line_stroke_color;
+
+    return {
+      initial,
+      repeatNone,
+      repeatAuto,
+      blockNamed,
+      blockNone,
+      lineColor,
+      lineAuto
+    };
+  });
+
+  expect(result.initial.repeat).toEqual({
+    mode: 'color',
+    picker: '#ff0000',
+    disabled: false
+  });
+  expect(result.initial.block).toEqual({
+    mode: 'none',
+    picker: '#000000',
+    disabled: true
+  });
+  expect(result.initial.line).toEqual({
+    mode: 'auto',
+    picker: '#000000',
+    disabled: true
+  });
+  expect(result.repeatNone).toBe('none');
+  expect(result.repeatAuto).toBeNull();
+  expect(result.blockNamed).toEqual({
+    mode: 'color',
+    picker: '#000080',
+    disabled: false
+  });
+  expect(result.blockNone).toBe('none');
+  expect(result.lineColor).toBe('#000000');
+  expect(result.lineAuto).toBeNull();
+});
+
+test('Definition line colors preserve raw values and present named, Auto, and None states', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const result = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.adv.linear_definition_line_styles.name.fill = 'red';
+    app.adv.linear_definition_line_styles.subtitle.fill = null;
+    app.adv.linear_definition_line_styles.replicon.fill = 'none';
+    await window.Vue.nextTick();
+
+    const picker = (label) => document.querySelector(
+      `input[aria-label="${label} definition line color"]`
+    );
+    const state = (label) => document.querySelector(
+      `[aria-label="${label} definition line color state"]`
+    );
+    const initial = {
+      namePicker: picker('Name / Species')?.value || '',
+      nameState: state('Name / Species')?.textContent?.trim() || '',
+      nameRaw: app.adv.linear_definition_line_styles.name.fill,
+      subtitlePicker: Boolean(picker('Subtitle')),
+      subtitleState: state('Subtitle')?.textContent?.trim() || '',
+      subtitleRaw: app.adv.linear_definition_line_styles.subtitle.fill,
+      repliconPicker: Boolean(picker('Replicon')),
+      repliconState: state('Replicon')?.textContent?.trim() || '',
+      repliconRaw: app.adv.linear_definition_line_styles.replicon.fill
+    };
+
+    const namePicker = picker('Name / Species');
+    namePicker.value = '#00ff00';
+    namePicker.dispatchEvent(new Event('input', { bubbles: true }));
+    await window.Vue.nextTick();
+
+    return {
+      initial,
+      editedNameRaw: app.adv.linear_definition_line_styles.name.fill
+    };
+  });
+
+  expect(result.initial).toEqual({
+    namePicker: '#ff0000',
+    nameState: '',
+    nameRaw: 'red',
+    subtitlePicker: false,
+    subtitleState: 'Auto',
+    subtitleRaw: null,
+    repliconPicker: false,
+    repliconState: 'None',
+    repliconRaw: 'none'
+  });
+  expect(result.editedNameRaw).toBe('#00ff00');
+});
+
+test('Invalid Annotation slot is rejected before worker startup and preserves committed state', async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativePostMessage = Worker.prototype.postMessage;
+    window.__GBDRAW_DIAGRAM_RUN_MESSAGES__ = 0;
+    Worker.prototype.postMessage = function instrumentDiagramWorker(message, ...args) {
+      if (
+        message?.type === 'run' &&
+        String(this.__gbdrawWorkerUrl || '').includes('diagram-generation-worker')
+      ) {
+        window.__GBDRAW_DIAGRAM_RUN_MESSAGES__ += 1;
+      }
+      return nativePostMessage.call(this, message, ...args);
+    };
+    const NativeWorker = Worker;
+    window.Worker = class InstrumentedWorker extends NativeWorker {
+      constructor(url, options) {
+        super(url, options);
+        this.__gbdrawWorkerUrl = String(url || '');
+      }
+    };
+  });
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.pyodideReady = true;
+  });
+
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
+
+  const outcome = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const featureId = String(app.extractedFeatures?.[0]?.svg_id || 'transaction-feature');
+    app.selectedFeatureIds = new Set([featureId]);
+    app.selectedFeatureAnchorId = featureId;
+    app.featureColorOverrides.__transaction_probe = {
+      color: '#123456',
+      caption: 'Transaction probe'
+    };
+    app.featureStrokeOverrides.__transaction_probe = {
+      color: '#654321',
+      width: 2
+    };
+    app.legendEntries.push({
+      caption: 'Transaction probe',
+      color: '#abcdef',
+      showStroke: true,
+      strokeColor: '#654321',
+      strokeWidth: 2
+    });
+    app.annotationSets.splice(0, app.annotationSets.length);
+    app.blastSource = 'none';
+    app.mode = 'linear';
+    app.adv.linear_track_slots.splice(
+      0,
+      app.adv.linear_track_slots.length,
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'overlay',
+        height: '',
+        spacing: '',
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'invalid_annotation',
+        renderer: 'annotations',
+        enabled: true,
+        side: 'overlay',
+        height: '',
+        spacing: '',
+        z: 1,
+        params: {
+          set_id: 'missing',
+          anchor_slot: 'features',
+          layer: 'foreground'
+        }
+      }
+    );
+    app.adv.linear_track_slots_axis_index = 0;
+    app.setLinearTrackSlotsEnabled(true);
+    await window.Vue.nextTick();
+    app.editableLabels = [{
+      key: 'transaction-label',
+      idx: 1,
+      text: 'Keep this label',
+      sourceText: 'Original label',
+      featureId,
+      kind: 'regular',
+      draftText: 'Keep this label'
+    }];
+
+    const snapshot = () => ({
+      results: app.results.map((entry) => ({
+        name: entry.name,
+        type: entry.type,
+        content: entry.content
+      })),
+      selectedResultIndex: app.selectedResultIndex,
+      selectedFeatureIds: [...app.selectedFeatureIds].sort(),
+      selectedFeatureAnchorId: app.selectedFeatureAnchorId,
+      featureColorOverrides: JSON.parse(JSON.stringify(app.featureColorOverrides)),
+      featureStrokeOverrides: JSON.parse(JSON.stringify(app.featureStrokeOverrides)),
+      legendEntries: JSON.parse(JSON.stringify(app.legendEntries)),
+      editableLabels: JSON.parse(JSON.stringify(app.editableLabels)),
+      liveLegend: (
+        document.querySelector('svg #legend, svg #feature_legend, svg [id*="legend" i]')
+          ?.outerHTML || null
+      )
+    });
+    const before = snapshot();
+    const workerMessagesBefore = window.__GBDRAW_DIAGRAM_RUN_MESSAGES__;
+    const result = await app.runAnalysis();
+    const after = snapshot();
+    const same = (field) => JSON.stringify(after[field]) === JSON.stringify(before[field]);
+
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      diagramWorkerMessages:
+        window.__GBDRAW_DIAGRAM_RUN_MESSAGES__ - workerMessagesBefore,
+      beforeResultCount: before.results.length,
+      resultsPreserved: same('results'),
+      resultSelectionPreserved: same('selectedResultIndex'),
+      featureSelectionPreserved:
+        same('selectedFeatureIds') && same('selectedFeatureAnchorId'),
+      fillOverridesPreserved: same('featureColorOverrides'),
+      strokeOverridesPreserved: same('featureStrokeOverrides'),
+      legendPreserved: same('legendEntries') && same('liveLegend'),
+      editableLabelsPreserved: same('editableLabels')
+    };
+  });
+
+  expect(outcome.result?.status).toBe('error');
+  expect(outcome.errorSummary).toContain("references unknown set 'missing'");
+  expect(outcome.diagramWorkerMessages).toBe(0);
+  expect(outcome.beforeResultCount).toBeGreaterThan(0);
+  expect(outcome.resultsPreserved).toBe(true);
+  expect(outcome.resultSelectionPreserved).toBe(true);
+  expect(outcome.featureSelectionPreserved).toBe(true);
+  expect(outcome.fillOverridesPreserved).toBe(true);
+  expect(outcome.strokeOverridesPreserved).toBe(true);
+  expect(outcome.legendPreserved).toBe(true);
+  expect(outcome.editableLabelsPreserved).toBe(true);
+});
+
 test('Session preflight rejects invalid canonical data without resetting live state', async ({ page }) => {
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
@@ -650,7 +1197,7 @@ ORIGIN
   });
 });
 
-test('v39 layout preferences project by mode and survive export and import', async ({ page }) => {
+test('v40 layout preferences and mode profiles survive fresh-page export and import', async ({ page }) => {
   test.setTimeout(120000);
   const expectedPreferences = {
     circular: {
@@ -690,6 +1237,16 @@ ORIGIN
       plotTitlePosition: expected.plotTitlePosition
     });
   };
+  const activeModeProfile = async (mode) => page.evaluate(async (nextMode) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = nextMode;
+    await window.Vue.nextTick();
+    await window.Vue.nextTick();
+    return {
+      identity: app.adv.identity,
+      axisStrokeColor: app.adv.axis_stroke_color
+    };
+  }, mode);
   const layoutPreferenceTree = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return JSON.parse(JSON.stringify(state.layoutPreferences));
@@ -709,11 +1266,15 @@ ORIGIN
     await window.Vue.nextTick();
     app.form.legend = 'upper_left';
     app.adv.plot_title_position = 'bottom';
+    app.adv.identity = 88;
+    app.adv.axis_stroke_color = '#123456';
 
     app.mode = 'linear';
     await window.Vue.nextTick();
     app.form.legend = 'top';
     app.adv.plot_title_position = 'center';
+    app.adv.identity = 77;
+    app.adv.axis_stroke_color = '#654321';
     await window.Vue.nextTick();
 
     app.cInputType = 'gb';
@@ -721,7 +1282,7 @@ ORIGIN
       type: 'text/plain',
       lastModified: 1
     });
-    app.sessionTitle = 'layout-preferences-v39';
+    app.sessionTitle = 'layout-preferences-v40';
   }, { genbankText: recordText });
 
   expect(await layoutPreferenceTree()).toEqual(expectedPreferences);
@@ -731,8 +1292,31 @@ ORIGIN
 
   await activeProjection('circular', false);
   await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
     state.biologicalFeatures.value = [{ nucleotide_sequence: 'ATGC' }];
+    state.linearSeqs[0].gb = new File(
+      [await app.files.c_gb.arrayBuffer()],
+      'inactive-linear-layout.gbk',
+      { type: 'application/genbank', lastModified: 22 }
+    );
+    state.linearSeqs[0].definition = 'Inactive Linear draft';
+    app.adv.linear_track_slots.splice(
+      0,
+      app.adv.linear_track_slots.length,
+      {
+        id: 'inactive_spacer',
+        renderer: 'spacer',
+        enabled: false,
+        side: 'below',
+        height: '17px',
+        spacing: '3px',
+        z: 2,
+        params: {}
+      }
+    );
+    app.adv.linear_track_slots_enabled = false;
+    app.adv.linear_track_slots_axis_index = 1;
   });
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
   await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
@@ -754,7 +1338,64 @@ ORIGIN
     'circularMultiRecordLegendPosition',
     'circularMultiRecordPlotTitlePosition'
   ];
-  expect(exportedSession.version).toBe(39);
+  expect(exportedSession.version).toBe(40);
+  expect(exportedSession).not.toHaveProperty('files');
+  expect(exportedSession.webFiles).toEqual(expect.any(Object));
+  expect(exportedSession.webFiles.bindings.schema).toBe(1);
+  expect(exportedSession.webFiles.bindings.c_gb.name).toBe('layout-preferences.gbk');
+  expect(exportedSession.webFiles.bindings.linearSeqs[0].gb.name).toBe(
+    'inactive-linear-layout.gbk'
+  );
+  expect(exportedSession.webFiles.bindings.c_gb.resourceId).toBe(
+    exportedSession.webFiles.bindings.linearSeqs[0].gb.resourceId
+  );
+  expect(exportedSession.editorState).toEqual(expect.any(Object));
+  expect(exportedSession.editorState.featureCatalog).toBeNull();
+  expect(exportedSession.features).not.toHaveProperty('extractedFeatures');
+  expect(exportedSession.features).not.toHaveProperty('biologicalFeatures');
+  expect(exportedSession.orthogroupState).not.toHaveProperty('groups');
+  expect(exportedSession.config.adv.circular_track_slots).toEqual(expect.any(Array));
+  expect(exportedSession.config.adv.linear_track_slots).toEqual(expect.any(Array));
+  expect(exportedSession.config.adv.linear_track_slots).toEqual([
+    expect.objectContaining({
+      id: 'inactive_spacer',
+      renderer: 'spacer',
+      enabled: false,
+      height: '17px',
+      spacing: '3px'
+    })
+  ]);
+  expect(exportedSession.config.adv).toHaveProperty('circular_track_slots_enabled');
+  expect(exportedSession.config.adv).toHaveProperty('linear_track_slots_enabled');
+  expect(exportedSession.config.modeProfiles.schema).toBe(1);
+  expect(Object.keys(exportedSession.config.modeProfiles.profiles).sort()).toEqual([
+    'circular',
+    'linear'
+  ]);
+  expect(exportedSession.config.modeProfiles.profiles.circular).toEqual(
+    expect.objectContaining({
+      values: expect.objectContaining({
+        identity: 88,
+        axis_stroke_color: '#123456'
+      }),
+      managed: expect.objectContaining({
+        identity: false,
+        axis_stroke_color: false
+      })
+    })
+  );
+  expect(exportedSession.config.modeProfiles.profiles.linear).toEqual(
+    expect.objectContaining({
+      values: expect.objectContaining({
+        identity: 77,
+        axis_stroke_color: '#654321'
+      }),
+      managed: expect.objectContaining({
+        identity: false,
+        axis_stroke_color: false
+      })
+    })
+  );
   expect(exportedSession.ui.layoutPreferences).toEqual(expectedPreferences);
   expect(legacyLayoutFields.filter((field) => (
     Object.prototype.hasOwnProperty.call(exportedSession.ui, field)
@@ -774,6 +1415,518 @@ ORIGIN
   await expectActiveProjection('circular', false, expectedPreferences.circular.single);
   await expectActiveProjection('circular', true, expectedPreferences.circular.multi);
   await expectActiveProjection('linear', false, expectedPreferences.linear);
+  expect(await activeModeProfile('circular')).toEqual({
+    identity: 88,
+    axisStrokeColor: '#123456'
+  });
+  expect(await activeModeProfile('linear')).toEqual({
+    identity: 77,
+    axisStrokeColor: '#654321'
+  });
+  expect(await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    return {
+      linearFileName: state.linearSeqs[0].gb?.name,
+      inactiveSlot: JSON.parse(JSON.stringify(
+        app.adv.linear_track_slots.find((slot) => slot.id === 'inactive_spacer')
+      )),
+      axisIndex: app.adv.linear_track_slots_axis_index,
+      enabled: app.adv.linear_track_slots_enabled
+    };
+  })).toEqual({
+    linearFileName: 'inactive-linear-layout.gbk',
+    inactiveSlot: expect.objectContaining({
+      id: 'inactive_spacer',
+      renderer: 'spacer',
+      enabled: false,
+      height: '17px',
+      spacing: '3px'
+    }),
+    axisIndex: 1,
+    enabled: false
+  });
+});
+
+test('P3 Custom Track drafts survive fresh-page session re-save and Reset history', async ({ page }) => {
+  test.setTimeout(180000);
+  const recordText = readFileSync(hmmtDnaPath, 'utf8');
+  const styleOverride = {
+    stroke: '#112233',
+    strokeWidth: 2,
+    hatch: { pattern: 'diagonal', spacing: 4 },
+    label: { color: '#445566', fontSize: 9 }
+  };
+  const p3Draft = (session) => ({
+    circularEnabled: session.config.adv.circular_track_slots_enabled,
+    circularAxis: session.config.adv.circular_track_slots_axis_index,
+    circularSlots: session.config.adv.circular_track_slots,
+    linearEnabled: session.config.adv.linear_track_slots_enabled,
+    linearAxis: session.config.adv.linear_track_slots_axis_index,
+    linearSlots: session.config.adv.linear_track_slots
+  });
+  const readSessionDownload = async (download) => {
+    const filePath = await download.path();
+    expect(filePath).toBeTruthy();
+    return JSON.parse(gunzipSync(readFileSync(filePath)).toString('utf8'));
+  };
+  const loadSession = async (filePath) => {
+    const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+    await page.locator('input[accept^=".json,"]').first().setInputFiles(filePath);
+    const dialog = await dialogPromise;
+    expect(dialog.message()).toBe('Session loaded successfully!');
+    await dialog.accept();
+    await page.waitForFunction(() => {
+      const app = window.__GBDRAW_APP__;
+      return (
+        app.mode === 'circular' &&
+        app.adv?.circular_track_slots?.some((slot) => slot.id === 'review_overlay') &&
+        app.adv?.linear_track_slots?.some((slot) => slot.id === 'inactive_overlay')
+      );
+    }, null, { timeout: 120000 });
+  };
+  const browserDraft = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return JSON.parse(JSON.stringify({
+      circularEnabled: app.adv.circular_track_slots_enabled,
+      circularAxis: app.adv.circular_track_slots_axis_index,
+      circularSlots: app.adv.circular_track_slots,
+      linearEnabled: app.adv.linear_track_slots_enabled,
+      linearAxis: app.adv.linear_track_slots_axis_index,
+      linearSlots: app.adv.linear_track_slots
+    }));
+  });
+
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.evaluate(({ genbankText, nestedStyle }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'circular';
+    app.cInputType = 'gb';
+    app.files.c_gb = new File([genbankText], 'p3-session.gbk', {
+      type: 'application/genbank',
+      lastModified: 31
+    });
+    app.annotationSets.splice(0, app.annotationSets.length);
+    const annotationSet = app.addAnnotationSet('review');
+    const annotation = app.addCoordinateAnnotation(annotationSet, { start: 1, end: 20 });
+    annotation.label = 'Review';
+    annotation.mark = 'line';
+
+    app.adv.circular_track_slots_enabled = true;
+    app.adv.circular_track_slots_axis_index = 1;
+    app.adv.circular_track_slots.splice(
+      0,
+      app.adv.circular_track_slots.length,
+      {
+        id: 'disabled_outer_space',
+        renderer: 'spacer',
+        enabled: false,
+        side: 'outside',
+        width: '13px',
+        radius: null,
+        inner_gap_px: '1px',
+        outer_gap_px: '2px',
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'inside',
+        width: null,
+        radius: null,
+        inner_gap_px: null,
+        outer_gap_px: null,
+        z: 0,
+        params: { lane_direction: 'inside' }
+      },
+      {
+        id: 'review_overlay',
+        renderer: 'annotations',
+        enabled: true,
+        side: 'overlay',
+        width: null,
+        radius: null,
+        inner_gap_px: null,
+        outer_gap_px: null,
+        z: 2,
+        params: {
+          set_id: 'review',
+          marks: ['line', 'band'],
+          lane_gap_px: 5,
+          padding_px: 0,
+          overflow: 'error',
+          show_labels: true,
+          anchor_slot: 'features',
+          layer: 'foreground',
+          cover_anchor: true,
+          style_override: structuredClone(nestedStyle)
+        }
+      },
+      {
+        id: 'inner_space',
+        renderer: 'spacer',
+        enabled: true,
+        side: 'inside',
+        width: '9px',
+        radius: null,
+        inner_gap_px: '2px',
+        outer_gap_px: '3px',
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'disabled_annotation',
+        renderer: 'annotations',
+        enabled: false,
+        side: 'inside',
+        width: '18px',
+        radius: null,
+        inner_gap_px: null,
+        outer_gap_px: null,
+        z: 1,
+        params: {
+          set_id: 'review',
+          marks: ['bracket', 'highlight'],
+          lane_gap_px: 7,
+          padding_px: 1,
+          overflow: 'clip',
+          show_labels: false,
+          layer: 'underlay',
+          style_override: structuredClone(nestedStyle)
+        }
+      }
+    );
+
+    app.adv.linear_track_slots_enabled = false;
+    app.adv.linear_track_slots_axis_index = 2;
+    app.adv.linear_track_slots.splice(
+      0,
+      app.adv.linear_track_slots.length,
+      {
+        id: 'inactive_above_space',
+        renderer: 'spacer',
+        enabled: true,
+        side: 'above',
+        height: '14px',
+        spacing: '3px',
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'inactive_disabled_annotation',
+        renderer: 'annotations',
+        enabled: false,
+        side: 'above',
+        height: '17px',
+        spacing: '4px',
+        z: 1,
+        params: {
+          set_id: 'review',
+          marks: ['highlight'],
+          lane_gap_px: 8,
+          padding_px: 1,
+          overflow: 'compress',
+          show_labels: false,
+          layer: 'underlay',
+          style_override: structuredClone(nestedStyle)
+        }
+      },
+      {
+        id: 'linear_features',
+        renderer: 'features',
+        enabled: true,
+        side: 'below',
+        height: '',
+        spacing: '',
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'inactive_overlay',
+        renderer: 'annotations',
+        enabled: true,
+        side: 'overlay',
+        height: '',
+        spacing: '',
+        z: 2,
+        params: {
+          set_id: 'review',
+          marks: ['line', 'bracket', 'band', 'highlight'],
+          lane_gap_px: 6,
+          padding_px: 0,
+          overflow: 'error',
+          show_labels: true,
+          anchor_slot: 'linear_features',
+          layer: 'foreground',
+          cover_anchor: true,
+          style_override: structuredClone(nestedStyle)
+        }
+      },
+      {
+        id: 'inactive_disabled_space',
+        renderer: 'spacer',
+        enabled: false,
+        side: 'below',
+        height: '11px',
+        spacing: '2px',
+        z: 0,
+        params: {}
+      }
+    );
+    app.sessionTitle = 'p3-drafts-v40';
+  }, { genbankText: recordText, nestedStyle: styleOverride });
+
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
+    await window.Vue.nextTick();
+  });
+  const circularAnnotationRow = page.locator(
+    '[data-capture="circular-track-slot-review_overlay"]'
+  );
+  await page.locator(
+    '[data-capture="circular-track-slot-disabled_outer_space"] input[title="Width"]'
+  ).fill('15px');
+  await circularAnnotationRow
+    .locator('.track-slot-field')
+    .filter({ hasText: 'padding' })
+    .locator('input[type="number"]')
+    .fill('4');
+  await circularAnnotationRow
+    .locator('label')
+    .filter({ hasText: 'Cover anchor' })
+    .locator('input[type="checkbox"]')
+    .click();
+  await circularAnnotationRow
+    .getByRole('checkbox', { name: 'band', exact: true })
+    .click();
+
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    if (!app.linearTrackSlotsPanelOpen) app.toggleLinearTrackSlotsPanel();
+    await window.Vue.nextTick();
+    await window.Vue.nextTick();
+  });
+  const linearAnnotationRow = page.locator(
+    '[data-capture="linear-track-slot-inactive_overlay"]'
+  );
+  await page.locator(
+    '[data-capture="linear-track-slot-inactive_above_space"] input[title="Height"]'
+  ).fill('16px');
+  await linearAnnotationRow
+    .locator('.track-slot-field')
+    .filter({ hasText: 'lane gap' })
+    .locator('input[type="number"]')
+    .fill('7');
+  await linearAnnotationRow
+    .locator('.track-slot-field')
+    .filter({ hasText: 'padding' })
+    .locator('input[type="number"]')
+    .fill('3');
+  await linearAnnotationRow
+    .locator('label')
+    .filter({ hasText: 'Cover anchor' })
+    .locator('input[type="checkbox"]')
+    .click();
+  await linearAnnotationRow
+    .getByRole('checkbox', { name: 'highlight', exact: true })
+    .click();
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.mode = 'circular';
+    await window.Vue.nextTick();
+    await window.Vue.nextTick();
+  });
+  expect(await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const circularSpacer = app.adv.circular_track_slots.find(
+      (slot) => slot.id === 'disabled_outer_space'
+    );
+    const circularAnnotation = app.adv.circular_track_slots.find(
+      (slot) => slot.id === 'review_overlay'
+    );
+    const linearSpacer = app.adv.linear_track_slots.find(
+      (slot) => slot.id === 'inactive_above_space'
+    );
+    const linearAnnotation = app.adv.linear_track_slots.find(
+      (slot) => slot.id === 'inactive_overlay'
+    );
+    return {
+      circularSpacerWidth: circularSpacer?.width,
+      circularAnnotation: {
+        marks: circularAnnotation?.params?.marks,
+        padding: circularAnnotation?.params?.padding_px,
+        coverAnchor: circularAnnotation?.params?.cover_anchor ?? false
+      },
+      linearSpacerHeight: linearSpacer?.height,
+      linearAnnotation: {
+        marks: linearAnnotation?.params?.marks,
+        laneGap: linearAnnotation?.params?.lane_gap_px,
+        padding: linearAnnotation?.params?.padding_px,
+        coverAnchor: linearAnnotation?.params?.cover_anchor ?? false
+      }
+    };
+  })).toEqual({
+    circularSpacerWidth: '15px',
+    circularAnnotation: {
+      marks: ['line'],
+      padding: 4,
+      coverAnchor: false
+    },
+    linearSpacerHeight: '16px',
+    linearAnnotation: {
+      marks: ['line', 'bracket', 'band'],
+      laneGap: 7,
+      padding: 3,
+      coverAnchor: false
+    }
+  });
+
+  const initialDownloadPromise = page.waitForEvent('download', { timeout: 60000 });
+  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const initialDownload = await initialDownloadPromise;
+  const initialPath = await initialDownload.path();
+  expect(initialPath).toBeTruthy();
+  const initialSession = JSON.parse(
+    gunzipSync(readFileSync(initialPath)).toString('utf8')
+  );
+  expect(initialSession.version).toBe(40);
+  const expectedDraft = p3Draft(initialSession);
+  expect(expectedDraft.circularEnabled).toBe(true);
+  expect(expectedDraft.linearEnabled).toBe(false);
+  expect(expectedDraft.circularSlots.map((slot) => [slot.id, slot.enabled])).toEqual([
+    ['disabled_outer_space', false],
+    ['features', true],
+    ['review_overlay', true],
+    ['inner_space', true],
+    ['disabled_annotation', false]
+  ]);
+  expect(expectedDraft.linearSlots.map((slot) => [slot.id, slot.enabled])).toEqual([
+    ['inactive_above_space', true],
+    ['inactive_disabled_annotation', false],
+    ['linear_features', true],
+    ['inactive_overlay', true],
+    ['inactive_disabled_space', false]
+  ]);
+  expect(
+    expectedDraft.circularSlots.find((slot) => slot.id === 'review_overlay')
+      .params.style_override
+  ).toEqual(styleOverride);
+  expect(
+    expectedDraft.linearSlots.find((slot) => slot.id === 'inactive_overlay')
+      .params.style_override
+  ).toEqual(styleOverride);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await loadSession(initialPath);
+  expect(await browserDraft()).toEqual(expectedDraft);
+
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
+    await window.Vue.nextTick();
+  });
+  const annotationRow = page.locator(
+    '[data-capture="circular-track-slot-review_overlay"]'
+  );
+  const laneGapInput = annotationRow
+    .locator('.track-slot-field')
+    .filter({ hasText: 'lane gap' })
+    .locator('input[type="number"]');
+  await laneGapInput.fill('9');
+  await laneGapInput.evaluate((input) => input.blur());
+  await page.waitForFunction(() => (
+    window.__GBDRAW_HISTORY__?.canUndo() &&
+    window.__GBDRAW_APP__.adv.circular_track_slots
+      .find((slot) => slot.id === 'review_overlay')?.params.lane_gap_px === 9
+  ));
+  expect(
+    (await browserDraft()).circularSlots
+      .find((slot) => slot.id === 'review_overlay').params.style_override
+  ).toEqual(styleOverride);
+
+  await page.evaluate(async () => window.__GBDRAW_APP__.undoHistory());
+  await page.waitForFunction(() => (
+    window.__GBDRAW_HISTORY__?.canRedo() &&
+    window.__GBDRAW_APP__.adv.circular_track_slots
+      .find((slot) => slot.id === 'review_overlay')?.params.lane_gap_px === 5
+  ));
+  expect(await browserDraft()).toEqual(expectedDraft);
+  await page.evaluate(async () => window.__GBDRAW_APP__.redoHistory());
+  await page.waitForFunction(() => (
+    window.__GBDRAW_APP__.adv.circular_track_slots
+      .find((slot) => slot.id === 'review_overlay')
+      ?.params.lane_gap_px === 9
+  ));
+  expect(
+    (await browserDraft()).circularSlots
+      .find((slot) => slot.id === 'review_overlay').params.style_override
+  ).toEqual(styleOverride);
+  await page.evaluate(async () => window.__GBDRAW_APP__.undoHistory());
+  await page.waitForFunction(() => (
+    window.__GBDRAW_APP__.adv.circular_track_slots
+      .find((slot) => slot.id === 'review_overlay')
+      ?.params.lane_gap_px === 5
+  ));
+
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.sessionTitle = 'p3-drafts-resaved';
+  });
+  const secondDownloadPromise = page.waitForEvent('download', { timeout: 60000 });
+  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const secondDownload = await secondDownloadPromise;
+  const secondPath = await secondDownload.path();
+  expect(secondPath).toBeTruthy();
+  const secondSession = JSON.parse(
+    gunzipSync(readFileSync(secondPath)).toString('utf8')
+  );
+  expect(p3Draft(secondSession)).toEqual(expectedDraft);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await loadSession(secondPath);
+  expect(await browserDraft()).toEqual(expectedDraft);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.sessionTitle = 'p3-drafts-fresh-resave';
+  });
+  const thirdDownloadPromise = page.waitForEvent('download', { timeout: 60000 });
+  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const thirdSession = await readSessionDownload(await thirdDownloadPromise);
+  expect(p3Draft(thirdSession)).toEqual(expectedDraft);
+
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
+    await window.Vue.nextTick();
+  });
+  await page.locator(
+    'button[title="Replace the current custom stack from the simple controls; this is the only action that regenerates it"]:visible'
+  ).click();
+  await page.waitForFunction(() => (
+    !window.__GBDRAW_APP__.adv.circular_track_slots
+      .some((slot) => slot.id === 'review_overlay')
+  ));
+  const resetDraft = await browserDraft();
+  expect(resetDraft.linearSlots).toEqual(expectedDraft.linearSlots);
+  expect(resetDraft.linearAxis).toBe(expectedDraft.linearAxis);
+  expect(resetDraft.linearEnabled).toBe(expectedDraft.linearEnabled);
+
+  await page.evaluate(async () => window.__GBDRAW_APP__.undoHistory());
+  await page.waitForFunction(() => (
+    window.__GBDRAW_APP__.adv.circular_track_slots
+      .some((slot) => slot.id === 'review_overlay')
+  ));
+  expect(await browserDraft()).toEqual(expectedDraft);
+  await page.evaluate(async () => window.__GBDRAW_APP__.redoHistory());
+  await page.waitForFunction(() => (
+    !window.__GBDRAW_APP__.adv.circular_track_slots
+      .some((slot) => slot.id === 'review_overlay')
+  ));
+  expect(await browserDraft()).toEqual(resetDraft);
 });
 
 test('Session commit failure restores the pre-import state', async ({ page }) => {
@@ -957,13 +2110,25 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
         gc: bboxBand([gc]),
         skew: bboxBand([skew])
       },
-      args
+      args,
+      settings: {
+        separateStrands: window.__GBDRAW_APP__.form.separate_strands,
+        resolveOverlaps: window.__GBDRAW_APP__.adv.resolve_overlaps,
+        showGc: window.__GBDRAW_APP__.form.show_gc,
+        showSkew: window.__GBDRAW_APP__.form.show_skew
+      },
+      reproducibilityLevel: window.__GBDRAW_APP__.lastRunInfo?.reproducibility?.level
     };
   });
 
-  ['--separate_strands', '--resolve_overlaps', '--gc', '--skew'].forEach((arg) => {
-    expect(geometry.args).toContain(arg);
+  expect(geometry.settings).toEqual({
+    separateStrands: true,
+    resolveOverlaps: true,
+    showGc: true,
+    showSkew: true
   });
+  expect(geometry.args).toEqual(['--session', 'out.gbdraw-session.json']);
+  expect(geometry.reproducibilityLevel).toBe('canonical-request');
   for (const bands of [geometry.client, geometry.bbox]) {
     for (const band of Object.values(bands)) {
       expect(Number.isFinite(band.top)).toBe(true);
@@ -1061,10 +2226,7 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   });
   expect(firstResult.depthAFills).toContain('#112233');
   expect(firstResult.depthBFills).toContain('#445566');
-  expect(firstResult.depthArgs).toEqual([
-    ['sample-a.tsv', ''],
-    ['', 'sample-b.tsv']
-  ]);
+  expect(firstResult.depthArgs).toEqual([]);
 
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
   await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
@@ -1118,13 +2280,10 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   expect(secondResult.groups).toEqual(firstResult.groups);
   expect(secondResult.depthAFills).toContain('#112233');
   expect(secondResult.depthBFills).toContain('#445566');
-  expect(secondResult.depthArgs).toEqual([
-    ['depth-track-files-1-1-sample-a.tsv', ''],
-    ['', 'depth-track-files-2-2-sample-b.tsv']
-  ]);
+  expect(secondResult.depthArgs).toEqual([]);
 });
 
-test('Circular sparse diagonal depth generates and survives a session round trip', async ({ page }) => {
+test('Circular sparse diagonal depth survives a session round trip and track removal', async ({ page }) => {
   test.setTimeout(240000);
   const genbankA = readFileSync(sparseGenbankAPath, 'utf8');
   const genbankB = readFileSync(sparseGenbankBPath, 'utf8');
@@ -1136,8 +2295,8 @@ test('Circular sparse diagonal depth generates and survives a session round trip
     ),
     `${recordId}\t${length}\t${depth}`
   ].join('\n');
-  const depthA = makeDepthTsv('BGC0000711', 30837, 10);
-  const depthB = makeDepthTsv('BGC0000713', 31892, 50);
+  const depthA = makeDepthTsv('BGC0000708', 40579, 10);
+  const depthB = makeDepthTsv('BGC0000709', 50466, 50);
 
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
@@ -1145,9 +2304,19 @@ test('Circular sparse diagonal depth generates and survives a session round trip
     const app = window.__GBDRAW_APP__;
     app.mode = 'circular';
     app.cInputType = 'gb';
-    app.files.c_gb = new File([`${genbankAText}\n${genbankBText}`], 'combined.gbk', {
+    const combinedFile = new File([`${genbankAText}\n${genbankBText}`], 'combined.gbk', {
       type: 'text/plain', lastModified: 1
     });
+    const originalArrayBuffer = combinedFile.arrayBuffer.bind(combinedFile);
+    let primaryReadCount = 0;
+    Object.defineProperty(combinedFile, 'arrayBuffer', {
+      value: () => {
+        primaryReadCount += 1;
+        return originalArrayBuffer();
+      }
+    });
+    window.__GBDRAW_PRIMARY_READ_COUNT__ = () => primaryReadCount;
+    app.files.c_gb = combinedFile;
     app.files.c_depth = [
       [new File([depthAText], 'sample-a.tsv', {
         type: 'text/tab-separated-values', lastModified: 2
@@ -1170,7 +2339,8 @@ test('Circular sparse diagonal depth generates and survives a session round trip
       { label: 'Sample A', color: '#112233', large_tick_interval: null, small_tick_interval: null, tick_font_size: null },
       { label: 'Sample B', color: '#445566', large_tick_interval: null, small_tick_interval: null, tick_font_size: null }
     );
-    app.setCircularTrackSlotsEnabled(false);
+    app.resetCircularTrackSlotsFromSimpleControls();
+    app.setCircularTrackSlotsEnabled(true);
     app.sessionTitle = 'circular-sparse-depth-e2e';
   }, {
     genbankAText: genbankA,
@@ -1188,6 +2358,7 @@ test('Circular sparse diagonal depth generates and survives a session round trip
   await page.waitForFunction(() => window.__GBDRAW_APP__?.circularRecordList?.length === 2, null, {
     timeout: 120000
   });
+  expect(await page.evaluate(() => window.__GBDRAW_PRIMARY_READ_COUNT__())).toBe(1);
   const firstResult = await inspectCircularSparseDepthResult(page);
   expect(firstResult.groups).toEqual({
     depthARecord1: true,
@@ -1199,10 +2370,7 @@ test('Circular sparse diagonal depth generates and survives a session round trip
   });
   expect(firstResult.depthAFills).toContain('#112233');
   expect(firstResult.depthBFills).toContain('#445566');
-  expect(firstResult.depthArgs).toEqual([
-    ['sample-a.tsv', ''],
-    ['', 'sample-b.tsv']
-  ]);
+  expect(firstResult.depthArgs).toEqual([]);
 
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
   await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
@@ -1249,54 +2417,13 @@ test('Circular sparse diagonal depth generates and survives a session round trip
   expect(secondResult.groups).toEqual(firstResult.groups);
   expect(secondResult.depthAFills).toContain('#112233');
   expect(secondResult.depthBFills).toContain('#445566');
-  expect(secondResult.depthArgs).toEqual([
-    ['depth-track-files-1-1-sample-a.tsv', ''],
-    ['', 'depth-track-files-2-2-sample-b.tsv']
-  ]);
-});
-
-test('WSSV depth session removes stale circular depth metadata and slots', async ({ page }) => {
-  page.on('dialog', (dialog) => dialog.accept());
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
-  await page.waitForFunction(() => {
-    const app = window.__GBDRAW_APP__;
-    if (!Array.isArray(app?.files?.c_depth)) return false;
-    const files = Array.isArray(app.files.c_depth[0]) ? app.files.c_depth[0] : app.files.c_depth;
-    return files.length === 2;
-  });
-
-  const loaded = await page.evaluate(() => {
-    const app = window.__GBDRAW_APP__;
-    const files = Array.isArray(app.files.c_depth[0]) ? app.files.c_depth[0] : app.files.c_depth;
-    return {
-      names: files.map((file) => file?.name || ''),
-      labels: app.adv.depth_tracks.map((track) => track?.label || ''),
-      slots: app.adv.circular_track_slots
-        .filter((slot) => slot?.renderer === 'depth')
-        .map((slot) => ({
-          id: slot.id,
-          enabled: slot.enabled !== false,
-          trackIndex: slot.params?.track_index,
-          legendLabel: slot.params?.legend_label
-        }))
-    };
-  });
-
-  expect(loaded.names).toHaveLength(2);
-  expect(loaded.labels).toHaveLength(2);
-  expect(loaded.labels[1]).toContain('SRR14027721');
-  expect(loaded.slots.filter((slot) => slot.enabled).map((slot) => slot.trackIndex)).toEqual([0, 1]);
-  expect(loaded.slots.filter((slot) => slot.enabled).map((slot) => slot.legendLabel)).toEqual(loaded.labels);
+  expect(secondResult.depthArgs).toEqual([]);
 
   await page.evaluate(() => window.__GBDRAW_APP__.removeCircularDepthTrack(1));
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
-    const files = Array.isArray(app.files.c_depth?.[0]) ? app.files.c_depth[0] : app.files.c_depth;
-    return Array.isArray(files) &&
-      files.length === 1 &&
+    const remainingFiles = app.files.c_depth.flat().filter(Boolean);
+    return remainingFiles.length === 1 &&
       app.adv.circular_track_slots
         .filter((slot) => slot?.renderer === 'depth' && slot.enabled !== false)
         .every((slot) => Number(slot.params?.track_index) < 1);
@@ -1304,9 +2431,8 @@ test('WSSV depth session removes stale circular depth metadata and slots', async
 
   const afterRemoval = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    const files = Array.isArray(app.files.c_depth?.[0]) ? app.files.c_depth[0] : app.files.c_depth;
     return {
-      names: files.map((file) => file?.name || ''),
+      names: app.files.c_depth.flat().filter(Boolean).map((file) => file.name),
       labels: app.adv.depth_tracks.map((track) => track?.label || ''),
       slots: app.adv.circular_track_slots
         .filter((slot) => slot?.renderer === 'depth')
@@ -1319,11 +2445,13 @@ test('WSSV depth session removes stale circular depth metadata and slots', async
     };
   });
 
-  expect(afterRemoval.names).toHaveLength(1);
-  expect(afterRemoval.labels[0]).toContain('SRR14027705');
+  expect(afterRemoval.names).toEqual(['sample-a.tsv']);
+  expect(afterRemoval.labels).toEqual(['Sample A']);
   expect(afterRemoval.slots.filter((slot) => slot.enabled).map((slot) => slot.trackIndex)).toEqual([0]);
   expect(afterRemoval.slots.some((slot) => Number(slot.trackIndex) >= 1)).toBe(false);
-  expect(afterRemoval.slots.some((slot) => String(slot.legendLabel || '').includes('SRR14027712'))).toBe(false);
+  expect(afterRemoval.slots.filter((slot) => slot.enabled).map((slot) => slot.legendLabel)).toEqual([
+    'Sample A'
+  ]);
 });
 
 test('BGC session keeps restored feature metadata selectable in the preview', async ({ page }) => {

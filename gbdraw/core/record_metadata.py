@@ -7,6 +7,115 @@ from Bio.SeqRecord import SeqRecord
 
 _COORD_BASE_KEY = "gbdraw_coord_base"
 _COORD_STEP_KEY = "gbdraw_coord_step"
+_SOURCE_FEATURE_INDEX_ATTR = "_gbdraw_source_feature_index"
+_SOURCE_FEATURE_PARTS_ATTR = "_gbdraw_source_feature_location_parts"
+
+
+def _feature_source_index_map(features: object) -> dict[int, int]:
+    """Map nested feature objects to their flattened source-order ordinals."""
+
+    indexes: dict[int, int] = {}
+
+    def walk(items: object) -> None:
+        for feature in items or ():  # type: ignore[union-attr]
+            indexes[id(feature)] = len(indexes)
+            walk(getattr(feature, "sub_features", None))
+
+    walk(features)
+    return indexes
+
+
+def _source_feature_index(feature: object) -> int | None:
+    """Return a pre-transform source ordinal attached to a feature, if any."""
+
+    try:
+        index = int(getattr(feature, _SOURCE_FEATURE_INDEX_ATTR))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return index if index >= 0 else None
+
+
+def _source_feature_location_parts(
+    feature: object,
+) -> tuple[tuple[int, int, int | None], ...] | None:
+    """Return pre-transform biological location parts, if attached."""
+
+    value = getattr(feature, _SOURCE_FEATURE_PARTS_ATTR, None)
+    if not isinstance(value, tuple):
+        return None
+    parts: list[tuple[int, int, int | None]] = []
+    for part in value:
+        if not isinstance(part, tuple) or len(part) != 3:
+            return None
+        try:
+            start = int(part[0])
+            end = int(part[1])
+        except (TypeError, ValueError):
+            return None
+        strand = part[2]
+        if strand not in {-1, 1}:
+            strand = None
+        parts.append((start, end, strand))
+    return tuple(parts) or None
+
+
+def _mapped_feature_location_parts(
+    feature: object,
+    *,
+    coord_base: int,
+    coord_step: int,
+) -> tuple[tuple[int, int, int | None], ...]:
+    """Map a feature's current parts into its biological source coordinates."""
+
+    location = getattr(feature, "location", None)
+    raw_parts = list(getattr(location, "parts", None) or [location])
+    parts: list[tuple[int, int, int | None]] = []
+    for part in raw_parts:
+        if part is None:
+            continue
+        try:
+            start, end = _absolute_display_interval(
+                int(part.start),
+                int(part.end),
+                coord_base,
+                coord_step,
+            )
+        except (AttributeError, TypeError, ValueError):
+            continue
+        strand = getattr(part, "strand", None)
+        if strand in {-1, 1}:
+            strand = int(strand) * (1 if int(coord_step) >= 0 else -1)
+        else:
+            strand = None
+        parts.append((start, end, strand))
+    return tuple(parts)
+
+
+def _copy_source_feature_identity(
+    source: object,
+    target: object,
+    *,
+    fallback_index: int,
+    coord_base: int,
+    coord_step: int,
+) -> None:
+    """Carry source ordinal and biological parts across a transformation."""
+
+    index = _source_feature_index(source)
+    setattr(
+        target,
+        _SOURCE_FEATURE_INDEX_ATTR,
+        int(fallback_index) if index is None else index,
+    )
+    parts = _source_feature_location_parts(source)
+    if parts is None:
+        parts = _mapped_feature_location_parts(
+            source,
+            coord_base=coord_base,
+            coord_step=coord_step,
+        )
+    if parts:
+        setattr(target, _SOURCE_FEATURE_PARTS_ATTR, parts)
 
 
 def _read_coord_map(record: object) -> tuple[int, int]:

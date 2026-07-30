@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
@@ -22,6 +23,7 @@ from gbdraw.api.options import (
     LinearRequestTrackOptions,
 )
 from gbdraw.exceptions import ExportError, ValidationError
+from gbdraw.features.ids import compute_feature_hash
 
 
 def _record(record_id: str = "record") -> SeqRecord:
@@ -200,6 +202,16 @@ def test_root_api_builds_metadata_only_for_explicit_interactive_render(
 def test_root_interactive_svg_uses_orthogroups_computed_by_builder(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    record = _record()
+    feature = SeqFeature(
+        SimpleLocation(0, 12, strand=1),
+        type="CDS",
+        qualifiers={
+            "protein_id": ["protein-computed"],
+            "translation": ["MMMM"],
+        },
+    )
+    record.features = [feature]
     member = OrthogroupMember(
         orthogroup_id="OG-computed",
         protein_id="protein-computed",
@@ -210,8 +222,8 @@ def test_root_interactive_svg_uses_orthogroups_computed_by_builder(
         start=0,
         end=12,
         strand=1,
-        feature_svg_id="feature-computed",
-        source_protein_id="source-computed",
+        feature_svg_id=compute_feature_hash(feature, record_id=record.id),
+        source_protein_id="protein-computed",
     )
     computed = OrthogroupResult(
         orthogroups={"OG-computed": [member]},
@@ -233,7 +245,7 @@ def test_root_interactive_svg_uses_orthogroups_computed_by_builder(
         fake_linear,
     )
 
-    diagram = interface.draw_linear(_record())
+    diagram = interface.draw_linear(record)
     svg = diagram.to_svg(interactive=True)
 
     assert "OG-computed" in svg

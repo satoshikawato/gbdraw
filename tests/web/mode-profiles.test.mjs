@@ -16,6 +16,7 @@ await writeFile(join(tempDir, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
   MODE_DEFAULT_FEATURE_TYPES,
+  MODE_PROFILE_STATE_SCHEMA,
   MODE_PROFILE_VERSION,
   comparisonFiltersForMode,
   comparisonProfileDefault,
@@ -146,6 +147,68 @@ importedManager.transition(importedLinearState, 'circular', 'linear');
 assert.equal(importedLinearState.identity, 91);
 assert.equal(importedLinearState.axis_stroke_color, 'gray');
 
+{
+  const liveState = {
+    ...managedAdvStateForMode('circular'),
+    identity: 88,
+    axis_stroke_color: '#123456'
+  };
+  const profileManager = createModeProfileStateManager('circular', liveState);
+  profileManager.transition(liveState, 'circular', 'linear');
+  liveState.evalue = '1e-9';
+  liveState.identity = 77;
+
+  const exported = profileManager.exportState();
+  assert.equal(exported.schema, MODE_PROFILE_STATE_SCHEMA);
+  assert.equal(exported.activeMode, 'linear');
+  assert.deepEqual(Object.keys(exported.profiles).sort(), ['circular', 'linear']);
+  assert.equal(exported.profiles.circular.values.identity, 88);
+  assert.equal(exported.profiles.circular.values.axis_stroke_color, '#123456');
+  assert.equal(exported.profiles.circular.managed.identity, false);
+  assert.equal(exported.profiles.linear.values.evalue, '1e-9');
+  assert.equal(exported.profiles.linear.values.identity, 77);
+  assert.equal(exported.profiles.linear.managed.evalue, false);
+  assert.equal(exported.profiles.linear.managed.identity, false);
+
+  const restoredState = managedAdvStateForMode('circular');
+  const restoredManager = createModeProfileStateManager('circular', restoredState);
+  restoredManager.importState(exported, 'linear', restoredState);
+  assert.equal(restoredState.evalue, '1e-9');
+  assert.equal(restoredState.identity, 77);
+  restoredState.identity = 66;
+  restoredManager.transition(restoredState, 'linear', 'circular');
+  assert.equal(restoredState.identity, 88);
+  assert.equal(restoredState.axis_stroke_color, '#123456');
+  restoredManager.transition(restoredState, 'circular', 'linear');
+  assert.equal(restoredState.identity, 66);
+
+  const roundTrip = restoredManager.exportState();
+  assert.equal(roundTrip.profiles.linear.values.identity, 66);
+  assert.equal(roundTrip.profiles.linear.managed.identity, false);
+}
+
+{
+  const restoredState = {
+    ...managedAdvStateForMode('linear'),
+    identity: 91,
+    axis_stroke_color: 'gray'
+  };
+  const restoredManager = createModeProfileStateManager('circular', {});
+  restoredManager.importState(null, 'linear', restoredState);
+  const exported = restoredManager.exportState();
+  assert.equal(exported.activeMode, 'linear');
+  assert.equal(exported.profiles.linear.values.identity, 91);
+  assert.equal(exported.profiles.linear.managed.identity, false);
+  assert.deepEqual(
+    exported.profiles.circular.values,
+    managedAdvStateForMode('circular')
+  );
+  assert.throws(
+    () => restoredManager.importState({ schema: 999, profiles: {} }, 'linear', restoredState),
+    /mode profile state schema/
+  );
+}
+
 assert.equal(
   effectiveLinearAxisColor(),
   expectedModes.linear.linearAxisColor
@@ -181,7 +244,8 @@ globalThis.window = {
       get value() {
         return getter();
       }
-    })
+    }),
+    nextTick: async () => {}
   },
   DOMPurify: { sanitize: (value) => value }
 };
@@ -245,6 +309,129 @@ assert.deepEqual(
   },
   { evalue: '1e-2', identity: 0, axis_stroke_color: 'lightgray' }
 );
+
+{
+  const { resetSettings } = await import(
+    pathToFileURL(join(tempDir, 'js', 'services', 'reset.js'))
+  );
+  state.mode.value = 'circular';
+  Object.assign(state.adv, createDefaultAdv('circular'));
+  state.modeProfileStateManager.reset('circular', state.adv);
+  state.adv.identity = 88;
+  state.modeProfileStateManager.transition(state.adv, 'circular', 'linear');
+  state.mode.value = 'linear';
+  state.adv.identity = 77;
+  state.adv.circular_track_slots_enabled = true;
+  state.adv.circular_track_slots_axis_index = 1;
+  state.adv.circular_track_slots.splice(
+    0,
+    state.adv.circular_track_slots.length,
+    {
+      id: 'custom_annotation',
+      renderer: 'annotations',
+      enabled: false,
+      side: 'outside',
+      params: {
+        set_id: 'review',
+        style_override: {
+          stroke: '#123456',
+          hatch: { angle: 45, spacing: 4 }
+        }
+      }
+    }
+  );
+  state.adv.linear_track_slots_enabled = true;
+  state.adv.linear_track_slots_axis_index = 1;
+  state.adv.linear_track_slots.splice(
+    0,
+    state.adv.linear_track_slots.length,
+    {
+      id: 'custom_spacer',
+      renderer: 'spacer',
+      enabled: false,
+      side: 'below',
+      height: '19px',
+      spacing: '4px',
+      params: {}
+    }
+  );
+  const retainedFile = { name: 'retained.gb' };
+  state.files.c_gb = retainedFile;
+
+  resetSettings(state);
+
+  const resetAdvDefaults = createDefaultAdv('linear');
+  const resetProfiles = state.modeProfileStateManager.exportState();
+  assert.deepEqual(
+    resetProfiles.profiles.circular.values,
+    managedAdvStateForMode('circular')
+  );
+  assert.deepEqual(
+    resetProfiles.profiles.linear.values,
+    managedAdvStateForMode('linear')
+  );
+  assert.ok(Object.values(resetProfiles.profiles.circular.managed).every(Boolean));
+  assert.ok(Object.values(resetProfiles.profiles.linear.managed).every(Boolean));
+  assert.equal(state.adv.circular_track_slots_enabled, false);
+  assert.equal(state.adv.linear_track_slots_enabled, false);
+  assert.deepEqual(
+    state.adv.circular_track_slots,
+    resetAdvDefaults.circular_track_slots
+  );
+  assert.deepEqual(
+    state.adv.linear_track_slots,
+    resetAdvDefaults.linear_track_slots
+  );
+  assert.equal(
+    state.adv.circular_track_slots_axis_index,
+    resetAdvDefaults.circular_track_slots_axis_index
+  );
+  assert.equal(
+    state.adv.linear_track_slots_axis_index,
+    resetAdvDefaults.linear_track_slots_axis_index
+  );
+  assert.equal(state.files.c_gb, retainedFile);
+}
+
+{
+  const { applyConfigData, buildConfigData } = await import(
+    pathToFileURL(join(tempDir, 'js', 'services', 'config.js'))
+  );
+  state.mode.value = 'circular';
+  Object.assign(state.adv, createDefaultAdv('circular'));
+  state.modeProfileStateManager.reset('circular', state.adv);
+  state.adv.identity = 88;
+  state.modeProfileStateManager.transition(state.adv, 'circular', 'linear');
+  state.mode.value = 'linear';
+  state.adv.identity = 77;
+  const savedConfig = structuredClone(buildConfigData());
+
+  assert.equal(savedConfig.modeProfiles.profiles.circular.values.identity, 88);
+  assert.equal(savedConfig.modeProfiles.profiles.circular.managed.identity, false);
+  assert.equal(savedConfig.modeProfiles.profiles.linear.values.identity, 77);
+  assert.equal(savedConfig.modeProfiles.profiles.linear.managed.identity, false);
+
+  Object.assign(state.adv, createDefaultAdv('linear'));
+  state.modeProfileStateManager.reset('linear', state.adv);
+  applyConfigData(savedConfig);
+  assert.equal(state.adv.identity, 77);
+  state.modeProfileStateManager.transition(state.adv, 'linear', 'circular');
+  assert.equal(state.adv.identity, 88);
+
+  const version39Config = structuredClone(savedConfig);
+  delete version39Config.modeProfiles;
+  state.mode.value = 'linear';
+  Object.assign(state.adv, createDefaultAdv('linear'));
+  state.modeProfileStateManager.reset('linear', state.adv);
+  applyConfigData(version39Config);
+  const migratedProfiles = state.modeProfileStateManager.exportState();
+  assert.equal(migratedProfiles.profiles.linear.values.identity, 77);
+  assert.equal(migratedProfiles.profiles.linear.managed.identity, false);
+  assert.deepEqual(
+    migratedProfiles.profiles.circular.values,
+    managedAdvStateForMode('circular')
+  );
+}
 
 const { buildCanonicalRenderRequest } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-request.js'))

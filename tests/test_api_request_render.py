@@ -1161,6 +1161,90 @@ def test_render_request_passes_output_policy_and_returns_existing_paths(
     }
 
 
+def test_render_request_plain_svg_retains_catalog_context_only_when_opted_in(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = LinearDiagramRequest(
+        records=(_memory_input("catalog-record"),),
+        output=RenderOutputRequest(
+            output_prefix="catalog-diagram",
+            output_directory=tmp_path,
+            formats=("svg",),
+        ),
+    )
+    prepared = PreparedDiagramRequest(
+        mode="linear",
+        request=request,
+        records=(_seqrecord("catalog-record"),),
+        drawing=Drawing("out.svg"),
+    )
+    context = object()
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        request_render_module,
+        "build_request_plan_diagram",
+        lambda _: prepared,
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_prepared_interactive_context",
+        lambda *_args, **_kwargs: context,
+    )
+
+    def fake_save(_canvas, _formats, **kwargs):
+        captured.update(kwargs)
+        return [str(tmp_path / "catalog-diagram.svg")]
+
+    monkeypatch.setattr(request_render_module, "save_figure_to", fake_save)
+
+    result = render_request(request, include_feature_catalog=True)
+
+    assert result.interactive_context is context
+    assert captured["interactive_context"] is None
+
+
+def test_render_request_plain_svg_skips_catalog_context_by_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = LinearDiagramRequest(
+        records=(_memory_input("default-record"),),
+        output=RenderOutputRequest(
+            output_prefix="default-diagram",
+            output_directory=tmp_path,
+            formats=("svg",),
+        ),
+    )
+    prepared = PreparedDiagramRequest(
+        mode="linear",
+        request=request,
+        records=(_seqrecord("default-record"),),
+        drawing=Drawing("out.svg"),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_request_plan_diagram",
+        lambda _: prepared,
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "build_prepared_interactive_context",
+        lambda *_args, **_kwargs: pytest.fail(
+            "plain SVG must not build feature context without an explicit opt-in"
+        ),
+    )
+    monkeypatch.setattr(
+        request_render_module,
+        "save_figure_to",
+        lambda *_args, **_kwargs: [str(tmp_path / "default-diagram.svg")],
+    )
+
+    result = render_request(request)
+
+    assert result.interactive_context is None
+
+
 def test_render_request_fails_when_interactive_metadata_generation_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1273,9 +1357,18 @@ def test_render_request_circular_batch_creates_one_output_per_record(
 
 
 @pytest.mark.circular
-def test_render_request_circular_batch_loads_comparison_fasta_once(
+@pytest.mark.parametrize(
+    ("formats", "include_feature_catalog"),
+    [
+        (("interactive_svg",), False),
+        (("svg",), True),
+    ],
+)
+def test_render_request_circular_batch_loads_needed_comparison_fasta_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    formats: tuple[str, ...],
+    include_feature_catalog: bool,
 ) -> None:
     comparison_fasta = tmp_path / "comparison.fna"
     comparison_fasta.write_text(">comparison\nAACCGG\n", encoding="utf-8")
@@ -1296,13 +1389,16 @@ def test_render_request_circular_batch_loads_comparison_fasta_once(
             RenderOutputRequest(
                 output_prefix=prefix,
                 output_directory=tmp_path,
-                formats=("interactive_svg",),
+                formats=formats,
             )
             for prefix in ("batch-a", "batch-b")
         ),
     )
 
-    result = render_request(request)
+    result = render_request(
+        request,
+        include_feature_catalog=include_feature_catalog,
+    )
 
     assert isinstance(result, CircularBatchRenderResult)
     assert parse_calls == [str(comparison_fasta)]

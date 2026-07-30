@@ -42,6 +42,7 @@ class FeatureDrawer:
         stroke_width_specified: Optional[float] = None,
         feature_data_id: Optional[str] = None,
         dom_element_id: Optional[str] = None,
+        rendered_feature_id: Optional[str] = None,
         stable_feature_id: Optional[str] = None,
         record_id: Optional[str] = None,
         record_index: int | None = None,
@@ -65,6 +66,10 @@ class FeatureDrawer:
         if feature_data_id:
             path.attribs["data-gbdraw-feature-id"] = feature_data_id
             path.attribs["id"] = dom_element_id or feature_data_id
+            if rendered_feature_id:
+                path.attribs["data-gbdraw-rendered-feature-id"] = (
+                    rendered_feature_id
+                )
             if stable_feature_id:
                 path.attribs["data-gbdraw-stable-feature-id"] = stable_feature_id
             if record_id:
@@ -117,7 +122,7 @@ class FeatureDrawer:
         )
         feature_dom_id = (
             instance_svg_id(feature_data_id, feature_instance_id)
-            if feature_data_id and feature_instance_id
+            if feature_data_id and feature_instance_id is not None
             else feature_data_id
         )
         block_count = sum(1 for path_type, *_rest in gene_paths if path_type == "block")
@@ -141,6 +146,11 @@ class FeatureDrawer:
                     fill_color=feature_object.color,
                     feature_data_id=feature_data_id,
                     dom_element_id=dom_element_id,
+                    rendered_feature_id=(
+                        feature_dom_id
+                        if feature_instance_id is not None
+                        else None
+                    ),
                     stable_feature_id=stable_feature_id,
                     record_id=getattr(feature_object, "record_id", None),
                     record_index=record_index,
@@ -157,6 +167,11 @@ class FeatureDrawer:
                     stroke_width_specified=self.intron_stroke_width,
                     feature_data_id=feature_data_id,
                     dom_element_id=dom_element_id,
+                    rendered_feature_id=(
+                        feature_dom_id
+                        if feature_instance_id is not None
+                        else None
+                    ),
                     stable_feature_id=stable_feature_id,
                     record_id=getattr(feature_object, "record_id", None),
                     record_index=record_index,

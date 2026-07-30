@@ -160,39 +160,31 @@ const promotedSyntheticGui = promoteGallerySessionToCurrent(syntheticGuiSession)
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
 assert.equal(promotedSyntheticGui.renderRequest.schema, 5);
 assert.equal(promotedSyntheticGui.renderRequest.grouping, 'single');
-assert.equal(promotedSyntheticGui.renderRequest.output.prefix, 'gui');
+assert.equal(promotedSyntheticGui.renderRequest.output.prefix, 'old');
 assert.equal(promotedSyntheticGui.renderRequest.output.overwrite, false);
 assert.deepEqual(syntheticGuiOptions.output, {
-  legend: 'left',
+  legend: 'right',
   plotTitlePosition: 'none'
 });
-assert.equal(syntheticGuiOptions.output.legend, 'left');
-assert.equal(syntheticGuiOptions.configOverrides['labels.circular.scope'], 'outer');
+assert.equal(syntheticGuiOptions.output.legend, 'right');
+assert.equal(syntheticGuiOptions.configOverrides['labels.circular.scope'], 'none');
 assert.equal(
   syntheticGuiOptions.configOverrides['objects.definition.circular.font_size'],
-  31
+  10
 );
 assert.equal(
   syntheticGuiOptions.configOverrides['objects.depth.large_tick_interval'],
-  15
+  undefined
 );
-assert.equal(syntheticGuiOptions.colors.defaultColorsPalette, 'applied-palette');
-assert.match(
-  resourceText(promotedSyntheticGui, syntheticGuiOptions.colors.defaultColorsFile),
-  /CDS\t#abcdef/
-);
-assert.doesNotMatch(
-  resourceText(promotedSyntheticGui, syntheticGuiOptions.colors.defaultColorsFile),
-  /#000000/
-);
+assert.equal(syntheticGuiOptions.colors.defaultColorsPalette, 'default');
 const projectedSyntheticGui = projectCanonicalSessionRequest({
   renderRequest: promotedSyntheticGui.renderRequest,
   resources: promotedSyntheticGui.resources,
   webFiles: promotedSyntheticGui.webFiles
 });
-assert.equal(projectedSyntheticGui.config.form.legend, 'left');
-assert.equal(projectedSyntheticGui.config.adv.def_font_size, 31);
-assert.equal(projectedSyntheticGui.config.colors.CDS, '#abcdef');
+assert.equal(projectedSyntheticGui.config.form.legend, 'right');
+assert.equal(projectedSyntheticGui.config.adv.def_font_size, 10);
+assert.equal(projectedSyntheticGui.config.colors.CDS, undefined);
 assert.equal(
   promotedSyntheticGui.config.losat.blastp.collinearMaxUnitGap,
   4
@@ -244,12 +236,13 @@ assert.equal(
     .params.lane_direction,
   'split'
 );
+assert.equal(hmmtOptions.colors.defaultColorsPalette, 'ajisai');
 assert.match(
-  resourceText(promotedHmmt, hmmtOptions.colors.defaultColorsFile),
-  /CDS\t#84b9ec/
+  resourceText(promotedHmmt, hmmtOptions.colors.defaultColors),
+  /CDS\t#54bcf8/
 );
 assert.match(
-  resourceText(promotedHmmt, hmmtOptions.qualifierPriorityFile),
+  resourceText(promotedHmmt, hmmtOptions.qualifierPriorityTable),
   /CDS\tgene/
 );
 
@@ -291,7 +284,7 @@ assert.equal(
   'bold'
 );
 assert.match(
-  resourceText(promotedBgc, bgcOptions.colors.colorTableFile),
+  resourceText(promotedBgc, bgcOptions.colors.colorTable),
   /Core biosynthetic genes/
 );
 assert.deepEqual(

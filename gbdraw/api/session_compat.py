@@ -48,6 +48,7 @@ from .requests import (
 )
 
 _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32
+_LEGACY_MULTILINE_CONSERVATION_LABEL_SESSION_VERSION = 39
 _LEGACY_PROTEIN_REFERENCE_RE = re.compile(
     r"p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}"
     r"(?:_[2-9][0-9]*)?"
@@ -796,6 +797,8 @@ def _build_session_compatible_plan(
 def render_session_compatible_request(
     request: DiagramRequest,
     session_artifacts: Mapping[str, Any],
+    *,
+    include_feature_catalog: bool = False,
 ) -> RequestRenderResult | CircularBatchRenderResult:
     """Render a released session through its sole compatibility adapter."""
 
@@ -812,6 +815,7 @@ def render_session_compatible_request(
     result = render_prepared_request(
         prepared,
         batch_outputs_preflighted=batch_outputs_preflighted,
+        include_feature_catalog=include_feature_catalog,
     )
     if not isinstance(prepared, PreparedDiagramRequest) or not isinstance(
         result,
@@ -831,9 +835,11 @@ def canonical_payload_for_session_decode(
     session_version: int,
     payload: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Return a detached canonical payload with supported slot migration applied."""
+    """Return a detached canonical payload with supported migrations applied."""
 
     detached = copy.deepcopy(dict(payload))
+    if session_version == _LEGACY_MULTILINE_CONSERVATION_LABEL_SESSION_VERSION:
+        _migrate_legacy_multiline_conservation_labels(detached)
     if session_version > _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION:
         return detached
 
@@ -856,6 +862,32 @@ def canonical_payload_for_session_decode(
         _migrate_legacy_linear_track_slot(slot) for slot in slots
     ]
     return detached
+
+
+def _migrate_legacy_multiline_conservation_labels(
+    payload: dict[str, Any],
+) -> None:
+    """Expand the released v39 Web writer's compact multiline label field."""
+
+    diagram_options = payload.get("diagramOptions")
+    if not isinstance(diagram_options, Mapping):
+        return
+    labels = diagram_options.get("conservationLabels")
+    blast_files = diagram_options.get("conservationBlastFiles")
+    if (
+        not isinstance(labels, list)
+        or len(labels) != 1
+        or not isinstance(labels[0], str)
+        or not isinstance(blast_files, list)
+        or len(blast_files) <= 1
+    ):
+        return
+    expanded = [line.strip() for line in labels[0].splitlines() if line.strip()]
+    if len(expanded) != len(blast_files):
+        return
+    migrated_options = dict(diagram_options)
+    migrated_options["conservationLabels"] = expanded
+    payload["diagramOptions"] = migrated_options
 
 
 def _migrate_legacy_linear_track_slot(slot: Any) -> Any:

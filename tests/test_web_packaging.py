@@ -4,6 +4,7 @@ import base64
 import contextlib
 import functools
 import gzip
+import hashlib
 import html
 import importlib.util
 import json
@@ -95,13 +96,7 @@ GALLERY_LOSAT_CACHE_SESSION_FILES = {
     "majanivirus_orthogroup.gbdraw-session.json.gz",
     "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
 }
-GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES = {
-    "BGC0000708-BGC0000713.gbdraw-session.json",
-    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
-    "majanivirus_orthogroup.gbdraw-session.json.gz",
-    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-}
+GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES: set[str] = set()
 
 
 def _write_pairwise_popup_test_module(tmp_path: Path) -> Path:
@@ -718,7 +713,8 @@ def test_web_feature_visibility_table_uses_matching_exclusion_mode() -> None:
     assert "serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || [])" in session_request_js
     assert "diagramOptions.featureVisibilityTableFile = fileRef(resources.addText(" in session_request_js
     assert "featureVisibility: featureVisibilityCacheKey" in run_analysis_js
-    assert "featureVisibilityTsv: featureVisibilityCacheKey" in run_analysis_js
+    assert "stageTextFile(featureVisibilityTablePath, featureVisibilityCacheKey);" in run_analysis_js
+    assert "validateFeatureCatalog(generationMetadata.featureCatalog, candidateResults)" in run_analysis_js
     assert "featureVisibilityTablePath || null" in worker_js
     assert "feature_visibility_table_path=None" in helper_js
     assert "extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False)" in helper_js
@@ -752,6 +748,9 @@ def test_web_linear_definition_line_styles_contract() -> None:
     definition_style_js = (
         WEB_ROOT / "js" / "app" / "definition-line-style-state.js"
     ).read_text(encoding="utf-8")
+    svg_sanitization_js = (
+        WEB_ROOT / "js" / "services" / "svg-sanitization.js"
+    ).read_text(encoding="utf-8")
 
     assert "Definition Line Styles" in index_html
     assert "Subtitle / title (optional)" in index_html
@@ -760,7 +759,8 @@ def test_web_linear_definition_line_styles_contract() -> None:
     assert "Subtitle" in app_setup_js
     assert "Length / Coord." in app_setup_js
     assert ">Normal</button>" in index_html
-    assert "data-definition-line-kind" in state_js
+    assert "sanitizeSvgContent" in state_js
+    assert "'data-definition-line-kind'" in svg_sanitization_js
     assert "record_subtitle: String(source.record_subtitle ?? '')" in state_js
     assert "linear_definition_line_styles: createDefaultLinearDefinitionLineStyles()" in state_js
     assert "record_subtitle: seq.record_subtitle ?? ''" in config_js
@@ -779,6 +779,9 @@ def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
     helper_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    svg_sanitization_js = (
+        WEB_ROOT / "js" / "services" / "svg-sanitization.js"
+    ).read_text(encoding="utf-8")
 
     assert "Edge mode" not in index_html
     assert 'v-model="losat.blastp.collinearAnchorMode"' not in index_html
@@ -806,9 +809,10 @@ def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
     assert "collinear_singleton_merge_gap=25" not in helper_js
     assert "normalized_collinear_anchor_mode = \"rbh\"" in helper_js
     assert "normalized_collinear_anchor_mode," in helper_js
-    assert "'data-group-kind'" in state_js
-    assert "'data-group-scope'" in state_js
-    assert "'data-collinear-group-scope'" in state_js
+    assert "sanitizeSvgContent" in state_js
+    assert "'data-group-kind'" in svg_sanitization_js
+    assert "'data-group-scope'" in svg_sanitization_js
+    assert "'data-collinear-group-scope'" in svg_sanitization_js
 
 
 def test_web_orthogroup_payload_serializes_record_local_scope() -> None:
@@ -960,14 +964,15 @@ def test_web_run_analysis_orthogroup_top_label_mode_is_wired() -> None:
     assert "form: state.form" in config_js
 
 
-def test_web_losatp_derived_payload_cache_is_persisted_separately() -> None:
+def test_web_losatp_derived_payload_cache_is_runtime_only() -> None:
     state_js = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
 
     assert "const losatDerivedCache = ref(new Map());" in state_js
     assert "losatDerivedCache:" in config_js
-    assert "serializeLosatDerivedCache()" in config_js
+    assert "serializeLosatDerivedCache" not in config_js
+    assert "losatDerivedCache: {\n      entries: []\n    }" in config_js
     assert "applyLosatDerivedCache(" in config_js
     assert "proteinIdentityManifest" in config_js
     assert "legacyArtifacts?.proteinRawCandidates" in config_js
@@ -1270,71 +1275,70 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert 'data-popup-mode="rich"' in svg_source
             assert "data-gbdraw-original-viewbox" in svg_source
             payload = _gallery_svg_metadata(svg_source)
-            assert payload["schema"] in {
-                "gbdraw-interactive-feature-popup-v1",
-                "gbdraw-interactive-feature-popup-v2",
+            assert payload["schema"] == 3
+            assert len(payload["items"]) == 1
+            item = payload["items"][0]
+            biological_features = item["biologicalFeatures"]
+            rendered_features = item["features"]
+            assert biological_features
+            assert rendered_features
+            assert any(
+                feature.get("qualifiers")
+                for feature in biological_features
+            )
+            assert all(
+                isinstance(feature.get("start"), int)
+                and isinstance(feature.get("end"), int)
+                for feature in biological_features
+            )
+            assert all(
+                "location_parts" not in feature
+                or (
+                    isinstance(feature["location_parts"], list)
+                    and feature["location_parts"]
+                    and all(
+                        isinstance(part, dict)
+                        for part in feature["location_parts"]
+                    )
+                )
+                for feature in biological_features
+            )
+            sequence_sources = item.get("sequenceSources", [])
+            assert all(
+                feature.get("nucleotide_sequence")
+                or (
+                    isinstance(feature.get("sequenceSourceIndex"), int)
+                    and 0
+                    <= feature["sequenceSourceIndex"]
+                    < len(sequence_sources)
+                    and sequence_sources[feature["sequenceSourceIndex"]].get(
+                        "sequence"
+                    )
+                )
+                for feature in biological_features
+            )
+            biological_keys = {
+                (feature["recordKey"], feature["biologicalFeatureId"])
+                for feature in biological_features
             }
-            assert payload["popup_mode"] == "rich"
-            features = payload["features"]
-            assert features
-            assert any(feature.get("qualifiers") for feature in features)
-            assert any(feature.get("location_parts") for feature in features)
-            assert all(feature.get("nucleotide_sequence") for feature in features)
-            assigned_orthogroups = {
-                str(feature.get("orthogroup_id") or "")
-                for feature in features
-                if feature.get("orthogroup_id")
-            }
-            if assigned_orthogroups:
-                orthogroups = {
-                    str(group.get("id") or ""): group
-                    for group in payload.get("orthogroups", [])
-                }
-                assert assigned_orthogroups <= orthogroups.keys()
-                rendered_features_by_id = {
-                    str(feature["svg_id"]): feature for feature in features
-                }
-                biological_features = payload.get("biological_features") or features
-                biological_features_by_key = {
-                    (
-                        int(
-                            feature.get(
-                                "record_idx",
-                                feature.get("record_index", feature.get("recordIndex", -1)),
-                            )
-                        ),
-                        str(
-                            feature.get("stable_feature_id")
-                            or feature.get("stable_svg_id")
-                            or feature.get("svg_id")
-                            or ""
-                        ),
-                    ): feature
-                    for feature in biological_features
-                }
-                for orthogroup_id in assigned_orthogroups:
-                    members = orthogroups[orthogroup_id].get("members", [])
-                    assert members
-                    for member in members:
-                        stable_id = str(
-                            member.get("stable_feature_svg_id")
-                            or member.get("stableFeatureSvgId")
-                            or member.get("feature_svg_id")
-                            or member.get("featureSvgId")
-                            or ""
-                        )
-                        record_index = int(
-                            member.get("record_index", member.get("recordIndex", -1))
-                        )
-                        feature = biological_features_by_key[(record_index, stable_id)]
-                        assert feature.get("nucleotide_sequence")
-                        rendered_id = str(
-                            member.get("rendered_feature_svg_id")
-                            or member.get("renderedFeatureSvgId")
-                            or ""
-                        )
-                        if rendered_id:
-                            assert rendered_id in rendered_features_by_id
+            assert all(
+                (feature["recordKey"], feature["biologicalFeatureId"])
+                in biological_keys
+                for feature in rendered_features
+            )
+            for group in item["orthogroups"]:
+                assert group["members"]
+                assert all(
+                    (member["recordKey"], member["biologicalFeatureId"])
+                    in biological_keys
+                    for member in group["members"]
+                )
+            for match in item["comparisonMatches"]:
+                for role in ("query", "subject"):
+                    record_key = match.get(f"{role}RecordKey")
+                    feature_id = match.get(f"{role}BiologicalFeatureId")
+                    if record_key or feature_id:
+                        assert (record_key, feature_id) in biological_keys
 
         assert thumbnail_header.startswith(b"RIFF")
         assert b"WEBP" in thumbnail_header
@@ -1479,6 +1483,15 @@ def test_web_session_feature_metadata_recovery_source_contract() -> None:
     recovery_path = WEB_ROOT / "js" / "app" / "session-feature-metadata.js"
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
+    bridge_js = (WEB_ROOT / "js" / "services" / "feature-catalog.js").read_text(
+        encoding="utf-8"
+    )
+    bridge_python = (
+        REPO_ROOT / "gbdraw" / "web_support" / "request_render.py"
+    ).read_text(encoding="utf-8")
+    bridge_catalog_python = (
+        REPO_ROOT / "gbdraw" / "web_support" / "feature_catalog.py"
+    ).read_text(encoding="utf-8")
     extraction_js = extraction_path.read_text(encoding="utf-8")
     recovery_js = recovery_path.read_text(encoding="utf-8")
 
@@ -1486,9 +1499,28 @@ def test_web_session_feature_metadata_recovery_source_contract() -> None:
     assert "export const extractFeatureMetadataForPreview" in extraction_js
     assert "export const makeLinearRenderedFeatureId" in extraction_js
     assert "export const buildLinearRegionExtractionContext" in extraction_js
-    assert "import { extractFeatureMetadataForPreview } from './feature-metadata-extraction.js';" in run_analysis_js
-    assert "extractFeatureMetadataForPreview({" in run_analysis_js
-    assert "const makeLinearRenderedFeatureId" not in run_analysis_js
+    extraction_importers = sorted(
+        path
+        for path in (WEB_ROOT / "js").rglob("*.js")
+        if "feature-metadata-extraction.js" in path.read_text(encoding="utf-8")
+    )
+    assert extraction_importers == [recovery_path]
+
+    assert "feature-metadata-extraction.js" not in run_analysis_js
+    assert "extractFeatureMetadataForPreview" not in run_analysis_js
+    assert "extractGeneratedDiagramFeatures" not in run_analysis_js
+    assert "validateFeatureCatalog" in run_analysis_js
+    assert (
+        "validateFeatureCatalog(generationMetadata.featureCatalog, candidateResults)"
+        in run_analysis_js
+    )
+    assert "export const FEATURE_CATALOG_SCHEMA = 3;" in bridge_js
+    assert "render_request(request, include_feature_catalog=True)" in bridge_python
+    assert (
+        'metadata["featureCatalog"] = build_feature_catalog(feature_catalog_items)'
+        in bridge_python
+    )
+    assert "FEATURE_CATALOG_SCHEMA = 3" in bridge_catalog_python
 
     assert recovery_path.exists()
     assert "export const classifyFeatureMetadataState" in recovery_js
@@ -1504,10 +1536,11 @@ def test_web_session_feature_metadata_recovery_source_contract() -> None:
     import_session_source = config_js.split("export const importSession", 1)[1]
     recovery_call = import_session_source.index("await recoverSessionFeatureMetadataIfNeeded")
     assert import_session_source.index("applyOrthogroupStateData(") < recovery_call
-    assert import_session_source.index("applyEditorStateData(data.editorState);") < recovery_call
-
-    export_session_source = config_js.split("export const exportSession", 1)[1]
-    assert export_session_source.index("await guardSessionFeatureMetadataForExport();") < export_session_source.index("const sessionData = {")
+    assert import_session_source.index("applyEditorStateData(restoredEditorState);") < recovery_call
+    assert (
+        import_session_source.index("if (sourceSessionVersion !== SESSION_VERSION)")
+        < recovery_call
+    )
 
     assert "READY_MATCH_RATIO" not in recovery_js
     assert "exactMatchingCount" in recovery_js
@@ -1528,6 +1561,37 @@ def test_web_session_feature_metadata_recovery_source_contract() -> None:
     assert "nextEditorState.featureStrokes.overrides = rewriteOverrideMap(" in recovery_js
 
 
+def test_web_session_writer_fails_closed_and_self_validates() -> None:
+    config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(
+        encoding="utf-8"
+    )
+    app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(
+        encoding="utf-8"
+    )
+    export_source = config_source.split("export const exportSession", 1)[1]
+
+    catalog_guard = export_source.index("if (logicalResults.length > 0)")
+    resource_assembly = export_source.index(
+        "const canonical = await assembleSessionResources"
+    )
+    writer_validation = export_source.index(
+        "validateSessionAuthorityInventory(sessionData, SESSION_VERSION);"
+    )
+    compression = export_source.index(
+        "const compressed = await compressSessionData(sessionData);"
+    )
+
+    assert catalog_guard < resource_assembly
+    assert "throw new Error(SESSION_FEATURE_CATALOG_SAVE_ERROR);" in export_source
+    assert writer_validation < compression
+
+    save_source = app_setup_source.split(
+        "const saveSessionWithTitle = async () => {", 1
+    )[1].split("const openFeatureEditorFromList", 1)[0]
+    assert "return await exportSession(title);" in save_source
+    assert "errorLog.value = normalizeUserFacingError(error);" in save_source
+
+
 def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None:
     observed_losat_cache_sessions = set()
     observed_losat_derived_cache_sessions = set()
@@ -1535,33 +1599,13 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
     for session_name in GALLERY_SESSION_FILES:
         session_path = GALLERY_ROOT / "sessions" / session_name
         session = load_session(session_path)
-        features = session.get("features", {}).get("extractedFeatures", [])
-        svg_text = "\n".join(result.get("content", "") for result in session.get("results", []))
-        rendered_stable_feature_ids = {
-            match
-            for match in re.findall(
-                r"data-gbdraw-stable-feature-id=[\"']([^\"']+)[\"']",
-                svg_text,
-            )
-        }
-        rendered_feature_ids = {
-            re.sub(r"_record_\d+$", "", match)
-            for match in re.findall(
-                r"data-gbdraw-feature-id=[\"']([^\"']+)[\"']",
-                svg_text,
-            )
-        }
-        feature_ids = {
-            candidate
-            for feature in features
-            for candidate in (
-                str(feature.get("stable_feature_id") or ""),
-                str(feature.get("stable_svg_id") or ""),
-                str(feature.get("svg_id") or ""),
-                re.sub(r"_record_\d+$", "", str(feature.get("svg_id") or "")),
-            )
-            if candidate
-        }
+        results = session.get("results", [])
+        editor_state = session.get("editorState", {})
+        feature_catalog = editor_state.get("featureCatalog", {})
+        catalog_items = feature_catalog.get("items", [])
+        svg_text = "\n".join(
+            result.get("content", "") for result in results
+        )
         pairwise_ids = set(re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text))
         collinearity_ids = set(re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text))
 
@@ -1575,14 +1619,80 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
             == PROTEIN_IDENTITY_MANIFEST_SCHEMA
         ), session_name
         assert "files" not in session, session_name
-        assert features, session_name
-        assert session.get("results"), session_name
+        assert results, session_name
+        assert feature_catalog.get("schema") == 3, session_name
+        assert [
+            (item.get("resultIndex"), item.get("resultName"))
+            for item in catalog_items
+        ] == [
+            (result_index, result.get("name"))
+            for result_index, result in enumerate(results)
+        ], session_name
+        feature_state = session.get("features")
+        if isinstance(feature_state, dict):
+            assert "extractedFeatures" not in feature_state, session_name
+        orthogroup_state = session.get("orthogroupState")
+        if isinstance(orthogroup_state, dict):
+            assert "groups" not in orthogroup_state, session_name
         assert "orthogroupState" in session, session_name
-        resolved_rendered_feature_ids = (
-            rendered_stable_feature_ids or rendered_feature_ids
-        )
-        assert resolved_rendered_feature_ids, session_name
-        assert resolved_rendered_feature_ids <= feature_ids, session_name
+
+        for result_index, result in enumerate(results):
+            assert not str(result.get("name") or "").lower().endswith(
+                ".interactive.svg"
+            ), session_name
+            content = result.get("content", "")
+            assert "<svg" in content, session_name
+            assert "gbdraw-interactive-feature-metadata" not in content, session_name
+
+            item = catalog_items[result_index]
+            biological_features = item.get("biologicalFeatures", [])
+            rendered_features = item.get("features", [])
+            biological_keys = {
+                (
+                    feature.get("recordKey"),
+                    feature.get("biologicalFeatureId"),
+                )
+                for feature in biological_features
+            }
+            assert biological_keys, session_name
+            assert rendered_features, session_name
+            assert all(
+                (
+                    feature.get("recordKey"),
+                    feature.get("biologicalFeatureId"),
+                )
+                in biological_keys
+                for feature in rendered_features
+            ), session_name
+            catalog_svg_ids = {
+                feature.get("svgId")
+                for feature in rendered_features
+                if feature.get("svgId")
+            }
+            result_svg_ids = set(
+                re.findall(
+                    r"data-gbdraw-feature-id=[\"']([^\"']+)[\"']",
+                    content,
+                )
+            )
+            assert result_svg_ids, session_name
+            assert result_svg_ids <= catalog_svg_ids, session_name
+
+        seen_resource_payloads: dict[tuple[int, bytes], str] = {}
+        for resource_id, resource in session.get("resources", {}).items():
+            assert resource.get("encoding") == "base64", session_name
+            payload = base64.b64decode(resource.get("data", ""), validate=True)
+            payload_identity = (
+                len(payload),
+                hashlib.sha256(payload).digest(),
+            )
+            assert payload_identity not in seen_resource_payloads, (
+                session_name,
+                resource_id,
+                seen_resource_payloads.get(payload_identity),
+            )
+            seen_resource_payloads[payload_identity] = resource_id
+
         if session_name in GALLERY_EDITOR_STATE_SESSION_FILES:
             assert session.get("editorState"), session_name
         losat_cache_entries = session.get("losatCache", {}).get("entries", [])
@@ -1778,7 +1888,7 @@ def test_feature_sequence_fasta_formatter_uses_ncbi_style_headers(tmp_path: Path
     subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
 
-def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload() -> None:
+def test_interactive_svg_export_embeds_committed_catalog_without_rebuilding() -> None:
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
     standalone_source = _standalone_interactivity_source()
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
@@ -1849,13 +1959,28 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "orthogroup_id",
         "protein_id",
         "const buildStandaloneOrthogroupPayloads = (features, context) => {",
-        "const orthogroups = buildStandaloneOrthogroupPayloads(features, context);",
+        "const sourceCatalogItem = selectStandaloneCatalogItem(context);",
+        "const catalogItem = sourceCatalogItem\n"
+        "    ? catalogItemWithStandaloneOverrides(sourceCatalogItem, context)\n"
+        "    : null;",
+        "const features = catalogItem\n"
+        "    ? catalogItem.features\n"
+        "    : buildStandaloneFeaturePayloads(svg, {",
+        "const biologicalFeatures = catalogItem\n"
+        "    ? catalogItem.biologicalFeatures\n"
+        "    : buildStandaloneBiologicalFeaturePayloads(context, features);",
+        "const orthogroups = catalogItem\n"
+        "    ? catalogItem.orthogroups\n"
+        "    : buildStandaloneOrthogroupPayloads(features, context);",
         "data-gbdraw-interactive-feature",
+        "data-gbdraw-interactive-annotation",
+        "function renderAnnotationPopup(annotation)",
+        "annotations: Array.isArray(item && item.annotations) ? item.annotations : []",
         "data-gbdraw-original-viewbox",
         "data-gbdraw-original-width",
         "data-gbdraw-original-height",
         "export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {\n  if (!svg) return false;",
-        "const features = buildStandaloneFeaturePayloads(svg, {\n    ...context,\n    popupMode: normalizedPopupMode\n  });",
+        "items: [catalogItem]",
         "svg.setAttribute('width', '100vw');",
         "svg.setAttribute('height', '100vh');",
         "svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');",
@@ -1875,7 +2000,9 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         "function scheduleViewportRefit()",
         "popup_mode: normalizedPopupMode",
         "orthogroups",
-        "var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';",
+        "if (payload && payload.schema === 3 && Array.isArray(payload.items)) {",
+        "payload = decodeCatalogPayload(payload);",
+        "var popupMode = (\n    payload.popup_mode === 'simple'",
         "var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];",
         "var richSearchFields = {",
         "if (popupMode === 'simple') {\n      searchFieldOptions = searchFieldOptions.filter",
@@ -1977,10 +2104,21 @@ def test_interactive_svg_export_decouples_interactivity_from_rich_popup_payload(
         assert needle not in standalone_source
 
     assert "popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich'" in export_source
-    assert "state.biologicalFeatures?.value" in export_source
-    assert "features: biologicalFeatures" in export_source
-    assert "editableLabels: state.editableLabels.value" in export_source
-    assert "orthogroups: state.orthogroups.value" in export_source
+    assert "featureCatalog: state.featureCatalog?.value" in export_source
+    assert "catalogResultIndex: resultIndex" in export_source
+    assert "catalogResultName: result?.name" in export_source
+    assert "requireFeatureCatalog: true" in export_source
+    assert "labelTextFeatureOverrides: state.labelTextFeatureOverrides" in export_source
+    assert "labelTextBulkOverrides: state.labelTextBulkOverrides" in export_source
+    assert "orthogroupNameOverrides: state.orthogroupNameOverrides" in export_source
+    assert (
+        "orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides"
+        in export_source
+    )
+    assert "state.biologicalFeatures?.value" not in export_source
+    assert "features: biologicalFeatures" not in export_source
+    assert "editableLabels: state.editableLabels.value" not in export_source
+    assert "orthogroups: state.orthogroups.value" not in export_source
     assert "if (!svg || state.adv.rich_feature_popup === false) return false;" not in export_source
 
     zoom_block = standalone_source.split("  function zoomViewBy", 1)[1].split("  function resetViewport", 1)[0]
@@ -2287,6 +2425,8 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
             name: 'rpoB',
             member_count: 2,
             record_coverage_count: 2,
+            orthologPathCount: 7,
+            relatedEdgeCount: 5,
             members: [
               {{
                 recordId: 'record_a',
@@ -2326,6 +2466,8 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         assert(labels.includes('Similarity group ID'), `Similarity group ID missing: ${{JSON.stringify(labels)}}`);
         assert(labels.includes('Display name'), `Display name missing: ${{JSON.stringify(labels)}}`);
         const summary = payload.sections[0];
+        assert(summary.rows.find((row) => row.label === 'Group paths')?.value === '7', JSON.stringify(summary.rows));
+        assert(summary.rows.find((row) => row.label === 'Related edges')?.value === '5', JSON.stringify(summary.rows));
         assert(summary.memberRows.length === 2, JSON.stringify(summary));
         assert(summary.memberRows.map((row) => row.proteinId).join(',') === 'WP_000001.1,WP_000002.1', JSON.stringify(summary.memberRows));
         assert(summary.memberCopyText.includes('Record\\tCoordinates (+/-)\\tProtein ID\\tRole\\tConfidence\\tAssignment reason\\tProduct / note'), summary.memberCopyText);
@@ -2333,6 +2475,19 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         assert(hoverLabels.includes('Similarity group'), `Hover similarity-group row missing: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Query'), `Hover query row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
         assert(!hoverLabels.includes('Subject'), `Hover subject row should be omitted: ${{JSON.stringify(hoverLabels)}}`);
+
+        const legacyCountPayload = buildPairwiseMatchPayload(element, {{
+          featureLookup,
+          orthogroups: [{{
+            id: 'og_1',
+            orthologPaths: [{{}}, {{}}],
+            relatedEdges: [{{}}],
+            members: []
+          }}]
+        }});
+        const legacyCountRows = legacyCountPayload.sections[0].rows;
+        assert(legacyCountRows.find((row) => row.label === 'Group paths')?.value === '2', JSON.stringify(legacyCountRows));
+        assert(legacyCountRows.find((row) => row.label === 'Related edges')?.value === '1', JSON.stringify(legacyCountRows));
 
         const hiddenMemberPayload = buildPairwiseMatchPayload(element, {{
           featureLookup,
@@ -2869,6 +3024,9 @@ def test_web_species_and_strain_are_projected_only_for_circular_requests() -> No
 
 def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() -> None:
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    svg_sanitization_source = (
+        WEB_ROOT / "js" / "services" / "svg-sanitization.js"
+    ).read_text(encoding="utf-8")
     feature_dom_source = (WEB_ROOT / "js" / "app" / "feature-dom.js").read_text(encoding="utf-8")
     svg_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js").read_text(encoding="utf-8")
     label_actions_source = (WEB_ROOT / "js" / "app" / "feature-editor" / "label-actions.js").read_text(encoding="utf-8")
@@ -2879,7 +3037,8 @@ def test_web_feature_lookup_uses_stable_data_attribute_with_dom_id_fallback() ->
     export_source = (WEB_ROOT / "js" / "services" / "export.js").read_text(encoding="utf-8")
     standalone_source = _standalone_interactivity_source()
 
-    assert "'data-gbdraw-feature-id'" in state_source
+    assert "sanitizeSvgContent" in state_source
+    assert "'data-gbdraw-feature-id'" in svg_sanitization_source
     assert "FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id'" in feature_dom_source
     assert "FEATURE_PART_ATTRIBUTE = 'data-gbdraw-feature-part'" in feature_dom_source
     assert "normalizeFeatureIdentity" in svg_actions_source
@@ -2932,8 +3091,9 @@ def test_web_linear_custom_track_slots_are_wired() -> None:
     assert "Auto values vary by record" in index_html
     assert ':disabled="adv.linear_track_slots_enabled"' in index_html
     assert 'v-model.number="entry.slot.params.track_index"' in index_html
-    assert "buildLinearTrackSlotSpec(slot)" in request_source
-    assert "linearTrackAxisIndexForEnabledSlots(" in request_source
+    assert "buildLinearTrackSlotPayload" in request_source
+    assert "linearTrackSlots: validation.enabledSlots.map(buildLinearTrackSlotPayload)" in request_source
+    assert "linearTrackAxisIndex: validation.emittedAxisIndex" in request_source
     assert "linearSlotNeedsDepth" in run_source
     assert "validateImportedLinearTrackSlots" in config_source
     assert "LINEAR_TRACK_SLOT_SCHEMA_VERSION = 2" in module_source
@@ -3095,15 +3255,18 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "applyCircularSuppressControlsToSlots" in run_source
     assert "[CONFIG_OVERRIDE_PATHS.showGc]" in request_source
     assert "[CONFIG_OVERRIDE_PATHS.showSkew]" in request_source
-    assert "circularTrackAxisIndex: circular && state.adv.circular_track_slots_enabled" in request_source
-    assert "buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type)" in request_source
+    assert "circularTrackAxisIndex: validation.emittedAxisIndex" in request_source
+    assert "buildCircularTrackSlotPayload(slot, state.adv.nt, state.form.track_type)" in request_source
     assert "args.push(" not in run_source
     assert "forceSplitLane" not in run_source
     assert "applyCircularTrackOrderPlacements(" in run_source
     assert "if (useCircularTrackSlots)" in run_source
     assert "hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth')" in run_source
     assert "Custom Track Slots" in index_html
-    assert '@click="setCircularTrackSlotsEnabled(!adv.circular_track_slots_enabled)"' in index_html
+    assert '@click="toggleCircularTrackSlotsPanel"' in index_html
+    assert 'v-if="circularTrackSlotsPanelOpen"' in index_html
+    assert ':checked="adv.circular_track_slots_enabled"' in index_html
+    assert '@change="setCircularTrackSlotsEnabled($event.target.checked)"' in index_html
     assert 'aria-controls="circular-custom-track-slots-panel"' in index_html
     assert "Track Preset" in index_html
     assert 'v-if="!adv.circular_track_slots_enabled"' in index_html
@@ -3112,7 +3275,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "Reset to Spreadout" in index_html
     assert "Center Reserved Radius" in index_html
     assert "Apply Tuckin" not in index_html
-    assert "arrows reorder within the current side" in index_html
+    assert "Arrow buttons reorder within the current side only" in index_html
     assert "Radial track stack" in index_html
     assert "circularTrackStackEntries()" in index_html
     assert "Use Move outside or Move inside to cross the Axis" in index_html
@@ -3144,7 +3307,7 @@ def test_web_run_analysis_wires_circular_track_slot_options() -> None:
     assert "setCircularTrackSlotsEnabled" in slot_source
     assert "setCircularTrackSlotEnabled: circularTrackSlotEditor.setCircularTrackSlotEnabled" in app_setup_source
     assert "circularTrackSlotHiddenBySuppress: circularTrackSlotEditor.circularTrackSlotHiddenBySuppress" in app_setup_source
-    assert "const templateSlots = createDefaultCircularTrackSlots" in slot_source
+    assert "const templateSlots = applyCircularGeometryShortcuts(createDefaultCircularTrackSlots" in slot_source
     assert "const suppressed = applyCircularSuppressControlsToSlots(normalized, state.form);" in slot_source
     assert "state.adv.circular_track_slots.splice(" in slot_source
     assert '@change="setCircularGcSuppressed($event.target.checked, $event)"' in index_html
@@ -3169,6 +3332,9 @@ def test_web_wires_circular_conservation_options() -> None:
     slot_source = (WEB_ROOT / "js" / "app" / "circular-track-slots.js").read_text(encoding="utf-8")
     app_setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(encoding="utf-8")
     components_source = (WEB_ROOT / "js" / "components.js").read_text(encoding="utf-8")
+    svg_sanitization_source = (
+        WEB_ROOT / "js" / "services" / "svg-sanitization.js"
+    ).read_text(encoding="utf-8")
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "const circularConservation = reactive" in state_source
@@ -3178,9 +3344,10 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "subject_gencode: 1" in state_source
     assert "losat_gencode: normalizePositiveInteger(entry.losat_gencode, 1)" in config_source
     assert "series: []" in state_source
-    assert "'data-source-index'" in state_source
-    assert "'data-reference-record-id'" in state_source
-    assert "'data-track-color'" in state_source
+    assert "sanitizeSvgContent" in state_source
+    assert "'data-source-index'" in svg_sanitization_source
+    assert "'data-reference-record-id'" in svg_sanitization_source
+    assert "'data-track-color'" in svg_sanitization_source
     assert "circularConservation" in app_setup_source
     assert "circularConservationSeriesRows" in app_setup_source
     assert "syncCircularConservationSeries" in app_setup_source
@@ -3190,7 +3357,8 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "circularConservation: state.circularConservation" in config_source
     assert "normalizeCircularConservationSeries" in config_source
     assert "normalizeCircularConservationLosatProgram" in config_source
-    assert "c_conservation_blasts: await serializeFileArray" in config_source
+    assert "c_conservation_blasts: includeConservationBlasts" in config_source
+    assert "? await serializeFileValue(sourceFiles.c_conservation_blasts)" in config_source
     assert "normalizeCircularConservationReference" in config_source
     assert "Pairwise Comparisons" in index_html
     assert 'v-model="circularConservation.losat_program"' in index_html
@@ -3362,6 +3530,7 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
         "track-slot-colors.js",
         "track-slot-display.js",
         "current-option-values.js",
+        "track-slot-validation.js",
     ]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -3550,7 +3719,14 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
     source_path = WEB_ROOT / "js" / "app" / "circular-track-slots.js"
     module_path = tmp_path / "circular-track-slots.mjs"
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
-    for dependency in ["conservation-series.js", "color-utils.js", "depth-track-state.js", "track-slot-display.js", "track-slot-colors.js"]:
+    for dependency in [
+        "conservation-series.js",
+        "color-utils.js",
+        "depth-track-state.js",
+        "track-slot-display.js",
+        "track-slot-colors.js",
+        "track-slot-validation.js",
+    ]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
         (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
@@ -3723,10 +3899,14 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
           }}
         }};
         const defaultEditor = createCircularTrackSlotEditor({{ state: defaultState }});
+        const dormantCircularStack = JSON.stringify(defaultState.adv.circular_track_slots);
         defaultEditor.setCircularTrackSlotsEnabled(true);
         const resetTick = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
-        if (resetTick?.side !== 'inside' || resetTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
-          throw new Error(`Enabling custom slots did not use the inward default Tick layout: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        if (JSON.stringify(defaultState.adv.circular_track_slots) !== dormantCircularStack) {{
+          throw new Error(`Enabling custom slots mutated the dormant draft: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        }}
+        if (resetTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
+          throw new Error(`Dormant custom slots lost the inward default Tick layout: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
         }}
         defaultEditor.resetCircularTrackSlotsToPreset('middle');
         const middleFeature = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'features');
@@ -3846,6 +4026,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         }};
         const multiDepthEditor = createCircularTrackSlotEditor({{ state: multiDepthState }});
         multiDepthEditor.setCircularTrackSlotsEnabled(true);
+        multiDepthEditor.resetCircularTrackSlotsFromSimpleControls();
         const multiDepthSlots = multiDepthState.adv.circular_track_slots.filter((slot) => slot.renderer === 'depth');
         const multiDepthIndexes = multiDepthSlots.map((slot) => Number(slot.params?.track_index ?? 0)).join(',');
         if (multiDepthSlots.length !== 2 || multiDepthIndexes !== '0,1') {{
@@ -3894,6 +4075,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         }};
         const conservationEditor = createCircularTrackSlotEditor({{ state: conservationState }});
         conservationEditor.setCircularTrackSlotsEnabled(true);
+        conservationEditor.resetCircularTrackSlotsFromSimpleControls();
         const conservationSlots = conservationState.adv.circular_track_slots.filter((slot) => slot.renderer === 'sequence_conservation');
         if (conservationSlots.length !== 2 || conservationSlots[0].params.label !== 'Beta' || conservationSlots[1].params.label !== 'Alpha') {{
           throw new Error(`Conservation slots were not materialized in series order: ${{JSON.stringify(conservationState.adv.circular_track_slots)}}`);
@@ -4155,8 +4337,8 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         }}
         axisTick.params.tick_label_layout = 'label_in_tick_out';
         const tickAxisSpec = tickAxisEditor.circularTrackSlotCliSpec(axisTick);
-        if (!tickAxisSpec.includes('side=overlay') || !tickAxisSpec.includes('tick_label_layout=label_in_tick_out')) {{
-          throw new Error(`Tick on-axis CLI spec lost inverted layout: ${{tickAxisSpec}}`);
+        if (!tickAxisSpec.includes('side=overlay') || !tickAxisSpec.includes('tick_label_layout=label_out_tick_in')) {{
+          throw new Error(`Tick on-axis CLI spec did not auto-orient relative to Feature: ${{tickAxisSpec}}`);
         }}
         tickAxisEditor.moveCircularTrackSlotInside(0);
         const demotedAxisTick = tickAxisState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
@@ -4368,10 +4550,11 @@ def test_web_session_uses_structured_depth_file_codec(tmp_path: Path) -> None:
     subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
-    assert "depth: await serializeDepthFile(seq.depth)" in config_source
-    assert "c_depth: await serializeDepthFile(state.files.c_depth)" in config_source
-    assert "await downloadCompressedSession(" in config_source
-    assert "compactSessionFeatureCatalog(sessionData)" in config_source
+    assert "serializeActiveRenderFiles(state.mode.value, state)" in config_source
+    assert "assembleSessionResources(state, committed)" in config_source
+    assert "const compressed = await compressSessionData(sessionData);" in config_source
+    assert "downloadSessionBlob(compressed, sessionFilename);" in config_source
+    assert "compactSessionFeatureCatalog(sessionData)" not in config_source
 
 
 def test_web_config_persists_manual_qualifier_priority_rules() -> None:
@@ -4392,7 +4575,8 @@ def test_web_session_json_is_single_visible_settings_workflow() -> None:
     assert "exportConfig" not in app_setup_source
     assert "importConfig" not in app_setup_source
     assert "editorState: buildEditorStateData()" in config_source
-    assert "applyEditorStateData(data.editorState)" in config_source
+    assert "const storedEditorState = canonicalSession" in config_source
+    assert "applyEditorStateData(restoredEditorState)" in config_source
     assert "featureStrokeOverrides" in config_source
 
 
@@ -4400,7 +4584,11 @@ def test_pyodide_palette_init_treats_comparison_only_colors_as_uninitialized() -
     source = (WEB_ROOT / "js" / "app" / "pyodide.js").read_text(encoding="utf-8")
 
     assert "const currentHasPaletteColors = hasPaletteColorEntries(currentColors.value);" in source
-    assert "if (!currentHasPaletteColors) {\n            currentColors.value = resolvedColors;" in source
+    assert re.search(
+        r"if\s*\(!currentHasPaletteColors\)\s*(?:\{\s*)?"
+        r"currentColors\.value\s*=\s*resolvedColors;",
+        source,
+    )
     assert "currentHasPaletteColors ? currentColors.value : resolvedColors" in source
     assert "const currentHasColors = hasColorEntries(currentColors.value);" not in source
 

@@ -19,7 +19,7 @@ import {
   exportSession,
   importSession as importSessionFromFile,
   SESSION_VERSION,
-  serializeFiles,
+  serializeActiveRenderFiles,
   serializeResults,
   setPreviewRuntime
 } from '../services/config.js';
@@ -38,6 +38,7 @@ import {
   DIAGRAM_ENGINE_STARTUP_MESSAGE
 } from '../services/runtime-capabilities.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
+import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -46,6 +47,7 @@ import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPyodideManager } from './pyodide.js';
 import { createRunAnalysis } from './run-analysis.js';
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import { createResultsManager } from './results.js';
@@ -386,6 +388,7 @@ export const createAppSetup = () => {
   const linearRecordSelector = createLinearRecordSelector({
     state,
     reactive,
+    ensureRuntime: pyodideManager.initPyodide,
     recordReader: ({ inputType, primaryFile, pairedFile, temporaryPathPrefix }) => (
       inputType === 'gff'
         ? discoverGffFastaRecords({
@@ -520,8 +523,19 @@ export const createAppSetup = () => {
   const { handleWheel, startPan, doPan, endPan, resetPreviewViewport } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
-  const legendActions = createLegendManager({ state, getPyodide, debugLog, history });
-  const svgActions = createSvgStyles({ state, watch, legendActions });
+  const legendActions = createLegendManager({
+    state,
+    getPyodide,
+    ensurePyodide: pyodideManager.initPyodide,
+    debugLog,
+    history
+  });
+  const svgActions = createSvgStyles({
+    state,
+    watch,
+    nextTick,
+    legendActions
+  });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
     state,
@@ -603,7 +617,11 @@ export const createAppSetup = () => {
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
   const linearTrackNewRenderer = ref('dinucleotide_skew');
+  const circularTrackSlotsPanelOpen = ref(false);
   const linearTrackSlotsPanelOpen = ref(false);
+  const toggleCircularTrackSlotsPanel = () => {
+    circularTrackSlotsPanelOpen.value = !circularTrackSlotsPanelOpen.value;
+  };
   const toggleLinearTrackSlotsPanel = () => {
     linearTrackSlotsPanelOpen.value = !linearTrackSlotsPanelOpen.value;
   };
@@ -814,9 +832,11 @@ export const createAppSetup = () => {
     const normalized = String(value || '').trim();
     ensureDefinitionLineStyle(kind).fill = normalized || null;
   };
+  const getDefinitionLineStyleColorMode = (kind) => (
+    colorValueMode(getDefinitionLineStyleFill(kind))
+  );
   const getDefinitionLineStyleSwatchValue = (kind) => {
-    const fill = getDefinitionLineStyleFill(kind);
-    return /^#[0-9a-fA-F]{6}$/.test(fill) ? fill : '#000000';
+    return toNativeColorInputValue(getDefinitionLineStyleFill(kind));
   };
   const isDefinitionLineStyleMuted = (row) => {
     const key = row?.visibilityKey;
@@ -1326,11 +1346,11 @@ export const createAppSetup = () => {
   } = createRunAnalysis({
     state,
     getPyodide,
+    ensurePyodide: pyodideManager.initPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
-    serializeCanonicalFiles: serializeFiles,
+    serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
-    refreshFeatureOverrides: featureActions.refreshFeatureOverrides,
     resetPreviewViewport,
     validateAnnotationTargets: ({ loadComparison }) => {
       const catalog = getAnnotationRecordCatalog(loadComparison);
@@ -1341,6 +1361,7 @@ export const createAppSetup = () => {
   const resultsManager = createResultsManager({
     state,
     getPyodide,
+    ensurePyodide: pyodideManager.initPyodide,
     legendLayout,
     rerenderLinearDefinitions: runLabelReflow
   });
@@ -1351,7 +1372,6 @@ export const createAppSetup = () => {
     nextTick,
     onMounted,
     debugLog,
-    pyodideManager,
     legendActions,
     svgActions,
     featureActions,
@@ -1362,6 +1382,7 @@ export const createAppSetup = () => {
     refreshLinearRecordSelectors: linearRecordSelector.refresh,
     resetPreviewViewport,
     previewRuntime,
+    preparePaletteDefinitions: pyodideManager.loadPaletteAsset,
     prepareDiagramGenerationWorker: async () => {
       diagramGenerationWorkerReady.value = false;
       diagramGenerationWorkerError.value = null;
@@ -1424,12 +1445,8 @@ export const createAppSetup = () => {
       : [];
     if (!entries.length || !svgContent.value) return;
 
-    let pyodideReadyForLegend = pyodideReady.value;
-    for (let attempt = 0; !pyodideReadyForLegend && attempt < 150; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      pyodideReadyForLegend = pyodideReady.value;
-    }
-    if (!pyodideReadyForLegend) return;
+    if (!pyodideReady.value) await pyodideManager.initPyodide();
+    if (!pyodideReady.value) return;
 
     let svgReady = false;
     for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -1486,6 +1503,7 @@ export const createAppSetup = () => {
     resetLegendPosition,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    setLegendEntryStrokeColorValue,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
     resetLegendEntryStroke,
@@ -1512,6 +1530,7 @@ export const createAppSetup = () => {
     featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail,
     getFeatureColor,
+    getFeatureColorValue,
     canEditFeatureColor,
     getFeatureVisibility,
     handleFeatureVisibilityScopeChoice,
@@ -1522,6 +1541,7 @@ export const createAppSetup = () => {
     setFeatureVisibilityRuleField,
     updateClickedFeatureVisibility,
     requestFeatureColorChange,
+    setFeatureColorValue,
     updateClickedFeatureColor,
     handleColorScopeChoice,
     handleLegendNameCommit,
@@ -1530,6 +1550,8 @@ export const createAppSetup = () => {
     renameLegendEntry,
     handleResetColorChoice,
     resetClickedFeatureFillColor,
+    getFeatureStrokeColorValue,
+    setClickedFeatureStrokeColorValue,
     updateClickedFeatureStroke,
     resetClickedFeatureStroke,
     applyStrokeToAllSiblings,
@@ -1570,13 +1592,22 @@ export const createAppSetup = () => {
     handleFeatureVisibilityScopeChoice
   );
   const requestFeatureColorChangeWithHistory = undoableAction('Change feature color', requestFeatureColorChange);
+  const setFeatureColorValueWithHistory = undoableAction('Change feature color', setFeatureColorValue);
   const updateClickedFeatureColorWithHistory = undoableAction('Change feature color', updateClickedFeatureColor);
+  const setLegendEntryStrokeColorValueWithHistory = undoableAction(
+    'Change legend stroke color',
+    setLegendEntryStrokeColorValue
+  );
   const handleColorScopeChoiceWithHistory = undoableAction('Change feature color', handleColorScopeChoice);
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
   const handleLegendRenameChoiceWithHistory = undoableAction('Rename legend item', handleLegendRenameChoice);
   const handleResetColorChoiceWithHistory = undoableAction('Reset feature color', handleResetColorChoice);
   const resetClickedFeatureFillColorWithHistory = undoableAction('Reset feature color', resetClickedFeatureFillColor);
   const updateClickedFeatureStrokeWithHistory = undoableAction('Change feature stroke', updateClickedFeatureStroke);
+  const setClickedFeatureStrokeColorValueWithHistory = undoableAction(
+    'Change feature stroke',
+    setClickedFeatureStrokeColorValue
+  );
   const resetClickedFeatureStrokeWithHistory = undoableAction('Reset feature stroke', resetClickedFeatureStroke);
   const applyStrokeToAllSiblingsWithHistory = undoableAction('Change feature stroke', applyStrokeToAllSiblings);
   const setFeatureColorWithHistory = undoableAction('Change feature color', setFeatureColor);
@@ -1670,20 +1701,6 @@ export const createAppSetup = () => {
 
   const runAnalysis = async () => history.runUndoable('Generate diagram', async () => {
     cancelDefinitionUpdate();
-    if (!pyodideReady.value) {
-      if (processing.value) return { status: 'skipped' };
-      generationCancelRequested.value = false;
-      processing.value = true;
-      processingStatus.value = loadingStatus.value || 'Preparing Python environment...';
-      await pyodideManager.initPyodide();
-      if (generationCancelRequested.value || !pyodideReady.value) {
-        const wasCanceled = generationCancelRequested.value;
-        processing.value = false;
-        processingStatus.value = '';
-        generationCancelRequested.value = false;
-        return { status: wasCanceled ? 'canceled' : 'error' };
-      }
-    }
 
     const hasRegionAnnotations = annotationSets.some((set) => (
       Array.isArray(set?.annotations) && set.annotations.length > 0
@@ -1711,9 +1728,10 @@ export const createAppSetup = () => {
       diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
     }
 
-    featureSelection.clearFeatureSelection({ clearStatus: true });
     const result = await runGeneratedDiagramAnalysis();
-    featureSelection.clearFeatureSelection({ clearStatus: true });
+    if (result?.status === 'ok') {
+      featureSelection.clearFeatureSelection({ clearStatus: true });
+    }
     if (result?.status === 'ok' && !diagramGenerationWorkerReady.value) {
       diagramGenerationWorkerReady.value = true;
       diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
@@ -2149,47 +2167,7 @@ export const createAppSetup = () => {
     return String(value).trim();
   };
 
-  const getLastLine = (text) => {
-    const trimmed = String(text || '').trim();
-    if (!trimmed) return '';
-    const lines = trimmed.split(/\r?\n/);
-    return lines[lines.length - 1] || '';
-  };
-
-  const normalizeErrorSections = (sections) =>
-    sections.filter((section) => section && typeof section.text === 'string' && section.text.trim() !== '');
-
-  const buildErrorDisplay = (value) => {
-    if (!value) return null;
-    if (typeof value === 'object' && value.summary) {
-      return {
-        summary: value.summary,
-        details: normalizeErrorSections(value.details || [])
-      };
-    }
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (parsed && typeof parsed === 'object' && parsed.summary) {
-            return {
-              summary: parsed.summary,
-              details: normalizeErrorSections(parsed.details || [])
-            };
-          }
-        } catch {
-          // Fall through to plain string handling.
-        }
-      }
-      const summary = getLastLine(trimmed) || 'Unknown error';
-      const details = trimmed ? normalizeErrorSections([{ label: 'Details', text: trimmed }]) : [];
-      return { summary, details };
-    }
-    return { summary: String(value), details: [] };
-  };
-
-  const errorDisplay = computed(() => buildErrorDisplay(errorLog.value));
+  const errorDisplay = computed(() => normalizeUserFacingError(errorLog.value));
 
   const sessionTitleLabel = computed(() => {
     const title = normalizeSessionTitle(sessionTitle.value);
@@ -2289,7 +2267,12 @@ export const createAppSetup = () => {
       title = normalizeSessionTitle(input);
       sessionTitle.value = title;
     }
-    await exportSession(title);
+    try {
+      return await exportSession(title);
+    } catch (error) {
+      errorLog.value = normalizeUserFacingError(error);
+      return { status: 'error' };
+    }
   };
 
   const openFeatureEditorFromList = (feat, event) => {
@@ -2644,9 +2627,12 @@ export const createAppSetup = () => {
     canUseLinearRulerOnAxis,
     circularTrackNewRenderer,
     linearTrackNewRenderer,
+    circularTrackSlotsPanelOpen,
+    toggleCircularTrackSlotsPanel,
     linearTrackSlotsPanelOpen,
     toggleLinearTrackSlotsPanel,
     circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
+    circularTrackSlotEditorKey: circularTrackSlotEditor.circularTrackSlotEditorKey,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
     resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset,
@@ -2655,7 +2641,9 @@ export const createAppSetup = () => {
     setCircularGcSuppressed: circularTrackSlotEditor.setCircularGcSuppressed,
     setCircularSkewSuppressed: circularTrackSlotEditor.setCircularSkewSuppressed,
     addCircularTrackSlot: circularTrackSlotEditor.addCircularTrackSlot,
+    canAddCircularTrackRenderer: circularTrackSlotEditor.canAddCircularTrackRenderer,
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
+    canDuplicateCircularTrackSlot: circularTrackSlotEditor.canDuplicateCircularTrackSlot,
     removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
     setCircularTrackSlotEnabled: circularTrackSlotEditor.setCircularTrackSlotEnabled,
     circularTrackSlotEffectiveEnabled: circularTrackSlotEditor.circularTrackSlotEffectiveEnabled,
@@ -2672,6 +2660,19 @@ export const createAppSetup = () => {
     updateCircularTrackSlotRenderer: circularTrackSlotEditor.updateCircularTrackSlotRenderer,
     updateCircularTrackSlotPlacement: circularTrackSlotEditor.updateCircularTrackSlotPlacement,
     updateCircularTrackFeatureLane: circularTrackSlotEditor.updateCircularTrackFeatureLane,
+    circularTrackSlotIssue: circularTrackSlotEditor.circularTrackSlotIssue,
+    circularTrackGlobalIssues: circularTrackSlotEditor.circularTrackGlobalIssues,
+    circularAnnotationAnchorOptions: circularTrackSlotEditor.circularAnnotationAnchorOptions,
+    circularAnnotationAnchorIsKnown: circularTrackSlotEditor.circularAnnotationAnchorIsKnown,
+    annotationTrackMarkOptions: circularTrackSlotEditor.annotationTrackMarkOptions,
+    circularAnnotationMarkSelected: circularTrackSlotEditor.circularAnnotationMarkSelected,
+    setCircularAnnotationMarkSelected: circularTrackSlotEditor.setCircularAnnotationMarkSelected,
+    circularAnnotationLaneGapValue: circularTrackSlotEditor.circularAnnotationLaneGapValue,
+    setCircularAnnotationLaneGap: circularTrackSlotEditor.setCircularAnnotationLaneGap,
+    circularAnnotationPaddingValue: circularTrackSlotEditor.circularAnnotationPaddingValue,
+    setCircularAnnotationPadding: circularTrackSlotEditor.setCircularAnnotationPadding,
+    circularAnnotationCoverAnchor: circularTrackSlotEditor.circularAnnotationCoverAnchor,
+    setCircularAnnotationCoverAnchor: circularTrackSlotEditor.setCircularAnnotationCoverAnchor,
     supportsCircularTrackSlotPlacement: circularTrackSlotEditor.supportsCircularTrackSlotPlacement,
     circularTrackSlots: circularTrackSlotEditor.circularTrackSlots,
     circularTrackStackEntries: circularTrackSlotEditor.circularTrackStackEntries,
@@ -2691,12 +2692,15 @@ export const createAppSetup = () => {
     circularTrackPresetSummary: circularTrackSlotEditor.circularTrackPresetSummary,
     circularTrackSlotUsesPresetGeometry: circularTrackSlotEditor.circularTrackSlotUsesPresetGeometry,
     linearTrackRenderers: linearTrackSlotEditor.linearTrackRenderers,
+    linearTrackSlotEditorKey: linearTrackSlotEditor.linearTrackSlotEditorKey,
     linearTrackRendererLabel: linearTrackSlotEditor.linearTrackRendererLabel,
     resetLinearTrackSlotsFromSimpleControls: linearTrackSlotEditor.resetLinearTrackSlotsFromSimpleControls,
     ensureLinearTrackDepthSlots: linearTrackSlotEditor.ensureLinearTrackDepthSlots,
     setLinearTrackSlotsEnabled: linearTrackSlotEditor.setLinearTrackSlotsEnabled,
     addLinearTrackSlot: linearTrackSlotEditor.addLinearTrackSlot,
+    canAddLinearTrackRenderer: linearTrackSlotEditor.canAddLinearTrackRenderer,
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
+    canDuplicateLinearTrackSlot: linearTrackSlotEditor.canDuplicateLinearTrackSlot,
     removeLinearTrackSlot: linearTrackSlotEditor.removeLinearTrackSlot,
     moveLinearTrackSlot: linearTrackSlotEditor.moveLinearTrackSlot,
     canMoveLinearTrackSlot: linearTrackSlotEditor.canMoveLinearTrackSlot,
@@ -2709,6 +2713,18 @@ export const createAppSetup = () => {
     canMoveLinearTrackSlotToAxis: linearTrackSlotEditor.canMoveLinearTrackSlotToAxis,
     updateLinearTrackSlotRenderer: linearTrackSlotEditor.updateLinearTrackSlotRenderer,
     updateLinearTrackSlotPlacement: linearTrackSlotEditor.updateLinearTrackSlotPlacement,
+    linearTrackSlotIssue: linearTrackSlotEditor.linearTrackSlotIssue,
+    linearTrackGlobalIssues: linearTrackSlotEditor.linearTrackGlobalIssues,
+    linearAnnotationAnchorOptions: linearTrackSlotEditor.linearAnnotationAnchorOptions,
+    linearAnnotationAnchorIsKnown: linearTrackSlotEditor.linearAnnotationAnchorIsKnown,
+    linearAnnotationMarkSelected: linearTrackSlotEditor.linearAnnotationMarkSelected,
+    setLinearAnnotationMarkSelected: linearTrackSlotEditor.setLinearAnnotationMarkSelected,
+    linearAnnotationLaneGapValue: linearTrackSlotEditor.linearAnnotationLaneGapValue,
+    setLinearAnnotationLaneGap: linearTrackSlotEditor.setLinearAnnotationLaneGap,
+    linearAnnotationPaddingValue: linearTrackSlotEditor.linearAnnotationPaddingValue,
+    setLinearAnnotationPadding: linearTrackSlotEditor.setLinearAnnotationPadding,
+    linearAnnotationCoverAnchor: linearTrackSlotEditor.linearAnnotationCoverAnchor,
+    setLinearAnnotationCoverAnchor: linearTrackSlotEditor.setLinearAnnotationCoverAnchor,
     linearTrackSlotHeightValue: linearTrackSlotEditor.linearTrackSlotHeightValue,
     linearTrackSlotGeometryAutoText: linearTrackSlotEditor.linearTrackSlotGeometryAutoText,
     linearTrackSlotGeometryHasManual: linearTrackSlotEditor.linearTrackSlotGeometryHasManual,
@@ -2909,6 +2925,7 @@ export const createAppSetup = () => {
     featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail,
     getFeatureColor,
+    getFeatureColorValue,
     getFeatureVisibility,
     moveFeatureVisibilityRuleDown: moveFeatureVisibilityRuleDownWithHistory,
     moveFeatureVisibilityRuleUp: moveFeatureVisibilityRuleUpWithHistory,
@@ -2916,6 +2933,7 @@ export const createAppSetup = () => {
     setFeatureVisibility: setFeatureVisibilityWithHistory,
     setFeatureVisibilityRuleField: setFeatureVisibilityRuleFieldWithHistory,
     requestFeatureColorChange: requestFeatureColorChangeWithHistory,
+    setFeatureColorValue: setFeatureColorValueWithHistory,
     setFeatureColor: setFeatureColorWithHistory,
     canEditFeatureColor,
     getEditableLabelByFeatureId,
@@ -2956,6 +2974,8 @@ export const createAppSetup = () => {
     selectLegendNameOption,
     resetClickedFeatureFillColor: resetClickedFeatureFillColorWithHistory,
     updateClickedFeatureStroke: updateClickedFeatureStrokeWithHistory,
+    getFeatureStrokeColorValue,
+    setClickedFeatureStrokeColorValue: setClickedFeatureStrokeColorValueWithHistory,
     resetClickedFeatureStroke: resetClickedFeatureStrokeWithHistory,
     applyStrokeToAllSiblings: applyStrokeToAllSiblingsWithHistory,
     colorScopeDialog,
@@ -2992,6 +3012,7 @@ export const createAppSetup = () => {
     resetLegendPosition,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
     resetLegendEntryStroke,
@@ -3008,6 +3029,7 @@ export const createAppSetup = () => {
     setDefinitionLineStyleWeight,
     getDefinitionLineStyleFill,
     setDefinitionLineStyleColor,
+    getDefinitionLineStyleColorMode,
     getDefinitionLineStyleSwatchValue,
     isDefinitionLineStyleMuted,
     downloadDpi,

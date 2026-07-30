@@ -71,6 +71,8 @@ def test_session_document_round_trip_owns_resource_lifetime(
     assert document.has_canonical_request is True
     assert document.to_dict()["resources"]["record-1-genbank"]["encoding"] == "base64"
     assert document.to_dict()["renderRequest"]["output"]["overwrite"] is False
+    assert document.to_dict()["results"] == []
+    assert document.to_dict()["editorState"]["featureCatalog"] is None
 
     with materialize_session(
         document,
@@ -428,6 +430,8 @@ def test_web_depth_writer_payload_decodes_with_python_codec(tmp_path: Path) -> N
             "version": CURRENT_SESSION_VERSION,
             "renderRequest": canonical["renderRequest"],
             "resources": canonical["resources"],
+            "results": [],
+            "editorState": {"featureCatalog": None},
         }
     )
 
@@ -467,6 +471,8 @@ def test_web_resolved_protein_writer_preserves_alignment_settings(
             "version": CURRENT_SESSION_VERSION,
             "renderRequest": canonical["renderRequest"],
             "resources": canonical["resources"],
+            "results": [],
+            "editorState": {"featureCatalog": None},
         }
     )
 
@@ -586,6 +592,8 @@ def test_python_typed_protein_results_round_trip_through_web_projection(
             "version": CURRENT_SESSION_VERSION,
             "renderRequest": canonical["renderRequest"],
             "resources": canonical["resources"],
+            "results": [],
+            "editorState": {"featureCatalog": None},
         }
     )
     with materialize_session(document, output_directory=tmp_path) as materialized:

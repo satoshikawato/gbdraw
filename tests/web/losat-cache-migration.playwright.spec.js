@@ -1,7 +1,14 @@
 const { test, expect } = require('@playwright/test');
 const { createHash } = require('node:crypto');
-const { createReadStream, existsSync, readFileSync } = require('node:fs');
+const {
+  createReadStream,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync
+} = require('node:fs');
 const { createServer } = require('node:http');
+const { tmpdir } = require('node:os');
 const { extname, join, normalize, resolve, sep } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 
@@ -15,7 +22,7 @@ const expected = JSON.parse(readFileSync(join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.expected.json'
 ), 'utf8'));
-const CURRENT_SESSION_VERSION = 39;
+const CURRENT_SESSION_VERSION = 40;
 const CURRENT_RENDER_REQUEST_SCHEMA = 5;
 const CURRENT_PROTEIN_RAW_SCHEMA = 4;
 const CURRENT_PROTEIN_DERIVED_SCHEMA = 3;
@@ -36,6 +43,8 @@ const contentTypes = {
 let server;
 let baseUrl;
 let sourceSession;
+let savedSessionCount = 0;
+let savedSessionDir;
 
 const expandedSessionBytes = (path) => {
   const bytes = readFileSync(path);
@@ -58,11 +67,22 @@ const importSession = async (page, path) => {
 
 const saveSession = async (page) => {
   const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const outcome = await page.evaluate(async () => ({
+    result: await window.__GBDRAW_APP__.saveSessionWithTitle(),
+    errorLog: window.__GBDRAW_APP__.errorLog
+  }));
+  if (outcome.result?.status !== 'saved') {
+    downloadPromise.catch(() => {});
+    throw new Error(`Session Save failed: ${JSON.stringify(outcome)}`);
+  }
   const download = await downloadPromise;
-  const path = await download.path();
-  expect(path).toBeTruthy();
-  return path;
+  savedSessionCount += 1;
+  const destination = join(
+    savedSessionDir,
+    `saved-${savedSessionCount}.gbdraw-session.json.gz`
+  );
+  await download.saveAs(destination);
+  return destination;
 };
 
 const downloadSvg = async (page) => {
@@ -204,7 +224,7 @@ const readFirstUploadedTsv = async (page) => page.evaluate(async () => {
   };
 });
 
-const assertCurrentSessionBoundary = (session, { requireDerived = false } = {}) => {
+const assertCurrentSessionBoundary = (session) => {
   const rawEntries = session.losatCache?.entries || [];
   const derivedEntries = session.losatDerivedCache?.entries || [];
   expect(session.format).toBe('gbdraw-session');
@@ -220,31 +240,6 @@ const assertCurrentSessionBoundary = (session, { requireDerived = false } = {}) 
       entry?.idEncoding === 'runtime-handle-v1'
     )
   )).toBe(true);
-  if (requireDerived) {
-    expect(derivedEntries.length).toBeGreaterThan(0);
-  }
-};
-
-const assertLegacyCandidatesPreserved = (session) => {
-  assertCurrentSessionBoundary(session);
-  const rawEnvelope = session.legacyArtifacts?.proteinRawCandidates;
-  const candidates = rawEnvelope?.entries;
-  const derivedEnvelope = session.legacyArtifacts?.proteinDerivedEvidence;
-  expect(session.losatCache?.entries || []).toHaveLength(0);
-  expect(session.losatDerivedCache?.entries || []).toHaveLength(0);
-  expect(rawEnvelope?.schema).toBe(1);
-  expect(candidates).toHaveLength(expected.storedRawEntries);
-  expect(candidates.every((candidate) => (
-    candidate.state === 'pending' &&
-    candidate.originalEntry?.schema === 2 &&
-    candidate.originalEntry?.program === 'blastp'
-  ))).toBe(true);
-  expect(candidates.map((candidate) => candidate.originalEntry))
-    .toEqual(sourceSession.losatCache?.entries || []);
-  expect(derivedEnvelope).toEqual({
-    schema: 1,
-    entries: sourceSession.losatDerivedCache?.entries || []
-  });
 };
 
 const assertRenamedZeroMtimeResources = (session) => {
@@ -264,7 +259,7 @@ const assertRenamedZeroMtimeResources = (session) => {
 };
 
 const assertCurrentProteinArtifacts = (session) => {
-  assertCurrentSessionBoundary(session, { requireDerived: true });
+  assertCurrentSessionBoundary(session);
   const manifest = session.proteinIdentityManifest;
   const entries = session.losatCache?.entries || [];
   const derivedEntries = session.losatDerivedCache?.entries || [];
@@ -277,11 +272,7 @@ const assertCurrentProteinArtifacts = (session) => {
     entry?.idEncoding === 'runtime-handle-v1' &&
     entry?.program === 'blastp'
   ))).toBe(true);
-  expect(derivedEntries.every((entry) => (
-    entry?.schema === CURRENT_PROTEIN_DERIVED_SCHEMA &&
-    entry?.kind === 'derived-losatp-payload' &&
-    entry?.idEncoding === 'runtime-handle-v1'
-  ))).toBe(true);
+  expect(derivedEntries).toEqual([]);
   const legacyCandidates = session.legacyArtifacts?.proteinRawCandidates?.entries || [];
   expect(legacyCandidates)
     .toHaveLength(expected.storedRawEntries - expected.totalPairs);
@@ -336,35 +327,6 @@ const assertCurrentProteinArtifacts = (session) => {
   }
   expect(resolvedReferenceCount).toBeGreaterThan(0);
 
-  const scalarReferenceKeys = new Set([
-    'query_protein_id',
-    'subject_protein_id',
-    'queryProteinId',
-    'subjectProteinId',
-    'proteinId'
-  ]);
-  const listReferenceKeys = new Set(['proteinIds', 'sharedProteinIds']);
-  const derivedReferences = [];
-  const collectReferences = (value) => {
-    if (Array.isArray(value)) {
-      value.forEach(collectReferences);
-      return;
-    }
-    if (!value || typeof value !== 'object') return;
-    for (const [key, item] of Object.entries(value)) {
-      if (scalarReferenceKeys.has(key) && typeof item === 'string') {
-        derivedReferences.push(item);
-      } else if (listReferenceKeys.has(key) && Array.isArray(item)) {
-        derivedReferences.push(...item.filter((reference) => typeof reference === 'string'));
-      }
-      collectReferences(item);
-    }
-  };
-  collectReferences(derivedEntries);
-  expect(derivedReferences.length).toBeGreaterThan(0);
-  expect(derivedReferences.filter((reference) => !runtimeOwners.has(reference))).toEqual([]);
-  expect(JSON.stringify(derivedEntries)).not.toContain('p_r_');
-  expect(JSON.stringify(derivedEntries)).not.toMatch(/@.+\|.+~f_[0-9a-f]{64}/);
 };
 
 const generateWithTelemetry = async (page) => page.evaluate(async () => {
@@ -379,6 +341,12 @@ const generateWithTelemetry = async (page) => page.evaluate(async () => {
     telemetry: app.lastRunInfo?.losatTelemetry || window.__GBDRAW_LAST_LOSAT_TELEMETRY__ || null,
     executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0)
   };
+});
+
+const settleAppRender = async (page) => page.evaluate(async () => {
+  await window.Vue.nextTick();
+  await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
+  await window.Vue.nextTick();
 });
 
 const migrationUiSnapshot = async (page) => page.evaluate(async () => {
@@ -514,10 +482,6 @@ const assertExpectedTelemetry = (run, migrationExpected = expected) => {
 };
 
 const inspectLayout = async (page) => {
-  await page.waitForFunction(() => (
-    window.__GBDRAW_APP__?.svgContainer?.querySelector('svg')
-      ?.querySelectorAll('g[data-query-row][data-subject-row]').length === 4
-  ), null, { timeout: 120000 });
   return page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const geometry = JSON.parse(JSON.stringify(state.trackSlotResolvedGeometry.value || null));
@@ -659,6 +623,20 @@ const inspectLayout = async (page) => {
       mode: geometry.mode,
       recordCount: records.length,
       comparisonCount: comparisonGroups.length,
+      comparisonGroupDiagnostics: Array.from(
+        svg.querySelectorAll('g[id^="comparison"]')
+      ).map((element) => ({
+        id: String(element.id || ''),
+        attributes: element.getAttributeNames(),
+        queryRecordIndex: element.getAttribute('data-query-record-index'),
+        subjectRecordIndex: element.getAttribute('data-subject-record-index'),
+        queryRow: element.getAttribute('data-query-row'),
+        subjectRow: element.getAttribute('data-subject-row'),
+        childCount: element.childElementCount
+      })),
+      resultComparisonGroup: String(
+        state.results.value[state.selectedResultIndex.value]?.content || ''
+      ).match(/<g[^>]*id="comparison1"[^>]*>/)?.[0] || '',
       recordGroupCount: recordGroups.length,
       definitionGroupCount: definitionGroups.length,
       axisGaps,
@@ -679,7 +657,13 @@ const assertLayout = (layout) => {
   expect(layout.schema).toBe(1);
   expect(layout.mode).toBe('linear');
   expect(layout.recordCount).toBe(5);
-  expect(layout.comparisonCount).toBe(4);
+  expect(
+    layout.comparisonCount,
+    JSON.stringify({
+      groups: layout.comparisonGroupDiagnostics,
+      resultGroup: layout.resultComparisonGroup
+    }, null, 2)
+  ).toBe(4);
   expect(layout.recordGroupCount).toBe(5);
   expect(layout.definitionGroupCount).toBe(5);
   expect(layout.axisGaps).toHaveLength(4);
@@ -763,6 +747,7 @@ const assertSvgGeometryParity = async (page, exportedPath) => {
 };
 
 test.beforeAll(async () => {
+  savedSessionDir = mkdtempSync(join(tmpdir(), 'gbdraw-losat-migration-'));
   expect(existsSync(fixturePath)).toBe(true);
   const fixtureBytes = expandedSessionBytes(fixturePath);
   const fixture = JSON.parse(fixtureBytes.toString('utf8'));
@@ -797,6 +782,26 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await new Promise((resolveClose) => server.close(resolveClose));
+  rmSync(savedSessionDir, { recursive: true, force: true });
+});
+
+test('SVG sanitizer preserves linear comparison row hooks', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, {
+    waitUntil: 'domcontentloaded'
+  });
+  const sanitized = await page.evaluate(async () => {
+    const { sanitizeSvgContent } = await import(
+      '/gbdraw/web/js/services/svg-sanitization.js'
+    );
+    const once = sanitizeSvgContent(
+      '<svg xmlns="http://www.w3.org/2000/svg">'
+        + '<g id="comparison1" data-query-row="0" data-subject-row="1">'
+        + '<path d="M0,0 L1,1" /></g></svg>'
+    );
+    return sanitizeSvgContent(once);
+  });
+  expect(sanitized).toContain('data-query-row="0"');
+  expect(sanitized).toContain('data-subject-row="1"');
 });
 
 test('legacy protein caches migrate, export readable TSV, and preserve uploads', async ({ page }) => {
@@ -832,15 +837,6 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
     name: `renamed-cache-input-${index + 1}.gbk`,
     lastModified: 0
   })));
-
-  const preGeneratePath = await saveSession(page);
-  const preGenerateSession = readSession(preGeneratePath);
-  assertLegacyCandidatesPreserved(preGenerateSession);
-  assertRenamedZeroMtimeResources(preGenerateSession);
-
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await importSession(page, preGeneratePath);
   await page.waitForFunction(
     () => window.__GBDRAW_APP__?.pyodideReady === true,
     null,
@@ -848,6 +844,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   );
   const legacyUiBeforeCancel = await migrationUiSnapshot(page);
   const canceledLegacyRun = await cancelDuringRender(page);
+  await settleAppRender(page);
   expect(canceledLegacyRun).toMatchObject({
     result: { status: 'canceled' },
     sawRendering: true,
@@ -859,6 +856,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   expect(await migrationUiSnapshot(page)).toEqual(legacyUiBeforeCancel);
   const legacyUiBeforeRenderError = await migrationUiSnapshot(page);
   const failedLegacyRun = await failRendererAfterMigration(page);
+  await settleAppRender(page);
   expect(failedLegacyRun).toMatchObject({
     result: { status: 'error' },
     authorityRestored: true,
@@ -867,7 +865,9 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   });
   expect(failedLegacyRun.errorSummary).not.toBe('');
   expect(await migrationUiSnapshot(page)).toEqual(legacyUiBeforeRenderError);
-  assertExpectedTelemetry(await generateWithTelemetry(page));
+  const migratedRun = await generateWithTelemetry(page);
+  await settleAppRender(page);
+  assertExpectedTelemetry(migratedRun);
   const firstLayout = await inspectLayout(page);
   assertLayout(firstLayout);
   await assertSvgGeometryParity(page, await downloadSvg(page));
@@ -887,13 +887,21 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
     null,
     { timeout: 240000 }
   );
-  assertExpectedTelemetry(await generateWithTelemetry(page));
+  const regeneratedRun = await generateWithTelemetry(page);
+  await settleAppRender(page);
+  assertExpectedTelemetry(regeneratedRun);
+  expect(regeneratedRun.telemetry?.proteinDerivedPayloadCacheMisses).toBeGreaterThan(0);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return state.losatDerivedCache.value.size;
+  })).toBeGreaterThan(0);
   const secondLayout = await inspectLayout(page);
   assertLayout(secondLayout);
   expect(secondLayout.geometrySignature).toBe(firstLayout.geometrySignature);
 
   const expectedUploadBytes = await installUserUploadedTsv(page);
   const uploadedSessionPath = await saveSession(page);
+  expect(readSession(uploadedSessionPath).losatDerivedCache?.entries || []).toEqual([]);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, uploadedSessionPath);

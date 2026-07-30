@@ -1,3 +1,30 @@
+export const circularInputNeedsRecordDiscovery = ({
+  form,
+  adv,
+  files,
+  annotationSets
+} = {}) => {
+  const customDepthRequested = (
+    adv?.circular_track_slots_enabled === true &&
+    (Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots : []).some((slot) => (
+      slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
+    ))
+  );
+  const hasAnnotations = (Array.isArray(annotationSets) ? annotationSets : []).some((set) => (
+    Array.isArray(set?.annotations) && set.annotations.length > 0
+  ));
+  return (
+    form?.multi_record_canvas === true ||
+    (
+      (form?.show_depth === true || customDepthRequested) &&
+      Array.isArray(files?.c_depth) &&
+      files.c_depth.length > 0 &&
+      files.c_depth.every((row) => Array.isArray(row))
+    ) ||
+    hasAnnotations
+  );
+};
+
 const normalizeRecordLength = (value) => {
   const numeric = Number(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;

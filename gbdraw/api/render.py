@@ -128,7 +128,11 @@ def save_figure_to(
     if classification.interactive:
         interactive_filename = resolve_format_output_path(base_prefix, INTERACTIVE_SVG_FORMAT)
         try:
-            interactive_svg = enrich_svg(svg_source, context=interactive_context)
+            interactive_svg = enrich_svg(
+                svg_source,
+                context=interactive_context,
+                result_name=os.path.basename(interactive_filename),
+            )
         except GbdrawError:
             raise
         except Exception as exc:

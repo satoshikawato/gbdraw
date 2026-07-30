@@ -1135,6 +1135,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         rendered = render_prepared_request(
             prepared,
             batch_outputs_preflighted=batch_outputs_preflighted,
+            include_feature_catalog=True,
         )
     else:
         rendered = render_request(canonical_request)
@@ -1151,6 +1152,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     track_slot_geometry_records = []
     session_feature_metadata = []
     session_biological_feature_metadata = []
+    session_interactive_contexts = []
     for result_index, rendered_item in enumerate(rendered_items):
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")
@@ -1169,6 +1171,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             )
         )
         interactive_context = rendered_item.interactive_context
+        session_interactive_contexts.append(interactive_context)
         if interactive_context is not None:
             session_feature_metadata.extend(interactive_context.features)
             session_biological_feature_metadata.extend(
@@ -1181,6 +1184,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         outputs=tuple(outputs),
         feature_metadata=tuple(session_feature_metadata),
         biological_feature_metadata=tuple(session_biological_feature_metadata),
+        interactive_contexts=tuple(session_interactive_contexts),
         run_metadata=build_track_slot_geometry_run_metadata(
             mode="circular",
             records=track_slot_geometry_records,

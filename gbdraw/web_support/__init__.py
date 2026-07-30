@@ -1,11 +1,5 @@
 """Support helpers shared by the browser UI and offline web asset tooling."""
 
-from .capabilities import (
-    WEB_RENDER_OPTIONS_SCHEMA,
-    WEB_RENDER_PROTOCOL,
-    WEB_RUNTIME_CAPABILITY_SCHEMA,
-    get_web_runtime_capabilities,
-)
 __all__ = [
     "WEB_RENDER_OPTIONS_SCHEMA",
     "WEB_RENDER_PROTOCOL",
@@ -17,6 +11,15 @@ __all__ = [
 
 
 def __getattr__(name: str) -> object:
+    if name in {
+        "WEB_RENDER_OPTIONS_SCHEMA",
+        "WEB_RENDER_PROTOCOL",
+        "WEB_RUNTIME_CAPABILITY_SCHEMA",
+        "get_web_runtime_capabilities",
+    }:
+        from . import capabilities
+
+        return getattr(capabilities, name)
     if name in {
         "render_canonical_web_request",
         "render_embedded_canonical_web_request",

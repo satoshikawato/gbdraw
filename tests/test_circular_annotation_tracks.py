@@ -7,6 +7,7 @@ from gbdraw.api import (
     AnnotationOptions,
     AnnotationSet,
     CircularDiagramOptions,
+    CircularRequestTrackOptions,
     CoordinateSpan,
     RegionAnnotation,
     RegionAnnotationStyle,
@@ -63,6 +64,28 @@ def test_circular_annotation_overlay_rejects_annotation_anchor() -> None:
         normalize_circular_track_slots([anchor, annotation])
 
 
+def test_circular_annotation_overlay_rejects_spacer_anchor() -> None:
+    spacer = CircularTrackSlot(
+        "space",
+        "spacer",
+        side="inside",
+    )
+    annotation = CircularTrackSlot(
+        "overlay_notes",
+        "annotations",
+        side="overlay",
+        z=1,
+        params={
+            "set_id": "overlay",
+            "anchor_slot": "space",
+            "layer": "foreground",
+        },
+    )
+
+    with pytest.raises(ValueError, match="anchor 'space' has no drawable band"):
+        normalize_circular_track_slots([spacer, annotation])
+
+
 def test_circular_annotation_overlay_allows_split_feature_anchor() -> None:
     feature = CircularTrackSlot("features", "features", side="overlay", z=0)
     annotation = CircularTrackSlot(
@@ -82,6 +105,97 @@ def test_circular_annotation_overlay_allows_split_feature_anchor() -> None:
     assert normalized[0].side == "overlay"
     assert normalized[0].reserve is True
     assert normalized[1].annotation is not None
+
+
+def test_circular_annotation_cover_anchor_uses_feature_band_width() -> None:
+    record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    annotation_options = AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "regions",
+                (
+                    RegionAnnotation(
+                        "band",
+                        CoordinateSpan(None, 100, 300),
+                        mark="band",
+                    ),
+                ),
+            ),
+        )
+    )
+
+    def resolved_widths(cover_anchor: bool) -> tuple[float, float]:
+        drawing = build_circular_diagram(
+            record,
+            options=CircularDiagramOptions(
+                annotations=annotation_options,
+                tracks=CircularRequestTrackOptions(
+                    circular_track_slots=(
+                        "features:features@side=inside,lane_direction=inside,r=0.75",
+                        (
+                            "regions:annotations@side=overlay,w=14px,set_id=regions,"
+                            "anchor_slot=features,layer=foreground,padding_px=0,z=1,"
+                            f"cover_anchor={'true' if cover_anchor else 'false'}"
+                        ),
+                    ),
+                ),
+            ),
+        )
+        slots = {
+            slot["slotId"]: slot
+            for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+        }
+        return float(slots["features"]["widthPx"]), float(slots["regions"]["widthPx"])
+
+    feature_width, uncovered_width = resolved_widths(False)
+    covered_feature_width, covered_width = resolved_widths(True)
+    assert uncovered_width == pytest.approx(14.0)
+    assert covered_feature_width == pytest.approx(feature_width)
+    assert covered_width == pytest.approx(feature_width)
+
+
+def test_circular_overlay_annotation_can_share_an_on_axis_feature_anchor() -> None:
+    record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    annotation_options = AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "regions",
+                (
+                    RegionAnnotation(
+                        "band",
+                        CoordinateSpan(None, 100, 300),
+                        mark="band",
+                    ),
+                ),
+            ),
+        )
+    )
+    drawing = build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            annotations=annotation_options,
+            tracks=CircularRequestTrackOptions(
+                circular_track_slots=(
+                    "features:features@side=overlay,lane_direction=split",
+                    (
+                        "regions:annotations@side=overlay,w=14px,set_id=regions,"
+                        "anchor_slot=features,layer=foreground,padding_px=0,"
+                        "cover_anchor=true,z=1"
+                    ),
+                ),
+            ),
+        ),
+    )
+    slots = {
+        slot["slotId"]: slot
+        for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+    assert slots["regions"]["radiusFactor"] == pytest.approx(
+        slots["features"]["radiusFactor"]
+    )
+    assert slots["regions"]["widthPx"] == pytest.approx(
+        slots["features"]["widthPx"]
+    )
 
 
 def test_circular_origin_annotation_renders_two_safe_paths() -> None:

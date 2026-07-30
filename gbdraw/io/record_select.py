@@ -11,7 +11,12 @@ from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
-from ..core.record_metadata import _read_coord_map, _write_coord_map
+from ..core.record_metadata import (
+    _copy_source_feature_identity,
+    _feature_source_index_map,
+    _read_coord_map,
+    _write_coord_map,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,11 +111,43 @@ def reverse_records(
         record_length = len(rec.seq)
         rc_base = base + (step * max(0, record_length - 1))
         rc_step = -step
+        source_indexes = _feature_source_index_map(rec.features)
+
+        def feature_start(feature):
+            try:
+                return int(feature.location.start)
+            except TypeError:
+                return None
+
+        def reverse_feature(feature):
+            reversed_feature = feature._flip(record_length)
+            _copy_source_feature_identity(
+                feature,
+                reversed_feature,
+                fallback_index=source_indexes[id(feature)],
+                coord_base=base,
+                coord_step=step,
+            )
+            sub_features = getattr(feature, "sub_features", None)
+            if sub_features is not None:
+                reversed_sub_features = [
+                    reverse_feature(sub_feature)
+                    for sub_feature in sub_features
+                ]
+                reversed_sub_features.sort(key=feature_start)
+                reversed_feature.sub_features = reversed_sub_features
+            return reversed_feature
+
+        reversed_features = [
+            reverse_feature(feature)
+            for feature in rec.features
+        ]
+        reversed_features.sort(key=feature_start)
         reversed_record = rec.reverse_complement(
             id=True,
             name=True,
             description=True,
-            features=True,
+            features=reversed_features,
             annotations=True,
             letter_annotations=True,
             dbxrefs=True,

@@ -15,6 +15,7 @@ const { buildCanonicalRenderRequest, projectCanonicalSessionRequest } = await im
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
 const {
+  buildLinearTrackSlotPayload,
   buildLinearTrackSlotSpec,
   linearTrackAxisIndexForEnabledSlots,
   migrateLinearTrackSlotsToCurrentSchema,
@@ -24,6 +25,7 @@ const {
   pathToFileURL(join(tempRoot, 'js', 'app', 'linear-track-slots.js'))
 );
 const {
+  buildCircularTrackSlotPayload,
   buildCircularTrackSlotSpec,
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
@@ -34,6 +36,9 @@ const {
 );
 const { validateTrackSlotBindingInvariants } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'track-slot-validation.js'))
+);
+const { orderedConservationSources } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'conservation-series.js'))
 );
 
 assert.equal(linearTrackAxisIndexForEnabledSlots([
@@ -408,7 +413,9 @@ assert.equal(canonical.resources['record-1-genbank'].encoding, 'base64');
 assert.equal(canonical.webFiles.resourceOriginalNames['record-1-genbank'], 'input.gb');
 assert.equal(canonical.webFiles.circularInputOriginalName, 'input.gb');
 assert.equal(canonical.renderRequest.output.prefix, 'web-session');
+assert.deepEqual(canonical.renderRequest.output.formats, ['svg']);
 assert.equal(canonical.renderRequest.output.overwrite, false);
+assert.equal(canonical.renderRequest.output.interactiveMetadataPolicy, 'omit');
 assert.deepEqual(canonical.renderRequest.diagramOptions.output, {
   legend: 'right',
   plotTitlePosition: 'none'
@@ -419,6 +426,73 @@ assert.equal(
     'outputPrefix'
   ),
   false
+);
+const canonicalWithWebBindings = structuredClone(canonical);
+canonicalWithWebBindings.resources['inactive-linear-source'] = {
+  kind: 'web-file',
+  name: 'inactive-linear-source.gb',
+  type: 'application/octet-stream',
+  size: genbank.size,
+  lastModified: 0,
+  encoding: 'base64',
+  data: genbank.data
+};
+canonicalWithWebBindings.resources['inactive-comparison'] = {
+  kind: 'web-file',
+  name: 'inactive-comparison.tsv',
+  type: 'application/octet-stream',
+  size: 5,
+  lastModified: 0,
+  encoding: 'base64',
+  data: btoa('match')
+};
+canonicalWithWebBindings.webFiles.bindings = {
+  schema: 1,
+  c_gb: {
+    resourceId: 'record-1-genbank',
+    name: 'bound-circular.gb',
+    type: 'text/x-genbank',
+    lastModified: 123
+  },
+  linearSeqs: [{
+    uid: 'inactive-linear-uid',
+    gb: {
+      resourceId: 'inactive-linear-source',
+      name: 'bound-linear.gb',
+      type: 'application/genbank',
+      lastModified: 456
+    },
+    gff: null,
+    fasta: null,
+    depth: null,
+    blast: null,
+    losat_gencode: 11
+  }],
+  linearComparisons: [{
+    id: 'inactive-comparison-uid',
+    queryUid: 'inactive-linear-uid',
+    subjectUid: 'inactive-linear-uid-2',
+    source: 'upload',
+    file: {
+      resourceId: 'inactive-comparison',
+      name: 'bound-comparison.tsv',
+      type: 'text/tab-separated-values',
+      lastModified: 789
+    }
+  }],
+  linearCanonicalComparisons: []
+};
+const webBindingProjection = projectCanonicalSessionRequest(
+  canonicalWithWebBindings
+);
+assert.equal(webBindingProjection.files.c_gb.name, 'bound-circular.gb');
+assert.equal(webBindingProjection.files.c_gb.type, 'text/x-genbank');
+assert.equal(webBindingProjection.files.c_gb.lastModified, 123);
+assert.equal(webBindingProjection.files.linearSeqs[0].uid, 'inactive-linear-uid');
+assert.equal(webBindingProjection.files.linearSeqs[0].gb.name, 'bound-linear.gb');
+assert.equal(
+  webBindingProjection.files.linearComparisons[0].file.name,
+  'bound-comparison.tsv'
 );
 const circularConfigOverrides = canonical.renderRequest.diagramOptions.configOverrides;
 assert.ok(Object.keys(circularConfigOverrides).every((path) => path.includes('.')));
@@ -590,10 +664,39 @@ state.adv.label_placement = 'auto';
 state.adv.circular_track_slots = [
   { id: 'stale', renderer: 'dinucleotide_skew', spacing: null, params: {} }
 ];
+assert.doesNotThrow(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  'an inactive custom-stack draft must not block a simple-mode request'
+);
+state.adv.circular_track_slots_enabled = true;
+state.adv.circular_track_slots_axis_index = 1;
+state.adv.circular_track_slots = [
+  {
+    id: 'features',
+    renderer: 'features',
+    enabled: true,
+    side: 'inside',
+    params: { lane_direction: 'inside' }
+  },
+  {
+    id: 'stale',
+    renderer: 'dinucleotide_skew',
+    enabled: false,
+    spacing: null,
+    params: {}
+  }
+];
+assert.doesNotThrow(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  'a disabled invalid row must stay in the draft without entering the request'
+);
+state.adv.circular_track_slots[1].enabled = true;
 assert.throws(
   () => buildCanonicalRenderRequest({ state, filesData }),
   /obsolete/
 );
+state.adv.circular_track_slots_enabled = false;
+state.adv.circular_track_slots_axis_index = null;
 state.adv.circular_track_slots = [];
 
 state.adv.depth_tick_interval = 10;
@@ -691,7 +794,10 @@ for (const { preset, laneDirection, side, axisIndex } of circularFeaturePresetCa
   state.adv.circular_track_slots = [featureSlot];
   const presetCanonical = buildCanonicalRenderRequest({ state, filesData });
   const canonicalSpec = presetCanonical.renderRequest.diagramOptions.tracks.circularTrackSlots[0];
-  assert.equal(canonicalSpec, liveSpec);
+  assert.deepEqual(
+    canonicalSpec,
+    buildCircularTrackSlotPayload(featureSlot, state.adv.nt, preset)
+  );
 
   const presetProjection = projectCanonicalSessionRequest(presetCanonical);
   const projectedFeature = presetProjection.config.adv.circular_track_slots[0];
@@ -699,8 +805,8 @@ for (const { preset, laneDirection, side, axisIndex } of circularFeaturePresetCa
     resolveCircularTrackFeaturePlacement(projectedFeature, preset),
     { laneDirection, side }
   );
-  assert.equal(
-    buildCircularTrackSlotSpec(projectedFeature, state.adv.nt, preset),
+  assert.deepEqual(
+    buildCircularTrackSlotPayload(projectedFeature, state.adv.nt, preset),
     canonicalSpec
   );
 }
@@ -1274,7 +1380,7 @@ assert.deepEqual(customTrackProjection.config.adv.circular_track_slots[1], {
   params: {
     set_id: 'plastome_regions',
     show_labels: true,
-    padding_px: '1',
+    padding_px: 1,
     overflow: 'compress',
     layer: 'foreground'
   }
@@ -2319,7 +2425,7 @@ assert.throws(
 );
 assert.equal(sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 1);
 assert.deepEqual(
-  sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots.map((slot) => slot.split(':')[0]),
+  sparseDepthCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots.map((slot) => slot.id),
   ['depth_b', 'features', 'depth_a']
 );
 const sparseDepthProjection = projectCanonicalSessionRequest(sparseDepthCanonical);
@@ -2408,8 +2514,604 @@ state.adv.linear_track_slots = [
 const filteredAxisCanonical = buildCanonicalRenderRequest({ state, filesData: sparseDepthFilesData });
 assert.equal(filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, 0);
 assert.deepEqual(
-  filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots.map((slot) => slot.split(':')[0]),
+  filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots.map((slot) => slot.id),
   ['features', 'depth_b']
+);
+
+const circularRequestState = ({
+  form: formOverrides = {},
+  adv: advOverrides = {},
+  annotationSets: nextAnnotationSets = []
+} = {}) => ({
+  ...state,
+  mode: ref('circular'),
+  cInputType: ref('gb'),
+  form: {
+    ...state.form,
+    show_depth: false,
+    suppress_gc: false,
+    suppress_skew: false,
+    track_type: 'tuckin',
+    ...formOverrides
+  },
+  adv: {
+    ...state.adv,
+    features: ['CDS'],
+    feature_shapes: { CDS: 'arrow' },
+    circular_track_slots_enabled: false,
+    circular_track_slots_axis_index: null,
+    circular_track_slots: [],
+    linear_track_slots_enabled: false,
+    depth_tracks: [],
+    feature_width_circular: null,
+    depth_width_circular: null,
+    gc_content_width_circular: null,
+    gc_content_radius_circular: null,
+    gc_skew_width_circular: null,
+    gc_skew_radius_circular: null,
+    ...advOverrides
+  },
+  annotationSets: structuredClone(nextAnnotationSets)
+});
+
+const geometryCases = [
+  ['feature_width_circular', 'features', 'width', { value: 17, unit: 'px' }],
+  ['depth_width_circular', 'depth', 'width', { value: 18, unit: 'px' }],
+  ['gc_content_width_circular', 'dinucleotide_content', 'width', { value: 19, unit: 'px' }],
+  ['gc_content_radius_circular', 'dinucleotide_content', 'radius', { value: 0.61, unit: 'factor' }],
+  ['gc_skew_width_circular', 'dinucleotide_skew', 'width', { value: 20, unit: 'px' }],
+  ['gc_skew_radius_circular', 'dinucleotide_skew', 'radius', { value: 0.52, unit: 'factor' }]
+];
+for (const [field, renderer, property, expected] of geometryCases) {
+  const needsDepth = field === 'depth_width_circular';
+  const geometryState = circularRequestState({
+    form: { show_depth: needsDepth },
+    adv: { [field]: expected.value }
+  });
+  const geometryCanonical = buildCanonicalRenderRequest({
+    state: geometryState,
+    filesData: {
+      ...filesData,
+      c_depth: needsDepth ? [depthA] : null
+    }
+  });
+  const slots = geometryCanonical.renderRequest.diagramOptions.tracks.circularTrackSlots;
+  assert.ok(Array.isArray(slots), `${field} should materialize the implicit stack`);
+  const slot = slots.find((entry) => entry.renderer === renderer);
+  assert.deepEqual(slot[property], expected, `${field} should patch ${renderer}.${property}`);
+}
+
+const nullGeometryCanonical = buildCanonicalRenderRequest({
+  state: circularRequestState(),
+  filesData
+});
+assert.equal(
+  nullGeometryCanonical.renderRequest.diagramOptions.tracks.circularTrackSlots,
+  null,
+  'all-Auto Circular geometry must preserve the implicit default request'
+);
+
+for (const invalidGeometry of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+  assert.throws(
+    () => buildCanonicalRenderRequest({
+      state: circularRequestState({
+        adv: { feature_width_circular: invalidGeometry }
+      }),
+      filesData
+    }),
+    /Feature Width must be Auto or a positive finite number/
+  );
+}
+
+const retainedDepthFile = { ...genbank, name: 'retained-depth.tsv', data: btoa('position\tdepth\n1\t5\n') };
+const inactiveDepthCanonical = buildCanonicalRenderRequest({
+  state: circularRequestState({ form: { show_depth: false } }),
+  filesData: { ...filesData, c_depth: [retainedDepthFile] }
+});
+assert.equal(inactiveDepthCanonical.renderRequest.diagramOptions.depthTracks, undefined);
+assert.equal(
+  inactiveDepthCanonical.renderRequest.diagramOptions.configOverrides['canvas.show_depth'],
+  false
+);
+assert.ok(
+  !Object.values(inactiveDepthCanonical.resources)
+    .some((resource) => resource.kind === 'depth-track-file')
+);
+
+const customDepthState = circularRequestState({
+  form: { show_depth: false },
+  adv: {
+    circular_track_slots_enabled: true,
+    circular_track_slots_axis_index: 0,
+    circular_track_slots: [{
+      id: 'depth',
+      renderer: 'depth',
+      enabled: true,
+      side: 'inside',
+      width: null,
+      radius: null,
+      inner_gap_px: null,
+      outer_gap_px: null,
+      z: 0,
+      params: { track_index: 0 }
+    }]
+  }
+});
+const customDepthCanonical = buildCanonicalRenderRequest({
+  state: customDepthState,
+  filesData: { ...filesData, c_depth: [retainedDepthFile] }
+});
+assert.equal(
+  customDepthCanonical.renderRequest.diagramOptions.configOverrides['canvas.show_depth'],
+  true
+);
+assert.equal(customDepthCanonical.renderRequest.diagramOptions.depthTracks.length, 1);
+
+const customNoDepthCanonical = buildCanonicalRenderRequest({
+  state: circularRequestState({
+    form: { show_depth: true },
+    adv: {
+      circular_track_slots_enabled: true,
+      circular_track_slots_axis_index: 0,
+      circular_track_slots: [{
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'inside',
+        width: null,
+        radius: null,
+        inner_gap_px: null,
+        outer_gap_px: null,
+        z: 0,
+        params: { lane_direction: 'inside' }
+      }]
+    }
+  }),
+  filesData: { ...filesData, c_depth: [retainedDepthFile] }
+});
+assert.equal(customNoDepthCanonical.renderRequest.diagramOptions.depthTracks, undefined);
+assert.equal(
+  customNoDepthCanonical.renderRequest.diagramOptions.configOverrides['canvas.show_depth'],
+  false
+);
+
+const circularAxisRebaseCanonical = buildCanonicalRenderRequest({
+  state: circularRequestState({
+    adv: {
+      circular_track_slots_enabled: true,
+      circular_track_slots_axis_index: 2,
+      circular_track_slots: [
+        {
+          id: 'outside',
+          renderer: 'spacer',
+          enabled: true,
+          side: 'outside',
+          width: '6px',
+          radius: null,
+          inner_gap_px: 0,
+          outer_gap_px: 0,
+          z: 0,
+          params: {}
+        },
+        {
+          id: 'disabled',
+          renderer: 'spacer',
+          enabled: false,
+          side: 'outside',
+          width: '6px',
+          radius: null,
+          inner_gap_px: 0,
+          outer_gap_px: 0,
+          z: 0,
+          params: {}
+        },
+        {
+          id: 'features',
+          renderer: 'features',
+          enabled: true,
+          side: 'inside',
+          width: null,
+          radius: null,
+          inner_gap_px: null,
+          outer_gap_px: null,
+          z: 0,
+          params: { lane_direction: 'inside' }
+        }
+      ]
+    }
+  }),
+  filesData
+});
+assert.equal(
+  circularAxisRebaseCanonical.renderRequest.diagramOptions.tracks.circularTrackAxisIndex,
+  1
+);
+assert.deepEqual(
+  circularAxisRebaseCanonical.renderRequest.diagramOptions.tracks.circularTrackSlots
+    .map((slot) => slot.id),
+  ['outside', 'features']
+);
+
+const nestedStyleOverride = {
+  stroke: '#112233',
+  strokeWidth: 2,
+  hatch: { pattern: 'diagonal', spacing: 4 },
+  label: { color: '#445566', fontSize: 9 }
+};
+const p3AnnotationSet = [{
+  id: 'review',
+  annotations: [{
+    id: 'line',
+    target: {
+      kind: 'coordinateSpan',
+      record: null,
+      start: 1,
+      end: 3,
+      coordinateSpace: 'source',
+      wrapsOrigin: false,
+      outOfBounds: 'clip'
+    },
+    label: 'Line',
+    mark: 'line',
+    lane: null,
+    style: null,
+    legendLabel: null,
+    metadata: {}
+  }],
+  defaultStyle: {
+    stroke: '#404040',
+    strokeWidth: 1.5,
+    strokeDasharray: [],
+    lineCap: 'tick',
+    fill: null,
+    fillOpacity: 0.2,
+    hatch: null,
+    labelColor: '#202020',
+    labelFontSize: null,
+    labelOrientation: 'auto',
+    labelPosition: 'center',
+    labelOffset: 4
+  },
+  legendLabel: null
+}];
+
+const circularP3State = circularRequestState({
+  annotationSets: p3AnnotationSet,
+  adv: {
+    circular_track_slots_enabled: true,
+    circular_track_slots_axis_index: 0,
+    circular_track_slots: [
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'inside',
+        width: null,
+        radius: null,
+        inner_gap_px: null,
+        outer_gap_px: null,
+        z: 0,
+        params: { lane_direction: 'inside' }
+      },
+      {
+        id: 'space',
+        renderer: 'spacer',
+        enabled: true,
+        side: 'inside',
+        width: '8px',
+        radius: null,
+        inner_gap_px: 1,
+        outer_gap_px: 2,
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'review_overlay',
+        renderer: 'annotations',
+        enabled: true,
+        side: 'overlay',
+        width: null,
+        radius: null,
+        inner_gap_px: null,
+        outer_gap_px: null,
+        z: 2,
+        params: {
+          set_id: 'review',
+          marks: ['line', 'band'],
+          lane_gap_px: 5,
+          padding_px: 0,
+          overflow: 'error',
+          show_labels: true,
+          anchor_slot: 'features',
+          layer: 'foreground',
+          cover_anchor: true,
+          style_override: nestedStyleOverride
+        }
+      }
+    ]
+  }
+});
+const circularP3Canonical = buildCanonicalRenderRequest({
+  state: circularP3State,
+  filesData
+});
+const circularP3Slots = circularP3Canonical.renderRequest.diagramOptions.tracks.circularTrackSlots;
+assert.equal(circularP3Slots.find((slot) => slot.id === 'space').renderer, 'spacer');
+assert.deepEqual(
+  circularP3Slots.find((slot) => slot.id === 'review_overlay').params,
+  {
+    set_id: 'review',
+    marks: ['line', 'band'],
+    lane_gap_px: 5,
+    padding_px: 0,
+    anchor_slot: 'features',
+    cover_anchor: true,
+    style_override: nestedStyleOverride
+  }
+);
+assert.deepEqual(
+  projectCanonicalSessionRequest(circularP3Canonical)
+    .config.adv.circular_track_slots.find((slot) => slot.id === 'review_overlay')
+    .params.style_override,
+  nestedStyleOverride
+);
+
+const linearP3State = {
+  ...state,
+  mode: ref('linear'),
+  lInputType: ref('gb'),
+  form: {
+    ...state.form,
+    show_depth: false,
+    linear_track_layout: 'middle'
+  },
+  adv: {
+    ...state.adv,
+    linear_track_slots_enabled: true,
+    linear_track_slots_axis_index: 0,
+    linear_track_slots: [
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'overlay',
+        height: '',
+        spacing: '',
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'space',
+        renderer: 'spacer',
+        enabled: true,
+        side: 'below',
+        height: '14px',
+        spacing: '3px',
+        z: 0,
+        params: {}
+      },
+      {
+        id: 'review_overlay',
+        renderer: 'annotations',
+        enabled: true,
+        side: 'overlay',
+        height: '',
+        spacing: '',
+        z: 2,
+        params: {
+          set_id: 'review',
+          marks: ['bracket'],
+          lane_gap_px: 6,
+          padding_px: 1,
+          anchor_slot: 'features',
+          layer: 'foreground',
+          cover_anchor: true,
+          style_override: nestedStyleOverride
+        }
+      }
+    ]
+  },
+  annotationSets: structuredClone(p3AnnotationSet)
+};
+const linearP3Canonical = buildCanonicalRenderRequest({
+  state: linearP3State,
+  filesData: linearFilesData
+});
+const linearP3Slots = linearP3Canonical.renderRequest.diagramOptions.tracks.linearTrackSlots;
+assert.deepEqual(
+  linearP3Slots.find((slot) => slot.id === 'space'),
+  buildLinearTrackSlotPayload(linearP3State.adv.linear_track_slots[1])
+);
+assert.deepEqual(
+  linearP3Slots.find((slot) => slot.id === 'review_overlay').params.style_override,
+  nestedStyleOverride
+);
+
+const defaultAnnotationPayload = buildCircularTrackSlotPayload({
+  id: 'default_annotation',
+  renderer: 'annotations',
+  enabled: true,
+  side: 'outside',
+  width: null,
+  radius: null,
+  inner_gap_px: null,
+  outer_gap_px: null,
+  z: 0,
+  params: {
+    set_id: 'review',
+    marks: [],
+    lane_gap_px: 3,
+    padding_px: 2,
+    overflow: 'error',
+    show_labels: true,
+    layer: 'foreground',
+    cover_anchor: false
+  }
+});
+assert.deepEqual(defaultAnnotationPayload.params, { set_id: 'review' });
+
+const implicitAnnotationsWithGeometry = buildCanonicalRenderRequest({
+  state: circularRequestState({
+    annotationSets: [{
+      ...p3AnnotationSet[0],
+      annotations: [
+        ...p3AnnotationSet[0].annotations,
+        {
+          ...p3AnnotationSet[0].annotations[0],
+          id: 'highlight',
+          mark: 'highlight'
+        }
+      ]
+    }],
+    adv: { feature_width_circular: 16 }
+  }),
+  filesData
+});
+assert.deepEqual(
+  implicitAnnotationsWithGeometry.renderRequest.diagramOptions.tracks.circularTrackSlots
+    .slice(0, 2)
+    .map((slot) => [slot.id, slot.renderer, slot.params.marks]),
+  [
+    ['annotations_1', 'annotations', ['line']],
+    ['annotations_1_highlight', 'annotations', ['highlight']]
+  ]
+);
+
+const combinedGeometryState = circularRequestState({
+  form: { show_depth: true },
+  annotationSets: [{
+    ...p3AnnotationSet[0],
+    annotations: [
+      ...p3AnnotationSet[0].annotations,
+      {
+        ...p3AnnotationSet[0].annotations[0],
+        id: 'highlight',
+        mark: 'highlight'
+      }
+    ]
+  }],
+  adv: {
+    depth_tracks: [
+      { label: 'Sample A', color: '#112233' },
+      { label: 'Sample B', color: '#445566' }
+    ],
+    feature_width_circular: 16,
+    depth_width_circular: 10,
+    gc_content_width_circular: 18,
+    gc_content_radius_circular: 0.66,
+    gc_skew_width_circular: 20,
+    gc_skew_radius_circular: 0.48
+  }
+});
+combinedGeometryState.circularConservation = {
+  enabled: true,
+  source: 'upload',
+  reference: 'subject',
+  labels: 'Comparison',
+  series: [{ sourceIndex: 0, label: 'Comparison', color: '#E15759' }],
+  ring_width: 14,
+  ring_gap: 3
+};
+const combinedGeometryCanonical = buildCanonicalRenderRequest({
+  state: combinedGeometryState,
+  filesData: {
+    ...filesData,
+    c_depth: [depthA, depthB],
+    c_conservation_blasts: [blastTable],
+    c_conservation_sequence_sources: [comparisonFasta]
+  }
+});
+const combinedGeometrySlots =
+  combinedGeometryCanonical.renderRequest.diagramOptions.tracks.circularTrackSlots;
+assert.deepEqual(
+  combinedGeometrySlots.map((slot) => [slot.id, slot.renderer]),
+  [
+    ['annotations_1', 'annotations'],
+    ['annotations_1_highlight', 'annotations'],
+    ['features', 'features'],
+    ['ticks', 'ticks'],
+    ['depth_1', 'depth'],
+    ['depth_2', 'depth'],
+    ['gc_content', 'dinucleotide_content'],
+    ['gc_skew', 'dinucleotide_skew']
+  ],
+  'geometry materialization must retain the full implicit stack and automatic annotations'
+);
+assert.equal(
+  combinedGeometryCanonical.renderRequest.diagramOptions.tracks.circularTrackAxisIndex,
+  2
+);
+assert.equal(
+  combinedGeometrySlots.filter((slot) => slot.renderer === 'depth').length,
+  2
+);
+assert.deepEqual(
+  combinedGeometrySlots
+    .filter((slot) => slot.renderer === 'depth')
+    .map((slot) => slot.width),
+  [
+    { value: 10, unit: 'px' },
+    { value: 10, unit: 'px' }
+  ]
+);
+assert.equal(
+  combinedGeometryCanonical.renderRequest.diagramOptions.conservationBlastFiles.length,
+  1,
+  'materializing geometry must retain managed comparison input'
+);
+
+const [managedComparisonSource] = orderedConservationSources(
+  [blastTable],
+  combinedGeometryState.circularConservation
+);
+const managedComparisonState = circularRequestState({
+  adv: {
+    circular_track_slots_enabled: true,
+    circular_track_slots_axis_index: 0,
+    circular_track_slots: [
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'inside',
+        z: 0,
+        params: { lane_direction: 'inside' }
+      },
+      {
+        id: 'comparison',
+        renderer: 'sequence_conservation',
+        enabled: true,
+        side: 'inside',
+        z: 0,
+        params: {
+          managed: 'circular_conservation',
+          series_key: managedComparisonSource.sourceKey,
+          source_index: managedComparisonSource.orderIndex,
+          track_index: managedComparisonSource.orderIndex + 1
+        }
+      }
+    ]
+  }
+});
+managedComparisonState.circularConservation = structuredClone(
+  combinedGeometryState.circularConservation
+);
+const managedComparisonCanonical = buildCanonicalRenderRequest({
+  state: managedComparisonState,
+  filesData: {
+    ...filesData,
+    c_conservation_blasts: [blastTable],
+    c_conservation_sequence_sources: [comparisonFasta]
+  }
+});
+assert.equal(
+  managedComparisonCanonical.renderRequest.diagramOptions.tracks.circularTrackSlots
+    .filter((slot) => slot.renderer === 'sequence_conservation').length,
+  1
+);
+assert.equal(
+  managedComparisonCanonical.renderRequest.diagramOptions.conservationBlastFiles.length,
+  1
 );
 
 const projectSessionIndex = process.argv.indexOf('--project-session');

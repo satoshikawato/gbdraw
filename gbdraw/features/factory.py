@@ -8,6 +8,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 
+from ..core.record_metadata import (
+    _feature_source_index_map,
+    _source_feature_index,
+)
 from .objects import GeneObject, RepeatObject, FeatureObject
 from .visibility import should_render_feature
 from ..labels.filtering import get_label_text
@@ -169,6 +173,7 @@ def _build_feature_layers(
     repeat_count: int = 0
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
+    source_indexes = _feature_source_index_map(gb_record.features)
 
     for feature in gb_record.features:
         if not should_render_feature(
@@ -232,6 +237,12 @@ def _build_feature_layers(
                 record_id=gb_record.id,
                 compute_label_text=include_label,
             )
+        source_feature_index = _source_feature_index(feature)
+        feature_object.source_feature_index = (
+            source_indexes[id(feature)]
+            if source_feature_index is None
+            else source_feature_index
+        )
         if rendering == "underlay":
             underlay_features.append(feature_object)
         else:

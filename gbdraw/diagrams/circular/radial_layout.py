@@ -1763,7 +1763,7 @@ def resolve_circular_radial_layout(
             tick_track_channel_override=tick_track_channel_override,
             depth_config=depth_config,
         )
-        if resolved.reserved_band_px is not None:
+        if _slot_reserves(intent) and resolved.reserved_band_px is not None:
             conflict = _reserved_overlap_any(resolved.reserved_band_px, occupied)
             if conflict is not None:
                 message = f"Pinned circular track slot '{intent.slot_id}' overlaps reserved circular slot '{conflict[0]}'."

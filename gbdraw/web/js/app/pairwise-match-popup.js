@@ -762,8 +762,14 @@ const buildBlockOrthogroups = ({
     : 'Similarity group ID';
   const recordCoverage = firstText(group?.record_coverage_count, group?.recordCoverage);
   const rbhOrthogroups = Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds : [];
-  const orthologPathCount = Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '';
-  const relatedEdgeCount = Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : '';
+  const orthologPathCount = firstText(
+    group?.orthologPathCount,
+    Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : ''
+  );
+  const relatedEdgeCount = firstText(
+    group?.relatedEdgeCount,
+    Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : ''
+  );
   const memberRows = buildOrthogroupMemberRows(group, featureLookup, orthogroupId, sourceFeatures);
   return {
     id: orthogroupId,
@@ -1027,8 +1033,14 @@ export const buildMatchPopupPayload = (
     addRow(orthogroupRows, 'Members', firstText(group?.member_count, group?.memberCount));
     addRow(orthogroupRows, 'Record coverage', firstText(group?.record_coverage_count, group?.recordCoverage));
     addRow(orthogroupRows, 'RBH seeds', Array.isArray(group?.rbhOrthogroupIds) ? group.rbhOrthogroupIds.join('; ') : '');
-    addRow(orthogroupRows, 'Group paths', Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : '');
-    addRow(orthogroupRows, 'Related edges', Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : '');
+    addRow(orthogroupRows, 'Group paths', firstText(
+      group?.orthologPathCount,
+      Array.isArray(group?.orthologPaths) ? String(group.orthologPaths.length) : ''
+    ));
+    addRow(orthogroupRows, 'Related edges', firstText(
+      group?.relatedEdgeCount,
+      Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : ''
+    ));
   }
   const orthogroupMemberRows = buildOrthogroupMemberRows(
     group,

@@ -378,8 +378,15 @@ def build_session_document(
         "createdAt": timestamp.isoformat(),
         "renderRequest": encoded.payload,
         "resources": resources,
+        "results": [],
+        "editorState": {"featureCatalog": None},
     }
     data.update(adjunct_data)
+    editor_state = data.get("editorState")
+    if isinstance(editor_state, Mapping):
+        normalized_editor_state = copy.deepcopy(dict(editor_state))
+        normalized_editor_state.setdefault("featureCatalog", None)
+        data["editorState"] = normalized_editor_state
     if title is not None:
         data["title"] = str(title)
     normalize_current_session_artifacts(data)

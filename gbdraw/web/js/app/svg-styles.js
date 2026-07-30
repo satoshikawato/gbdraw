@@ -18,6 +18,7 @@ import {
 import { ruleMatchesFeature } from './feature-utils.js';
 import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
+import { getFeatureOverride } from '../services/feature-override-identity.js';
 
 export const getGroupsByBaseIds = (svg, baseIds, slotRenderers = []) => {
   if (!svg) return [];
@@ -49,7 +50,28 @@ export const getGroupsByBaseIds = (svg, baseIds, slotRenderers = []) => {
   return groups;
 };
 
-export const createSvgStyles = ({ state, watch, legendActions }) => {
+const normalizeComparableColor = (value) => String(value || '').trim().toLowerCase();
+
+const setColorAttributeIfChanged = (element, attribute, value) => {
+  if (normalizeComparableColor(element.getAttribute(attribute)) === normalizeComparableColor(value)) {
+    return false;
+  }
+  element.setAttribute(attribute, value);
+  return true;
+};
+
+const paletteColorsEqual = (left, right) => {
+  const keys = new Set([...Object.keys(left || {}), ...Object.keys(right || {})]);
+  return Array.from(keys).every(
+    (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
+  );
+};
+
+const paletteColorKeysEqual = (left, right, keys) => keys.every(
+  (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
+);
+
+export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
   const {
     svgContent,
     extractedFeatures,
@@ -187,15 +209,17 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       if (!minColor || !maxColor) return;
       const stops = gradient.querySelectorAll('stop');
       if (stops.length >= 2) {
-        stops[0].setAttribute('stop-color', minColor);
-        stops[1].setAttribute('stop-color', maxColor);
-        updated = true;
+        updated = setColorAttributeIfChanged(stops[0], 'stop-color', minColor) || updated;
+        updated = setColorAttributeIfChanged(stops[1], 'stop-color', maxColor) || updated;
       }
     });
     return updated;
   };
 
-  const applyPaletteToSvg = () => {
+  const applyPaletteToSvg = ({
+    recolorPairwise = false,
+    recolorCollinear = false
+  } = {}) => {
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!svgContainer.value) return;
 
@@ -221,7 +245,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
 
       const hasSpecificRule = manualSpecificRules.some((rule) => ruleMatchesFeature(feat, rule));
 
-      if (!hasSpecificRule && !featureColorOverrides[feat.id]) {
+      if (!hasSpecificRule && !getFeatureOverride(featureColorOverrides, feat)) {
         const currentFill = path.getAttribute('fill');
         if (currentFill !== paletteColor) {
           path.setAttribute('fill', paletteColor);
@@ -239,8 +263,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       gcContentGroups.forEach((gcContentGroup) => {
         const gcPaths = gcContentGroup.querySelectorAll('path');
         gcPaths.forEach((path) => {
-          path.setAttribute('fill', colors.gc_content);
-          updatedCount++;
+          if (setColorAttributeIfChanged(path, 'fill', colors.gc_content)) updatedCount++;
         });
       });
     }
@@ -258,11 +281,9 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
           const fill = path.getAttribute('fill');
           if (fill && fill !== 'white' && fill !== 'none') {
             if (pathIndex === 0 && colors.skew_high) {
-              path.setAttribute('fill', colors.skew_high);
-              updatedCount++;
+              if (setColorAttributeIfChanged(path, 'fill', colors.skew_high)) updatedCount++;
             } else if (pathIndex === 1 && colors.skew_low) {
-              path.setAttribute('fill', colors.skew_low);
-              updatedCount++;
+              if (setColorAttributeIfChanged(path, 'fill', colors.skew_low)) updatedCount++;
             }
             pathIndex++;
           }
@@ -270,7 +291,11 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
       });
     }
 
-    if (colors.pairwise_match_min && colors.pairwise_match_max) {
+    if (
+      (recolorPairwise || recolorCollinear)
+      && colors.pairwise_match_min
+      && colors.pairwise_match_max
+    ) {
       let compIdx = 1;
       let compGroup = svg.getElementById(`comparison${compIdx}`);
       while (compGroup) {
@@ -291,11 +316,16 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
               colors
             });
             if (collinearColor) {
-              path.setAttribute('fill', collinearColor);
-              updatedCount++;
+              if (
+                recolorCollinear
+                && setColorAttributeIfChanged(path, 'fill', collinearColor)
+              ) {
+                updatedCount++;
+              }
               return;
             }
             if (collinearityBlockId && !collinearityColorMode) return;
+            if (!recolorPairwise) return;
 
             let factor;
             if (Number.isFinite(metadataFactor)) {
@@ -310,8 +340,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
               pairwiseMatchFactors.value[pathKey] = factor;
             }
             const newColor = interpolateColor(colors.pairwise_match_min, colors.pairwise_match_max, factor);
-            path.setAttribute('fill', newColor);
-            updatedCount++;
+            if (setColorAttributeIfChanged(path, 'fill', newColor)) updatedCount++;
           }
         });
         compIdx++;
@@ -370,7 +399,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
           for (const path of paths) {
             const fill = path.getAttribute('fill');
             if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-              path.setAttribute('fill', newColor);
+              if (setColorAttributeIfChanged(path, 'fill', newColor)) updatedCount++;
               break;
             }
           }
@@ -406,8 +435,7 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
             }
           }
           if (bestPath) {
-            bestPath.setAttribute('fill', newColor);
-            updatedCount++;
+            if (setColorAttributeIfChanged(bestPath, 'fill', newColor)) updatedCount++;
           }
         });
       }
@@ -701,9 +729,29 @@ export const createSvgStyles = ({ state, watch, legendActions }) => {
 
   watch(
     appliedPaletteColors,
-    () => {
-      applyPaletteToSvg();
-      applySpecificRulesToSvg();
+    (colors, previousColors) => {
+      if (paletteColorsEqual(colors, previousColors)) return;
+      // Inferred comparison factors are lossy, so only re-interpolate a family
+      // when one of its palette endpoints actually changed.
+      const recolorPairwise = !paletteColorKeysEqual(
+        colors,
+        previousColors,
+        ['pairwise_match_min', 'pairwise_match_max']
+      );
+      const recolorCollinear = !paletteColorKeysEqual(
+        colors,
+        previousColors,
+        [
+          'collinear_block_plus_min',
+          'collinear_block_plus',
+          'collinear_block_minus_min',
+          'collinear_block_minus'
+        ]
+      );
+      nextTick(() => {
+        applyPaletteToSvg({ recolorPairwise, recolorCollinear });
+        applySpecificRulesToSvg();
+      });
     },
     { deep: true }
   );

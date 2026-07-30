@@ -198,22 +198,19 @@ const mergedGuiConfig = (session, projection) => {
     isPlainObject(session.config) ? session.config : {}
   );
   const projected = isPlainObject(projection.config) ? projection.config : {};
-  const ui = isPlainObject(session.ui) ? session.ui : {};
-  const appliedPaletteColors = isPlainObject(ui.appliedPaletteColors)
-    ? ui.appliedPaletteColors
-    : null;
   return {
-    ...projected,
     ...saved,
-    form: { ...(projected.form || {}), ...(saved.form || {}) },
-    adv: { ...(projected.adv || {}), ...(saved.adv || {}) },
-    palette: String(ui.appliedPaletteName || saved.palette || projected.palette || 'default'),
-    colors: appliedPaletteColors && Object.keys(appliedPaletteColors).length > 0
-      ? cloneJson(appliedPaletteColors)
-      : cloneJson(saved.colors || projected.colors || {}),
-    annotationSets: Array.isArray(saved.annotationSets)
-      ? cloneJson(saved.annotationSets)
-      : cloneJson(projected.annotationSets || [])
+    ...projected,
+    form: { ...(saved.form || {}), ...(projected.form || {}) },
+    adv: { ...(saved.adv || {}), ...(projected.adv || {}) },
+    palette: String(projected.palette || 'default'),
+    colors: cloneJson(isPlainObject(projected.colors) ? projected.colors : {}),
+    annotationSets: Array.isArray(projected.annotationSets)
+      ? cloneJson(projected.annotationSets)
+      : cloneJson(saved.annotationSets || []),
+    circularConservation: isPlainObject(projected.circularConservation)
+      ? cloneJson(projected.circularConservation)
+      : cloneJson(isPlainObject(saved.circularConservation) ? saved.circularConservation : {})
   };
 };
 

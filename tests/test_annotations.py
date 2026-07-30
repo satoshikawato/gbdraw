@@ -73,6 +73,48 @@ def test_highlight_track_flattens_overlaps_and_ignores_explicit_lanes() -> None:
     assert track.required_extent_px == 18.0
 
 
+def test_annotation_marks_and_spacing_options_change_selected_layout_geometry() -> None:
+    annotations = (
+        RegionAnnotation("line", CoordinateSpan(None, 1, 20), mark="line"),
+        RegionAnnotation("band", CoordinateSpan(None, 5, 25), mark="band"),
+        RegionAnnotation("bracket", CoordinateSpan(None, 10, 30), mark="bracket"),
+    )
+    bundle = resolve_annotations(
+        (AnnotationSet("s", annotations),),
+        [_record()],
+        mode="linear",
+    )
+
+    defaults = layout_annotation_track(
+        "default",
+        "s",
+        bundle.annotations,
+        record_lengths={0: 100},
+        params=AnnotationTrackParams(set_id="s", marks=("line", "band")),
+    )
+    customized = layout_annotation_track(
+        "custom",
+        "s",
+        bundle.annotations,
+        record_lengths={0: 100},
+        params=AnnotationTrackParams(
+            set_id="s",
+            marks=("line", "band"),
+            lane_gap_px=7,
+            padding_px=5,
+        ),
+    )
+
+    assert {item.annotation.mark for item in defaults.placements} == {
+        "line",
+        "band",
+    }
+    assert defaults.lane_gap_px == pytest.approx(3.0)
+    assert defaults.required_extent_px == pytest.approx(35.0)
+    assert customized.lane_gap_px == pytest.approx(7.0)
+    assert customized.required_extent_px == pytest.approx(45.0)
+
+
 def test_source_coordinates_follow_reverse_coordinate_map() -> None:
     record = _record(10)
     record.annotations["gbdraw_coord_base"] = 100

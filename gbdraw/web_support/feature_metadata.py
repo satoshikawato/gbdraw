@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 import json
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,8 @@ from Bio.Seq import Seq
 from gbdraw.core.record_metadata import (
     _absolute_display_interval,
     _read_coord_map as _read_record_coord_map,
+    _source_feature_index,
+    _source_feature_location_parts,
 )
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import (
@@ -21,6 +24,7 @@ from gbdraw.features.visibility import (
     read_feature_visibility_file,
     should_render_feature,
 )
+from gbdraw.svg.ids import instance_svg_id
 
 
 _NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
@@ -159,7 +163,12 @@ def _biological_selector_values(
 
     selector = build_feature_selector_values(feature, record_id=record_id)
     rendered_feature_id = str(selector.get("hash") or "")
-    parts = _biological_location_parts(feature.location, coord_base, coord_step)
+    rendered_parts = _biological_location_parts(
+        feature.location,
+        coord_base,
+        coord_step,
+    )
+    parts = _source_feature_location_parts(feature) or tuple(rendered_parts)
     stable_feature_id = compute_feature_hash_from_location_parts(
         str(getattr(feature, "type", "") or ""),
         parts,
@@ -339,7 +348,10 @@ def extract_features_from_records_payload(
         organism = _get_record_organism(record)
         coord_base, coord_step = _read_record_coord_map(record)
         record_ids.append(record_id)
+        prepared_features = []
+        rendered_id_counts: Counter[str] = Counter()
         for feature_index, feat in enumerate(_iter_features(record.features)):
+            source_feature_index = _source_feature_index(feat)
             is_rendered_feature = should_render_feature(
                 feat,
                 selected_feature_set,
@@ -349,7 +361,37 @@ def extract_features_from_records_payload(
             )
             if not is_rendered_feature and not include_biological_features:
                 continue
+            if (
+                include_biological_features
+                and not is_rendered_feature
+                and str(getattr(feat, "type", "") or "").lower() == "source"
+            ):
+                continue
+            selector_values = _biological_selector_values(
+                feat,
+                record_id=hash_record_id,
+                coord_base=coord_base,
+                coord_step=coord_step,
+            )
+            if is_rendered_feature and selector_values[2]:
+                rendered_id_counts[selector_values[2]] += 1
+            prepared_features.append(
+                (
+                    feature_index,
+                    source_feature_index,
+                    feat,
+                    is_rendered_feature,
+                    selector_values,
+                )
+            )
 
+        for (
+            feature_index,
+            source_feature_index,
+            feat,
+            is_rendered_feature,
+            selector_values,
+        ) in prepared_features:
             feature_start = int(feat.location.start)
             feature_end = int(feat.location.end)
             start, end = _absolute_display_interval(
@@ -371,14 +413,7 @@ def extract_features_from_records_payload(
             )
             sequence_warnings.extend(translation_warnings)
 
-            selector, stable_svg_id, rendered_stable_svg_id = (
-                _biological_selector_values(
-                    feat,
-                    record_id=hash_record_id,
-                    coord_base=coord_base,
-                    coord_step=coord_step,
-                )
-            )
+            selector, stable_svg_id, rendered_stable_svg_id = selector_values
 
             qualifiers = {}
             for q_key, q_vals in feat.qualifiers.items():
@@ -394,7 +429,11 @@ def extract_features_from_records_payload(
                 "stable_feature_id": stable_svg_id,
                 "record_id": record_id,
                 "record_idx": rec_idx,
-                "feature_index": feature_index,
+                "feature_index": (
+                    feature_index
+                    if source_feature_index is None
+                    else source_feature_index
+                ),
                 "organism": organism,
                 "type": feat.type,
                 "start": start,
@@ -426,7 +465,6 @@ def extract_features_from_records_payload(
             if not is_rendered_feature:
                 continue
             rendered_feature_payload = dict(feature_payload)
-            rendered_feature_payload.pop("feature_index", None)
             rendered_feature_payload["id"] = f"f{idx}"
             rendered_feature_svg_id = rendered_stable_svg_id
             if linear_rendered_feature_ids:
@@ -437,6 +475,18 @@ def extract_features_from_records_payload(
                         record_count=len(records),
                     )
                     or rendered_stable_svg_id
+                )
+            if (
+                rendered_feature_svg_id
+                and rendered_id_counts[rendered_stable_svg_id] > 1
+            ):
+                rendered_feature_svg_id = instance_svg_id(
+                    rendered_feature_svg_id,
+                    (
+                        feature_index
+                        if source_feature_index is None
+                        else source_feature_index
+                    ),
                 )
             if rendered_feature_svg_id:
                 rendered_feature_payload["rendered_feature_svg_id"] = (

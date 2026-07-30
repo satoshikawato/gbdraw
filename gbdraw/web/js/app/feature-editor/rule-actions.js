@@ -4,13 +4,17 @@ import { getFeatureGenerationHash, ruleMatchesFeature } from '../feature-utils.j
 import { resolveFeatureLabelSelector } from '../feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
+  featureOverrideKey,
+  getFeatureOverride,
+  migrateLegacyFeatureOverrides
+} from '../../services/feature-override-identity.js';
+import {
   defaultFeatureRendering,
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 
 export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => {
   const {
-    pyodideReady,
     currentColors,
     appliedPaletteColors,
     newColorFeat,
@@ -146,7 +150,9 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       if (regexCaption) return regexCaption;
     }
 
-    const overrideCaption = normalizeCaption(featureColorOverrides[feat.id]?.caption);
+    const overrideCaption = normalizeCaption(
+      getFeatureOverride(featureColorOverrides, feat)?.caption
+    );
     if (overrideCaption) return overrideCaption;
 
     return normalizeCaption(feat.type) || normalizeCaption(getIndividualFeatureLabel(feat));
@@ -205,7 +211,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     };
     manualSpecificRules.push(rule);
 
-    if (rule.cap && pyodideReady.value) {
+    if (rule.cap) {
       await nextTick();
       const actualCaption = await addLegendEntry(rule.cap, rule.color);
       if (actualCaption && typeof actualCaption === 'string') {
@@ -263,7 +269,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
         adv.legend_font_size = 12;
       }
 
-      if (rulesWithCaptions.length > 0 && pyodideReady.value) {
+      if (rulesWithCaptions.length > 0) {
         await nextTick();
         for (const rule of rulesWithCaptions) {
           const actualCaption = await addLegendEntry(rule.cap, rule.color);
@@ -320,11 +326,19 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   };
 
   const getFeatureColor = (feat) => {
-    const override = featureColorOverrides[feat.id];
+    const override = getFeatureOverride(featureColorOverrides, feat);
     if (override) {
       return resolveColorToHex(override.color || override);
     }
     return resolveColorToHex(appliedPaletteColors.value[feat.type]) || '#cccccc';
+  };
+
+  const getFeatureColorValue = (feat) => {
+    const override = getFeatureOverride(featureColorOverrides, feat);
+    if (!override) return null;
+    return Object.prototype.hasOwnProperty.call(override, 'color')
+      ? override.color
+      : override;
   };
 
   const canEditFeatureColor = () => true;
@@ -358,13 +372,16 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   };
 
   const refreshFeatureOverrides = (features) => {
-    Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
     if (!features || features.length === 0) return;
+    migrateLegacyFeatureOverrides(featureColorOverrides, features);
 
     for (const feat of features) {
       for (const rule of manualSpecificRules) {
         if (!ruleMatchesFeature(feat, rule)) continue;
-        featureColorOverrides[feat.id] = { color: rule.color, caption: rule.cap };
+        const key = featureOverrideKey(feat);
+        if (key) {
+          featureColorOverrides[key] = { color: rule.color, caption: rule.cap };
+        }
         break;
       }
     }
@@ -462,6 +479,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     findFeaturesWithSameLegendItem,
     findMatchingRegexRule,
     getFeatureColor,
+    getFeatureColorValue,
     getDisplayedFeatureLabel,
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,

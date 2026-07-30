@@ -119,6 +119,30 @@ def test_circular_track_slot_geometry_metadata_preserves_factor_width_and_gaps()
     assert gc_slot["outerGapPx"] == pytest.approx(6.0)
 
 
+def test_circular_spacer_reserves_resolved_geometry_without_rendering_a_group() -> None:
+    record = _load_record()
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        cfg=GbdrawConfig.from_dict(_base_config(track_type="tuckin")),
+        default_colors=load_default_colors("", palette="default"),
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=[
+            "features:features@side=inside,lane_direction=inside,r=0.8",
+            "space:spacer@side=inside,w=12px,r=0.55,inner_gap_px=3,outer_gap_px=4",
+        ],
+    )
+
+    geometry = canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    spacer = next(slot for slot in geometry if slot["slotId"] == "space")
+    assert spacer["renderer"] == "spacer"
+    assert spacer["widthPx"] == pytest.approx(12.0)
+    assert spacer["radiusFactor"] == pytest.approx(0.55)
+    assert spacer["innerGapPx"] == pytest.approx(3.0)
+    assert spacer["outerGapPx"] == pytest.approx(4.0)
+    assert 'data-gbdraw-slot-id="space"' not in canvas.tostring()
+
+
 def _axis_circle_radius(svg_text: str) -> float:
     match = re.search(r'<g id="Axis"[^>]*>.*?<circle\b[^>]*\br="([^"]+)"', svg_text, re.S)
     assert match is not None

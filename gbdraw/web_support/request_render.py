@@ -13,12 +13,17 @@ from gbdraw.api.request_render import (
     render_request,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
 )
 from gbdraw.session_request_codec import decode_canonical_request
 from gbdraw.session_io import materialize_embedded_file, safe_embedded_filename
+from gbdraw.web_support.feature_catalog import (
+    build_feature_catalog,
+    build_feature_catalog_item,
+)
 
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -36,6 +41,21 @@ def _attach_exception_note(error: BaseException, note: str) -> None:
         notes.append(note)
     else:
         error.__notes__ = [note]  # type: ignore[attr-defined]
+
+
+def _base_svg_path(item: RequestRenderResult) -> Path:
+    output = item.request.output
+    base_prefix = Path(output.output_directory or ".") / output.output_prefix
+    expected = Path(resolve_format_output_path(str(base_prefix), SVG_FORMAT))
+    expected_identity = expected.resolve(strict=False)
+    for output_path in item.output_paths:
+        path = Path(output_path)
+        if path.resolve(strict=False) == expected_identity:
+            return path
+    raise ValidationError(
+        "The canonical Web request did not produce its expected base SVG: "
+        f"{expected.name}."
+    )
 
 
 def render_canonical_web_request(
@@ -57,7 +77,7 @@ def render_canonical_web_request(
         resource_paths=resource_paths,
         output_directory=output_root,
     )
-    rendered = render_request(request)
+    rendered = render_request(request, include_feature_catalog=True)
     items: tuple[RequestRenderResult, ...]
     if isinstance(rendered, CircularBatchRenderResult):
         items = rendered.items
@@ -66,19 +86,25 @@ def render_canonical_web_request(
 
     results: list[dict[str, str]] = []
     geometry_records: list[dict[str, Any]] = []
+    feature_catalog_items: list[dict[str, Any]] = []
     for result_index, item in enumerate(items):
-        result_name = item.request.output.output_prefix
-        for output_path in item.output_paths:
-            path = Path(output_path)
-            if path.suffix.lower() != ".svg":
-                continue
-            result_name = path.name
-            results.append(
-                {
-                    "name": path.name,
-                    "content": path.read_text(encoding="utf-8"),
-                }
+        path = _base_svg_path(item)
+        result_name = path.name
+        svg_content = path.read_text(encoding="utf-8")
+        results.append(
+            {
+                "name": result_name,
+                "content": svg_content,
+            }
+        )
+        feature_catalog_items.append(
+            build_feature_catalog_item(
+                svg_content,
+                item.interactive_context,
+                result_index=result_index,
+                result_name=result_name,
             )
+        )
         geometry_records.extend(
             collect_track_slot_geometry_records(
                 item.drawing,
@@ -88,12 +114,14 @@ def render_canonical_web_request(
         )
     if not results:
         raise ValidationError("The canonical Web request did not produce an SVG.")
+    metadata = build_track_slot_geometry_run_metadata(
+        mode=rendered.mode,
+        records=geometry_records,
+    )
+    metadata["featureCatalog"] = build_feature_catalog(feature_catalog_items)
     return {
         "results": results,
-        "metadata": build_track_slot_geometry_run_metadata(
-            mode=rendered.mode,
-            records=geometry_records,
-        ),
+        "metadata": metadata,
     }
 
 

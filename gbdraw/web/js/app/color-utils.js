@@ -182,6 +182,7 @@ const COLOR_NAME_MAP = {
   plum: '#DDA0DD',
   powderblue: '#B0E0E6',
   purple: '#800080',
+  rebeccapurple: '#663399',
   red: '#FF0000',
   rosybrown: '#BC8F8F',
   royalblue: '#4169E1',
@@ -189,7 +190,7 @@ const COLOR_NAME_MAP = {
   salmon: '#FA8072',
   sandybrown: '#F4A460',
   seagreen: '#2E8B57',
-  seashell: '#2E8B57',
+  seashell: '#FFF5EE',
   sienna: '#A0522D',
   silver: '#C0C0C0',
   skyblue: '#87CEEB',
@@ -260,6 +261,33 @@ export const resolveColorToHex = (colorValue) => {
   if (!trimmed) return trimmed;
   if (trimmed.startsWith('#')) return trimmed;
   return COLOR_NAME_MAP[trimmed.toLowerCase()] || trimmed;
+};
+
+export const colorValueMode = (colorValue) => {
+  if (colorValue === null || colorValue === undefined || String(colorValue).trim() === '') {
+    return 'auto';
+  }
+  return String(colorValue).trim().toLowerCase() === 'none' ? 'none' : 'color';
+};
+
+export const toNativeColorInputValue = (colorValue, fallback = '#000000') => {
+  const resolved = String(resolveColorToHex(colorValue) || '').trim();
+  const shortHex = resolved.match(/^#([0-9a-f]{3})$/i);
+  if (shortHex) {
+    return `#${shortHex[1].split('').map((value) => `${value}${value}`).join('')}`.toLowerCase();
+  }
+  if (/^#[0-9a-f]{6}$/i.test(resolved)) return resolved.toLowerCase();
+  const normalizedFallback = String(resolveColorToHex(fallback) || '#000000').trim();
+  return /^#[0-9a-f]{6}$/i.test(normalizedFallback)
+    ? normalizedFallback.toLowerCase()
+    : '#000000';
+};
+
+export const colorValueForMode = (mode, currentColor = null, fallback = '#000000') => {
+  const normalizedMode = String(mode || '').trim().toLowerCase();
+  if (normalizedMode === 'auto') return null;
+  if (normalizedMode === 'none') return 'none';
+  return toNativeColorInputValue(currentColor, fallback);
 };
 
 export const normalizePaletteColors = (colors = {}) => {

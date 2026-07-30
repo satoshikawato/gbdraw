@@ -51,6 +51,7 @@ export const createLinearRecordSelector = ({
   state,
   reactive,
   recordReader,
+  ensureRuntime = null,
   logger = console
 }) => {
   const selectorStateByUid = reactive({});
@@ -135,7 +136,30 @@ export const createLinearRecordSelector = ({
       });
       targets.push({ uid, primaryFile, pairedFile });
     }
-    if (!state.pyodideReady.value) return;
+    const attemptedRuntimeStart = (
+      !state.pyodideReady.value &&
+      targets.length > 0 &&
+      typeof ensureRuntime === 'function'
+    );
+    if (attemptedRuntimeStart) {
+      await ensureRuntime();
+      if (generation !== refreshGeneration) return;
+    }
+    if (!state.pyodideReady.value) {
+      if (attemptedRuntimeStart) {
+        targets.forEach(({ uid, primaryFile, pairedFile }) => {
+          replaceState(uid, {
+            status: 'error',
+            records: [],
+            error: 'Could not start the record discovery helper.',
+            inputType,
+            primaryFile,
+            pairedFile
+          });
+        });
+      }
+      return;
+    }
 
     for (const { uid, primaryFile, pairedFile } of targets) {
       try {

@@ -11,11 +11,23 @@ globalThis.window = {
   DOMPurify: { sanitize: (value) => value }
 };
 globalThis.document = {};
+let restoredPrimaryTextReads = 0;
+let restoredPrimaryArrayBufferReads = 0;
 globalThis.File = class File extends Blob {
   constructor(parts, name, options = {}) {
     super(parts, options);
     this.name = String(name || 'file');
     this.lastModified = options.lastModified ?? Date.now();
+  }
+
+  async text() {
+    restoredPrimaryTextReads += 1;
+    return super.text();
+  }
+
+  async arrayBuffer() {
+    restoredPrimaryArrayBufferReads += 1;
+    return super.arrayBuffer();
   }
 };
 const alerts = [];
@@ -24,7 +36,7 @@ globalThis.alert = (message) => alerts.push(String(message));
 const {
   adoptCanonicalRenderArtifacts,
   importSession,
-  serializeFiles,
+  serializeActiveRenderFiles,
   validateSessionLosatArtifacts
 } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -306,7 +318,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
     ]
   );
 
-  const serialized = await serializeFiles();
+  const serialized = await serializeActiveRenderFiles(state.mode.value, state);
   assert.equal(serialized.linearCanonicalComparisons[0].file.data, btoa(proteinTable));
   assert.equal(
     serialized.linearCanonicalComparisons[1].file.data,
@@ -321,6 +333,176 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
     serialized.linearCanonicalComparisons[3],
     generatedProteinComparison
   );
+});
+
+test('current session restores match sequences from the catalog without rereading primary files', async () => {
+  alerts.length = 0;
+  restoredPrimaryTextReads = 0;
+  restoredPrimaryArrayBufferReads = 0;
+  const genbank = `LOCUS       CATALOG                     8 bp    DNA     linear   UNK 01-JAN-1980
+ACCESSION   CATALOG
+VERSION     CATALOG.1
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 aaccggtt
+//
+`;
+  const renderRequest = {
+    schema: 5,
+    mode: 'linear',
+    grouping: 'single',
+    records: [{
+      recordKey: 'catalog-record',
+      source: { kind: 'genbank', resourceId: 'catalog-record' },
+      selector: null,
+      region: null,
+      presentation: {
+        label: null,
+        subtitle: null,
+        reverseComplement: false,
+        gridRow: null,
+        gridColumn: null
+      }
+    }],
+    diagramOptions: {
+      configOverrides: {},
+      colors: {
+        colorTable: null,
+        colorTableFile: null,
+        defaultColors: null,
+        defaultColorsPalette: 'default',
+        defaultColorsFile: null
+      },
+      selectedFeaturesSet: ['CDS'],
+      featureShapes: { CDS: 'arrow' },
+      plotTitle: '',
+      evalue: 1e-5,
+      bitscore: 50,
+      identity: 70,
+      alignmentLength: 0,
+      tracks: {
+        circularTrackSlots: null,
+        circularTrackAxisIndex: null,
+        linearTrackSlots: null,
+        linearTrackAxisIndex: null,
+        centerReservedRadius: null
+      },
+      output: { legend: 'bottom', plotTitlePosition: 'bottom' },
+      pairwiseMatchStyle: 'ribbon'
+    },
+    layout: {},
+    comparisons: [],
+    output: {
+      prefix: 'catalog-session',
+      formats: ['svg'],
+      overwrite: false,
+      interactiveMetadataPolicy: 'omit'
+    }
+  };
+  const sequenceSource = {
+    key: 'linear:record:0',
+    recordId: 'CATALOG.1',
+    aliases: ['CATALOG', 'CATALOG.1'],
+    sequence: 'AACCGGTT',
+    origin: 'linear-record',
+    recordIndex: 0
+  };
+  const payload = {
+    format: 'gbdraw-session',
+    version: 40,
+    renderRequest,
+    resources: {
+      'catalog-record': canonicalResource(
+        'genbank',
+        'catalog-primary.gbk',
+        genbank
+      )
+    },
+    webFiles: {
+      bindings: {
+        schema: 1,
+        linearSeqs: [{
+          uid: 'catalog-record',
+          gb: {
+            resourceId: 'catalog-record',
+            name: 'catalog-primary.gbk',
+            type: 'application/genbank',
+            lastModified: 7
+          },
+          gff: null,
+          fasta: null,
+          depth: null,
+          blast: null,
+          losat_gencode: 1,
+          losat_filename: '',
+          definition: '',
+          record_subtitle: '',
+          region_record_id: '',
+          region_start: null,
+          region_end: null,
+          region_reverse: false
+        }]
+      }
+    },
+    config: {
+      form: { legend: 'bottom' },
+      adv: {
+        circular_track_slots_enabled: false,
+        circular_track_slots: [],
+        circular_track_slots_axis_index: null,
+        circular_track_slots_schema_version: 4,
+        linear_track_slots_enabled: false,
+        linear_track_slots: [],
+        linear_track_slots_axis_index: null,
+        linear_track_slots_schema_version: 2
+      }
+    },
+    ui: { mode: 'linear', selectedResultIndex: 0 },
+    results: [{
+      name: 'catalog-session',
+      content: '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
+    }],
+    features: {},
+    editorState: {
+      featureCatalog: {
+        schema: 3,
+        items: [{
+          resultIndex: 0,
+          resultName: 'catalog-session',
+          recordKeys: ['catalog-record'],
+          features: [],
+          biologicalFeatures: [],
+          orthogroups: [],
+          annotations: [],
+          comparisonMatches: [],
+          sequenceSources: [sequenceSource]
+        }]
+      }
+    },
+    orthogroupState: {},
+    losatCache: { entries: [] },
+    losatDerivedCache: { entries: [] },
+    proteinIdentityManifest: {
+      schema: 2,
+      proteinSets: {},
+      recordAnalyses: {},
+      recordInstances: {}
+    }
+  };
+  const file = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const event = { target: { files: [file], value: 'selected' } };
+
+  const result = await importSession(event);
+
+  assert.equal(result.status, 'ok');
+  assert.equal(state.linearSeqs[0].gb.name, 'catalog-primary.gbk');
+  assert.equal(restoredPrimaryTextReads, 0);
+  assert.equal(restoredPrimaryArrayBufferReads, 0);
+  assert.deepEqual(state.matchSequenceRegistry.values(), [{
+    ...sequenceSource,
+    aliases: ['CATALOG.1', 'CATALOG'],
+    sourceIndex: null
+  }]);
 });
 
 test('fresh Circular LOSAT resources become session-owned live files', async () => {
@@ -455,7 +637,8 @@ ORIGIN
   assert.equal(state.circularConservation.series[1].sourceIndex, 1);
   assert.equal(state.circularConservation.series[1].losat_gencode, 4);
 
-  const serialized = await serializeFiles();
+  state.mode.value = 'circular';
+  const serialized = await serializeActiveRenderFiles(state.mode.value, state);
   assert.equal(serialized.c_conservation_blasts[0].data, '');
   assert.equal(serialized.c_conservation_fastas[0], null);
   assert.equal(serialized.c_conservation_fastas[1].data, btoa(fasta));
@@ -487,7 +670,7 @@ test('legacy standalone config import migrates retired values without a writer e
   ]);
 });
 
-for (const version of [39]) {
+for (const version of [39, 40]) {
   test(`version-${version} import rejects duplicate raw LOSAT cache keys`, () => {
     assert.throws(
       () => validateSessionLosatArtifacts(

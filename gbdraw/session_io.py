@@ -27,7 +27,7 @@ from .analysis.protein_artifacts import (
     validate_current_derived_protein_artifacts,
 )
 from .definition_line_styles import DEFINITION_LINE_KINDS, parse_definition_line_style_overrides
-from .exceptions import ValidationError
+from .exceptions import GbdrawError, ValidationError
 from .io.regions import RegionSpec, parse_region_specs
 from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
@@ -37,11 +37,12 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 39
+CURRENT_SESSION_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, CURRENT_SESSION_VERSION}
 )
+CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
 NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
@@ -50,6 +51,40 @@ PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
 FEATURE_CATALOG_SCHEMA = 1
 FEATURE_CATALOG_ENCODING = "biological-authority-v1"
+CURRENT_FEATURE_CATALOG_SCHEMA = 3
+CURRENT_SESSION_TOP_LEVEL_FIELDS = frozenset(
+    {
+        "format",
+        "version",
+        "createdAt",
+        "title",
+        "renderRequest",
+        "resources",
+        "webFiles",
+        "config",
+        "ui",
+        "files",
+        "results",
+        "features",
+        "editorState",
+        "orthogroupState",
+        "losatCache",
+        "losatDerivedCache",
+        "proteinIdentityManifest",
+        "legacyArtifacts",
+        "runMetadata",
+        "cliInvocation",
+    }
+)
+CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
+    {
+        "extractedFeatures",
+        "biologicalFeatures",
+        "featureSelectorSafetyScope",
+        "featureRecordIds",
+        "featureCatalog",
+    }
+)
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
@@ -367,9 +402,9 @@ def _compact_feature_catalog(features: Mapping[str, Any]) -> Mapping[str, Any]:
 def compact_session_feature_catalog(
     session: Mapping[str, Any],
 ) -> Mapping[str, Any]:
-    """Return a disk projection that removes duplicated feature catalog data."""
+    """Compact the released v39 feature representation for compatibility."""
 
-    if session.get("version") != CURRENT_SESSION_VERSION:
+    if session.get("version") != 39:
         return session
     features = session.get("features")
     if not isinstance(features, Mapping):
@@ -385,9 +420,11 @@ def compact_session_feature_catalog(
 def expand_session_feature_catalog(
     session: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Expand a compact on-disk feature catalog to the stable in-memory shape."""
+    """Expand the released v39 compact feature representation."""
 
     expanded_session = dict(session)
+    if expanded_session.get("version") == CURRENT_SESSION_VERSION:
+        return expanded_session
     features = expanded_session.get("features")
     if not isinstance(features, Mapping):
         return expanded_session
@@ -536,14 +573,143 @@ def validate_session(session: Mapping[str, Any]) -> None:
                 f"Session version {version} requires a canonical resources object."
             )
         files = session.get("files")
+        if version == CURRENT_SESSION_VERSION and "files" in session:
+            raise ValidationError(
+                f"Session version {version} cannot contain legacy files; "
+                "use resources and webFiles."
+            )
         if files is not None and not isinstance(files, Mapping):
             raise ValidationError("Session files must be an object when present.")
     else:
         files = session.get("files")
         if files is None or not isinstance(files, Mapping):
             raise ValidationError("Session files are required for CLI regeneration.")
-    if version == CURRENT_SESSION_VERSION:
+    if version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION:
         validate_current_session_artifacts(session)
+    if version == CURRENT_SESSION_VERSION:
+        _validate_current_feature_catalog_authority(session)
+
+
+def _validate_current_feature_catalog_authority(
+    session: Mapping[str, Any],
+) -> None:
+    """Require the v40 schema-3 catalog and reject duplicated derived payloads."""
+
+    unknown_fields = sorted(
+        str(field)
+        for field in session
+        if field not in CURRENT_SESSION_TOP_LEVEL_FIELDS
+    )
+    if unknown_fields:
+        raise ValidationError(
+            "Session contains unclassified top-level field(s): "
+            + ", ".join(unknown_fields)
+            + "."
+        )
+
+    features = session.get("features")
+    if isinstance(features, Mapping):
+        duplicated = CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS & set(features)
+        if duplicated:
+            raise ValidationError(
+                "Session version 40 cannot contain derived feature payloads in "
+                f"features: {', '.join(sorted(duplicated))}."
+            )
+    elif "features" in session:
+        raise ValidationError("Session features must be an object when present.")
+
+    orthogroup_state = session.get("orthogroupState")
+    if isinstance(orthogroup_state, Mapping):
+        if "groups" in orthogroup_state:
+            raise ValidationError(
+                "Session version 40 cannot contain derived orthogroupState.groups."
+            )
+    elif "orthogroupState" in session:
+        raise ValidationError(
+            "Session orthogroupState must be an object when present."
+        )
+
+    results = session.get("results")
+    if "results" not in session or not isinstance(results, list):
+        raise ValidationError("Session version 40 requires a results array.")
+    editor_state = session.get("editorState")
+    if (
+        not isinstance(editor_state, Mapping)
+        or "featureCatalog" not in editor_state
+    ):
+        raise ValidationError(
+            "Session version 40 "
+            + (
+                "Results require editorState.featureCatalog."
+                if results
+                else "requires editorState.featureCatalog."
+            )
+        )
+    catalog = (
+        editor_state.get("featureCatalog")
+        if isinstance(editor_state, Mapping)
+        else None
+    )
+    if not results:
+        if catalog is not None and (
+            not isinstance(catalog, Mapping)
+            or catalog.get("schema") != CURRENT_FEATURE_CATALOG_SCHEMA
+            or catalog.get("items") != []
+        ):
+            raise ValidationError(
+                "An empty Result set requires an empty schema-3 feature catalog."
+            )
+        return
+    if not isinstance(catalog, Mapping):
+        raise ValidationError(
+            "Session version 40 Results require editorState.featureCatalog."
+        )
+    items = catalog.get("items")
+    if (
+        catalog.get("schema") != CURRENT_FEATURE_CATALOG_SCHEMA
+        or not isinstance(items, list)
+        or len(items) != len(results)
+    ):
+        raise ValidationError(
+            "Session feature catalog must contain one schema-3 item per Result."
+        )
+
+    from .web_support.feature_catalog import select_feature_catalog_item
+
+    for result_index, result in enumerate(results):
+        if not isinstance(result, Mapping):
+            raise ValidationError("Session results must contain objects.")
+        raw_result_name = result.get("name")
+        result_name = (
+            raw_result_name.strip()
+            if isinstance(raw_result_name, str)
+            else ""
+        )
+        content = result.get("content")
+        if (
+            not result_name
+            or result_name.lower().endswith(".interactive.svg")
+            or not isinstance(content, str)
+            or "<svg" not in content
+        ):
+            raise ValidationError(
+                "Each current Session Result must be a named plain SVG."
+            )
+        if (
+            "gbdraw-interactive-feature-metadata" in content
+            or "gbdraw-interactive-feature-script" in content
+        ):
+            raise ValidationError(
+                "Current Session Results must contain plain SVG only."
+            )
+        try:
+            select_feature_catalog_item(
+                catalog,
+                result_index=result_index,
+                result_name=result_name,
+            )
+        except GbdrawError as exc:
+            raise ValidationError(str(exc)) from exc
 
 
 def empty_protein_identity_manifest() -> dict[str, Any]:
@@ -1298,6 +1464,7 @@ def build_session_json(
     svg_results: Sequence[tuple[str, str]],
     embedded_files: Mapping[str, Any],
     generated_at: datetime,
+    feature_catalog: Mapping[str, Any] | None = None,
     losat_cache_entries: Sequence[Mapping[str, Any]] | None = None,
     losat_derived_cache_entries: Sequence[Mapping[str, Any]] | None = None,
     protein_identity_manifest: Mapping[str, Any] | None = None,
@@ -1353,8 +1520,46 @@ def build_session_json(
         {"name": name or f"Result {index + 1}", "content": content}
         for index, (name, content) in enumerate(svg_results)
     ]
-    payload.setdefault("features", {})
-    payload.setdefault("orthogroupState", {})
+    editor_state = payload.get("editorState")
+    editor_state = (
+        dict(editor_state) if isinstance(editor_state, Mapping) else {}
+    )
+    editor_state["featureCatalog"] = _json_clone(
+        feature_catalog
+        if feature_catalog is not None
+        else {
+            "schema": CURRENT_FEATURE_CATALOG_SCHEMA,
+            "items": [
+                {
+                    "resultIndex": index,
+                    "resultName": result["name"],
+                    "recordKeys": [],
+                    "features": [],
+                    "biologicalFeatures": [],
+                    "orthogroups": [],
+                    "annotations": [],
+                    "comparisonMatches": [],
+                }
+                for index, result in enumerate(payload["results"])
+            ],
+        }
+    )
+    payload["editorState"] = editor_state
+
+    features = payload.get("features")
+    features = dict(features) if isinstance(features, Mapping) else {}
+    for key in CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS:
+        features.pop(key, None)
+    payload["features"] = features
+
+    orthogroup_state = payload.get("orthogroupState")
+    orthogroup_state = (
+        dict(orthogroup_state)
+        if isinstance(orthogroup_state, Mapping)
+        else {}
+    )
+    orthogroup_state.pop("groups", None)
+    payload["orthogroupState"] = orthogroup_state
     if context.mode == "linear":
         _populate_linear_session_fields_from_cli_context(payload, context)
     payload["cliInvocation"] = {
@@ -1378,6 +1583,7 @@ def build_session_json(
         raise ValidationError(
             f"A canonical typed request is required to write a version {CURRENT_SESSION_VERSION} session."
         )
+    payload.pop("files", None)
     normalize_current_session_artifacts(
         payload,
         losat_cache_entries=losat_cache_entries,
