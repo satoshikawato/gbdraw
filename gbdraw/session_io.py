@@ -33,6 +33,7 @@ from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
 
 if TYPE_CHECKING:
+    from .analysis.protein_colinearity import ProteinIdentityManifest
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
@@ -633,16 +634,21 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
         seen_derived_keys.add(key)
 
     manifest = session.get("proteinIdentityManifest")
-    if manifest is not None and not _is_valid_protein_identity_manifest(manifest):
+    validated_manifest = (
+        _validated_protein_identity_manifest(manifest)
+        if manifest is not None
+        else None
+    )
+    if manifest is not None and validated_manifest is None:
         raise ValidationError("Invalid proteinIdentityManifest schema-2 artifact.")
     if protein_entries and manifest is None:
         raise ValidationError(
             "Current protein LOSATP cache entries require proteinIdentityManifest."
         )
     if protein_entries:
-        assert isinstance(manifest, Mapping)
+        assert validated_manifest is not None
         for index, entry in enumerate(protein_entries):
-            if not _protein_raw_entry_matches_manifest(entry, manifest):
+            if not _protein_raw_entry_matches_manifest(entry, validated_manifest):
                 raise ValidationError(
                     "Protein LOSATP cache entry does not resolve through the manifest: "
                     f"losatCache.entries[{index}]."
@@ -898,24 +904,28 @@ def _is_current_derived_cache_entry(entry: object) -> bool:
     return is_current_derived_protein_artifact(entry)
 
 
-def _is_valid_protein_identity_manifest(manifest: object) -> bool:
+def _validated_protein_identity_manifest(
+    manifest: object,
+) -> ProteinIdentityManifest | None:
     if not isinstance(manifest, Mapping):
-        return False
-    if manifest == empty_protein_identity_manifest():
-        return True
+        return None
     try:
         from .analysis.protein_colinearity import (
             validate_protein_identity_manifest,
         )
 
-        validate_protein_identity_manifest(manifest)
+        return validate_protein_identity_manifest(manifest)
     except (ImportError, ValidationError, TypeError, ValueError):
-        return False
-    return True
+        return None
+
+
+def _is_valid_protein_identity_manifest(manifest: object) -> bool:
+    return _validated_protein_identity_manifest(manifest) is not None
 
 
 def _protein_raw_entry_matches_manifest(
-    entry: Mapping[str, Any], manifest: Mapping[str, Any]
+    entry: Mapping[str, Any],
+    manifest: ProteinIdentityManifest | Mapping[str, Any],
 ) -> bool:
     from .analysis.protein_colinearity import (
         validate_protein_raw_entry_references,

@@ -953,6 +953,9 @@ def _fail_renderer_after_migration(page: Any) -> dict[str, Any]:
         """async () => {
           const app = window.__GBDRAW_APP__;
           const { state } = await import('/gbdraw/web/js/state.js');
+          const {
+            CANONICAL_REQUEST_SCHEMA
+          } = await import('/gbdraw/web/js/services/session-request.js');
           const before = {
             proteinIdentityManifest: state.proteinIdentityManifest.value,
             legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
@@ -962,8 +965,23 @@ def _fail_renderer_after_migration(page: Any) -> dict[str, Any]:
             losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
             losatCacheInfo: state.losatCacheInfo.value
           };
-          const previousLegendFontSize = app.adv.legend_font_size;
-          app.adv.legend_font_size = 'not-a-number';
+          const originalWorkerPostMessage = Worker.prototype.postMessage;
+          let rendererFailureInjected = false;
+          Worker.prototype.postMessage = function (...args) {
+            const message = args[0];
+            if (
+              !rendererFailureInjected &&
+              message?.type === 'run' &&
+              message?.payload?.request?.schema === CANONICAL_REQUEST_SCHEMA &&
+              message?.payload?.resources &&
+              typeof message.payload.resources === 'object' &&
+              !Array.isArray(message.payload.resources)
+            ) {
+              rendererFailureInjected = true;
+              message.payload.request = null;
+            }
+            return originalWorkerPostMessage.apply(this, args);
+          };
           try {
             const result = await app.runAnalysis();
             const sameMapEntries = (entries, current) => (
@@ -974,6 +992,7 @@ def _fail_renderer_after_migration(page: Any) -> dict[str, Any]:
               result,
               errorSummary: String(app.errorLog?.summary || ''),
               executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
+              rendererFailureInjected,
               authorityRestored: (
                 state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
                 state.legacyProteinRawCandidates.value ===
@@ -989,7 +1008,7 @@ def _fail_renderer_after_migration(page: Any) -> dict[str, Any]:
               )
             };
           } finally {
-            app.adv.legend_font_size = previousLegendFontSize;
+            Worker.prototype.postMessage = originalWorkerPostMessage;
           }
         }"""
     )
@@ -1249,7 +1268,8 @@ def _run_python_adapter() -> int:
                     failed_legacy_run.get("result") == {"status": "error"}
                     and failed_legacy_run.get("authorityRestored")
                     and bool(failed_legacy_run.get("errorSummary"))
-                    and failed_legacy_run.get("executorCalls") == 0,
+                    and failed_legacy_run.get("executorCalls") == 0
+                    and failed_legacy_run.get("rendererFailureInjected"),
                     "Legacy renderer failure did not roll migration back: "
                     f"{failed_legacy_run}",
                 )

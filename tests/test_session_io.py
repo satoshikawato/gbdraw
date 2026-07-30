@@ -13,6 +13,7 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
+import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.circular as circular_cli_module
 import gbdraw.session_io as session_io_module
 from gbdraw.analysis.protein_colinearity import (
@@ -327,6 +328,52 @@ def test_current_protein_raw_numeric_contract(
         validate_protein_raw_entry_references(current_entry, current_manifest)
         is case["valid"]
     )
+
+
+def test_current_session_materializes_manifest_once_for_multiple_protein_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _protein_identity_manifest()
+    first_entry = _current_protein_cache_entry()
+    pair_identity = build_protein_losat_pair_identity(
+        manifest,
+        query_record_instance_key="record-1",
+        subject_record_instance_key="record-2",
+    )
+    second_args = ["--max-hsps-per-subject", "1"]
+    second_entry = {
+        **first_entry,
+        "args": second_args,
+        "key": build_protein_losat_cache_key(
+            pair_identity,
+            args=second_args,
+        ),
+    }
+    real_validate = (
+        protein_colinearity_module.validate_protein_identity_manifest
+    )
+    validation_calls = 0
+
+    def count_validation(value):
+        nonlocal validation_calls
+        validation_calls += 1
+        return real_validate(value)
+
+    monkeypatch.setattr(
+        protein_colinearity_module,
+        "validate_protein_identity_manifest",
+        count_validation,
+    )
+
+    session_io_module.validate_current_session_artifacts(
+        {
+            "losatCache": {"entries": [first_entry, second_entry]},
+            "losatDerivedCache": {"entries": []},
+            "proteinIdentityManifest": manifest,
+        }
+    )
+
+    assert validation_calls == 1
 
 
 def _legacy_protein_cache_entry() -> dict:
