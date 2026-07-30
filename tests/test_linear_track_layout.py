@@ -685,7 +685,9 @@ def test_linear_pairwise_hits_use_record_exclusion_edges(tmp_path: Path, layout:
 
 
 @pytest.mark.linear
-def test_linear_pairwise_starts_at_percent_gc_skew_stack_bottom(tmp_path: Path) -> None:
+def test_linear_pairwise_keeps_four_pixel_gap_after_percent_gc_skew_stack(
+    tmp_path: Path,
+) -> None:
     returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
         tmp_path,
         [INPUT_GBK, INPUT_MELA_GBK],
@@ -719,7 +721,7 @@ def test_linear_pairwise_starts_at_percent_gc_skew_stack_bottom(tmp_path: Path) 
         + (0.5 * cfg.objects.gc_skew.stroke_width)
     )
 
-    assert comparison_group_y == pytest.approx(gc_skew_paint_bottom_y)
+    assert comparison_group_y - gc_skew_paint_bottom_y == pytest.approx(4.0)
 
 
 @pytest.mark.linear
