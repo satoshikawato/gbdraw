@@ -10,6 +10,24 @@ Use [https://gbdraw.app/](https://gbdraw.app/) for the hosted app, or run `gbdra
 
 Small differences in label placement and legend sizing are expected. The CLI uses kerning-aware font metrics, while the web UI uses browser text metrics.
 
+## How do I hide the coordinate scale without hiding the genome axis?
+
+Add `--hide_scale` in either Circular or Linear mode. In Linear mode, this
+removes the bottom scale bar or ruler and any coordinate ticks and labels drawn
+on record axes, while retaining each record's main axis line. In Circular
+simple layouts, it removes the primary coordinate ticks and labels while
+retaining the circular axis.
+
+An explicit Circular track list is authoritative. If it contains an enabled
+`ticks` slot, that slot remains visible even with `--hide_scale`; omit or
+disable the slot instead. In the web app, clear **Show Coordinate Scale** for a
+simple layout. While **Custom Track Slots** are active, use the **Ticks** slot
+instead.
+
+GC-content and Depth axes and ticks are separate controls. Linear definition
+text such as **Length / Coord.** is also independent; use `--hide_length` to
+remove that line.
+
 ## Can I use a GFF3 file by itself?
 
 No. `gbdraw` requires both annotation and sequence data. When using GFF3 input, provide the matching FASTA file with `--fasta`.

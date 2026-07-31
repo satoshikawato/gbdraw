@@ -690,7 +690,8 @@ def _get_args(args) -> argparse.Namespace:
         '--ruler_on_axis',
         help=(
             'Use each record axis as the ruler in linear mode. '
-            'Effective only with --scale_style ruler and --track_layout above|below.'
+            'Effective only with a visible scale, --scale_style ruler, '
+            'and --track_layout above|below.'
         ),
         action='store_true',
     )
@@ -727,6 +728,10 @@ def _get_args(args) -> argparse.Namespace:
         '--comparison_height',
         help='Comparison block height (optional; float; optional; default: 60 (pixels, 96 dpi))',
         type=float)
+    parser.add_argument(
+        '--hide_scale',
+        help='Hide the coordinate scale while retaining each record axis (default: False).',
+        action='store_true')
     parser.add_argument(
         '--scale_style',
         help='Style for the length scale (default: "bar"; "bar", "ruler")',
@@ -1095,6 +1100,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     out_formats: list[str] = parse_formats(args.format)
     out_formats = handle_output_formats(out_formats)
     user_defined_default_colors: str = args.default_colors
+    show_scale: bool = not bool(args.hide_scale)
     scale_style: str = args.scale_style
     scale_stroke_color: Optional[str] = args.scale_stroke_color
     scale_stroke_width: Optional[float] = args.scale_stroke_width
@@ -1143,7 +1149,12 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     linear_track_slot_specs = args.linear_track_slot_specs
     linear_track_axis_index: int | None = args.linear_track_axis_index
     ruler_on_axis: bool = bool(args.ruler_on_axis)
-    if ruler_on_axis and not (scale_style == "ruler" and track_layout in {"above", "below"}):
+    if ruler_on_axis and not show_scale:
+        logger.warning(
+            "WARNING: --ruler_on_axis is ignored when --hide_scale is set."
+        )
+        ruler_on_axis = False
+    elif ruler_on_axis and not (scale_style == "ruler" and track_layout in {"above", "below"}):
         logger.warning(
             "WARNING: --ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
         )
@@ -1224,6 +1235,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "labels.filtering.raw": filtering_override,
         "canvas.linear.comparison_height": comparison_height,
         "canvas.linear.default_gc_height": gc_height,
+        "objects.scale.show": show_scale,
         "objects.scale.style": scale_style,
         "objects.scale.stroke_color": scale_stroke_color,
         "objects.scale.label_color": scale_label_color,

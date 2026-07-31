@@ -351,7 +351,7 @@ const createLayoutPreferences = () => ({
     }
   };
   const state = {
-    form: { prefix: 'before' },
+    form: { prefix: 'before', show_scale: true },
     adv: {
       features: ['CDS'],
       circular_track_slots_enabled: true,
@@ -482,6 +482,7 @@ const createLayoutPreferences = () => ({
 
   const snapshot = await snapshots.buildHistorySnapshot();
   state.form.prefix = 'after';
+  state.form.show_scale = false;
   state.files.c_gb = null;
   state.files.c_conservation_blasts_source = null;
   state.files.linearCanonicalComparisons = [];
@@ -493,6 +494,7 @@ const createLayoutPreferences = () => ({
   assert.equal(snapshot.files.c_gb.name, 'restore.gb');
   await snapshots.applyHistorySnapshot(snapshot);
   assert.equal(state.form.prefix, 'before');
+  assert.equal(state.form.show_scale, true);
   assert.equal(state.files.c_gb.name, 'restore.gb');
   assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
   assert.equal(state.files.c_conservation_fastas.length, 2);
@@ -532,6 +534,17 @@ const createLayoutPreferences = () => ({
     applySnapshot: snapshots.applyHistorySnapshot
   });
   await history.captureBaseline('P3 baseline');
+  await history.runUndoable('Hide coordinate scale', () => {
+    state.form.show_scale = false;
+  });
+  assert.equal(state.form.show_scale, false);
+  await history.undo();
+  assert.equal(state.form.show_scale, true);
+  await history.redo();
+  assert.equal(state.form.show_scale, false);
+  await history.undo();
+  assert.equal(state.form.show_scale, true);
+
   await history.runUndoable('Edit Annotation lane gap', () => {
     state.adv.circular_track_slots[0].params.lane_gap_px = 9;
   });

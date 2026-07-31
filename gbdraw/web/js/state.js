@@ -237,6 +237,7 @@ export const createDefaultForm = () => ({
   plot_title: '',
   track_type: 'tuckin',
   linear_track_layout: 'middle',
+  show_scale: true,
   scale_style: 'bar',
   linear_ruler_on_axis: false,
   labels_mode: 'none',

@@ -81,6 +81,17 @@ gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels bo
 gbdraw circular --gbk genome.gb -o output -f svg --no-gc --no-skew --legend none
 ```
 
+### Hide coordinate ticks but keep the circular axis
+
+```bash
+gbdraw circular --gbk genome.gb -o output -f svg --hide_scale
+```
+
+This hides the primary coordinate ticks and labels in an implicit Circular
+layout. An explicit `--circular_track_order`, `--circular_track_slot`, or
+`--circular_track_table` remains authoritative: omit or disable its `ticks`
+slot to hide that scale.
+
 ### Resolve overlapping features
 
 ```bash
@@ -152,6 +163,19 @@ gbdraw linear \
   --scale_style ruler \
   --ruler_on_axis
 ```
+
+### Hide the coordinate scale but keep record axes
+
+```bash
+gbdraw linear \
+  --gbk genome.gb \
+  -o output \
+  -f svg \
+  --hide_scale
+```
+
+This removes the bottom bar or ruler and any coordinate ticks and labels on
+record axes. Each record's main axis line remains visible.
 
 ### Crop a region
 

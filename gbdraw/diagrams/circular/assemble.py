@@ -225,6 +225,7 @@ def _prepare_circular_annotation_tracks(
     *,
     canvas_config: CircularCanvasConfigurator,
     record_index: int,
+    show_ticks: bool,
     show_depth: bool,
     show_gc: bool,
     show_skew: bool,
@@ -237,7 +238,7 @@ def _prepare_circular_annotation_tracks(
         mode="circular",
         default_slots=lambda: default_circular_track_slots(
             show_features=True,
-            show_ticks=True,
+            show_ticks=show_ticks,
             show_depth=show_depth,
             depth_track_count=depth_track_count,
             show_gc=show_gc,
@@ -287,6 +288,7 @@ def _add_circular_feature_underlays(
     *,
     canvas_config: CircularCanvasConfigurator,
     record_index: int,
+    show_ticks: bool,
     show_depth: bool,
     show_gc: bool,
     show_skew: bool,
@@ -329,6 +331,7 @@ def _add_circular_feature_underlays(
         [underlay_slot, *slots],
         canvas_config=canvas_config,
         record_index=record_index,
+        show_ticks=show_ticks,
         show_depth=show_depth,
         show_gc=show_gc,
         show_skew=show_skew,
@@ -2083,12 +2086,14 @@ def add_record_on_circular_canvas(
 
     show_labels_base = profile.labels_enabled
     depth_enabled = bool(profile.show_depth and depth_config is not None)
+    simple_show_ticks = bool(cfg.objects.scale.show)
     effective_circular_track_slots, resolved_annotations, annotation_track_layouts = _prepare_circular_annotation_tracks(
         gb_record,
         annotations,
         circular_track_slots,
         canvas_config=canvas_config,
         record_index=annotation_record_index,
+        show_ticks=simple_show_ticks,
         show_depth=depth_enabled,
         show_gc=profile.show_gc,
         show_skew=profile.show_skew,
@@ -2109,7 +2114,7 @@ def add_record_on_circular_canvas(
         show_depth_track = bool(depth_enabled)
         show_gc_track = profile.show_gc
         show_skew_track = profile.show_skew
-        show_ticks_track = True
+        show_ticks_track = simple_show_ticks
     circular_preset = normalize_circular_track_preset(cfg.canvas.circular.track_type)
 
     if user_slot_mode:
@@ -2225,6 +2230,7 @@ def add_record_on_circular_canvas(
             resolved_annotations,
             canvas_config=canvas_config,
             record_index=annotation_record_index,
+            show_ticks=show_ticks_track,
             show_depth=show_depth_track,
             show_gc=profile.show_gc,
             show_skew=profile.show_skew,
@@ -2742,6 +2748,7 @@ def assemble_circular_diagram(
         circular_track_slots,
         canvas_config=canvas_config,
         record_index=annotation_record_index,
+        show_ticks=bool(cfg.objects.scale.show),
         show_depth=bool(profile.show_depth and depth_config is not None),
         show_gc=profile.show_gc,
         show_skew=profile.show_skew,

@@ -3013,6 +3013,39 @@ def test_web_typed_request_wires_scale_and_tick_font_size_options() -> None:
     assert "args.push(" not in run_source
 
 
+def test_web_coordinate_scale_visibility_lifecycle_is_wired() -> None:
+    index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    request_source = (
+        WEB_ROOT / "js" / "services" / "session-request.js"
+    ).read_text(encoding="utf-8")
+    setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(
+        encoding="utf-8"
+    )
+    slot_source = (
+        WEB_ROOT / "js" / "app" / "circular-track-slots.js"
+    ).read_text(encoding="utf-8")
+
+    assert "show_scale: true" in state_source
+    assert "showScale: 'objects.scale.show'" in request_source
+    assert "[CONFIG_OVERRIDE_PATHS.showScale]: form.show_scale !== false" in request_source
+    assert "show_scale: overrides.show_scale !== false" in request_source
+    assert "form.show_scale !== false && Boolean(form.linear_ruler_on_axis)" in request_source
+    assert "showTicks: state.form.show_scale !== false" in request_source
+    assert index_html.count("Show Coordinate Scale") >= 2
+    assert 'aria-label="Show Coordinate Scale (Linear)"' in index_html
+    assert 'aria-label="Show Coordinate Scale (Circular)"' in index_html
+    assert ':disabled="adv.circular_track_slots_enabled"' in index_html
+    assert "Use an enabled Ticks slot to control coordinate-scale visibility." in index_html
+    assert ':disabled="!canUseCircularScaleStyling"' in index_html
+    assert "form.show_scale !== false" in setup_source
+    assert "slot?.renderer === 'ticks'" in setup_source
+    assert "canUseCircularScaleStyling" in setup_source
+    assert "showTicks = true" in slot_source
+    assert "if (showTicks)" in slot_source
+    assert slot_source.count("showTicks: state.form.show_scale !== false") == 2
+
+
 def test_web_species_and_strain_are_projected_only_for_circular_requests() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
     request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(encoding="utf-8")
@@ -3750,6 +3783,13 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         if (defaultTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
           throw new Error(`Default Tick layout should point labels inward when Tick is inside Feature: ${{JSON.stringify(defaultTick)}}`);
         }}
+        const hiddenSimpleSlots = createDefaultCircularTrackSlots({{
+          preset: 'tuckin',
+          showTicks: false
+        }});
+        if (hiddenSimpleSlots.some((slot) => slot.renderer === 'ticks')) {{
+          throw new Error(`Hidden simple scale should omit Tick slots: ${{JSON.stringify(hiddenSimpleSlots)}}`);
+        }}
         const gapSpec = buildCircularTrackSlotSpec(
           {{
             id: 'gc_content',
@@ -3870,6 +3910,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
           }},
           form: {{
             track_type: 'tuckin',
+            show_scale: false,
             show_depth: false,
             suppress_gc: false,
             suppress_skew: false
@@ -3893,6 +3934,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
           }},
           form: {{
             track_type: 'tuckin',
+            show_scale: false,
             show_depth: false,
             suppress_gc: false,
             suppress_skew: false
@@ -3908,8 +3950,13 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         if (resetTick?.params?.tick_label_layout !== 'label_in_tick_out') {{
           throw new Error(`Dormant custom slots lost the inward default Tick layout: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
         }}
+        defaultEditor.resetCircularTrackSlotsFromSimpleControls();
+        if (defaultState.adv.circular_track_slots.some((slot) => slot.renderer === 'ticks')) {{
+          throw new Error(`Reset from hidden simple controls retained Tick slots: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
+        }}
         defaultEditor.resetCircularTrackSlotsToPreset('middle');
         const middleFeature = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'features');
+        const middleTick = defaultState.adv.circular_track_slots.find((slot) => slot.id === 'ticks');
         const middleFeatureSpec = buildCircularTrackSlotSpec(
           middleFeature,
           defaultState.adv.nt,
@@ -3920,6 +3967,9 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         }}
         if (middleFeatureSpec !== 'features:features@lane_direction=split') {{
           throw new Error(`Middle feature CLI spec must keep lane_direction=split with circular axis index: ${{middleFeatureSpec}}`);
+        }}
+        if (!middleTick || middleTick.enabled === false) {{
+          throw new Error(`Explicit preset reset should restore an enabled Tick slot: ${{JSON.stringify(defaultState.adv.circular_track_slots)}}`);
         }}
 
         const suppressState = {{

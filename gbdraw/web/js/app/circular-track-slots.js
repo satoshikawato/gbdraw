@@ -699,6 +699,7 @@ export const createDefaultCircularTrackSlots = ({
   depthTrackCount = 1,
   showGc = true,
   showSkew = true,
+  showTicks = true,
   preset = 'tuckin'
 } = {}) => {
   void nt;
@@ -707,15 +708,17 @@ export const createDefaultCircularTrackSlots = ({
     makeSlot({
       id: 'features',
       renderer: 'features'
-    }),
-    makeSlot({
+    })
+  ];
+  if (showTicks) {
+    slots.push(makeSlot({
       id: 'ticks',
       renderer: 'ticks',
       params: {
         tick_label_layout: defaultPresetTickLabelLayout(preset)
       }
-    })
-  ];
+    }));
+  }
   if (showDepth) {
     const count = Math.max(1, Number(depthTrackCount) || 1);
     if (count === 1) {
@@ -1653,6 +1656,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       depthTrackCount: desiredCircularDepthTrackCount(),
       showGc: !state.form.suppress_gc,
       showSkew: !state.form.suppress_skew,
+      showTicks: state.form.show_scale !== false,
       preset: state.form.track_type
     }), circularGeometryShortcutsForState(state));
     state.adv.circular_track_slots_axis_index = inferLegacyAxisIndexFromFeature(
@@ -1697,6 +1701,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
         showDepth: false,
         showGc: !state.form.suppress_gc,
         showSkew: !state.form.suppress_skew,
+        showTicks: state.form.show_scale !== false,
         preset: state.form.track_type
       }),
       state.adv.nt,

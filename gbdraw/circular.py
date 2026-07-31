@@ -402,6 +402,10 @@ def _get_args(
         help='Manual scale interval for circular mode (in bp). Overrides automatic calculation.',
         type=int)
     parser.add_argument(
+        '--hide_scale',
+        help='Hide the primary genome-coordinate scale while retaining the circular axis.',
+        action='store_true')
+    parser.add_argument(
         '--tick_label_font_size',
         help='Tick label font size for circular mode (optional; float; default: 14 (pt)).',
         type=float)
@@ -765,6 +769,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         else None
     )
     scale_interval: Optional[int] = args.scale_interval
+    hide_scale: bool = bool(args.hide_scale)
     tick_label_font_size: Optional[float] = args.tick_label_font_size
     circular_label_spacing: Optional[float] = args.circular_label_spacing
     legend_box_size = args.legend_box_size
@@ -906,6 +911,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "labels.unified_adjustment.inner_labels.x_radius_offset": inner_label_x_radius_offset,
         "labels.unified_adjustment.inner_labels.y_radius_offset": inner_label_y_radius_offset,
         "objects.scale.interval": scale_interval,
+        "objects.scale.show": not hide_scale,
         "objects.ticks.tick_labels.font_size": tick_label_font_size,
         "labels.spacing.circular": circular_label_spacing,
     }
@@ -987,11 +993,33 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     elif shortcut_geometry_requested:
         circular_track_slots_or_none = circular_track_slots_from_order(
             "features,ticks,depth,gc_content,gc_skew",
+            show_ticks=not hide_scale,
             show_depth=show_depth,
             depth_track_count=max(1, logical_depth_track_count),
             show_gc=show_gc,
             show_skew=show_skew,
             dinucleotide=dinucleotide,
+        )
+
+    user_explicit_track_slots = bool(
+        circular_track_table
+        or circular_track_order
+        or circular_track_slot_specs
+    )
+    if (
+        hide_scale
+        and user_explicit_track_slots
+        and any(
+            slot.enabled and str(slot.renderer) == "ticks"
+            for slot in parse_circular_track_slots(
+                circular_track_slots_or_none or (),
+                _allow_legacy_transport=allow_legacy_track_transport,
+            )
+        )
+    ):
+        logger.warning(
+            "WARNING: --hide_scale does not suppress an enabled ticks slot in a "
+            "user-explicit Circular track list; the explicit slot wins."
         )
 
     if circular_track_slots_or_none is not None and not circular_track_slot_specs:

@@ -18,6 +18,8 @@ PairwiseMatchStyle = Literal["ribbon", "curve"]
 _PAIRWISE_MATCH_STYLES: tuple[PairwiseMatchStyle, ...] = ("ribbon", "curve")
 GcContentMode = Literal["deviation", "percent"]
 _GC_CONTENT_MODES: tuple[GcContentMode, ...] = ("deviation", "percent")
+ScaleStyle = Literal["bar", "ruler"]
+_SCALE_STYLES: tuple[ScaleStyle, ...] = ("bar", "ruler")
 
 
 def _normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:
@@ -38,6 +40,13 @@ def _normalize_gc_content_mode(value: Any) -> GcContentMode:
     normalized = str(value if value is not None else "deviation").strip().lower()
     if normalized not in _GC_CONTENT_MODES:
         raise ValidationError("gc_content_mode must be one of: deviation, percent")
+    return normalized  # type: ignore[return-value]
+
+
+def _normalize_scale_style(value: Any) -> ScaleStyle:
+    normalized = str(value if value is not None else "bar").strip().lower()
+    if normalized not in _SCALE_STYLES:
+        raise ValidationError("scale_style must be one of: bar, ruler")
     return normalized  # type: ignore[return-value]
 
 
@@ -507,7 +516,7 @@ class ObjectsDefinitionConfig:
 
 @dataclass(frozen=True)
 class ObjectsScaleConfig:
-    style: str
+    style: ScaleStyle
     stroke_color: str
     label_color: str
     stroke_width: float
@@ -515,13 +524,14 @@ class ObjectsScaleConfig:
     font_size: ShortLongFloatConfig
     ruler_label_font_size: ShortLongFloatConfig
     interval: Optional[int]
+    show: bool = True
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsScaleConfig":
         interval = d.get("interval")
         font_size = ShortLongFloatConfig.from_dict(d["font_size"])
         return cls(
-            style=str(d.get("style", "bar")),
+            style=_normalize_scale_style(d.get("style", "bar")),
             stroke_color=str(d["stroke_color"]),
             label_color=str(d.get("label_color", "black")),
             stroke_width=float(d["stroke_width"]),
@@ -533,6 +543,7 @@ class ObjectsScaleConfig:
                 else font_size
             ),
             interval=int(interval) if interval is not None else None,
+            show=_bool_from_config(d.get("show", True), default=True),
         )
 
 

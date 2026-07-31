@@ -192,6 +192,7 @@
           ["Track Layout", "Middle"],
           ["Align to Center", "On"],
           ["Separate Strands", "On"],
+          ["Show Coordinate Scale", "On"],
           ["Scale Style", "Ruler (Ticks)"],
           ["Show GC Content", "On"],
           ["Show GC Skew", "On"],
@@ -201,19 +202,31 @@
       },
       "operations": [
         {
+          "dataDependent": true,
           "title": "Scale style selector",
           "body": "Open Scale Style and choose Ruler.",
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-05-01-layout-gc-skew-ruler.webp",
-            "alt": "Axis and Scale card with the Scale Style menu open and the Ruler option highlighted.",
-            "caption": "Open Scale Style in the Axis & Scale card and choose the highlighted Ruler option."
+            "alt": "Axis and Scale card with Show Coordinate Scale selected and the Scale Style menu open on Ruler.",
+            "caption": "Leave Show Coordinate Scale selected and choose Ruler (Ticks) for Scale Style."
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.form.show_scale = true; app.form.scale_style = 'ruler';"
+              }
+            ],
             "crop": "openSelect",
             "cropPadding": {
-              "top": 54,
-              "right": 80,
+              "top": 145,
+              "right": 130,
               "bottom": 24,
               "left": 80
             },
@@ -222,7 +235,22 @@
               "options": ["Bar (Simple)", "Ruler (Ticks)"],
               "label": "Scale Style"
             },
-            "openDetails": ["Axis & Scale"]
+            "openDetails": ["Axis & Scale"],
+            "assertAppState": {
+              "mode": "linear",
+              "form.show_scale": true,
+              "form.scale_style": "ruler"
+            },
+            "visibleControls": [
+              {
+                "label": "Show Coordinate Scale",
+                "checked": true
+              },
+              {
+                "label": "Scale Style",
+                "value": "Ruler (Ticks)"
+              }
+            ]
           }
         },
         {

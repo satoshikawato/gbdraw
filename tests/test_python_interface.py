@@ -395,6 +395,27 @@ def test_draw_linear_routes_through_typed_request_plan(
     assert captured["layout"].multi_record_positions == ("#1@1", "#2@2")
 
 
+def test_root_draw_functions_carry_hidden_scale_override_through_rendering() -> None:
+    circular_svg = interface.draw_circular(
+        _record("circular"),
+        options=interface.CircularOptions(
+            config_overrides={"objects.scale.show": False},
+        ),
+    ).to_svg()
+    linear_svg = interface.draw_linear(
+        _record("linear"),
+        options=interface.LinearOptions(
+            config_overrides={"objects.scale.show": False},
+        ),
+    ).to_svg()
+
+    assert 'id="tick"' not in circular_svg
+    assert 'id="Axis"' in circular_svg
+    assert 'id="length_bar"' not in linear_svg
+    assert 'y1="0"' in linear_svg
+    assert 'y2="0"' in linear_svg
+
+
 def test_circular_companion_sequence_reaches_interactive_context() -> None:
     reference = _record("reference")
     comparison = _record("comparison")

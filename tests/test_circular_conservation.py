@@ -16,7 +16,11 @@ from gbdraw.analysis.conservation import (
     normalize_conservation_tracks_for_record,
 )
 from gbdraw.api.config import apply_config_overrides
-from gbdraw.api.diagram import assemble_circular_diagram_from_record, build_circular_diagram
+from gbdraw.api.diagram import (
+    assemble_circular_diagram_from_record,
+    assemble_circular_diagram_from_records,
+    build_circular_diagram,
+)
 from gbdraw.api.options import CircularDiagramOptions
 from gbdraw.configurators import LegendMeasurement
 from gbdraw.core.text import calculate_bbox_dimensions
@@ -753,6 +757,77 @@ def test_circular_api_uses_explicit_conservation_slot_source_indexes() -> None:
     assert reference_b_id is not None
     assert reference_a_id is not None
     assert svg.index(f'id="{reference_b_id}"') < svg.index(f'id="{reference_a_id}"')
+
+
+def test_circular_conservation_auto_slots_do_not_restore_hidden_scale() -> None:
+    canvas = assemble_circular_diagram_from_record(
+        _record(),
+        cfg=apply_config_overrides(
+            None,
+            {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.scale.show": False,
+            },
+        ),
+        conservation_dataframes=[
+            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+        ],
+        conservation_reference="subject",
+        conservation_labels=["Reference"],
+        legend="none",
+    )
+    svg = canvas.tostring()
+    renderers = {
+        slot["renderer"]
+        for slot in canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert "ticks" not in renderers
+    assert _conservation_group_id(svg, "Reference") is not None
+    assert 'id="Axis"' in svg
+
+
+def test_circular_multi_record_conservation_auto_slots_do_not_restore_hidden_scale() -> None:
+    records = [_record("rec1"), _record("rec2")]
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.scale.show": False,
+            },
+        ),
+        conservation_dataframes=[
+            _comparison_frame(
+                [
+                    _hit(subject="rec1", sstart=1, send=120),
+                    _hit(subject="rec2", sstart=1, send=120),
+                ]
+            )
+        ],
+        conservation_reference="subject",
+        conservation_labels=["Reference"],
+        legend="none",
+    )
+    svg = canvas.tostring()
+
+    assert all(
+        all(slot["renderer"] != "ticks" for slot in record_geometry["slots"])
+        for record_geometry in canvas._gbdraw_track_slot_geometry["records"]
+    )
+    assert all(
+        any(
+            slot["renderer"] == "sequence_conservation"
+            for slot in record_geometry["slots"]
+        )
+        for record_geometry in canvas._gbdraw_track_slot_geometry["records"]
+    )
+    assert svg.count('data-track-label="Reference"') >= 2
+    assert 'id="Axis_0"' in svg
+    assert 'id="Axis_1"' in svg
 
 
 def test_circular_api_keeps_axis_derived_side_for_conservation_slot() -> None:

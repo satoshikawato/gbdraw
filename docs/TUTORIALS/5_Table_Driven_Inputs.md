@@ -223,6 +223,12 @@ This writes `tutorial-circular-track-table.svg`. The result places GC content, G
 
 ![Human mitochondrial circular diagram with GC content, GC skew, and custom AT skew rings](../../examples/tutorial-circular-track-table.svg)
 
+The `ticks` row is explicit and therefore controls the primary coordinate
+scale. It remains visible if the command also includes `--hide_scale`; the CLI
+prints a warning that the explicit slot wins. To hide coordinate ticks in this
+table-driven layout, omit the `ticks` row. The `features` row with `side=axis`
+still draws the circular genome axis.
+
 `--circular_track_table` cannot be combined with inline circular track slot options such as `--circular_track_order`, `--circular_track_slot`, or `--circular_track_axis_index`.
 
 Keep slot structure in the dedicated columns: `id`, `renderer`, `side`, `r`, `w`, `inner_gap_px`, `outer_gap_px`, and `z`. Do not repeat these settings or their aliases in `params`, and do not put `lane_direction` or `lanes` in a feature row. Use `params` only for renderer-specific settings such as `nt`, `positive_color`, `negative_color`, `legend_label`, and `tick_label_layout`.

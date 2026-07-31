@@ -782,6 +782,7 @@ def _default_circular_depth_slots_if_needed(
     parsed_circular_track_slots: list[CircularTrackSlot] | None,
     show_depth: bool,
     depth_track_count_value: int,
+    show_ticks: bool,
     show_gc: bool,
     show_skew: bool,
     dinucleotide: str,
@@ -791,6 +792,7 @@ def _default_circular_depth_slots_if_needed(
     if not show_depth or depth_track_count_value <= 1:
         return None
     return default_circular_track_slots(
+        show_ticks=show_ticks,
         show_depth=True,
         depth_track_count=depth_track_count_value,
         show_gc=show_gc,
@@ -2635,6 +2637,7 @@ def assemble_circular_diagram_from_record(
         parsed_circular_track_slots=parsed_circular_track_slots,
         show_depth=bool(show_depth and show_depth_from_input),
         depth_track_count_value=available_depth_track_count,
+        show_ticks=bool(cfg.objects.scale.show),
         show_gc=bool(show_gc),
         show_skew=bool(show_skew),
         dinucleotide=dinucleotide,
@@ -2695,6 +2698,7 @@ def assemble_circular_diagram_from_record(
             if parsed_circular_track_slots is None:
                 parsed_circular_track_slots = circular_track_slots_from_order(
                     "features,ticks,depth,gc_content,gc_skew",
+                    show_ticks=bool(cfg.objects.scale.show),
                     show_depth=show_depth,
                     depth_track_count=available_depth_track_count,
                     show_gc=show_gc,
@@ -3169,6 +3173,7 @@ def assemble_circular_diagram_from_records(
         parsed_circular_track_slots=parsed_circular_track_slots,
         show_depth=bool(show_depth and record_depth_tracks is not None),
         depth_track_count_value=available_depth_track_count,
+        show_ticks=bool(cfg.objects.scale.show),
         show_gc=bool(show_gc),
         show_skew=bool(show_skew),
         dinucleotide=dinucleotide,
@@ -3233,6 +3238,7 @@ def assemble_circular_diagram_from_records(
             if parsed_circular_track_slots is None:
                 parsed_circular_track_slots = circular_track_slots_from_order(
                     "features,ticks,depth,gc_content,gc_skew",
+                    show_ticks=bool(cfg.objects.scale.show),
                     show_depth=show_depth,
                     depth_track_count=max(1, depth_track_count(record_depth_tracks)),
                     show_gc=show_gc,

@@ -245,10 +245,27 @@ The linear result places the 45-degree labels above their features:
 
 Numeric and depth slots placed inside the axis auto-compress when `r` and `w` are omitted; gbdraw never moves them outside automatically. The circular axis stays fixed and cannot be moved or hidden with a circular track slot.
 
+Use `--hide_scale` to hide the primary coordinate ticks and labels while
+retaining the circular genome axis. This controls only an implicit track
+layout. If `--circular_track_order`, `--circular_track_slot`, or
+`--circular_track_table` supplies an enabled `ticks` slot, that explicit slot
+remains visible; omit or disable it to hide the scale.
+
+In the web app, **Show Coordinate Scale** controls simple Circular layouts.
+While **Custom Track Slots** are active, the checkbox is disabled and the
+enabled **Ticks** slots control visibility. Scale interval and tick-label
+styling controls are available only when the effective simple or custom layout
+contains ticks. The simple checkbox value is preserved while a custom stack is
+active. **Reset** copies the simple controls, including that checkbox value, so
+it omits ticks when the simple scale is hidden. **Reset to Tuckin**, **Reset to
+Middle**, and **Reset to Spreadout** create explicit preset stacks that retain
+their ticks slot.
+
 These options control stroke colors and widths, font sizes, and circular label offsets:
 
 - `--block_stroke_color` and `--block_stroke_width`
 - `--axis_stroke_color` and `--axis_stroke_width`
+- `--hide_scale`
 - `--line_stroke_color` and `--line_stroke_width`
 - `--definition_font_size` and `--label_font_size`
 - `--outer_label_x_radius_offset`, `--outer_label_y_radius_offset`

@@ -3449,13 +3449,14 @@
                     <details>
                         <summary><i class="ph ph-ruler"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <div>
-                                <label class="input-label text-[10px] mb-1">Scale Style <help-tip text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></label>
-                                <select v-model="form.scale_style" class="form-input text-xs py-1">
-                                    <option value="bar">Bar (Simple)</option>
-                                    <option value="ruler">Ruler (Ticks)</option>
-                                </select>
-                            </div>
+                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    v-model="form.show_scale"
+                                    class="form-checkbox"
+                                    aria-label="Show Coordinate Scale (Linear)">
+                                <span class="inline-flex items-center gap-1">Show Coordinate Scale <help-tip text="Show the bottom scale bar or ruler and any coordinate ticks and labels drawn on record axes. Main record axes remain visible when this is off."></help-tip></span>
+                            </label>
 
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
@@ -3472,23 +3473,35 @@
                                         <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact auto-value-input">
                                     </auto-value-field>
                                 </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Line Width <help-tip text="Line width of the scale bar or ruler."></help-tip></label>
-                                    <auto-value-field :visible="autoValueVisible(adv.scale_stroke_width, 'scaleStrokeWidth')" :text="autoValueText('scaleStrokeWidth')">
-                                        <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact auto-value-input">
-                                    </auto-value-field>
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Scale Line Color <help-tip text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></label>
-                                    <color-value-control
-                                        v-model="adv.scale_stroke_color"
-                                        fallback="#000000"
-                                        aria-label="Scale line color">
-                                    </color-value-control>
-                                </div>
                             </div>
 
-                            <div class="space-y-3">
+                            <fieldset
+                                :disabled="form.show_scale === false"
+                                :class="form.show_scale === false ? 'opacity-50' : ''"
+                                class="space-y-3 min-w-0">
+                                <div>
+                                    <label class="input-label text-[10px] mb-1">Scale Style <help-tip text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></label>
+                                    <select v-model="form.scale_style" class="form-input text-xs py-1" aria-label="Linear scale style">
+                                        <option value="bar">Bar (Simple)</option>
+                                        <option value="ruler">Ruler (Ticks)</option>
+                                    </select>
+                                </div>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px]">Line Width <help-tip text="Line width of the scale bar or ruler."></help-tip></label>
+                                        <auto-value-field :visible="autoValueVisible(adv.scale_stroke_width, 'scaleStrokeWidth')" :text="autoValueText('scaleStrokeWidth')">
+                                            <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact auto-value-input" aria-label="Linear scale line width">
+                                        </auto-value-field>
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Scale Line Color <help-tip text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></label>
+                                        <color-value-control
+                                            v-model="adv.scale_stroke_color"
+                                            fallback="#000000"
+                                            aria-label="Scale line color">
+                                        </color-value-control>
+                                    </div>
+                                </div>
                                 <label
                                     :class="[
                                         'option-label flex items-center gap-2 text-xs select-none',
@@ -3506,13 +3519,13 @@
                                     <div>
                                         <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for scale label text. Used by bar style and ruler labels."></help-tip></label>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_font_size, 'scaleFontSize')" :text="autoValueText('scaleFontSize')">
-                                            <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact auto-value-input" aria-label="Linear scale font size">
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
                                         <label class="input-label text-[10px]">Interval <help-tip text="Manual tick interval for Ruler scale style in bp. Leave blank to calculate automatically."></help-tip></label>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
-                                            <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Linear ruler interval">
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
@@ -3524,7 +3537,7 @@
                                         </color-value-control>
                                     </div>
                                 </div>
-                            </div>
+                            </fieldset>
                         </div>
                     </details>
                 </div>
@@ -3533,19 +3546,27 @@
                     <details>
                         <summary><i class="ph ph-paint-brush"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
+                            <label
+                                :class="[
+                                    'option-label flex items-center gap-2 text-xs select-none',
+                                    adv.circular_track_slots_enabled ? 'text-slate-400 cursor-not-allowed' : 'text-slate-700 cursor-pointer'
+                                ]">
+                                <input
+                                    type="checkbox"
+                                    v-model="form.show_scale"
+                                    :disabled="adv.circular_track_slots_enabled"
+                                    :class="adv.circular_track_slots_enabled ? 'opacity-50' : ''"
+                                    class="form-checkbox"
+                                    aria-label="Show Coordinate Scale (Circular)">
+                                <span class="inline-flex items-center gap-1">Show Coordinate Scale <help-tip text="Show primary coordinate ticks and labels in simple mode. The circular genome axis remains visible when this is off."></help-tip></span>
+                            </label>
+                            <p
+                                v-if="adv.circular_track_slots_enabled"
+                                class="rounded border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] text-sky-800"
+                                data-scale-visibility-note>
+                                Custom Track Slots are active. Use an enabled Ticks slot to control coordinate-scale visibility.
+                            </p>
                             <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
-                                <div>
-                                    <label class="input-label text-[10px]">Scale Interval <help-tip text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></label>
-                                    <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
-                                        <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input">
-                                    </auto-value-field>
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px]">Tick Label Font Size <help-tip text="Font size for circular tick labels. Leave blank to use the default size."></help-tip></label>
-                                    <auto-value-field :visible="autoValueVisible(adv.tick_label_font_size, 'tickLabelFontSize')" :text="autoValueText('tickLabelFontSize')">
-                                        <input type="number" v-model.number="adv.tick_label_font_size" class="form-input form-input-compact auto-value-input">
-                                    </auto-value-field>
-                                </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
                                         <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Use Auto for the configured default, None to hide the axis, or Color for an explicit value."></help-tip></label>
@@ -3562,6 +3583,23 @@
                                         </auto-value-field>
                                     </div>
                                 </div>
+                                <fieldset
+                                    :disabled="!canUseCircularScaleStyling"
+                                    :class="canUseCircularScaleStyling ? '' : 'opacity-50'"
+                                    class="grid grid-cols-2 gap-1.5 min-w-0">
+                                    <div>
+                                        <label class="input-label text-[10px]">Scale Interval <help-tip text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></label>
+                                        <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
+                                            <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Circular scale interval">
+                                        </auto-value-field>
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Tick Label Font Size <help-tip text="Font size for circular tick labels. Leave blank to use the default size."></help-tip></label>
+                                        <auto-value-field :visible="autoValueVisible(adv.tick_label_font_size, 'tickLabelFontSize')" :text="autoValueText('tickLabelFontSize')">
+                                            <input type="number" v-model.number="adv.tick_label_font_size" class="form-input form-input-compact auto-value-input" aria-label="Circular tick label font size">
+                                        </auto-value-field>
+                                    </div>
+                                </fieldset>
                             </div>
                         </div>
                     </details>

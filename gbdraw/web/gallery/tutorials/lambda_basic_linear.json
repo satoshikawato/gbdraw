@@ -142,6 +142,10 @@
             "All Records"
           ],
           [
+            "Show Coordinate Scale",
+            "On"
+          ],
+          [
             "Scale Style",
             "Ruler (Ticks)"
           ],
@@ -249,8 +253,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/lambda_basic_linear/manual-03-03-scale-style-ruler.webp",
-            "alt": "Scale Style selector with Ruler highlighted.",
-            "caption": "Set Scale Style to Ruler (Ticks)."
+            "alt": "Axis and Scale card with Show Coordinate Scale selected and the Scale Style menu open on Ruler.",
+            "caption": "Leave Show Coordinate Scale selected and set Scale Style to Ruler (Ticks)."
           },
           "capture": {
             "source": "webapp",
@@ -265,13 +269,13 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.form.scale_style = 'ruler';"
+                "script": "const app = window.__GBDRAW_APP__; app.form.show_scale = true; app.form.scale_style = 'ruler';"
               }
             ],
             "crop": "openSelect",
             "cropPadding": {
-              "top": 54,
-              "right": 80,
+              "top": 145,
+              "right": 130,
               "bottom": 24,
               "left": 80
             },
@@ -285,9 +289,14 @@
             },
             "assertAppState": {
               "mode": "linear",
+              "form.show_scale": true,
               "form.scale_style": "ruler"
             },
             "visibleControls": [
+              {
+                "label": "Show Coordinate Scale",
+                "checked": true
+              },
               {
                 "label": "Scale Style",
                 "value": "Ruler (Ticks)"

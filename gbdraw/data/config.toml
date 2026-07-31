@@ -55,6 +55,7 @@ normalize_length = false
 
 [objects.scale]
 style = "bar"
+show = true
 stroke_color = 'black'
 label_color = 'black'
 stroke_width = 3

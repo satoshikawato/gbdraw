@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from gbdraw.api.config import apply_config_overrides, load_default_config
-from gbdraw.api.options import CircularDiagramOptions
+from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import (
     canonical_config_override_paths,
@@ -19,6 +19,7 @@ def test_override_paths_are_canonical_dataclass_leaves() -> None:
     paths = canonical_config_override_paths()
 
     assert "canvas.show_gc" in paths
+    assert "objects.scale.show" in paths
     assert "labels.circular.scope" in paths
     assert "labels.linear.scope" in paths
     assert "objects.axis.linear.stroke_color" in paths
@@ -153,3 +154,44 @@ def test_default_override_resolution_parses_typed_config_once(monkeypatch) -> No
 def test_typed_options_reject_flat_override_aliases_eagerly() -> None:
     with pytest.raises(ValidationError, match="Unknown config override path"):
         CircularDiagramOptions(config_overrides={"show_gc": False})
+
+
+def test_scale_visibility_defaults_visible_and_normalizes_raw_config_values() -> None:
+    default_config = load_default_config()
+    assert default_config["objects"]["scale"]["show"] is True
+    assert GbdrawConfig.from_dict(default_config).objects.scale.show is True
+
+    missing_config = load_default_config()
+    del missing_config["objects"]["scale"]["show"]
+    assert GbdrawConfig.from_dict(missing_config).objects.scale.show is True
+
+    compatible_raw_config = load_default_config()
+    compatible_raw_config["objects"]["scale"]["show"] = "off"
+    assert GbdrawConfig.from_dict(compatible_raw_config).objects.scale.show is False
+
+
+@pytest.mark.parametrize(
+    "options_type",
+    [CircularDiagramOptions, LinearDiagramOptions],
+)
+def test_scale_visibility_is_a_shared_strict_boolean_override(
+    options_type: type[CircularDiagramOptions] | type[LinearDiagramOptions],
+) -> None:
+    options = options_type(config_overrides={"objects.scale.show": False})
+    assert options.config_overrides["objects.scale.show"] is False
+
+    with pytest.raises(ValidationError, match="objects.scale.show"):
+        options_type(config_overrides={"objects.scale.show": 0})
+
+
+def test_scale_style_rejects_unknown_raw_and_override_values() -> None:
+    invalid_raw_config = load_default_config()
+    invalid_raw_config["objects"]["scale"]["style"] = "unknown"
+    with pytest.raises(ValidationError, match="scale_style"):
+        GbdrawConfig.from_dict(invalid_raw_config)
+
+    with pytest.raises(ValidationError, match="allowed literal values"):
+        modify_config_dict(
+            load_default_config(),
+            {"objects.scale.style": "unknown"},
+        )

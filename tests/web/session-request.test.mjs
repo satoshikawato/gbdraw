@@ -299,7 +299,8 @@ const state = {
     show_gc: false, show_skew: false, show_depth: false, separate_strands: true,
     labels_mode: 'none', show_labels_linear: 'none', track_type: 'tuckin',
     linear_track_layout: 'middle', linear_ruler_on_axis: false, align_center: false,
-    keep_definition_left_aligned: false, scale_style: 'bar', normalize_length: false
+    keep_definition_left_aligned: false, show_scale: true, scale_style: 'bar',
+    normalize_length: false
   },
   adv: {
     features: ['CDS'], feature_shapes: { CDS: 'arrow' }, nt: 'GC', evalue: '1e-5',
@@ -497,6 +498,8 @@ assert.equal(
 const circularConfigOverrides = canonical.renderRequest.diagramOptions.configOverrides;
 assert.ok(Object.keys(circularConfigOverrides).every((path) => path.includes('.')));
 assert.ok(Object.values(circularConfigOverrides).every((value) => value !== null));
+assert.equal(circularConfigOverrides['objects.scale.show'], true);
+assert.equal(projectCanonicalSessionRequest(canonical).config.form.show_scale, true);
 assert.equal(circularConfigOverrides['labels.circular.scope'], 'none');
 assert.equal(circularConfigOverrides['labels.circular.placement'], 'horizontal');
 assert.equal(canonical.renderRequest.diagramOptions.featureShapes.repeat_region, 'underlay');
@@ -509,6 +512,27 @@ assert.equal(
   25
 );
 assert.equal(projectCanonicalSessionRequest(canonical).config.adv.depth_large_tick_interval, 25);
+const sparseCircularScaleCanonical = structuredClone(canonical);
+delete sparseCircularScaleCanonical.renderRequest.diagramOptions.configOverrides[
+  'objects.scale.show'
+];
+assert.equal(
+  projectCanonicalSessionRequest(sparseCircularScaleCanonical).config.form.show_scale,
+  true
+);
+state.form.show_scale = false;
+const hiddenCircularScaleCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(
+  hiddenCircularScaleCanonical.renderRequest.diagramOptions.configOverrides[
+    'objects.scale.show'
+  ],
+  false
+);
+assert.equal(
+  projectCanonicalSessionRequest(hiddenCircularScaleCanonical).config.form.show_scale,
+  false
+);
+state.form.show_scale = true;
 state.form.labels_mode = 'out';
 const outerLabelsCanonical = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(
@@ -1525,6 +1549,11 @@ assert.equal(
   linearCanonical.renderRequest.diagramOptions.configOverrides['labels.linear.scope'],
   'none'
 );
+assert.equal(
+  linearCanonical.renderRequest.diagramOptions.configOverrides['objects.scale.show'],
+  true
+);
+assert.equal(projectCanonicalSessionRequest(linearCanonical).config.form.show_scale, true);
 state.adv.block_stroke_width = 2;
 state.adv.def_font_size = 16;
 state.adv.label_font_size = 14;
@@ -1623,6 +1652,35 @@ assert.equal(
   ],
   'dimgray'
 );
+state.form.show_scale = false;
+const hiddenRulerAxisCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: linearFilesData
+});
+assert.equal(
+  hiddenRulerAxisCanonical.renderRequest.diagramOptions.configOverrides[
+    'objects.scale.show'
+  ],
+  false
+);
+assert.equal(
+  hiddenRulerAxisCanonical.renderRequest.diagramOptions.configOverrides[
+    'canvas.linear.ruler_on_axis'
+  ],
+  true,
+  'ordinary Web state must preserve a dormant ruler-on-axis choice'
+);
+assert.equal(
+  hiddenRulerAxisCanonical.renderRequest.diagramOptions.configOverrides[
+    'objects.axis.linear.stroke_color'
+  ],
+  'lightgray',
+  'a hidden dormant ruler must not apply the ruler-axis managed color'
+);
+const hiddenRulerProjection = projectCanonicalSessionRequest(hiddenRulerAxisCanonical);
+assert.equal(hiddenRulerProjection.config.form.show_scale, false);
+assert.equal(hiddenRulerProjection.config.form.linear_ruler_on_axis, true);
+state.form.show_scale = true;
 state.form.linear_ruler_on_axis = false;
 assert.deepEqual(linearCanonical.webFiles.linearRecordMetadata, [
   { recordKey: 'first', losatGencode: 11, losatFilename: 'first-to-second.losat.tsv' },
@@ -2089,6 +2147,7 @@ pythonConfigCanonical.renderRequest.diagramOptions.config = {
     },
     legends: { color_rect_size: { short: 17, long: 17 }, font_size: { short: 19, long: 19 } },
     scale: {
+      show: false,
       style: 'bar',
       font_size: { short: 21, long: 21 },
       ruler_label_font_size: { short: 22, long: 22 }
@@ -2102,6 +2161,7 @@ assert.equal(pythonConfigProjection.config.form.align_center, true);
 assert.equal(pythonConfigProjection.config.form.keep_definition_left_aligned, true);
 assert.equal(pythonConfigProjection.config.form.linear_track_layout, 'above');
 assert.equal(pythonConfigProjection.config.form.linear_ruler_on_axis, true);
+assert.equal(pythonConfigProjection.config.form.show_scale, false);
 assert.equal(pythonConfigProjection.config.form.normalize_length, true);
 assert.equal(pythonConfigProjection.config.form.show_labels_linear, 'orthogroup_top');
 assert.equal(pythonConfigProjection.config.adv.comparison_height, 31);
@@ -2133,6 +2193,13 @@ const rulerFontCanonical = structuredClone(pythonConfigCanonical);
 rulerFontCanonical.renderRequest.diagramOptions.config.objects.scale.style = 'ruler';
 assert.equal(projectCanonicalSessionRequest(rulerFontCanonical).config.adv.scale_font_size, 22);
 
+const sparsePythonScaleCanonical = structuredClone(pythonConfigCanonical);
+delete sparsePythonScaleCanonical.renderRequest.diagramOptions.config.objects.scale.show;
+assert.equal(
+  projectCanonicalSessionRequest(sparsePythonScaleCanonical).config.form.show_scale,
+  true
+);
+
 const pythonCircularConfigCanonical = structuredClone(canonical);
 delete pythonCircularConfigCanonical.renderRequest.diagramOptions.configOverrides;
 pythonCircularConfigCanonical.renderRequest.diagramOptions.config = structuredClone(
@@ -2149,6 +2216,7 @@ assert.equal(pythonCircularConfigProjection.config.adv.outer_label_x_offset, 0.9
 assert.equal(pythonCircularConfigProjection.config.adv.outer_label_y_offset, 0.91);
 assert.equal(pythonCircularConfigProjection.config.adv.inner_label_x_offset, 0.97);
 assert.equal(pythonCircularConfigProjection.config.adv.inner_label_y_offset, 0.98);
+assert.equal(pythonCircularConfigProjection.config.form.show_scale, false);
 
 const emptyBlacklistCanonical = structuredClone(pythonConfigCanonical);
 emptyBlacklistCanonical.renderRequest.diagramOptions.config.labels.filtering.blacklist_keywords = [];
@@ -2562,6 +2630,14 @@ const geometryCases = [
   ['gc_skew_width_circular', 'dinucleotide_skew', 'width', { value: 20, unit: 'px' }],
   ['gc_skew_radius_circular', 'dinucleotide_skew', 'radius', { value: 0.52, unit: 'factor' }]
 ];
+const sparseScaleState = circularRequestState();
+delete sparseScaleState.form.show_scale;
+assert.equal(
+  buildCanonicalRenderRequest({ state: sparseScaleState, filesData })
+    .renderRequest.diagramOptions.configOverrides['objects.scale.show'],
+  true,
+  'sparse Web form state must retain the visible-scale default'
+);
 for (const [field, renderer, property, expected] of geometryCases) {
   const needsDepth = field === 'depth_width_circular';
   const geometryState = circularRequestState({
@@ -2580,6 +2656,59 @@ for (const [field, renderer, property, expected] of geometryCases) {
   const slot = slots.find((entry) => entry.renderer === renderer);
   assert.deepEqual(slot[property], expected, `${field} should patch ${renderer}.${property}`);
 }
+
+const hiddenScaleGeometryCanonical = buildCanonicalRenderRequest({
+  state: circularRequestState({
+    form: { show_scale: false },
+    adv: { feature_width_circular: 17 }
+  }),
+  filesData
+});
+assert.equal(
+  hiddenScaleGeometryCanonical.renderRequest.diagramOptions.configOverrides[
+    'objects.scale.show'
+  ],
+  false
+);
+assert.equal(
+  hiddenScaleGeometryCanonical.renderRequest.diagramOptions.tracks.circularTrackSlots
+    .some((slot) => slot.renderer === 'ticks'),
+  false,
+  'simple geometry materialization must not restore hidden coordinate ticks'
+);
+
+const explicitTicksWithHiddenSimpleScale = buildCanonicalRenderRequest({
+  state: circularRequestState({
+    form: { show_scale: false },
+    adv: {
+      circular_track_slots_enabled: true,
+      circular_track_slots_axis_index: 0,
+      circular_track_slots: [
+        {
+          id: 'features',
+          renderer: 'features',
+          enabled: true,
+          side: 'inside',
+          params: { lane_direction: 'inside' }
+        },
+        {
+          id: 'ticks',
+          renderer: 'ticks',
+          enabled: true,
+          side: 'inside',
+          params: { tick_label_layout: 'label_in_tick_out' }
+        }
+      ]
+    }
+  }),
+  filesData
+});
+assert.equal(
+  explicitTicksWithHiddenSimpleScale.renderRequest.diagramOptions.tracks.circularTrackSlots
+    .some((slot) => slot.renderer === 'ticks'),
+  true,
+  'enabled custom Ticks slots must remain authoritative over the dormant simple setting'
+);
 
 const nullGeometryCanonical = buildCanonicalRenderRequest({
   state: circularRequestState(),

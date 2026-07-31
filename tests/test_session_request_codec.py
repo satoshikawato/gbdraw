@@ -1212,6 +1212,95 @@ def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 
+@pytest.mark.parametrize(
+    ("request_type", "options_type"),
+    [
+        (CircularDiagramRequest, CircularDiagramOptions),
+        (LinearDiagramRequest, LinearDiagramOptions),
+    ],
+)
+def test_schema5_round_trips_scale_visibility_in_full_config_and_override(
+    tmp_path: Path,
+    request_type,
+    options_type,
+) -> None:
+    record = SeqRecord(
+        Seq("ATGC"),
+        id="record",
+        annotations={"molecule_type": "DNA"},
+    )
+    config_dict = load_default_config()
+    config_dict["objects"]["scale"]["show"] = False
+    request = request_type(
+        records=(RecordInput(source=InMemoryRecordSource(record)),),
+        options=options_type(
+            config=GbdrawConfig.from_dict(config_dict),
+            config_overrides={"objects.scale.show": False},
+        ),
+    )
+
+    encoded = encode_canonical_request(request)
+    diagram_options = encoded.payload["diagramOptions"]
+    assert diagram_options["config"]["objects"]["scale"]["show"] is False
+    assert (
+        diagram_options["configOverrides"]["objects.scale.show"] is False
+    )
+    assert "show_scale" not in diagram_options
+    assert "show_scale" not in diagram_options["configOverrides"]
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / request_type.__name__,
+        ),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.options.config.objects.scale.show is False
+    assert decoded.options.config_overrides["objects.scale.show"] is False
+    assert encode_canonical_request(decoded).payload == encoded.payload
+
+
+@pytest.mark.parametrize(
+    ("request_type", "options_type"),
+    [
+        (CircularDiagramRequest, CircularDiagramOptions),
+        (LinearDiagramRequest, LinearDiagramOptions),
+    ],
+)
+def test_schema5_full_config_missing_scale_visibility_defaults_visible(
+    tmp_path: Path,
+    request_type,
+    options_type,
+) -> None:
+    record = SeqRecord(
+        Seq("ATGC"),
+        id="record",
+        annotations={"molecule_type": "DNA"},
+    )
+    encoded = encode_canonical_request(
+        request_type(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=options_type(
+                config=GbdrawConfig.from_dict(load_default_config()),
+            ),
+        )
+    )
+    payload = copy.deepcopy(encoded.payload)
+    del payload["diagramOptions"]["config"]["objects"]["scale"]["show"]
+
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / request_type.__name__,
+        ),
+        output_directory=tmp_path / "output",
+    )
+
+    assert decoded.options.config.objects.scale.show is True
+
+
 def test_canonical_depth_tracks_round_trip_mixed_sources(tmp_path: Path) -> None:
     gbk_a = _source_file(tmp_path / "a.gbk")
     gbk_b = _source_file(tmp_path / "b.gbk")

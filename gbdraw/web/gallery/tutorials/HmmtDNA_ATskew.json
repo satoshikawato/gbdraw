@@ -284,6 +284,7 @@
       },
       "operations": [
         {
+          "dataDependent": true,
           "title": "Tick track slot",
           "body": "Move the tick slot inward to the end of the custom stack and set the tick layout to Labels inside and ticks outside.",
           "media": {
@@ -293,6 +294,11 @@
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "viewport": {
+              "width": 1280,
+              "height": 1000
+            },
             "selector": "[data-capture='circular-track-slot-ticks']",
             "highlightSelector": "[data-capture='circular-track-slot-ticks']",
             "actions": [
@@ -312,7 +318,19 @@
               "left": 8
             },
             "openDetails": ["Layout"],
-            "waitForSelector": "[data-capture='circular-track-slot-ticks']"
+            "waitForSelector": "[data-capture='circular-track-slot-ticks']",
+            "assertAppState": {
+              "mode": "circular",
+              "adv.circular_track_slots_enabled": true,
+              "adv.circular_track_slots.4.id": "ticks",
+              "adv.circular_track_slots.4.renderer": "ticks",
+              "adv.circular_track_slots.4.enabled": true,
+              "adv.circular_track_slots.4.params.tick_label_layout": "label_in_tick_out"
+            },
+            "visibleText": [
+              "ticks",
+              "Labels inside / ticks outside"
+            ]
           }
         }
       ]

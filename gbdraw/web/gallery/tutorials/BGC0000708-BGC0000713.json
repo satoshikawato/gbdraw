@@ -251,6 +251,7 @@
           ["Label Rotation", "45"],
           ["Palette", "orange"],
           ["Default CDS color", "#dddddd"],
+          ["Show Coordinate Scale", "On"],
           ["Scale Style", "Ruler (Ticks)"],
           ["Legend Position", "Bottom"],
           ["Lock Definition Column", "On"]
@@ -282,18 +283,30 @@
           }
         },
         {
+          "dataDependent": true,
           "title": "Scale style selector",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-05-02-scale-style-ruler.webp",
-            "alt": "Axis and Scale card with the Scale Style menu open and the Ruler option highlighted.",
-            "caption": "Open Scale Style in the Axis & Scale card and choose the highlighted Ruler option."
+            "alt": "Axis and Scale card with Show Coordinate Scale selected and the Scale Style menu open on Ruler.",
+            "caption": "Leave Show Coordinate Scale selected and choose Ruler (Ticks) for Scale Style."
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.form.show_scale = true; app.form.scale_style = 'ruler';"
+              }
+            ],
             "crop": "openSelect",
             "cropPadding": {
-              "top": 54,
-              "right": 80,
+              "top": 145,
+              "right": 130,
               "bottom": 24,
               "left": 80
             },
@@ -302,7 +315,22 @@
               "options": ["Bar (Simple)", "Ruler (Ticks)"],
               "label": "Scale Style"
             },
-            "openDetails": ["Axis & Scale"]
+            "openDetails": ["Axis & Scale"],
+            "assertAppState": {
+              "mode": "linear",
+              "form.show_scale": true,
+              "form.scale_style": "ruler"
+            },
+            "visibleControls": [
+              {
+                "label": "Show Coordinate Scale",
+                "checked": true
+              },
+              {
+                "label": "Scale Style",
+                "value": "Ruler (Ticks)"
+              }
+            ]
           }
         },
         {

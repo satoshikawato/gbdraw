@@ -139,7 +139,7 @@ usage: gbdraw circular [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET]
               [--inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET]
               [--inner_label_y_radius_offset INNER_LABEL_Y_RADIUS_OFFSET]
-              [--scale_interval SCALE_INTERVAL]
+              [--scale_interval SCALE_INTERVAL] [--hide_scale]
               [--tick_label_font_size TICK_LABEL_FONT_SIZE]
               [--circular_label_spacing CIRCULAR_LABEL_SPACING]
               [--feature_width FEATURE_WIDTH]
@@ -402,6 +402,8 @@ options:
   --scale_interval SCALE_INTERVAL
                         Manual scale interval for circular mode (in bp).
                         Overrides automatic calculation.
+  --hide_scale          Hide the primary genome-coordinate scale while
+                        retaining the circular axis.
   --tick_label_font_size TICK_LABEL_FONT_SIZE
                         Tick label font size for circular mode (optional;
                         float; default: 14 (pt)).
@@ -492,6 +494,14 @@ options:
 ```
 
 <!-- END GENERATED CIRCULAR HELP -->
+
+`--hide_scale` omits primary coordinate ticks and their labels from an
+implicit Circular layout. The circular genome axis remains visible, and
+GC-content and Depth axes and ticks are unaffected. User-explicit
+`--circular_track_order`, `--circular_track_slot`, and
+`--circular_track_table` inputs are authoritative. An enabled `ticks` slot
+remains visible and causes a warning when combined with `--hide_scale`; omit or
+disable that slot to hide the scale.
 
 For fresh Circular input, output names are derived from record IDs when
 `--output` is omitted. An ID used this way must be one filename component:
@@ -867,7 +877,7 @@ usage: gbdraw linear [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--feature_visibility_table FEATURE_TABLE]
               [--annotation_table ANNOTATION_TABLE]
               [--feature_height FEATURE_HEIGHT] [--gc_height GC_HEIGHT]
-              [--comparison_height COMPARISON_HEIGHT]
+              [--comparison_height COMPARISON_HEIGHT] [--hide_scale]
               [--scale_style {bar,ruler}]
               [--scale_stroke_color SCALE_STROKE_COLOR]
               [--scale_stroke_width SCALE_STROKE_WIDTH]
@@ -1164,8 +1174,8 @@ options:
   --linear_track_axis_index LINEAR_TRACK_AXIS_INDEX
                         Axis boundary index for linear custom track slots.
   --ruler_on_axis       Use each record axis as the ruler in linear mode.
-                        Effective only with --scale_style ruler and
-                        --track_layout above|below.
+                        Effective only with a visible scale, --scale_style
+                        ruler, and --track_layout above|below.
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
                         interactive_svg, png, pdf, eps, ps; default: svg;
                         png/pdf/eps/ps require CairoSVG).
@@ -1205,6 +1215,8 @@ options:
   --comparison_height COMPARISON_HEIGHT
                         Comparison block height (optional; float; optional;
                         default: 60 (pixels, 96 dpi))
+  --hide_scale          Hide the coordinate scale while retaining each record
+                        axis (default: False).
   --scale_style {bar,ruler}
                         Style for the length scale (default: "bar"; "bar",
                         "ruler")
@@ -1261,6 +1273,12 @@ options:
 ```
 
 <!-- END GENERATED LINEAR HELP -->
+
+`--hide_scale` omits the bottom bar or ruler and suppresses ruler ticks and
+coordinate labels on record axes without removing those axes or reserving a
+blank scale band. `--ruler_on_axis` is ignored with a warning when the scale is
+hidden. GC-content and Depth axes remain independent, as does the definition
+line controlled by `--hide_length`.
 
 `--resolve_overlaps` assigns overlapping genomic features to additional lanes.
 Linear layout measures those lanes and their labels per record, then repacks

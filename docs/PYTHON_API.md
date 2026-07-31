@@ -196,6 +196,41 @@ The lower-level request transport retains its
 `ConservationTrackOptions` class names are identity aliases for
 `ComparisonRingOptions` and `ComparisonRingTrackOptions`.
 
+## Coordinate-scale visibility
+
+Use the shared canonical override `objects.scale.show` to hide the primary
+genome-coordinate scale. The same path works with both diagram modes:
+
+```python
+scale_free_circular = draw_circular(
+    record,
+    options=CircularOptions(
+        features=FeatureOptions(types=("CDS",)),
+        config_overrides={"objects.scale.show": False},
+    ),
+)
+scale_free_linear = draw_linear(
+    linear_records,
+    options=LinearOptions(
+        features=FeatureOptions(types=("CDS",)),
+        config_overrides={"objects.scale.show": False},
+    ),
+)
+
+assert scale_free_circular.to_svg().startswith("<svg")
+assert scale_free_linear.to_svg().startswith("<svg")
+```
+
+The override hides Circular coordinate ticks in an implicit layout, or the
+Linear bottom scale and record-axis coordinate ticks and labels. It does not
+hide the Circular axis, Linear record axes, GC-content axes, Depth axes, or
+Linear definition text.
+
+`objects.scale.style` remains a separate `bar` or `ruler` choice. When
+`CircularOptions.tracks` supplies `CircularTrackOptions(slots=...)`, that
+explicit list is authoritative: an enabled `ticks` slot is rendered even when
+`objects.scale.show` is `False`.
+
 ## Feature colors, visibility, and labels
 
 Table inputs accept either a path or a validated DataFrame. One field represents one

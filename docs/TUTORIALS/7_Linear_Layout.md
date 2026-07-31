@@ -39,9 +39,11 @@ In a comparison diagram, ribbons attach directly to the outer edges of the two r
 
 ![Two majanivirus records with feature, GC content, and GC skew tracks placed below each record axis](../../examples/tutorial-7-track-layout-below.svg)
 
-## 3. Use a ruler on the axis
+## 3. Choose, place, or hide the coordinate scale
 
-`--ruler_on_axis` is effective when `--scale_style ruler` is used with `--track_layout above` or `below`.
+`--scale_style` selects a bottom `bar` or `ruler`. With a visible ruler,
+`--ruler_on_axis` moves its ticks and coordinate labels onto each record axis
+when `--track_layout above` or `below` is used.
 
 ```bash
 gbdraw linear \
@@ -53,6 +55,28 @@ gbdraw linear \
   -o majani_axis_ruler \
   -f svg
 ```
+
+Use `--hide_scale` when the figure needs record axes but no genome-coordinate
+scale:
+
+```bash
+gbdraw linear \
+  --gbk MjeNMV.gb MelaMJNV.gb \
+  --track_layout below \
+  --hide_scale \
+  -o majani_without_scale \
+  -f svg
+```
+
+This removes the bottom bar or ruler and suppresses coordinate ticks and labels
+on record axes without reserving an empty scale band. Each record's main axis
+line remains. `--ruler_on_axis` is ignored with a warning when
+`--hide_scale` is set.
+
+In the web app, clear **Show Coordinate Scale** in **Axis & Scale**. Scale
+style, interval, line, label, and ruler-on-axis controls are disabled while the
+scale is hidden; axis color and width remain available. Stored scale choices
+become effective again when the checkbox is selected.
 
 ## 4. Combine the ruler with record text and a plot title
 
@@ -101,6 +125,10 @@ gbdraw linear \
 ```
 
 `--keep_definition_left_aligned` keeps the record-label column fixed while `--align_center` moves the record axes. `--hide_accession` and `--hide_length` remove the default metadata lines. `--show_replicon` adds a line only when a source feature supplies a `chromosome` or `plasmid` qualifier.
+
+The `Length / Coord.` definition line is independent of
+`--hide_scale`. Use `--hide_length`, or clear **Show Length / Coordinates** in
+the web app, when that text should also be removed.
 
 ![Two centered majanivirus records with compact bold names and gray subtitles in a fixed left record-label column](../../examples/tutorial-7-definition-lines.svg)
 

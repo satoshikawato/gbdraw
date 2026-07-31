@@ -39,6 +39,8 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import read_records_table
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.render.formats import ACCEPTED_FORMATS
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.api.requests import (
     CircularDiagramRequest,
     InMemoryRecordSource,
@@ -98,6 +100,21 @@ def _canonical_request(mode: str):
     if mode == "linear":
         return LinearDiagramRequest(records=(record_input,))
     return CircularDiagramRequest(records=(record_input,))
+
+
+def _canonical_request_with_scale_visibility(mode: str, *, show: bool):
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    record_input = RecordInput(source=InMemoryRecordSource(record))
+    config = apply_config_overrides(None, {"objects.scale.show": show})
+    if mode == "linear":
+        return LinearDiagramRequest(
+            records=(record_input,),
+            options=LinearDiagramOptions(config=config),
+        )
+    return CircularDiagramRequest(
+        records=(record_input,),
+        options=CircularDiagramOptions(config=config),
+    )
 
 
 def test_write_session_json_does_not_use_predictable_temp_path(
@@ -2012,6 +2029,65 @@ def test_gui_only_circular_session_maps_to_cli_args(tmp_path: Path) -> None:
     assert "--suppress_skew" not in spec.args
 
 
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_gui_only_session_restores_hidden_scale_as_cli_flag(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    files = (
+        {"c_gb": _file_entry("input.gb", b"LOCUS       TEST\n")}
+        if mode == "circular"
+        else {
+            "linearSeqs": [
+                {"gb": _file_entry("input.gb", b"LOCUS       TEST\n")}
+            ]
+        }
+    )
+    session = _minimal_session(files, mode=mode)
+    session["config"]["form"]["show_scale"] = False
+    if mode == "linear":
+        session["config"]["form"]["linear_ruler_on_axis"] = True
+
+    spec = session_to_cli_args(
+        session,
+        mode=mode,
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assert "--hide_scale" in spec.args
+    if mode == "linear":
+        assert "--ruler_on_axis" in spec.args
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_sparse_gui_session_keeps_scale_visible_by_default(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    files = (
+        {"c_gb": _file_entry("input.gb", b"LOCUS       TEST\n")}
+        if mode == "circular"
+        else {
+            "linearSeqs": [
+                {"gb": _file_entry("input.gb", b"LOCUS       TEST\n")}
+            ]
+        }
+    )
+    session = _minimal_session(files, mode=mode)
+
+    spec = session_to_cli_args(
+        session,
+        mode=mode,
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assert "--hide_scale" not in spec.args
+
+
 def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> None:
     session = _minimal_session(
         {
@@ -2203,6 +2279,48 @@ def test_gui_only_linear_session_restores_top_level_losatp_keys(tmp_path: Path) 
     assert spec.args[spec.args.index("--losatp_threads") + 1] == "4"
 
 
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_session_projects_hidden_scale_to_web_and_canonical_state(
+    mode: str,
+) -> None:
+    args = ["--gbk", "input.gb", "--hide_scale"]
+    if mode == "linear":
+        args.extend(
+            [
+                "--track_layout",
+                "above",
+                "--scale_style",
+                "ruler",
+                "--ruler_on_axis",
+            ]
+        )
+    payload = build_session_json(
+        SessionBuildContext(
+            mode=mode,
+            output_prefix="out",
+            render_formats=("svg",),
+            cli_invocation_args=tuple(args),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 7, 31),
+        canonical_request=_canonical_request_with_scale_visibility(
+            mode,
+            show=False,
+        ),
+    )
+
+    assert payload["config"]["form"]["show_scale"] is False
+    assert (
+        payload["renderRequest"]["diagramOptions"]["config"]["objects"]["scale"][
+            "show"
+        ]
+        is False
+    )
+    if mode == "linear":
+        assert payload["config"]["form"]["linear_ruler_on_axis"] is False
+
+
 def test_cli_session_config_includes_lossless_cli_options() -> None:
     args = (
         "-f",
@@ -2272,6 +2390,7 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
     assert config["form"]["prefix"] == "out"
     assert config["form"]["align_center"] is True
     assert config["form"]["separate_strands"] is True
+    assert config["form"]["show_scale"] is True
     assert config["form"]["scale_style"] == "ruler"
     assert config["form"]["show_gc"] is True
     assert config["form"]["show_skew"] is True

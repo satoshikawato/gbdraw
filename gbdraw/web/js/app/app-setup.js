@@ -2175,7 +2175,22 @@ export const createAppSetup = () => {
   });
 
   const canUseLinearRulerOnAxis = computed(
-    () => form.scale_style === 'ruler' && ['above', 'below'].includes(form.linear_track_layout)
+    () => (
+      form.show_scale !== false &&
+      form.scale_style === 'ruler' &&
+      ['above', 'below'].includes(form.linear_track_layout)
+    )
+  );
+
+  const canUseCircularScaleStyling = computed(
+    () => (
+      adv.circular_track_slots_enabled
+        ? adv.circular_track_slots.some((slot) => (
+            slot?.renderer === 'ticks' &&
+            circularTrackSlotEditor.circularTrackSlotEffectiveEnabled(slot)
+          ))
+        : form.show_scale !== false
+    )
   );
 
   const clickedFeatureLocation = computed(() => {
@@ -2625,6 +2640,7 @@ export const createAppSetup = () => {
     autoValueText: autoValueDisplay.autoValueText,
     autoValueVisible: autoValueDisplay.autoValueVisible,
     canUseLinearRulerOnAxis,
+    canUseCircularScaleStyling,
     circularTrackNewRenderer,
     linearTrackNewRenderer,
     circularTrackSlotsPanelOpen,

@@ -165,6 +165,7 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   depthSmallTickInterval: 'objects.depth.small_tick_interval',
   depthTickFontSize: 'objects.depth.tick_font_size',
   depthShareAxis: 'objects.depth.share_axis',
+  showScale: 'objects.scale.show',
   scaleStyle: 'objects.scale.style',
   scaleStrokeColor: 'objects.scale.stroke_color',
   scaleLabelColor: 'objects.scale.label_color',
@@ -536,7 +537,8 @@ const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_
     ? null
     : effectiveLinearAxisColor({
         axisColor: adv.axis_stroke_color,
-        rulerOnAxis: Boolean(form.linear_ruler_on_axis),
+        rulerOnAxis:
+          form.show_scale !== false && Boolean(form.linear_ruler_on_axis),
         managed: linearAxisManaged
       });
   const overrides = {
@@ -576,6 +578,7 @@ const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_
       optionalNumber(adv.depth_small_tick_interval),
     [CONFIG_OVERRIDE_PATHS.depthTickFontSize]: optionalNumber(adv.depth_tick_font_size),
     [CONFIG_OVERRIDE_PATHS.depthShareAxis]: Boolean(adv.depth_share_axis),
+    [CONFIG_OVERRIDE_PATHS.showScale]: form.show_scale !== false,
     [CONFIG_OVERRIDE_PATHS.scaleInterval]: optionalNumber(adv.scale_interval),
     ...(state.filterMode.value === 'Blacklist'
       ? {
@@ -1048,6 +1051,7 @@ const buildTrackPlan = ({
           depthTrackCount: Math.max(1, depthTrackCount),
           showGc: !state.form.suppress_gc,
           showSkew: !state.form.suppress_skew,
+          showTicks: state.form.show_scale !== false,
           preset: state.form.track_type
         }),
         shortcuts
@@ -2895,6 +2899,7 @@ export const projectCanonicalSessionRequest = ({
       : 'none',
     track_type: overrides.track_type || 'tuckin',
     linear_track_layout: projectedLinearTrackLayout,
+    show_scale: overrides.show_scale !== false,
     scale_style: overrides.scale_style || 'bar',
     align_center: Boolean(overrides.align_center),
     keep_definition_left_aligned: Boolean(overrides.keep_definition_left_aligned),

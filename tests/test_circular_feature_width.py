@@ -645,6 +645,44 @@ def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pyt
     assert by_id["features"].width.resolve(390.0) == pytest.approx(42.0)
 
 
+def test_cli_hidden_scale_geometry_shortcut_omits_implicit_ticks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    record = _load_record()
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    _stub_typed_request_export(monkeypatch, tmp_path)
+
+    def fake_assemble(*args, **kwargs):
+        captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
+
+    circular_cli_module.circular_main(
+        [
+            "--gbk",
+            "dummy.gb",
+            "--hide_scale",
+            "--feature_width",
+            "42",
+            "--format",
+            "svg",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    slots = captured["circular_track_slots"]
+    assert all(slot.renderer != "ticks" for slot in slots)
+    assert next(slot for slot in slots if slot.id == "features").width.resolve(
+        390.0
+    ) == pytest.approx(42.0)
+
+
 @pytest.mark.parametrize(
     ("option", "value"),
     [

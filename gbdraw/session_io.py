@@ -2196,6 +2196,8 @@ def _append_common_gui_args(
         _append_pair(run_args, invocation_args, "--strain", str(form.get("strain")))
     if form.get("separate_strands") is True:
         _append_flag(run_args, invocation_args, "--separate_strands")
+    if form.get("show_scale") is False:
+        _append_flag(run_args, invocation_args, "--hide_scale")
     features = adv.get("features")
     if isinstance(features, list) and features:
         _append_pair(run_args, invocation_args, "-k", ",".join(str(item) for item in features if item))
@@ -2995,6 +2997,7 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
         "strain": _option_value(args, "--strain") or "",
         "plot_title": _option_value(args, "--plot_title") or "",
         "separate_strands": "--separate_strands" in args,
+        "show_scale": "--hide_scale" not in args,
     }
     adv: dict[str, Any] = {}
     losat: dict[str, Any] = {
@@ -3048,7 +3051,9 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
                 "legend": _option_value(args, "-l", "--legend") or "bottom",
                 "scale_style": _option_value(args, "--scale_style") or "bar",
                 "linear_track_layout": _option_value(args, "--track_layout") or "middle",
-                "linear_ruler_on_axis": "--ruler_on_axis" in args,
+                "linear_ruler_on_axis": (
+                    "--ruler_on_axis" in args and "--hide_scale" not in args
+                ),
                 "align_center": "--align_center" in args,
                 "keep_definition_left_aligned": "--keep_definition_left_aligned" in args,
                 "show_gc": "--gc" in args,

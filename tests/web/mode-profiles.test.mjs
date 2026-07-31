@@ -276,7 +276,8 @@ assert.deepEqual(
     suppress_gc: formDefaults.suppress_gc,
     suppress_skew: formDefaults.suppress_skew,
     show_gc: formDefaults.show_gc,
-    show_skew: formDefaults.show_skew
+    show_skew: formDefaults.show_skew,
+    show_scale: formDefaults.show_scale
   },
   {
     multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
@@ -284,7 +285,8 @@ assert.deepEqual(
     suppress_gc: false,
     suppress_skew: false,
     show_gc: false,
-    show_skew: false
+    show_skew: false,
+    show_scale: true
   }
 );
 const circularAdv = createDefaultAdv();
@@ -321,6 +323,7 @@ assert.deepEqual(
   state.modeProfileStateManager.transition(state.adv, 'circular', 'linear');
   state.mode.value = 'linear';
   state.adv.identity = 77;
+  state.form.show_scale = false;
   state.adv.circular_track_slots_enabled = true;
   state.adv.circular_track_slots_axis_index = 1;
   state.adv.circular_track_slots.splice(
@@ -374,6 +377,7 @@ assert.deepEqual(
   assert.ok(Object.values(resetProfiles.profiles.linear.managed).every(Boolean));
   assert.equal(state.adv.circular_track_slots_enabled, false);
   assert.equal(state.adv.linear_track_slots_enabled, false);
+  assert.equal(state.form.show_scale, true);
   assert.deepEqual(
     state.adv.circular_track_slots,
     resetAdvDefaults.circular_track_slots
@@ -404,8 +408,10 @@ assert.deepEqual(
   state.modeProfileStateManager.transition(state.adv, 'circular', 'linear');
   state.mode.value = 'linear';
   state.adv.identity = 77;
+  state.form.show_scale = false;
   const savedConfig = structuredClone(buildConfigData());
 
+  assert.equal(savedConfig.form.show_scale, false);
   assert.equal(savedConfig.modeProfiles.profiles.circular.values.identity, 88);
   assert.equal(savedConfig.modeProfiles.profiles.circular.managed.identity, false);
   assert.equal(savedConfig.modeProfiles.profiles.linear.values.identity, 77);
@@ -413,7 +419,9 @@ assert.deepEqual(
 
   Object.assign(state.adv, createDefaultAdv('linear'));
   state.modeProfileStateManager.reset('linear', state.adv);
+  state.form.show_scale = true;
   applyConfigData(savedConfig);
+  assert.equal(state.form.show_scale, false);
   assert.equal(state.adv.identity, 77);
   state.modeProfileStateManager.transition(state.adv, 'linear', 'circular');
   assert.equal(state.adv.identity, 88);
@@ -499,6 +507,7 @@ for (const modeName of ['circular', 'linear']) {
   assert.deepEqual(options.selectedFeaturesSet, semanticParity.featureTypes);
   assert.equal(options.configOverrides['canvas.show_gc'], expected.tracks.gc);
   assert.equal(options.configOverrides['canvas.show_skew'], expected.tracks.skew);
+  assert.equal(options.configOverrides['objects.scale.show'], true);
   if (modeName === 'linear') {
     assert.equal(
       options.configOverrides['objects.axis.linear.stroke_color'],

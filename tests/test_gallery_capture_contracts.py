@@ -17,6 +17,7 @@ from tools.capture_gallery_tutorial_screenshots import (
     load_ready_examples,
     resolve_gallery_reference,
     validate_tutorial_media,
+    wait_for_web_app_ready,
 )
 
 
@@ -147,3 +148,20 @@ def test_cross_example_media_is_explicitly_generic() -> None:
             media_owner = source.split("/", 3)[2]
             if media_owner != sample["id"]:
                 assert operation.get("genericMedia") is True
+
+
+def test_web_app_readiness_accepts_worker_or_main_thread_runtime() -> None:
+    calls: list[tuple[str, int]] = []
+
+    class FakePage:
+        def wait_for_function(self, script: str, *, timeout: int) -> None:
+            calls.append((script, timeout))
+
+    wait_for_web_app_ready(FakePage())
+
+    assert len(calls) == 1
+    script, timeout = calls[0]
+    assert "app.diagramGenerationWorkerReady === true" in script
+    assert "app.pyodideReady === true" in script
+    assert "status.startsWith('Startup Error:')" in script
+    assert timeout == 120000

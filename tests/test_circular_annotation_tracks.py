@@ -263,6 +263,34 @@ def test_circular_highlight_automatically_renders_behind_features() -> None:
     assert elements.index(highlight_group) < elements.index(record_group)
 
 
+def test_circular_automatic_annotation_slots_respect_hidden_scale() -> None:
+    record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    annotation = RegionAnnotation(
+        "highlighted",
+        CoordinateSpan(None, 100, 300),
+        mark="highlight",
+    )
+
+    drawing = build_circular_diagram(
+        record,
+        options=CircularDiagramOptions(
+            config_overrides={"objects.scale.show": False},
+            annotations=AnnotationOptions(
+                sets=(AnnotationSet("regions", (annotation,)),)
+            ),
+        ),
+    )
+    svg = drawing.tostring()
+    renderers = {
+        slot["renderer"]
+        for slot in drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert "ticks" not in renderers
+    assert 'data-gbdraw-annotation-id="highlighted"' in svg
+    assert 'id="Axis"' in svg
+
+
 def test_circular_multi_record_annotations_bind_by_record_index() -> None:
     records = [
         SeqRecord(Seq("A" * 1000), id="duplicate", name="duplicate"),
