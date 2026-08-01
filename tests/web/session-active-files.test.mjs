@@ -53,6 +53,11 @@ const sourceState = {
     linear_track_slots: []
   },
   circularConservation: { enabled: false, source: 'upload' },
+  linearRecordLayoutEnabled: { value: false },
+  linearRecordRows: [],
+  linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+  losatProgram: { value: 'blastn' },
+  losat: { blastp: { mode: 'pairwise' } },
   files: {
     c_gb: circularInput,
     c_gff: null,
@@ -77,7 +82,6 @@ const sourceState = {
     depth: null,
     blast: null
   }],
-  linearComparisons: []
 };
 
 const circular = await serializeActiveRenderFiles('circular', sourceState);
@@ -108,3 +112,84 @@ assert.equal(linearInput.reads(), 1);
 assert.equal(linear.linearSeqs[0].gb.name, 'linear.gb');
 assert.equal(linear.linearSeqs[0].depth, null);
 assert.equal(linear.c_gb, null);
+
+const activeComparison = readableFile('active-comparison.tsv', 'q\ts\t99');
+const inactiveComparison = unreadableFile('inactive-comparison.tsv');
+const inactiveCanonical = unreadableFile('inactive-canonical.tsv');
+const comparisonState = {
+  ...linearState,
+  files: {
+    ...linearState.files,
+    linearCanonicalComparisons: []
+  },
+  linearSeqs: [
+    { uid: 'a', gb: linearInput, gff: null, fasta: null, depth: null },
+    { uid: 'b', gb: linearInput, gff: null, fasta: null, depth: null }
+  ],
+  linearComparisonPlan: {
+    mode: 'selected',
+    defaultSource: 'losat',
+    edges: [{
+      id: 'active-upload',
+      queryUid: 'a',
+      subjectUid: 'b',
+      included: true,
+      fileActive: true,
+      losatFilenameActive: false,
+      source: 'upload',
+      file: activeComparison,
+      losatFilename: ''
+    }, {
+      id: 'dormant-upload',
+      queryUid: 'a',
+      subjectUid: 'b',
+      included: false,
+      fileActive: false,
+      losatFilenameActive: false,
+      source: 'upload',
+      file: inactiveComparison,
+      losatFilename: ''
+    }]
+  }
+};
+const activeSnapshot = {
+  mode: 'selected',
+  edges: [{
+    id: 'active-upload',
+    source: 'upload',
+    fileActive: true,
+    file: activeComparison
+  }]
+};
+const activeSerialized = await serializeActiveRenderFiles(
+  'linear',
+  comparisonState,
+  activeSnapshot
+);
+assert.deepEqual(
+  activeSerialized.linearComparisons.map((comparison) => Object.keys(comparison)),
+  [['id', 'file']]
+);
+assert.equal(activeSerialized.linearComparisons[0].id, 'active-upload');
+assert.equal(activeSerialized.linearComparisons[0].file.name, 'active-comparison.tsv');
+assert.equal(activeComparison.reads(), 1);
+
+const noneSerialized = await serializeActiveRenderFiles(
+  'linear',
+  {
+    ...comparisonState,
+    files: {
+      ...comparisonState.files,
+      linearCanonicalComparisons: [{
+        kind: 'precomputedProteinComparison',
+        encoding: 'canonicalTsv',
+        queryRecordIndex: 0,
+        subjectRecordIndex: 1,
+        file: inactiveCanonical
+      }]
+    }
+  },
+  { mode: 'none', edges: [] }
+);
+assert.deepEqual(noneSerialized.linearComparisons, []);
+assert.deepEqual(noneSerialized.linearCanonicalComparisons, []);

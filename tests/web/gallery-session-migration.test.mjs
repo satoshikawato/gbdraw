@@ -11,7 +11,10 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-gallery-session-migration-
 await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
-const { promoteGallerySessionToCurrent } = await import(
+const {
+  migrateLegacyLinearComparisonDraft,
+  promoteGallerySessionToCurrent
+} = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'gallery-session-migration.js'))
 );
 const { projectCanonicalSessionRequest } = await import(
@@ -213,10 +216,195 @@ assert.equal(
 );
 const currentWithoutWebConfig = structuredClone(promotedSyntheticGui);
 delete currentWithoutWebConfig.config;
-assert.equal(
-  promoteGallerySessionToCurrent(currentWithoutWebConfig).config,
-  undefined
+const repairedWithoutWebConfig = promoteGallerySessionToCurrent(currentWithoutWebConfig);
+assert.deepEqual(repairedWithoutWebConfig.config.linearComparisonPlan, {
+  mode: 'adjacent',
+  defaultSource: 'losat',
+  edges: []
+});
+
+const uploadedGap = syntheticResource('web-file', 'gap.tsv', 'q\ts\t99');
+const migratedSelectedDraft = migrateLegacyLinearComparisonDraft({
+  config: {
+    blastSource: 'losat',
+    linearRecordLayout: {
+      enabled: true,
+      recordGap: 20,
+      rows: [{ uid: 'a', row: 1 }, { uid: 'b', row: 2 }],
+      comparisons: [{
+        id: 'selected-edge',
+        queryUid: 'a',
+        subjectUid: 'b',
+        source: 'upload'
+      }]
+    }
+  },
+  filesData: {
+    linearSeqs: [
+      { uid: 'a', blast: uploadedGap, losat_filename: 'custom-a.fna' },
+      { uid: 'b', blast: null, losat_filename: '' }
+    ],
+    linearComparisons: [{
+      id: 'selected-edge',
+      queryUid: 'a',
+      subjectUid: 'b',
+      source: 'upload',
+      file: uploadedGap
+    }]
+  },
+  forceWebDraft: true
+});
+assert.equal(migratedSelectedDraft.config.linearComparisonPlan.mode, 'selected');
+assert.deepEqual(migratedSelectedDraft.config.linearComparisonPlan.edges[0], {
+  id: 'selected-edge',
+  queryUid: 'a',
+  subjectUid: 'b',
+  included: true,
+  fileActive: true,
+  losatFilenameActive: true,
+  source: 'upload',
+  losatFilename: 'custom-a.fna'
+});
+assert.deepEqual(
+  migratedSelectedDraft.filesData.linearComparisons,
+  [{ id: 'selected-edge', file: uploadedGap }]
 );
+assert.equal(Object.hasOwn(migratedSelectedDraft.config, 'blastSource'), false);
+assert.equal(
+  Object.hasOwn(migratedSelectedDraft.config.linearRecordLayout, 'comparisons'),
+  false
+);
+assert.equal(
+  Object.hasOwn(migratedSelectedDraft.filesData.linearSeqs[0], 'blast'),
+  false
+);
+assert.equal(
+  Object.hasOwn(migratedSelectedDraft.filesData.linearSeqs[0], 'losat_filename'),
+  false
+);
+
+const migratedMirroredAdjacentUpload = migrateLegacyLinearComparisonDraft({
+  config: {
+    blastSource: 'upload',
+    linearRecordLayout: {
+      enabled: false,
+      rows: [{ uid: 'a', row: 1 }, { uid: 'b', row: 2 }]
+    }
+  },
+  filesData: {
+    linearSeqs: [{ uid: 'a', blast: uploadedGap }, { uid: 'b' }],
+    linearComparisons: [{
+      id: 'mirrored-a-b',
+      queryUid: 'a',
+      subjectUid: 'b',
+      source: 'upload',
+      file: uploadedGap
+    }]
+  },
+  forceWebDraft: true
+});
+assert.equal(migratedMirroredAdjacentUpload.config.linearComparisonPlan.edges.length, 1);
+assert.equal(migratedMirroredAdjacentUpload.filesData.linearComparisons.length, 1);
+assert.deepEqual(
+  migratedMirroredAdjacentUpload.config.linearComparisonPlan.edges[0],
+  {
+    id: 'linear-comparison-migrated-adjacent-1-a-b',
+    queryUid: 'a',
+    subjectUid: 'b',
+    included: true,
+    fileActive: true,
+    losatFilenameActive: false,
+    source: 'upload',
+    losatFilename: ''
+  }
+);
+
+const migratedEmptySelectedDraft = migrateLegacyLinearComparisonDraft({
+  config: {
+    blastSource: 'upload',
+    linearRecordLayout: { enabled: true, rows: [], comparisons: [] }
+  },
+  filesData: {
+    linearSeqs: [
+      { uid: 'a', blast: uploadedGap, losat_filename: 'retained.fna' },
+      { uid: 'b' }
+    ]
+  },
+  forceWebDraft: true
+});
+assert.equal(migratedEmptySelectedDraft.config.linearComparisonPlan.mode, 'none');
+assert.deepEqual(
+  migratedEmptySelectedDraft.config.linearComparisonPlan.edges[0],
+  {
+    id: 'linear-comparison-migrated-adjacent-1-a-b',
+    queryUid: 'a',
+    subjectUid: 'b',
+    included: false,
+    fileActive: false,
+    losatFilenameActive: false,
+    source: 'upload',
+    losatFilename: 'retained.fna'
+  }
+);
+
+const dormantExplicitUpload = syntheticResource(
+  'web-file',
+  'retained-non-adjacent.tsv',
+  'a\tc\t97'
+);
+const migratedDisabledLayoutDraft = migrateLegacyLinearComparisonDraft({
+  config: {
+    blastSource: 'upload',
+    linearRecordLayout: {
+      enabled: false,
+      rows: [
+        { uid: 'a', row: 1 },
+        { uid: 'b', row: 2 },
+        { uid: 'c', row: 3 }
+      ],
+      comparisons: [{
+        id: 'dormant-a-c',
+        queryUid: 'a',
+        subjectUid: 'c',
+        source: 'upload'
+      }]
+    }
+  },
+  filesData: {
+    linearSeqs: [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }],
+    linearComparisons: [{
+      id: 'dormant-a-c',
+      queryUid: 'a',
+      subjectUid: 'c',
+      source: 'upload',
+      file: dormantExplicitUpload
+    }]
+  },
+  forceWebDraft: true
+});
+assert.equal(migratedDisabledLayoutDraft.config.linearComparisonPlan.mode, 'adjacent');
+assert.deepEqual(migratedDisabledLayoutDraft.config.linearComparisonPlan.edges, [{
+  id: 'dormant-a-c',
+  queryUid: 'a',
+  subjectUid: 'c',
+  included: false,
+  fileActive: false,
+  losatFilenameActive: false,
+  source: 'upload',
+  losatFilename: ''
+}]);
+assert.deepEqual(migratedDisabledLayoutDraft.filesData.linearComparisons, [{
+  id: 'dormant-a-c',
+  file: dormantExplicitUpload
+}]);
+
+const migratedCliOnly = migrateLegacyLinearComparisonDraft({
+  config: { blastSource: 'losat', cliOptions: { rawArgs: [] } },
+  filesData: { linearSeqs: [{ uid: 'a' }, { uid: 'b' }] },
+  forceWebDraft: false
+});
+assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearComparisonPlan'), false);
+assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearRecordLayout'), false);
 
 const hmmt = await loadSession('HmmtDNA_ATskew.gbdraw-session.json');
 const promotedHmmt = promoteGallerySessionToCurrent(hmmt);
@@ -237,10 +425,14 @@ assert.equal(
   'split'
 );
 assert.equal(hmmtOptions.colors.defaultColorsPalette, 'ajisai');
-assert.match(
-  resourceText(promotedHmmt, hmmtOptions.colors.defaultColors),
-  /CDS\t#54bcf8/
+const hmmtDefaultColors = resourceText(
+  promotedHmmt,
+  hmmtOptions.colors.defaultColors
 );
+assert.match(hmmtDefaultColors, /CDS\t#84b9ec/);
+assert.match(hmmtDefaultColors, /rRNA\t#7cecd5/);
+assert.match(hmmtDefaultColors, /tRNA\t#ddce76/);
+assert.doesNotMatch(hmmtDefaultColors, /CDS\t#54bcf8/);
 assert.match(
   resourceText(promotedHmmt, hmmtOptions.qualifierPriorityTable),
   /CDS\tgene/

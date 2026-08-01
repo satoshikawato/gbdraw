@@ -535,15 +535,27 @@ def _install_user_uploaded_tsv(
         """async ({ filename, text }) => {
           const bytes = new TextEncoder().encode(text);
           const app = window.__GBDRAW_APP__;
-          app.blastSource = 'upload';
           app.losatProgram = 'blastn';
-          app.linearSeqs[0].blast = new File(
+          const file = new File(
             [bytes],
             filename,
             { type: 'text/tab-separated-values', lastModified: 0 }
           );
+          app.linearComparisonPlan.mode = 'adjacent';
+          app.linearComparisonPlan.defaultSource = 'upload';
+          app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
+            id: 'acceptance-upload-edge',
+            queryUid: app.linearSeqs[0].uid,
+            subjectUid: app.linearSeqs[1].uid,
+            included: true,
+            fileActive: true,
+            losatFilenameActive: false,
+            source: 'upload',
+            file,
+            losatFilename: ''
+          });
           return Array.from(
-            new Uint8Array(await app.linearSeqs[0].blast.arrayBuffer())
+            new Uint8Array(await file.arrayBuffer())
           );
         }""",
         {
@@ -556,7 +568,7 @@ def _install_user_uploaded_tsv(
 def _read_first_uploaded_tsv(page: Any) -> dict[str, Any]:
     return page.evaluate(
         """async () => {
-          const file = window.__GBDRAW_APP__.linearSeqs[0].blast;
+          const file = window.__GBDRAW_APP__.linearComparisonPlan.edges[0]?.file;
           return {
             name: file?.name || '',
             bytes: file

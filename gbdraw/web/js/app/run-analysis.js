@@ -47,8 +47,10 @@ import {
   normalizeGroupMetadataScope
 } from './losat-normalization.js';
 import { buildRunInfo } from './run-info.js';
-import { reconcileLinearRecordLayout } from './linear-record-layout.js';
-import { validateLinearComparisons } from './linear-comparisons.js';
+import {
+  buildPairwiseLosatJobSpecs,
+  resolveLinearComparisonPlan
+} from './linear-comparisons.js';
 import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
@@ -817,7 +819,6 @@ export const createRunAnalysis = ({
     mode,
     cInputType,
     lInputType,
-    blastSource,
     losatProgram,
     losat,
     losatCacheInfo,
@@ -841,7 +842,8 @@ export const createRunAnalysis = ({
     linearSeqs,
     linearRecordLayoutEnabled,
     linearRecordRows,
-    linearComparisons,
+    linearComparisonPlan,
+    linearComparisonResolution,
     generatedLegendPosition,
     generatedMode,
     generatedMultiRecordCanvas,
@@ -1124,9 +1126,33 @@ export const createRunAnalysis = ({
     return `${left}.${right}.${buildLosatSuffix()}.tsv`;
   };
 
-  const getLosatPairDefaultName = (pairIndex, queryEntry = null, subjectEntry = null) => {
-    const leftLabel = getSeqLabel(linearSeqs[pairIndex], queryEntry?.recordId || `seq_${pairIndex + 1}`);
-    const rightLabel = getSeqLabel(linearSeqs[pairIndex + 1], subjectEntry?.recordId || `seq_${pairIndex + 2}`);
+  const getResolvedLinearEdge = (edgeKey) => {
+    const normalizedKey = String(edgeKey || '').trim();
+    if (!normalizedKey) return null;
+    const edges = linearComparisonResolution?.value?.edges;
+    return (Array.isArray(edges) ? edges : []).find((edge) => edge.edgeKey === normalizedKey) || null;
+  };
+
+  const getLosatCacheInfoEntry = (edgeKey) => {
+    const entries = Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [];
+    if (Number.isInteger(edgeKey)) return entries[edgeKey] || null;
+    const normalizedKey = String(edgeKey || '').trim();
+    return entries.find((entry) => String(entry?.edgeKey || '') === normalizedKey) || null;
+  };
+
+  const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
+    const cacheEntry = getLosatCacheInfoEntry(edgeKey);
+    const edge = getResolvedLinearEdge(edgeKey) || cacheEntry;
+    const queryIndex = Number(edge?.queryIndex);
+    const subjectIndex = Number(edge?.subjectIndex);
+    const leftLabel = getSeqLabel(
+      linearSeqs[queryIndex],
+      queryEntry?.recordId || `seq_${Number.isInteger(queryIndex) ? queryIndex + 1 : 1}`
+    );
+    const rightLabel = getSeqLabel(
+      linearSeqs[subjectIndex],
+      subjectEntry?.recordId || `seq_${Number.isInteger(subjectIndex) ? subjectIndex + 1 : 2}`
+    );
     return buildLosatFilename(leftLabel, rightLabel);
   };
 
@@ -1229,8 +1255,8 @@ export const createRunAnalysis = ({
     }
   };
 
-  const downloadLosatPair = async (pairIndex, customName) => {
-    const entry = losatCacheInfo.value?.[pairIndex];
+  const downloadLosatPair = async (edgeKey, customName) => {
+    const entry = getLosatCacheInfoEntry(edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
@@ -1238,10 +1264,13 @@ export const createRunAnalysis = ({
     if (classifyRawLosatCacheEntry(cached) === 'protein-current') {
       await ensureHelperRuntime();
     }
-    const defaultName = getLosatPairDefaultName(pairIndex);
+    const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
+    const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
+      ? Number(entry.ordinal)
+      : 0;
     const filename = normalizeLosatFilename(
       customName,
-      entry.filename || defaultName || `losat_pair_${pairIndex + 1}.tsv`
+      entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
     entry.filename = filename;
     const hydrated = hydrateLosatDownloadText(entry.key, cached);
@@ -1252,13 +1281,16 @@ export const createRunAnalysis = ({
     );
   };
 
-  const setLosatPairFilename = (pairIndex, customName) => {
-    const entry = losatCacheInfo.value?.[pairIndex];
+  const setLosatPairFilename = (edgeKey, customName) => {
+    const entry = getLosatCacheInfoEntry(edgeKey);
     if (!entry) return;
-    const defaultName = getLosatPairDefaultName(pairIndex);
+    const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
+    const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
+      ? Number(entry.ordinal)
+      : 0;
     entry.filename = normalizeLosatFilename(
       customName,
-      entry.filename || defaultName || `losat_pair_${pairIndex + 1}.tsv`
+      entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
   };
 
@@ -1345,10 +1377,10 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const shouldSuppressPairwiseIdentityLegend = () => {
+  const shouldSuppressPairwiseIdentityLegend = (comparisonPlanSnapshot = null) => {
     return (
       mode.value === 'linear' &&
-      blastSource.value === 'losat' &&
+      comparisonPlanSnapshot?.hasLosatIntent === true &&
       losatProgram.value === 'blastp' &&
       normalizeBlastpMode(losat.blastp?.mode) === 'collinear' &&
       normalizeCollinearColorMode(losat.blastp?.collinearColorMode) === 'orientation'
@@ -1479,9 +1511,24 @@ export const createRunAnalysis = ({
     }
   };
 
-  const runAnalysisInternal = async ({ runMode = 'manual', requestId = 0 } = {}) => {
+  const runAnalysisInternal = async ({
+    runMode = 'manual',
+    requestId = 0,
+    comparisonPlanSnapshot = null
+  } = {}) => {
     const isReflow = runMode === 'reflow';
     let pyodide = getPyodide();
+    const activeComparisonPlanSnapshot = mode.value === 'linear'
+      ? (
+          comparisonPlanSnapshot || resolveLinearComparisonPlan({
+            plan: linearComparisonPlan,
+            sequences: linearSeqs,
+            layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
+            losatProgram: losatProgram.value,
+            blastpMode: normalizeBlastpMode(losat.blastp?.mode)
+          })
+        )
+      : null;
 
     const generationToken = ++latestGenerationToken;
     let keepProcessingStatus = false;
@@ -1821,6 +1868,14 @@ export const createRunAnalysis = ({
     labelOverrideBuildWarning.value = '';
 
     try {
+      if (mode.value === 'linear') {
+        if (!activeComparisonPlanSnapshot || !Array.isArray(activeComparisonPlanSnapshot.edges)) {
+          throw new Error('A resolved Linear comparison plan is required.');
+        }
+        if (activeComparisonPlanSnapshot.error) {
+          throw new Error(activeComparisonPlanSnapshot.error);
+        }
+      }
       let annotationLoadComparison = false;
       let regionSpecs = [];
       let recordSelectors = [];
@@ -2612,19 +2667,10 @@ export const createRunAnalysis = ({
           adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
           adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
         }
-        const explicitLosatPairs = linearRecordLayoutEnabled.value
-          ? linearComparisons.filter((comparison) => comparison.source === 'losat')
-          : [];
-        const useLosat = linearRecordLayoutEnabled.value
-          ? explicitLosatPairs.length > 0
-          : blastSource.value === 'losat';
+        const comparisonResolution = activeComparisonPlanSnapshot;
+        const useLosat = comparisonResolution.hasLosatIntent === true;
         const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
-        if (explicitLosatPairs.length > 0 && !useProteinBlastp) {
-          throw new Error('Comparison-list LOSAT sources require the blastp program.');
-        }
-        const blastpMode = explicitLosatPairs.length > 0
-          ? 'pairwise'
-          : normalizeBlastpMode(losat.blastp?.mode);
+        const blastpMode = normalizeBlastpMode(losat.blastp?.mode);
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         adv.min_bitscore = normalizeBlastThresholdNumber(
@@ -2767,7 +2813,7 @@ export const createRunAnalysis = ({
           return null;
         };
 
-        let hasLinearComparisonData = false;
+        let hasLinearComparisonData = comparisonResolution.hasComparisonIntent === true;
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
@@ -3168,8 +3214,20 @@ export const createRunAnalysis = ({
           return verified;
         };
 
-        const buildCacheFilename = (pairIndex, queryEntry, subjectEntry) =>
-          getLosatPairDefaultName(pairIndex, queryEntry, subjectEntry);
+        const buildCacheFilename = (spec, queryEntry, subjectEntry) => {
+          const edge = comparisonResolution.edges.find(
+            (candidate) => candidate.edgeKey === spec.edgeKey
+          );
+          const fallback = getLosatPairDefaultName(
+            spec.edgeKey,
+            queryEntry,
+            subjectEntry
+          );
+          return normalizeLosatFilename(
+            edge?.losatFilenameActive ? edge.losatFilename : '',
+            fallback
+          );
+        };
 
         const pushArg = (arr, flag, value) => {
           if (value === null || value === undefined || value === '') return;
@@ -3214,11 +3272,16 @@ export const createRunAnalysis = ({
 
         {
           const inputWriteStartedAt = getNow();
+          const losatRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
+            ? new Set(linearSeqs.map((_, index) => index))
+            : new Set(comparisonResolution.edges
+                .filter((edge) => edge.source === 'losat')
+                .flatMap((edge) => [edge.queryIndex, edge.subjectIndex]));
           for (let i = 0; i < linearSeqs.length; i++) {
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
               if (!seq.gb) throw new Error(`Sequence #${i + 1}: Missing GenBank file.`);
-              if (useLosat) {
+              if (useLosat && losatRecordIndexes.has(i)) {
                 await writeLinearFileToFs(seq.gb, `/seq_${i}.gb`, {
                   cacheText: true,
                   slot: `files.linearSeqs[${i}].gb`
@@ -3226,7 +3289,7 @@ export const createRunAnalysis = ({
               }
             } else {
               if (!seq.gff || !seq.fasta) throw new Error(`Sequence #${i + 1}: GFF3 and FASTA are required.`);
-              if (useLosat) {
+              if (useLosat && losatRecordIndexes.has(i)) {
                 await writeLinearFileToFs(seq.gff, `/seq_${i}.gff`, {
                   slot: `files.linearSeqs[${i}].gff`
                 });
@@ -3243,8 +3306,14 @@ export const createRunAnalysis = ({
         regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
         if (useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
+          const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
+            ? linearSeqs.map((_, index) => index)
+            : Array.from(new Set(comparisonResolution.edges
+                .filter((edge) => edge.source === 'losat')
+                .flatMap((edge) => [edge.queryIndex, edge.subjectIndex])))
+                .sort((left, right) => left - right);
           const proteinEntries = [];
-          for (let index = 0; index < linearSeqs.length; index += 1) {
+          for (const index of proteinRecordIndexes) {
             proteinEntries.push(await getSeqEntry(index));
           }
           const manifests = proteinEntries.map((entry) => entry.identityManifest);
@@ -3320,43 +3389,51 @@ export const createRunAnalysis = ({
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
           const jobSpecs = [];
+          const resolvedLosatEdges = comparisonResolution.edges.filter(
+            (edge) => edge.source === 'losat'
+          );
+          const edgeForOrdinal = (ordinal) => (
+            resolvedLosatEdges.find((edge) => edge.ordinal === ordinal) ||
+            resolvedLosatEdges[Math.max(0, Math.min(ordinal, resolvedLosatEdges.length - 1))]
+          );
+          const pushExpandedJobSpec = (queryIndex, subjectIndex, ordinal) => {
+            const edge = edgeForOrdinal(ordinal);
+            if (!edge) return;
+            jobSpecs.push({
+              edgeKey: edge.edgeKey,
+              ordinal: edge.ordinal,
+              queryUid: edge.queryUid,
+              subjectUid: edge.subjectUid,
+              queryIndex,
+              subjectIndex,
+              program: losatProgram.value
+            });
+          };
           if (useOrthogroupBlastp) {
             for (let i = 0; i < linearSeqs.length; i++) {
-              jobSpecs.push({ queryIndex: i, subjectIndex: i, pairIndex: Math.min(i, Math.max(0, linearSeqs.length - 2)) });
+              pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
               for (let j = i + 1; j < linearSeqs.length; j++) {
-                jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
-                jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
+                pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
+                pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
               }
             }
           } else if (useCollinearBlastp) {
             for (let i = 0; i < linearSeqs.length; i++) {
-              jobSpecs.push({ queryIndex: i, subjectIndex: i, pairIndex: Math.min(i, Math.max(0, linearSeqs.length - 2)) });
+              pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
             }
             for (let i = 0; i < linearSeqs.length - 1; i++) {
               const subjectEnd = collinearSearchScope === 'all' ? linearSeqs.length : i + 2;
               for (let j = i + 1; j < subjectEnd; j++) {
-                jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
-                jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
+                pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
+                pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
               }
             }
           } else {
-            if (linearRecordLayoutEnabled.value) {
-              const indexByUid = new Map(
-                linearSeqs.map((sequence, index) => [sequence.uid, index])
-              );
-              linearComparisons.forEach((comparison, comparisonIndex) => {
-                if (comparison.source !== 'losat') return;
-                jobSpecs.push({
-                  queryIndex: indexByUid.get(comparison.queryUid),
-                  subjectIndex: indexByUid.get(comparison.subjectUid),
-                  pairIndex: comparisonIndex
-                });
-              });
-            } else {
-              for (let i = 0; i < linearSeqs.length - 1; i++) {
-                jobSpecs.push({ queryIndex: i, subjectIndex: i + 1, pairIndex: i });
-              }
-            }
+            jobSpecs.push(...buildPairwiseLosatJobSpecs({
+              resolution: comparisonResolution,
+              program: losatProgram.value,
+              blastpMode
+            }));
           }
 
           for (const spec of jobSpecs) {
@@ -3398,30 +3475,54 @@ export const createRunAnalysis = ({
             losatTiming.totalPairs += 1;
             if (hasCachedText) losatTiming.cacheHits += 1;
             else losatTiming.cacheMisses += 1;
-            const isAdjacentForwardDisplayPair = linearRecordLayoutEnabled.value
-              ? true
-              : spec.subjectIndex === spec.queryIndex + 1;
+            const resolvedEdge = comparisonResolution.edges.find(
+              (edge) => edge.edgeKey === spec.edgeKey
+            );
+            const isResolvedDisplayPair = Boolean(
+              resolvedEdge &&
+              spec.queryIndex === resolvedEdge.queryIndex &&
+              spec.subjectIndex === resolvedEdge.subjectIndex
+            );
             const pair = {
-              pairIndex: spec.pairIndex,
+              pairIndex: spec.ordinal,
+              ordinal: spec.ordinal,
+              edgeKey: spec.edgeKey,
+              queryUid: spec.queryUid,
+              subjectUid: spec.subjectUid,
               queryIndex: spec.queryIndex,
               subjectIndex: spec.subjectIndex,
               cacheKey,
-              filename: buildCacheFilename(spec.pairIndex, queryEntry, subjectEntry),
-              displayPair: isAdjacentForwardDisplayPair
+              filename: buildCacheFilename(spec, queryEntry, subjectEntry),
+              displayPair: isResolvedDisplayPair
             };
             losatPairs.push(pair);
-            if (isAdjacentForwardDisplayPair) {
+            if (
+              isResolvedDisplayPair &&
+              !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
+            ) {
               cacheInfo.push({
                 key: cacheKey,
                 filename: pair.filename,
-                display: true
+                display: true,
+                edgeKey: spec.edgeKey,
+                ordinal: spec.ordinal,
+                queryUid: resolvedEdge.queryUid,
+                subjectUid: resolvedEdge.subjectUid,
+                queryIndex: resolvedEdge.queryIndex,
+                subjectIndex: resolvedEdge.subjectIndex
               });
             }
 
             if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
               pendingJobKeys.add(cacheKey);
               losatJobs.push({
-                pairIndex: spec.pairIndex,
+                pairIndex: spec.ordinal,
+                ordinal: spec.ordinal,
+                edgeKey: spec.edgeKey,
+                queryUid: spec.queryUid,
+                subjectUid: spec.subjectUid,
+                queryIndex: spec.queryIndex,
+                subjectIndex: spec.subjectIndex,
                 cacheKey,
                 program: losatProgram.value,
                 querySequenceKey: queryEntry.sequenceKey,
@@ -3511,7 +3612,13 @@ export const createRunAnalysis = ({
               );
             }
             const recordPayloads = [];
-            for (let i = 0; i < linearSeqs.length; i += 1) {
+            const recordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
+              ? linearSeqs.map((_, index) => index)
+              : Array.from(new Set(losatPairs.flatMap((pair) => [
+                  pair.queryIndex,
+                  pair.subjectIndex
+                ]))).sort((left, right) => left - right);
+            for (const i of recordIndexes) {
               const entry = await getSeqEntry(i);
               recordPayloads.push({
                 recordIndex: i,
@@ -3530,6 +3637,8 @@ export const createRunAnalysis = ({
               const losatText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
               pairPayloads.push({
                 pairIndex: pair.pairIndex,
+                ordinal: pair.ordinal,
+                edgeKey: pair.edgeKey,
                 queryIndex: pair.queryIndex,
                 subjectIndex: pair.subjectIndex,
                 cacheKey: pair.cacheKey,
@@ -3646,6 +3755,8 @@ export const createRunAnalysis = ({
               });
               resolvedComparisons.push({
                 kind: 'precomputedProteinComparison',
+                edgeKey: sourcePair?.edgeKey || '',
+                ordinal: Number(sourcePair?.ordinal),
                 queryRecordIndex: Number(sourcePair?.queryIndex),
                 subjectRecordIndex: Number(sourcePair?.subjectIndex),
                 rows: Array.isArray(converted.rows) ? converted.rows : []
@@ -3684,6 +3795,8 @@ export const createRunAnalysis = ({
               });
               resolvedComparisons.push({
                 kind: 'nucleotideBlast',
+                edgeKey: pair.edgeKey,
+                ordinal: pair.ordinal,
                 queryRecordIndex: pair.queryIndex,
                 subjectRecordIndex: pair.subjectIndex,
                 text: converted.tsv || '',
@@ -3778,23 +3891,6 @@ export const createRunAnalysis = ({
               `FASTA chars=${losatTiming.totalFastaChars.toLocaleString()}`
             ].join(', ')
           );
-        } else if (!linearRecordLayoutEnabled.value) {
-          for (let i = 0; i < linearSeqs.length - 1; i++) {
-            const seq = linearSeqs[i];
-            if (seq.blast) {
-              hasLinearComparisonData = true;
-            }
-          }
-        }
-        if (linearRecordLayoutEnabled.value && linearComparisons.length > 0) {
-          const layoutRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
-          const comparisonError = validateLinearComparisons(
-            linearSeqs,
-            layoutRows,
-            linearComparisons
-          );
-          if (comparisonError) throw new Error(comparisonError);
-          hasLinearComparisonData = true;
         }
         if (extractFirstFasta) {
           extractFirstFasta.destroy();
@@ -3818,7 +3914,9 @@ export const createRunAnalysis = ({
           convertNucleotideBlast.destroy();
         }
         if (useLosat) {
-          losatCacheInfo.value = cacheInfo;
+          losatCacheInfo.value = cacheInfo.sort(
+            (left, right) => Number(left?.ordinal) - Number(right?.ordinal)
+          );
           losatCache.value = cacheMap;
         }
         if ((!useLinearTrackSlots && form.show_depth) || linearSlotNeedsDepth) {
@@ -3859,7 +3957,7 @@ export const createRunAnalysis = ({
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }
-      const serializedFiles = await serializeCanonicalFiles();
+      const serializedFiles = await serializeCanonicalFiles(activeComparisonPlanSnapshot);
       const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
         ...entry,
         fasta: serializedFiles.c_conservation_fastas?.[entry.sourceIndex] || null
@@ -3867,6 +3965,7 @@ export const createRunAnalysis = ({
       const canonical = buildCanonicalRenderRequest({
         state,
         filesData: serializedFiles,
+        comparisonPlanSnapshot: activeComparisonPlanSnapshot,
         resolvedComparisons,
         resolvedCircularConservation: canonicalCircularConservation
       });
@@ -3942,7 +4041,7 @@ export const createRunAnalysis = ({
         skipPositionReapply.value = true;
       }
 
-      const candidateResults = shouldSuppressPairwiseIdentityLegend()
+      const candidateResults = shouldSuppressPairwiseIdentityLegend(activeComparisonPlanSnapshot)
         ? stripPairwiseIdentityLegendsFromResults(res)
         : res;
       const candidateCatalog = isReflow
@@ -4114,7 +4213,10 @@ export const createRunAnalysis = ({
     }
   };
 
-  const runAnalysis = async () => runAnalysisInternal({ runMode: 'manual' });
+  const runAnalysis = async (comparisonPlanSnapshot = null) => runAnalysisInternal({
+    runMode: 'manual',
+    comparisonPlanSnapshot
+  });
 
   const cancelRunAnalysis = () => {
     latestGenerationToken += 1;

@@ -10,6 +10,7 @@ import binascii
 import copy
 import csv
 import gzip
+import hashlib
 import io
 import json
 import math
@@ -587,7 +588,199 @@ def validate_session(session: Mapping[str, Any]) -> None:
     if version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION:
         validate_current_session_artifacts(session)
     if version == CURRENT_SESSION_VERSION:
+        _validate_current_comparison_authority(session)
         _validate_current_feature_catalog_authority(session)
+
+
+def _validate_current_comparison_authority(
+    session: Mapping[str, Any],
+) -> None:
+    """Reject retired v40 comparison fields and validate an optional Web draft."""
+
+    config_value = session.get("config")
+    config = config_value if isinstance(config_value, Mapping) else {}
+    ui_value = session.get("ui")
+    ui = ui_value if isinstance(ui_value, Mapping) else {}
+    web_files_value = session.get("webFiles")
+    web_files = web_files_value if isinstance(web_files_value, Mapping) else {}
+    has_bindings = "bindings" in web_files
+    bindings_value = web_files.get("bindings")
+    if has_bindings and not isinstance(bindings_value, Mapping):
+        raise ValidationError("Session webFiles.bindings must be an object.")
+    bindings = bindings_value if isinstance(bindings_value, Mapping) else {}
+    if has_bindings and bindings.get("schema") != 1:
+        raise ValidationError("Unsupported Web file binding schema.")
+    adv_value = config.get("adv")
+    adv = adv_value if isinstance(adv_value, Mapping) else {}
+    layout_value = config.get("linearRecordLayout")
+    layout = layout_value if isinstance(layout_value, Mapping) else None
+
+    if "blastSource" in config or "blastSource" in adv:
+        raise ValidationError(
+            "Session version 40 cannot contain retired blastSource state."
+        )
+    if "blastSource" in ui:
+        raise ValidationError(
+            "Session version 40 cannot contain ui.blastSource."
+        )
+    if layout is not None and "comparisons" in layout:
+        raise ValidationError(
+            "Session version 40 cannot contain "
+            "config.linearRecordLayout.comparisons."
+        )
+
+    linear_sequences = bindings.get("linearSeqs")
+    if isinstance(linear_sequences, list):
+        for sequence in linear_sequences:
+            if not isinstance(sequence, Mapping):
+                continue
+            if "blast" in sequence:
+                raise ValidationError(
+                    "Session version 40 cannot contain per-record BLAST bindings."
+                )
+            if "losat_filename" in sequence:
+                raise ValidationError(
+                    "Session version 40 cannot contain per-record LOSAT filenames."
+                )
+    linear_metadata = web_files.get("linearRecordMetadata")
+    if isinstance(linear_metadata, list):
+        for metadata in linear_metadata:
+            if not isinstance(metadata, Mapping):
+                continue
+            if "losatFilename" in metadata or "losat_filename" in metadata:
+                raise ValidationError(
+                    "Session version 40 cannot contain per-record LOSAT filenames."
+                )
+    if "linearCanonicalComparisons" in bindings:
+        raise ValidationError(
+            "Session version 40 cannot bind comparison artifacts outside "
+            "the committed request."
+        )
+
+    comparison_bindings_value = bindings.get("linearComparisons")
+    if (
+        "linearComparisons" in bindings
+        and not isinstance(comparison_bindings_value, list)
+    ):
+        raise ValidationError("Current comparison file bindings must be an array.")
+    comparison_bindings = (
+        comparison_bindings_value
+        if isinstance(comparison_bindings_value, list)
+        else []
+    )
+    has_web_draft = (
+        "linearRecordLayout" in config or "linearComparisonPlan" in config
+    )
+    if not has_web_draft and not comparison_bindings:
+        return
+
+    plan = config.get("linearComparisonPlan")
+    if not isinstance(plan, Mapping):
+        raise ValidationError(
+            "Current Web comparison draft requires config.linearComparisonPlan."
+        )
+    if plan.get("mode") not in {"none", "adjacent", "selected"}:
+        raise ValidationError("config.linearComparisonPlan.mode is invalid.")
+    if plan.get("defaultSource") not in {"losat", "upload"}:
+        raise ValidationError(
+            "config.linearComparisonPlan.defaultSource is invalid."
+        )
+    edges = plan.get("edges")
+    if not isinstance(edges, list):
+        raise ValidationError("config.linearComparisonPlan.edges must be an array.")
+    allowed_edge_fields = {
+        "id",
+        "queryUid",
+        "subjectUid",
+        "included",
+        "fileActive",
+        "losatFilenameActive",
+        "source",
+        "losatFilename",
+    }
+    edge_ids: set[str] = set()
+    for edge in edges:
+        if not isinstance(edge, Mapping):
+            raise ValidationError(
+                "Each config.linearComparisonPlan edge must be an object."
+            )
+        unknown = sorted(str(field) for field in edge if field not in allowed_edge_fields)
+        if unknown:
+            raise ValidationError(
+                "config.linearComparisonPlan edge contains retired or unknown "
+                f"field(s): {', '.join(unknown)}."
+            )
+        edge_id = str(edge.get("id") or "").strip()
+        query_uid = str(edge.get("queryUid") or "").strip()
+        subject_uid = str(edge.get("subjectUid") or "").strip()
+        if not edge_id or not query_uid or not subject_uid:
+            raise ValidationError(
+                "Current comparison-plan edges require stable IDs and endpoint UIDs."
+            )
+        if edge_id in edge_ids:
+            raise ValidationError(
+                f"Current comparison-plan edge ID is duplicated: {edge_id}."
+            )
+        edge_ids.add(edge_id)
+        if (
+            type(edge.get("included")) is not bool
+            or type(edge.get("fileActive")) is not bool
+            or type(edge.get("losatFilenameActive")) is not bool
+            or edge.get("source") not in {"losat", "upload"}
+            or not isinstance(edge.get("losatFilename"), str)
+        ):
+            raise ValidationError(
+                "Current comparison-plan edge metadata is invalid."
+            )
+
+    bound_ids: set[str] = set()
+    resources_value = session.get("resources")
+    resources = resources_value if isinstance(resources_value, Mapping) else {}
+    for binding in comparison_bindings:
+        if not isinstance(binding, Mapping):
+            raise ValidationError(
+                "Each current comparison file binding must be an object."
+            )
+        unknown = sorted(
+            str(field) for field in binding if field not in {"id", "file"}
+        )
+        if unknown:
+            raise ValidationError(
+                "Current comparison file binding duplicates plan metadata: "
+                + ", ".join(unknown)
+                + "."
+            )
+        edge_id = str(binding.get("id") or "").strip()
+        if not edge_id or edge_id not in edge_ids:
+            raise ValidationError(
+                "Current comparison file binding must reference a plan edge ID."
+            )
+        if edge_id in bound_ids:
+            raise ValidationError(
+                f"Current comparison file binding is duplicated: {edge_id}."
+            )
+        file_binding = binding.get("file")
+        if not isinstance(file_binding, Mapping):
+            raise ValidationError(
+                "Each current comparison file binding requires a file resource binding."
+            )
+        resource_id = str(file_binding.get("resourceId") or "").strip()
+        if not resource_id:
+            raise ValidationError(
+                "Each current comparison file binding requires a resourceId."
+            )
+        if resource_id not in resources:
+            raise ValidationError(
+                "Current comparison file binding references a missing resource: "
+                f"{resource_id}."
+            )
+        bound_ids.add(edge_id)
+    for edge in edges:
+        if edge.get("fileActive") and str(edge.get("id") or "") not in bound_ids:
+            raise ValidationError(
+                "Active comparison file is missing its Web file binding: "
+                f"{edge.get('id')}."
+            )
 
 
 def _validate_current_feature_catalog_authority(
@@ -1458,6 +1651,547 @@ def session_to_cli_args(
     )
 
 
+def _legacy_comparison_source(value: Any, fallback: str = "losat") -> str:
+    source = str(value or "").strip().lower()
+    if source in {"upload", "files", "file"}:
+        return "upload"
+    if source == "losat":
+        return "losat"
+    return fallback
+
+
+def _stable_migrated_comparison_id(
+    prefix: str,
+    index: int,
+    query_uid: str,
+    subject_uid: str,
+) -> str:
+    def safe(value: str) -> str:
+        token = _SAFE_FILENAME_RE.sub("-", value).strip("-")
+        return token or "record"
+
+    return (
+        f"linear-comparison-migrated-{prefix}-{index + 1}-"
+        f"{safe(query_uid)}-{safe(subject_uid)}"
+    )
+
+
+def _migrate_legacy_linear_comparison_draft(
+    config: Mapping[str, Any],
+    files: Mapping[str, Any],
+    *,
+    force_web_draft: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    migrated_config = _json_clone(dict(config))
+    migrated_files = _json_clone(dict(files))
+    linear_sequences_value = migrated_files.get("linearSeqs")
+    linear_sequences = (
+        linear_sequences_value if isinstance(linear_sequences_value, list) else []
+    )
+    legacy_rows: list[dict[str, Any]] = []
+    sanitized_sequences: list[Any] = []
+    for sequence in linear_sequences:
+        if not isinstance(sequence, Mapping):
+            sanitized_sequences.append(sequence)
+            legacy_rows.append({"uid": "", "blast": None, "losatFilename": ""})
+            continue
+        row = dict(sequence)
+        legacy_rows.append(
+            {
+                "uid": str(row.get("uid") or ""),
+                "blast": row.pop("blast", None),
+                "losatFilename": str(row.pop("losat_filename", "") or ""),
+            }
+        )
+        sanitized_sequences.append(row)
+    migrated_files["linearSeqs"] = sanitized_sequences
+
+    comparisons_value = migrated_files.get("linearComparisons")
+    file_comparisons = (
+        [dict(item) for item in comparisons_value if isinstance(item, Mapping)]
+        if isinstance(comparisons_value, list)
+        else []
+    )
+    adv_value = migrated_config.get("adv")
+    adv = dict(adv_value) if isinstance(adv_value, Mapping) else {}
+    raw_source = migrated_config.get("blastSource", adv.get("blastSource"))
+    global_source = _legacy_comparison_source(raw_source)
+    legacy_none = str(raw_source or "").strip().lower() == "none"
+    migrated_config.pop("blastSource", None)
+    adv.pop("blastSource", None)
+    migrated_config["adv"] = adv
+
+    layout_value = migrated_config.get("linearRecordLayout")
+    layout = dict(layout_value) if isinstance(layout_value, Mapping) else None
+    explicit_value = layout.get("comparisons") if layout is not None else None
+    explicit = (
+        [dict(item) for item in explicit_value if isinstance(item, Mapping)]
+        if isinstance(explicit_value, list)
+        else None
+    )
+    if layout is not None:
+        layout.pop("comparisons", None)
+        migrated_config["linearRecordLayout"] = layout
+
+    existing_plan = migrated_config.get("linearComparisonPlan")
+    if isinstance(existing_plan, Mapping):
+        plan = _json_clone(dict(existing_plan))
+        edges_value = plan.get("edges")
+        edges = edges_value if isinstance(edges_value, list) else []
+        file_by_id = {
+            str(item.get("id") or ""): item.get("file")
+            for item in file_comparisons
+            if str(item.get("id") or "") and item.get("file")
+        }
+        bindings = []
+        sanitized_edges = []
+        for edge in edges:
+            if not isinstance(edge, Mapping):
+                continue
+            metadata = dict(edge)
+            file_entry = metadata.pop("file", None) or file_by_id.get(
+                str(metadata.get("id") or "")
+            )
+            sanitized_edges.append(metadata)
+            if file_entry:
+                bindings.append(
+                    {"id": str(metadata.get("id") or ""), "file": file_entry}
+                )
+        plan["edges"] = sanitized_edges
+        migrated_config["linearComparisonPlan"] = plan
+        migrated_files["linearComparisons"] = bindings
+        return migrated_config, migrated_files
+
+    if not force_web_draft:
+        migrated_config.pop("linearRecordLayout", None)
+        migrated_config.pop("linearComparisonPlan", None)
+        migrated_files["linearComparisons"] = []
+        return migrated_config, migrated_files
+
+    uid_index = {
+        str(row.get("uid") or ""): index
+        for index, row in enumerate(legacy_rows)
+        if str(row.get("uid") or "")
+    }
+    legacy_binding_entries = [
+        {
+            "index": index,
+            "comparison": comparison,
+            "id": str(comparison.get("id") or ""),
+            "queryUid": str(comparison.get("queryUid") or ""),
+            "subjectUid": str(comparison.get("subjectUid") or ""),
+            "file": comparison.get("file"),
+        }
+        for index, comparison in enumerate(file_comparisons)
+    ]
+    file_by_id: dict[str, Mapping[str, Any]] = {}
+    file_by_pair: dict[tuple[str, str], Mapping[str, Any]] = {}
+    for entry in legacy_binding_entries:
+        file_entry = entry["file"]
+        if not file_entry:
+            continue
+        comparison_id = str(entry["id"])
+        query_uid = str(entry["queryUid"])
+        subject_uid = str(entry["subjectUid"])
+        if comparison_id:
+            file_by_id.setdefault(comparison_id, entry)
+        if query_uid and subject_uid:
+            file_by_pair.setdefault((query_uid, subject_uid), entry)
+
+    consumed_binding_indexes: set[int] = set()
+
+    def consume_binding(entry: Mapping[str, Any] | None) -> Any:
+        if not entry or not entry.get("file"):
+            return None
+        consumed_binding_indexes.add(int(entry["index"]))
+        return entry["file"]
+
+    def positional_file(index: int) -> Any:
+        if not 0 <= index < len(legacy_rows) - 1:
+            return None
+        row = legacy_rows[index]
+        next_row = legacy_rows[index + 1]
+        endpoint_binding = file_by_pair.get(
+            (str(row.get("uid") or ""), str(next_row.get("uid") or ""))
+        )
+        if row.get("blast"):
+            # Canonical projection mirrored adjacent uploads into both legacy shapes.
+            consume_binding(endpoint_binding)
+            return row["blast"]
+        return consume_binding(endpoint_binding)
+
+    used_ids: set[str] = set()
+    edges_with_files: list[dict[str, Any]] = []
+
+    def add_edge(
+        *,
+        edge_id: Any,
+        query_uid: str,
+        subject_uid: str,
+        source: str,
+        included: bool,
+        file_entry: Any,
+        file_active: bool,
+        losat_filename: str,
+        losat_filename_active: bool,
+        prefix: str,
+        index: int,
+    ) -> None:
+        if not query_uid or not subject_uid:
+            return
+        base_id = str(edge_id or "").strip() or _stable_migrated_comparison_id(
+            prefix, index, query_uid, subject_uid
+        )
+        unique_id = base_id
+        suffix = 2
+        while unique_id in used_ids:
+            unique_id = f"{base_id}-{suffix}"
+            suffix += 1
+        used_ids.add(unique_id)
+        edges_with_files.append(
+            {
+                "id": unique_id,
+                "queryUid": query_uid,
+                "subjectUid": subject_uid,
+                "included": bool(included),
+                "fileActive": bool(file_active),
+                "losatFilenameActive": bool(losat_filename_active),
+                "source": source,
+                "losatFilename": str(losat_filename or ""),
+                "file": file_entry,
+            }
+        )
+
+    authoritative_explicit = bool(layout and layout.get("enabled")) and explicit is not None
+    mode = "none" if legacy_none else "adjacent"
+    used_payload_gaps: set[int] = set()
+    if authoritative_explicit:
+        mode = "selected" if explicit else "none"
+        for index, comparison in enumerate(explicit):
+            query_index_value = comparison.get("queryIndex")
+            subject_index_value = comparison.get("subjectIndex")
+            query_uid = str(comparison.get("queryUid") or "")
+            subject_uid = str(comparison.get("subjectUid") or "")
+            query_index = uid_index.get(query_uid)
+            subject_index = uid_index.get(subject_uid)
+            if query_index is None and isinstance(query_index_value, int):
+                query_index = query_index_value
+                if 0 <= query_index < len(legacy_rows):
+                    query_uid = str(legacy_rows[query_index].get("uid") or "")
+            if subject_index is None and isinstance(subject_index_value, int):
+                subject_index = subject_index_value
+                if 0 <= subject_index < len(legacy_rows):
+                    subject_uid = str(legacy_rows[subject_index].get("uid") or "")
+            adjacent_gap = (
+                query_index
+                if query_index is not None and subject_index == query_index + 1
+                else None
+            )
+            file_entry = (
+                consume_binding(file_by_id.get(str(comparison.get("id") or "")))
+                or consume_binding(file_by_pair.get((query_uid, subject_uid)))
+                or (positional_file(adjacent_gap) if adjacent_gap is not None else None)
+            )
+            losat_filename = (
+                str(legacy_rows[adjacent_gap].get("losatFilename") or "")
+                if adjacent_gap is not None
+                else ""
+            )
+            if adjacent_gap is not None and (file_entry or losat_filename):
+                used_payload_gaps.add(adjacent_gap)
+            add_edge(
+                edge_id=comparison.get("id"),
+                query_uid=query_uid,
+                subject_uid=subject_uid,
+                source=_legacy_comparison_source(
+                    comparison.get("source"), global_source
+                ),
+                included=True,
+                file_entry=file_entry,
+                file_active=bool(file_entry),
+                losat_filename=losat_filename,
+                losat_filename_active=bool(losat_filename),
+                prefix="selected",
+                index=index,
+            )
+
+    for index, row in enumerate(legacy_rows[:-1]):
+        file_entry = positional_file(index)
+        losat_filename = str(row.get("losatFilename") or "")
+        if (not file_entry and not losat_filename) or index in used_payload_gaps:
+            continue
+        payload_active = mode == "adjacent"
+        file_active = payload_active and global_source == "upload" and bool(file_entry)
+        filename_active = (
+            payload_active and global_source == "losat" and bool(losat_filename)
+        )
+        add_edge(
+            edge_id=None,
+            query_uid=str(row.get("uid") or ""),
+            subject_uid=str(legacy_rows[index + 1].get("uid") or ""),
+            source=global_source,
+            included=file_active or filename_active,
+            file_entry=file_entry,
+            file_active=file_active,
+            losat_filename=losat_filename,
+            losat_filename_active=filename_active,
+            prefix="adjacent",
+            index=index,
+        )
+
+    for entry in legacy_binding_entries:
+        entry_index = int(entry["index"])
+        file_entry = entry.get("file")
+        if not file_entry or entry_index in consumed_binding_indexes:
+            continue
+        comparison = entry["comparison"]
+        query_uid = str(entry["queryUid"])
+        subject_uid = str(entry["subjectUid"])
+        query_index_value = comparison.get("queryIndex")
+        subject_index_value = comparison.get("subjectIndex")
+        if not query_uid and isinstance(query_index_value, int):
+            if 0 <= query_index_value < len(legacy_rows):
+                query_uid = str(legacy_rows[query_index_value].get("uid") or "")
+        if not subject_uid and isinstance(subject_index_value, int):
+            if 0 <= subject_index_value < len(legacy_rows):
+                subject_uid = str(legacy_rows[subject_index_value].get("uid") or "")
+        add_edge(
+            edge_id=entry["id"],
+            query_uid=query_uid,
+            subject_uid=subject_uid,
+            source=_legacy_comparison_source(
+                comparison.get("source"), global_source
+            ),
+            included=False,
+            file_entry=file_entry,
+            file_active=False,
+            losat_filename="",
+            losat_filename_active=False,
+            prefix="retained",
+            index=entry_index,
+        )
+
+    migrated_config["linearComparisonPlan"] = {
+        "mode": mode,
+        "defaultSource": global_source,
+        "edges": [
+            {key: value for key, value in edge.items() if key != "file"}
+            for edge in edges_with_files
+        ],
+    }
+    migrated_files["linearComparisons"] = [
+        {"id": edge["id"], "file": edge["file"]}
+        for edge in edges_with_files
+        if edge.get("file")
+    ]
+    return migrated_config, migrated_files
+
+
+def migrate_legacy_linear_comparison_draft_for_current_writer(
+    config: Mapping[str, Any],
+    files: Mapping[str, Any],
+    *,
+    force_web_draft: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Project a supported pre-v40 comparison draft into final v40 ownership."""
+
+    return _migrate_legacy_linear_comparison_draft(
+        config,
+        files,
+        force_web_draft=force_web_draft,
+    )
+
+
+def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
+    encoding = entry.get("encoding")
+    data = entry.get("data")
+    if encoding != DEPTH_FILE_ENCODING and isinstance(data, str):
+        try:
+            return base64.b64decode(data, validate=True)
+        except (binascii.Error, ValueError):
+            return None
+    if encoding == DEPTH_FILE_ENCODING and isinstance(data, Mapping):
+        try:
+            return decode_depth_payload(data).encode("utf-8")
+        except ValidationError:
+            return None
+    return None
+
+
+def _attach_current_web_file_bindings(
+    payload: dict[str, Any],
+    files: Mapping[str, Any],
+) -> None:
+    resources_value = payload.get("resources")
+    if not isinstance(resources_value, dict):
+        raise ValidationError("Current session resources must be an object.")
+    resources = resources_value
+    identities: dict[tuple[int, str], str] = {}
+    for resource_id, resource in resources.items():
+        if not isinstance(resource, Mapping):
+            continue
+        resource_bytes = _embedded_entry_bytes(resource)
+        if resource_bytes is None:
+            continue
+        identity = (len(resource_bytes), hashlib.sha256(resource_bytes).hexdigest())
+        identities.setdefault(identity, str(resource_id))
+
+    next_number = 1
+
+    def add_file(entry: Any) -> dict[str, Any] | None:
+        nonlocal next_number
+        if not isinstance(entry, Mapping):
+            return None
+        file_bytes = _embedded_entry_bytes(entry)
+        if file_bytes is None:
+            return None
+        identity = (len(file_bytes), hashlib.sha256(file_bytes).hexdigest())
+        resource_id = identities.get(identity)
+        if resource_id is None:
+            while True:
+                candidate = f"resource-{next_number:04d}"
+                next_number += 1
+                if candidate not in resources:
+                    resource_id = candidate
+                    break
+            name = safe_embedded_filename(
+                entry.get("name"), fallback="resource.dat"
+            )
+            resources[resource_id] = {
+                "kind": "web-file",
+                "name": f"{resource_id}-{name}",
+                "type": str(entry.get("type") or "application/octet-stream"),
+                "size": len(file_bytes),
+                "lastModified": int(entry.get("lastModified") or 0),
+                "encoding": "base64",
+                "data": base64.b64encode(file_bytes).decode("ascii"),
+            }
+            identities[identity] = resource_id
+        return {
+            "resourceId": resource_id,
+            "name": str(entry.get("name") or "file"),
+            "type": str(entry.get("type") or ""),
+            "lastModified": int(entry.get("lastModified") or 0),
+        }
+
+    def add_value(value: Any) -> Any:
+        if isinstance(value, list):
+            return [add_value(item) for item in value]
+        return add_file(value)
+
+    linear_sequences_value = files.get("linearSeqs")
+    linear_sequences = (
+        linear_sequences_value if isinstance(linear_sequences_value, list) else []
+    )
+    sequence_bindings = []
+    for sequence in linear_sequences:
+        if not isinstance(sequence, Mapping):
+            continue
+        sequence_bindings.append(
+            {
+                "uid": str(sequence.get("uid") or ""),
+                "gb": add_file(sequence.get("gb")),
+                "gff": add_file(sequence.get("gff")),
+                "fasta": add_file(sequence.get("fasta")),
+                "depth": add_value(sequence.get("depth")),
+                "losat_gencode": sequence.get("losat_gencode", 1),
+                "definition": str(sequence.get("definition") or ""),
+                "record_subtitle": str(sequence.get("record_subtitle") or ""),
+                "region_record_id": str(sequence.get("region_record_id") or ""),
+                "region_start": sequence.get("region_start"),
+                "region_end": sequence.get("region_end"),
+                "region_reverse": bool(sequence.get("region_reverse")),
+            }
+        )
+    comparison_bindings = []
+    comparisons_value = files.get("linearComparisons")
+    comparisons = comparisons_value if isinstance(comparisons_value, list) else []
+    for comparison in comparisons:
+        if not isinstance(comparison, Mapping):
+            continue
+        binding = add_file(comparison.get("file"))
+        comparison_id = str(comparison.get("id") or "")
+        if comparison_id and binding is not None:
+            comparison_bindings.append({"id": comparison_id, "file": binding})
+
+    bindings = {
+        "schema": 1,
+        "c_gb": add_file(files.get("c_gb")),
+        "c_gff": add_file(files.get("c_gff")),
+        "c_fasta": add_file(files.get("c_fasta")),
+        "c_depth": add_value(files.get("c_depth")),
+        "c_conservation_blasts": add_value(
+            files.get("c_conservation_blasts")
+        ),
+        "c_conservation_blasts_source": (
+            "losat-cache"
+            if files.get("c_conservation_blasts_source") == "losat-cache"
+            else None
+        ),
+        "c_conservation_fastas": add_value(files.get("c_conservation_fastas")),
+        "c_conservation_sequence_sources": add_value(
+            files.get("c_conservation_sequence_sources")
+        ),
+        "d_color": add_file(files.get("d_color")),
+        "t_color": add_file(files.get("t_color")),
+        "blacklist": add_file(files.get("blacklist")),
+        "whitelist": add_file(files.get("whitelist")),
+        "qualifier_priority": add_file(files.get("qualifier_priority")),
+        "linearSeqs": sequence_bindings,
+        "linearComparisons": comparison_bindings,
+    }
+    web_files_value = payload.get("webFiles")
+    web_files = (
+        _json_clone(dict(web_files_value))
+        if isinstance(web_files_value, Mapping)
+        else {}
+    )
+    web_files.pop("bindings", None)
+    metadata_value = web_files.get("linearRecordMetadata")
+    if isinstance(metadata_value, list):
+        web_files["linearRecordMetadata"] = [
+            {
+                key: value
+                for key, value in metadata.items()
+                if key not in {"losatFilename", "losat_filename"}
+            }
+            if isinstance(metadata, Mapping)
+            else metadata
+            for metadata in metadata_value
+        ]
+    resource_aliases: dict[str, str] = {}
+    for source_field, binding_field in (
+        ("conservationLosatFastaSources", "c_conservation_fastas"),
+        ("conservationSequenceSources", "c_conservation_sequence_sources"),
+    ):
+        source_ids = web_files.get(source_field)
+        rebound_files = bindings[binding_field]
+        if not isinstance(source_ids, list) or not isinstance(rebound_files, list):
+            continue
+        rewritten_ids: list[str | None] = []
+        for index, source_id_value in enumerate(source_ids):
+            rebound = rebound_files[index] if index < len(rebound_files) else None
+            rebound_id = (
+                str(rebound.get("resourceId") or "").strip()
+                if isinstance(rebound, Mapping)
+                else ""
+            )
+            rewritten_ids.append(rebound_id or None)
+            source_id = str(source_id_value or "").strip()
+            if source_id and rebound_id:
+                resource_aliases[source_id] = rebound_id
+        web_files[source_field] = rewritten_ids
+    original_names = web_files.get("resourceOriginalNames")
+    if isinstance(original_names, Mapping):
+        web_files["resourceOriginalNames"] = {
+            resource_aliases.get(str(resource_id), str(resource_id)): name
+            for resource_id, name in original_names.items()
+            if resource_aliases.get(str(resource_id), str(resource_id)) in resources
+        }
+    web_files["bindings"] = bindings
+    payload["webFiles"] = web_files
+
+
 def build_session_json(
     context: SessionBuildContext,
     *,
@@ -1506,6 +2240,7 @@ def build_session_json(
         ui = {}
         payload["ui"] = ui
     ui["mode"] = context.mode
+    ui.pop("blastSource", None)
     ui.setdefault("zoom", 1)
     ui.setdefault("selectedResultIndex", 0)
     ui.setdefault("canvasPan", {"x": 0, "y": 0})
@@ -1583,6 +2318,20 @@ def build_session_json(
         raise ValidationError(
             f"A canonical typed request is required to write a version {CURRENT_SESSION_VERSION} session."
         )
+    files_value = payload.get("files")
+    files_for_web = files_value if isinstance(files_value, Mapping) else {}
+    force_web_comparison_draft = (
+        isinstance(config.get("linearRecordLayout"), Mapping)
+        or isinstance(config.get("linearComparisonPlan"), Mapping)
+        or not isinstance(config.get("cliOptions"), Mapping)
+    )
+    migrated_config, migrated_files = _migrate_legacy_linear_comparison_draft(
+        config,
+        files_for_web,
+        force_web_draft=force_web_comparison_draft,
+    )
+    payload["config"] = migrated_config
+    _attach_current_web_file_bindings(payload, migrated_files)
     payload.pop("files", None)
     normalize_current_session_artifacts(
         payload,
@@ -3093,11 +3842,9 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
             adv[key] = value
     _populate_shared_cli_config(args, adv)
     filter_mode, blacklist_text = _label_filter_config_from_cli_args(args)
-    blast_source = str(
-        adv.get("blastSource")
-        or ("upload" if _has_option(args, "-b", "--blast") else "losat")
-    )
     losat_program = str(adv.get("losatProgram") or "blastn")
+    adv.pop("blastSource", None)
+    adv.pop("losatProgram", None)
     return {
         "form": form,
         "adv": adv,
@@ -3110,7 +3857,6 @@ def _minimal_config_from_cli_args(context: SessionBuildContext) -> dict[str, Any
         "filterMode": filter_mode,
         "whitelist": [],
         "blacklistText": blacklist_text,
-        "blastSource": blast_source,
         "losatProgram": losat_program,
         "circularConservation": circular_conservation
         or {
@@ -4035,6 +4781,7 @@ __all__ = [
     "get_session_slot",
     "load_session",
     "materialize_embedded_file",
+    "migrate_legacy_linear_comparison_draft_for_current_writer",
     "migrate_persisted_web_state_field_names",
     "migrate_legacy_repeat_feature_shape_args",
     "normalize_current_session_artifacts",

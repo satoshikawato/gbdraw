@@ -101,6 +101,9 @@ globalThis.Worker = AuditSimplePathWorker;
 
 const { createRunAnalysis } = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
+  resolveLinearComparisonPlan
+} = await import('../../gbdraw/web/js/app/linear-comparisons.js');
+const {
   serializeActiveRenderFiles,
   SESSION_VERSION
 } = await import('../../gbdraw/web/js/services/config.js');
@@ -414,5 +417,211 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(
     workerMessages.filter(({ type }) => type === 'run').length,
     workerRunCountBeforeDiscoveryFailure
+  );
+});
+
+test('Linear mode none ignores dormant comparison state while active depth and annotations render', async () => {
+  const primaryReadsBefore = activePrimaryReads;
+  const inactiveReadsBefore = inactiveFileReads;
+  const workerRunCountBefore = workerMessages.filter(({ type }) => type === 'run').length;
+  const first = new AuditFile(['LOCUS first\nORIGIN\n        1 acgtacgt\n//\n'], 'first.gb');
+  const second = new AuditFile(['LOCUS second\nORIGIN\n        1 acgtacgt\n//\n'], 'second.gb');
+  const depth = new AuditFile(['position\tdepth\n1\t5\n'], 'first-depth.tsv');
+  const dormantUpload = new AuditInactiveFile(['unused upload'], 'dormant-upload.tsv');
+  const staleCanonical = new AuditInactiveFile(['unused canonical'], 'stale-canonical.tsv');
+
+  state.mode.value = 'linear';
+  state.lInputType.value = 'gb';
+  state.form.prefix = 'linear-none';
+  state.form.show_depth = true;
+  state.form.multi_record_canvas = false;
+  state.adv.linear_track_slots_enabled = false;
+  state.adv.linear_track_slots = [];
+  state.adv.depth_tracks = [{
+    label: 'Coverage',
+    color: '#4A90E2',
+    height: null,
+    large_tick_interval: null,
+    small_tick_interval: null,
+    tick_font_size: null
+  }];
+  state.linearRecordLayoutEnabled.value = false;
+  state.linearRecordRows.splice(0);
+  state.linearSeqs.splice(0, state.linearSeqs.length,
+    {
+      uid: 'linear-none-first',
+      gb: first,
+      gff: null,
+      fasta: null,
+      depth,
+      blast: dormantUpload,
+      losat_gencode: 1,
+      definition: '',
+      record_subtitle: '',
+      region_record_id: '',
+      region_start: null,
+      region_end: null,
+      region_reverse: false
+    },
+    {
+      uid: 'linear-none-second',
+      gb: second,
+      gff: null,
+      fasta: null,
+      depth: null,
+      blast: dormantUpload,
+      losat_gencode: 1,
+      definition: '',
+      record_subtitle: '',
+      region_record_id: '',
+      region_start: null,
+      region_end: null,
+      region_reverse: false
+    }
+  );
+  state.linearComparisonPlan.mode = 'none';
+  state.linearComparisonPlan.defaultSource = 'losat';
+  state.linearComparisonPlan.edges.splice(0, state.linearComparisonPlan.edges.length, {
+    id: 'dormant-upload-edge',
+    queryUid: 'linear-none-first',
+    subjectUid: 'linear-none-second',
+    included: true,
+    source: 'upload',
+    file: dormantUpload,
+    fileActive: true,
+    losatFilename: '',
+    losatFilenameActive: false
+  });
+  state.files.linearCanonicalComparisons = [{
+    kind: 'precomputed',
+    edgeKey: 'linear-none-first->linear-none-second',
+    queryIndex: 0,
+    subjectIndex: 1,
+    file: staleCanonical
+  }, {
+    kind: 'generated-protein',
+    mode: 'pairwise',
+    pairs: [{ queryIndex: 0, subjectIndex: 1 }]
+  }];
+  state.annotationSets.splice(0, state.annotationSets.length, {
+    id: 'active-annotation',
+    annotations: [{
+      id: 'active-window',
+      target: {
+        kind: 'coordinateSpan',
+        record: null,
+        start: 1,
+        end: 4,
+        coordinateSpace: 'source',
+        wrapsOrigin: false,
+        outOfBounds: 'clip'
+      },
+      label: 'Active window',
+      mark: 'band',
+      lane: null,
+      style: null,
+      legendLabel: null,
+      metadata: {}
+    }],
+    defaultStyle: null,
+    legendLabel: null
+  });
+
+  const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+    plan: state.linearComparisonPlan,
+    sequences: state.linearSeqs,
+    layout: [],
+    losatProgram: state.losatProgram.value,
+    blastpMode: state.losat.blastp.mode
+  });
+  assert.equal(Object.isFrozen(comparisonPlanSnapshot), true);
+  assert.equal(comparisonPlanSnapshot.mode, 'none');
+  assert.deepEqual(comparisonPlanSnapshot.edges, []);
+
+  let ensurePyodideCalls = 0;
+  let pyodideWrites = 0;
+  let losatCalls = 0;
+  let annotationValidationCalls = 0;
+  let serializedSnapshot = null;
+  const previousLosatExecutor = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+  globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async () => {
+    losatCalls += 1;
+    throw new Error('mode none must not execute LOSAT');
+  };
+
+  const runner = createRunAnalysis({
+    state,
+    getPyodide: () => null,
+    ensurePyodide: async () => {
+      ensurePyodideCalls += 1;
+      throw new Error('mode none must not initialize Pyodide');
+    },
+    writeFileToFs: async () => {
+      pyodideWrites += 1;
+      throw new Error('mode none must not stage LOSAT input through Pyodide');
+    },
+    serializeCanonicalFiles: (snapshot) => {
+      serializedSnapshot = snapshot;
+      return serializeActiveRenderFiles(state.mode.value, state, snapshot);
+    },
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts: () => {},
+    validateAnnotationTargets: ({ loadComparison }) => {
+      annotationValidationCalls += 1;
+      assert.equal(loadComparison, false);
+      return '';
+    },
+    prepareCandidateCommit: ({
+      results,
+      catalog,
+      featureColorOverrides,
+      featureStrokeOverrides
+    }) => ({
+      results: structuredClone(results),
+      featureState: featureStateFromCatalog(catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides),
+      featureStrokeOverrides: structuredClone(featureStrokeOverrides)
+    }),
+    resetPreviewViewport: ({ pan = null } = {}) => {
+      state.canvasPan.x = Number(pan?.x) || 0;
+      state.canvasPan.y = Number(pan?.y) || 0;
+      if (!pan) state.zoom.value = 1;
+    }
+  });
+
+  const linearResult = result('linear-none.svg', 'linear-none');
+  workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
+  try {
+    assert.deepEqual(
+      await runner.runAnalysis(comparisonPlanSnapshot),
+      { status: 'ok' },
+      JSON.stringify(state.errorLog.value)
+    );
+  } finally {
+    if (previousLosatExecutor === undefined) {
+      delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+    } else {
+      globalThis.__GBDRAW_LOSAT_EXECUTOR__ = previousLosatExecutor;
+    }
+  }
+
+  const workerRunMessages = workerMessages.filter(({ type }) => type === 'run');
+  const payload = workerRunMessages.at(-1).payload;
+  assert.equal(workerRunMessages.length, workerRunCountBefore + 1);
+  assert.equal(serializedSnapshot, comparisonPlanSnapshot);
+  assert.equal(ensurePyodideCalls, 0);
+  assert.equal(pyodideWrites, 0);
+  assert.equal(losatCalls, 0);
+  assert.equal(annotationValidationCalls, 1);
+  assert.equal(activePrimaryReads, primaryReadsBefore + 3);
+  assert.equal(inactiveFileReads, inactiveReadsBefore);
+  assert.deepEqual(payload.request.comparisons, []);
+  assert.equal(payload.request.diagramOptions.annotations.sets[0].id, 'active-annotation');
+  assert.equal(payload.request.diagramOptions.depthTracks.length, 1);
+  assert.equal(
+    Object.values(payload.resources).some((resource) => (
+      String(resource?.kind || '').includes('comparison')
+    )),
+    false
   );
 });

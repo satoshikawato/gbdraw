@@ -34,6 +34,7 @@ from gbdraw.session_io import (
     SessionBuildContext,
     SessionFileBinding,
     build_session_json,
+    migrate_legacy_linear_comparison_draft_for_current_writer,
     migrate_persisted_web_state_field_names,
     safe_embedded_filename,
     serialize_file_entry,
@@ -502,6 +503,7 @@ def render_canonical_session_if_present(
         replay_prefix: str | None = None
         sidecar_path: Path | None = None
         adjunct: dict[str, Any] | None = None
+        web_file_inventory: dict[str, Any] | None = None
         if save_session or session_output:
             from gbdraw.api.requests import CircularBatchRequest
 
@@ -529,7 +531,7 @@ def render_canonical_session_if_present(
                 diagram_output_paths=diagram_request_output_paths(request),
                 overwrite=overwrite,
             )
-            adjunct = _project_session_adjunct_for_current_write(
+            adjunct, web_file_inventory = _project_session_adjunct_for_current_write(
                 document.to_dict(),
                 source_version=document.version,
             )
@@ -656,16 +658,135 @@ def render_canonical_session_if_present(
                 rendered_request,
                 title=str(document.to_dict().get("title") or replay_prefix),
                 adjunct=adjunct,
+                web_file_inventory=web_file_inventory,
                 overwrite=overwrite,
             )
     return True
+
+
+def _web_binding_as_embedded_file(
+    resources: Mapping[str, Any],
+    binding: Any,
+) -> dict[str, Any] | None:
+    if not isinstance(binding, Mapping):
+        return None
+    resource_id = str(binding.get("resourceId") or "")
+    resource = resources.get(resource_id)
+    if not isinstance(resource, Mapping):
+        if isinstance(binding.get("data"), (str, Mapping)):
+            return dict(binding)
+        return None
+    embedded = dict(resource)
+    embedded["name"] = str(binding.get("name") or resource.get("name") or "file")
+    embedded["type"] = str(binding.get("type") or resource.get("type") or "")
+    embedded["lastModified"] = int(
+        binding.get("lastModified") or resource.get("lastModified") or 0
+    )
+    return embedded
+
+
+def _project_web_file_inventory(
+    session: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    web_files = session.get("webFiles")
+    resources = session.get("resources")
+    if not isinstance(web_files, Mapping) or not isinstance(resources, Mapping):
+        return None
+    bindings_value = web_files.get("bindings")
+    has_current_bindings = (
+        isinstance(bindings_value, Mapping) and bindings_value.get("schema") == 1
+    )
+    bindings = bindings_value if has_current_bindings else {}
+    direct_source_fields = {
+        "conservationLosatFastaSources": "c_conservation_fastas",
+        "conservationSequenceSources": "c_conservation_sequence_sources",
+    }
+    has_direct_sources = any(
+        isinstance(web_files.get(field), list) for field in direct_source_fields
+    )
+    if not has_current_bindings and not has_direct_sources:
+        return None
+
+    original_names_value = web_files.get("resourceOriginalNames")
+    original_names = (
+        original_names_value if isinstance(original_names_value, Mapping) else {}
+    )
+
+    def restore(value: Any) -> Any:
+        if isinstance(value, list):
+            return [restore(item) for item in value]
+        return _web_binding_as_embedded_file(resources, value)
+
+    def restore_resource_id(value: Any) -> Any:
+        if isinstance(value, list):
+            return [restore_resource_id(item) for item in value]
+        resource_id = str(value or "").strip()
+        if not resource_id:
+            return None
+        return _web_binding_as_embedded_file(
+            resources,
+            {
+                "resourceId": resource_id,
+                "name": original_names.get(resource_id),
+            },
+        )
+
+    files: dict[str, Any] = {}
+    for slot in (
+        "c_gb",
+        "c_gff",
+        "c_fasta",
+        "c_depth",
+        "c_conservation_blasts",
+        "c_conservation_fastas",
+        "c_conservation_sequence_sources",
+        "d_color",
+        "t_color",
+        "blacklist",
+        "whitelist",
+        "qualifier_priority",
+    ):
+        if slot in bindings:
+            files[slot] = restore(bindings[slot])
+    files["c_conservation_blasts_source"] = (
+        "losat-cache"
+        if bindings.get("c_conservation_blasts_source") == "losat-cache"
+        else None
+    )
+
+    linear_sequences = bindings.get("linearSeqs")
+    if isinstance(linear_sequences, list):
+        files["linearSeqs"] = [
+            {
+                **dict(sequence),
+                "gb": restore(sequence.get("gb")),
+                "gff": restore(sequence.get("gff")),
+                "fasta": restore(sequence.get("fasta")),
+                "depth": restore(sequence.get("depth")),
+                "blast": restore(sequence.get("blast")),
+            }
+            for sequence in linear_sequences
+            if isinstance(sequence, Mapping)
+        ]
+    linear_comparisons = bindings.get("linearComparisons")
+    if isinstance(linear_comparisons, list):
+        files["linearComparisons"] = [
+            {**dict(comparison), "file": restore(comparison.get("file"))}
+            for comparison in linear_comparisons
+            if isinstance(comparison, Mapping)
+        ]
+    for source_field, slot in direct_source_fields.items():
+        source_ids = web_files.get(source_field)
+        if isinstance(source_ids, list) and slot not in files:
+            files[slot] = restore_resource_id(source_ids)
+    return files
 
 
 def _project_session_adjunct_for_current_write(
     session: Mapping[str, Any],
     *,
     source_version: int,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Detach non-canonical state and migrate released Web-owned field names."""
 
     adjunct = {
@@ -681,17 +802,77 @@ def _project_session_adjunct_for_current_write(
             "files",
         }
     }
+    web_file_inventory = _project_web_file_inventory(session)
     if source_version >= CURRENT_SESSION_VERSION:
-        return adjunct
+        return adjunct, web_file_inventory
 
     config = adjunct.get("config")
     if isinstance(config, Mapping):
-        adjunct["config"] = migrate_persisted_web_state_field_names(config)
+        migrated_config = migrate_persisted_web_state_field_names(config)
+        assert isinstance(migrated_config, Mapping)
+        source_files = session.get("files")
+        has_source_file_inventory = (
+            isinstance(source_files, Mapping) and bool(source_files)
+        ) or web_file_inventory is not None
+        migrated_config, migrated_files = (
+            migrate_legacy_linear_comparison_draft_for_current_writer(
+                migrated_config,
+                source_files
+                if isinstance(source_files, Mapping)
+                else (web_file_inventory or {}),
+                force_web_draft=(
+                    isinstance(config.get("linearRecordLayout"), Mapping)
+                    or not isinstance(config.get("cliOptions"), Mapping)
+                ),
+            )
+        )
+        adjunct["config"] = migrated_config
+        web_file_inventory = migrated_files if has_source_file_inventory else None
     else:
         adjunct.pop("config", None)
-    if not isinstance(adjunct.get("ui"), Mapping):
+    if isinstance(adjunct.get("ui"), Mapping):
+        adjunct["ui"] = dict(adjunct["ui"])
+        adjunct["ui"].pop("blastSource", None)
+    else:
         adjunct.pop("ui", None)
-    return adjunct
+    web_files_value = adjunct.get("webFiles")
+    if isinstance(web_files_value, Mapping):
+        web_files = dict(web_files_value)
+        bindings_value = web_files.get("bindings")
+        if isinstance(bindings_value, Mapping):
+            bindings = dict(bindings_value)
+            bindings.pop("linearCanonicalComparisons", None)
+            if web_file_inventory is not None:
+                bindings = {}
+            else:
+                linear_sequences = bindings.get("linearSeqs")
+                if isinstance(linear_sequences, list):
+                    bindings["linearSeqs"] = [
+                        {
+                            key: value
+                            for key, value in sequence.items()
+                            if key not in {"blast", "losat_filename"}
+                        }
+                        if isinstance(sequence, Mapping)
+                        else sequence
+                        for sequence in linear_sequences
+                    ]
+                bindings["linearComparisons"] = []
+            web_files["bindings"] = bindings
+        metadata_value = web_files.get("linearRecordMetadata")
+        if isinstance(metadata_value, list):
+            web_files["linearRecordMetadata"] = [
+                {
+                    key: value
+                    for key, value in metadata.items()
+                    if key not in {"losatFilename", "losat_filename"}
+                }
+                if isinstance(metadata, Mapping)
+                else metadata
+                for metadata in metadata_value
+            ]
+        adjunct["webFiles"] = web_files
+    return adjunct, web_file_inventory
 
 
 def _render_request(

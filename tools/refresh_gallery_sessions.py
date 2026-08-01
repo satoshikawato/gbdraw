@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import gc
 import gzip
@@ -48,6 +49,7 @@ from gbdraw.tracks.scalars import ScalarSpec  # noqa: E402
 
 GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
 SESSION_ROOT = GALLERY_ROOT / "sessions"
+TEST_INPUT_SESSION_ROOT = REPO_ROOT / "tests" / "test_inputs"
 SESSION_PROMOTER = REPO_ROOT / "tools" / "promote_gallery_session.mjs"
 VIBRIO_SESSION_NAME = "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
 VIBRIO_RAW_ENTRY_COUNT = 59
@@ -78,6 +80,9 @@ SESSION_ENVELOPE_KEYS = (
     "createdAt",
     "renderRequest",
     "resources",
+)
+PALETTE_LEGEND_FEATURE_TYPES = frozenset(
+    {"CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "repeat_region", "misc_feature"}
 )
 
 
@@ -134,6 +139,10 @@ GALLERY_SESSION_FILES = (
     "majanivirus_orthogroup.gbdraw-session.json.gz",
     "lambda_basic_linear.gbdraw-session.json",
 )
+TEST_INPUT_SESSION_FILES = (
+    "AP027280_comparison.gbdraw-session.json",
+    "BGC0000708-BGC0000713.gbdraw-session.json",
+)
 
 
 def _validate_gallery_session_inventory() -> None:
@@ -161,11 +170,11 @@ def _validate_gallery_session_inventory() -> None:
 
 
 def _gallery_mutation_targets(
-    session_names: tuple[str, ...],
+    session_names: tuple[str, ...] | None,
     *,
     include_assets: bool,
 ) -> tuple[Path, ...]:
-    targets = {_session_path(name) for name in session_names}
+    targets = set(_refresh_session_paths(session_names))
     if include_assets:
         from tools.prepare_interactive_gallery_assets import (
             EXAMPLES,
@@ -230,6 +239,15 @@ def _session_path(name_or_id: str) -> Path:
     if compressed_path.exists():
         return compressed_path
     return SESSION_ROOT / f"{name}.gbdraw-session.json"
+
+
+def _refresh_session_paths(session_names: tuple[str, ...] | None) -> tuple[Path, ...]:
+    if session_names is not None:
+        return tuple(_session_path(name) for name in session_names)
+    return (
+        *(SESSION_ROOT / name for name in GALLERY_SESSION_FILES),
+        *(TEST_INPUT_SESSION_ROOT / name for name in TEST_INPUT_SESSION_FILES),
+    )
 
 
 def _session_cli_invocation(session: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -298,7 +316,8 @@ def _promote_gallery_session(
     if source_path.is_file():
         source_session = load_session(source_path)
         if (
-            source_session.get("renderRequest", {}).get("schema")
+            source_session.get("version") == CURRENT_SESSION_VERSION
+            and source_session.get("renderRequest", {}).get("schema")
             == CANONICAL_REQUEST_SCHEMA
         ):
             write_session_json(output_path, source_session)
@@ -327,6 +346,161 @@ def _promote_gallery_session(
     load_session(output_path)
 
 
+def _referenced_resource_ids(value: object):
+    if isinstance(value, Mapping):
+        resource_id = value.get("resourceId")
+        if isinstance(resource_id, str) and resource_id:
+            yield resource_id
+        for nested in value.values():
+            yield from _referenced_resource_ids(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            yield from _referenced_resource_ids(nested)
+
+
+def _resource_color_rows(resource: object) -> dict[str, str]:
+    if not isinstance(resource, Mapping) or resource.get("encoding") != "base64":
+        return {}
+    data = resource.get("data")
+    if not isinstance(data, str) or not data:
+        return {}
+    try:
+        text = base64.b64decode(data, validate=True).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    rows: dict[str, str] = {}
+    for line in text.splitlines():
+        columns = line.split("\t")
+        if len(columns) < 2:
+            continue
+        feature_type = columns[0].strip()
+        color = columns[1].strip().lower()
+        if feature_type and feature_type != "feature_type" and re.fullmatch(
+            r"#[0-9a-f]{6}", color
+        ):
+            rows[feature_type] = color
+    return rows
+
+
+def _restore_rendered_palette_file_binding(session: dict[str, Any]) -> bool:
+    """Restore a retained Web palette file when old artifacts prove it was rendered."""
+
+    request = session.get("renderRequest")
+    options = request.get("diagramOptions") if isinstance(request, Mapping) else None
+    colors = options.get("colors") if isinstance(options, Mapping) else None
+    config = session.get("config")
+    resources = session.get("resources")
+    editor_state = session.get("editorState")
+    legend = editor_state.get("legend") if isinstance(editor_state, Mapping) else None
+    original_colors = (
+        legend.get("originalColors") if isinstance(legend, Mapping) else None
+    )
+    if not all(
+        isinstance(value, Mapping)
+        for value in (colors, config, resources, original_colors)
+    ):
+        return False
+    if colors.get("defaultColorsFile") is not None:
+        return False
+    palette = config.get("palette")
+    config_colors = config.get("colors")
+    if (
+        not isinstance(palette, str)
+        or palette != colors.get("defaultColorsPalette")
+        or not isinstance(config_colors, Mapping)
+    ):
+        return False
+
+    canonical_ref = colors.get("defaultColors")
+    canonical_id = (
+        canonical_ref.get("resourceId") if isinstance(canonical_ref, Mapping) else None
+    )
+    canonical_rows = _resource_color_rows(resources.get(canonical_id))
+    candidates: list[tuple[str, dict[str, str]]] = []
+    for resource_id, resource in resources.items():
+        if not isinstance(resource, Mapping):
+            continue
+        if resource.get("kind") != "colors-default-colors-file":
+            continue
+        rows = _resource_color_rows(resource)
+        if not rows or any(
+            str(config_colors.get(feature_type, "")).lower() != color
+            for feature_type, color in rows.items()
+        ):
+            continue
+        rendered_types = PALETTE_LEGEND_FEATURE_TYPES.intersection(
+            original_colors, rows
+        )
+        if not rendered_types or any(
+            str(original_colors[feature_type]).lower() != rows[feature_type]
+            for feature_type in rendered_types
+        ):
+            continue
+        candidates.append((str(resource_id), rows))
+
+    if len(candidates) != 1:
+        return False
+    resource_id, retained_rows = candidates[0]
+    if retained_rows.items() <= canonical_rows.items():
+        return False
+    colors["defaultColors"] = None
+    colors["defaultColorsFile"] = {
+        "resourceId": resource_id,
+        "representation": "file",
+    }
+    return True
+
+
+def _drop_unreferenced_duplicate_resources(session: dict[str, Any]) -> None:
+    """Drop stale merge copies only when one exact payload remains referenced."""
+
+    resources = session.get("resources")
+    if not isinstance(resources, dict):
+        return
+    referenced = set(
+        _referenced_resource_ids(
+            {key: value for key, value in session.items() if key != "resources"}
+        )
+    )
+    duplicates: dict[tuple[object, ...], list[str]] = {}
+    for resource_id, resource in resources.items():
+        if not isinstance(resource, Mapping):
+            continue
+        data = resource.get("data")
+        if not isinstance(data, str) or not data:
+            continue
+        hasher = hashlib.sha256()
+        for offset in range(0, len(data), 1024 * 1024):
+            hasher.update(data[offset : offset + 1024 * 1024].encode("utf-8"))
+        signature = (
+            resource.get("kind"),
+            resource.get("type"),
+            resource.get("size"),
+            resource.get("lastModified"),
+            resource.get("encoding"),
+            hasher.hexdigest(),
+        )
+        duplicates.setdefault(signature, []).append(str(resource_id))
+
+    removed: set[str] = set()
+    for resource_ids in duplicates.values():
+        referenced_ids = [
+            resource_id for resource_id in resource_ids if resource_id in referenced
+        ]
+        if len(referenced_ids) != 1:
+            continue
+        keeper = referenced_ids[0]
+        for resource_id in resource_ids:
+            if resource_id != keeper:
+                resources.pop(resource_id, None)
+                removed.add(resource_id)
+
+    original_names = session.get("webFiles", {}).get("resourceOriginalNames")
+    if isinstance(original_names, dict):
+        for resource_id in removed:
+            original_names.pop(resource_id, None)
+
+
 def _merge_refreshed_gallery_artifacts(
     promoted_session: Mapping[str, Any],
     refreshed_session: Mapping[str, Any],
@@ -335,11 +509,12 @@ def _merge_refreshed_gallery_artifacts(
 
     merged = dict(promoted_session)
     refreshed_request = refreshed_session.get("renderRequest")
-    if (
+    refreshes_render_request = (
         refreshed_session.get("version") == CURRENT_SESSION_VERSION
         and isinstance(refreshed_request, Mapping)
         and refreshed_request.get("schema") == CANONICAL_REQUEST_SCHEMA
-    ):
+    )
+    if refreshes_render_request:
         merged["renderRequest"] = refreshed_request
     for key in REFRESHED_GALLERY_ARTIFACT_KEYS:
         if key in refreshed_session:
@@ -356,16 +531,24 @@ def _merge_refreshed_gallery_artifacts(
 
     refreshed_resources = refreshed_session.get("resources")
     promoted_resources = promoted_session.get("resources")
-    merged["resources"] = {
-        **(dict(refreshed_resources) if isinstance(refreshed_resources, Mapping) else {}),
-        **(dict(promoted_resources) if isinstance(promoted_resources, Mapping) else {}),
-    }
+    promoted_resource_map = (
+        dict(promoted_resources) if isinstance(promoted_resources, Mapping) else {}
+    )
+    refreshed_resource_map = (
+        dict(refreshed_resources) if isinstance(refreshed_resources, Mapping) else {}
+    )
+    merged["resources"] = (
+        {**promoted_resource_map, **refreshed_resource_map}
+        if refreshes_render_request
+        else {**refreshed_resource_map, **promoted_resource_map}
+    )
     envelope = {
         key: merged.pop(key)
         for key in SESSION_ENVELOPE_KEYS
         if key in merged
     }
     envelope.update(merged)
+    _drop_unreferenced_duplicate_resources(envelope)
     return envelope
 
 
@@ -850,6 +1033,20 @@ def _validate_staged_gallery_session(
             f"{session_path.name} has no canonical schema-"
             f"{expected_request_schema} render request"
         )
+    config = session.get("config")
+    if isinstance(config, Mapping) and "linearRecordLayout" in config:
+        plan = config.get("linearComparisonPlan")
+        if not isinstance(plan, Mapping):
+            raise ValueError(
+                f"{session_path.name} has a Web Linear draft without linearComparisonPlan"
+            )
+    if (
+        session_path.name == "lambda_basic_linear.gbdraw-session.json"
+        and request.get("comparisons")
+    ):
+        raise ValueError(
+            "lambda_basic_linear must contain zero comparison descriptors"
+        )
     run_metadata = session.get("runMetadata")
     geometry = (
         run_metadata.get("trackSlotGeometry")
@@ -1006,18 +1203,7 @@ def _validate_staged_gallery_session(
         )
     del protein_artifacts, serialized_protein_artifacts
 
-    def referenced_resource_ids(value: object):
-        if isinstance(value, Mapping):
-            resource_id = value.get("resourceId")
-            if isinstance(resource_id, str) and resource_id:
-                yield resource_id
-            for nested in value.values():
-                yield from referenced_resource_ids(nested)
-        elif isinstance(value, list):
-            for nested in value:
-                yield from referenced_resource_ids(nested)
-
-    for resource_id in set(referenced_resource_ids(request)):
+    for resource_id in set(_referenced_resource_ids(request)):
         resource = resources.get(resource_id)
         if not isinstance(resource, Mapping) or not str(resource.get("data") or ""):
             raise ValueError(
@@ -1056,6 +1242,7 @@ def _refresh_one_session(
     session = load_session(session_path)
     if session.get("version") == CURRENT_SESSION_VERSION:
         normalize_current_session_artifacts(session)
+    _restore_rendered_palette_file_binding(session)
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:
         raise RuntimeError(f"Could not determine gallery session mode: {session_path}")
@@ -1073,7 +1260,8 @@ def _refresh_one_session(
     )
     render_request = session.get("renderRequest")
     is_canonical = (
-        isinstance(render_request, Mapping)
+        session.get("version") == CURRENT_SESSION_VERSION
+        and isinstance(render_request, Mapping)
         and render_request.get("schema") == CANONICAL_REQUEST_SCHEMA
     )
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-session-") as tmpdir:
@@ -1137,11 +1325,11 @@ def _refresh_one_session(
 
 
 def refresh_gallery_sessions(
-    session_names: tuple[str, ...] = GALLERY_SESSION_FILES,
+    session_names: tuple[str, ...] | None = None,
 ) -> None:
-    if session_names == GALLERY_SESSION_FILES:
+    if session_names is None:
         _validate_gallery_session_inventory()
-    session_paths = [_session_path(session_name) for session_name in session_names]
+    session_paths = list(_refresh_session_paths(session_names))
     for session_path in session_paths:
         if not session_path.exists():
             raise FileNotFoundError(
@@ -1156,9 +1344,9 @@ def refresh_gallery_sessions(
     ) as staging_dir:
         staging_root = Path(staging_dir)
         staged_paths: list[tuple[Path, Path]] = []
-        for session_path in session_paths:
+        for index, session_path in enumerate(session_paths):
             print(f"Refreshing gallery session: {session_path.relative_to(REPO_ROOT)}")
-            staged_path = staging_root / session_path.name
+            staged_path = staging_root / f"{index:02d}-{session_path.name}"
             _refresh_one_session(session_path, destination_path=staged_path)
             staged_session = load_session(staged_path)
             _validate_staged_gallery_session(
@@ -1186,7 +1374,7 @@ def prepare_gallery_assets() -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Regenerate web gallery session JSON files with the current CLI/session schema. "
+            "Regenerate bundled session JSON files with the current CLI/session schema. "
             "By default, gallery SVG sources, thumbnails, and examples.json are refreshed afterwards."
         )
     )
@@ -1196,7 +1384,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=(
             "Refresh one gallery session by file name or gallery id. "
-            "May be repeated; defaults to all gallery sessions."
+            "May be repeated; defaults to all Gallery and test-input sessions."
         ),
     )
     parser.add_argument(
@@ -1211,7 +1399,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    session_names = tuple(args.session or GALLERY_SESSION_FILES)
+    session_names = tuple(args.session) if args.session else None
     targets = _gallery_mutation_targets(
         () if args.skip_session_refresh else session_names,
         include_assets=not args.no_assets,

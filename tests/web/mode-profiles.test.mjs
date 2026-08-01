@@ -31,6 +31,9 @@ const {
   WEB_UX_PROFILE,
   WEB_UX_PROFILE_VERSION
 } = await import(pathToFileURL(join(tempDir, 'js', 'web-ux-profile.js')));
+const { resolveLinearComparisonPlan } = await import(
+  pathToFileURL(join(tempDir, 'js', 'app', 'linear-comparisons.js'))
+);
 
 const normalizedComparison = (filters) => ({
   evalue: Number(filters.evalue),
@@ -360,6 +363,46 @@ assert.deepEqual(
   );
   const retainedFile = { name: 'retained.gb' };
   state.files.c_gb = retainedFile;
+  const retainedComparisonFile = { name: 'retained-comparison.tsv' };
+  state.linearComparisonPlan.mode = 'selected';
+  state.linearComparisonPlan.defaultSource = 'upload';
+  state.linearComparisonPlan.edges.splice(
+    0,
+    state.linearComparisonPlan.edges.length,
+    {
+      id: 'generated-only',
+      queryUid: 'a',
+      subjectUid: 'b',
+      included: true,
+      fileActive: false,
+      losatFilenameActive: false,
+      source: 'losat',
+      file: null,
+      losatFilename: ''
+    },
+    {
+      id: 'retained-file',
+      queryUid: 'a',
+      subjectUid: 'b',
+      included: true,
+      fileActive: true,
+      losatFilenameActive: false,
+      source: 'upload',
+      file: retainedComparisonFile,
+      losatFilename: ''
+    },
+    {
+      id: 'retained-name',
+      queryUid: 'b',
+      subjectUid: 'c',
+      included: true,
+      fileActive: false,
+      losatFilenameActive: true,
+      source: 'losat',
+      file: null,
+      losatFilename: 'custom-subject.fna'
+    }
+  );
 
   resetSettings(state);
 
@@ -395,6 +438,20 @@ assert.deepEqual(
     resetAdvDefaults.linear_track_slots_axis_index
   );
   assert.equal(state.files.c_gb, retainedFile);
+  assert.equal(state.linearComparisonPlan.mode, 'adjacent');
+  assert.equal(state.linearComparisonPlan.defaultSource, 'losat');
+  assert.deepEqual(
+    state.linearComparisonPlan.edges.map((edge) => edge.id),
+    ['retained-file', 'retained-name']
+  );
+  assert.equal(state.linearComparisonPlan.edges[0].file, retainedComparisonFile);
+  assert.equal(state.linearComparisonPlan.edges[0].included, false);
+  assert.equal(state.linearComparisonPlan.edges[0].fileActive, false);
+  assert.equal(state.linearComparisonPlan.edges[0].losatFilenameActive, false);
+  assert.equal(state.linearComparisonPlan.edges[1].losatFilename, 'custom-subject.fna');
+  assert.equal(state.linearComparisonPlan.edges[1].included, false);
+  assert.equal(state.linearComparisonPlan.edges[1].fileActive, false);
+  assert.equal(state.linearComparisonPlan.edges[1].losatFilenameActive, false);
 }
 
 {
@@ -488,7 +545,20 @@ for (const modeName of ['circular', 'linear']) {
         }],
         linearComparisons: []
       };
-  const canonical = buildCanonicalRenderRequest({ state, filesData });
+  const comparisonPlanSnapshot = modeName === 'linear'
+    ? resolveLinearComparisonPlan({
+        plan: state.linearComparisonPlan,
+        sequences: filesData.linearSeqs,
+        layout: [],
+        losatProgram: state.losatProgram.value,
+        blastpMode: state.losat.blastp.mode
+      })
+    : null;
+  const canonical = buildCanonicalRenderRequest({
+    state,
+    filesData,
+    comparisonPlanSnapshot
+  });
   const options = canonical.renderRequest.diagramOptions;
   const expected = expectedModes[modeName];
   assert.equal(canonical.renderRequest.mode, modeName);

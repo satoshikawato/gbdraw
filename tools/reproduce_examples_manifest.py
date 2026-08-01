@@ -18,6 +18,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PALETTES_FILE = PROJECT_ROOT / "gbdraw" / "data" / "color_palettes.toml"
 
 MANUALLY_MANAGED_FIGURES: dict[str, str] = {
+    "gbdraw/web/gallery/media/lambda_basic_linear/manual-02-03-no-comparison.webp": (
+        "Browser screenshot; recapture with the Gallery tutorial screenshot tool from the "
+        "Lambda session and its declarative No comparison capture contract."
+    ),
     "docs/TUTORIALS/images/tutorial-8-interactive-feature-popup.png": (
         "Browser screenshot; recapture after loading the tutorial session and opening a feature popup."
     ),
@@ -1948,7 +1952,6 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
 
 def _palette_figures() -> dict[str, FigureSpec]:
     figures: dict[str, FigureSpec] = {}
-    palette_names = load_palette_names()
     representative_names = ("default", "ajisai", "soft_pastels")
 
     palette_base_inputs = (

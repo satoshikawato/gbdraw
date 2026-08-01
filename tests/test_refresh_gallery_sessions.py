@@ -48,17 +48,22 @@ from tools.prepare_interactive_gallery_assets import (
     _validate_source_feature_ids,
 )
 from tools.refresh_gallery_sessions import (
+    GALLERY_SESSION_FILES,
+    TEST_INPUT_SESSION_FILES,
     VIBRIO_EXPANDED_HARD_LIMIT,
     VIBRIO_EXPANDED_REGRESSION_CEILING,
     VIBRIO_EXPECTED_RAW_PAIRS,
     VIBRIO_GZIP_HARD_LIMIT,
     VIBRIO_GZIP_REGRESSION_CEILING,
     VIBRIO_RAW_ENTRY_COUNT,
+    _drop_unreferenced_duplicate_resources,
     _gallery_file_transaction,
     _merge_refreshed_gallery_artifacts,
     _omit_regenerable_gallery_derived_cache,
     _preserve_gallery_cli_invocation,
     _refresh_one_session,
+    _refresh_session_paths,
+    _restore_rendered_palette_file_binding,
     _session_artifact_measurements,
     _session_path,
     _validate_current_session_catalog_structure,
@@ -66,6 +71,158 @@ from tools.refresh_gallery_sessions import (
     _validate_staged_gallery_session,
     _with_interactive_svg_format,
 )
+
+
+def _color_resource(kind: str, text: str) -> dict[str, object]:
+    data = text.encode("utf-8")
+    return {
+        "kind": kind,
+        "name": "colors.tsv",
+        "type": "text/tab-separated-values",
+        "size": len(data),
+        "lastModified": 0,
+        "encoding": "base64",
+        "data": base64.b64encode(data).decode("ascii"),
+    }
+
+
+def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
+    paths = _refresh_session_paths(None)
+
+    assert len(paths) == 13
+    assert len(GALLERY_SESSION_FILES) == 11
+    assert len(TEST_INPUT_SESSION_FILES) == 2
+    assert {path.name for path in paths} >= set(TEST_INPUT_SESSION_FILES)
+
+
+def test_palette_binding_restores_the_file_proven_by_rendered_legend() -> None:
+    colors = {
+        "defaultColors": {
+            "resourceId": "colors-default-colors",
+            "representation": "canonicalTsv",
+        },
+        "defaultColorsPalette": "ajisai",
+        "defaultColorsFile": None,
+    }
+    session = {
+        "renderRequest": {"diagramOptions": {"colors": colors}},
+        "resources": {
+            "colors-default-colors": _color_resource(
+                "canonical-tsv", "feature_type\tcolor\nCDS\t#54bcf8\n"
+            ),
+            "colors-default-colors-file": _color_resource(
+                "colors-default-colors-file", "CDS\t#84b9ec\nrRNA\t#7cecd5\n"
+            ),
+        },
+        "config": {
+            "palette": "ajisai",
+            "colors": {"CDS": "#84b9ec", "rRNA": "#7cecd5"},
+        },
+        "editorState": {
+            "legend": {
+                "originalColors": {"CDS": "#84b9ec", "rRNA": "#7cecd5"}
+            }
+        },
+    }
+
+    assert _restore_rendered_palette_file_binding(session) is True
+    assert colors["defaultColors"] is None
+    assert colors["defaultColorsFile"] == {
+        "resourceId": "colors-default-colors-file",
+        "representation": "file",
+    }
+
+
+def test_palette_binding_ignores_a_draft_palette_not_proven_by_legend() -> None:
+    colors = {
+        "defaultColors": {
+            "resourceId": "colors-default-colors",
+            "representation": "canonicalTsv",
+        },
+        "defaultColorsPalette": "orange",
+        "defaultColorsFile": None,
+    }
+    session = {
+        "renderRequest": {"diagramOptions": {"colors": colors}},
+        "resources": {
+            "colors-default-colors": _color_resource(
+                "canonical-tsv", "feature_type\tcolor\nCDS\t#54bcf8\n"
+            ),
+            "colors-default-colors-file": _color_resource(
+                "colors-default-colors-file", "CDS\t#dddddd\n"
+            ),
+        },
+        "config": {"palette": "orange", "colors": {"CDS": "#dddddd"}},
+        "editorState": {
+            "legend": {"originalColors": {"other proteins": "#dddddd"}}
+        },
+    }
+
+    assert _restore_rendered_palette_file_binding(session) is False
+    assert colors["defaultColors"]["resourceId"] == "colors-default-colors"
+    assert colors["defaultColorsFile"] is None
+
+
+def test_duplicate_resource_cleanup_keeps_the_referenced_copy_only() -> None:
+    payload = {
+        "kind": "canonical-tsv",
+        "name": "fresh.tsv",
+        "type": "text/tab-separated-values",
+        "size": 3,
+        "lastModified": 0,
+        "encoding": "base64",
+        "data": "QUJD",
+    }
+    stale_payload = {**payload, "name": "stale.tsv"}
+    session = {
+        "renderRequest": {
+            "comparisons": [{"resourceId": "fresh"}],
+        },
+        "resources": {
+            "fresh": payload,
+            "stale": stale_payload,
+        },
+        "webFiles": {
+            "resourceOriginalNames": {
+                "fresh": "fresh.tsv",
+                "stale": "stale.tsv",
+            }
+        },
+    }
+
+    _drop_unreferenced_duplicate_resources(session)
+
+    assert list(session["resources"]) == ["fresh"]
+    assert session["webFiles"]["resourceOriginalNames"] == {
+        "fresh": "fresh.tsv"
+    }
+
+
+def test_duplicate_resource_cleanup_preserves_two_referenced_copies() -> None:
+    payload = {
+        "kind": "canonical-tsv",
+        "type": "text/tab-separated-values",
+        "size": 3,
+        "lastModified": 0,
+        "encoding": "base64",
+        "data": "QUJD",
+    }
+    session = {
+        "renderRequest": {
+            "comparisons": [
+                {"resourceId": "first"},
+                {"resourceId": "second"},
+            ],
+        },
+        "resources": {
+            "first": {**payload, "name": "first.tsv"},
+            "second": {**payload, "name": "second.tsv"},
+        },
+    }
+
+    _drop_unreferenced_duplicate_resources(session)
+
+    assert list(session["resources"]) == ["first", "second"]
 
 
 def test_gallery_file_transaction_restores_all_outputs_on_failure(
@@ -584,6 +741,32 @@ def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() 
     assert merged["losatDerivedCache"] == refreshed["losatDerivedCache"]
     assert merged["proteinIdentityManifest"] == refreshed["proteinIdentityManifest"]
     assert "legacyArtifacts" not in merged
+
+
+def test_refreshed_request_keeps_its_resource_on_identifier_collision() -> None:
+    promoted = {
+        "format": "gbdraw-session",
+        "version": CURRENT_SESSION_VERSION,
+        "renderRequest": {
+            "schema": CANONICAL_REQUEST_SCHEMA,
+            "diagramOptions": {"colors": "stale"},
+        },
+        "resources": {"colors-default-colors": {"data": "stale"}},
+    }
+    refreshed = {
+        "version": CURRENT_SESSION_VERSION,
+        "createdAt": "fresh",
+        "renderRequest": {
+            "schema": CANONICAL_REQUEST_SCHEMA,
+            "diagramOptions": {"colors": "fresh"},
+        },
+        "resources": {"colors-default-colors": {"data": "fresh"}},
+    }
+
+    merged = _merge_refreshed_gallery_artifacts(promoted, refreshed)
+
+    assert merged["renderRequest"] == refreshed["renderRequest"]
+    assert merged["resources"]["colors-default-colors"] == {"data": "fresh"}
 
 
 def test_vibrio_gallery_refresh_omits_regenerable_derived_cache(

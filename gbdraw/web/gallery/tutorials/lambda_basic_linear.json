@@ -125,6 +125,40 @@
       ]
     },
     {
+      "title": "Turn off sequence comparisons",
+      "body": "Choose No comparison before generating. This makes the no-search intent explicit and prevents the app from running LOSAT or using a retained BLAST TSV.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/lambda_basic_linear/manual-02-03-no-comparison.webp",
+            "alt": "Linear comparison choices with No comparison selected.",
+            "caption": "Select No comparison to generate the Linear diagram without running LOSAT."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "viewport": {"width": 1280, "height": 900},
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.linearComparisonPlan.mode = 'none'; app.linearComparisonPlan.defaultSource = 'losat';"
+              }
+            ],
+            "selector": "[data-capture='linear-blast-source']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "none"
+            },
+            "visibleControls": [
+              {"label": "No comparison", "checked": true}
+            ]
+          }
+        }
+      ]
+    },
+    {
       "title": "Set strands, labels, ruler, and legend",
       "body": "Apply the four Linear presentation settings below.",
       "table": {

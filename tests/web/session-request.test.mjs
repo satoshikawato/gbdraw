@@ -11,9 +11,35 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-session-request-'));
 await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
-const { buildCanonicalRenderRequest, projectCanonicalSessionRequest } = await import(
+const {
+  buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
+  projectCanonicalSessionRequest
+} = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
+const {
+  createDefaultLinearComparisonPlan,
+  resolveLinearComparisonPlan
+} = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-comparisons.js'))
+);
+
+const comparisonSnapshotForState = (requestState, filesData = {}) => resolveLinearComparisonPlan({
+  plan: requestState.linearComparisonPlan || createDefaultLinearComparisonPlan(),
+  sequences: requestState.linearSeqs || filesData.linearSeqs || [],
+  layout: requestState.linearRecordLayoutEnabled?.value
+    ? requestState.linearRecordRows || []
+    : [],
+  losatProgram: requestState.losatProgram?.value || 'blastn',
+  blastpMode: requestState.losat?.blastp?.mode || 'orthogroup'
+});
+
+const buildCanonicalRenderRequest = (args) => buildCanonicalRenderRequestRaw({
+  ...args,
+  ...(args.state?.mode?.value === 'linear' && !args.comparisonPlanSnapshot
+    ? { comparisonPlanSnapshot: comparisonSnapshotForState(args.state, args.filesData) }
+    : {})
+});
 const {
   buildLinearTrackSlotPayload,
   buildLinearTrackSlotSpec,
@@ -332,14 +358,13 @@ const state = {
   editableLabels: ref([]),
   extractedFeatures: ref([]),
   circularConservation: { reference: 'auto', labels: '', series: [] },
-  blastSource: ref('files'),
+  linearComparisonPlan: createDefaultLinearComparisonPlan(),
   losatProgram: ref('blastn'),
   losat: { blastp: { collinearMaxUnitGap: 2 } },
   selectedOrthogroupAlignmentFeature: ref(''),
   linearRecordLayoutEnabled: ref(false),
   linearRecordGap: ref(24),
   linearRecordRows: [],
-  linearComparisons: [],
   annotationSets: []
 };
 
@@ -355,7 +380,9 @@ const stateForCanonicalProjection = (projection) => {
     form: { ...state.form, ...structuredClone(config.form || {}) },
     adv: { ...state.adv, ...structuredClone(config.adv || {}) },
     losat: structuredClone(config.losat || { threadsPerJob: 'auto', blastp: {} }),
-    blastSource: ref(config.blastSource || 'files'),
+    linearComparisonPlan: structuredClone(
+      config.linearComparisonPlan || createDefaultLinearComparisonPlan()
+    ),
     losatProgram: ref(config.losatProgram || 'blastn'),
     selectedOrthogroupAlignmentFeature: ref(
       projection.pipelineState?.selectedOrthogroupAlignmentFeature || ''
@@ -374,7 +401,6 @@ const stateForCanonicalProjection = (projection) => {
     linearRecordLayoutEnabled: ref(Boolean(linearLayout.enabled)),
     linearRecordGap: ref(linearLayout.recordGap ?? 24),
     linearRecordRows: structuredClone(linearLayout.rows || []),
-    linearComparisons: structuredClone(linearLayout.comparisons || []),
     annotationSets: structuredClone(config.annotationSets || [])
   };
 };
@@ -1683,9 +1709,9 @@ assert.equal(hiddenRulerProjection.config.form.linear_ruler_on_axis, true);
 state.form.show_scale = true;
 state.form.linear_ruler_on_axis = false;
 assert.deepEqual(linearCanonical.webFiles.linearRecordMetadata, [
-  { recordKey: 'first', losatGencode: 11, losatFilename: 'first-to-second.losat.tsv' },
-  { recordKey: 'second', losatGencode: 4, losatFilename: 'second-to-third.losat.tsv' },
-  { recordKey: 'third', losatGencode: 1, losatFilename: '' }
+  { recordKey: 'first', losatGencode: 11 },
+  { recordKey: 'second', losatGencode: 4 },
+  { recordKey: 'third', losatGencode: 1 }
 ]);
 assert.equal(linearCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots, null);
 assert.equal(linearCanonical.renderRequest.diagramOptions.tracks.linearTrackAxisIndex, null);
@@ -1721,9 +1747,17 @@ assert.deepEqual(arrangedCanonical.renderRequest.layout, {
 });
 
 state.losatProgram.value = 'blastp';
-linearFilesData.linearComparisons = [{
-  id: 'selected-losat-pair', queryUid: 'first', subjectUid: 'third', source: 'losat', file: null
-}];
+state.losat.blastp.mode = 'pairwise';
+state.linearComparisonPlan = {
+  mode: 'selected',
+  defaultSource: 'losat',
+  edges: [{
+    id: 'selected-losat-pair', queryUid: 'first', subjectUid: 'third',
+    included: true, fileActive: false, losatFilenameActive: false,
+    source: 'losat', file: null, losatFilename: ''
+  }]
+};
+linearFilesData.linearComparisons = [];
 const losatPairCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 const generatedProtein = losatPairCanonical.renderRequest.comparisons.find(
   (comparison) => comparison.kind === 'generatedProteinComparison'
@@ -1745,6 +1779,7 @@ const resolvedProteinCanonical = buildCanonicalRenderRequest({
   filesData: linearFilesData,
   resolvedComparisons: [{
     kind: 'precomputedProteinComparison',
+    edgeKey: 'first->third',
     queryRecordIndex: 0,
     subjectRecordIndex: 2,
     rows: [{
@@ -1808,9 +1843,9 @@ assert.equal(
   resolvedProteinProjection.pipelineState.selectedOrthogroupAlignmentFeature,
   'resolved-feature-anchor'
 );
-state.blastSource.value = resolvedProteinProjection.config.blastSource;
 state.losatProgram.value = resolvedProteinProjection.config.losatProgram;
 state.losat = structuredClone(resolvedProteinProjection.config.losat);
+state.losat.blastp.mode = 'pairwise';
 state.selectedOrthogroupAlignmentFeature.value =
   resolvedProteinProjection.pipelineState.selectedOrthogroupAlignmentFeature;
 const resolvedProteinRoundTripCanonical = buildCanonicalRenderRequest({
@@ -1891,6 +1926,7 @@ const resolvedWithFreshTable = buildCanonicalRenderRequest({
   filesData: resolvedWithMetadataProjection.files,
   resolvedComparisons: [{
     kind: 'precomputedProteinComparison',
+    edgeKey: 'first->third',
     queryRecordIndex: 0,
     subjectRecordIndex: 2,
     rows: [{
@@ -1952,7 +1988,6 @@ typedCanonicalFiles.linearCanonicalComparisons =
 const typedCanonicalState = stateForCanonicalProjection(
   resolvedWithMetadataProjection
 );
-typedCanonicalState.blastSource.value = 'files';
 typedCanonicalState.losatProgram.value = 'blastn';
 const typedCanonicalResult = buildCanonicalRenderRequest({
   state: typedCanonicalState,
@@ -1962,16 +1997,57 @@ assert.deepEqual(
   typedCanonicalResult.renderRequest.comparisons.map(
     (comparison) => comparison.kind
   ),
-  [
-    'orthogroupResult',
-    'collinearityResult'
-  ],
-  'direct typed canonical results must not require Web protein-pipeline state'
+  [],
+  'fresh Web materialization must not revive artifacts outside the resolved plan'
+);
+const typedOptionCanonical = structuredClone(resolvedWithMetadataCanonical);
+typedOptionCanonical.renderRequest.comparisons =
+  typedOptionCanonical.renderRequest.comparisons.filter(
+    (comparison) => comparison.kind !== 'generatedProteinComparison'
+  );
+const typedOptionProjection = projectCanonicalSessionRequest(typedOptionCanonical);
+assert.ok(
+  typedOptionProjection.files.linearCanonicalComparisons.every(
+    (comparison) => comparison.canonicalInput === true
+  ),
+  'typed Python comparison options must remain distinct from Web pipeline artifacts'
+);
+const typedOptionState = stateForCanonicalProjection(typedOptionProjection);
+typedOptionState.losatProgram.value = 'blastn';
+const typedOptionRoundTrip = buildCanonicalRenderRequest({
+  state: typedOptionState,
+  filesData: typedOptionProjection.files
+});
+assert.deepEqual(
+  typedOptionRoundTrip.renderRequest.comparisons.map(
+    (comparison) => comparison.kind
+  ),
+  ['precomputedProteinComparison', 'orthogroupResult', 'collinearityResult'],
+  'Python comparison options must survive canonical projection and rebuild'
+);
+assert.equal(
+  typedOptionRoundTrip.renderRequest.comparisons.some(
+    (comparison) => Object.hasOwn(comparison, 'canonicalInput')
+  ),
+  false,
+  'projection provenance must not become part of the canonical comparison schema'
+);
+typedOptionState.linearComparisonPlan = {
+  mode: 'none',
+  defaultSource: 'losat',
+  edges: []
+};
+assert.deepEqual(
+  buildCanonicalRenderRequest({
+    state: typedOptionState,
+    filesData: typedOptionProjection.files
+  }).renderRequest.comparisons,
+  [],
+  'an explicit Web No comparison plan must still suppress canonical inputs'
 );
 const inactiveProteinState = stateForCanonicalProjection(
   resolvedWithMetadataProjection
 );
-inactiveProteinState.blastSource.value = 'files';
 inactiveProteinState.losatProgram.value = 'blastn';
 const withoutStaleProteinArtifacts = buildCanonicalRenderRequest({
   state: inactiveProteinState,
@@ -1991,6 +2067,12 @@ assert.equal(
 );
 state.selectedOrthogroupAlignmentFeature.value = '';
 state.adv.plot_title_position = resolvedProteinPlotTitlePosition;
+state.losatProgram.value = 'blastn';
+state.linearComparisonPlan = {
+  mode: 'none',
+  defaultSource: 'losat',
+  edges: []
+};
 
 const linearProjection = projectCanonicalSessionRequest(linearCanonical);
 assert.equal(linearProjection.config.adv.comparison_height, 42.5);
@@ -2080,7 +2162,8 @@ assert.deepEqual(
 );
 assert.deepEqual(
   linearProjection.files.linearSeqs.map((seq) => seq.losat_filename),
-  ['first-to-second.losat.tsv', 'second-to-third.losat.tsv', '']
+  ['', '', ''],
+  'current canonical requests must not persist retired per-record LOSAT filenames'
 );
 assert.deepEqual(
   linearProjection.files.linearSeqs.map((seq) => seq.region_record_id),
@@ -3242,6 +3325,268 @@ assert.equal(
   managedComparisonCanonical.renderRequest.diagramOptions.conservationBlastFiles.length,
   1
 );
+
+const comparisonContractState = {
+  ...state,
+  mode: ref('linear'),
+  lInputType: ref('gb'),
+  form: { ...state.form, prefix: 'comparison-contract', show_depth: false },
+  adv: {
+    ...state.adv,
+    linear_track_slots_enabled: false,
+    linear_track_slots_axis_index: null,
+    linear_track_slots: []
+  },
+  losatProgram: ref('blastn'),
+  losat: structuredClone(state.losat),
+  linearRecordLayoutEnabled: ref(false),
+  linearRecordRows: [],
+  linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
+  selectedOrthogroupAlignmentFeature: ref('')
+};
+comparisonContractState.losat.blastp = {
+  ...(comparisonContractState.losat.blastp || {}),
+  mode: 'pairwise'
+};
+const comparisonContractSequences = ['a', 'b', 'c', 'd'].map((uid) => ({
+  uid,
+  gb: genbank,
+  blast: blastTable,
+  losat_gencode: 1,
+  losat_filename: 'retired-name.tsv',
+  region_record_id: '',
+  region_start: null,
+  region_end: null,
+  region_reverse: false
+}));
+const staleCanonicalComparison = {
+  kind: 'precomputedProteinComparison',
+  queryRecordIndex: 0,
+  subjectRecordIndex: 1,
+  encoding: 'canonicalTsv',
+  file: blastTable
+};
+const staleGeneratedComparison = {
+  kind: 'generatedProteinComparison',
+  mode: 'pairwise',
+  pairs: [{ queryRecordIndex: 0, subjectRecordIndex: 1 }],
+  settings: {}
+};
+const comparisonContractFiles = {
+  linearSeqs: comparisonContractSequences,
+  linearComparisons: [{ id: 'dormant-upload', file: blastTable }],
+  linearCanonicalComparisons: [staleCanonicalComparison, staleGeneratedComparison]
+};
+
+assert.throws(
+  () => buildCanonicalRenderRequestRaw({
+    state: comparisonContractState,
+    filesData: comparisonContractFiles
+  }),
+  /resolved Linear comparison plan/
+);
+
+const noneSnapshot = resolveLinearComparisonPlan({
+  plan: {
+    mode: 'none',
+    defaultSource: 'losat',
+    edges: [{
+      id: 'dormant-upload', queryUid: 'a', subjectUid: 'b', included: true,
+      fileActive: true, losatFilenameActive: true, source: 'upload',
+      file: blastTable, losatFilename: 'retained.tsv'
+    }]
+  },
+  sequences: comparisonContractSequences,
+  losatProgram: 'blastp',
+  blastpMode: 'pairwise'
+});
+const noneCanonical = buildCanonicalRenderRequestRaw({
+  state: comparisonContractState,
+  filesData: comparisonContractFiles,
+  comparisonPlanSnapshot: noneSnapshot,
+  resolvedComparisons: [{
+    kind: 'nucleotideBlast', edgeKey: 'a->b', text: 'must-not-render\n'
+  }]
+});
+assert.deepEqual(noneCanonical.renderRequest.comparisons, []);
+assert.equal(
+  Object.keys(noneCanonical.resources).some((key) => key.startsWith('comparison-')),
+  false,
+  'none must not materialize dormant upload, canonical, or generated comparison resources'
+);
+
+const emptySelectedSnapshot = resolveLinearComparisonPlan({
+  plan: { mode: 'selected', defaultSource: 'losat', edges: [] },
+  sequences: comparisonContractSequences,
+  losatProgram: 'blastp',
+  blastpMode: 'pairwise'
+});
+assert.deepEqual(buildCanonicalRenderRequestRaw({
+  state: comparisonContractState,
+  filesData: comparisonContractFiles,
+  comparisonPlanSnapshot: emptySelectedSnapshot
+}).renderRequest.comparisons, []);
+
+const oneRecordSnapshot = resolveLinearComparisonPlan({
+  plan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+  sequences: comparisonContractSequences.slice(0, 1),
+  losatProgram: 'blastp',
+  blastpMode: 'pairwise'
+});
+assert.deepEqual(buildCanonicalRenderRequestRaw({
+  state: comparisonContractState,
+  filesData: {
+    ...comparisonContractFiles,
+    linearSeqs: comparisonContractSequences.slice(0, 1)
+  },
+  comparisonPlanSnapshot: oneRecordSnapshot
+}).renderRequest.comparisons, []);
+
+const mixedPlan = {
+  mode: 'selected',
+  defaultSource: 'losat',
+  edges: [
+    {
+      id: 'losat-middle', queryUid: 'b', subjectUid: 'c', included: true,
+      fileActive: true, losatFilenameActive: false, source: 'losat',
+      file: blastTableB, losatFilename: ''
+    },
+    {
+      id: 'upload-first', queryUid: 'a', subjectUid: 'b', included: true,
+      fileActive: true, losatFilenameActive: false, source: 'upload',
+      file: blastTable, losatFilename: ''
+    },
+    {
+      id: 'losat-last', queryUid: 'c', subjectUid: 'd', included: true,
+      fileActive: false, losatFilenameActive: false, source: 'losat',
+      file: null, losatFilename: ''
+    }
+  ]
+};
+const mixedSnapshot = resolveLinearComparisonPlan({
+  plan: mixedPlan,
+  sequences: comparisonContractSequences,
+  losatProgram: 'blastn',
+  blastpMode: 'pairwise'
+});
+const mixedCanonical = buildCanonicalRenderRequestRaw({
+  state: comparisonContractState,
+  filesData: {
+    ...comparisonContractFiles,
+    linearComparisons: [
+      { id: 'losat-middle', file: blastTableB },
+      { id: 'upload-first', file: blastTable }
+    ],
+    linearCanonicalComparisons: []
+  },
+  comparisonPlanSnapshot: mixedSnapshot,
+  resolvedComparisons: [
+    { kind: 'nucleotideBlast', edgeKey: 'c->d', text: 'c-to-d\n' },
+    { kind: 'nucleotideBlast', edgeKey: 'b->c', text: 'b-to-c\n' }
+  ]
+});
+assert.deepEqual(
+  mixedCanonical.renderRequest.comparisons.map((comparison) => [
+    comparison.kind,
+    comparison.queryRecordIndex,
+    comparison.subjectRecordIndex
+  ]),
+  [
+    ['nucleotideBlast', 1, 2],
+    ['nucleotideBlast', 0, 1],
+    ['nucleotideBlast', 2, 3]
+  ],
+  'mixed comparison descriptors must follow dense plan ordinal order'
+);
+assert.equal(
+  Buffer.from(
+    mixedCanonical.resources[mixedCanonical.renderRequest.comparisons[0].resourceId].data,
+    'base64'
+  ).toString('utf8'),
+  'b-to-c\n',
+  'a stale retained file on a LOSAT edge must not replace its edge-keyed result'
+);
+
+for (const program of ['blastn', 'tblastx']) {
+  const nucleotideState = {
+    ...comparisonContractState,
+    losatProgram: ref(program)
+  };
+  const snapshot = resolveLinearComparisonPlan({
+    plan: {
+      mode: 'selected', defaultSource: 'losat', edges: [mixedPlan.edges[2]]
+    },
+    sequences: comparisonContractSequences,
+    losatProgram: program,
+    blastpMode: 'pairwise'
+  });
+  const canonicalRequest = buildCanonicalRenderRequestRaw({
+    state: nucleotideState,
+    filesData: { ...comparisonContractFiles, linearCanonicalComparisons: [] },
+    comparisonPlanSnapshot: snapshot,
+    resolvedComparisons: [{
+      kind: 'nucleotideBlast', edgeKey: 'c->d', text: `${program}\n`
+    }]
+  });
+  assert.deepEqual(
+    canonicalRequest.renderRequest.comparisons.map((comparison) => [
+      comparison.queryRecordIndex,
+      comparison.subjectRecordIndex
+    ]),
+    [[2, 3]]
+  );
+}
+
+const selectedProteinState = {
+  ...comparisonContractState,
+  losatProgram: ref('blastp'),
+  losat: {
+    ...structuredClone(comparisonContractState.losat),
+    blastp: {
+      ...structuredClone(comparisonContractState.losat.blastp),
+      mode: 'pairwise'
+    }
+  }
+};
+const selectedProteinSnapshot = resolveLinearComparisonPlan({
+  plan: {
+    mode: 'selected', defaultSource: 'losat', edges: [mixedPlan.edges[0]]
+  },
+  sequences: comparisonContractSequences,
+  losatProgram: 'blastp',
+  blastpMode: 'pairwise'
+});
+const unresolvedSelectedProtein = buildCanonicalRenderRequestRaw({
+  state: selectedProteinState,
+  filesData: { ...comparisonContractFiles, linearCanonicalComparisons: [] },
+  comparisonPlanSnapshot: selectedProteinSnapshot
+});
+const unresolvedProteinDescriptor = unresolvedSelectedProtein.renderRequest.comparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+);
+assert.equal(unresolvedProteinDescriptor.mode, 'pairwise');
+assert.deepEqual(unresolvedProteinDescriptor.pairs, [{
+  queryRecordIndex: 1,
+  subjectRecordIndex: 2
+}]);
+
+const resolvedSelectedProtein = buildCanonicalRenderRequestRaw({
+  state: selectedProteinState,
+  filesData: { ...comparisonContractFiles, linearCanonicalComparisons: [] },
+  comparisonPlanSnapshot: selectedProteinSnapshot,
+  resolvedComparisons: [{
+    kind: 'precomputedProteinComparison',
+    edgeKey: 'b->c',
+    rows: [{ query: 'q', subject: 's', identity: 90 }]
+  }]
+});
+assert.deepEqual(
+  resolvedSelectedProtein.renderRequest.comparisons.map((comparison) => comparison.kind),
+  ['precomputedProteinComparison', 'generatedProteinComparison']
+);
+const resolvedProteinMarker = resolvedSelectedProtein.renderRequest.comparisons[1];
+assert.equal(resolvedProteinMarker.mode, 'none');
+assert.deepEqual(resolvedProteinMarker.pairs, []);
 
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {

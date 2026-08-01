@@ -233,6 +233,13 @@ The solver uses one common bp/px scale for every record. A ruler starts from zer
 
 For stable left-to-right ordering and per-record labels, prefer `row` and `column` in a [`--records_table`](./5_Table_Driven_Inputs.md#2-linear---records_table-for-genbank-rows). Add selected cross-row BLAST edges with [`--comparisons_table`](./2_Comparative_Genomics.md#6-compare-selected-pairs-across-multi-record-rows).
 
+In the web app, **Arrange in rows** changes placement only. It does not enable
+or disable comparisons and is not required for editing **Selected pairs**.
+Choose **No comparison**, an adjacent LOSAT or upload plan, or explicit selected
+edges independently. For a multi-row layout, the adjacent actions use zipped
+positions between neighboring rows; **All adjacent-row pairs** creates the
+cross-product as explicit selected edges.
+
 ### Two strains with multiple replicons
 
 In a source checkout, the checked-in [`vibrio-nigripulchritudo-linear-records.tsv`](../../examples/vibrio-nigripulchritudo-linear-records.tsv) reads `tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff` and `tests/test_inputs/GCF_000801275.2_ASM80127v1_genomic.gbff`. It selects all six replicons from *Vibrio nigripulchritudo* TUMSAT-TG-2018 and both chromosomes from strain SFn1, places one strain on each row, and orders its replicons by `column`. Run the command from the repository root.

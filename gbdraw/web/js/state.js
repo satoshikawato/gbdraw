@@ -15,6 +15,10 @@ import {
   updateActiveLayoutPreference
 } from './app/layout-preferences.js';
 import { createSequenceSourceRegistry } from './app/match-sequences.js';
+import {
+  createDefaultLinearComparisonPlan,
+  resolveLinearComparisonPlan
+} from './app/linear-comparisons.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import {
   MODE_DEFAULT_FEATURE_TYPES,
@@ -82,7 +86,6 @@ const layoutPreferences = reactive(createDefaultLayoutPreferences());
 const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
-const blastSource = ref('losat'); // 'upload' | 'losat'
 const losatProgram = ref('blastn'); // 'blastn' | 'tblastx' | 'blastp'
 const files = reactive({
   c_gb: null,
@@ -127,9 +130,7 @@ export const createLinearSeq = (overrides = {}) => {
     gff: source.gff ?? null,
     fasta: source.fasta ?? null,
     depth: source.depth ?? null,
-    blast: source.blast ?? null,
     losat_gencode: Number.isFinite(rawLosatGencode) && rawLosatGencode > 0 ? rawLosatGencode : 1,
-    losat_filename: String(source.losat_filename ?? ''),
     definition: String(source.definition ?? ''),
     record_subtitle: String(source.record_subtitle ?? ''),
     region_record_id: String(source.region_record_id ?? ''),
@@ -138,14 +139,6 @@ export const createLinearSeq = (overrides = {}) => {
     region_reverse: Boolean(source.region_reverse)
   };
 };
-
-export const clearLinearSeqGapData = (seq) => ({
-  ...createLinearSeq(seq),
-  blast: null,
-  losat_filename: ''
-});
-
-const getLinearPairKey = (leftUid, rightUid) => `${String(leftUid || '').trim()}->${String(rightUid || '').trim()}`;
 
 export const normalizeLinearSeqList = (items) => {
   const baseItems = Array.isArray(items) && items.length > 0 ? items : [null];
@@ -158,53 +151,7 @@ export const normalizeLinearSeqList = (items) => {
     seenUids.add(next.uid);
     return next;
   });
-  const lastIndex = normalized.length - 1;
-  return normalized.map((seq, index) => (index === lastIndex ? clearLinearSeqGapData(seq) : seq));
-};
-
-export const reconcileLinearSeqPairData = (previousItems, nextItems) => {
-  const previous = normalizeLinearSeqList(previousItems);
-  const next = normalizeLinearSeqList(nextItems);
-  const previousPairs = new Map();
-
-  for (let index = 0; index < previous.length - 1; index += 1) {
-    const left = previous[index];
-    const right = previous[index + 1];
-    previousPairs.set(getLinearPairKey(left.uid, right.uid), {
-      blast: left.blast ?? null,
-      losatFilename: String(left.losat_filename ?? '')
-    });
-  }
-
-  for (let index = 0; index < next.length; index += 1) {
-    next[index] = clearLinearSeqGapData(next[index]);
-  }
-
-  const restoredPairKeys = new Set();
-  for (let index = 0; index < next.length - 1; index += 1) {
-    const left = next[index];
-    const right = next[index + 1];
-    const pairKey = getLinearPairKey(left.uid, right.uid);
-    const previousPair = previousPairs.get(pairKey);
-    if (!previousPair) continue;
-    restoredPairKeys.add(pairKey);
-    left.blast = previousPair.blast ?? null;
-    left.losat_filename = String(previousPair.losatFilename ?? '');
-  }
-
-  let clearedBlastSlots = 0;
-  let clearedLosatNames = 0;
-  previousPairs.forEach((previousPair, pairKey) => {
-    if (restoredPairKeys.has(pairKey)) return;
-    if (previousPair.blast) clearedBlastSlots += 1;
-    if (String(previousPair.losatFilename || '').trim()) clearedLosatNames += 1;
-  });
-
-  return {
-    linearSeqs: next,
-    clearedBlastSlots,
-    clearedLosatNames
-  };
+  return normalized;
 };
 
 const hasLinearSeqPrimaryInput = (seq) => Boolean(seq?.gb || seq?.gff || seq?.fasta);
@@ -214,14 +161,14 @@ export const collapseEmptyLinearSeqList = (items) => {
   if (previous.length <= 1) return previous;
   const collapsed = previous.filter((seq) => hasLinearSeqPrimaryInput(seq));
   if (collapsed.length === previous.length) return previous;
-  return reconcileLinearSeqPairData(previous, collapsed).linearSeqs;
+  return normalizeLinearSeqList(collapsed);
 };
 
 const linearSeqs = reactive(normalizeLinearSeqList([]));
 const linearRecordLayoutEnabled = ref(false);
 const linearRecordGap = ref(24);
 const linearRecordRows = reactive([]);
-const linearComparisons = reactive([]);
+const linearComparisonPlan = reactive(createDefaultLinearComparisonPlan());
 const annotationSets = reactive([]);
 const selectedAnnotation = ref(null);
 
@@ -475,6 +422,17 @@ Object.defineProperty(adv, 'plot_title_position', {
 });
 
 const losat = reactive(createDefaultLosat());
+
+const linearComparisonResolution = computed(() => resolveLinearComparisonPlan({
+  plan: linearComparisonPlan,
+  sequences: linearSeqs,
+  layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
+  losatProgram: losatProgram.value,
+  blastpMode: losat.blastp?.mode
+}));
+const hasLinearComparisonIntent = computed(() => linearComparisonResolution.value.hasComparisonIntent);
+const hasActiveLinearLosatIntent = computed(() => linearComparisonResolution.value.hasLosatIntent);
+const hasActiveLinearUploadIntent = computed(() => linearComparisonResolution.value.hasUploadIntent);
 
 const losatCacheInfo = ref([]);
 const losatThreadingStatus = ref({
@@ -1031,7 +989,6 @@ export const state = {
   suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,
-  blastSource,
   losatProgram,
   files,
   circularConservation,
@@ -1041,7 +998,11 @@ export const state = {
   linearRecordLayoutEnabled,
   linearRecordGap,
   linearRecordRows,
-  linearComparisons,
+  linearComparisonPlan,
+  linearComparisonResolution,
+  hasLinearComparisonIntent,
+  hasActiveLinearLosatIntent,
+  hasActiveLinearUploadIntent,
   form,
   adv,
   modeProfileStateManager,

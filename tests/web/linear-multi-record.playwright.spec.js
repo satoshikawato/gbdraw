@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { createReadStream, existsSync } = require('node:fs');
+const { createReadStream, existsSync, readFileSync } = require('node:fs');
 const { createServer } = require('node:http');
 const { extname, join, normalize, resolve, sep } = require('node:path');
 
@@ -17,6 +17,62 @@ const contentTypes = {
 
 let server;
 let baseUrl;
+
+const makeComparisonGenbank = (recordId, base = 'atg') => {
+  const sequence = base.repeat(100);
+  const origin = sequence.match(/.{1,60}/g).map((chunk, index) => {
+    const groups = chunk.match(/.{1,10}/g).join(' ');
+    return `${String(index * 60 + 1).padStart(9)} ${groups}`;
+  }).join('\n');
+  return `LOCUS       ${recordId.padEnd(24)} 300 bp    DNA     linear   UNA 01-JAN-2000
+DEFINITION  linear comparison browser test.
+ACCESSION   ${recordId}
+VERSION     ${recordId}
+KEYWORDS    .
+SOURCE      synthetic construct
+  ORGANISM  synthetic construct
+            .
+FEATURES             Location/Qualifiers
+     CDS             1..90
+                     /product="comparison test protein"
+ORIGIN
+${origin}
+//
+`;
+};
+
+const installDiagramRequestObserver = async (page) => {
+  await page.addInitScript(() => {
+    window.__GBDRAW_DIAGRAM_RUNS__ = [];
+    window.__GBDRAW_RUNTIME_URLS__ = { fetches: [], workers: [] };
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (...args) => {
+      window.__GBDRAW_RUNTIME_URLS__.fetches.push(String(args[0]?.url || args[0] || ''));
+      return nativeFetch(...args);
+    };
+    const NativeWorker = window.Worker;
+    window.Worker = new Proxy(NativeWorker, {
+      construct(target, args) {
+        const worker = Reflect.construct(target, args, target);
+        const workerUrl = String(args[0] || '');
+        window.__GBDRAW_RUNTIME_URLS__.workers.push(workerUrl);
+        if (workerUrl.includes('diagram-generation-worker.js')) {
+          const nativePostMessage = worker.postMessage.bind(worker);
+          worker.postMessage = (message, transfer) => {
+            if (message?.type === 'run' && message?.payload?.request) {
+              window.__GBDRAW_DIAGRAM_RUNS__.push(
+                JSON.parse(JSON.stringify(message.payload.request))
+              );
+            }
+            if (transfer === undefined) return nativePostMessage(message);
+            return nativePostMessage(message, transfer);
+          };
+        }
+        return worker;
+      }
+    });
+  });
+};
 
 test.beforeAll(async () => {
   await new Promise((resolveServer, rejectServer) => {
@@ -56,8 +112,12 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
     app.addLinearSeq();
     app.addLinearSeq();
     app.addLinearSeq();
-    app.linearRecordLayoutEnabled = true;
-    app.syncLinearRecordLayout();
+    app.files.linearCanonicalComparisons = [{ id: 'stale' }];
+    app.losatCacheInfo = [
+      { edgeKey: 'stale->edge', key: 'linear-cache' },
+      { key: 'circular-cache' }
+    ];
+    app.setLinearRecordLayoutEnabled(true);
     app.setLinearRecordRow(app.linearSeqs[0].uid, 1);
     app.setLinearRecordRow(app.linearSeqs[1].uid, 1);
     app.setLinearRecordRow(app.linearSeqs[2].uid, 2);
@@ -65,18 +125,383 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
     app.addLinearComparisonBatch(true);
     return {
       tokens: app.linearLayoutTokens,
-      comparisonCount: app.linearComparisons.length,
-      endpoints: app.linearComparisons.map((item) => [item.queryUid, item.subjectUid]),
-      uniqueUids: new Set(app.linearSeqs.map((item) => item.uid)).size
+      comparisonMode: app.linearComparisonPlan.mode,
+      comparisonCount: app.linearComparisonPlan.edges.filter((item) => item.included).length,
+      endpoints: app.linearComparisonPlan.edges
+        .filter((item) => item.included)
+        .map((item) => [item.queryUid, item.subjectUid]),
+      uniqueUids: new Set(app.linearSeqs.map((item) => item.uid)).size,
+      canonicalComparisonCount: app.files.linearCanonicalComparisons.length,
+      cacheInfo: app.losatCacheInfo.map((entry) => entry.key)
     };
   });
 
   expect(state.tokens).toEqual(['#1@1', '#2@1', '#3@2', '#4@2']);
+  expect(state.comparisonMode).toBe('selected');
   expect(state.comparisonCount).toBe(4);
   expect(state.uniqueUids).toBe(4);
+  expect(state.canonicalComparisonCount).toBe(0);
+  expect(state.cacheInfo).toEqual(['circular-cache']);
   expect(new Set(state.endpoints.map((pair) => pair.join('->'))).size).toBe(4);
   await expect(page.locator('input[aria-label="Linear record row"]')).toHaveCount(4);
-  await expect(page.getByText('All adjacent-row pairs', { exact: true })).toBeVisible();
+  await expect(page.getByText('All adjacent-row pairs (cross-product)', { exact: true })).toBeVisible();
+  const globalComparisonControls = page.locator('[data-capture="linear-blast-source"]');
+  await expect(globalComparisonControls.getByRole('radio', { name: 'No comparison' })).toBeVisible();
+  await expect(globalComparisonControls.getByRole('radio', { name: 'Run LOSAT' })).toBeVisible();
+  await expect(globalComparisonControls.getByRole('radio', { name: 'Upload BLAST TSV' })).toBeVisible();
+  await globalComparisonControls.getByRole('radio', { name: 'No comparison' }).check();
+  const optedOut = await page.evaluate(() => ({
+    mode: window.__GBDRAW_APP__.linearComparisonPlan.mode,
+    retainedDrafts: window.__GBDRAW_APP__.linearComparisonPlan.edges.length,
+    resolvedEdges: window.__GBDRAW_APP__.linearComparisonResolution.edges.length
+  }));
+  expect(optedOut).toEqual({ mode: 'none', retainedDrafts: 4, resolvedEdges: 0 });
+  await expect(page.locator('[data-capture="linear-losat-settings"]')).toHaveCount(0);
+});
+
+test('No comparison completes a real render without touching dormant comparison work', async ({ page }) => {
+  test.setTimeout(300000);
+  await installDiagramRequestObserver(page);
+  await page.addInitScript(() => {
+    window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ = 0;
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async () => {
+      window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ += 1;
+      throw new Error('No comparison must not execute LOSAT.');
+    };
+  });
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.evaluate(async (records) => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.addLinearSeq();
+    app.addLinearSeq();
+    records.forEach((content, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File(
+      [content], `none-record-${index + 1}.gbk`, { type: 'text/plain', lastModified: index + 1 }
+    )));
+    Object.assign(app.form, {
+      legend: 'bottom', show_gc: false, show_skew: false,
+      show_depth: false, show_labels_linear: 'none'
+    });
+    const dormant = new File([
+      'DormantA\tDormantB\t100\t30\t0\t0\t1\t30\t1\t30\t1e-20\t100\n'
+    ], 'dormant-comparison.tsv', { type: 'text/tab-separated-values', lastModified: 99 });
+    const nativeArrayBuffer = dormant.arrayBuffer.bind(dormant);
+    window.__GBDRAW_DORMANT_READS__ = 0;
+    dormant.arrayBuffer = () => {
+      window.__GBDRAW_DORMANT_READS__ += 1;
+      return nativeArrayBuffer();
+    };
+    const [first, second] = app.linearSeqs;
+    app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
+      id: 'dormant-none-edge', queryUid: first.uid, subjectUid: second.uid,
+      included: true, fileActive: true, losatFilenameActive: true,
+      source: 'upload', file: dormant, losatFilename: 'dormant-losat-name.tsv'
+    });
+    app.setLinearComparisonGlobalAction('none');
+    const rawCache = new Map([['dormant-cache', { text: 'must remain unread' }]]);
+    const nativeGet = rawCache.get.bind(rawCache);
+    window.__GBDRAW_CACHE_LOOKUPS__ = 0;
+    rawCache.get = (key) => {
+      window.__GBDRAW_CACHE_LOOKUPS__ += 1;
+      return nativeGet(key);
+    };
+    state.losatCache.value = window.Vue.markRaw(rawCache);
+  }, [
+    makeComparisonGenbank('NoneRecA', 'atg'),
+    makeComparisonGenbank('NoneRecB', 'gct'),
+    makeComparisonGenbank('NoneRecC', 'tta')
+  ]);
+
+  const outcome = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    const result = await app.runAnalysis();
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    const svg = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml');
+    return {
+      result,
+      error: app.errorLog,
+      request: [request.records.length, request.comparisons.length],
+      resolution: [Object.isFrozen(app.linearComparisonResolution), app.linearComparisonResolution.edges.length],
+      draft: app.linearComparisonPlan.edges.map((edge) => [
+        edge.id, edge.included, edge.fileActive, edge.losatFilenameActive,
+        edge.file?.name, edge.losatFilename
+      ]),
+      skipped: [
+        window.__GBDRAW_DORMANT_READS__, window.__GBDRAW_CACHE_LOOKUPS__,
+        window.__GBDRAW_LOSAT_EXECUTOR_CALLS__
+      ],
+      cacheSize: state.losatCache.value.size,
+      losatRuntimeUrls: [
+        ...window.__GBDRAW_RUNTIME_URLS__.fetches,
+        ...window.__GBDRAW_RUNTIME_URLS__.workers
+      ].filter((url) => url.includes('losat')),
+      comparisonSvgNodes: svg.querySelectorAll(
+        '[data-query-row], [data-subject-row], [data-gbdraw-role="comparison-legend"], #pairwise_legend'
+      ).length
+    };
+  });
+  expect(outcome).toEqual({
+    result: { status: 'ok' }, error: null, request: [3, 0], resolution: [true, 0],
+    draft: [['dormant-none-edge', true, true, true, 'dormant-comparison.tsv', 'dormant-losat-name.tsv']],
+    skipped: [0, 0, 0], cacheSize: 1, losatRuntimeUrls: [], comparisonSvgNodes: 0
+  });
+  await expect(page.getByText('Raw LOSAT results', { exact: true })).toHaveCount(0);
+});
+
+test('Sparse upload and mixed selected renders keep snapshots and raw cache identity stable', async ({ page }) => {
+  test.setTimeout(420000);
+  await installDiagramRequestObserver(page);
+  await page.addInitScript(() => {
+    window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ = 0;
+    window.__GBDRAW_LOSAT_EXECUTOR_JOBS__ = [];
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+      window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ += 1;
+      window.__GBDRAW_LOSAT_EXECUTOR_JOBS__.push(jobs.map((job) => [
+        job.edgeKey, job.ordinal, job.queryIndex, job.subjectIndex, job.cacheKey
+      ]));
+      if (window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ > 1) {
+        throw new Error('A content-addressed cache hit must not execute another LOSAT job.');
+      }
+      await new Promise((resolve) => { window.__GBDRAW_RELEASE_LOSAT__ = resolve; });
+      return jobs.map((job) => ({
+        cacheKey: job.cacheKey,
+        text: 'MixedRecB\tMixedRecC\t100\t60\t0\t0\t1\t60\t1\t60\t1e-30\t150\n'
+      }));
+    };
+  });
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const [uidA, uidB, uidC] = await page.evaluate((records) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.addLinearSeq();
+    app.addLinearSeq();
+    records.forEach((content, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File(
+      [content], `mixed-record-${index + 1}.gbk`, { type: 'text/plain', lastModified: index + 10 }
+    )));
+    Object.assign(app.form, {
+      legend: 'bottom', show_gc: false, show_skew: false,
+      show_depth: false, show_labels_linear: 'none'
+    });
+    app.setLinearLosatProgram('blastn');
+    app.losat.executionMode = 'serial';
+    const [first, second, third] = app.linearSeqs;
+    const blastRow = 'MixedRecA\tMixedRecB\t100\t60\t0\t0\t1\t60\t1\t60\t1e-30\t150\n';
+    app.linearComparisonPlan.mode = 'adjacent';
+    app.linearComparisonPlan.defaultSource = 'upload';
+    app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length,
+      {
+        id: 'upload-a-b', queryUid: first.uid, subjectUid: second.uid,
+        included: false, fileActive: true, losatFilenameActive: false, source: 'upload',
+        file: new File([blastRow], 'mixed-a-to-b.tsv'), losatFilename: ''
+      },
+      {
+        id: 'retained-b-c', queryUid: second.uid, subjectUid: third.uid,
+        included: false, fileActive: false, losatFilenameActive: false, source: 'upload',
+        file: new File([blastRow], 'retained-b-to-c.tsv'), losatFilename: ''
+      }
+    );
+    return [first.uid, second.uid, third.uid];
+  }, [
+    makeComparisonGenbank('MixedRecA', 'atg'),
+    makeComparisonGenbank('MixedRecB', 'gct'),
+    makeComparisonGenbank('MixedRecC', 'tta')
+  ]);
+  const requestPairs = (entries) => entries.map((entry) => [
+    entry.kind, entry.queryRecordIndex, entry.subjectRecordIndex
+  ]);
+  const sparseUpload = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    return {
+      result,
+      comparisons: window.__GBDRAW_DIAGRAM_RUNS__.at(-1).comparisons,
+      executorCalls: window.__GBDRAW_LOSAT_EXECUTOR_CALLS__
+    };
+  });
+  expect(sparseUpload.result).toEqual({ status: 'ok' });
+  expect(requestPairs(sparseUpload.comparisons)).toEqual([['nucleotideBlast', 0, 1]]);
+  expect(sparseUpload.executorCalls).toBe(0);
+
+  const independentReuse = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonLosatFilename('retained-b-c', 'retained-name.tsv');
+    app.deactivateLinearComparisonLosatFilename('retained-b-c');
+    app.reuseLinearComparisonFile('retained-b-c');
+    const afterFile = app.linearComparisonPlan.edges.find((edge) => edge.id === 'retained-b-c');
+    const fileOnly = [afterFile.fileActive, afterFile.losatFilenameActive, afterFile.source];
+    app.deactivateLinearComparisonFile('retained-b-c');
+    app.reuseLinearComparisonLosatFilename('retained-b-c');
+    const afterName = app.linearComparisonPlan.edges.find((edge) => edge.id === 'retained-b-c');
+    return [fileOnly, [afterName.fileActive, afterName.losatFilenameActive, afterName.source]];
+  });
+  expect(independentReuse).toEqual([[true, false, 'upload'], [false, true, 'losat']]);
+
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.pyodideReady === true, null, {
+    timeout: 240000
+  });
+  const selectedResolution = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { buildPairwiseLosatJobSpecs, resolveLinearComparisonPlan } = await import(
+      './js/app/linear-comparisons.js'
+    );
+    const [first, second, third] = app.linearSeqs;
+    const upload = app.linearComparisonPlan.edges.find((edge) => edge.id === 'upload-a-b').file;
+    app.linearComparisonPlan.mode = 'selected';
+    app.linearComparisonPlan.defaultSource = 'losat';
+    app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length,
+      {
+        id: 'selected-upload-a-b', queryUid: first.uid, subjectUid: second.uid,
+        included: true, fileActive: true, losatFilenameActive: false,
+        source: 'upload', file: upload, losatFilename: ''
+      },
+      {
+        id: 'selected-losat-b-c', queryUid: second.uid, subjectUid: third.uid,
+        included: true, fileActive: false, losatFilenameActive: true,
+        source: 'losat', file: null, losatFilename: 'selected-b-to-c.tsv'
+      },
+      {
+        id: 'omitted-a-c', queryUid: first.uid, subjectUid: third.uid,
+        included: false, fileActive: false, losatFilenameActive: false,
+        source: 'upload', file: null, losatFilename: ''
+      }
+    );
+    const programJobs = ['blastn', 'tblastx', 'blastp'].map((program) => {
+      const resolution = resolveLinearComparisonPlan({
+        plan: app.linearComparisonPlan,
+        sequences: app.linearSeqs,
+        losatProgram: program,
+        blastpMode: 'pairwise'
+      });
+      return buildPairwiseLosatJobSpecs({ resolution, program, blastpMode: 'pairwise' })
+        .map((job) => [job.program, job.edgeKey, job.queryIndex, job.subjectIndex]);
+    });
+    return [app.linearComparisonResolution.valid, Object.isFrozen(app.linearComparisonResolution),
+      app.linearRecordLayoutEnabled,
+      app.linearComparisonResolution.edges.map((edge) => [edge.edgeKey, edge.ordinal, edge.source]),
+      programJobs];
+  });
+  expect(selectedResolution).toEqual([true, true, false, [
+    [`${uidA}->${uidB}`, 0, 'upload'], [`${uidB}->${uidC}`, 1, 'losat']
+  ], [
+    [['blastn', `${uidB}->${uidC}`, 1, 2]],
+    [['tblastx', `${uidB}->${uidC}`, 1, 2]],
+    [['blastp', `${uidB}->${uidC}`, 1, 2]]
+  ]]);
+
+  await page.evaluate(() => { window.__GBDRAW_MIXED_RUN__ = window.__GBDRAW_APP__.runAnalysis(); });
+  await page.waitForFunction(() => window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ === 1);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.setLinearComparisonGlobalAction('none');
+    window.__GBDRAW_RELEASE_LOSAT__();
+  });
+  const firstMixed = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await window.__GBDRAW_MIXED_RUN__;
+    return {
+      result,
+      modeAndDrafts: [app.linearComparisonPlan.mode, app.linearComparisonPlan.edges.length],
+      comparisons: window.__GBDRAW_DIAGRAM_RUNS__.at(-1).comparisons,
+      cacheInfo: app.losatCacheInfo.map((entry) => [
+        entry.edgeKey, entry.ordinal, entry.queryIndex, entry.subjectIndex, entry.filename
+      ]),
+      telemetry: app.lastRunInfo.losatTelemetry,
+      jobs: window.__GBDRAW_LOSAT_EXECUTOR_JOBS__
+    };
+  });
+  expect(firstMixed.result).toEqual({ status: 'ok' });
+  expect(firstMixed.modeAndDrafts).toEqual(['none', 3]);
+  expect(requestPairs(firstMixed.comparisons)).toEqual([
+    ['nucleotideBlast', 0, 1], ['nucleotideBlast', 1, 2]
+  ]);
+  expect(firstMixed.cacheInfo).toEqual([[
+    `${uidB}->${uidC}`, 1, 1, 2, 'selected-b-to-c.tsv'
+  ]]);
+  expect(firstMixed.telemetry).toMatchObject({ cacheHits: 0, cacheMisses: 1, uniqueJobs: 1 });
+  expect(firstMixed.jobs[0][0].slice(0, 4)).toEqual([`${uidB}->${uidC}`, 1, 1, 2]);
+  expect(firstMixed.jobs[0][0][4]).not.toBe('');
+
+  const reordered = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.linearComparisonPlan.mode = 'selected';
+    app.setLinearRecordLayoutEnabled(true);
+    app.moveLinearSeqUp(2);
+    app.moveLinearSeqUp(1);
+    return [app.linearSeqs.map((record) => record.uid), app.linearComparisonResolution.edges.map(
+      (edge) => [edge.edgeKey, edge.queryIndex, edge.subjectIndex]
+    )];
+  });
+  expect(reordered).toEqual([[uidC, uidA, uidB], [
+    [`${uidA}->${uidB}`, 1, 2], [`${uidB}->${uidC}`, 2, 0]
+  ]]);
+  const cachedRun = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    return {
+      result,
+      comparisons: window.__GBDRAW_DIAGRAM_RUNS__.at(-1).comparisons,
+      executorCalls: window.__GBDRAW_LOSAT_EXECUTOR_CALLS__,
+      telemetry: app.lastRunInfo.losatTelemetry,
+      cacheInfo: app.losatCacheInfo.map((entry) => [
+        entry.edgeKey, entry.queryIndex, entry.subjectIndex, entry.filename
+      ])
+    };
+  });
+  expect(cachedRun.result).toEqual({ status: 'ok' });
+  expect(cachedRun.executorCalls).toBe(1);
+  expect(cachedRun.telemetry).toMatchObject({ cacheHits: 1, cacheMisses: 0, uniqueJobs: 0 });
+  expect(requestPairs(cachedRun.comparisons)).toEqual([
+    ['nucleotideBlast', 1, 2], ['nucleotideBlast', 2, 0]
+  ]);
+  expect(cachedRun.cacheInfo).toEqual([[
+    `${uidB}->${uidC}`, 2, 0, 'selected-b-to-c.tsv'
+  ]]);
+
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'linear-comparison-browser-matrix'; });
+  const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
+  expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status).toBe('saved');
+  const sessionPath = await (await sessionDownloadPromise).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.losatCacheInfo?.length === 1);
+  const restored = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    return {
+      mode: app.linearComparisonPlan.mode,
+      resolution: app.linearComparisonResolution.edges.map(
+        (edge) => [edge.edgeKey, edge.queryIndex, edge.subjectIndex]
+      ),
+      cache: app.losatCacheInfo.map((entry) => [
+        entry.edgeKey, entry.ordinal, entry.queryUid, entry.subjectUid,
+        entry.queryIndex, entry.subjectIndex, entry.filename
+      ]),
+      cacheSize: state.losatCache.value.size
+    };
+  });
+  expect(restored).toEqual({
+    mode: 'selected',
+    resolution: [[`${uidA}->${uidB}`, 1, 2], [`${uidB}->${uidC}`, 2, 0]],
+    cache: [[`${uidB}->${uidC}`, 1, uidB, uidC, 2, 0, 'selected-b-to-c.tsv']],
+    cacheSize: 1
+  });
+  const rawDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
+  await page.evaluate((edgeKey) => window.__GBDRAW_APP__.downloadLosatPair(edgeKey, ''), `${uidB}->${uidC}`);
+  const rawDownload = await rawDownloadPromise;
+  expect(rawDownload.suggestedFilename()).toBe('selected-b-to-c.tsv');
+  expect(readFileSync(await rawDownload.path(), 'utf8')).toBe(
+    'MixedRecB\tMixedRecC\t100\t60\t0\t0\t1\t60\t1\t60\t1e-30\t150\n'
+  );
 });
 
 test('Candidate render post-processing sanitizes and reapplies stable styles before commit', async ({ page }) => {

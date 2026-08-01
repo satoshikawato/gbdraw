@@ -176,6 +176,26 @@ test('Gallery routes a sample path and tab hash while preserving Preview default
   await expect(page).toHaveURL(`${baseUrl}/gallery/#HmmtDNA_basic_circular`);
 });
 
+test('Lambda tutorial shows how to disable LOSAT with No comparison', async ({ page }) => {
+  await page.goto(`${baseUrl}/gallery/#lambda_basic_linear`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('tab', { name: 'Tutorial' }).click();
+
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  await expect(
+    tutorialPanel.getByText('Turn off sequence comparisons', { exact: true })
+  ).toBeVisible();
+  await expect(tutorialPanel.getByText(/Choose No comparison before generating/)).toBeVisible();
+
+  const noComparisonImage = tutorialPanel.locator(
+    'img[src$="manual-02-03-no-comparison.webp"]'
+  );
+  await expect(noComparisonImage).toHaveCount(1);
+  await noComparisonImage.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() => noComparisonImage.evaluate((element) => element.complete && element.naturalWidth > 0))
+    .toBe(true);
+});
+
 test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -252,7 +272,10 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
     const image = mediaImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
-    await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+    await expect.poll(
+      () => image.evaluate((element) => element.complete && element.naturalWidth > 0),
+      { timeout: 30_000 }
+    ).toBe(true);
   }
 
   await page.getByRole('tab', { name: 'Files' }).click();

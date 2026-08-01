@@ -279,7 +279,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
       'generatedProteinComparison'
     ]
   );
-  assert.equal(state.linearComparisons.length, 0);
+  assert.equal(state.linearComparisonPlan.edges.length, 0);
   assert.equal(
     state.files.linearCanonicalComparisons[0].file.name,
     'resolved-protein.tsv'
@@ -432,9 +432,7 @@ ORIGIN
           gff: null,
           fasta: null,
           depth: null,
-          blast: null,
           losat_gencode: 1,
-          losat_filename: '',
           definition: '',
           record_subtitle: '',
           region_record_id: '',

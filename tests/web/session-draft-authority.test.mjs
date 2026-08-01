@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 globalThis.window = {
   Vue: {
@@ -10,11 +11,21 @@ globalThis.window = {
   DOMPurify: { sanitize: (value) => value }
 };
 globalThis.document = {};
+globalThis.File = class File extends Blob {
+  constructor(parts, name, options = {}) {
+    super(parts, options);
+    this.name = String(name || 'file');
+    this.lastModified = options.lastModified ?? Date.now();
+  }
+};
+globalThis.alert = () => {};
 
 const {
+  importSession,
   overlayCurrentWriterDraftConfig,
   validateCurrentWriterActiveDraft
 } = await import('../../gbdraw/web/js/services/config.js');
+const { state } = await import('../../gbdraw/web/js/state.js');
 
 const canonicalFeature = {
   id: 'features',
@@ -105,3 +116,32 @@ assert.doesNotThrow(() => validateCurrentWriterActiveDraft({
   projectedConfig,
   storedConfig: inactive
 }));
+
+const divergentSession = JSON.parse(await readFile(
+  'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json',
+  'utf8'
+));
+const committedComparisonCount = divergentSession.renderRequest.comparisons.length;
+assert.ok(committedComparisonCount > 0);
+divergentSession.config.linearComparisonPlan = {
+  mode: 'none',
+  defaultSource: 'losat',
+  edges: []
+};
+const importEvent = {
+  target: {
+    files: [new Blob([JSON.stringify(divergentSession)], { type: 'application/json' })],
+    value: 'selected'
+  }
+};
+
+const imported = await importSession(importEvent);
+
+assert.equal(imported.status, 'ok');
+assert.equal(state.linearComparisonPlan.mode, 'none');
+assert.deepEqual(state.linearComparisonPlan.edges, []);
+assert.equal(
+  imported.data.renderRequest.comparisons.length,
+  committedComparisonCount,
+  'the editable comparison draft must not replace the last committed render request'
+);

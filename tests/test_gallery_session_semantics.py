@@ -65,6 +65,15 @@ def test_gallery_sessions_do_not_persist_overwrite_permission(
     )
 
 
+def test_lambda_basic_linear_gallery_session_opts_out_of_comparisons() -> None:
+    _, session = _session("lambda_basic_linear")
+
+    plan = session["config"]["linearComparisonPlan"]
+    assert plan["mode"] == "none"
+    assert plan["edges"] == []
+    assert _request(session)["comparisons"] == []
+
+
 def _resource_bytes(
     session: dict[str, object], ref: dict[str, object]
 ) -> bytes:

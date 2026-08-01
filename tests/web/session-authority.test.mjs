@@ -67,6 +67,138 @@ const currentSession = {
 };
 delete currentSession.files;
 assert.doesNotThrow(() => validateSessionAuthorityInventory(currentSession, 40));
+const currentWebDraft = {
+  ...currentSession,
+  resources: {
+    'comparison-resource': { kind: 'web-file' }
+  },
+  config: {
+    linearRecordLayout: { enabled: false, recordGap: 24, rows: [] },
+    linearComparisonPlan: {
+      mode: 'selected',
+      defaultSource: 'losat',
+      edges: [{
+        id: 'edge-a-b',
+        queryUid: 'a',
+        subjectUid: 'b',
+        included: true,
+        fileActive: true,
+        losatFilenameActive: false,
+        source: 'upload',
+        losatFilename: ''
+      }]
+    }
+  },
+  webFiles: {
+    bindings: {
+      schema: 1,
+      linearComparisons: [{
+        id: 'edge-a-b',
+        file: { resourceId: 'comparison-resource' }
+      }]
+    }
+  }
+};
+assert.doesNotThrow(() => validateSessionAuthorityInventory(currentWebDraft, 40));
+assert.throws(
+  () => validateSessionAuthorityInventory({
+    ...currentWebDraft,
+    webFiles: {
+      bindings: {
+        ...currentWebDraft.webFiles.bindings,
+        schema: 2
+      }
+    }
+  }, 40),
+  /Unsupported Web file binding schema/
+);
+assert.throws(
+  () => validateSessionAuthorityInventory({
+    ...currentWebDraft,
+    webFiles: {
+      bindings: {
+        ...currentWebDraft.webFiles.bindings,
+        linearComparisons: [{ id: 'edge-a-b', file: null }]
+      }
+    }
+  }, 40),
+  /requires a file resource binding/
+);
+assert.throws(
+  () => validateSessionAuthorityInventory({
+    ...currentWebDraft,
+    webFiles: {
+      bindings: {
+        ...currentWebDraft.webFiles.bindings,
+        linearComparisons: [{
+          id: 'edge-a-b',
+          file: { resourceId: 'missing-comparison-resource' }
+        }]
+      }
+    }
+  }, 40),
+  /references a missing resource/
+);
+assert.throws(
+  () => validateSessionAuthorityInventory({
+    ...currentWebDraft,
+    webFiles: {
+      bindings: {
+        ...currentWebDraft.webFiles.bindings,
+        linearComparisons: []
+      }
+    }
+  }, 40),
+  /Active comparison file is missing its Web file binding/
+);
+assert.throws(
+  () => validateSessionAuthorityInventory({
+    ...currentWebDraft,
+    config: { linearRecordLayout: { enabled: false, recordGap: 24, rows: [] } }
+  }, 40),
+  /requires config\.linearComparisonPlan/
+);
+for (const corrupt of [
+  {
+    ...currentWebDraft,
+    config: { ...currentWebDraft.config, blastSource: 'losat' }
+  },
+  {
+    ...currentWebDraft,
+    ui: { ...currentWebDraft.ui, blastSource: 'upload' }
+  },
+  {
+    ...currentWebDraft,
+    config: {
+      ...currentWebDraft.config,
+      linearRecordLayout: {
+        ...currentWebDraft.config.linearRecordLayout,
+        comparisons: []
+      }
+    }
+  }
+]) {
+  assert.throws(
+    () => validateSessionAuthorityInventory(corrupt, 40),
+    /cannot contain/
+  );
+}
+assert.throws(
+  () => validateSessionAuthorityInventory({
+    ...currentWebDraft,
+    webFiles: {
+      bindings: {
+        ...currentWebDraft.webFiles.bindings,
+        linearComparisons: [{
+          ...currentWebDraft.webFiles.bindings.linearComparisons[0],
+          queryUid: 'a',
+          source: 'upload'
+        }]
+      }
+    }
+  }, 40),
+  /duplicates plan metadata/
+);
 assert.doesNotThrow(() => validateSessionAuthorityInventory({
   ...currentSession,
   results: [],

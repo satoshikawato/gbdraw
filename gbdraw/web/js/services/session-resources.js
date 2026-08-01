@@ -8,10 +8,6 @@ import {
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 
-const cloneJson = (value) => (
-  value === undefined ? undefined : JSON.parse(JSON.stringify(value))
-);
-
 const base64ToBytes = (value) => {
   const binary = atob(String(value || ''));
   const bytes = new Uint8Array(binary.length);
@@ -114,13 +110,14 @@ const rewriteOriginalNameHints = (webFiles, aliases) => {
       resourceId && aliases.has(resourceId) ? aliases.get(resourceId) : null
     ));
   });
+  if (Array.isArray(rewritten.linearRecordMetadata)) {
+    rewritten.linearRecordMetadata = rewritten.linearRecordMetadata.map((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+      const { losatFilename: _losatFilename, ...metadata } = entry;
+      return metadata;
+    });
+  }
   return rewritten;
-};
-
-const cloneComparisonMetadata = (comparison) => {
-  if (!comparison || typeof comparison !== 'object' || Array.isArray(comparison)) return {};
-  const { file: _file, ...metadata } = comparison;
-  return cloneJson(metadata);
 };
 
 export const buildSessionResources = async (state, committedRequest) => {
@@ -189,11 +186,8 @@ export const buildSessionResources = async (state, committedRequest) => {
 
   const files = state?.files || {};
   const linearSeqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
-  const linearComparisons = Array.isArray(state?.linearComparisons)
-    ? state.linearComparisons
-    : [];
-  const canonicalComparisons = Array.isArray(files.linearCanonicalComparisons)
-    ? files.linearCanonicalComparisons
+  const linearComparisons = Array.isArray(state?.linearComparisonPlan?.edges)
+    ? state.linearComparisonPlan.edges
     : [];
 
   const bindings = {
@@ -220,9 +214,7 @@ export const buildSessionResources = async (state, committedRequest) => {
       gff: await bindFile(sequence?.gff),
       fasta: await bindFile(sequence?.fasta),
       depth: await bindFileValue(sequence?.depth),
-      blast: await bindFile(sequence?.blast),
       losat_gencode: sequence?.losat_gencode ?? 1,
-      losat_filename: String(sequence?.losat_filename || ''),
       definition: String(sequence?.definition || ''),
       record_subtitle: String(sequence?.record_subtitle || ''),
       region_record_id: String(sequence?.region_record_id || ''),
@@ -230,19 +222,13 @@ export const buildSessionResources = async (state, committedRequest) => {
       region_end: sequence?.region_end ?? null,
       region_reverse: Boolean(sequence?.region_reverse)
     }))),
-    linearComparisons: await Promise.all(linearComparisons.map(async (comparison) => ({
-      ...cloneComparisonMetadata(comparison),
-      id: String(comparison?.id || ''),
-      queryUid: String(comparison?.queryUid || ''),
-      subjectUid: String(comparison?.subjectUid || ''),
-      source: String(comparison?.source || 'upload'),
-      file: await bindFile(comparison?.file)
-    }))),
-    linearCanonicalComparisons: await Promise.all(
-      canonicalComparisons.map(async (comparison) => ({
-        ...cloneComparisonMetadata(comparison),
-        file: await bindFile(comparison?.file)
-      }))
+    linearComparisons: await Promise.all(
+      linearComparisons
+        .filter((comparison) => comparison?.file)
+        .map(async (comparison) => ({
+          id: String(comparison?.id || ''),
+          file: await bindFile(comparison.file)
+        }))
     )
   };
 

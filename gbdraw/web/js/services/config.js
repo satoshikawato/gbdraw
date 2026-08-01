@@ -74,6 +74,13 @@ import {
   buildCanonicalRenderRequest,
   projectCanonicalSessionRequest
 } from './session-request.js';
+import {
+  createDefaultLinearComparisonPlan,
+  createLinearComparisonEdge,
+  normalizeLinearComparisonPlan,
+  reconcileLinearComparisonPlan,
+  resolveLinearComparisonPlan
+} from '../app/linear-comparisons.js';
 import { buildSessionResources as assembleSessionResources } from './session-resources.js';
 import { bytesToBase64, readFileBytes } from './file-content-cache.js';
 import { normalizeLogicalResults } from './result-normalization.js';
@@ -85,7 +92,10 @@ import {
   isResourceBackedCanonicalComparison,
   mapResourceBackedCanonicalComparison
 } from './canonical-comparisons.js';
-import { promoteGallerySessionToCurrent } from './gallery-session-migration.js';
+import {
+  migrateLegacyLinearComparisonDraft,
+  promoteGallerySessionToCurrent
+} from './gallery-session-migration.js';
 import {
   compressSessionData,
   confirmLargeSessionBlob,
@@ -822,6 +832,32 @@ const cloneLosatForConfig = () => {
   return cloned;
 };
 
+const replaceLinearComparisonPlan = (target, source) => {
+  const normalized = normalizeLinearComparisonPlan(source);
+  target.mode = normalized.mode;
+  target.defaultSource = normalized.defaultSource;
+  if (!Array.isArray(target.edges)) target.edges = [];
+  target.edges.splice(0, target.edges.length, ...normalized.edges);
+};
+
+const serializeLinearComparisonPlan = (plan) => {
+  const normalized = normalizeLinearComparisonPlan(plan);
+  return {
+    mode: normalized.mode,
+    defaultSource: normalized.defaultSource,
+    edges: normalized.edges.map((edge) => ({
+      id: edge.id,
+      queryUid: edge.queryUid,
+      subjectUid: edge.subjectUid,
+      included: edge.included,
+      fileActive: edge.fileActive,
+      losatFilenameActive: edge.losatFilenameActive,
+      source: edge.source,
+      losatFilename: edge.losatFilename
+    }))
+  };
+};
+
 export const buildConfigData = () => ({
   form: state.form,
   adv: {
@@ -841,7 +877,6 @@ export const buildConfigData = () => ({
   filterMode: state.filterMode.value,
   whitelist: state.manualWhitelist,
   blacklistText: state.manualBlacklist.value,
-  blastSource: state.blastSource.value,
   losatProgram: state.losatProgram.value,
   circularConservation: state.circularConservation,
   annotationSets: normalizeAnnotationSets(state.annotationSets),
@@ -852,14 +887,9 @@ export const buildConfigData = () => ({
     rows: (state.linearRecordRows || []).map((entry) => ({
       uid: String(entry?.uid || ''),
       row: Number(entry?.row) || 1
-    })),
-    comparisons: (state.linearComparisons || []).map((comparison) => ({
-      id: String(comparison?.id || ''),
-      queryUid: String(comparison?.queryUid || ''),
-      subjectUid: String(comparison?.subjectUid || ''),
-      source: String(comparison?.source || 'upload')
     }))
   },
+  linearComparisonPlan: serializeLinearComparisonPlan(state.linearComparisonPlan),
   webEdits: {
     orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
     orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
@@ -1207,6 +1237,8 @@ const restoreStoredNonCanonicalConfig = (
     'cliOptions',
     'paletteInstantPreviewEnabled',
     'modeProfiles',
+    'linearRecordLayout',
+    'linearComparisonPlan',
     'webEdits'
   ].forEach((key) => {
     if (hasCanonicalProteinPipeline && key === 'losat') {
@@ -1420,6 +1452,31 @@ const preflightSessionImport = (rawData) => {
         )
       }
     : data.config;
+  if (sourceSessionVersion < SESSION_VERSION && restoredConfig) {
+    const sourceStoredConfig = isPlainObject(normalizedData.config)
+      ? normalizedData.config
+      : {};
+    const forceWebDraft = isPlainObject(sourceStoredConfig.linearRecordLayout)
+      || !isPlainObject(sourceStoredConfig.cliOptions);
+    const comparisonMigrationConfig = cloneJsonData(restoredConfig);
+    if (
+      !Object.prototype.hasOwnProperty.call(comparisonMigrationConfig, 'blastSource')
+      && normalizedData.ui?.blastSource
+    ) {
+      comparisonMigrationConfig.blastSource = normalizedData.ui.blastSource;
+    }
+    const migratedComparisonDraft = migrateLegacyLinearComparisonDraft({
+      config: comparisonMigrationConfig,
+      filesData: canonicalProjection?.files || data.files || {},
+      forceWebDraft
+    });
+    restoredConfig = migratedComparisonDraft.config;
+    if (canonicalProjection) {
+      canonicalProjection.files = migratedComparisonDraft.filesData;
+    } else {
+      data.files = migratedComparisonDraft.filesData;
+    }
+  }
   if (canonicalProjection && sourceSessionVersion === SESSION_VERSION) {
     validateCurrentWriterActiveDraft({
       mode: canonicalProjection.mode,
@@ -1549,18 +1606,9 @@ export const applyConfigData = (data) => {
       .map((entry) => ({ uid: String(entry?.uid || ''), row: Number(entry?.row) }))
       .filter((entry) => entry.uid && Number.isInteger(entry.row) && entry.row > 0)
   );
-  state.linearComparisons.splice(
-    0,
-    state.linearComparisons.length,
-    ...(Array.isArray(linearLayout?.comparisons) ? linearLayout.comparisons : [])
-      .map((comparison, index) => ({
-        id: String(comparison?.id || `linear-comparison-restored-${index + 1}`),
-        queryUid: String(comparison?.queryUid || ''),
-        subjectUid: String(comparison?.subjectUid || ''),
-        source: String(comparison?.source || 'upload'),
-        file: null
-      }))
-      .filter((comparison) => comparison.queryUid && comparison.subjectUid)
+  replaceLinearComparisonPlan(
+    state.linearComparisonPlan,
+    data.linearComparisonPlan || createDefaultLinearComparisonPlan()
   );
   state.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;
   state.adv.label_placement = requireCurrentLinearLabelPlacement(
@@ -1887,7 +1935,6 @@ export const applyConfigData = (data) => {
     });
   }
   if (data.blacklistText !== undefined) state.manualBlacklist.value = String(data.blacklistText || '');
-  if (data.blastSource) state.blastSource.value = String(data.blastSource);
   if (data.losatProgram) {
     const program = String(data.losatProgram);
     state.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
@@ -2064,6 +2111,21 @@ export const serializeResults = () => {
   })));
 };
 
+const LOSAT_CACHE_INFO_STRING_FIELDS = ['edgeKey', 'queryUid', 'subjectUid'];
+const LOSAT_CACHE_INFO_INTEGER_FIELDS = ['ordinal', 'queryIndex', 'subjectIndex'];
+const losatCacheInfoIdentity = (entry) => {
+  const identity = {};
+  LOSAT_CACHE_INFO_STRING_FIELDS.forEach((field) => {
+    if (typeof entry?.[field] === 'string' && entry[field].trim()) {
+      identity[field] = entry[field];
+    }
+  });
+  LOSAT_CACHE_INFO_INTEGER_FIELDS.forEach((field) => {
+    if (Number.isInteger(entry?.[field])) identity[field] = entry[field];
+  });
+  return identity;
+};
+
 const serializeLosatCache = () => {
   const cacheMap = state.losatCache?.value;
   if (!cacheMap || cacheMap.size === 0) return [];
@@ -2071,11 +2133,12 @@ const serializeLosatCache = () => {
   const entries = [];
   const seen = new Set();
 
-  const buildEntry = (key, cached, { filename = '', display = false } = {}) => ({
+  const buildEntry = (key, cached, infoEntry = {}) => ({
     ...cloneJsonData(cached),
     key: String(key),
-    filename: String(filename || ''),
-    display: Boolean(display)
+    filename: String(infoEntry.filename || ''),
+    display: Boolean(infoEntry.display),
+    ...losatCacheInfoIdentity(infoEntry)
   });
 
   info.forEach((entry, idx) => {
@@ -2083,6 +2146,7 @@ const serializeLosatCache = () => {
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
     entries.push(buildEntry(entry.key, cached, {
+      ...entry,
       filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
       display: entry.display !== false
     }));
@@ -2121,12 +2185,15 @@ const applyLosatCache = (entries, legacyEnvelope = null) => {
       delete restored.key;
       delete restored.filename;
       delete restored.display;
+      [...LOSAT_CACHE_INFO_STRING_FIELDS, ...LOSAT_CACHE_INFO_INTEGER_FIELDS]
+        .forEach((field) => delete restored[field]);
       map.set(entry.key, restored);
       if (entry.display === false) return;
       info.push({
         key: entry.key,
         filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
-        display: true
+        display: true,
+        ...losatCacheInfoIdentity(entry)
       });
     });
   }
@@ -2344,7 +2411,8 @@ const customDepthRequested = (mode, sourceState) => {
 
 export const serializeActiveRenderFiles = async (
   mode = state.mode.value,
-  sourceState = state
+  sourceState = state,
+  comparisonPlanOrOptions = null
 ) => {
   if (!['circular', 'linear'].includes(mode)) {
     throw new Error(`Unsupported render mode: ${String(mode)}.`);
@@ -2361,9 +2429,7 @@ export const serializeActiveRenderFiles = async (
       gff: await serializeFile(seq.gff),
       fasta: await serializeFile(seq.fasta),
       depth: depthRequested ? await serializeFileValue(seq.depth) : null,
-      blast: await serializeFile(seq.blast),
       losat_gencode: seq.losat_gencode ?? 1,
-      losat_filename: seq.losat_filename ?? '',
       definition: seq.definition ?? '',
       record_subtitle: seq.record_subtitle ?? '',
       region_record_id: seq.region_record_id ?? '',
@@ -2372,16 +2438,31 @@ export const serializeActiveRenderFiles = async (
       region_reverse: !!seq.region_reverse
     }))
   );
-  const linearComparisons = mode === 'linear' ? await Promise.all(
-    (sourceState.linearComparisons || []).map(async (comparison) => ({
-      id: String(comparison?.id || ''),
-      queryUid: String(comparison?.queryUid || ''),
-      subjectUid: String(comparison?.subjectUid || ''),
-      source: String(comparison?.source || 'upload'),
-      file: await serializeFile(comparison?.file)
+  const suppliedComparisonPlan = comparisonPlanOrOptions?.comparisonPlan
+    || comparisonPlanOrOptions;
+  const resolvedComparisonPlan = mode === 'linear'
+    ? suppliedComparisonPlan || resolveLinearComparisonPlan({
+        plan: sourceState.linearComparisonPlan,
+        sequences: normalizedLinearSeqs,
+        layout: sourceState.linearRecordLayoutEnabled?.value
+          ? sourceState.linearRecordRows
+          : [],
+        losatProgram: sourceState.losatProgram?.value,
+        blastpMode: sourceState.losat?.blastp?.mode
+      })
+    : null;
+  const linearComparisons = resolvedComparisonPlan ? await Promise.all(
+    resolvedComparisonPlan.edges
+      .filter((edge) => edge.source === 'upload' && edge.fileActive && edge.file)
+      .map(async (edge) => ({
+      id: String(edge.id || ''),
+      file: await serializeFile(edge.file)
     }))
   ) : [];
-  const linearCanonicalComparisons = mode === 'linear' ? await Promise.all(
+  const linearCanonicalComparisons = mode === 'linear'
+    && resolvedComparisonPlan?.mode !== 'none'
+    && resolvedComparisonPlan?.edges?.length > 0
+    ? await Promise.all(
     (Array.isArray(sourceFiles.linearCanonicalComparisons)
       ? sourceFiles.linearCanonicalComparisons
       : []
@@ -2393,7 +2474,8 @@ export const serializeActiveRenderFiles = async (
           }
         : cloneJsonData(comparison)
     ))
-  ) : [];
+    )
+    : [];
   const conservationEnabled = mode === 'circular'
     && Boolean(sourceState.circularConservation?.enabled);
   const conservationSource = String(sourceState.circularConservation?.source || 'upload');
@@ -2528,7 +2610,10 @@ const applyFiles = (filesData) => {
   if (!filesData) {
     state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
     state.linearRecordRows.splice(0);
-    state.linearComparisons.splice(0);
+    replaceLinearComparisonPlan(
+      state.linearComparisonPlan,
+      reconcileLinearComparisonPlan(state.linearComparisonPlan, state.linearSeqs)
+    );
     return { collapsedLinearSeqs: false };
   }
 
@@ -2564,9 +2649,7 @@ const applyFiles = (filesData) => {
       gff: deserializeFile(seq.gff),
       fasta: deserializeFile(seq.fasta),
       depth: deserializeFile(seq.depth),
-      blast: deserializeFile(seq.blast),
       losat_gencode: seq.losat_gencode ?? 1,
-      losat_filename: seq.losat_filename ?? '',
       definition: seq.definition ?? '',
       record_subtitle: seq.record_subtitle ?? '',
       region_record_id: seq.region_record_id ?? '',
@@ -2589,36 +2672,30 @@ const applyFiles = (filesData) => {
           : index + 1
       }))
     );
-    if (Array.isArray(filesData.linearComparisons)) {
-      state.linearComparisons.splice(
-        0,
-        state.linearComparisons.length,
-        ...filesData.linearComparisons.map((comparison, index) => ({
-          id: String(comparison?.id || `linear-comparison-restored-${index + 1}`),
-          queryUid: String(comparison?.queryUid || ''),
-          subjectUid: String(comparison?.subjectUid || ''),
-          source: String(comparison?.source || 'upload'),
-          file: deserializeFile(comparison?.file)
-        })).filter((comparison) => comparison.queryUid && comparison.subjectUid)
-      );
-    } else {
-      const migratedComparisons = state.linearSeqs.slice(0, -1)
-        .map((seq, index) => seq.blast ? ({
-          id: `linear-comparison-legacy-${index + 1}`,
-          queryUid: seq.uid,
-          subjectUid: state.linearSeqs[index + 1].uid,
-          source: 'upload',
-          file: seq.blast
-        }) : null)
-        .filter(Boolean);
-      if (migratedComparisons.length > 0) {
-        state.linearComparisons.splice(0, state.linearComparisons.length, ...migratedComparisons);
-      }
-    }
+    const comparisonFiles = new Map(
+      (Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
+        .map((comparison) => [
+          String(comparison?.id || ''),
+          deserializeFile(comparison?.file)
+        ])
+        .filter(([id]) => id)
+    );
+    const planWithFiles = normalizeLinearComparisonPlan(state.linearComparisonPlan);
+    planWithFiles.edges.forEach((edge) => {
+      edge.file = comparisonFiles.get(edge.id) || null;
+    });
+    replaceLinearComparisonPlan(
+      state.linearComparisonPlan,
+      reconcileLinearComparisonPlan(planWithFiles, state.linearSeqs)
+    );
     return { collapsedLinearSeqs };
   }
 
   state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
+  replaceLinearComparisonPlan(
+    state.linearComparisonPlan,
+    reconcileLinearComparisonPlan(state.linearComparisonPlan, state.linearSeqs)
+  );
   return { collapsedLinearSeqs: false };
 };
 
@@ -2738,7 +2815,11 @@ const cloneLiveFileState = () => ({
     depth: Array.isArray(seq.depth) ? [...seq.depth] : seq.depth
   })),
   linearRecordRows: state.linearRecordRows.map((entry) => ({ ...entry })),
-  linearComparisons: state.linearComparisons.map((comparison) => ({ ...comparison }))
+  linearComparisonPlan: {
+    mode: state.linearComparisonPlan.mode,
+    defaultSource: state.linearComparisonPlan.defaultSource,
+    edges: state.linearComparisonPlan.edges.map((edge) => ({ ...edge }))
+  }
 });
 
 const restoreLiveFileState = (snapshot) => {
@@ -2748,7 +2829,7 @@ const restoreLiveFileState = (snapshot) => {
   });
   state.linearSeqs.splice(0, state.linearSeqs.length, ...snapshot.linearSeqs);
   state.linearRecordRows.splice(0, state.linearRecordRows.length, ...snapshot.linearRecordRows);
-  state.linearComparisons.splice(0, state.linearComparisons.length, ...snapshot.linearComparisons);
+  replaceLinearComparisonPlan(state.linearComparisonPlan, snapshot.linearComparisonPlan);
 };
 
 const captureSessionImportSnapshot = () => ({
@@ -2872,7 +2953,6 @@ export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
     featurePanelTab: state.featurePanelTab.value,
     cInputType: state.cInputType.value,
     lInputType: state.lInputType.value,
-    blastSource: state.blastSource.value,
     losatProgram: state.losatProgram.value,
     downloadDpi: state.downloadDpi.value,
     autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
@@ -2905,7 +2985,6 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
   if (ui.mode) state.mode.value = ui.mode === 'linear' ? 'linear' : 'circular';
   if (ui.cInputType) state.cInputType.value = ui.cInputType;
   if (ui.lInputType) state.lInputType.value = ui.lInputType;
-  if (ui.blastSource) state.blastSource.value = String(ui.blastSource);
   if (ui.losatProgram) {
     const program = String(ui.losatProgram);
     state.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
@@ -3225,8 +3304,27 @@ export const exportSession = async (titleOverride = null) => {
     }
   }
   if (!committed) {
-    const activeFiles = await serializeActiveRenderFiles(state.mode.value, state);
-    committed = buildCanonicalRenderRequest({ state, filesData: activeFiles });
+    const comparisonPlanSnapshot = state.mode.value === 'linear'
+      ? resolveLinearComparisonPlan({
+          plan: state.linearComparisonPlan,
+          sequences: normalizeLinearSeqList(state.linearSeqs),
+          layout: state.linearRecordLayoutEnabled?.value
+            ? state.linearRecordRows
+            : [],
+          losatProgram: state.losatProgram?.value,
+          blastpMode: state.losat?.blastp?.mode
+        })
+      : null;
+    const activeFiles = await serializeActiveRenderFiles(
+      state.mode.value,
+      state,
+      comparisonPlanSnapshot
+    );
+    committed = buildCanonicalRenderRequest({
+      state,
+      filesData: activeFiles,
+      comparisonPlanSnapshot
+    });
   }
   const canonical = await assembleSessionResources(state, committed);
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(

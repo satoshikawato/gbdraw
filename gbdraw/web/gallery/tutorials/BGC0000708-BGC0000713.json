@@ -93,10 +93,40 @@
       },
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-02-01-record-text-row.webp",
             "alt": "Linear GenBank row 1 with BGC0000708.gbk and its Organism / strain and Subtitle / title values.",
             "caption": "Enter the row 1 values from the table, including the literal <i>Streptomyces lividus</i> markup, then repeat the remaining rows in order."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {"width": 1280, "height": 1000},
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const expected = ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk', 'BGC0000713.gbk']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('BGC GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = '<i>Streptomyces lividus</i> CBS 844.73'; seq.record_subtitle = 'Lividomycin biosynthetic gene cluster'; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = Array.from(card?.querySelectorAll('div') || []).find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); if (!row) throw new Error('BGC Linear input row 1 was not found.'); const fieldInput = (labelText) => { const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === labelText && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error(`BGC ${labelText} input was not found.`); return input; }; fieldInput('Organism / strain (optional)').dataset.capture = 'bgc-organism-input'; fieldInput('Subtitle / title (optional)').dataset.capture = 'bgc-subtitle-input'; row.dataset.capture = 'bgc-record-row'; row.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='bgc-record-row']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "linearSeqs.0.gb.name": "BGC0000708.gbk",
+              "linearSeqs.0.definition": "<i>Streptomyces lividus</i> CBS 844.73",
+              "linearSeqs.0.record_subtitle": "Lividomycin biosynthetic gene cluster"
+            },
+            "visibleText": [
+              "BGC0000708.gbk",
+              "Organism / strain (optional)",
+              "Subtitle / title (optional)"
+            ],
+            "visibleControls": [
+              {"selector": "[data-capture='bgc-organism-input']", "value": "<i>Streptomyces lividus</i> CBS 844.73"},
+              {"selector": "[data-capture='bgc-subtitle-input']", "value": "Lividomycin biosynthetic gene cluster"}
+            ]
           }
         }
       ]
@@ -113,7 +143,7 @@
           ["Threads per run", "Auto"],
           ["blastp mode", "Similarity groups"],
           ["Bitscore", "50"],
-          ["E-value", "1e-2"],
+          ["E-value", "0.01"],
           ["Minimum Identity", "30"],
           ["Minimum Length", "0"]
         ]
@@ -121,11 +151,12 @@
       "note": "The five records contain related biosynthetic gene clusters. Similarity groups uses retained protein-search hits to form visualization groups across them and draws links between group members; it does not infer phylogeny-based orthology.",
       "operations": [
         {
+          "dataDependent": true,
           "title": "Run LOSAT settings panel",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-01-open-pairwise.webp",
-            "alt": "Run LOSAT settings with LOSATP Similarity groups, Auto execution, Safe total threads, and the 50, 1e-2, 30, and 0 thresholds.",
-            "caption": "Set LOSATP Similarity groups with Auto execution, Safe total threads, and thresholds 50 / 1e-2 / 30 / 0."
+            "alt": "Run LOSAT settings with LOSATP Similarity groups, Auto execution, Safe total threads, and the 50, 0.01, 30, and 0 thresholds.",
+            "caption": "Set LOSATP Similarity groups with Auto execution, Safe total threads, and thresholds 50 / 0.01 / 30 / 0."
           },
           "capture": {
             "source": "webapp",
@@ -137,11 +168,35 @@
             "clipSelectors": ["[data-capture='linear-blast-source']", "[data-capture='linear-losat-settings']"],
             "cropPadding": {
               "top": 12,
-              "right": 12,
+              "right": 36,
               "bottom": 12,
               "left": 12
             },
-            "waitForSelector": "[data-capture='linear-losat-settings']"
+            "waitForSelector": "[data-capture='linear-losat-settings']",
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "orthogroup",
+              "losat.executionMode": "auto",
+              "losat.totalThreadBudget": "safe",
+              "adv.min_bitscore": 50,
+              "adv.evalue": "0.01",
+              "adv.identity": 30,
+              "adv.alignment_length": 0
+            },
+            "visibleControls": [
+              {"label": "Run LOSAT", "checked": true},
+              {"label": "LOSATP", "checked": true},
+              {"label": "Execution", "value": "auto"},
+              {"label": "Total threads", "value": "safe"},
+              {"label": "blastp mode", "value": "Similarity groups"},
+              {"label": "Bitscore", "value": 50},
+              {"label": "E-value", "value": "0.01"},
+              {"label": "Minimum Identity", "value": 30},
+              {"label": "Minimum Length", "value": 0}
+            ]
           }
         },
         {

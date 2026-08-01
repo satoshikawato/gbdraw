@@ -49,7 +49,10 @@ fields are migrated when read and are not written again.
 The Web writer stores file bytes once under `resources`. `webFiles` binds those
 resources to active and inactive input controls, so files shared by the
 committed request and an editable draft are not copied into a second payload.
-Version 39 sessions with legacy embedded `files` remain readable.
+For Linear comparisons, `webFiles.bindings.linearComparisons` contains only a
+stable comparison-edge ID and its file binding. Endpoint, source, inclusion,
+and filename metadata are not duplicated there. Version 39 sessions with
+legacy embedded `files` remain readable.
 
 `renderRequest` owns the last committed render. Web config retains inactive
 Custom Track stacks, disabled rows, draft Axis positions, and per-mode
@@ -57,6 +60,22 @@ comparison profiles. `editorState.featureCatalog` holds the schema-3 feature
 catalog used by the saved preview and editor. Current sessions store one base
 SVG Result per logical diagram; readers collapse paired base and interactive
 Results from supported older sessions.
+
+Linear comparison intent is an independent editable draft under
+`config.linearComparisonPlan`. Its mode is `none`, `adjacent`, or `selected`;
+it also stores the default adjacent source and stable edge metadata. Placement
+alone remains under `config.linearRecordLayout`. Current writers do not store a
+global `blastSource`, nested layout comparisons, per-record BLAST files, or
+per-record LOSAT filenames. The editable plan can therefore opt out without
+changing the last committed comparison artifacts in `renderRequest`.
+
+Supported pre-40 Web sessions migrate directly to this plan. A disabled or
+absent legacy layout retains the old adjacent LOSAT/upload behavior, an enabled
+explicit list becomes `selected`, and an authoritative empty explicit list
+becomes `none`. Legacy per-record uploads and custom filenames are attached to
+their original positional gap by stable record UID. CLI-only replay sessions
+do not gain a synthetic Web comparison draft. The accepted session versions
+remain 27–33 and 39–40.
 
 ## Retired inputs
 

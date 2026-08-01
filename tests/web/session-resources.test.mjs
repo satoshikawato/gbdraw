@@ -161,9 +161,7 @@ const state = {
     gff: null,
     fasta: null,
     depth: [makeFile('linear-depth', 'linear-depth.tsv')],
-    blast: makeFile('linear-blast', 'linear-blast.tsv'),
     losat_gencode: 11,
-    losat_filename: 'linear-proteins.faa',
     definition: 'Linear record',
     record_subtitle: 'Subtitle',
     region_record_id: '#1',
@@ -171,13 +169,21 @@ const state = {
     region_end: 9,
     region_reverse: true
   }],
-  linearComparisons: [{
-    id: 'comparison-uid-1',
-    queryUid: 'linear-uid-1',
-    subjectUid: 'linear-uid-2',
-    source: 'upload',
-    file: makeFile('uploaded-comparison', 'comparison.tsv')
-  }]
+  linearComparisonPlan: {
+    mode: 'selected',
+    defaultSource: 'losat',
+    edges: [{
+      id: 'comparison-uid-1',
+      queryUid: 'linear-uid-1',
+      subjectUid: 'linear-uid-2',
+      included: true,
+      fileActive: true,
+      losatFilenameActive: false,
+      source: 'upload',
+      file: makeFile('uploaded-comparison', 'comparison.tsv'),
+      losatFilename: ''
+    }]
+  }
 };
 
 const built = await buildSessionResources(state, committed);
@@ -213,11 +219,8 @@ assert.deepEqual(bindings.linearSeqs[0].gb, {
 });
 assert.equal(bindings.linearSeqs[0].uid, 'linear-uid-1');
 assert.equal(bindings.linearComparisons[0].id, 'comparison-uid-1');
-assert.equal(
-  bindings.linearCanonicalComparisons[0].file.resourceId
-    in built.resources,
-  true
-);
+assert.deepEqual(Object.keys(bindings.linearComparisons[0]), ['id', 'file']);
+assert.equal(Object.hasOwn(bindings, 'linearCanonicalComparisons'), false);
 assert.equal(
   built.renderRequest.records[0].source.resourceId,
   bindings.c_gb.resourceId

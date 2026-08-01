@@ -74,6 +74,21 @@ This writes `tutorial-protein-pairwise.svg`. The curved ribbons connect CDS-deri
 
 ![Pairwise majanivirus protein comparison with curved ribbons between two linear records](../../examples/tutorial-protein-pairwise.svg)
 
+### Web app selected LOSAT pairs
+
+For a sparse browser workflow, edit one entry under **Adjacent gaps**, or click
+**Add** under **Selected pairs and retained drafts** for custom endpoints.
+Either action creates a **Selected pairs** plan. Set each included edge to **Run
+LOSAT**. Selected edges support LOSATN, TLOSATX, and LOSATP when the LOSATP mode
+is **Pairwise**. One plan can also mix those LOSAT edges with uploaded BLAST TSV
+edges and omitted pairs.
+
+**Similarity groups** and **Collinear blocks** still collect evidence across
+all records and are available with the global adjacent LOSAT plan. The web app
+rejects an active selected LOSAT edge in either of those modes instead of
+silently expanding it. A selected plan containing only uploaded edges remains
+valid because it does not request LOSAT evidence expansion.
+
 ## 4. gbdraw similarity-group ribbons (`orthogroup` mode)
 
 `orthogroup` assigns CDS-derived proteins to gbdraw similarity groups across all input records before drawing ribbons between adjacent records. The mode does not perform phylogeny-based orthology inference.
@@ -126,6 +141,9 @@ For a multi-record layout, add `--collinear_search_scope all` to search every re
 Use precomputed BLAST tables when you need to preserve an existing result, use custom database settings, compare nucleotide or translated nucleotide sequences, or draw hits that were filtered by an upstream workflow.
 
 Do not combine `-b/--blast` with `--protein_blastp_mode`. The CLI rejects that combination because the two options define different comparison sources.
+
+The selected mixed-source plan described above is a web app feature. It does
+not change the CLI restriction or the Python `pairs` contract.
 
 For Python workflows with multi-record rows, use `LinearComparisonOptions(protein_mode="pairwise", pairs=((0, 2), (1, 3)))` to run only the declared record pairs. Pair indices are zero-based and must connect adjacent layout rows. Omitting `pairs` preserves adjacent-record behavior. See the [Python API linear example](../PYTHON_API.md#linear-diagrams-and-comparisons).
 

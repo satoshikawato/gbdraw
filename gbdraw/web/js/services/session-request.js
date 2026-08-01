@@ -1146,79 +1146,148 @@ const generatedProteinSettings = (state, baseline = {}) => {
   };
 };
 
+const comparisonPlanErrorMessage = (snapshot) => {
+  const direct = String(snapshot?.error || '').trim();
+  if (direct) return direct;
+  const issue = Array.isArray(snapshot?.errors) ? snapshot.errors[0] : null;
+  return String(issue?.message || issue || '').trim();
+};
+
+const requireLinearComparisonPlanSnapshot = (snapshot) => {
+  if (!snapshot || !Array.isArray(snapshot.edges)) {
+    throw new Error('A resolved Linear comparison plan is required.');
+  }
+  const error = comparisonPlanErrorMessage(snapshot);
+  if (error) throw new Error(error);
+  return snapshot;
+};
+
+const orderedComparisonPlanEdges = (snapshot) => (
+  (Array.isArray(snapshot?.edges) ? snapshot.edges : [])
+    .slice()
+    .sort((left, right) => Number(left?.ordinal) - Number(right?.ordinal))
+);
+
+const comparisonEndpointKey = (queryRecordIndex, subjectRecordIndex) => (
+  `${Number(queryRecordIndex)}->${Number(subjectRecordIndex)}`
+);
+
+const addResolvedComparisonResource = ({
+  comparison,
+  edge,
+  resources
+}) => {
+  const resourceId = `comparison-resolved-${edge.ordinal + 1}`;
+  if (comparison.kind === 'precomputedProteinComparison') {
+    return {
+      kind: 'precomputedProteinComparison',
+      resourceId: resources.addCanonicalTable(
+        resourceId,
+        comparison.rows,
+        comparison.columns
+      ),
+      encoding: 'canonicalTsv',
+      queryRecordIndex: edge.queryIndex,
+      subjectRecordIndex: edge.subjectIndex
+    };
+  }
+  if (comparison.kind !== 'nucleotideBlast') {
+    throw new Error(`Unsupported resolved comparison kind for '${edge.edgeKey}'.`);
+  }
+  return {
+    kind: 'nucleotideBlast',
+    resourceId: resources.addText(
+      resourceId,
+      'nucleotide-blast',
+      `${resourceId}.tsv`,
+      String(comparison.text || '')
+    ),
+    queryRecordIndex: edge.queryIndex,
+    subjectRecordIndex: edge.subjectIndex
+  };
+};
+
+const addPersistedProteinComparisonResource = ({
+  comparison,
+  edge,
+  resources
+}) => ({
+  kind: 'precomputedProteinComparison',
+  resourceId: resources.addFile(
+    `comparison-canonical-protein-${edge.ordinal + 1}`,
+    canonicalComparisonResourceKind(comparison),
+    comparison.file
+  ),
+  encoding: String(comparison.encoding || 'canonicalTsv'),
+  queryRecordIndex: edge.queryIndex,
+  subjectRecordIndex: edge.subjectIndex
+});
+
+const addCanonicalInputProteinComparisonResource = ({
+  comparison,
+  index,
+  resources
+}) => ({
+  kind: 'precomputedProteinComparison',
+  resourceId: resources.addFile(
+    `comparison-canonical-input-protein-${index + 1}`,
+    canonicalComparisonResourceKind(comparison),
+    comparison.file
+  ),
+  encoding: String(comparison.encoding || 'canonicalTsv'),
+  queryRecordIndex: Number(comparison.queryRecordIndex),
+  subjectRecordIndex: Number(comparison.subjectRecordIndex)
+});
+
 const buildComparisons = ({
   state,
   filesData,
   resources,
+  comparisonPlanSnapshot,
   resolvedComparisons = []
 }) => {
   if (state.mode.value !== 'linear') return [];
+  const snapshot = requireLinearComparisonPlanSnapshot(comparisonPlanSnapshot);
+  const edges = orderedComparisonPlanEdges(snapshot);
+  // The plan is the permission boundary. Do not inspect dormant uploads,
+  // committed artifacts, or generated-protein metadata for an empty plan.
+  if (snapshot.mode === 'none' || edges.length === 0) return [];
+
   const comparisons = [];
-  const indexByUid = new Map((filesData.linearSeqs || []).map((seq, index) => [String(seq.uid || ''), index]));
-  const explicitComparisons = Array.isArray(filesData.linearComparisons)
-    ? filesData.linearComparisons
-    : [];
-  explicitComparisons.forEach((comparison, index) => {
-    if (!comparison?.file) return;
-    const queryRecordIndex = indexByUid.get(String(comparison.queryUid || ''));
-    const subjectRecordIndex = indexByUid.get(String(comparison.subjectUid || ''));
-    if (!Number.isInteger(queryRecordIndex) || !Number.isInteger(subjectRecordIndex)) return;
-    const id = `comparison-nucleotide-${index + 1}`;
-    comparisons.push({
-      kind: 'nucleotideBlast',
-      resourceId: resources.addFile(id, 'nucleotide-blast', comparison.file),
-      queryRecordIndex,
-      subjectRecordIndex
-    });
-  });
-  if (explicitComparisons.length === 0) {
-    (filesData.linearSeqs || []).forEach((seq, index) => {
-      if (!seq.blast || index + 1 >= filesData.linearSeqs.length) return;
-      const id = `comparison-nucleotide-${index + 1}`;
-      comparisons.push({
-        kind: 'nucleotideBlast',
-        resourceId: resources.addFile(id, 'nucleotide-blast', seq.blast),
-        queryRecordIndex: index,
-        subjectRecordIndex: index + 1
-      });
-    });
-  }
-  const normalizedResolvedComparisons = Array.isArray(resolvedComparisons)
-    ? resolvedComparisons.filter((comparison) => (
-        comparison &&
-        Number.isInteger(comparison.queryRecordIndex) &&
-        Number.isInteger(comparison.subjectRecordIndex)
-      ))
-    : [];
-  const hasResolvedProteinComparisons = normalizedResolvedComparisons.some(
-    (comparison) => comparison.kind === 'precomputedProteinComparison'
+  const uploadFilesByEdgeId = new Map(
+    (Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
+      .filter((binding) => binding?.file)
+      .map((binding) => [String(binding.id || ''), binding.file])
   );
+  const resolvedByEdgeKey = new Map();
+  (Array.isArray(resolvedComparisons) ? resolvedComparisons : []).forEach((comparison) => {
+    const edgeKey = String(comparison?.edgeKey || '').trim();
+    if (!edgeKey) return;
+    if (resolvedByEdgeKey.has(edgeKey)) {
+      throw new Error(`Multiple resolved comparison results were produced for '${edgeKey}'.`);
+    }
+    resolvedByEdgeKey.set(edgeKey, comparison);
+  });
+
   const persistedCanonicalComparisons = Array.isArray(filesData.linearCanonicalComparisons)
     ? filesData.linearCanonicalComparisons
     : [];
-  const hasPersistedGeneratedProteinPipeline = persistedCanonicalComparisons.some(
+  const persistedGeneratedComparison = persistedCanonicalComparisons.find(
     (comparison) => comparison?.kind === 'generatedProteinComparison'
   );
-  const usesCanonicalProteinPipeline = (
-    state.blastSource?.value === 'losat' &&
-    state.losatProgram?.value === 'blastp'
+  const activeProteinPipeline = (
+    snapshot.hasLosatIntent === true && state.losatProgram?.value === 'blastp'
   );
-  // A generated descriptor marks artifacts owned by the Web protein-analysis
-  // pipeline, so changing to a nucleotide pipeline invalidates that whole set.
-  // Typed Python requests may instead provide orthogroup, collinearity, or
-  // precomputed-protein inputs directly without a generated descriptor; those
-  // remain canonical diagram inputs regardless of the Web analysis controls.
-  const persistedResourceComparisons = (
-    usesCanonicalProteinPipeline || !hasPersistedGeneratedProteinPipeline
-      ? persistedCanonicalComparisons
-      : []
-  )
-    .filter(isResourceBackedCanonicalComparison)
-    .filter((comparison) => (
-      !hasResolvedProteinComparisons ||
-      comparison.kind !== 'precomputedProteinComparison'
-    ));
-  persistedResourceComparisons.forEach((comparison, index) => {
+  const persistedCanonicalInputs = persistedCanonicalComparisons.filter(
+    (comparison) => comparison?.canonicalInput === true
+  );
+  const persistedMetadata = persistedCanonicalComparisons.filter((comparison) => (
+    (
+      comparison?.kind === 'orthogroupResult' ||
+      comparison?.kind === 'collinearityResult'
+    ) && activeProteinPipeline && comparison.canonicalInput !== true
+  ));
+  [...persistedCanonicalInputs, ...persistedMetadata].forEach((comparison, index) => {
     if (!comparison.file) return;
     if (comparison.kind === 'orthogroupResult') {
       comparisons.push({
@@ -1245,6 +1314,7 @@ const buildComparisons = ({
       });
       return;
     }
+    if (comparison.kind !== 'precomputedProteinComparison') return;
     const queryRecordIndex = Number(comparison.queryRecordIndex);
     const subjectRecordIndex = Number(comparison.subjectRecordIndex);
     if (
@@ -1253,85 +1323,128 @@ const buildComparisons = ({
       !filesData.linearSeqs?.[queryRecordIndex] ||
       !filesData.linearSeqs?.[subjectRecordIndex]
     ) return;
-    const resourceId = `comparison-canonical-protein-${index + 1}`;
-    comparisons.push({
-      kind: 'precomputedProteinComparison',
-      resourceId: resources.addFile(
-        resourceId,
-        canonicalComparisonResourceKind(comparison),
+    comparisons.push(addCanonicalInputProteinComparisonResource({
+      comparison,
+      index,
+      resources
+    }));
+  });
+
+  const persistedProteinByEdgeKey = new Map();
+  const persistedProteinByEndpoints = new Map();
+  if (activeProteinPipeline) {
+    persistedCanonicalComparisons
+      .filter((comparison) => (
+        comparison?.kind === 'precomputedProteinComparison' &&
+        comparison.canonicalInput !== true &&
         comparison.file
-      ),
-      encoding: String(comparison.encoding || 'canonicalTsv'),
-      queryRecordIndex,
-      subjectRecordIndex
-    });
-  });
-  normalizedResolvedComparisons.forEach((comparison, index) => {
-    const resourceId = `comparison-resolved-${index + 1}`;
-    if (comparison.kind === 'precomputedProteinComparison') {
-      comparisons.push({
-        kind: 'precomputedProteinComparison',
-        resourceId: resources.addCanonicalTable(
-          resourceId,
-          comparison.rows,
-          comparison.columns
-        ),
-        encoding: 'canonicalTsv',
-        queryRecordIndex: comparison.queryRecordIndex,
-        subjectRecordIndex: comparison.subjectRecordIndex
+      ))
+      .forEach((comparison) => {
+        const edgeKey = String(comparison.edgeKey || '').trim();
+        if (edgeKey && !persistedProteinByEdgeKey.has(edgeKey)) {
+          persistedProteinByEdgeKey.set(edgeKey, comparison);
+        }
+        const endpointKey = comparisonEndpointKey(
+          comparison.queryRecordIndex,
+          comparison.subjectRecordIndex
+        );
+        if (!persistedProteinByEndpoints.has(endpointKey)) {
+          persistedProteinByEndpoints.set(endpointKey, comparison);
+        }
       });
-      return;
+  }
+
+  let hasPrecomputedProteinComparisons = false;
+  for (const edge of edges) {
+    if (
+      !Number.isInteger(edge?.ordinal) ||
+      !Number.isInteger(edge?.queryIndex) ||
+      !Number.isInteger(edge?.subjectIndex) ||
+      !String(edge?.edgeKey || '').trim()
+    ) {
+      throw new Error('The resolved Linear comparison plan contains an invalid edge.');
     }
-    comparisons.push({
-      kind: 'nucleotideBlast',
-      resourceId: resources.addText(
-        resourceId,
-        'nucleotide-blast',
-        `${resourceId}.tsv`,
-        String(comparison.text || '')
-      ),
-      queryRecordIndex: comparison.queryRecordIndex,
-      subjectRecordIndex: comparison.subjectRecordIndex
-    });
-  });
-  const hasPrecomputedProteinComparisons = (
-    hasResolvedProteinComparisons ||
-    persistedResourceComparisons.some(
-      (comparison) => comparison.kind === 'precomputedProteinComparison'
-    )
+    if (edge.source === 'upload') {
+      const file = uploadFilesByEdgeId.get(String(edge.id || ''));
+      if (!file) {
+        throw new Error(`The uploaded comparison '${edge.edgeKey}' has no active BLAST TSV file.`);
+      }
+      const resourceId = `comparison-nucleotide-${edge.ordinal + 1}`;
+      comparisons.push({
+        kind: 'nucleotideBlast',
+        resourceId: resources.addFile(resourceId, 'nucleotide-blast', file),
+        queryRecordIndex: edge.queryIndex,
+        subjectRecordIndex: edge.subjectIndex
+      });
+      continue;
+    }
+    if (edge.source !== 'losat') {
+      throw new Error(`Unsupported comparison source for '${edge.edgeKey}'.`);
+    }
+    const resolved = resolvedByEdgeKey.get(edge.edgeKey);
+    if (resolved) {
+      const descriptor = addResolvedComparisonResource({
+        comparison: resolved,
+        edge,
+        resources
+      });
+      comparisons.push(descriptor);
+      if (descriptor.kind === 'precomputedProteinComparison') {
+        hasPrecomputedProteinComparisons = true;
+      }
+      continue;
+    }
+    if (activeProteinPipeline) {
+      const persisted = persistedProteinByEdgeKey.get(edge.edgeKey) ||
+        persistedProteinByEndpoints.get(comparisonEndpointKey(edge.queryIndex, edge.subjectIndex));
+      if (persisted) {
+        comparisons.push(addPersistedProteinComparisonResource({
+          comparison: persisted,
+          edge,
+          resources
+        }));
+        hasPrecomputedProteinComparisons = true;
+      }
+    }
+  }
+
+  const activeLosatEdges = edges.filter((edge) => edge.source === 'losat');
+  const selectedPairwiseLosat = (
+    snapshot.mode === 'selected' &&
+    activeProteinPipeline &&
+    String(state.losat?.blastp?.mode || '').trim().toLowerCase() === 'pairwise'
   );
-  const generatedPairs = explicitComparisons
-    .filter((comparison) => comparison?.source === 'losat')
-    .map((comparison) => ({
-      queryRecordIndex: indexByUid.get(String(comparison.queryUid || '')),
-      subjectRecordIndex: indexByUid.get(String(comparison.subjectUid || ''))
-    }))
-    .filter((pair) => Number.isInteger(pair.queryRecordIndex) && Number.isInteger(pair.subjectRecordIndex));
-  const shouldGenerateProteinComparisons = (
-    !hasPrecomputedProteinComparisons &&
-    state.losatProgram.value === 'blastp' &&
-    (generatedPairs.length > 0 || state.blastSource.value === 'losat')
+  const shouldEmitResolvedProteinMarker = (
+    activeProteinPipeline &&
+    activeLosatEdges.length > 0 &&
+    hasPrecomputedProteinComparisons
   );
-  const persistedGeneratedComparison = (usesCanonicalProteinPipeline
-    ? persistedCanonicalComparisons
-    : []
-  ).find(
-    (comparison) => comparison?.kind === 'generatedProteinComparison'
+  const shouldGenerateSelectedProteinPairs = (
+    selectedPairwiseLosat &&
+    activeLosatEdges.length > 0 &&
+    !hasPrecomputedProteinComparisons
   );
-  if (
-    hasPrecomputedProteinComparisons ||
-    shouldGenerateProteinComparisons ||
-    persistedGeneratedComparison
-  ) {
-    const mode = hasPrecomputedProteinComparisons
+  const shouldGenerateAdjacentProteinPipeline = (
+    snapshot.mode === 'adjacent' &&
+    activeProteinPipeline &&
+    activeLosatEdges.length > 0 &&
+    !hasPrecomputedProteinComparisons
+  );
+  if (shouldEmitResolvedProteinMarker || shouldGenerateSelectedProteinPairs || shouldGenerateAdjacentProteinPipeline) {
+    const mode = shouldEmitResolvedProteinMarker
       ? 'none'
-      : persistedGeneratedComparison?.mode === 'none'
-        ? 'none'
-        : String(state.losat.blastp?.mode || persistedGeneratedComparison?.mode || 'orthogroup');
+      : selectedPairwiseLosat
+        ? 'pairwise'
+        : String(state.losat?.blastp?.mode || persistedGeneratedComparison?.mode || 'orthogroup');
     comparisons.push({
       kind: 'generatedProteinComparison',
       mode,
-      pairs: mode === 'none' ? [] : generatedPairs,
+      pairs: mode === 'pairwise'
+        ? activeLosatEdges.map((edge) => ({
+            queryRecordIndex: edge.queryIndex,
+            subjectRecordIndex: edge.subjectIndex
+          }))
+        : [],
       settings: generatedProteinSettings(
         state,
         persistedGeneratedComparison?.settings || {}
@@ -1379,6 +1492,7 @@ const buildLayout = (state, filesData) => {
 export const buildCanonicalRenderRequest = ({
   state,
   filesData,
+  comparisonPlanSnapshot = null,
   resolvedComparisons = [],
   resolvedCircularConservation = []
 }) => {
@@ -1612,8 +1726,7 @@ export const buildCanonicalRenderRequest = ({
   if (state.mode.value === 'linear') {
     webFiles.linearRecordMetadata = (filesData.linearSeqs || []).map((sequence, index) => ({
       recordKey: String(records[index]?.recordKey || sequence?.uid || `record-${index + 1}`),
-      losatGencode: optionalPositiveInteger(sequence?.losat_gencode) || 1,
-      losatFilename: String(sequence?.losat_filename || '')
+      losatGencode: optionalPositiveInteger(sequence?.losat_gencode) || 1
     }));
   }
 
@@ -1626,11 +1739,12 @@ export const buildCanonicalRenderRequest = ({
       diagramOptions,
       layout: buildLayout(state, filesData),
       comparisons: buildComparisons({
-        state,
-        filesData,
-        resources,
-        resolvedComparisons
-      }),
+      state,
+      filesData,
+      resources,
+      comparisonPlanSnapshot,
+      resolvedComparisons
+    }),
       output
     },
     resources: resources.resources,
@@ -2498,6 +2612,9 @@ export const projectCanonicalSessionRequest = ({
       (comparison) => comparison?.kind === 'generatedProteinComparison'
     )
   );
+  const comparisonsContainGeneratedProteinPipeline = (
+    renderRequest.comparisons || []
+  ).some((comparison) => comparison?.kind === 'generatedProteinComparison');
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     const source = records[0]?.source || {};
@@ -2574,10 +2691,20 @@ export const projectCanonicalSessionRequest = ({
           )
         ) return;
         files.linearCanonicalComparisons.push(
-          mapResourceBackedCanonicalComparison(
-            comparison,
-            () => resourceAsLegacyFile(resources, comparison.resourceId)
-          )
+          {
+            ...mapResourceBackedCanonicalComparison(
+              comparison,
+              () => resourceAsLegacyFile(resources, comparison.resourceId)
+            ),
+            // This is in-memory projection provenance, not a canonical-schema
+            // field. Direct CLI/Python comparison options have no Web pipeline
+            // marker and must survive a projection/rebuild unchanged.
+            ...(
+              !comparisonsContainGeneratedProteinPipeline
+                ? { canonicalInput: true }
+                : {}
+            )
+          }
         );
         return;
       }

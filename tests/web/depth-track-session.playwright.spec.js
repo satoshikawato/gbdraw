@@ -884,7 +884,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
       strokeWidth: 2
     });
     app.annotationSets.splice(0, app.annotationSets.length);
-    app.blastSource = 'none';
+    app.linearComparisonPlan.mode = 'none';
     app.mode = 'linear';
     app.adv.linear_track_slots.splice(
       0,

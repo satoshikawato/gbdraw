@@ -331,6 +331,7 @@ const createLayoutPreferences = () => ({
   const proteinTable = makeFile('resolved-protein.tsv', 40);
   const orthogroupsJson = makeFile('orthogroups.json', 50);
   const collinearityJson = makeFile('collinearity.json', 60);
+  const comparisonUpload = makeFile('selected-comparison.tsv', 70);
   const nestedStyleOverride = {
     stroke: '#123456',
     strokeWidth: 2,
@@ -431,7 +432,25 @@ const createLayoutPreferences = () => ({
       whitelist: null,
       qualifier_priority: null
     },
-    linearSeqs: [],
+    linearSeqs: [
+      { uid: 'record-a', gb: null, gff: null, fasta: null, depth: null },
+      { uid: 'record-b', gb: null, gff: null, fasta: null, depth: null }
+    ],
+    linearComparisonPlan: {
+      mode: 'selected',
+      defaultSource: 'losat',
+      edges: [{
+        id: 'edge-a-b',
+        queryUid: 'record-a',
+        subjectUid: 'record-b',
+        included: true,
+        fileActive: true,
+        losatFilenameActive: true,
+        source: 'upload',
+        file: comparisonUpload,
+        losatFilename: 'custom-query.fna'
+      }]
+    },
     results: ref([{ name: 'r1', content: '<svg id="a"></svg>' }]),
     selectedResultIndex: ref(0),
     mode: ref('circular'),
@@ -471,12 +490,27 @@ const createLayoutPreferences = () => ({
     buildConfigData: () => ({
       form: state.form,
       adv: state.adv,
-      modeProfiles
+      modeProfiles,
+      linearComparisonPlan: {
+        mode: state.linearComparisonPlan.mode,
+        defaultSource: state.linearComparisonPlan.defaultSource,
+        edges: state.linearComparisonPlan.edges.map(({ file: _file, ...edge }) => edge)
+      }
     }),
     applyConfigData: (config) => {
       state.form = { ...config.form };
       state.adv = { ...config.adv };
       modeProfiles = structuredClone(config.modeProfiles);
+      state.linearComparisonPlan.mode = config.linearComparisonPlan.mode;
+      state.linearComparisonPlan.defaultSource = config.linearComparisonPlan.defaultSource;
+      state.linearComparisonPlan.edges.splice(
+        0,
+        state.linearComparisonPlan.edges.length,
+        ...structuredClone(config.linearComparisonPlan.edges).map((edge) => ({
+          ...edge,
+          file: null
+        }))
+      );
     }
   });
 
@@ -486,6 +520,9 @@ const createLayoutPreferences = () => ({
   state.files.c_gb = null;
   state.files.c_conservation_blasts_source = null;
   state.files.linearCanonicalComparisons = [];
+  state.linearComparisonPlan.mode = 'none';
+  state.linearComparisonPlan.defaultSource = 'upload';
+  state.linearComparisonPlan.edges.splice(0);
   state.results.value = [{ name: 'r2', content: '<svg id="b"></svg>' }];
   state.featureColorOverrides.f1.color = '#222222';
   modeProfiles.profiles.circular.values.identity = 70;
@@ -500,6 +537,15 @@ const createLayoutPreferences = () => ({
   assert.equal(state.files.c_conservation_fastas.length, 2);
   assert.equal(state.files.c_conservation_fastas[0], null);
   assert.equal(state.files.c_conservation_fastas[1].name, 'comparison-2.fa');
+  assert.equal(state.linearComparisonPlan.mode, 'selected');
+  assert.equal(state.linearComparisonPlan.defaultSource, 'losat');
+  assert.equal(state.linearComparisonPlan.edges[0].id, 'edge-a-b');
+  assert.equal(state.linearComparisonPlan.edges[0].source, 'upload');
+  assert.equal(state.linearComparisonPlan.edges[0].included, true);
+  assert.equal(state.linearComparisonPlan.edges[0].fileActive, true);
+  assert.equal(state.linearComparisonPlan.edges[0].losatFilenameActive, true);
+  assert.equal(state.linearComparisonPlan.edges[0].losatFilename, 'custom-query.fna');
+  assert.equal(state.linearComparisonPlan.edges[0].file.name, 'selected-comparison.tsv');
   assert.equal(
     state.files.linearCanonicalComparisons[0].file.name,
     'resolved-protein.tsv'

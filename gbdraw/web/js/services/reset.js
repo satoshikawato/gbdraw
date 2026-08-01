@@ -121,6 +121,23 @@ const resetEditorDraftState = (state) => {
   clearReactiveObject(state.orthogroupDescriptionOverrides);
 };
 
+const resetLinearComparisonPlan = (state) => {
+  const plan = state.linearComparisonPlan;
+  if (!plan || typeof plan !== 'object') return;
+  const retainedEdges = (Array.isArray(plan.edges) ? plan.edges : [])
+    .filter((edge) => Boolean(edge?.file) || String(edge?.losatFilename || '').trim())
+    .map((edge) => ({
+      ...edge,
+      included: false,
+      fileActive: false,
+      losatFilenameActive: false
+    }));
+  plan.mode = 'adjacent';
+  plan.defaultSource = 'losat';
+  if (!Array.isArray(plan.edges)) plan.edges = [];
+  plan.edges.splice(0, plan.edges.length, ...retainedEdges);
+};
+
 export const resetSettings = (state) => {
   replaceReactiveObject(state.form, createDefaultForm());
   replaceReactiveObject(state.adv, createDefaultAdv(state.mode.value));
@@ -129,7 +146,7 @@ export const resetSettings = (state) => {
   replaceReactiveObject(state.circularConservation, createDefaultCircularConservation());
   replaceReactiveArray(state.annotationSets);
   state.selectedAnnotation.value = null;
-  state.blastSource.value = 'losat';
+  resetLinearComparisonPlan(state);
   state.losatProgram.value = 'blastn';
 
   resetLayoutPreferenceState(state);

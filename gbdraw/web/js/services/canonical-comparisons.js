@@ -38,6 +38,7 @@ export const mapResourceBackedCanonicalComparison = (
     ...(kind === 'collinearityResult'
       ? { valueKind: String(comparison.valueKind || 'result') }
       : {}),
+    ...(comparison.canonicalInput === true ? { canonicalInput: true } : {}),
     file: mapFile(comparison.file)
   };
 };

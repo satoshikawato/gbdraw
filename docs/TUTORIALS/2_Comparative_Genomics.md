@@ -46,6 +46,35 @@ The order matters:
 
 Reversing an input or cropping a region does not remap a full-record BLAST table. Regenerate the search for the displayed sequences when the coordinate systems change.
 
+### Web app comparison plans
+
+The web app keeps record placement and comparison selection independent. Choose
+one of these Linear comparison plans before generating:
+
+- **No comparison** draws the records without LOSAT work or comparison ribbons.
+- **Upload BLAST TSV** uses positional adjacent gaps that have an active file;
+  leave a gap empty to skip it.
+- **Run LOSAT** searches every positional adjacent gap.
+- **Selected pairs** uses only included edges and can mix uploaded BLAST TSV
+  files, LOSAT searches, and omitted pairs. Create this plan by editing one
+  entry under **Adjacent gaps**, or click **Add** under **Selected pairs and
+  retained drafts** for custom endpoints.
+
+For LOSATP **Similarity groups** and **Collinear blocks**, LOSAT builds
+all-record evidence instead of independent adjacent-pair searches. See
+[Tutorial 4](4_Protein_Comparisons.md#web-app-selected-losat-pairs) for
+the program-specific rules.
+
+![Linear comparison choices with No comparison selected](../../gbdraw/web/gallery/media/lambda_basic_linear/manual-02-03-no-comparison.webp)
+
+Select **No comparison** as shown above when the records should be drawn
+without any search or comparison track.
+
+Changing the global choice does not delete retained uploads or custom raw-result
+filenames. A retained inactive value must be explicitly reused before the app
+can consume it. This behavior is specific to the web app; the CLI `--blast`
+ordering described below is unchanged.
+
 ## 3. Extend to more records
 
 For five displayed records, pass four BLAST files in adjacent-pair order:
@@ -118,6 +147,11 @@ gbdraw linear \
 ![Four majanivirus records arranged two per row with two explicitly selected cross-row comparisons](../../examples/linear_multi_record.svg)
 
 The four records use one shared bp/px scale. Each comparison retains its declared query and subject even if the endpoints are listed in the opposite vertical order. Endpoints must lie in adjacent rows; same-row and row-skipping edges are errors.
+
+In the web app, **Adjacent pairs** materializes the zipped positional pairs
+between adjacent rows. **All adjacent-row pairs** materializes their
+cross-product as a **Selected pairs** plan. It does not change what the global
+adjacent modes mean.
 
 ## 7. Circular BLAST/LOSAT comparison rings
 

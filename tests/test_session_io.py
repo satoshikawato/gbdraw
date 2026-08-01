@@ -1234,18 +1234,14 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
 
 
 def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
-    source = build_session_json(
-        SessionBuildContext(
-            mode="linear",
-            output_prefix="old",
-            render_formats=("svg",),
-        ),
-        svg_results=(("old", "<svg></svg>"),),
-        embedded_files={"linearSeqs": []},
-        generated_at=datetime(2026, 7, 30),
-        canonical_request=_canonical_request("linear"),
+    fixture_path = (
+        Path(__file__).parent
+        / "fixtures"
+        / "sessions"
+        / "BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"
     )
-    source["version"] = 39
+    source = load_session(fixture_path)
+    assert source["version"] == 39
     source["webFiles"] = {"linearRecords": [{"uid": "record-1"}]}
     source["editorState"] = {"legend": {"entries": []}}
     source["features"] = {
@@ -1306,7 +1302,18 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
     assert rewritten["version"] == CURRENT_SESSION_VERSION
     for payload in (promoted, rewritten):
         assert "files" not in payload
-        assert payload["webFiles"] == source["webFiles"]
+        assert payload["webFiles"]["linearRecords"] == source["webFiles"][
+            "linearRecords"
+        ]
+        assert payload["webFiles"]["bindings"]["schema"] == 1
+        assert "linearCanonicalComparisons" not in payload["webFiles"]["bindings"]
+        assert payload["config"]["linearComparisonPlan"] == {
+            "mode": "adjacent",
+            "defaultSource": "losat",
+            "edges": [],
+        }
+        assert "blastSource" not in payload["config"]
+        assert "comparisons" not in payload["config"]["linearRecordLayout"]
         assert payload["editorState"]["legend"] == source["editorState"]["legend"]
         assert payload["editorState"]["featureCatalog"]["schema"] == 3
         assert len(payload["editorState"]["featureCatalog"]["items"]) == 1
@@ -1320,6 +1327,303 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
             == source["config"]["adv"]["linear_track_slots"]
         )
         assert payload["config"]["modeProfiles"] == source["config"]["modeProfiles"]
+
+
+def test_genuine_version_39_shape_retains_disabled_layout_upload_draft() -> None:
+    fixture_path = (
+        Path(__file__).parent
+        / "fixtures"
+        / "sessions"
+        / "BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"
+    )
+    source = load_session(fixture_path)
+    assert source["version"] == 39
+    assert source["config"]["linearRecordLayout"]["enabled"] is False
+    record_uids = [
+        str(row["uid"])
+        for row in source["config"]["linearRecordLayout"]["rows"]
+    ]
+    dormant_file = _file_entry("retained-non-adjacent.tsv", b"a\tc\t97\n")
+
+    migrated_config, migrated_files = (
+        session_io_module.migrate_legacy_linear_comparison_draft_for_current_writer(
+            source["config"],
+            {
+                "linearSeqs": [{"uid": uid} for uid in record_uids],
+                "linearComparisons": [
+                    {
+                        "id": "dormant-v39-upload",
+                        "queryUid": record_uids[0],
+                        "subjectUid": record_uids[2],
+                        "source": "upload",
+                        "file": dormant_file,
+                    }
+                ],
+            },
+            force_web_draft=True,
+        )
+    )
+
+    assert migrated_config["linearComparisonPlan"] == {
+        "mode": "adjacent",
+        "defaultSource": "losat",
+        "edges": [
+            {
+                "id": "dormant-v39-upload",
+                "queryUid": record_uids[0],
+                "subjectUid": record_uids[2],
+                "included": False,
+                "fileActive": False,
+                "losatFilenameActive": False,
+                "source": "upload",
+                "losatFilename": "",
+            }
+        ],
+    }
+    assert migrated_files["linearComparisons"] == [
+        {"id": "dormant-v39-upload", "file": dormant_file}
+    ]
+
+
+def test_pre40_web_comparison_draft_migrates_directly_to_final_plan() -> None:
+    source = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="old",
+            render_formats=("svg",),
+        ),
+        svg_results=(("old", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 20),
+        canonical_request=_canonical_request("linear"),
+    )
+    source["version"] = 33
+    source["config"]["blastSource"] = "upload"
+    source["config"]["linearRecordLayout"] = {
+        "enabled": True,
+        "recordGap": 18,
+        "rows": [{"uid": "record-a", "row": 1}, {"uid": "record-b", "row": 2}],
+        "comparisons": [
+            {
+                "id": "selected-a-b",
+                "queryUid": "record-a",
+                "subjectUid": "record-b",
+                "source": "upload",
+            }
+        ],
+    }
+    comparison_file = _file_entry("selected.tsv", b"query\tsubject\t99\n")
+
+    promoted = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="new",
+            render_formats=("svg",),
+            source_session=source,
+        ),
+        svg_results=(("new", "<svg></svg>"),),
+        embedded_files={
+            "linearSeqs": [
+                {
+                    "uid": "record-a",
+                    "blast": comparison_file,
+                    "losat_filename": "custom-a.fna",
+                },
+                {"uid": "record-b"},
+            ],
+            "linearComparisons": [
+                {
+                    "id": "selected-a-b",
+                    "queryUid": "record-a",
+                    "subjectUid": "record-b",
+                    "source": "upload",
+                    "file": comparison_file,
+                }
+            ],
+        },
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+
+    assert "blastSource" not in promoted["config"]
+    assert "comparisons" not in promoted["config"]["linearRecordLayout"]
+    assert promoted["config"]["linearComparisonPlan"] == {
+        "mode": "selected",
+        "defaultSource": "upload",
+        "edges": [
+            {
+                "id": "selected-a-b",
+                "queryUid": "record-a",
+                "subjectUid": "record-b",
+                "included": True,
+                "fileActive": True,
+                "losatFilenameActive": True,
+                "source": "upload",
+                "losatFilename": "custom-a.fna",
+            }
+        ],
+    }
+    sequence_binding = promoted["webFiles"]["bindings"]["linearSeqs"][0]
+    assert "blast" not in sequence_binding
+    assert "losat_filename" not in sequence_binding
+    comparison_binding = promoted["webFiles"]["bindings"]["linearComparisons"]
+    assert [set(binding) for binding in comparison_binding] == [{"id", "file"}]
+    resource_id = comparison_binding[0]["file"]["resourceId"]
+    assert base64.b64decode(promoted["resources"][resource_id]["data"]) == (
+        b"query\tsubject\t99\n"
+    )
+    matching_payloads = [
+        resource
+        for resource in promoted["resources"].values()
+        if base64.b64decode(resource["data"]) == b"query\tsubject\t99\n"
+    ]
+    assert len(matching_payloads) == 1
+
+
+def test_pre40_adjacent_upload_migration_consumes_mirrored_binding() -> None:
+    comparison_file = _file_entry("adjacent.tsv", b"query\tsubject\t99\n")
+
+    migrated_config, migrated_files = (
+        session_io_module.migrate_legacy_linear_comparison_draft_for_current_writer(
+            {
+                "blastSource": "upload",
+                "linearRecordLayout": {
+                    "enabled": False,
+                    "rows": [
+                        {"uid": "record-a", "row": 1},
+                        {"uid": "record-b", "row": 2},
+                    ],
+                },
+            },
+            {
+                "linearSeqs": [
+                    {"uid": "record-a", "blast": comparison_file},
+                    {"uid": "record-b"},
+                ],
+                "linearComparisons": [
+                    {
+                        "id": "mirrored-a-b",
+                        "queryUid": "record-a",
+                        "subjectUid": "record-b",
+                        "source": "upload",
+                        "file": comparison_file,
+                    }
+                ],
+            },
+            force_web_draft=True,
+        )
+    )
+
+    assert migrated_config["linearComparisonPlan"]["edges"] == [
+        {
+            "id": "linear-comparison-migrated-adjacent-1-record-a-record-b",
+            "queryUid": "record-a",
+            "subjectUid": "record-b",
+            "included": True,
+            "fileActive": True,
+            "losatFilenameActive": False,
+            "source": "upload",
+            "losatFilename": "",
+        }
+    ]
+    assert migrated_files["linearComparisons"] == [
+        {
+            "id": "linear-comparison-migrated-adjacent-1-record-a-record-b",
+            "file": comparison_file,
+        }
+    ]
+
+
+def test_current_comparison_authority_rejects_retired_version40_shape() -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+    payload["config"]["blastSource"] = "losat"
+    with pytest.raises(ValidationError, match="retired blastSource"):
+        validate_session(payload)
+
+    payload["config"].pop("blastSource")
+    payload["config"]["linearRecordLayout"] = {
+        "enabled": False,
+        "recordGap": 24,
+        "rows": [],
+        "comparisons": [],
+    }
+    with pytest.raises(ValidationError, match="linearRecordLayout.comparisons"):
+        validate_session(payload)
+
+
+def test_current_comparison_authority_validates_file_bindings() -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+    resource_id = next(iter(payload["resources"]))
+    payload["config"]["linearComparisonPlan"] = {
+        "mode": "selected",
+        "defaultSource": "losat",
+        "edges": [
+            {
+                "id": "edge-a-b",
+                "queryUid": "a",
+                "subjectUid": "b",
+                "included": True,
+                "fileActive": True,
+                "losatFilenameActive": False,
+                "source": "upload",
+                "losatFilename": "",
+            }
+        ],
+    }
+    payload["webFiles"] = {
+        "bindings": {
+            "schema": 1,
+            "linearComparisons": [
+                {"id": "edge-a-b", "file": {"resourceId": resource_id}}
+            ],
+        }
+    }
+    validate_session(payload)
+
+    unsupported_schema = copy.deepcopy(payload)
+    unsupported_schema["webFiles"]["bindings"]["schema"] = 2
+    with pytest.raises(ValidationError, match="Unsupported Web file binding schema"):
+        validate_session(unsupported_schema)
+
+    malformed_file = copy.deepcopy(payload)
+    malformed_file["webFiles"]["bindings"]["linearComparisons"][0]["file"] = None
+    with pytest.raises(ValidationError, match="requires a file resource binding"):
+        validate_session(malformed_file)
+
+    missing_resource = copy.deepcopy(payload)
+    missing_resource["webFiles"]["bindings"]["linearComparisons"][0]["file"] = {
+        "resourceId": "missing-resource"
+    }
+    with pytest.raises(ValidationError, match="references a missing resource"):
+        validate_session(missing_resource)
+
+    missing_active_binding = copy.deepcopy(payload)
+    missing_active_binding["webFiles"]["bindings"]["linearComparisons"] = []
+    with pytest.raises(
+        ValidationError,
+        match="Active comparison file is missing its Web file binding",
+    ):
+        validate_session(missing_active_binding)
 
 
 def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
@@ -2399,7 +2703,8 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
     assert config["adv"]["depth_large_tick_interval"] == "4"
     assert "depth_tick_interval" not in config["adv"]
     assert config["palette"] == "ajisai"
-    assert config["blastSource"] == "losat"
+    assert "blastSource" not in config
+    assert "blastSource" not in config["adv"]
     assert config["losatProgram"] == "blastp"
     assert config["losat"]["threadsPerJob"] == "32"
     assert config["losat"]["blastp"]["mode"] == "orthogroup"
@@ -2487,6 +2792,8 @@ def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert payload["resources"]
     assert payload["orthogroupState"]["selectedOrthogroupAlignmentFeature"] == "target_feature"
+    assert "linearRecordLayout" not in payload["config"]
+    assert "linearComparisonPlan" not in payload["config"]
 
 
 def test_current_cli_session_writer_omits_legacy_ambiguous_linear_files() -> None:

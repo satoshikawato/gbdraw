@@ -77,6 +77,24 @@ The most common causes are:
 
 See [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
 
+## How do I draw several Linear records without comparing them in the web app?
+
+Select **No comparison** above the Linear input rows, then click **Generate
+Diagram**. The app skips LOSAT and does not use an uploaded BLAST TSV for that
+render. Uploaded comparison files and custom raw-result filenames can remain in
+the saved session as inactive drafts; use their separate reuse actions before
+they can participate in a later comparison.
+
+See the screenshot in [Web app comparison plans](./TUTORIALS/2_Comparative_Genomics.md#web-app-comparison-plans)
+for the exact control to select.
+
+Use **Run LOSAT** or **Upload BLAST TSV** for all positional adjacent gaps. In
+upload mode, a gap without a file is deliberately skipped. Use **Selected
+pairs** when one diagram needs a mixture of LOSAT edges, uploaded edges, and
+omitted edges. Edit an entry under **Adjacent gaps**, or click **Add** under
+**Selected pairs and retained drafts**, to create that plan. An included
+uploaded edge must have an active file.
+
 ## Why did gbdraw rerun LOSATP after I loaded a session?
 
 A protein-search cache hit requires the same amino-acid sequences, selected

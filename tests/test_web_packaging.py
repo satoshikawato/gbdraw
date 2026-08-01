@@ -4600,7 +4600,16 @@ def test_web_session_uses_structured_depth_file_codec(tmp_path: Path) -> None:
     subprocess.run([node, str(check_path)], check=True, cwd=REPO_ROOT)
 
     config_source = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
-    assert "serializeActiveRenderFiles(state.mode.value, state)" in config_source
+    assert re.search(
+        r"const activeFiles = await serializeActiveRenderFiles\(\s*"
+        r"state\.mode\.value,\s*state,\s*comparisonPlanSnapshot\s*\);",
+        config_source,
+    )
+    assert re.search(
+        r"committed = buildCanonicalRenderRequest\(\{\s*state,\s*"
+        r"filesData: activeFiles,\s*comparisonPlanSnapshot\s*\}\);",
+        config_source,
+    )
     assert "assembleSessionResources(state, committed)" in config_source
     assert "const compressed = await compressSessionData(sessionData);" in config_source
     assert "downloadSessionBlob(compressed, sessionFilename);" in config_source
@@ -5010,7 +5019,6 @@ ORIGIN
                 const app = window.__GBDRAW_APP__;
                 app.mode = 'linear';
                 app.sessionTitle = 'LOSAT round trip';
-                app.blastSource = 'losat';
                 app.losatProgram = 'blastp';
                 Object.assign(app.losat, losat);
                 Object.assign(app.adv, {
@@ -5026,8 +5034,14 @@ ORIGIN
                 app.addLinearSeq();
                 app.setLinearSeqPrimaryFile(1, 'gb', new File([secondText], 'second-original.gbk'));
                 app.linearSeqs[0].losat_gencode = 11;
-                app.linearSeqs[0].losat_filename = 'first-vs-second.losat.tsv';
                 app.linearSeqs[1].losat_gencode = 4;
+                app.addLinearComparison();
+                const comparison = app.linearComparisonPlan.edges[0];
+                if (!comparison) throw new Error('Selected comparison draft was not created.');
+                app.setLinearComparisonLosatFilename(
+                    comparison.id,
+                    'first-vs-second.losat.tsv'
+                );
             }""",
             {
                 "losat": custom_losat,
@@ -5043,7 +5057,7 @@ ORIGIN
         page.evaluate(
             """() => {
                 const app = window.__GBDRAW_APP__;
-                app.blastSource = 'files';
+                app.setLinearComparisonGlobalAction('none');
                 app.losatProgram = 'blastn';
                 app.losat.executionMode = 'serial';
                 app.losat.threadsPerJob = 'auto';
@@ -5059,7 +5073,23 @@ ORIGIN
             """() => {
                 const app = window.__GBDRAW_APP__;
                 return {
-                    blastSource: app.blastSource,
+                    comparisonPlan: {
+                        mode: app.linearComparisonPlan.mode,
+                        defaultSource: app.linearComparisonPlan.defaultSource,
+                        edges: app.linearComparisonPlan.edges.map((edge) => ({
+                            included: edge.included,
+                            fileActive: edge.fileActive,
+                            losatFilenameActive: edge.losatFilenameActive,
+                            source: edge.source,
+                            queryIndex: app.linearSeqs.findIndex(
+                                (sequence) => sequence.uid === edge.queryUid
+                            ),
+                            subjectIndex: app.linearSeqs.findIndex(
+                                (sequence) => sequence.uid === edge.subjectUid
+                            ),
+                            losatFilename: edge.losatFilename
+                        }))
+                    },
                     losatProgram: app.losatProgram,
                     losat: JSON.parse(JSON.stringify(app.losat)),
                     webOnlyAdv: {
@@ -5073,14 +5103,27 @@ ORIGIN
                     },
                     sequences: app.linearSeqs.map((sequence) => ({
                         gbName: sequence.gb?.name || '',
-                        losatGencode: sequence.losat_gencode,
-                        losatFilename: sequence.losat_filename
+                        losatGencode: sequence.losat_gencode
                     }))
                 };
             }"""
         )
         assert restored == {
-            "blastSource": "losat",
+            "comparisonPlan": {
+                "mode": "selected",
+                "defaultSource": "losat",
+                "edges": [
+                    {
+                        "included": True,
+                        "fileActive": False,
+                        "losatFilenameActive": True,
+                        "source": "losat",
+                        "queryIndex": 0,
+                        "subjectIndex": 1,
+                        "losatFilename": "first-vs-second.losat.tsv",
+                    }
+                ],
+            },
             "losatProgram": "blastp",
             "losat": custom_losat,
             "webOnlyAdv": {
@@ -5096,12 +5139,10 @@ ORIGIN
                 {
                     "gbName": "first-original.gbk",
                     "losatGencode": 11,
-                    "losatFilename": "first-vs-second.losat.tsv",
                 },
                 {
                     "gbName": "second-original.gbk",
                     "losatGencode": 4,
-                    "losatFilename": "",
                 },
             ],
         }
@@ -5120,7 +5161,10 @@ ORIGIN
             """() => {
                 const app = window.__GBDRAW_APP__;
                 return {
-                    blastSource: app.blastSource,
+                    comparisonPlan: {
+                        mode: app.linearComparisonPlan.mode,
+                        defaultSource: app.linearComparisonPlan.defaultSource
+                    },
                     losatProgram: app.losatProgram,
                     losat: JSON.parse(JSON.stringify(app.losat)),
                     genbankNames: app.linearSeqs.map((sequence) => sequence.gb?.name || '')
@@ -5128,7 +5172,10 @@ ORIGIN
             }"""
         )
         assert historical_restored == {
-            "blastSource": "losat",
+            "comparisonPlan": {
+                "mode": "adjacent",
+                "defaultSource": "losat",
+            },
             "losatProgram": "blastp",
             "losat": historical_losat,
             "genbankNames": [
