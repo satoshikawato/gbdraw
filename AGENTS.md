@@ -62,6 +62,14 @@ python -m build
 - Do not manually edit generated artifacts under `dist/` or `gbdraw.egg-info/`.
 - Treat `gbdraw/web/gbdraw-<version>-py3-none-any.whl` as a generated, gitignored asset. Prepare it when tests or packaging need it, but do not commit it.
 
+## Showcase Figure Quality
+
+- Treat every public figure that demonstrates a feature as a finished example, even when the underlying change is small.
+- Start from a realistic Gallery-quality recipe or session when one exists, and change only the setting being demonstrated where practical.
+- Keep the labels, legend, color rules, record metadata, quantitative tracks, and comparison context that make the source figure useful. Remove an element only when the example has a clear reason to omit it.
+- Keep minimal smoke diagrams in tests. Do not use them as tutorial images, Gallery entries, release examples, or other public showcases.
+- Render and visually inspect the final artifact at a readable scale. Confirm that its documented command, session, or reproduction recipe generates the displayed figure.
+
 ## Completion Handoff
 
 - After completing an implementation, treat the session as one commit and provide a proposed commit title and summary in English.

@@ -98,9 +98,10 @@ def _matches_literal_domain(annotation: object, value: object) -> bool:
         for member in get_args(annotation):
             if get_origin(member) is Literal and _matches_literal_domain(member, value):
                 return True
-            if member is type(None) and value is None:
-                return True
-            if isinstance(member, type) and isinstance(value, member):
+            if get_origin(member) is not Literal and _matches_annotation(
+                member,
+                value,
+            ):
                 return True
         return False
     return True

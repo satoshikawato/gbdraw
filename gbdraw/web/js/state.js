@@ -19,7 +19,10 @@ import {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
 } from './app/linear-comparisons.js';
-import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
+import {
+  DEFAULT_ARROWHEAD_SHAFT_WIDTH_RATIO,
+  createDefaultFeatureRenderings
+} from './utils/feature-rendering.js';
 import {
   MODE_DEFAULT_FEATURE_TYPES,
   comparisonStateForMode,
@@ -205,6 +208,8 @@ export const createDefaultAdv = (profileMode = 'circular') => ({
   rich_feature_popup: true,
   features: [...MODE_DEFAULT_FEATURE_TYPES],
   feature_shapes: createDefaultFeatureShapes(),
+  arrow_head_length_ratio: null,
+  arrowhead_shaft_width_ratio: DEFAULT_ARROWHEAD_SHAFT_WIDTH_RATIO,
   window_size: null,
   step_size: null,
   nt: 'GC',

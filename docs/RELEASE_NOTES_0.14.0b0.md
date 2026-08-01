@@ -180,9 +180,12 @@ Phase 2 completes the internal state/planner consolidation:
 - **Save Raw LOSAT TSV** hydrates generated protein results at download time: it resolves every internal handle through the manifest and replaces only QUERY and SUBJECT with readable, percent-encoded protein or feature aliases. Duplicate aliases receive deterministic short ordinals. Row order, columns 3–12, numeric text, comments, and line endings are preserved; an unresolved or wrong-binding handle aborts the download instead of exposing an internal ID. User-uploaded comparison TSV is never rewritten.
 - Versions 27–33 retain their existing schema-2 protein candidate path and derived schema-1 evidence. Save-before-Generate preserves pending candidates, verified results are copied to raw schema 4, and an unverifiable candidate becomes only a pair-local miss.
 
-## Feature underlay rendering
+## Feature arrowhead and underlay rendering
 
-- Feature rendering now accepts `arrow`, `rectangle`, or `underlay` through `--feature_shape`, Python `feature_shapes`, and the Web feature editor.
+- Feature rendering now accepts `arrow`, `arrowhead`, `rectangle`, or `underlay` through `--feature_shape`, Python `feature_shapes`, and the Web feature editor. Existing defaults continue to use the five-vertex `arrow`; the seven-vertex, narrow-shaft `arrowhead` is opt-in.
+- `--arrow_head_length_ratio` configures the head length for both arrow forms as `auto` or a positive finite ratio of full feature thickness. `--arrowhead_shaft_width_ratio` configures the new shape's centered shaft in `(0, 1]`. The same canonical settings are available to Python and Web requests and survive current session round trips.
+- Numeric head lengths resolve in display space in both diagram modes. Short arrowheads fall back to triangles, multipart bodies use shaft width, and undefined-strand features remain rectangular. The dedicated five-vertex serializers keep existing default SVG path text unchanged.
+- The Web rendering-options capability advances to schema 2 and rejects runtimes that do not advertise the complete `arrow`, `arrowhead`, `rectangle`, and `underlay` list. The render protocol and persisted request/session schemas are unchanged.
 - New configurations render `repeat_region` as an underlay: the interval covers the full feature band behind foreground glyphs and is excluded from overlap lanes and feature labels. Use `repeat_region=rectangle` to restore the previous appearance.
 - Underlays are generic to any feature type and retain resolved colors, feature legends, interactive metadata, search/edit behavior, and protein-comparison eligibility. Rendering assignments do not change feature visibility.
 - Automatic feature underlays are private render-time highlights, not saved region annotations. Custom track stacks require exactly one enabled feature slot when a visible underlay exists.

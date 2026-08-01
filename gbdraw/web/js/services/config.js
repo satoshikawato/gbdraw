@@ -120,7 +120,9 @@ import {
   validateProteinIdentityManifest
 } from '../app/losat-cache.js';
 import {
+  arrowHeadLengthRatioForState,
   defaultFeatureRendering,
+  normalizeArrowheadShaftWidthRatio,
   normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
 import {
@@ -831,6 +833,31 @@ const cloneLosatForConfig = () => {
   }
   return cloned;
 };
+
+const normalizedArrowGeometryState = (adv = {}) => ({
+  arrow_head_length_ratio: arrowHeadLengthRatioForState(
+    adv?.arrow_head_length_ratio
+  ),
+  arrowhead_shaft_width_ratio: normalizeArrowheadShaftWidthRatio(
+    adv?.arrowhead_shaft_width_ratio
+  )
+});
+
+const persistedArrowGeometryValue = (value) => {
+  if (typeof value !== 'string' || value.trim() === '') return value;
+  const numeric = Number(value.trim());
+  return Number.isFinite(numeric) ? numeric : value;
+};
+
+const normalizedPersistedArrowGeometryState = (adv = {}) =>
+  normalizedArrowGeometryState({
+    arrow_head_length_ratio: persistedArrowGeometryValue(
+      adv?.arrow_head_length_ratio
+    ),
+    arrowhead_shaft_width_ratio: persistedArrowGeometryValue(
+      adv?.arrowhead_shaft_width_ratio
+    )
+  });
 
 const replaceLinearComparisonPlan = (target, source) => {
   const normalized = normalizeLinearComparisonPlan(source);
@@ -1644,6 +1671,7 @@ export const applyConfigData = (data) => {
   state.form.plot_title = String(state.form.plot_title || '');
   state.form.legend = normalizeLegendPosition(state.form.legend, state.mode.value === 'linear' ? 'bottom' : 'left');
   state.adv.feature_shapes = normalizeFeatureRenderingMap(state.adv.feature_shapes);
+  Object.assign(state.adv, normalizedPersistedArrowGeometryState(data.adv));
   state.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
     state.adv.multi_record_size_mode
   );
@@ -3289,6 +3317,10 @@ export const exportSession = async (titleOverride = null) => {
     ? cloneJsonData(lastRunInvocation)
     : undefined;
   const storedConfig = buildConfigData();
+  Object.assign(
+    storedConfig.adv,
+    normalizedArrowGeometryState(storedConfig.adv)
+  );
   let committed = cloneCanonicalSession(committedCanonicalSession);
   if (committed) {
     try {

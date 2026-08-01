@@ -483,6 +483,20 @@ assert.deepEqual(
   state.modeProfileStateManager.transition(state.adv, 'linear', 'circular');
   assert.equal(state.adv.identity, 88);
 
+  const cliProjectedNumericConfig = structuredClone(savedConfig);
+  cliProjectedNumericConfig.adv.arrow_head_length_ratio = '1.25';
+  cliProjectedNumericConfig.adv.arrowhead_shaft_width_ratio = '0.25';
+  applyConfigData(cliProjectedNumericConfig);
+  assert.equal(state.adv.arrow_head_length_ratio, 1.25);
+  assert.equal(state.adv.arrowhead_shaft_width_ratio, 0.25);
+
+  const cliProjectedAutoConfig = structuredClone(savedConfig);
+  cliProjectedAutoConfig.adv.arrow_head_length_ratio = 'auto';
+  cliProjectedAutoConfig.adv.arrowhead_shaft_width_ratio = '0.5';
+  applyConfigData(cliProjectedAutoConfig);
+  assert.equal(state.adv.arrow_head_length_ratio, null);
+  assert.equal(state.adv.arrowhead_shaft_width_ratio, 0.5);
+
   const version39Config = structuredClone(savedConfig);
   delete version39Config.modeProfiles;
   state.mode.value = 'linear';

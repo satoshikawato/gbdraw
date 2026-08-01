@@ -1840,6 +1840,72 @@ def test_legacy_gui_config_migrates_repeat_to_rectangle_without_mutating_source(
     assert "feature_shapes" not in session["config"]["adv"]
 
 
+def test_gui_session_replays_arrowhead_shape_and_geometry_flags(tmp_path: Path) -> None:
+    session = _minimal_session({"c_gb": _file_entry("input.gb", b"LOCUS       A\n")})
+    session["config"]["adv"].update(
+        {
+            "feature_shapes": {"CDS": "arrowhead"},
+            "arrow_head_length_ratio": "1.25",
+            "arrowhead_shaft_width_ratio": "0.25",
+        }
+    )
+
+    spec = session_to_cli_args(
+        session,
+        mode="circular",
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assert "CDS=arrowhead" in session_io_module._option_all_values(
+        spec.args,
+        "--feature_shape",
+    )
+    head_index = spec.args.index("--arrow_head_length_ratio")
+    assert spec.args[head_index + 1] == "1.25"
+    shaft_index = spec.args.index("--arrowhead_shaft_width_ratio")
+    assert spec.args[shaft_index + 1] == "0.25"
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize(
+    ("head_ratio", "shaft_ratio"),
+    [("auto", "0.5"), ("1.25", "0.25")],
+)
+def test_cli_session_projects_arrowhead_shape_and_geometry_to_web_state(
+    mode: str,
+    head_ratio: str,
+    shaft_ratio: str,
+) -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode=mode,
+            output_prefix="out",
+            render_formats=("svg",),
+            cli_invocation_args=(
+                "--gbk",
+                "input.gb",
+                "--feature_shape",
+                "CDS=arrowhead",
+                "--arrow_head_length_ratio",
+                head_ratio,
+                "--arrowhead_shaft_width_ratio",
+                shaft_ratio,
+            ),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 8, 1),
+        canonical_request=_canonical_request(mode),
+    )
+
+    adv = payload["config"]["adv"]
+    assert adv["feature_shapes"] == {"CDS": "arrowhead"}
+    assert adv["arrow_head_length_ratio"] == head_ratio
+    assert adv["arrowhead_shaft_width_ratio"] == shaft_ratio
+
+
 @pytest.mark.parametrize(
     ("version", "request_schema"),
     (

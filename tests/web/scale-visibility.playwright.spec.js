@@ -214,3 +214,160 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   expect(hiddenLinearScale.lengthBar).toBe(false);
   expect(hiddenLinearScale.recordAxisCount).toBeGreaterThan(0);
 });
+
+test('Arrowhead controls render in both modes and survive a session round trip', async ({ page }) => {
+  test.setTimeout(300000);
+  const genbank = readFileSync(genbankPath, 'utf8');
+
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.waitForFunction(
+    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    null,
+    { timeout: 180000 }
+  );
+
+  await page.evaluate(async (genbankText) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'circular';
+    app.cInputType = 'gb';
+    app.files.c_gb = new File([genbankText], 'HmmtDNA.gbk', {
+      type: 'text/plain',
+      lastModified: 31
+    });
+    app.adv.features.splice(0, app.adv.features.length, 'CDS');
+    app.form.labels_mode = 'none';
+    app.form.suppress_gc = true;
+    app.form.suppress_skew = true;
+    await window.Vue.nextTick();
+  }, genbank);
+
+  const featuresCard = page.locator('.card').filter({
+    has: page.locator('summary').filter({ hasText: 'Features' })
+  }).first();
+  await featuresCard.locator('summary').click();
+  await page.getByLabel('Rendering for CDS').selectOption('arrowhead');
+  await page.getByLabel('Arrow head length ratio').fill('0');
+  const invalidRun = await runDiagram(page);
+  expect(invalidRun.result).toEqual({ status: 'error' });
+  expect(invalidRun.errorSummary).toContain(
+    'Arrow head length ratio must be Auto or a positive finite number.'
+  );
+  await page.getByLabel('Arrow head length ratio').fill('1.25');
+  await page.getByLabel('Arrowhead shaft width ratio').fill('0.25');
+  await expect(page.getByLabel('Rendering for CDS')).toHaveValue('arrowhead');
+  await expect(page.getByLabel('Arrow head length ratio')).toHaveValue('1.25');
+  await expect(page.getByLabel('Arrowhead shaft width ratio')).toHaveValue('0.25');
+
+  expect(await runDiagram(page)).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+  expect(await page.evaluate(() => {
+    const content = window.__GBDRAW_APP__.results?.[0]?.content || '';
+    const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+    return svg.querySelectorAll('path[data-gbdraw-feature-part="block"]').length;
+  })).toBeGreaterThan(0);
+
+  await page.evaluate(async (genbankText) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
+      type: 'text/plain',
+      lastModified: 32
+    }));
+    Object.assign(app.form, {
+      show_gc: false,
+      show_skew: false,
+      show_depth: false,
+      show_labels_linear: 'none'
+    });
+    await window.Vue.nextTick();
+  }, genbank);
+
+  expect(await page.evaluate(() => ({
+    shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,
+    head: window.__GBDRAW_APP__.adv.arrow_head_length_ratio,
+    shaft: window.__GBDRAW_APP__.adv.arrowhead_shaft_width_ratio
+  }))).toEqual({ shape: 'arrowhead', head: 1.25, shaft: 0.25 });
+  expect(await runDiagram(page)).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+
+  const linearGeometry = await page.evaluate(() => {
+    const content = window.__GBDRAW_APP__.results?.[0]?.content || '';
+    const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+    const numberPattern = '[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?';
+    const vertexPattern = new RegExp(`[ML]\\s*(${numberPattern})\\s*,\\s*(${numberPattern})`, 'gi');
+    for (const path of svg.querySelectorAll('path[data-gbdraw-feature-part="block"]')) {
+      const vertices = [...String(path.getAttribute('d') || '').matchAll(vertexPattern)]
+        .map((match) => ({ x: Number(match[1]), y: Number(match[2]) }));
+      if (vertices.length !== 7) continue;
+      const fullWidth = Math.abs(vertices[4].y - vertices[2].y);
+      return {
+        d: path.getAttribute('d'),
+        vertexCount: vertices.length,
+        headRatio: Math.abs(vertices[3].x - vertices[2].x) / fullWidth,
+        shaftRatio: Math.abs(vertices[6].y - vertices[0].y) / fullWidth
+      };
+    }
+    return null;
+  });
+  expect(linearGeometry).not.toBeNull();
+  expect(linearGeometry.vertexCount).toBe(7);
+  expect(linearGeometry.headRatio).toBeCloseTo(1.25, 6);
+  expect(linearGeometry.shaftRatio).toBeCloseTo(0.25, 6);
+
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.sessionTitle = 'arrowhead-browser-round-trip';
+  });
+  const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
+  expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
+    .toBe('saved');
+  const sessionPath = await (await sessionDownloadPromise).path();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+  await page.waitForFunction(
+    () => window.__GBDRAW_APP__?.adv?.feature_shapes?.CDS === 'arrowhead'
+  );
+  expect(await page.evaluate(() => ({
+    mode: window.__GBDRAW_APP__.mode,
+    shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,
+    head: window.__GBDRAW_APP__.adv.arrow_head_length_ratio,
+    shaft: window.__GBDRAW_APP__.adv.arrowhead_shaft_width_ratio,
+    content: window.__GBDRAW_APP__.results?.[0]?.content || ''
+  }))).toMatchObject({
+    mode: 'linear',
+    shape: 'arrowhead',
+    head: 1.25,
+    shaft: 0.25
+  });
+  expect(await page.evaluate((expectedPath) => (
+    String(window.__GBDRAW_APP__.results?.[0]?.content || '').includes(expectedPath)
+  ), linearGeometry.d)).toBe(true);
+
+  expect(await page.evaluate(() => {
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+    try {
+      window.__GBDRAW_APP__.resetSettings();
+      return {
+        shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,
+        head: window.__GBDRAW_APP__.adv.arrow_head_length_ratio,
+        shaft: window.__GBDRAW_APP__.adv.arrowhead_shaft_width_ratio
+      };
+    } finally {
+      window.confirm = originalConfirm;
+    }
+  })).toEqual({ shape: 'arrow', head: null, shaft: 0.5 });
+});

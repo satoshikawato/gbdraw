@@ -58,6 +58,7 @@ from .tracks import (  # type: ignore[reportMissingImports]
 )
 
 from .cli_utils.common import (
+    _add_arrow_geometry_args,
     _add_block_stroke_args,
     _add_comparison_filter_args,
     _add_depth_axis_args,
@@ -198,6 +199,7 @@ def _get_args(
         type=str)
     add_feature_args(parser)
     _add_feature_shape_arg(parser)
+    _add_arrow_geometry_args(parser)
     _add_block_stroke_args(parser)
     parser.add_argument(
         '--axis_stroke_color',
@@ -691,6 +693,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     color_table_path: str = args.table
     selected_features_set: str = args.features.split(',')
     feature_shapes = parse_feature_shape_overrides(args.feature_shape)
+    arrow_head_length_ratio: str | float | None = args.arrow_head_length_ratio
+    arrowhead_shaft_width_ratio: float | None = args.arrowhead_shaft_width_ratio
     species: str = args.species
     strain: str = args.strain
     legend: str = args.legend
@@ -872,6 +876,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     override_candidates: dict[str, object | None] = {
         "objects.features.block_stroke_color": block_stroke_color,
+        "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
+        "objects.features.arrow_geometry.shaft_width_ratio": arrowhead_shaft_width_ratio,
         "objects.axis.circular.stroke_color": axis_stroke_color,
         "objects.features.line_stroke_color": line_stroke_color,
         "labels.circular.scope": (

@@ -355,6 +355,9 @@ const createLayoutPreferences = () => ({
     form: { prefix: 'before', show_scale: true },
     adv: {
       features: ['CDS'],
+      feature_shapes: { CDS: 'arrowhead' },
+      arrow_head_length_ratio: 1.5,
+      arrowhead_shaft_width_ratio: 0.25,
       circular_track_slots_enabled: true,
       circular_track_slots_axis_index: 1,
       circular_track_slots: [
@@ -517,6 +520,8 @@ const createLayoutPreferences = () => ({
   const snapshot = await snapshots.buildHistorySnapshot();
   state.form.prefix = 'after';
   state.form.show_scale = false;
+  state.adv.arrow_head_length_ratio = null;
+  state.adv.arrowhead_shaft_width_ratio = 0.5;
   state.files.c_gb = null;
   state.files.c_conservation_blasts_source = null;
   state.files.linearCanonicalComparisons = [];
@@ -532,6 +537,9 @@ const createLayoutPreferences = () => ({
   await snapshots.applyHistorySnapshot(snapshot);
   assert.equal(state.form.prefix, 'before');
   assert.equal(state.form.show_scale, true);
+  assert.equal(state.adv.feature_shapes.CDS, 'arrowhead');
+  assert.equal(state.adv.arrow_head_length_ratio, 1.5);
+  assert.equal(state.adv.arrowhead_shaft_width_ratio, 0.25);
   assert.equal(state.files.c_gb.name, 'restore.gb');
   assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
   assert.equal(state.files.c_conservation_fastas.length, 2);
@@ -590,6 +598,20 @@ const createLayoutPreferences = () => ({
   assert.equal(state.form.show_scale, false);
   await history.undo();
   assert.equal(state.form.show_scale, true);
+
+  await history.runUndoable('Edit arrow geometry', () => {
+    state.adv.arrow_head_length_ratio = 2;
+    state.adv.arrowhead_shaft_width_ratio = 0.75;
+  });
+  assert.equal(state.adv.arrow_head_length_ratio, 2);
+  assert.equal(state.adv.arrowhead_shaft_width_ratio, 0.75);
+  await history.undo();
+  assert.equal(state.adv.arrow_head_length_ratio, 1.5);
+  assert.equal(state.adv.arrowhead_shaft_width_ratio, 0.25);
+  await history.redo();
+  assert.equal(state.adv.arrow_head_length_ratio, 2);
+  assert.equal(state.adv.arrowhead_shaft_width_ratio, 0.75);
+  await history.undo();
 
   await history.runUndoable('Edit Annotation lane gap', () => {
     state.adv.circular_track_slots[0].params.lane_gap_px = 9;

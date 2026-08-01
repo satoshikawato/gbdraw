@@ -9,6 +9,7 @@ used by both circular and linear diagram commands.
 
 import argparse
 import logging
+import math
 import sys
 from typing import Optional
 
@@ -92,11 +93,33 @@ def _add_window_step_args(parser: argparse.ArgumentParser) -> None:
 def _add_feature_shape_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--feature_shape',
-        help='Feature rendering override (repeatable): TYPE=SHAPE where SHAPE is arrow, rectangle, or underlay.',
+        help=(
+            'Feature rendering override (repeatable): TYPE=SHAPE where SHAPE is '
+            'arrow, arrowhead, rectangle, or underlay.'
+        ),
         type=parse_feature_shape_assignment_arg,
         action='append',
         default=[],
         metavar='TYPE=SHAPE',
+    )
+
+
+def _add_arrow_geometry_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        '--arrow_head_length_ratio',
+        help=(
+            'Arrow head length divided by full feature thickness: auto or a '
+            'positive finite number (default: auto).'
+        ),
+        type=parse_arrow_head_length_ratio_arg,
+    )
+    parser.add_argument(
+        '--arrowhead_shaft_width_ratio',
+        help=(
+            'Arrowhead shaft thickness divided by full head thickness: a '
+            'finite number in (0, 1] (default: 0.5).'
+        ),
+        type=parse_arrowhead_shaft_width_ratio_arg,
     )
 
 
@@ -475,6 +498,37 @@ def parse_feature_shape_assignment_arg(value: str) -> str:
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
     return value
+
+
+def parse_arrow_head_length_ratio_arg(value: str) -> str | float:
+    text = str(value).strip().lower()
+    if text == "auto":
+        return "auto"
+    try:
+        parsed = float(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "arrow head length ratio must be 'auto' or a positive finite number"
+        ) from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError(
+            "arrow head length ratio must be 'auto' or a positive finite number"
+        )
+    return parsed
+
+
+def parse_arrowhead_shaft_width_ratio_arg(value: str) -> float:
+    try:
+        parsed = float(str(value).strip())
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "arrowhead shaft width ratio must be a finite number in (0, 1]"
+        ) from exc
+    if not math.isfinite(parsed) or parsed <= 0 or parsed > 1:
+        raise argparse.ArgumentTypeError(
+            "arrowhead shaft width ratio must be a finite number in (0, 1]"
+        )
+    return parsed
 
 
 def handle_output_formats(out_formats: list[str]) -> list[str]:

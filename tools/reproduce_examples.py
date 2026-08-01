@@ -27,6 +27,7 @@ from tools.reproduce_examples_manifest import (  # noqa: E402
     CompositeRecipe,
     FigureSpec,
     FastaPreparation,
+    SessionVariantRecipe,
     build_figure_specs,
     get_support_assets,
 )
@@ -446,6 +447,91 @@ class Reproducer:
             raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"gbdraw {recipe.subcommand} failed")
         return True
 
+    def _run_session_variant_recipe(
+        self,
+        recipe: SessionVariantRecipe,
+        figure_id: str,
+        target_path: Path,
+        *,
+        dry_run: bool,
+    ) -> bool:
+        session_path = self.project_root / recipe.source_session_path
+        if not session_path.is_file():
+            self.add_missing(
+                recipe.source_session_path,
+                figure_id,
+                could_derive=False,
+            )
+            return False
+        if target_path.suffix.lower() != ".svg":
+            raise RuntimeError("Session variant recipes require an SVG target")
+        if dry_run:
+            return True
+
+        session = json.loads(session_path.read_text(encoding="utf-8"))
+        request = session.get("renderRequest")
+        resources = session.get("resources")
+        if not isinstance(request, dict) or not isinstance(resources, dict):
+            raise RuntimeError(
+                f"Gallery session lacks a canonical request or resources: {session_path}"
+            )
+        diagram_options = request.get("diagramOptions")
+        if not isinstance(diagram_options, dict):
+            raise RuntimeError(
+                f"Gallery session lacks diagramOptions: {session_path}"
+            )
+        feature_shapes = diagram_options.setdefault("featureShapes", {})
+        config_overrides = diagram_options.setdefault("configOverrides", {})
+        if not isinstance(feature_shapes, dict) or not isinstance(
+            config_overrides, dict
+        ):
+            raise RuntimeError(
+                f"Gallery session has invalid diagram options: {session_path}"
+            )
+        feature_shapes.update(recipe.feature_shapes)
+        config_overrides.update(recipe.config_overrides)
+
+        mode = request.get("mode")
+        if mode not in {"circular", "linear"}:
+            raise RuntimeError(f"Gallery session has an invalid mode: {session_path}")
+        variant_session_path = (
+            self.temp_root / f"{figure_id}.gbdraw-session.json"
+        )
+        variant_session_path.write_text(
+            json.dumps(session, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            sys.executable,
+            "-m",
+            "gbdraw.cli",
+            mode,
+            "--session",
+            str(variant_session_path),
+            "-o",
+            str(target_path.with_suffix("")),
+            "-f",
+            "svg",
+            "--overwrite",
+        ]
+        result = subprocess.run(
+            cmd,
+            cwd=str(self.project_root),
+            capture_output=True,
+            text=True,
+            timeout=3600,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                result.stderr.strip()
+                or result.stdout.strip()
+                or f"Session variant render failed: {session_path}"
+            )
+        if not target_path.is_file():
+            raise RuntimeError(f"Session variant did not render an SVG: {session_path}")
+        return True
+
     def _svg_size(self, svg_path: Path) -> tuple[int, int]:
         import re
 
@@ -614,6 +700,13 @@ class Reproducer:
             elif isinstance(spec.recipe, CliRecipe):
                 prep_map = {prep.output_filename: prep for prep in spec.preparations}
                 ready = self._run_cli_recipe(spec.recipe, figure_id, prep_map, target_path, dry_run=True)
+            elif isinstance(spec.recipe, SessionVariantRecipe):
+                ready = self._run_session_variant_recipe(
+                    spec.recipe,
+                    figure_id,
+                    target_path,
+                    dry_run=True,
+                )
             else:
                 ready = self._render_composite(figure_id, spec.recipe, target_path, dry_run=True)
         finally:
@@ -640,6 +733,13 @@ class Reproducer:
             if isinstance(spec.recipe, CliRecipe):
                 prep_map = {prep.output_filename: prep for prep in spec.preparations}
                 success = self._run_cli_recipe(spec.recipe, figure_id, prep_map, target_path, dry_run=False)
+            elif isinstance(spec.recipe, SessionVariantRecipe):
+                success = self._run_session_variant_recipe(
+                    spec.recipe,
+                    figure_id,
+                    target_path,
+                    dry_run=False,
+                )
             else:
                 success = self._render_composite(figure_id, spec.recipe, target_path, dry_run=False)
             if not success:

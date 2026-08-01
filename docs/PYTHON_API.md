@@ -259,6 +259,36 @@ assert styled_diagram.to_svg().startswith("<svg")
 Use `FeatureOptions.color_table`, `default_colors`, `visibility`, and `shapes` for
 the corresponding feature controls.
 
+`FeatureOptions.shapes` accepts `arrow`, `arrowhead`, `rectangle`, and
+`underlay`. `arrow` retains the five-vertex, full-width outline;
+`arrowhead` uses seven vertices and a narrower shaft. Tune their shared head
+length and the arrowhead-only shaft width through canonical configuration
+overrides:
+
+```python
+arrowhead_diagram = draw_linear(
+    linear_records,
+    options=LinearOptions(
+        features=FeatureOptions(
+            types=("CDS", "rRNA"),
+            shapes={"CDS": "arrowhead", "rRNA": "arrow"},
+        ),
+        config_overrides={
+            "objects.features.arrow_geometry.head_length_ratio": 1.0,
+            "objects.features.arrow_geometry.shaft_width_ratio": 0.5,
+        },
+    ),
+)
+assert arrowhead_diagram.to_svg().startswith("<svg")
+```
+
+Set `head_length_ratio` to `"auto"` to retain the existing mode-specific head
+length. Numeric values must be positive and measure head length relative to the
+full rendered feature thickness. `shaft_width_ratio` must be in `(0, 1]`; `1`
+keeps the `arrowhead` selection but gives it the same visible full-width outline
+as `arrow`. An arrowhead with no positive shaft length is rendered as a
+triangle.
+
 ### Canonical label configuration overrides
 
 `config_overrides` accepts canonical dotted leaf paths. Label configuration has

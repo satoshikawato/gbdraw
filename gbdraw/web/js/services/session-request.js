@@ -52,7 +52,10 @@ import {
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import {
+  arrowHeadLengthRatioForState,
   defaultFeatureRendering,
+  normalizeArrowHeadLengthRatio,
+  normalizeArrowheadShaftWidthRatio,
   normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
 import {
@@ -116,6 +119,8 @@ const HISTORICAL_CONFIG_OVERRIDES = Object.freeze({
 // The snake_case aliases derived below exist solely in the persisted-session
 // reader; they are never emitted by buildConfigOverrides().
 const CONFIG_OVERRIDE_PATHS = Object.freeze({
+  arrowHeadLengthRatio: 'objects.features.arrow_geometry.head_length_ratio',
+  arrowheadShaftWidthRatio: 'objects.features.arrow_geometry.shaft_width_ratio',
   blockStrokeColor: 'objects.features.block_stroke_color',
   circularAxisStrokeColor: 'objects.axis.circular.stroke_color',
   linearAxisStrokeColor: 'objects.axis.linear.stroke_color',
@@ -542,6 +547,10 @@ const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_
         managed: linearAxisManaged
       });
   const overrides = {
+    [CONFIG_OVERRIDE_PATHS.arrowHeadLengthRatio]:
+      normalizeArrowHeadLengthRatio(adv.arrow_head_length_ratio),
+    [CONFIG_OVERRIDE_PATHS.arrowheadShaftWidthRatio]:
+      normalizeArrowheadShaftWidthRatio(adv.arrowhead_shaft_width_ratio),
     [CONFIG_OVERRIDE_PATHS.blockStrokeColor]: adv.block_stroke_color || null,
     [CONFIG_OVERRIDE_PATHS.lineStrokeColor]: adv.line_stroke_color || null,
     [CONFIG_OVERRIDE_PATHS.labelRendering]: adv.label_rendering || 'auto',
@@ -3063,6 +3072,12 @@ export const projectCanonicalSessionRequest = ({
   const adv = {
     features: options.selectedFeaturesSet ?? [...sparseFeatureTypes],
     feature_shapes: projectedFeatureShapes,
+    arrow_head_length_ratio: arrowHeadLengthRatioForState(
+      overrides.arrow_head_length_ratio
+    ),
+    arrowhead_shaft_width_ratio: normalizeArrowheadShaftWidthRatio(
+      overrides.arrowhead_shaft_width_ratio
+    ),
     nt: options.dinucleotide || 'GC',
     window_size: options.window ?? null,
     step_size: options.step ?? null,

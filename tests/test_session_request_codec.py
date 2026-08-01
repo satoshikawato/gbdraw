@@ -1268,6 +1268,63 @@ def test_schema5_round_trips_scale_visibility_in_full_config_and_override(
         (LinearDiagramRequest, LinearDiagramOptions),
     ],
 )
+def test_schema5_round_trips_arrowhead_shape_and_geometry_overrides(
+    tmp_path: Path,
+    request_type,
+    options_type,
+) -> None:
+    record = SeqRecord(
+        Seq("ATGC"),
+        id="record",
+        annotations={"molecule_type": "DNA"},
+    )
+    request = request_type(
+        records=(RecordInput(source=InMemoryRecordSource(record)),),
+        options=options_type(
+            feature_shapes={"CDS": "arrowhead"},
+            config_overrides={
+                "objects.features.arrow_geometry.head_length_ratio": 1.25,
+                "objects.features.arrow_geometry.shaft_width_ratio": 0.25,
+            },
+        ),
+    )
+
+    encoded = encode_canonical_request(request)
+    diagram_options = encoded.payload["diagramOptions"]
+    assert diagram_options["featureShapes"] == {"CDS": "arrowhead"}
+    assert (
+        diagram_options["configOverrides"][
+            "objects.features.arrow_geometry.head_length_ratio"
+        ]
+        == 1.25
+    )
+    assert (
+        diagram_options["configOverrides"][
+            "objects.features.arrow_geometry.shaft_width_ratio"
+        ]
+        == 0.25
+    )
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / request_type.__name__,
+        ),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.options.feature_shapes == {"CDS": "arrowhead"}
+    assert decoded.options.config_overrides == request.options.config_overrides
+    assert encode_canonical_request(decoded).payload == encoded.payload
+
+
+@pytest.mark.parametrize(
+    ("request_type", "options_type"),
+    [
+        (CircularDiagramRequest, CircularDiagramOptions),
+        (LinearDiagramRequest, LinearDiagramOptions),
+    ],
+)
 def test_schema5_full_config_missing_scale_visibility_defaults_visible(
     tmp_path: Path,
     request_type,

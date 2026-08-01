@@ -16,11 +16,40 @@ Core feature data models.
 
 from __future__ import annotations
 
-from typing import Any, List, Literal, NamedTuple, Optional
+from typing import Any, List, Literal, NamedTuple, Optional, cast
+
+from .shapes import FeatureGlyph
 
 
 FeatureSegmentKind = Literal["block", "line"]
 Strand = Literal["positive", "negative", "undefined"]
+
+
+def _resolve_glyph_kind(
+    *,
+    is_directional: bool | None,
+    glyph_kind: FeatureGlyph | None,
+) -> FeatureGlyph:
+    if is_directional is not None and not isinstance(is_directional, bool):
+        raise ValueError("is_directional must be a Boolean or None")
+
+    if glyph_kind is None:
+        if is_directional is None:
+            raise ValueError("either glyph_kind or is_directional must be provided")
+        return "arrow" if is_directional else "rectangle"
+
+    normalized = str(glyph_kind).strip().lower()
+    if normalized not in {"arrow", "arrowhead", "rectangle"}:
+        raise ValueError(
+            "glyph_kind must be 'arrow', 'arrowhead', or 'rectangle'"
+        )
+    resolved = cast(FeatureGlyph, normalized)
+    if (
+        is_directional is not None
+        and is_directional != (resolved in {"arrow", "arrowhead"})
+    ):
+        raise ValueError("glyph_kind contradicts is_directional")
+    return resolved
 
 
 class FeatureLocationPart(NamedTuple):
@@ -46,7 +75,7 @@ class FeatureObject:
         self,
         feature_id: str,
         location: FeatureLocation,
-        is_directional: bool,
+        is_directional: bool | None,
         color: str,
         note: str,
         label_text: str,
@@ -54,6 +83,7 @@ class FeatureObject:
         type: str,
         qualifiers: dict,
         record_id: Optional[str] = None,
+        glyph_kind: FeatureGlyph | None = None,
     ) -> None:
         """
         Represents a general genomic feature.
@@ -64,7 +94,10 @@ class FeatureObject:
             part if isinstance(part, FeatureLocationPart) else FeatureLocationPart(*part)  # type: ignore[arg-type]
             for part in (location or [])
         ]
-        self.is_directional: bool = is_directional
+        self.glyph_kind: FeatureGlyph = _resolve_glyph_kind(
+            is_directional=is_directional,
+            glyph_kind=glyph_kind,
+        )
         self.coordinates = coordinates
         self.color: str = color
         self.note: str = note
@@ -85,6 +118,12 @@ class FeatureObject:
     @feature_type.setter
     def feature_type(self, value: str) -> None:
         self._feature_type = value
+
+    @property
+    def is_directional(self) -> bool:
+        """Backward-compatible directionality derived from the stored glyph."""
+
+        return self.glyph_kind in {"arrow", "arrowhead"}
 
     @property
     def type(self) -> str:
@@ -120,7 +159,7 @@ class GeneObject(FeatureObject):
         self,
         feature_id: str,
         location: FeatureLocation,
-        is_directional: bool,
+        is_directional: bool | None,
         color: str,
         note: str,
         product: str,
@@ -131,6 +170,7 @@ class GeneObject(FeatureObject):
         type: str,
         qualifiers: dict,
         record_id: Optional[str] = None,
+        glyph_kind: FeatureGlyph | None = None,
     ) -> None:
         """
         Represents a gene, inheriting from FeatureObject.
@@ -146,6 +186,7 @@ class GeneObject(FeatureObject):
             type,
             qualifiers,
             record_id=record_id,
+            glyph_kind=glyph_kind,
         )
         self.gene_biotype: str = gene_biotype
         self.product: str = product
@@ -167,7 +208,7 @@ class RepeatObject(FeatureObject):
         self,
         feature_id: str,
         location: FeatureLocation,
-        is_directional: bool,
+        is_directional: bool | None,
         color: str,
         note: str,
         rpt_family: str,
@@ -177,6 +218,7 @@ class RepeatObject(FeatureObject):
         type: str,
         qualifiers: dict,
         record_id: Optional[str] = None,
+        glyph_kind: FeatureGlyph | None = None,
     ) -> None:
         """
         Represents a repeat region, inheriting from FeatureObject.
@@ -192,6 +234,7 @@ class RepeatObject(FeatureObject):
             type,
             qualifiers,
             record_id=record_id,
+            glyph_kind=glyph_kind,
         )
         self.rpt_family: str = rpt_family
         self.rpt_type: str = rpt_type

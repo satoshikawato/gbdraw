@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from xml.etree import ElementTree
 
 from tools.reproduce_examples import PROJECT_ROOT, Reproducer
 from tools.reproduce_examples_manifest import (
@@ -63,7 +64,7 @@ def test_manifest_counts_and_unique_paths() -> None:
     palette_circular = [figure_id for figure_id in figures if figure_id.startswith("palette_circular_")]
     palette_linear = [figure_id for figure_id in figures if figure_id.startswith("palette_linear_")]
 
-    assert len(docs_and_readme) == 60
+    assert len(docs_and_readme) == 62
     assert palette_circular == [
         "palette_circular_default",
         "palette_circular_ajisai",
@@ -74,7 +75,7 @@ def test_manifest_counts_and_unique_paths() -> None:
         "palette_linear_ajisai",
         "palette_linear_soft_pastels",
     ]
-    assert len(figures) == 60 + 6
+    assert len(figures) == 62 + 6
 
     output_paths = [spec.output_path for spec in figures.values()]
     assert len(output_paths) == len(set(output_paths))
@@ -242,3 +243,61 @@ def test_smoke_render_subset_via_cli(tmp_path: Path) -> None:
     assert payload["skipped_missing_inputs"] == []
     assert "ecoli_k12_plot" in payload["generated"]
     assert "majani" in payload["generated"]
+
+
+def test_gallery_session_arrowhead_variants_reproduce_tracked_svgs(
+    tmp_path: Path,
+) -> None:
+    figure_ids = (
+        "tutorial_9_arrow_vs_arrowhead",
+        "tutorial_9_arrowhead_linear_bgc",
+    )
+    reproducer = Reproducer(
+        project_root=PROJECT_ROOT,
+        output_root=tmp_path / "out",
+        figures=build_figure_specs(),
+    )
+    try:
+        for figure_id in figure_ids:
+            assert reproducer.render_figure(figure_id) is True
+            generated = reproducer.output_path_for(figure_id)
+            tracked = PROJECT_ROOT / reproducer.figures[figure_id].output_path
+            assert generated.read_bytes() == tracked.read_bytes()
+    finally:
+        reproducer.close()
+
+
+def test_gallery_session_arrowhead_variants_only_change_feature_paths() -> None:
+    pairs = (
+        (
+            PROJECT_ROOT / "gbdraw/web/gallery/sources/HmmtDNA_ATskew.svg",
+            PROJECT_ROOT / "examples/tutorial-9-arrow-vs-arrowhead.svg",
+            13,
+        ),
+        (
+            PROJECT_ROOT
+            / "gbdraw/web/gallery/sources/BGC0000708-BGC0000713.svg",
+            PROJECT_ROOT / "examples/tutorial-9-arrowhead-linear-bgc.svg",
+            152,
+        ),
+    )
+    for source_path, variant_path, expected_changed_paths in pairs:
+        source_elements = list(ElementTree.parse(source_path).getroot().iter())
+        variant_elements = list(ElementTree.parse(variant_path).getroot().iter())
+        assert len(source_elements) == len(variant_elements)
+
+        changed_paths = 0
+        for source, variant in zip(source_elements, variant_elements, strict=True):
+            assert source.tag == variant.tag
+            assert source.text == variant.text
+            assert source.tail == variant.tail
+            source_attributes = dict(source.attrib)
+            variant_attributes = dict(variant.attrib)
+            source_path_data = source_attributes.pop("d", None)
+            variant_path_data = variant_attributes.pop("d", None)
+            assert source_attributes == variant_attributes
+            if source_path_data != variant_path_data:
+                assert source.tag.endswith("path")
+                changed_paths += 1
+
+        assert changed_paths == expected_changed_paths

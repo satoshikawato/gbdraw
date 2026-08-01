@@ -97,6 +97,13 @@ class CliRecipe:
 
 
 @dataclass(frozen=True)
+class SessionVariantRecipe:
+    source_session_path: str
+    feature_shapes: tuple[tuple[str, str], ...] = ()
+    config_overrides: tuple[tuple[str, str | float | int | bool], ...] = ()
+
+
+@dataclass(frozen=True)
 class CompositePanel:
     figure_id: str | None = None
     recipe: CliRecipe | None = None
@@ -116,7 +123,7 @@ class CompositeRecipe:
     canvas_size: tuple[int, int] | None = None
 
 
-Recipe = CliRecipe | CompositeRecipe
+Recipe = CliRecipe | SessionVariantRecipe | CompositeRecipe
 
 
 @dataclass(frozen=True)
@@ -1406,7 +1413,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
     def add(
         figure_id: str,
         output_path: str,
-        recipe: CliRecipe,
+        recipe: Recipe,
         *,
         required_inputs: tuple[str, ...],
         support_assets: tuple[str, ...] = (),
@@ -1897,6 +1904,55 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         required_inputs=("MjeNMV.gb",),
     )
 
+    add(
+        "tutorial_9_arrow_vs_arrowhead",
+        "examples/tutorial-9-arrow-vs-arrowhead.svg",
+        SessionVariantRecipe(
+            source_session_path=(
+                "gbdraw/web/gallery/sessions/"
+                "HmmtDNA_ATskew.gbdraw-session.json"
+            ),
+            feature_shapes=(("CDS", "arrowhead"),),
+            config_overrides=(
+                (
+                    "objects.features.arrow_geometry.head_length_ratio",
+                    "auto",
+                ),
+                (
+                    "objects.features.arrow_geometry.shaft_width_ratio",
+                    0.5,
+                ),
+            ),
+        ),
+        required_inputs=(
+            "gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json",
+        ),
+    )
+    add(
+        "tutorial_9_arrowhead_linear_bgc",
+        "examples/tutorial-9-arrowhead-linear-bgc.svg",
+        SessionVariantRecipe(
+            source_session_path=(
+                "gbdraw/web/gallery/sessions/"
+                "BGC0000708-BGC0000713.gbdraw-session.json"
+            ),
+            feature_shapes=(("CDS", "arrowhead"),),
+            config_overrides=(
+                (
+                    "objects.features.arrow_geometry.head_length_ratio",
+                    "auto",
+                ),
+                (
+                    "objects.features.arrow_geometry.shaft_width_ratio",
+                    0.5,
+                ),
+            ),
+        ),
+        required_inputs=(
+            "gbdraw/web/gallery/sessions/"
+            "BGC0000708-BGC0000713.gbdraw-session.json",
+        ),
+    )
     add(
         "tutorial_9_feature_shapes",
         "examples/tutorial-9-feature-shapes.svg",

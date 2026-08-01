@@ -23,6 +23,8 @@ def test_override_paths_are_canonical_dataclass_leaves() -> None:
     assert "labels.circular.scope" in paths
     assert "labels.linear.scope" in paths
     assert "objects.axis.linear.stroke_color" in paths
+    assert "objects.features.arrow_geometry.head_length_ratio" in paths
+    assert "objects.features.arrow_geometry.shaft_width_ratio" in paths
     assert "objects.definition.linear.line_styles.name.font_size" in paths
     assert "canvas" not in paths
     assert "objects.axis.linear" not in paths
@@ -195,3 +197,58 @@ def test_scale_style_rejects_unknown_raw_and_override_values() -> None:
             load_default_config(),
             {"objects.scale.style": "unknown"},
         )
+
+
+def test_arrow_geometry_defaults_and_missing_block_compatibility() -> None:
+    default_config = load_default_config()
+    assert default_config["objects"]["features"]["arrow_geometry"] == {
+        "head_length_ratio": "auto",
+        "shaft_width_ratio": 0.5,
+    }
+
+    typed = GbdrawConfig.from_dict(default_config)
+    assert typed.objects.features.arrow_geometry.head_length_ratio == "auto"
+    assert typed.objects.features.arrow_geometry.shaft_width_ratio == 0.5
+
+    del default_config["objects"]["features"]["arrow_geometry"]
+    compatible = GbdrawConfig.from_dict(default_config)
+    assert compatible.objects.features.arrow_geometry.head_length_ratio == "auto"
+    assert compatible.objects.features.arrow_geometry.shaft_width_ratio == 0.5
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "expected"),
+    [
+        ("objects.features.arrow_geometry.head_length_ratio", "auto", "auto"),
+        ("objects.features.arrow_geometry.head_length_ratio", 1, 1.0),
+        ("objects.features.arrow_geometry.head_length_ratio", 1.25, 1.25),
+        ("objects.features.arrow_geometry.shaft_width_ratio", 0.25, 0.25),
+        ("objects.features.arrow_geometry.shaft_width_ratio", 1, 1.0),
+    ],
+)
+def test_arrow_geometry_dotted_overrides(path: str, value: object, expected: object) -> None:
+    updated = modify_config_dict(load_default_config(), {path: value})
+    geometry = GbdrawConfig.from_dict(updated).objects.features.arrow_geometry
+    field_name = path.rsplit(".", 1)[-1]
+    assert getattr(geometry, field_name) == expected
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        ("objects.features.arrow_geometry.head_length_ratio", True),
+        ("objects.features.arrow_geometry.head_length_ratio", 0),
+        ("objects.features.arrow_geometry.head_length_ratio", -0.5),
+        ("objects.features.arrow_geometry.head_length_ratio", float("nan")),
+        ("objects.features.arrow_geometry.head_length_ratio", float("inf")),
+        ("objects.features.arrow_geometry.shaft_width_ratio", True),
+        ("objects.features.arrow_geometry.shaft_width_ratio", 0),
+        ("objects.features.arrow_geometry.shaft_width_ratio", -0.5),
+        ("objects.features.arrow_geometry.shaft_width_ratio", 1.01),
+        ("objects.features.arrow_geometry.shaft_width_ratio", float("nan")),
+        ("objects.features.arrow_geometry.shaft_width_ratio", float("inf")),
+    ],
+)
+def test_arrow_geometry_rejects_invalid_overrides(path: str, value: object) -> None:
+    with pytest.raises(ValidationError, match="arrow|Invalid value"):
+        modify_config_dict(load_default_config(), {path: value})

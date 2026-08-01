@@ -17,7 +17,60 @@ If you are working from a source checkout, the same record is available as `test
 
 ## 2. Override feature shapes
 
-`--feature_shape TYPE=SHAPE` is repeatable. Supported shapes are `arrow` and `rectangle`.
+`--feature_shape TYPE=SHAPE` is repeatable and accepts four rendering values:
+
+| Value | Result |
+| --- | --- |
+| `arrow` | Existing five-vertex directional glyph with a full-width body |
+| `arrowhead` | Seven-vertex directional glyph with a narrower shaft |
+| `rectangle` | Nondirectional foreground block |
+| `underlay` | Full-band highlight behind foreground features |
+
+The default assignments do not change: CDS and RNA feature types use `arrow`,
+`repeat_region` uses `underlay`, and other feature types use `rectangle`.
+
+The two examples below are derived from the canonical sessions used by the
+Interactive SVG Gallery. Each variant changes `CDS` from `arrow` to
+`arrowhead`, keeps the automatic head length, and uses a half-width shaft. The
+Gallery resources and all other diagram settings remain unchanged.
+
+From a source checkout, reproduce both figures with:
+
+```bash
+python tools/reproduce_examples.py \
+  --output-root . \
+  --figure tutorial_9_arrow_vs_arrowhead \
+  --figure tutorial_9_arrowhead_linear_bgc
+```
+
+The Circular figure starts from the Gallery's `HmmtDNA_ATskew` session. CDS
+features use seven-vertex arrowheads, while rRNA and tRNA retain the existing
+arrow shape. The GC content, GC skew, and AT skew tracks, tick layout, labels,
+center definition, and legend remain unchanged.
+
+![Human mitochondrial genome with CDS arrowheads, RNA arrows, GC content, GC skew, AT skew, labels, and a left legend](../../examples/tutorial-9-arrow-vs-arrowhead.svg)
+
+The Linear figure starts from the Gallery's five-record aminoglycoside BGC
+session. It retains the curved protein-similarity matches, antiSMASH category
+colors, rotated first-record gene labels, record definitions, ruler, title, and
+bottom legend. Only the CDS path geometry changes.
+
+![Five aminoglycoside biosynthetic gene clusters with CDS arrowheads, curved similarity matches, gene labels, a ruler, and a bottom legend](../../examples/tutorial-9-arrowhead-linear-bgc.svg)
+
+For a regular CLI command, select the same geometry with
+`--feature_shape CDS=arrowhead`, `--arrow_head_length_ratio auto`, and
+`--arrowhead_shaft_width_ratio 0.5`. Shape overrides do not change colors,
+labels, tracks, or comparisons.
+
+A numeric head ratio must be positive and finite. The arrowhead shaft ratio
+must be in `(0, 1]`; `1` keeps the semantic
+`arrowhead` selection but gives it the same visible outline as `arrow`. A short
+arrowhead becomes a triangle when the terminal block has no positive-length
+shaft. Multipart arrowheads draw nonterminal blocks at shaft width and keep
+their connectors on the feature center line.
+
+To compare the foreground shapes with rectangles, render every selected type as
+a block:
 
 ```bash
 gbdraw circular \
@@ -35,6 +88,12 @@ gbdraw circular \
 Shape overrides apply by feature type. In this result, the CDS, rRNA, and tRNA features are all rectangles, while their colors continue to distinguish the feature types. Shape overrides do not change colors, labels, or feature selection by themselves.
 
 ![Human mitochondrial genome with rectangular CDS, rRNA, and tRNA features](../../examples/tutorial-9-feature-shapes.svg)
+
+In the web app or local GUI, open **Features**, choose **Arrowhead (7
+vertices)** for a feature type, then set **Head Length Ratio** and **Arrowhead
+Shaft Width Ratio** in **Arrow Geometry**. These values are retained even when
+no feature type currently uses `arrowhead`, so a later shape change reuses the
+stored geometry.
 
 ## 3. Create a feature visibility table
 

@@ -115,6 +115,25 @@ Use `--feature_shape repeat_region=rectangle` to restore the older foreground re
 
 Automatic feature underlays remain feature metadata, not region-annotation rows. With custom track slots, provide exactly one enabled feature slot; the underlay follows that slot even when its ID is not `features`.
 
+### Draw a narrower seven-vertex arrowhead
+
+The finished Circular HmmtDNA and Linear BGC examples in
+[Tutorial 9](./TUTORIALS/9_Feature_Visibility_Shapes.md) start from Interactive
+SVG Gallery sessions and change only CDS features to seven-vertex arrowheads.
+From a source checkout, reproduce both SVGs with:
+
+```bash
+python tools/reproduce_examples.py \
+  --output-root . \
+  --figure tutorial_9_arrow_vs_arrowhead \
+  --figure tutorial_9_arrowhead_linear_bgc
+```
+
+For another CLI command, add `--feature_shape CDS=arrowhead`,
+`--arrow_head_length_ratio auto`, and
+`--arrowhead_shaft_width_ratio 0.5`. A numeric head ratio applies to both arrow
+forms. Ratios must be positive and finite; the shaft ratio must not exceed `1`.
+
 ### Place multiple records on one shared canvas
 
 ```bash

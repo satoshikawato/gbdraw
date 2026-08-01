@@ -30,6 +30,13 @@ from gbdraw.web_support.capabilities import (
 def test_web_runtime_capability_manifest_is_owner_backed_and_json_safe() -> None:
     capabilities = get_web_runtime_capabilities()
 
+    assert WEB_RENDER_OPTIONS_SCHEMA == 2
+    assert capabilities["rendering"]["featureRenderings"] == [
+        "arrow",
+        "arrowhead",
+        "rectangle",
+        "underlay",
+    ]
     assert capabilities == {
         "schema": WEB_RUNTIME_CAPABILITY_SCHEMA,
         "renderProtocol": WEB_RENDER_PROTOCOL,

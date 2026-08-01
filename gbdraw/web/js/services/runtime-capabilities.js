@@ -16,8 +16,8 @@ export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
     encodings: Object.freeze(['base64', 'gbdraw-depth-table-v1'])
   }),
   rendering: Object.freeze({
-    optionSchema: 1,
-    featureRenderings: Object.freeze(['arrow', 'rectangle', 'underlay']),
+    optionSchema: 2,
+    featureRenderings: Object.freeze(['arrow', 'arrowhead', 'rectangle', 'underlay']),
     circularTrackRenderers: Object.freeze([
       'annotations',
       'depth',

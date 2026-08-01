@@ -11,9 +11,11 @@ from ....features.ids import compute_feature_object_hash, make_linear_rendered_f
 from ....layout.linear import LinearFeatureLaneGeometry
 from ....svg.ids import instance_svg_id
 from ....svg.linear_features import (
-    create_arrowhead_path_linear,
+    create_arrow_path_linear,
+    create_arrow_shaft_path_linear,
     create_intron_path_linear,
     create_rectangle_path_linear,
+    create_seven_vertex_arrowhead_path_linear,
 )
 
 
@@ -28,6 +30,15 @@ class FeatureDrawer:
         self.default_stroke_width: float = feature_config.block_stroke_width
         self.intron_stroke_color: str = feature_config.line_stroke_color
         self.intron_stroke_width: float = feature_config.line_stroke_width
+        arrow_geometry = getattr(feature_config, "arrow_geometry", None)
+        self.head_length_ratio = getattr(
+            arrow_geometry,
+            "head_length_ratio",
+            "auto",
+        )
+        self.shaft_width_ratio: float = float(
+            getattr(arrow_geometry, "shaft_width_ratio", 0.5)
+        )
 
     @staticmethod
     def get_feature_data_id(feature_object) -> Optional[str]:
@@ -109,6 +120,8 @@ class FeatureDrawer:
             track_layout=track_layout,
             track_axis_gap=track_axis_gap,
             feature_lane_geometry=feature_lane_geometry,
+            head_length_ratio=self.head_length_ratio,
+            shaft_width_ratio=self.shaft_width_ratio,
         )
 
         gene_paths = path_generator.generate_linear_gene_path(feature_object)
@@ -197,6 +210,8 @@ class FeaturePathGenerator:
         track_layout: str = "middle",
         track_axis_gap: float | None = None,
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
+        head_length_ratio: str | float = "auto",
+        shaft_width_ratio: float = 0.5,
     ) -> None:
         self.genome_length = genome_length
         self.alignment_width = alignment_width
@@ -208,6 +223,8 @@ class FeaturePathGenerator:
         self.track_layout = track_layout
         self.track_axis_gap = track_axis_gap
         self.feature_lane_geometry = feature_lane_geometry
+        self.head_length_ratio = head_length_ratio
+        self.shaft_width_ratio = shaft_width_ratio
 
     def generate_linear_gene_path(self, gene_object):
         feature_track_id = gene_object.feature_track_id
@@ -245,8 +262,14 @@ class FeaturePathGenerator:
                     feature_y_positions=feature_y_positions,
                 )
             elif feat_type == "block":
-                if coord.is_last and gene_object.is_directional:
-                    coord_path = create_arrowhead_path_linear(
+                glyph_kind = getattr(
+                    gene_object,
+                    "glyph_kind",
+                    "arrow" if gene_object.is_directional else "rectangle",
+                )
+                has_defined_strand = coord.strand in {"positive", "negative"}
+                if coord.is_last and glyph_kind == "arrow" and has_defined_strand:
+                    coord_path = create_arrow_path_linear(
                         coord_dict=coord_dict,
                         arrow_length=self.arrow_length,
                         cds_height=self.cds_height,
@@ -256,6 +279,43 @@ class FeaturePathGenerator:
                         genome_size_normalization_factor=self.genome_size_normalization_factor,
                         separate_strands=self.separate_strands,
                         feature_track_id=feature_track_id,
+                        track_layout=self.track_layout,
+                        track_axis_gap=self.track_axis_gap,
+                        feature_y_positions=feature_y_positions,
+                        head_length_ratio=self.head_length_ratio,
+                    )
+                elif (
+                    coord.is_last
+                    and glyph_kind == "arrowhead"
+                    and has_defined_strand
+                ):
+                    coord_path = create_seven_vertex_arrowhead_path_linear(
+                        coord_dict=coord_dict,
+                        arrow_length=self.arrow_length,
+                        cds_height=self.cds_height,
+                        feature_strand=self.feature_strand,
+                        genome_length=self.genome_length,
+                        alignment_width=self.alignment_width,
+                        genome_size_normalization_factor=self.genome_size_normalization_factor,
+                        separate_strands=self.separate_strands,
+                        feature_track_id=feature_track_id,
+                        track_layout=self.track_layout,
+                        track_axis_gap=self.track_axis_gap,
+                        feature_y_positions=feature_y_positions,
+                        head_length_ratio=self.head_length_ratio,
+                        shaft_width_ratio=self.shaft_width_ratio,
+                    )
+                elif glyph_kind == "arrowhead" and has_defined_strand:
+                    coord_path = create_arrow_shaft_path_linear(
+                        coord_dict=coord_dict,
+                        genome_length=self.genome_length,
+                        alignment_width=self.alignment_width,
+                        genome_size_normalization_factor=self.genome_size_normalization_factor,
+                        cds_height=self.cds_height,
+                        feature_strand=self.feature_strand,
+                        separate_strands=self.separate_strands,
+                        feature_track_id=feature_track_id,
+                        shaft_width_ratio=self.shaft_width_ratio,
                         track_layout=self.track_layout,
                         track_axis_gap=self.track_axis_gap,
                         feature_y_positions=feature_y_positions,
@@ -283,5 +343,4 @@ class FeaturePathGenerator:
 
 
 __all__ = ["FeatureDrawer", "FeaturePathGenerator"]
-
 

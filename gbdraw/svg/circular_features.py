@@ -4,7 +4,12 @@
 import math
 from typing import Dict, Tuple, Union
 
-from .arrows import set_arrow_shoulder
+from .arrows import (
+    calculate_arrow_shaft_bounds,
+    cap_arrow_head_length,
+    has_arrowhead_shaft,
+    set_arrow_shoulder,
+)
 from ..layout.circular import calculate_feature_position_factors_circular
 
 
@@ -53,7 +58,7 @@ def generate_circular_intron_path_with_radii(
     return ["line", feature_path]
 
 
-def generate_circular_arrowhead_path_with_radii(
+def generate_circular_arrow_path_with_radii(
     coord_dict: Dict[str, Union[str, int]],
     total_length: int,
     cds_arrow_length: float,
@@ -61,6 +66,7 @@ def generate_circular_arrowhead_path_with_radii(
     center_radius_px: float,
     outer_radius_px: float,
 ) -> list[str]:
+    """Generate the legacy five-vertex circular arrow with explicit radii."""
     coord_strand = str(coord_dict["coord_strand"])
     coord_start = int(coord_dict["coord_start"]) % total_length
     coord_end = int(coord_dict["coord_end"]) % total_length
@@ -120,6 +126,116 @@ def generate_circular_arrowhead_path_with_radii(
     return ["block", feature_path]
 
 
+def generate_circular_seven_vertex_arrowhead_path_with_radii(
+    coord_dict: Dict[str, Union[str, int]],
+    total_length: int,
+    head_length_bp: float,
+    inner_radius_px: float,
+    center_radius_px: float,
+    outer_radius_px: float,
+    shaft_width_ratio: float,
+) -> list[str]:
+    """Generate a seven-vertex arrowhead using explicit feature radii."""
+    coord_strand = str(coord_dict["coord_strand"])
+    coord_start = int(coord_dict["coord_start"]) % total_length
+    coord_end = int(coord_dict["coord_end"]) % total_length
+    arrow_strand_dict: Dict[str, Tuple[int, int, str, str]] = {
+        "positive": (coord_start, coord_end, " 0 0 1 ", " 0 0 0 "),
+        "negative": (coord_end, coord_start, " 0 0 0 ", " 0 0 1 "),
+    }
+    arrow_start, arrow_end, param_1, param_2 = arrow_strand_dict[coord_strand]
+    arrow_start %= total_length
+    arrow_end %= total_length
+    coord_len_bp = float(
+        _coord_len_bp(arrow_start, arrow_end, total_length, strand=coord_strand)
+    )
+    resolved_head_length_bp = cap_arrow_head_length(coord_len_bp, head_length_bp)
+
+    point_x, point_y = _point_on_radius(center_radius_px, arrow_end, total_length)
+    full_start_x_1, full_start_y_1 = _point_on_radius(
+        inner_radius_px, arrow_start, total_length
+    )
+    full_start_x_2, full_start_y_2 = _point_on_radius(
+        outer_radius_px, arrow_start, total_length
+    )
+    if not has_arrowhead_shaft(coord_len_bp, resolved_head_length_bp):
+        feature_path = (
+            f"M {full_start_x_1},{full_start_y_1} "
+            f"L{point_x},{point_y} L{full_start_x_2},{full_start_y_2} z"
+        )
+        return ["block", feature_path]
+
+    shoulder = (
+        set_arrow_shoulder(coord_strand, arrow_end, resolved_head_length_bp)
+        % total_length
+    )
+    shaft_inner_radius_px, shaft_outer_radius_px = calculate_arrow_shaft_bounds(
+        inner_radius_px,
+        center_radius_px,
+        outer_radius_px,
+        shaft_width_ratio,
+    )
+    shaft_start_x_1, shaft_start_y_1 = _point_on_radius(
+        shaft_inner_radius_px, arrow_start, total_length
+    )
+    shaft_start_x_2, shaft_start_y_2 = _point_on_radius(
+        shaft_outer_radius_px, arrow_start, total_length
+    )
+    shaft_end_x_1, shaft_end_y_1 = _point_on_radius(
+        shaft_inner_radius_px, shoulder, total_length
+    )
+    shaft_end_x_2, shaft_end_y_2 = _point_on_radius(
+        shaft_outer_radius_px, shoulder, total_length
+    )
+    head_base_x_1, head_base_y_1 = _point_on_radius(
+        inner_radius_px, shoulder, total_length
+    )
+    head_base_x_2, head_base_y_2 = _point_on_radius(
+        outer_radius_px, shoulder, total_length
+    )
+
+    shaft_len_bp = coord_len_bp - resolved_head_length_bp
+    angle_deg = 360.0 * shaft_len_bp / total_length
+    if angle_deg > 20.0:
+        if coord_strand == "positive":
+            mid_pos = (arrow_start + shaft_len_bp / 2.0) % total_length
+        else:
+            mid_pos = (arrow_start - shaft_len_bp / 2.0) % total_length
+        mid_x_1, mid_y_1 = _point_on_radius(
+            shaft_inner_radius_px, mid_pos, total_length
+        )
+        mid_x_2, mid_y_2 = _point_on_radius(
+            shaft_outer_radius_px, mid_pos, total_length
+        )
+        sweep_flag_1 = param_1.strip().split(" ")[2]
+        sweep_flag_2 = param_2.strip().split(" ")[2]
+        segment_param_1 = f" 0 0 {sweep_flag_1} "
+        segment_param_2 = f" 0 0 {sweep_flag_2} "
+        first_shaft_arc = (
+            f"A{shaft_inner_radius_px},{shaft_inner_radius_px}{segment_param_1}{mid_x_1},{mid_y_1} "
+            f"A{shaft_inner_radius_px},{shaft_inner_radius_px}{segment_param_1}{shaft_end_x_1},{shaft_end_y_1}"
+        )
+        second_shaft_arc = (
+            f"A{shaft_outer_radius_px},{shaft_outer_radius_px}{segment_param_2}{mid_x_2},{mid_y_2} "
+            f"A{shaft_outer_radius_px},{shaft_outer_radius_px}{segment_param_2}{shaft_start_x_2},{shaft_start_y_2}"
+        )
+        feature_path = (
+            f"M {shaft_start_x_1},{shaft_start_y_1} {first_shaft_arc} "
+            f"L {head_base_x_1},{head_base_y_1} L {point_x},{point_y} "
+            f"L {head_base_x_2},{head_base_y_2} L {shaft_end_x_2},{shaft_end_y_2} "
+            f"{second_shaft_arc} z"
+        )
+    else:
+        feature_path = (
+            f"M {shaft_start_x_1},{shaft_start_y_1}"
+            f"A{shaft_inner_radius_px},{shaft_inner_radius_px}{param_1}{shaft_end_x_1},{shaft_end_y_1}"
+            f" L{head_base_x_1},{head_base_y_1} L{point_x},{point_y}"
+            f" L{head_base_x_2},{head_base_y_2} L{shaft_end_x_2},{shaft_end_y_2}"
+            f"A{shaft_outer_radius_px},{shaft_outer_radius_px}{param_2}{shaft_start_x_2},{shaft_start_y_2} z"
+        )
+    return ["block", feature_path]
+
+
 def generate_circular_rectangle_path_with_radii(
     coord_dict: Dict[str, Union[str, int]],
     total_length: int,
@@ -169,6 +285,30 @@ def generate_circular_rectangle_path_with_radii(
             f"A{outer_radius_px},{outer_radius_px}{param_2}{start_x_2},{start_y_2} z"
         )
     return ["block", feature_path]
+
+
+def generate_circular_arrowhead_shaft_path_with_radii(
+    coord_dict: Dict[str, Union[str, int]],
+    total_length: int,
+    inner_radius_px: float,
+    center_radius_px: float,
+    outer_radius_px: float,
+    shaft_width_ratio: float,
+) -> list[str]:
+    """Generate a reduced-width body block for a multipart arrowhead."""
+    shaft_inner_radius_px, shaft_outer_radius_px = calculate_arrow_shaft_bounds(
+        inner_radius_px,
+        center_radius_px,
+        outer_radius_px,
+        shaft_width_ratio,
+    )
+    return generate_circular_rectangle_path_with_radii(
+        coord_dict,
+        total_length,
+        shaft_inner_radius_px,
+        center_radius_px,
+        shaft_outer_radius_px,
+    )
 
 
 def generate_circular_intron_path(
@@ -263,7 +403,7 @@ def generate_circular_intron_path(
     return ["line", feature_path]
 
 
-def generate_circular_arrowhead_path(
+def generate_circular_arrow_path(
     radius: float,
     coord_dict: Dict[str, Union[str, int]],
     total_length: int,
@@ -276,7 +416,7 @@ def generate_circular_arrowhead_path(
     track_id: int = 0,
 ) -> list[str]:
     """
-    Generates the SVG path description for an arrowhead feature on a circular canvas.
+    Generates the legacy five-vertex arrow path on a circular canvas.
 
     Args:
         radius: Base radius of the circular canvas
@@ -457,6 +597,76 @@ def generate_circular_arrowhead_path(
     return ["block", feature_path]
 
 
+def generate_circular_seven_vertex_arrowhead_path(
+    radius: float,
+    coord_dict: Dict[str, Union[str, int]],
+    total_length: int,
+    head_length_bp: float,
+    track_ratio: float,
+    cds_ratio: float,
+    offset: float,
+    track_type: str,
+    strandedness: bool,
+    shaft_width_ratio: float,
+    track_id: int = 0,
+) -> list[str]:
+    """Generate a seven-vertex arrowhead using legacy factor-based layout."""
+    coord_strand = str(coord_dict["coord_strand"])
+    factors = calculate_feature_position_factors_circular(
+        total_length,
+        coord_strand,
+        track_ratio,
+        cds_ratio,
+        offset,
+        track_type,
+        strandedness,
+        track_id,
+    )
+    return generate_circular_seven_vertex_arrowhead_path_with_radii(
+        coord_dict,
+        total_length,
+        head_length_bp,
+        radius * factors[0],
+        radius * factors[1],
+        radius * factors[2],
+        shaft_width_ratio,
+    )
+
+
+def generate_circular_arrowhead_shaft_path(
+    radius: float,
+    coord_dict: Dict[str, Union[str, int]],
+    total_length: int,
+    track_ratio: float,
+    cds_ratio: float,
+    offset: float,
+    track_type: str,
+    strandedness: bool,
+    shaft_width_ratio: float,
+    track_id: int = 0,
+) -> list[str]:
+    """Generate a multipart arrowhead body using legacy factor-based layout."""
+    coord_strand = str(coord_dict["coord_strand"])
+    factors = calculate_feature_position_factors_circular(
+        total_length,
+        coord_strand,
+        track_ratio,
+        cds_ratio,
+        offset,
+        track_type,
+        strandedness,
+        track_id,
+    )
+    return generate_circular_arrowhead_shaft_path_with_radii(
+        coord_dict,
+        total_length,
+        radius * factors[0],
+        radius * factors[1],
+        radius * factors[2],
+        shaft_width_ratio,
+    )
+
+
 def generate_circular_rectangle_path(
     radius: float,
     coord_dict: Dict[str, Union[str, int]],
@@ -593,11 +803,63 @@ def generate_circular_rectangle_path(
     return ["block", feature_path]
 
 
+def generate_circular_arrowhead_path_with_radii(
+    coord_dict: Dict[str, Union[str, int]],
+    total_length: int,
+    cds_arrow_length: float,
+    inner_radius_px: float,
+    center_radius_px: float,
+    outer_radius_px: float,
+) -> list[str]:
+    """Compatibility wrapper for the legacy five-vertex arrow helper."""
+    return generate_circular_arrow_path_with_radii(
+        coord_dict,
+        total_length,
+        cds_arrow_length,
+        inner_radius_px,
+        center_radius_px,
+        outer_radius_px,
+    )
+
+
+def generate_circular_arrowhead_path(
+    radius: float,
+    coord_dict: Dict[str, Union[str, int]],
+    total_length: int,
+    cds_arrow_length: float,
+    track_ratio: float,
+    cds_ratio: float,
+    offset: float,
+    track_type: str,
+    strandedness: bool,
+    track_id: int = 0,
+) -> list[str]:
+    """Compatibility wrapper for the legacy five-vertex arrow helper."""
+    return generate_circular_arrow_path(
+        radius,
+        coord_dict,
+        total_length,
+        cds_arrow_length,
+        track_ratio,
+        cds_ratio,
+        offset,
+        track_type,
+        strandedness,
+        track_id,
+    )
+
+
 __all__ = [
+    "generate_circular_arrow_path",
+    "generate_circular_arrow_path_with_radii",
+    "generate_circular_arrowhead_shaft_path",
+    "generate_circular_arrowhead_shaft_path_with_radii",
     "generate_circular_arrowhead_path",
     "generate_circular_arrowhead_path_with_radii",
     "generate_circular_intron_path",
     "generate_circular_intron_path_with_radii",
     "generate_circular_rectangle_path",
     "generate_circular_rectangle_path_with_radii",
+    "generate_circular_seven_vertex_arrowhead_path",
+    "generate_circular_seven_vertex_arrowhead_path_with_radii",
 ]

@@ -113,9 +113,27 @@ Radial placement works with `auto`, `embedded_only`, and `external_only`. Unlike
 > [!WARNING]
 > Avoid `--labels` or `--labels both` on feature-dense genomes unless you also filter labels with `--label_blacklist` or `--label_whitelist`.
 
-## 5. Choose arrow, rectangle, or underlay rendering
+## 5. Choose arrow, arrowhead, rectangle, or underlay rendering
 
-Use repeatable `--feature_shape TYPE=SHAPE` options to choose how a feature type is drawn. `arrow` and `rectangle` are normal foreground glyphs. `underlay` uses the feature's resolved color to highlight the full feature-track band behind other features, without consuming an overlap lane or creating a feature label.
+Use repeatable `--feature_shape TYPE=SHAPE` options to choose how a feature type is drawn. `arrow` keeps the existing five-vertex, full-width glyph. `arrowhead` uses seven vertices and a narrower shaft. `rectangle` is a nondirectional foreground glyph. `underlay` uses the feature's resolved color to highlight the full feature-track band behind other features, without consuming an overlap lane or creating a feature label.
+
+For a seven-vertex CDS glyph with a head as long as the full rendered feature
+thickness and a half-width shaft, run:
+
+```bash
+gbdraw circular \
+  --gbk AP027280.gb \
+  --feature_shape CDS=arrowhead \
+  --arrow_head_length_ratio 1 \
+  --arrowhead_shaft_width_ratio 0.5 \
+  -o WSSV_arrowheads \
+  -f svg
+```
+
+The head ratio applies to both arrow forms. Use `auto` to preserve the existing
+mode-specific head length. The shaft ratio applies only to `arrowhead`, accepts
+values in `(0, 1]`, and remains centered on the feature track. Short arrowheads
+become triangles when no positive shaft length remains.
 
 `repeat_region` uses `underlay` by default in new commands. To restore the earlier foreground block style:
 
