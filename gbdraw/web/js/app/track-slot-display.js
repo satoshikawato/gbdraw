@@ -54,17 +54,26 @@ export const findTrackSlotGeometry = ({
   geometry,
   resultIndex = 0,
   recordIndex = 0,
-  slotIndex
+  slotIndex,
+  slotId = null
 } = {}) => {
   if (!geometry || typeof geometry !== 'object' || !Array.isArray(geometry.records)) return null;
   const wantedResult = Number(resultIndex) || 0;
   const wantedRecord = Number(recordIndex) || 0;
   const wantedSlot = Number(slotIndex);
-  if (!Number.isInteger(wantedSlot)) return null;
+  const wantedSlotId = normalizeOptionalText(slotId);
+  if (!wantedSlotId && !Number.isInteger(wantedSlot)) return null;
   const matchingRecord = geometry.records.find((record) => (
     Number(record?.resultIndex ?? 0) === wantedResult &&
     Number(record?.recordIndex ?? 0) === wantedRecord
   )) || geometry.records.find((record) => Number(record?.resultIndex ?? 0) === wantedResult);
   if (!matchingRecord || !Array.isArray(matchingRecord.slots)) return null;
+  if (wantedSlotId) {
+    const matchingSlot = matchingRecord.slots.find(
+      (slot) => normalizeOptionalText(slot?.slotId) === wantedSlotId
+    );
+    if (matchingSlot) return matchingSlot;
+  }
+  if (!Number.isInteger(wantedSlot)) return null;
   return matchingRecord.slots.find((slot) => Number(slot?.slotIndex) === wantedSlot) || null;
 };

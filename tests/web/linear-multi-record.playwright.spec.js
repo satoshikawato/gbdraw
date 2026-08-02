@@ -159,6 +159,78 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
   await expect(page.locator('[data-capture="linear-losat-settings"]')).toHaveCount(0);
 });
 
+test('Normalize Record Lengths rejects a shared Linear row and remains recoverable', async ({ page }) => {
+  test.setTimeout(300000);
+  await installDiagramRequestObserver(page);
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.evaluate((records) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.addLinearSeq();
+    records.forEach((content, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File(
+      [content], `normalize-record-${index + 1}.gbk`, {
+        type: 'text/plain',
+        lastModified: index + 1
+      }
+    )));
+    Object.assign(app.form, {
+      legend: 'none',
+      show_gc: false,
+      show_skew: false,
+      show_depth: false,
+      show_labels_linear: 'none',
+      normalize_length: true
+    });
+    app.setLinearComparisonGlobalAction('none');
+    app.setLinearRecordLayoutEnabled(true);
+    app.setLinearRecordRow(app.linearSeqs[0].uid, 1);
+    app.setLinearRecordRow(app.linearSeqs[1].uid, 1);
+  }, [
+    makeComparisonGenbank('NormalizeRecA', 'atg'),
+    makeComparisonGenbank('NormalizeRecB', 'gct')
+  ]);
+
+  const invalid = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      errorDetails: Array.isArray(app.errorLog?.details)
+        ? app.errorLog.details.map((detail) => String(detail))
+        : [],
+      dispatchedRequests: window.__GBDRAW_DIAGRAM_RUNS__.length,
+      normalizeLength: app.form.normalize_length
+    };
+  });
+  expect(invalid.result).toEqual({ status: 'error' });
+  expect([invalid.errorSummary, ...invalid.errorDetails].join(' ')).toMatch(
+    /Normalize Record Lengths.*same Linear row/i
+  );
+  expect(invalid.dispatchedRequests).toBe(0);
+  expect(invalid.normalizeLength).toBe(true);
+
+  const recovered = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.form.normalize_length = false;
+    const result = await app.runAnalysis();
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      dispatchedRequests: window.__GBDRAW_DIAGRAM_RUNS__.length,
+      normalizeLength: app.form.normalize_length
+    };
+  });
+  expect(recovered).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    dispatchedRequests: 1,
+    normalizeLength: false
+  });
+});
+
 test('No comparison completes a real render without touching dormant comparison work', async ({ page }) => {
   test.setTimeout(300000);
   await installDiagramRequestObserver(page);

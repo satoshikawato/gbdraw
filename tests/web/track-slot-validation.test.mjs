@@ -12,6 +12,11 @@ await cp(
   join(tempRoot, 'app'),
   { recursive: true }
 );
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'utils'),
+  join(tempRoot, 'utils'),
+  { recursive: true }
+);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
@@ -20,6 +25,15 @@ const {
   validateCustomTrackPlan
 } = await import(
   pathToFileURL(join(tempRoot, 'app', 'track-slot-validation.js'))
+);
+const {
+  buildLinearTrackSlotPayload,
+  createLinearTrackSlotEditor
+} = await import(
+  pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js'))
+);
+const { buildCircularTrackSlotPayload } = await import(
+  pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
 );
 
 const feature = (id = 'features', overrides = {}) => ({
@@ -159,6 +173,306 @@ test('requires exactly one Circular Features row only for visible feature underl
     visibleFeatureUnderlays: false
   });
   assert.equal(noUnderlay.globalIssues.length, 0);
+});
+
+test('requires exactly one Linear Features row for visible feature underlays', () => {
+  const missing = validate({
+    slots: [depth('depth', 0, { side: 'below' })],
+    axisIndex: 0,
+    depthTrackCount: 1,
+    visibleFeatureUnderlays: ['repeat_region']
+  });
+  assert.ok(
+    missing.globalIssues.some((issue) => issue.code === 'feature_underlay_features_count')
+  );
+
+  const exactlyOne = validate({
+    slots: [feature()],
+    axisIndex: 0,
+    visibleFeatureUnderlays: ['repeat_region']
+  });
+  assert.equal(
+    exactlyOne.globalIssues.some((issue) => issue.code === 'feature_underlay_features_count'),
+    false
+  );
+
+  const duplicate = validate({
+    slots: [feature('features_a'), feature('features_b')],
+    axisIndex: 0,
+    visibleFeatureUnderlays: ['repeat_region']
+  });
+  assert.ok(rowCodes(duplicate, 1).includes('features_multiple'));
+  assert.ok(
+    duplicate.globalIssues.some((issue) => issue.code === 'feature_underlay_features_count')
+  );
+
+  const disabledDuplicate = validate({
+    slots: [feature(), feature('disabled_features', { enabled: false })],
+    axisIndex: 0,
+    visibleFeatureUnderlays: ['repeat_region']
+  });
+  assert.equal(disabledDuplicate.rowIssues.size, 0);
+  assert.equal(
+    disabledDuplicate.globalIssues.some(
+      (issue) => issue.code === 'feature_underlay_features_count'
+    ),
+    false
+  );
+});
+
+test('Linear editor live validation uses visible feature-underlay intent', () => {
+  const state = {
+    form: { linear_track_layout: 'middle', show_depth: false },
+    adv: {
+      linear_track_slots: [{
+        id: 'space', renderer: 'spacer', enabled: true,
+        side: 'below', z: 0, params: {}
+      }],
+      linear_track_slots_axis_index: 0,
+      depth_tracks: [],
+      features: ['repeat_region'],
+      feature_shapes: { repeat_region: 'underlay' },
+      nt: 'GC'
+    },
+    files: { linearSeqs: [] },
+    annotationSets: []
+  };
+  const editor = createLinearTrackSlotEditor({ state });
+  assert.match(
+    editor.linearTrackGlobalIssues().join(' '),
+    /exactly one enabled Linear Features row/
+  );
+});
+
+test('rejects an empty enabled Linear stack but preserves Circular axis-only drafts', () => {
+  for (const slots of [
+    [],
+    [feature('disabled_features', { enabled: false })]
+  ]) {
+    const linear = validate({ slots, axisIndex: slots.length });
+    assert.ok(
+      linear.globalIssues.some((issue) => issue.code === 'linear_slots_empty')
+    );
+
+    const circular = validate({
+      mode: 'circular',
+      slots,
+      axisIndex: slots.length,
+      visibleFeatureUnderlays: false
+    });
+    assert.equal(
+      circular.globalIssues.some((issue) => issue.code === 'linear_slots_empty'),
+      false
+    );
+    assert.equal(circular.globalIssues.length, 0);
+  }
+});
+
+test('validates enabled Linear sides against the emitted Axis and keeps overlay exceptions', () => {
+  const conflicting = validate({
+    slots: [
+      feature(),
+      depth('wrong_side', 0, { side: 'above' })
+    ],
+    axisIndex: 0,
+    depthTrackCount: 1
+  });
+  assert.ok(rowCodes(conflicting, 1).includes('axis_side_conflict'));
+
+  const onAxisFeatures = validate({
+    slots: [
+      depth('above', 0, { side: 'above' }),
+      feature(),
+      depth('below', 0, { side: 'below' })
+    ],
+    axisIndex: 1,
+    depthTrackCount: 1
+  });
+  assert.equal(onAxisFeatures.rowIssues.size, 0);
+
+  const offAxisFeatures = validate({
+    slots: [depth('below', 0), feature()],
+    axisIndex: 0,
+    depthTrackCount: 1
+  });
+  assert.ok(rowCodes(offAxisFeatures, 1).includes('axis_side_conflict'));
+
+  const overlayAnnotation = validate({
+    slots: [
+      feature(),
+      annotation('review_overlay', {
+        side: 'overlay',
+        z: 1,
+        params: {
+          set_id: 'review',
+          anchor_slot: 'features',
+          layer: 'foreground'
+        }
+      })
+    ],
+    axisIndex: 0,
+    annotationSetIds: ['review']
+  });
+  assert.equal(overlayAnnotation.rowIssues.size, 0);
+
+  const disabledConflict = validate({
+    slots: [
+      feature(),
+      depth('disabled_conflict', 0, { enabled: false, side: 'above' })
+    ],
+    axisIndex: 0,
+    depthTrackCount: 1
+  });
+  assert.equal(rowCodes(disabledConflict, 1).includes('axis_side_conflict'), false);
+  assert.equal(disabledConflict.rowIssues.size, 0);
+});
+
+test('derives an omitted Linear side from the emitted Axis', () => {
+  const sideLessDepth = depth('derived_above', 0);
+  delete sideLessDepth.side;
+  const plan = validate({
+    slots: [sideLessDepth, feature()],
+    axisIndex: 1,
+    depthTrackCount: 1
+  });
+
+  assert.equal(plan.rowIssues.size, 0);
+  assert.deepEqual(plan.globalIssues, []);
+  assert.equal(plan.enabledSlots[0].side, 'above');
+  assert.equal(buildLinearTrackSlotPayload(plan.enabledSlots[0]).side, 'above');
+});
+
+test('validates enabled Circular sides against the emitted Axis and keeps overlay exceptions', () => {
+  const circularFeature = feature('features', {
+    side: 'overlay',
+    params: { lane_direction: 'split' }
+  });
+  const circularTick = (id, overrides = {}) => ({
+    id,
+    renderer: 'ticks',
+    enabled: true,
+    side: 'inside',
+    z: 0,
+    params: {},
+    ...overrides
+  });
+
+  const conflicting = validate({
+    mode: 'circular',
+    slots: [circularFeature, circularTick('wrong_side', { side: 'outside' })],
+    axisIndex: 0
+  });
+  assert.ok(rowCodes(conflicting, 1).includes('axis_side_conflict'));
+
+  const featureLaneConflict = validate({
+    mode: 'circular',
+    slots: [feature('features', {
+      side: 'outside',
+      params: { lane_direction: 'inside' }
+    })],
+    axisIndex: 1
+  });
+  assert.ok(rowCodes(featureLaneConflict, 0).includes('axis_side_conflict'));
+
+  const overlayExceptions = validate({
+    mode: 'circular',
+    slots: [
+      circularFeature,
+      circularTick('axis_ticks', { side: 'overlay' }),
+      annotation('review_overlay', {
+        side: 'overlay',
+        z: 1,
+        params: {
+          set_id: 'review',
+          anchor_slot: 'features',
+          layer: 'foreground'
+        }
+      })
+    ],
+    axisIndex: 0,
+    annotationSetIds: ['review']
+  });
+  assert.equal(overlayExceptions.rowIssues.size, 0);
+
+  const disabledConflict = validate({
+    mode: 'circular',
+    slots: [
+      circularFeature,
+      circularTick('disabled_conflict', { enabled: false, side: 'outside' })
+    ],
+    axisIndex: 0
+  });
+  assert.equal(rowCodes(disabledConflict, 1).includes('axis_side_conflict'), false);
+  assert.equal(disabledConflict.rowIssues.size, 0);
+});
+
+test('derives omitted Circular sides while keeping Feature lanes authoritative', () => {
+  const sideLessSpacer = {
+    id: 'outer_gap',
+    renderer: 'spacer',
+    enabled: true,
+    z: 0,
+    params: {}
+  };
+  const spacerPlan = validate({
+    mode: 'circular',
+    slots: [sideLessSpacer],
+    axisIndex: 1
+  });
+  assert.equal(spacerPlan.rowIssues.size, 0);
+  assert.deepEqual(spacerPlan.globalIssues, []);
+  assert.equal(spacerPlan.enabledSlots[0].side, 'outside');
+  assert.equal(
+    buildCircularTrackSlotPayload(spacerPlan.enabledSlots[0]).side,
+    'outside'
+  );
+
+  const splitFeature = feature('lane_only_features', {
+    params: { lane_direction: 'split' }
+  });
+  delete splitFeature.side;
+  const featurePlan = validate({
+    mode: 'circular',
+    slots: [splitFeature],
+    axisIndex: 0,
+    trackType: 'tuckin'
+  });
+  assert.equal(featurePlan.rowIssues.size, 0);
+  assert.deepEqual(featurePlan.globalIssues, []);
+  assert.equal(featurePlan.enabledSlots[0].side, 'overlay');
+  assert.equal(
+    buildCircularTrackSlotPayload(featurePlan.enabledSlots[0]).side,
+    'overlay'
+  );
+});
+
+test('infers an omitted Circular Axis from a side-less Feature lane', () => {
+  for (const { trackType, lane, expectedSide, expectedAxis } of [
+    { trackType: 'spreadout', lane: 'inside', expectedSide: 'inside', expectedAxis: 0 },
+    { trackType: 'tuckin', lane: 'outside', expectedSide: 'outside', expectedAxis: 1 },
+    { trackType: 'spreadout', lane: 'split', expectedSide: 'overlay', expectedAxis: 0 }
+  ]) {
+    const laneOnlyFeature = feature(`lane_${lane}`, {
+      params: { lane_direction: lane }
+    });
+    delete laneOnlyFeature.side;
+    const plan = validate({
+      mode: 'circular',
+      slots: [laneOnlyFeature],
+      axisIndex: null,
+      trackType
+    });
+
+    assert.equal(plan.rowIssues.size, 0, `${trackType} + ${lane}`);
+    assert.deepEqual(plan.globalIssues, [], `${trackType} + ${lane}`);
+    assert.equal(plan.emittedAxisIndex, expectedAxis, `${trackType} + ${lane}`);
+    assert.equal(plan.enabledSlots[0].side, expectedSide, `${trackType} + ${lane}`);
+    assert.equal(
+      buildCircularTrackSlotPayload(plan.enabledSlots[0], 'GC', trackType).side,
+      expectedSide,
+      `${trackType} + ${lane}`
+    );
+  }
 });
 
 test('rejects nonpositive Circular radius and width before request serialization', () => {

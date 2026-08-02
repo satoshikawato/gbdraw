@@ -527,9 +527,15 @@ def _conservation_slots_for_tracks(
 def _insert_conservation_slots(
     base_slots: Sequence[CircularTrackSlot],
     conservation_slots: Sequence[CircularTrackSlot],
+    *,
+    axis_index: int | None,
 ) -> list[CircularTrackSlot]:
     if not conservation_slots:
         return list(base_slots)
+    if axis_index is not None:
+        out = list(base_slots)
+        out[axis_index:axis_index] = conservation_slots
+        return out
     out: list[CircularTrackSlot] = []
     inserted = False
     for slot in base_slots:
@@ -2708,6 +2714,7 @@ def assemble_circular_diagram_from_record(
             parsed_circular_track_slots = _insert_conservation_slots(
                 parsed_circular_track_slots,
                 conservation_slots,
+                axis_index=circular_track_axis_index,
             )
 
     seq_length = len(gb_record.seq)
@@ -3248,6 +3255,7 @@ def assemble_circular_diagram_from_records(
             parsed_circular_track_slots = _insert_conservation_slots(
                 parsed_circular_track_slots,
                 conservation_slots,
+                axis_index=circular_track_axis_index,
             )
     tick_track_channel_override = _resolve_multi_record_tick_track_channel_override(
         record_lengths,

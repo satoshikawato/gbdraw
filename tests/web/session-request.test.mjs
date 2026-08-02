@@ -13,6 +13,7 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
+  linearRecordLayoutHasSharedRow,
   projectCanonicalSessionRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
@@ -33,6 +34,15 @@ const comparisonSnapshotForState = (requestState, filesData = {}) => resolveLine
   losatProgram: requestState.losatProgram?.value || 'blastn',
   blastpMode: requestState.losat?.blastp?.mode || 'orthogroup'
 });
+
+assert.equal(linearRecordLayoutHasSharedRow(
+  [{ uid: 'a' }, { uid: 'b' }],
+  [{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }]
+), true);
+assert.equal(linearRecordLayoutHasSharedRow(
+  [{ uid: 'a' }, { uid: 'b' }],
+  [{ uid: 'a', row: 1 }, { uid: 'b', row: 2 }]
+), false);
 
 const buildCanonicalRenderRequest = (args) => buildCanonicalRenderRequestRaw({
   ...args,
@@ -728,7 +738,7 @@ assert.doesNotThrow(
   'an inactive custom-stack draft must not block a simple-mode request'
 );
 state.adv.circular_track_slots_enabled = true;
-state.adv.circular_track_slots_axis_index = 1;
+state.adv.circular_track_slots_axis_index = 0;
 state.adv.circular_track_slots = [
   {
     id: 'features',
@@ -2758,6 +2768,123 @@ assert.equal(filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTra
 assert.deepEqual(
   filteredAxisCanonical.renderRequest.diagramOptions.tracks.linearTrackSlots.map((slot) => slot.id),
   ['features', 'depth_b']
+);
+
+const linearCombinationRegressionState = ({
+  slotsEnabled = false,
+  slots = [],
+  axisIndex = null,
+  features = ['CDS'],
+  featureShapes = { CDS: 'arrow' },
+  normalizeLength = false,
+  layoutEnabled = false,
+  layoutRows = []
+} = {}) => ({
+  ...state,
+  mode: ref('linear'),
+  form: {
+    ...state.form,
+    normalize_length: normalizeLength,
+    show_depth: false
+  },
+  adv: {
+    ...state.adv,
+    features,
+    feature_shapes: featureShapes,
+    depth_tracks: [],
+    linear_track_slots_enabled: slotsEnabled,
+    linear_track_slots_axis_index: axisIndex,
+    linear_track_slots: structuredClone(slots)
+  },
+  linearRecordLayoutEnabled: ref(layoutEnabled),
+  linearRecordRows: structuredClone(layoutRows),
+  linearComparisonPlan: {
+    mode: 'none',
+    defaultSource: 'losat',
+    edges: []
+  }
+});
+
+const underlayWithoutFeaturesState = linearCombinationRegressionState({
+  slotsEnabled: true,
+  slots: [{
+    id: 'space', renderer: 'spacer', enabled: true, side: 'below', z: 0, params: {}
+  }],
+  axisIndex: 0,
+  features: ['repeat_region'],
+  featureShapes: { repeat_region: 'underlay' }
+});
+const linearCombinationFailures = [];
+const checkLinearCombination = (label, assertion) => {
+  try {
+    assertion();
+  } catch (error) {
+    linearCombinationFailures.push(`${label}: ${String(error?.message || error)}`);
+  }
+};
+checkLinearCombination('underlay without Features', () => assert.throws(
+  () => buildCanonicalRenderRequest({
+    state: underlayWithoutFeaturesState,
+    filesData: linearFilesData
+  }),
+  /Visible feature underlays require exactly one enabled(?: Linear)? Features row/i
+));
+
+const allDisabledLinearState = linearCombinationRegressionState({
+  slotsEnabled: true,
+  slots: [{
+    id: 'disabled_features', renderer: 'features', enabled: false,
+    side: 'overlay', z: 0, params: {}
+  }],
+  axisIndex: 1
+});
+checkLinearCombination('all-disabled Linear stack', () => assert.throws(
+  () => buildCanonicalRenderRequest({
+    state: allDisabledLinearState,
+    filesData: linearFilesData
+  }),
+  /Linear Custom Track Slots.*at least one enabled row/i
+));
+
+const sharedLinearRowState = linearCombinationRegressionState({
+  normalizeLength: true,
+  layoutEnabled: true,
+  layoutRows: [
+    { uid: 'first', row: 1 },
+    { uid: 'second', row: 1 },
+    { uid: 'third', row: 2 }
+  ]
+});
+checkLinearCombination('Normalize with a shared Linear row', () => assert.throws(
+  () => buildCanonicalRenderRequest({
+    state: sharedLinearRowState,
+    filesData: linearFilesData
+  }),
+  (error) => (
+    /Normalize Record Lengths/i.test(String(error?.message || error)) &&
+    /same row|multiple records|more than one record/i.test(String(error?.message || error))
+  )
+));
+
+const separateLinearRowsState = linearCombinationRegressionState({
+  normalizeLength: true,
+  layoutEnabled: true,
+  layoutRows: [
+    { uid: 'first', row: 1 },
+    { uid: 'second', row: 2 },
+    { uid: 'third', row: 3 }
+  ]
+});
+checkLinearCombination('Normalize with separate Linear rows', () => assert.doesNotThrow(
+  () => buildCanonicalRenderRequest({
+    state: separateLinearRowsState,
+    filesData: linearFilesData
+  })
+));
+assert.deepEqual(
+  linearCombinationFailures,
+  [],
+  `Linear combination preflight regressions:\n${linearCombinationFailures.join('\n')}`
 );
 
 const circularRequestState = ({

@@ -22,6 +22,7 @@ import {
   parseCircularScalarDisplay
 } from './track-slot-display.js';
 import { validateCustomTrackPlan } from './track-slot-validation.js';
+import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -1413,15 +1414,6 @@ const circularGeometryShortcutsForState = (state) => ({
   gcSkewRadius: state?.adv?.gc_skew_radius_circular
 });
 
-const visibleCircularFeatureUnderlays = (state) => (
-  (Array.isArray(state?.adv?.features) ? state.adv.features : []).filter((featureType) => {
-    const key = String(featureType || '').trim();
-    const explicit = String(state?.adv?.feature_shapes?.[key] || '').trim().toLowerCase();
-    const rendering = explicit || (key === 'repeat_region' ? 'underlay' : 'rectangle');
-    return rendering === 'underlay';
-  })
-);
-
 export const createCircularTrackSlotEditor = ({ state }) => {
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
@@ -1469,7 +1461,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     trackType: state.form.track_type,
     depthTrackCount: circularAvailableDepthTrackCountForState(state),
     annotationSetIds: annotationSetIds(),
-    visibleFeatureUnderlays: visibleCircularFeatureUnderlays(state),
+    visibleFeatureUnderlays: visibleFeatureUnderlaysForState(state),
     conservationSeries: conservationEntriesForState(state)
   });
 
@@ -1526,7 +1518,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     }
     if (
       normalizedRenderer === 'features' &&
-      visibleCircularFeatureUnderlays(state).length > 0
+      visibleFeatureUnderlaysForState(state).length > 0
     ) {
       return !state.adv.circular_track_slots.some((slot) => (
         slot?.enabled !== false && slot?.renderer === 'features'
@@ -1540,7 +1532,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     if (slot.enabled === false) return true;
     if (
       slot.renderer === 'features' &&
-      visibleCircularFeatureUnderlays(state).length > 0
+      visibleFeatureUnderlaysForState(state).length > 0
     ) {
       return false;
     }
@@ -1649,6 +1641,63 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     );
   };
 
+  const commitManagedSlotMutation = ({
+    nextSlots,
+    newSlots = [],
+    managedPredicate,
+    preferredInsertIndex = null
+  }) => {
+    const currentSlots = Array.isArray(state.adv.circular_track_slots)
+      ? state.adv.circular_track_slots
+      : [];
+    const currentAxis = axisIndexForCurrentSlots(currentSlots);
+    const retainedManagedIds = new Set(
+      (Array.isArray(nextSlots) ? nextSlots : [])
+        .filter((slot) => managedPredicate(slot))
+        .map((slot) => String(slot?.id || '').trim())
+        .filter(Boolean)
+    );
+    const removedBeforeAxis = currentSlots
+      .slice(0, currentAxis)
+      .filter((slot) => (
+        managedPredicate(slot) &&
+        !retainedManagedIds.has(String(slot?.id || '').trim())
+      )).length;
+    const committed = Array.isArray(nextSlots) ? nextSlots.slice() : [];
+    const axis = Math.max(0, currentAxis - removedBeforeAxis);
+    const additions = (Array.isArray(newSlots) ? newSlots : []).map((slot) => {
+      applyPlacementDefaults(slot, 'inside');
+      return slot;
+    });
+    if (additions.length > 0) {
+      const preferred = Number.isInteger(preferredInsertIndex)
+        ? preferredInsertIndex
+        : axis;
+      const insideFloor = committed.reduce((floor, slot, index) => {
+        if (
+          index < axis ||
+          slot?.renderer === 'annotations' ||
+          effectiveSlotPlacement(slot, state.form.track_type) !== 'overlay'
+        ) {
+          return floor;
+        }
+        return Math.max(floor, index + 1);
+      }, axis);
+      const insertIndex = Math.max(
+        insideFloor,
+        Math.min(preferred, committed.length)
+      );
+      committed.splice(insertIndex, 0, ...additions);
+    }
+    state.adv.circular_track_slots_axis_index = Math.min(axis, committed.length);
+    state.adv.circular_track_slots.splice(
+      0,
+      state.adv.circular_track_slots.length,
+      ...committed
+    );
+    normalizeSlotsInPlace();
+  };
+
   const resetCircularTrackSlotsFromSimpleControls = () => {
     const slots = applyCircularGeometryShortcuts(createDefaultCircularTrackSlots({
       nt: state.adv.nt,
@@ -1677,52 +1726,22 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeSlotsInPlace();
     const desiredCount = desiredCircularDepthTrackCount();
     if (desiredCount <= 0) {
-      state.adv.circular_track_slots.splice(
-        0,
-        state.adv.circular_track_slots.length,
-        ...dropInvalidManagedDepthSlots({
+      commitManagedSlotMutation({
+        nextSlots: dropInvalidManagedDepthSlots({
           slots: state.adv.circular_track_slots,
           activeCount: 0,
           managedPredicate: isDefaultManagedDepthSlot
-        })
-      );
-      normalizeSlotsInPlace();
-      return;
-    }
-
-    const currentSlots = JSON.stringify(normalizeCircularTrackSlots(
-      state.adv.circular_track_slots,
-      state.adv.nt,
-      state.form.track_type
-    ));
-    const simpleSlotsWithoutDepth = JSON.stringify(normalizeCircularTrackSlots(
-      createDefaultCircularTrackSlots({
-        nt: state.adv.nt,
-        showDepth: false,
-        showGc: !state.form.suppress_gc,
-        showSkew: !state.form.suppress_skew,
-        showTicks: state.form.show_scale !== false,
-        preset: state.form.track_type
-      }),
-      state.adv.nt,
-      state.form.track_type
-    ));
-
-    if (currentSlots === simpleSlotsWithoutDepth) {
-      resetCircularTrackSlotsFromSimpleControls();
-      return;
-    }
-
-    state.adv.circular_track_slots.splice(
-      0,
-      state.adv.circular_track_slots.length,
-      ...dropInvalidManagedDepthSlots({
-        slots: state.adv.circular_track_slots,
-        activeCount: desiredCount,
+        }),
         managedPredicate: isDefaultManagedDepthSlot
-      })
-    );
-    const slots = state.adv.circular_track_slots;
+      });
+      return;
+    }
+
+    const slots = dropInvalidManagedDepthSlots({
+      slots: state.adv.circular_track_slots,
+      activeCount: desiredCount,
+      managedPredicate: isDefaultManagedDepthSlot
+    });
     const existingIds = new Set(
       slots.map((slot) => String(slot?.id || '').trim()).filter(Boolean)
     );
@@ -1763,23 +1782,32 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       }
     });
 
-    const missingSlots = [];
+    let missingSlots = [];
     for (let trackIndex = 0; trackIndex < desiredCount; trackIndex += 1) {
       if (claimedTrackIndexes.has(trackIndex)) continue;
       missingSlots.push(makeDepthSlotForTrackIndex(trackIndex, existingIds, desiredCount));
       claimedTrackIndexes.add(trackIndex);
     }
-
-    if (missingSlots.length > 0) {
-      let insertIndex = -1;
-      slots.forEach((slot, index) => {
-        if (slot?.renderer === 'depth') insertIndex = index;
-      });
-      if (insertIndex < 0) insertIndex = slots.findIndex((slot) => slot?.renderer === 'ticks');
-      if (insertIndex < 0) insertIndex = slots.findIndex((slot) => slot?.renderer === 'features');
-      slots.splice(Math.max(0, insertIndex + 1), 0, ...missingSlots);
+    missingSlots = applyCircularGeometryShortcuts(
+      missingSlots,
+      circularGeometryShortcutsForState(state)
+    );
+    let preferredInsertIndex = -1;
+    slots.forEach((slot, index) => {
+      if (slot?.renderer === 'depth') preferredInsertIndex = index;
+    });
+    if (preferredInsertIndex < 0) {
+      preferredInsertIndex = slots.findIndex((slot) => slot?.renderer === 'ticks');
     }
-    normalizeSlotsInPlace();
+    if (preferredInsertIndex < 0) {
+      preferredInsertIndex = slots.findIndex((slot) => slot?.renderer === 'features');
+    }
+    commitManagedSlotMutation({
+      nextSlots: slots,
+      newSlots: missingSlots,
+      managedPredicate: isDefaultManagedDepthSlot,
+      preferredInsertIndex: Math.max(0, preferredInsertIndex + 1)
+    });
   };
 
   const syncCircularConservationSlots = () => {
@@ -1814,23 +1842,19 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       presentKeys.add(key);
     });
 
-    if (missingSlots.length > 0) {
-      let insertIndex = -1;
-      nextSlots.forEach((slot, index) => {
-        if (isManagedConservationSlot(slot)) insertIndex = index;
-      });
-      if (insertIndex < 0) {
-        insertIndex = nextSlots.findIndex((slot) => slot?.renderer === 'features');
-      }
-      nextSlots.splice(Math.max(0, insertIndex + 1), 0, ...missingSlots);
+    let preferredInsertIndex = -1;
+    nextSlots.forEach((slot, index) => {
+      if (isManagedConservationSlot(slot)) preferredInsertIndex = index;
+    });
+    if (preferredInsertIndex < 0) {
+      preferredInsertIndex = nextSlots.findIndex((slot) => slot?.renderer === 'features');
     }
-
-    state.adv.circular_track_slots.splice(
-      0,
-      state.adv.circular_track_slots.length,
-      ...nextSlots
-    );
-    normalizeSlotsInPlace();
+    commitManagedSlotMutation({
+      nextSlots,
+      newSlots: missingSlots,
+      managedPredicate: isManagedConservationSlot,
+      preferredInsertIndex: Math.max(0, preferredInsertIndex + 1)
+    });
   };
 
   const resetCircularTrackSlotsToPreset = (preset) => {
@@ -2385,13 +2409,14 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const selectedResultIndexValue = () => Number(state?.selectedResultIndex?.value ?? 0) || 0;
 
-  const resolvedCircularSlotGeometry = (slotIndex) => findTrackSlotGeometry({
+  const resolvedCircularSlotGeometry = (slotIndex, slotId) => findTrackSlotGeometry({
     geometry: String(state?.trackSlotResolvedGeometry?.value?.mode || '') === 'circular'
       ? state.trackSlotResolvedGeometry.value
       : null,
     resultIndex: selectedResultIndexValue(),
     recordIndex: 0,
-    slotIndex
+    slotIndex,
+    slotId
   });
 
   const estimateCircularSlotGeometry = (slot, slotIndex) => {
@@ -2422,7 +2447,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const circularTrackSlotDisplayGeometry = (slot, slotIndex) => {
-    const resolved = resolvedCircularSlotGeometry(slotIndex);
+    const resolved = resolvedCircularSlotGeometry(slotIndex, slot?.id);
     if (resolved) return { ...resolved, source: 'resolved' };
     return estimateCircularSlotGeometry(slot, slotIndex);
   };

@@ -449,6 +449,59 @@ def test_normalize_linear_track_slots_with_axis_rejects_explicit_side_conflicts(
         normalize_linear_track_slots_with_axis(slots, 1)
 
 
+def test_normalize_linear_track_slots_with_axis_ignores_disabled_side_conflict() -> None:
+    slots = [
+        LinearTrackSlot(
+            id="disabled_depth",
+            renderer="depth",
+            enabled=False,
+            side="below",
+            params={"track_index": 0},
+        ),
+        LinearTrackSlot(id="features", renderer="features", side="overlay"),
+    ]
+
+    normalized = normalize_linear_track_slots_with_axis(slots, 1)
+
+    assert [slot.id for slot in normalized] == ["features"]
+    assert normalized[0].side == "overlay"
+
+
+def test_normalize_linear_track_slots_with_axis_does_not_normalize_disabled_side() -> None:
+    slots = [
+        LinearTrackSlot(
+            id="disabled_circular_draft",
+            renderer="depth",
+            enabled=False,
+            side="inside",
+            params={"track_index": 0},
+        ),
+        LinearTrackSlot(id="features", renderer="features", side="overlay"),
+    ]
+
+    normalized = normalize_linear_track_slots_with_axis(slots, 1)
+
+    assert [slot.id for slot in normalized] == ["features"]
+
+
+def test_normalize_linear_track_slots_with_axis_keeps_exact_depth_conflict() -> None:
+    slots = parse_linear_track_slots(
+        [
+            "spacer:spacer@side=above",
+            "depth_3:depth@side=above,track_index=0",
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"linear track slot 'depth_3' at index 1 has side='above'.*"
+            r"--linear_track_axis_index 1.*axis-derived side is 'below'"
+        ),
+    ):
+        normalize_linear_track_slots_with_axis(slots, 1)
+
+
 def test_normalize_linear_track_slots_with_axis_allows_feature_overlay_at_axis() -> None:
     slots = parse_linear_track_slots(
         [

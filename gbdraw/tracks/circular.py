@@ -502,6 +502,9 @@ def _axis_side_conflict_message(slot: CircularTrackSlot, derived_side: str, expl
 def _slot_with_axis_derived_side(slot: CircularTrackSlot, slot_index: int, axis_index: int) -> CircularTrackSlot:
     """Return a transient slot whose side/lane matches an explicit axis boundary."""
 
+    if not slot.enabled:
+        return slot
+
     derived_side = _axis_derived_side(slot_index, axis_index)
     renderer = _normalize_renderer(str(slot.renderer))
     params = {str(key): value for key, value in dict(slot.params or {}).items()}

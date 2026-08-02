@@ -295,6 +295,7 @@ def _add_linear_feature_underlays(
     ResolvedAnnotationBundle,
     dict[str, ResolvedAnnotationTrack],
     frozenset[str],
+    int,
 ]:
     merged, set_id = merge_feature_underlays(
         bundle,
@@ -303,7 +304,7 @@ def _add_linear_feature_underlays(
         mode="linear",
     )
     if set_id is None:
-        return slots, bundle, layouts, auto_slot_ids
+        return slots, bundle, layouts, auto_slot_ids, 0
     anchor_id = feature_underlay_anchor_slot_id(slots)
     anchor = next(slot for slot in slots if str(slot.id) == anchor_id)
     slot_id = feature_underlay_slot_id(slots)
@@ -323,6 +324,7 @@ def _add_linear_feature_underlays(
         },
     )
     updated_slots = [underlay_slot, *slots]
+    private_prefix_count = len(updated_slots) - len(slots)
     updated_auto_ids = frozenset((*auto_slot_ids, slot_id))
     updated_slots, updated_layouts = _layout_linear_annotation_tracks(
         records,
@@ -331,7 +333,13 @@ def _add_linear_feature_underlays(
         canvas_config=canvas_config,
         auto_slot_ids=updated_auto_ids,
     )
-    return updated_slots, merged, updated_layouts, updated_auto_ids
+    return (
+        updated_slots,
+        merged,
+        updated_layouts,
+        updated_auto_ids,
+        private_prefix_count,
+    )
 
 
 def _apply_depth_track_heights_to_linear_slots(
@@ -1341,6 +1349,7 @@ def assemble_linear_diagram(
         resolved_annotations,
         annotation_track_layouts,
         auto_annotation_slot_ids,
+        private_underlay_prefix_count,
     ) = _add_linear_feature_underlays(
         records,
         record_feature_layers,
@@ -1350,9 +1359,14 @@ def assemble_linear_diagram(
         auto_annotation_slot_ids,
         canvas_config=canvas_config,
     )
+    effective_linear_track_axis_index = (
+        linear_track_axis_index + private_underlay_prefix_count
+        if linear_track_axis_index is not None
+        else None
+    )
     normalized_linear_track_slots = normalize_linear_track_slots_with_axis(
         linear_track_slots,
-        linear_track_axis_index,
+        effective_linear_track_axis_index,
     )
     normalized_linear_track_slots = _apply_depth_track_heights_to_linear_slots(
         normalized_linear_track_slots,
@@ -1769,7 +1783,7 @@ def assemble_linear_diagram(
             )
             normalized_linear_track_slots = normalize_linear_track_slots_with_axis(
                 linear_track_slots,
-                linear_track_axis_index,
+                effective_linear_track_axis_index,
             )
             normalized_linear_track_slots = _apply_depth_track_heights_to_linear_slots(
                 normalized_linear_track_slots,

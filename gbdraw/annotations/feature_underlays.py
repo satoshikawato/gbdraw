@@ -114,6 +114,10 @@ def merge_feature_underlays(
             annotation_id = (
                 f"record_{record_index + 1}_{feature.feature_id}_{feature_index + 1}"
             )
+            fill = (
+                str(getattr(feature, "color", "") or "").strip()
+                or AUTO_FEATURE_UNDERLAY_FILL
+            )
             resolved.append(
                 ResolvedRegionAnnotation(
                     id=annotation_id,
@@ -125,7 +129,7 @@ def merge_feature_underlays(
                     label="",
                     mark="highlight",
                     lane=None,
-                    style=RegionAnnotationStyle(fill=AUTO_FEATURE_UNDERLAY_FILL),
+                    style=RegionAnnotationStyle(fill=fill),
                     style_is_annotation_override=False,
                     legend_label=None,
                     metadata={

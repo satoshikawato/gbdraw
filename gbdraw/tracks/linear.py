@@ -292,6 +292,9 @@ def linear_track_slots_with_axis_side(
     for slot_index, slot in enumerate(slots):
         renderer = _normalize_renderer(str(slot.renderer))
         params = {str(key): value for key, value in dict(slot.params or {}).items()}
+        if not slot.enabled:
+            out.append(replace(slot, renderer=renderer, params=params))
+            continue
         derived_side = _axis_derived_side(slot_index, axis_index)
         explicit_side = _normalize_side_value(slot.side) if slot.side is not None else None
         if explicit_side == "overlay":

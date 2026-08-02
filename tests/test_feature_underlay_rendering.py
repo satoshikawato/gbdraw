@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+import pandas as pd
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.annotations.feature_underlays import (
+    AUTO_FEATURE_UNDERLAY_FILL,
+    merge_feature_underlays,
+)
+from gbdraw.annotations.models import ResolvedAnnotationBundle
+from gbdraw.api import LinearMultiRecordOptions
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import (
     assemble_circular_diagram_from_record,
@@ -14,16 +21,32 @@ from gbdraw.api.diagram import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
+from gbdraw.features.objects import FeatureLocationPart, FeatureObject
+from gbdraw.io.colors import load_default_colors
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 
 
 SVG_NS = {"svg": "http://www.w3.org/2000/svg"}
 PRIVATE_SLOT_ID = "__gbdraw_auto_feature_underlay_slot__"
 _DEFAULT_CFG = apply_config_overrides(None, None)
+_LINEAR_CFG = apply_config_overrides(
+    None,
+    {
+        "labels.linear.scope": "none",
+        "canvas.show_gc": False,
+        "canvas.show_skew": False,
+    },
+)
 
 
-def _record(*, compound_repeat: bool = False, include_cds: bool = True) -> SeqRecord:
-    record = SeqRecord(Seq("A" * 400), id="record_1", name="record_1")
+def _record(
+    *,
+    record_id: str = "record_1",
+    length: int = 400,
+    compound_repeat: bool = False,
+    include_cds: bool = True,
+) -> SeqRecord:
+    record = SeqRecord(Seq("A" * length), id=record_id, name=record_id)
     repeat_location = (
         CompoundLocation(
             [
@@ -52,6 +75,16 @@ def _record(*, compound_repeat: bool = False, include_cds: bool = True) -> SeqRe
     return record
 
 
+def _depth_table(record_id: str, record_length: int) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "reference_name": [record_id] * 4,
+            "position": [1, record_length // 3, 2 * record_length // 3, record_length],
+            "depth": [10, 30, 20, 40],
+        }
+    )
+
+
 def _underlay_shapes(svg_text: str) -> list[ET.Element]:
     root = ET.fromstring(svg_text)
     return [
@@ -61,15 +94,154 @@ def _underlay_shapes(svg_text: str) -> list[ET.Element]:
     ]
 
 
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("axis_index", "slot_specs", "expected_depth_side"),
+    [
+        (
+            0,
+            [
+                "features:features@side=overlay",
+                "depth_3:depth@side=below,track_index=0",
+            ],
+            "below",
+        ),
+        (
+            1,
+            [
+                "depth_3:depth@side=above,track_index=0",
+                "features:features@side=overlay",
+            ],
+            "above",
+        ),
+        (
+            2,
+            [
+                "depth_3:depth@side=above,track_index=0",
+                "features:features@side=above",
+            ],
+            "above",
+        ),
+    ],
+    ids=["axis-start", "axis-middle-incident", "axis-end"],
+)
+def test_linear_underlay_preserves_public_axis_sides(
+    axis_index: int,
+    slot_specs: list[str],
+    expected_depth_side: str,
+) -> None:
+    record = _record(include_cds=False)
+    drawing = assemble_linear_diagram_from_records(
+        [record],
+        cfg=_LINEAR_CFG,
+        selected_features_set=["repeat_region"],
+        depth_track_tables=[[_depth_table(record.id, len(record.seq))]],
+        linear_track_slots=slot_specs,
+        linear_track_axis_index=axis_index,
+        legend="none",
+    )
+    svg = drawing.tostring()
+    slots = drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+    depth = next(slot for slot in slots if slot["slotId"] == "depth_3")
+    depth_band = depth["paintBand"]
+
+    assert [slot["slotId"] for slot in slots] == [
+        PRIVATE_SLOT_ID,
+        *(spec.split(":", 1)[0] for spec in slot_specs),
+    ]
+    assert depth["side"] == expected_depth_side
+    assert depth_band is not None
+    if expected_depth_side == "above":
+        assert depth_band["bottomPx"] < 0
+    else:
+        assert depth_band["topPx"] > 0
+    assert svg.index(f'data-gbdraw-slot-id="{PRIVATE_SLOT_ID}"') < svg.index(
+        'data-gbdraw-slot-id="features"'
+    )
+
+
+@pytest.mark.linear
+def test_linear_underlay_with_axis_omitted_keeps_explicit_sides() -> None:
+    record = _record(include_cds=False)
+    drawing = assemble_linear_diagram_from_records(
+        [record],
+        cfg=_LINEAR_CFG,
+        selected_features_set=["repeat_region"],
+        depth_track_tables=[[_depth_table(record.id, len(record.seq))]],
+        linear_track_slots=[
+            "depth_3:depth@side=above,track_index=0",
+            "features:features@side=overlay",
+        ],
+        legend="none",
+    )
+    slots = drawing._gbdraw_track_slot_geometry["records"][0]["slots"]
+
+    assert [slot["slotId"] for slot in slots] == [
+        PRIVATE_SLOT_ID,
+        "depth_3",
+        "features",
+    ]
+    assert next(slot for slot in slots if slot["slotId"] == "depth_3")[
+        "side"
+    ] == "above"
+
+
+@pytest.mark.linear
+def test_linear_multi_record_underlay_keeps_axis_during_final_relayout() -> None:
+    records = [
+        _record(record_id="record_1", length=400, include_cds=False),
+        _record(record_id="record_2", length=700, include_cds=False),
+    ]
+    drawing = assemble_linear_diagram_from_records(
+        records,
+        cfg=_LINEAR_CFG,
+        layout=LinearMultiRecordOptions(
+            multi_record_positions=("#1@1", "#2@1"),
+        ),
+        selected_features_set=["repeat_region"],
+        depth_track_tables=[
+            [_depth_table(record.id, len(record.seq))] for record in records
+        ],
+        linear_track_slots=[
+            "depth_3:depth@side=above,track_index=0",
+            "features:features@side=overlay",
+        ],
+        linear_track_axis_index=1,
+        legend="none",
+    )
+    resolved_records = drawing._gbdraw_track_slot_geometry["records"]
+
+    assert len(resolved_records) == 2
+    assert resolved_records[0]["axisYpx"] == pytest.approx(
+        resolved_records[1]["axisYpx"]
+    )
+    for resolved_record in resolved_records:
+        assert [slot["slotId"] for slot in resolved_record["slots"]] == [
+            PRIVATE_SLOT_ID,
+            "depth_3",
+            "features",
+        ]
+        depth = next(
+            slot for slot in resolved_record["slots"] if slot["slotId"] == "depth_3"
+        )
+        assert depth["side"] == "above"
+        assert depth["paintBand"]["bottomPx"] < 0
+
+
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_default_repeat_underlay_has_feature_identity_and_paints_first(mode: str) -> None:
     record = _record()
     repeat = record.features[0]
     feature_id = compute_feature_hash(repeat, record_id=record.id)
+    default_colors = load_default_colors("", "default")
+    expected_fill = default_colors.loc[
+        default_colors["feature_type"] == "repeat_region", "color"
+    ].iloc[0]
     drawing = (
         assemble_circular_diagram_from_record(
             record,
             cfg=_DEFAULT_CFG,
+            default_colors=default_colors,
             selected_features_set=["repeat_region", "CDS"],
             legend="none",
         )
@@ -77,6 +249,7 @@ def test_default_repeat_underlay_has_feature_identity_and_paints_first(mode: str
         else assemble_linear_diagram_from_records(
             [record],
             cfg=_DEFAULT_CFG,
+            default_colors=default_colors,
             selected_features_set=["repeat_region", "CDS"],
             legend="none",
         )
@@ -90,7 +263,7 @@ def test_default_repeat_underlay_has_feature_identity_and_paints_first(mode: str
     assert shapes[0].attrib["data-gbdraw-feature-part"] == "block"
     assert shapes[0].attrib["data-gbdraw-record-id"] == record.id
     assert shapes[0].attrib["data-gbdraw-record-index"] == "0"
-    assert shapes[0].attrib["fill"] == "#808080"
+    assert shapes[0].attrib["fill"] == expected_fill
     assert shapes[0].attrib["fill-opacity"] == "0.2"
     assert shapes[0].attrib["stroke"] == "none"
     assert shapes[0].attrib["stroke-width"] == "0"
@@ -110,6 +283,79 @@ def test_default_repeat_underlay_has_feature_identity_and_paints_first(mode: str
     assert repeat_metadata["type"] == "repeat_region"
     assert repeat_metadata["qualifiers"]["rpt_family"] == ["family-a"]
     assert repeat_metadata["qualifiers"]["rpt_type"] == ["direct"]
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_underlays_keep_each_specific_color_rule_fill(mode: str) -> None:
+    record = _record(include_cds=False)
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(220, 320, strand=1),
+            type="repeat_region",
+            qualifiers={"rpt_family": ["family-b"], "rpt_type": ["inverted"]},
+        )
+    )
+    color_table = pd.DataFrame(
+        [
+            ["repeat_region", "rpt_family", "^family-a$", "#ff00aa", "Family A"],
+            ["repeat_region", "rpt_family", "^family-b$", "#00aaff", "Family B"],
+        ],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+    drawing = (
+        assemble_circular_diagram_from_record(
+            record,
+            cfg=_DEFAULT_CFG,
+            color_table=color_table,
+            selected_features_set=["repeat_region"],
+            legend="none",
+        )
+        if mode == "circular"
+        else assemble_linear_diagram_from_records(
+            [record],
+            cfg=_DEFAULT_CFG,
+            color_table=color_table,
+            selected_features_set=["repeat_region"],
+            legend="none",
+        )
+    )
+    fills_by_feature_id = {
+        shape.attrib["id"]: shape.attrib["fill"]
+        for shape in _underlay_shapes(drawing.tostring())
+    }
+
+    assert fills_by_feature_id == {
+        compute_feature_hash(record.features[0], record_id=record.id): "#ff00aa",
+        compute_feature_hash(record.features[1], record_id=record.id): "#00aaff",
+    }
+
+
+def test_empty_feature_color_keeps_defensive_underlay_fill() -> None:
+    record = _record(include_cds=False)
+    coordinates = [
+        FeatureLocationPart("block", "001", "positive", 20, 180, True)
+    ]
+    feature = FeatureObject(
+        feature_id="feature_without_color",
+        location=coordinates,
+        is_directional=False,
+        color="",
+        note="",
+        label_text="",
+        coordinates=coordinates,
+        type="repeat_region",
+        qualifiers={},
+        record_id=record.id,
+    )
+
+    merged, _set_id = merge_feature_underlays(
+        ResolvedAnnotationBundle(()),
+        [[feature]],
+        [record],
+        mode="linear",
+    )
+
+    assert merged.annotations[0].style.fill == AUTO_FEATURE_UNDERLAY_FILL
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])

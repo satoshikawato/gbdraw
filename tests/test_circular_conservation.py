@@ -403,6 +403,106 @@ def test_circular_api_renders_source_colored_conservation_ring() -> None:
     assert "#e15759" in svg
 
 
+def _assert_auto_conservation_axis_geometry(
+    canvas: Drawing,
+    *,
+    axis_index: int,
+    record_count: int,
+) -> None:
+    geometry_records = canvas._gbdraw_track_slot_geometry["records"]
+    assert len(geometry_records) == record_count
+
+    original_slot_ids = ["features", "outer_gap", "ticks"]
+    for record_geometry in geometry_records:
+        slots = sorted(record_geometry["slots"], key=lambda slot: slot["slotIndex"])
+        conservation_slots = [
+            slot
+            for slot in slots
+            if slot["renderer"] == "sequence_conservation"
+        ]
+
+        assert len(conservation_slots) == 1
+        conservation_slot = conservation_slots[0]
+        assert slots[axis_index] is conservation_slot
+        assert conservation_slot["side"] == "inside"
+        assert [
+            slot["slotId"]
+            for slot in slots
+            if slot["renderer"] != "sequence_conservation"
+        ] == original_slot_ids
+
+        by_id = {slot["slotId"]: slot for slot in slots}
+        for original_index, slot_id in enumerate(original_slot_ids):
+            expected_side = "outside" if original_index < axis_index else "inside"
+            assert by_id[slot_id]["side"] == expected_side
+
+
+@pytest.mark.parametrize("axis_index", [0, 2, 3], ids=["axis-zero", "axis-middle", "axis-end"])
+def test_circular_api_auto_conservation_inserts_at_explicit_axis(
+    axis_index: int,
+) -> None:
+    canvas = assemble_circular_diagram_from_record(
+        _record(),
+        cfg=apply_config_overrides(None, None),
+        selected_features_set=[],
+        conservation_dataframes=[
+            _comparison_frame([_hit(subject="rec1", sstart=1, send=120)])
+        ],
+        conservation_reference="subject",
+        conservation_labels=["Axis reference"],
+        circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="outer_gap", renderer="spacer"),
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+        ],
+        circular_track_axis_index=axis_index,
+        legend="none",
+    )
+
+    _assert_auto_conservation_axis_geometry(
+        canvas,
+        axis_index=axis_index,
+        record_count=1,
+    )
+    assert _conservation_group_id(canvas.tostring(), "Axis reference") is not None
+
+
+@pytest.mark.parametrize("axis_index", [0, 2, 3], ids=["axis-zero", "axis-middle", "axis-end"])
+def test_circular_multi_record_auto_conservation_inserts_at_explicit_axis(
+    axis_index: int,
+) -> None:
+    records = [_record("rec1"), _record("rec2")]
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        cfg=apply_config_overrides(None, None),
+        selected_features_set=[],
+        conservation_dataframes=[
+            _comparison_frame(
+                [
+                    _hit(subject="rec1", sstart=1, send=120),
+                    _hit(subject="rec2", sstart=1, send=120),
+                ]
+            )
+        ],
+        conservation_reference="subject",
+        conservation_labels=["Axis reference"],
+        circular_track_slots=[
+            CircularTrackSlot(id="features", renderer="features"),
+            CircularTrackSlot(id="outer_gap", renderer="spacer"),
+            CircularTrackSlot(id="ticks", renderer="ticks"),
+        ],
+        circular_track_axis_index=axis_index,
+        legend="none",
+    )
+
+    _assert_auto_conservation_axis_geometry(
+        canvas,
+        axis_index=axis_index,
+        record_count=2,
+    )
+    assert canvas.tostring().count('data-track-label="Axis reference"') >= 2
+
+
 def test_circular_multi_conservation_gradient_legend_uses_compact_linear_layout() -> None:
     canvas_config = SimpleNamespace(legend_position="right", dpi=96)
     legend_config = SimpleNamespace(

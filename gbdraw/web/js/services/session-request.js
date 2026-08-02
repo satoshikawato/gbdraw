@@ -56,7 +56,8 @@ import {
   defaultFeatureRendering,
   normalizeArrowHeadLengthRatio,
   normalizeArrowShaftWidthRatio,
-  normalizeFeatureRenderingMap
+  normalizeFeatureRenderingMap,
+  visibleFeatureUnderlaysForState
 } from '../utils/feature-rendering.js';
 import {
   comparisonFiltersForMode,
@@ -877,18 +878,6 @@ const annotationSetIdsForState = (state) => (
     .filter(Boolean)
 );
 
-const visibleFeatureUnderlaysForState = (state) => {
-  const featureShapes = {
-    repeat_region: defaultFeatureRendering('repeat_region'),
-    ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
-  };
-  return Array.from(state.adv.features || [])
-    .map((featureType) => String(featureType || '').trim())
-    .filter((featureType) => (
-      (featureShapes[featureType] || defaultFeatureRendering(featureType)) === 'underlay'
-    ));
-};
-
 const automaticCircularAnnotationSlots = (state) => {
   const slots = [];
   (Array.isArray(state.annotationSets) ? state.annotationSets : [])
@@ -1031,7 +1020,7 @@ const buildTrackPlan = ({
       trackType: state.form.linear_track_layout,
       depthTrackCount,
       annotationSetIds,
-      visibleFeatureUnderlays: false,
+      visibleFeatureUnderlays,
       conservationSeries: []
     }));
     const depthRequested = validation.enabledSlots.some(
@@ -1463,18 +1452,36 @@ const buildComparisons = ({
   return comparisons;
 };
 
+const resolvedLinearRecordRows = (sequences, layoutRows) => {
+  const rowsByUid = new Map(
+    (Array.isArray(layoutRows) ? layoutRows : [])
+      .map((entry) => [String(entry?.uid || ''), Number(entry?.row)])
+  );
+  return (Array.isArray(sequences) ? sequences : []).map((sequence, index) => {
+    const row = rowsByUid.get(String(sequence?.uid || ''));
+    return Number.isInteger(row) && row > 0 ? row : index + 1;
+  });
+};
+
+export const linearRecordLayoutHasSharedRow = (sequences, layoutRows) => {
+  const seenRows = new Set();
+  return resolvedLinearRecordRows(sequences, layoutRows).some((row) => {
+    if (seenRows.has(row)) return true;
+    seenRows.add(row);
+    return false;
+  });
+};
+
 const buildLayout = (state, filesData) => {
   if (state.mode.value === 'linear') {
     if (!state.linearRecordLayoutEnabled?.value) return {};
-    const rows = new Map(
-      (state.linearRecordRows || []).map((entry) => [String(entry?.uid || ''), Number(entry?.row)])
+    const resolvedRows = resolvedLinearRecordRows(
+      filesData.linearSeqs,
+      state.linearRecordRows
     );
     return {
       recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0),
-      multiRecordPositions: (filesData.linearSeqs || []).map((sequence, index) => {
-        const row = rows.get(String(sequence?.uid || ''));
-        return `#${index + 1}@${Number.isInteger(row) && row > 0 ? row : index + 1}`;
-      })
+      multiRecordPositions: resolvedRows.map((row, index) => `#${index + 1}@${row}`)
     };
   }
   if (!state.form.multi_record_canvas) return {};
@@ -1509,6 +1516,17 @@ export const buildCanonicalRenderRequest = ({
   requireCurrentCircularMultiRecordSizeMode(state.adv.multi_record_size_mode);
   requireCurrentLinearTrackLayout(state.form.linear_track_layout);
   requireCurrentLinearLabelPlacement(state.adv.label_placement);
+  if (
+    state.mode.value === 'linear' &&
+    Boolean(state.form.normalize_length) &&
+    Boolean(state.linearRecordLayoutEnabled?.value) &&
+    linearRecordLayoutHasSharedRow(filesData?.linearSeqs, state.linearRecordRows)
+  ) {
+    throw new Error(
+      'Normalize Record Lengths cannot be used when multiple records share the same Linear row. ' +
+      'Turn Normalize off or assign each record to a separate row.'
+    );
+  }
   const resources = createResourceBuilder();
   const webFiles = {};
   const records = buildRecords({ state, filesData, resources });

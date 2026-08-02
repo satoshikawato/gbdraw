@@ -7,6 +7,7 @@ const { gunzipSync } = require('node:zlib');
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const bgcSessionPath = join(repoRoot, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
 const hmmtDnaPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
+const repeatRegionGenbankPath = join(repoRoot, 'tests/test_inputs/NC_001454.1.gbk');
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
 const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000709.gbk');
 
@@ -273,6 +274,127 @@ test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page })
   });
   await expect(showDepthCheckbox).toBeDisabled();
   await expect(showDepthCheckbox).not.toBeChecked();
+});
+
+test('Linear Depth above Features generates with repeat_region underlays', async ({ page }) => {
+  test.setTimeout(300000);
+  const genbank = readFileSync(repeatRegionGenbankPath, 'utf8');
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.waitForFunction(() => (
+    window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true
+  ), null, { timeout: 180000 });
+
+  const outcome = await page.evaluate(async (genbankText) => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'repeat-region.gbk', {
+      type: 'text/plain',
+      lastModified: 19
+    }));
+    app.setLinearDepthFile(app.linearSeqs[0], 0, new File([
+      'reference_name\tposition\tdepth\n' +
+      'NC_001454.1\t1\t12\n' +
+      'NC_001454.1\t80\t18\n' +
+      'NC_001454.1\t160\t9\n'
+    ], 'repeat-region-depth.tsv', {
+      type: 'text/tab-separated-values',
+      lastModified: 20
+    }));
+    Object.assign(app.form, {
+      show_gc: false,
+      show_skew: false,
+      show_depth: true,
+      show_labels_linear: 'none',
+      legend: 'none'
+    });
+    if (!app.adv.features.includes('repeat_region')) {
+      app.adv.features.push('repeat_region');
+    }
+    app.adv.feature_shapes = {
+      ...(app.adv.feature_shapes || {}),
+      repeat_region: 'underlay'
+    };
+    app.adv.linear_track_slots.splice(
+      0,
+      app.adv.linear_track_slots.length,
+      {
+        id: 'depth_3',
+        renderer: 'depth',
+        enabled: true,
+        side: 'above',
+        z: 0,
+        params: { track_index: 0 }
+      },
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'overlay',
+        z: 0,
+        params: {}
+      }
+    );
+    app.adv.linear_track_slots_axis_index = 1;
+    app.adv.linear_track_slots_enabled = true;
+    app.results.splice(0, app.results.length);
+    state.trackSlotResolvedGeometry.value = null;
+
+    const result = await app.runAnalysis();
+    const geometry = state.trackSlotResolvedGeometry.value;
+    const firstRecord = geometry?.records?.find((record) => (
+      Number(record?.resultIndex ?? 0) === 0 &&
+      Number(record?.recordIndex ?? 0) === 0
+    ));
+    const slots = firstRecord?.slots || [];
+    const content = app.results?.[0]?.content || '';
+    const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
+    const underlayPaintIndex = content.indexOf(
+      'data-gbdraw-slot-id="__gbdraw_auto_feature_underlay_slot__"'
+    );
+    const foregroundPaintIndex = content.indexOf(
+      'data-gbdraw-slot-id="features"'
+    );
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      errorDetails: Array.isArray(app.errorLog?.details)
+        ? app.errorLog.details.map((detail) => String(detail))
+        : [],
+      resultCount: app.results?.length || 0,
+      mode: geometry?.mode || null,
+      slotIds: slots.map((slot) => slot.slotId),
+      depthSide: slots.find((slot) => slot.slotId === 'depth_3')?.side || null,
+      featureSide: slots.find((slot) => slot.slotId === 'features')?.side || null,
+      underlayCount: svg.querySelectorAll(
+        '[data-gbdraw-auto-feature-underlay="true"]'
+      ).length,
+      underlayPaintsFirst: (
+        underlayPaintIndex >= 0 &&
+        foregroundPaintIndex >= 0 &&
+        underlayPaintIndex < foregroundPaintIndex
+      )
+    };
+  }, genbank);
+
+  expect(outcome).toMatchObject({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: [],
+    resultCount: 1,
+    mode: 'linear',
+    depthSide: 'above',
+    featureSide: 'overlay',
+    underlayPaintsFirst: true
+  });
+  expect(outcome.slotIds).toEqual([
+    '__gbdraw_auto_feature_underlay_slot__',
+    'depth_3',
+    'features'
+  ]);
+  expect(outcome.underlayCount).toBeGreaterThan(0);
 });
 
 test('Linear depth add, clear, and remove keep global sparse columns aligned', async ({ page }) => {

@@ -13,6 +13,7 @@ import {
 } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
 import { validateCustomTrackPlan } from './track-slot-validation.js';
+import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -875,7 +876,7 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     trackType: form.linear_track_layout,
     depthTrackCount: linearAvailableDepthTrackCountForState(state),
     annotationSetIds: annotationSetIds(),
-    visibleFeatureUnderlays: false,
+    visibleFeatureUnderlays: visibleFeatureUnderlaysForState(state),
     conservationSeries: []
   });
 
@@ -1528,13 +1529,14 @@ export const createLinearTrackSlotEditor = ({ state }) => {
 
   const selectedResultIndexValue = () => Number(state?.selectedResultIndex?.value ?? 0) || 0;
 
-  const resolvedLinearSlotGeometry = (slotIndex) => findTrackSlotGeometry({
+  const resolvedLinearSlotGeometry = (slotIndex, slotId) => findTrackSlotGeometry({
     geometry: String(state?.trackSlotResolvedGeometry?.value?.mode || '') === 'linear'
       ? state.trackSlotResolvedGeometry.value
       : null,
     resultIndex: selectedResultIndexValue(),
     recordIndex: 0,
-    slotIndex
+    slotIndex,
+    slotId
   });
 
   const estimateLinearSlotGeometry = (slot) => {
@@ -1559,7 +1561,7 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const linearTrackSlotDisplayGeometry = (slot, slotIndex) => {
-    const resolved = resolvedLinearSlotGeometry(slotIndex);
+    const resolved = resolvedLinearSlotGeometry(slotIndex, slot?.id);
     if (resolved) return { ...resolved, source: 'resolved' };
     return estimateLinearSlotGeometry(slot);
   };

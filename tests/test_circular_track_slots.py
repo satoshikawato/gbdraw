@@ -752,6 +752,40 @@ def test_normalize_circular_track_slots_with_axis_rejects_conflicting_side() -> 
         )
 
 
+@pytest.mark.parametrize(
+    "disabled_slot",
+    [
+        pytest.param(
+            CircularTrackSlot(
+                id="ticks",
+                renderer="ticks",
+                side="inside",
+                enabled=False,
+            ),
+            id="side",
+        ),
+        pytest.param(
+            CircularTrackSlot(
+                id="features",
+                renderer="features",
+                enabled=False,
+                params={"lane_direction": "inside"},
+            ),
+            id="feature-lane",
+        ),
+    ],
+)
+def test_normalize_circular_track_slots_with_axis_ignores_disabled_conflicts(
+    disabled_slot: CircularTrackSlot,
+) -> None:
+    normalized = normalize_circular_track_slots_with_axis(
+        [disabled_slot],
+        axis_index=1,
+    )
+
+    assert normalized == []
+
+
 def test_normalize_circular_track_slots_with_axis_keeps_split_feature_overlay() -> None:
     split = normalize_circular_track_slots_with_axis(
         [

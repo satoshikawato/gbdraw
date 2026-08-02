@@ -465,6 +465,11 @@ const defaultSideForSlot = (slot, mode, trackType) => {
   }
   if (renderer === 'annotations') return 'outside';
   if (renderer !== 'features') return 'inside';
+  const lane = normalizedOptionalString(
+    slot?.params?.lane_direction ?? slot?.params?.lanes
+  );
+  if (lane === 'split') return 'overlay';
+  if (lane === 'inside' || lane === 'outside') return lane;
   const preset = normalizedString(trackType);
   if (preset === 'middle') return 'overlay';
   if (preset === 'spreadout') return 'outside';
@@ -647,6 +652,37 @@ const collectCustomTrackIssues = ({
     }
     if (slot.enabled !== false) enabledIndexes.push(index);
   });
+  if (mode === 'linear' && enabledIndexes.length === 0) {
+    globalIssues.push(globalIssue({
+      code: 'linear_slots_empty',
+      field: 'slots',
+      message: 'Linear Custom Track Slots require at least one enabled row.'
+    }));
+  }
+
+  let resolvedAxisIndex = null;
+  if (axisIndex === null || axisIndex === undefined || axisIndex === '') {
+    resolvedAxisIndex = inferredCustomTrackAxisIndex(draftSlots, mode, trackType);
+  } else if (
+    typeof axisIndex !== 'boolean' &&
+    Number.isSafeInteger(Number(axisIndex)) &&
+    Number(axisIndex) >= 0 &&
+    Number(axisIndex) <= draftSlots.length
+  ) {
+    resolvedAxisIndex = Number(axisIndex);
+  } else {
+    globalIssues.push(globalIssue({
+      code: 'axis_out_of_range',
+      field: 'axisIndex',
+      message: `${modeLabel} Axis boundary must be an integer from 0 to ${draftSlots.length}.`
+    }));
+  }
+  const emittedAxisIndex = resolvedAxisIndex === null
+    ? null
+    : draftSlots
+        .slice(0, resolvedAxisIndex)
+        .filter((slot) => slot && typeof slot === 'object' && slot.enabled !== false)
+        .length;
 
   const idsToIndexes = new Map();
   enabledIndexes.forEach((index) => {
@@ -694,19 +730,19 @@ const collectCustomTrackIssues = ({
       });
     }
 
-    let side = null;
+    let explicitSide = null;
     if (slot.side !== null && slot.side !== undefined && slot.side !== '') {
-      side = typeof slot.side === 'string' ? normalizedString(slot.side) : null;
-      if (!side || !supportedSides.has(side)) {
+      explicitSide = typeof slot.side === 'string' ? normalizedString(slot.side) : null;
+      if (!explicitSide || !supportedSides.has(explicitSide)) {
         addRowIssue(rowIssues, index, {
           code: 'side_unsupported',
           field: 'side',
           slotId: id || null,
           message: `${modeLabel} track ${slotLabel} has an unsupported side.`
         });
+        explicitSide = null;
       }
     }
-    side = side || defaultSideForSlot(slot, mode, trackType);
 
     const params = (
       slot.params && typeof slot.params === 'object' && !Array.isArray(slot.params)
@@ -766,6 +802,39 @@ const collectCustomTrackIssues = ({
       }
     }
 
+    const enabledSlotIndex = normalizedEnabled.length;
+    const axisDerivedSide = emittedAxisIndex === null
+      ? defaultSideForSlot(slot, mode, trackType)
+      : (
+          mode === 'linear'
+            ? (enabledSlotIndex < emittedAxisIndex ? 'above' : 'below')
+            : (enabledSlotIndex < emittedAxisIndex ? 'outside' : 'inside')
+        );
+    let side = explicitSide;
+    if (mode === 'circular' && renderer === 'features' && params) {
+      const lane = normalizedOptionalString(params.lane_direction ?? params.lanes);
+      if (lane !== null && !['inside', 'outside', 'split'].includes(lane)) {
+        addRowIssue(rowIssues, index, {
+          code: 'feature_lane',
+          field: 'params.lane_direction',
+          slotId: id || null,
+          message: `Circular Features track ${slotLabel} has an invalid lane direction.`
+        });
+      } else if (lane !== null) {
+        const laneSide = lane === 'split' ? 'overlay' : lane;
+        if (explicitSide !== null && explicitSide !== laneSide) {
+          addRowIssue(rowIssues, index, {
+            code: 'feature_lane_side_conflict',
+            field: 'side',
+            slotId: id || null,
+            message: `Circular Features track ${slotLabel} side conflicts with its lane direction.`
+          });
+        }
+        side = laneSide;
+      }
+    }
+    side = side || axisDerivedSide;
+
     if (mode === 'linear' && side === 'overlay' && !['features', 'annotations'].includes(renderer)) {
       addRowIssue(rowIssues, index, {
         code: 'overlay_renderer_unsupported',
@@ -781,28 +850,6 @@ const collectCustomTrackIssues = ({
         slotId: id || null,
         message: `Circular comparison track ${slotLabel} cannot use Overlay.`
       });
-    }
-
-    if (mode === 'circular' && renderer === 'features' && params) {
-      const lane = normalizedOptionalString(params.lane_direction ?? params.lanes);
-      if (lane !== null && !['inside', 'outside', 'split'].includes(lane)) {
-        addRowIssue(rowIssues, index, {
-          code: 'feature_lane',
-          field: 'params.lane_direction',
-          slotId: id || null,
-          message: `Circular Features track ${slotLabel} has an invalid lane direction.`
-        });
-      } else if (lane !== null) {
-        const expectedSide = lane === 'split' ? 'overlay' : lane;
-        if (side !== expectedSide) {
-          addRowIssue(rowIssues, index, {
-            code: 'feature_lane_side_conflict',
-            field: 'side',
-            slotId: id || null,
-            message: `Circular Features track ${slotLabel} side conflicts with its lane direction.`
-          });
-        }
-      }
     }
 
     if (mode === 'circular' && renderer === 'ticks' && params) {
@@ -1001,7 +1048,8 @@ const collectCustomTrackIssues = ({
       slotId: String(draftSlots[index]?.id || '').trim() || null,
       message: 'Linear Custom Track Slots support only one enabled Features row.'
     }));
-  } else if (featureUnderlaysVisible(visibleFeatureUnderlays)) {
+  }
+  if (featureUnderlaysVisible(visibleFeatureUnderlays)) {
     const featureCount = enabledIndexes.filter(
       (index) => normalizedString(draftSlots[index]?.renderer) === 'features'
     ).length;
@@ -1009,7 +1057,7 @@ const collectCustomTrackIssues = ({
       globalIssues.push(globalIssue({
         code: 'feature_underlay_features_count',
         field: 'slots',
-        message: 'Visible feature underlays require exactly one enabled Circular Features row.'
+        message: `Visible feature underlays require exactly one enabled ${modeLabel} Features row.`
       }));
     }
   }
@@ -1061,29 +1109,48 @@ const collectCustomTrackIssues = ({
     }
   });
 
-  let resolvedAxisIndex = null;
-  if (axisIndex === null || axisIndex === undefined || axisIndex === '') {
-    resolvedAxisIndex = inferredCustomTrackAxisIndex(draftSlots, mode, trackType);
-  } else if (
-    typeof axisIndex !== 'boolean' &&
-    Number.isSafeInteger(Number(axisIndex)) &&
-    Number(axisIndex) >= 0 &&
-    Number(axisIndex) <= draftSlots.length
-  ) {
-    resolvedAxisIndex = Number(axisIndex);
-  } else {
-    globalIssues.push(globalIssue({
-      code: 'axis_out_of_range',
-      field: 'axisIndex',
-      message: `${modeLabel} Axis boundary must be an integer from 0 to ${draftSlots.length}.`
-    }));
+  if (emittedAxisIndex !== null) {
+    normalizedEnabled.forEach((slot, slotIndex) => {
+      if (!supportedRenderers.has(slot.renderer)) return;
+      const rowIndex = rowIndexByNormalizedSlot.get(slot);
+      if (!Number.isInteger(rowIndex)) return;
+      let conflictsWithAxis = false;
+      if (mode === 'linear') {
+        const derivedSide = slotIndex < emittedAxisIndex ? 'above' : 'below';
+        if (slot.side === 'overlay') {
+          conflictsWithAxis = (
+            slot.renderer === 'features' && slotIndex !== emittedAxisIndex
+          );
+        } else {
+          conflictsWithAxis = slot.side !== derivedSide;
+        }
+      } else {
+        const derivedSide = slotIndex < emittedAxisIndex ? 'outside' : 'inside';
+        const featureLane = slot.renderer === 'features'
+          ? normalizedOptionalString(slot.params.lane_direction ?? slot.params.lanes)
+          : null;
+        const isOverlayException = (
+          (slot.renderer === 'features' && featureLane === 'split' && slot.side === 'overlay') ||
+          (['ticks', 'annotations'].includes(slot.renderer) && slot.side === 'overlay')
+        );
+        const featureLaneConflictsWithAxis = (
+          slot.renderer === 'features' &&
+          ['inside', 'outside'].includes(featureLane) &&
+          featureLane !== derivedSide
+        );
+        conflictsWithAxis = !isOverlayException && (
+          slot.side !== derivedSide || featureLaneConflictsWithAxis
+        );
+      }
+      if (!conflictsWithAxis) return;
+      addRowIssue(rowIssues, rowIndex, {
+        code: 'axis_side_conflict',
+        field: 'side',
+        slotId: slot.id || null,
+        message: `${modeLabel} track '${slot.id}' side conflicts with the enabled Axis boundary.`
+      });
+    });
   }
-  const emittedAxisIndex = resolvedAxisIndex === null
-    ? null
-    : draftSlots
-        .slice(0, resolvedAxisIndex)
-        .filter((slot) => slot && typeof slot === 'object' && slot.enabled !== false)
-        .length;
 
   return {
     draftSlots,

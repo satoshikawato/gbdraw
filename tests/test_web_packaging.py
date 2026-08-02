@@ -3043,7 +3043,7 @@ def test_web_coordinate_scale_visibility_lifecycle_is_wired() -> None:
     assert "canUseCircularScaleStyling" in setup_source
     assert "showTicks = true" in slot_source
     assert "if (showTicks)" in slot_source
-    assert slot_source.count("showTicks: state.form.show_scale !== false") == 2
+    assert slot_source.count("showTicks: state.form.show_scale !== false") == 1
 
 
 def test_web_species_and_strain_are_projected_only_for_circular_requests() -> None:
@@ -3555,7 +3555,15 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
         pytest.skip("node is not available")
 
     source_path = WEB_ROOT / "js" / "app" / "linear-track-slots.js"
-    module_path = tmp_path / "linear-track-slots.mjs"
+    module_dir = tmp_path / "app"
+    module_dir.mkdir()
+    module_path = module_dir / "linear-track-slots.mjs"
+    utils_dir = tmp_path / "utils"
+    utils_dir.mkdir()
+    feature_rendering_path = WEB_ROOT / "js" / "utils" / "feature-rendering.js"
+    (utils_dir / "feature-rendering.js").write_text(
+        feature_rendering_path.read_text(encoding="utf-8"), encoding="utf-8"
+    )
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
     for dependency in [
         "depth-track-state.js",
@@ -3566,7 +3574,7 @@ def test_linear_track_slot_axis_sync_actions_and_specs(tmp_path: Path) -> None:
         "track-slot-validation.js",
     ]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
-        (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
+        (module_dir / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
     check_path = tmp_path / "check-linear-track-slots.mjs"
     check_path.write_text(
@@ -3750,7 +3758,15 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         pytest.skip("node is not available")
 
     source_path = WEB_ROOT / "js" / "app" / "circular-track-slots.js"
-    module_path = tmp_path / "circular-track-slots.mjs"
+    module_dir = tmp_path / "app"
+    module_dir.mkdir()
+    module_path = module_dir / "circular-track-slots.mjs"
+    utils_dir = tmp_path / "utils"
+    utils_dir.mkdir()
+    feature_rendering_path = WEB_ROOT / "js" / "utils" / "feature-rendering.js"
+    (utils_dir / "feature-rendering.js").write_text(
+        feature_rendering_path.read_text(encoding="utf-8"), encoding="utf-8"
+    )
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")
     for dependency in [
         "conservation-series.js",
@@ -3761,7 +3777,7 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
         "track-slot-validation.js",
     ]:
         dep_path = WEB_ROOT / "js" / "app" / dependency
-        (tmp_path / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
+        (module_dir / dependency).write_text(dep_path.read_text(encoding="utf-8"), encoding="utf-8")
     module_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
     check_path = tmp_path / "check-circular-track-slots.mjs"
     check_path.write_text(
@@ -3775,8 +3791,8 @@ def test_circular_track_slot_axis_crossing_actions_keep_neighbor_sides(tmp_path:
           estimateCircularConservationLayoutWarning,
           migrateLegacyCircularTrackSlot
         }} from {module_path.as_uri()!r};
-        import {{ normalizeConservationSeriesColor }} from './conservation-series.js';
-        import {{ formatCircularWidthValue }} from './track-slot-display.js';
+        import {{ normalizeConservationSeriesColor }} from {(module_dir / "conservation-series.js").as_uri()!r};
+        import {{ formatCircularWidthValue }} from {(module_dir / "track-slot-display.js").as_uri()!r};
 
         const defaultSlots = createDefaultCircularTrackSlots({{ preset: 'tuckin' }});
         const defaultTick = defaultSlots.find((slot) => slot.id === 'ticks');
