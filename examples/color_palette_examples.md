@@ -1,6 +1,6 @@
 # Color palette reference
 
-This page is generated from [`gbdraw/data/color_palettes.toml`](../gbdraw/data/color_palettes.toml) by `python tools/generate_palette_page.py`. Choose a palette with `-p/--palette <name>`. The TOML file is the complete source of truth for every semantic color.
+This reference is generated from [`gbdraw/data/color_palettes.toml`](../gbdraw/data/color_palettes.toml). Choose a palette with `-p/--palette <name>`. The TOML file is the complete source of truth for every semantic color.
 
 gbdraw currently provides **55 palettes**.
 
@@ -90,14 +90,41 @@ The table keeps the most frequently compared roles visible. Open the TOML source
 | `volcano` | $\textcolor{#e28b85}{\blacksquare}$ `#e28b85` | $\textcolor{#ffd84c}{\blacksquare}$ `#ffd84c` | $\textcolor{#a0522d}{\blacksquare}$ `#a0522d` | $\textcolor{#772403}{\blacksquare}$ `#772403` | $\textcolor{#ffad60}{\blacksquare}$ `#ffad60` | $\textcolor{#d13c31}{\blacksquare}$ `#d13c31` | $\textcolor{#d13c31}{\blacksquare}$ `#d13c31` |
 | `zen` | $\textcolor{#a0a5a9}{\blacksquare}$ `#a0a5a9` | $\textcolor{#d8dfe5}{\blacksquare}$ `#d8dfe5` | $\textcolor{#40807b}{\blacksquare}$ `#40807b` | $\textcolor{#68776d}{\blacksquare}$ `#68776d` | $\textcolor{#d4d4d4}{\blacksquare}$ `#d4d4d4` | $\textcolor{#87919e}{\blacksquare}$ `#87919e` | $\textcolor{#87919e}{\blacksquare}$ `#87919e` |
 
-## Reproduce the images
+## Reproduce the `ajisai` examples
+
+From a source checkout, these commands reproduce the Circular and Linear `ajisai` figures shown above:
 
 ```bash
-python tools/reproduce_examples.py --group palettes
-python tools/generate_palette_explorer_assets.py --source-svg _reproduced/examples/AP027078_tuckin_separate_strands_default.svg
+gbdraw circular \
+  --gbk tests/test_inputs/AP027078.gb \
+  --separate_strands \
+  --track_type tuckin \
+  -p ajisai \
+  -o AP027078_tuckin_separate_strands_ajisai \
+  -f svg
+
+gbdraw linear \
+  --gbk \
+    tests/test_inputs/AP027078.gb \
+    tests/test_inputs/AP027131.gb \
+    tests/test_inputs/AP027133.gb \
+    tests/test_inputs/AP027132.gb \
+    tests/test_inputs/NZ_CP006932.gb \
+  -b \
+    tests/test_inputs/AP027078_AP027131.tblastx.out \
+    tests/test_inputs/AP027131_AP027133.tblastx.out \
+    tests/test_inputs/AP027133_AP027132.tblastx.out \
+    tests/test_inputs/AP027132_NZ_CP006932.tblastx.out \
+  --align_center \
+  --separate_strands \
+  --gc \
+  --skew \
+  -p ajisai \
+  -o hepatoplasmataceae_ajisai \
+  -f svg
 ```
 
-The first command reproduces all three Circular/Linear pairs shown above. The explorer stores one Circular SVG plus the TOML-derived palette definitions.
+Replace `ajisai` and both output prefixes to render another palette. To compare palettes without writing files, use the [Circular Palette Explorer](https://gbdraw.app/gallery/palettes/).
 
 ## Accessibility
 

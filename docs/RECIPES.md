@@ -1,8 +1,8 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
 
 # Recipes
 
-Copy-paste command examples for common tasks. For explanations and screenshots, see the [command-line guides](./TUTORIALS/TUTORIALS.md).
+Copy-paste command examples for common tasks. For explanations and screenshots, see the [command-line guides](./TUTORIALS/README.md).
 
 ## Circular diagrams
 
@@ -117,24 +117,22 @@ Automatic feature underlays remain feature metadata, not region-annotation rows.
 
 ### Draw narrower arrows
 
-The finished Circular HmmtDNA and Linear BGC examples in
-[Tutorial 9](./TUTORIALS/9_Feature_Visibility_Shapes.md) start from Interactive
-SVG Gallery sessions. The Circular example sets the global arrow shaft-width
-ratio to `0.75`; the Linear example sets it to `0.5`. From a source checkout,
-reproduce both SVGs with:
-
 ```bash
-python tools/reproduce_examples.py \
-  --output-root . \
-  --figure tutorial_9_arrow_geometry_circular \
-  --figure tutorial_9_arrow_geometry_linear
+gbdraw circular \
+  --gbk genome.gb \
+  --arrow_head_length_ratio auto \
+  --arrow_shaft_width_ratio 0.75 \
+  -o narrow-arrows \
+  -f svg
 ```
 
-For another CLI command, add `--arrow_head_length_ratio auto` and a suitable
-`--arrow_shaft_width_ratio`. Auto extends the mode-specific head length by the
-thickness removed from the shaft. The settings apply to every feature type
+This writes `narrow-arrows.svg`. Auto extends the mode-specific head length by
+the thickness removed from the shaft. The settings apply to every feature type
 rendered as `arrow`. Ratios must be positive and finite; the shaft ratio must
 not exceed `1` and defaults to `1.0`.
+
+For the exact Circular HmmtDNA and Linear BGC Gallery-session workflows, follow
+[Tutorial 9](./TUTORIALS/9_Feature_Visibility_Shapes.md#recreate-the-circular-gallery-figure).
 
 ### Place multiple records on one shared canvas
 
@@ -459,4 +457,4 @@ gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg,interactive_svg
 It does not require CairoSVG, Node.js, Playwright, Chromium, or a web build step.
 Open the interactive file in a browser; some desktop SVG viewers block embedded scripts.
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

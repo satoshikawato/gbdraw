@@ -1,6 +1,6 @@
-[Home](../DOCS.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md)
+[Home](../DOCS.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./README.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md)
 
-[< Back to the guide index](./TUTORIALS.md) | [Protein comparisons >](./4_Protein_Comparisons.md)
+[< Back to the guide index](./README.md) | [Protein comparisons >](./4_Protein_Comparisons.md)
 
 # Draw genome comparison links from precomputed BLAST results
 
@@ -188,4 +188,4 @@ In the web app, click an HSP arc to inspect both BLAST coordinate pairs and expo
 - Put per-record metadata and comparison inputs in [TSV manifests](./5_Table_Driven_Inputs.md).
 - Save the final command or [interactive session](./8_Interactive_SVG_Sessions.md) with the figure.
 
-[< Back to the guide index](./TUTORIALS.md) | [Protein comparisons >](./4_Protein_Comparisons.md)
+[< Back to the guide index](./README.md) | [Protein comparisons >](./4_Protein_Comparisons.md)

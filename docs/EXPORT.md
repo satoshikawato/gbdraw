@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **Export** | [CLI Reference](./CLI_Reference.md)
+[Home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **Export** | [CLI Reference](./CLI_Reference.md)
 
 # Export figures for publication
 
@@ -54,4 +54,4 @@ Edit a copy of the SVG. Preserve element IDs, data attributes, groups, and embed
 
 For reproducibility, retain the source input identifiers/checksums, complete command or session, gbdraw version, editable SVG, and the exact submitted derivative.
 
-[Home](./DOCS.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **Export**
+[Home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **Export**

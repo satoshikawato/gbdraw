@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Workflow guide** | [Python API](./PYTHON_API.md) | [Export](./EXPORT.md)
+[Home](./DOCS.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | **Workflow guide** | [Python API](./PYTHON_API.md) | [Export](./EXPORT.md)
 
 # Choose a gbdraw workflow
 
@@ -79,4 +79,4 @@ style contract, including fields that are not shown in the form; see
 
 See [Export for publication](./EXPORT.md) and [interactive SVG/session workflows](./TUTORIALS/8_Interactive_SVG_Sessions.md).
 
-[Home](./DOCS.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | **Workflow guide**
+[Home](./DOCS.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | **Workflow guide**

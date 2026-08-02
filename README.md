@@ -35,7 +35,7 @@
 | [Full documentation](./docs/DOCS.md) | Main entry point for the published docs set. |
 | [Installation](./docs/INSTALL.md) | Hosted app, Bioconda, and local development installation. |
 | [Quickstart](./docs/QUICKSTART.md) | Create a circular plot from a GenBank record. |
-| [Tutorials](./docs/TUTORIALS/TUTORIALS.md) | Task-based guides to styling, sequence-search results, table inputs, quantitative tracks, and interactive output. |
+| [Tutorials](./docs/TUTORIALS/README.md) | Numbered command-line guides, web app tutorials, and related workflows. |
 | [Recipes](./docs/RECIPES.md) | Copy-paste command patterns for common tasks. |
 | [CLI Reference](./docs/CLI_Reference.md) | Current command help for the CLI. |
 | [Gallery](./docs/GALLERY.md) | Example plots and commands. |

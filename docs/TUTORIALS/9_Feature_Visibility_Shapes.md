@@ -1,6 +1,6 @@
-[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./README.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the guide index](./TUTORIALS.md)
+[< Back to the guide index](./README.md)
 [< Previous: Create interactive SVGs and restore saved sessions](./8_Interactive_SVG_Sessions.md)
 
 # Control feature visibility and shapes
@@ -28,21 +28,17 @@ If you are working from a source checkout, the same record is available as `test
 The default assignments do not change: CDS and RNA feature types use `arrow`,
 `repeat_region` uses `underlay`, and other feature types use `rectangle`.
 
-The two examples below are derived from the canonical sessions used by the
-Interactive SVG Gallery. Both use automatic head length. The Circular variant
-sets the global shaft-width ratio to `0.75`, while the Linear variant uses
-`0.5`. Auto starts from the mode-specific head length and extends it by the
-thickness removed from the shaft. The Gallery resources and all other diagram
-settings remain unchanged.
+The two examples below start from the saved sessions in the Interactive SVG
+Gallery. Loading each session preserves its inputs, tracks, labels, colors, and
+layout while you change only the global arrow geometry.
 
-From a source checkout, reproduce both figures with:
+### Recreate the Circular Gallery figure
 
-```bash
-python tools/reproduce_examples.py \
-  --output-root . \
-  --figure tutorial_9_arrow_geometry_circular \
-  --figure tutorial_9_arrow_geometry_linear
-```
+1. Open the [Human mitochondrial genome (AT skew) Gallery entry](https://gbdraw.app/gallery/HmmtDNA_ATskew). Click **Session** above the preview to download `HmmtDNA_ATskew.gbdraw-session.json`.
+2. Open the [web app](https://gbdraw.app/). For a local GUI, run `gbdraw gui` and use the browser page it opens.
+3. Click **Load Session** and choose the downloaded session file.
+4. Open **Features**. Under **Arrow Geometry**, leave **Head Length Ratio** empty so that the field shows `Auto`, then set **Shaft Width Ratio** to `0.75`. Keep the feature-type renderings unchanged.
+5. Click **Generate Diagram**. When **Result Preview** appears, click **SVG** to save the figure.
 
 The Circular figure starts from the Gallery's `HmmtDNA_ATskew` session. CDS,
 rRNA, and tRNA features retain the `arrow` rendering and share the
@@ -52,6 +48,14 @@ remain unchanged.
 
 ![Human mitochondrial genome with narrow-shaft CDS and RNA arrows, GC content, GC skew, AT skew, labels, and a left legend](../../examples/tutorial-9-arrow-geometry-circular.svg)
 
+### Recreate the Linear Gallery figure
+
+1. Open the [five aminoglycoside biosynthetic gene clusters Gallery entry](https://gbdraw.app/gallery/BGC0000708-BGC0000713). Click **Session** above the preview to download `BGC0000708-BGC0000713.gbdraw-session.json`.
+2. Open the [web app](https://gbdraw.app/), or run `gbdraw gui` for the local GUI.
+3. Click **Load Session** and choose the downloaded session file.
+4. Open **Features**. Under **Arrow Geometry**, leave **Head Length Ratio** empty so that the field shows `Auto`, then set **Shaft Width Ratio** to `0.5`. Keep the feature-type renderings unchanged.
+5. Click **Generate Diagram**, then click **SVG** in **Result Preview**.
+
 The Linear figure starts from the Gallery's five-record aminoglycoside BGC
 session. It retains the curved protein-similarity matches, antiSMASH category
 colors, rotated first-record gene labels, record definitions, ruler, title, and
@@ -60,10 +64,32 @@ to match the half-width shafts.
 
 ![Five aminoglycoside biosynthetic gene clusters with narrow-shaft arrows, curved similarity matches, gene labels, a ruler, and a bottom legend](../../examples/tutorial-9-arrow-geometry-linear.svg)
 
-For a regular CLI command, use `--arrow_head_length_ratio auto` with
-`--arrow_shaft_width_ratio 0.75` for the Circular example or `0.5` for the
-Linear example. Geometry settings do not change colors, labels, tracks,
-comparisons, or feature visibility.
+### Apply the setting to another CLI figure
+
+The `HmmtDNA.gbk` file prepared in Section 1 is enough for a
+copy-pasteable CLI example:
+
+```bash
+gbdraw circular \
+  --gbk HmmtDNA.gbk \
+  -k CDS,rRNA,tRNA \
+  --track_type middle \
+  --labels out \
+  --arrow_head_length_ratio auto \
+  --arrow_shaft_width_ratio 0.75 \
+  -o tutorial-9-narrow-arrows \
+  -f svg
+```
+
+This writes `tutorial-9-narrow-arrows.svg`. Replace `HmmtDNA.gbk` and the
+output prefix to use the same geometry in another Circular figure. Use a shaft
+ratio such as `0.5` for a narrower body. Geometry settings do not change
+colors, labels, tracks, comparisons, or feature visibility.
+
+The CLI `--session` mode replays the request stored in the session and does not
+accept `--arrow_head_length_ratio` or `--arrow_shaft_width_ratio` overrides.
+Use the web app or local GUI workflow above when you need to preserve every
+Gallery-session setting.
 
 A numeric head ratio must be positive and finite. The arrow shaft ratio must be
 in `(0, 1]`; `1` preserves the legacy full-width outline and smaller values
@@ -170,7 +196,7 @@ gbdraw linear \
 
 For precise targeting, constrain each row with `record_id` and `feature_type`, then match a stable qualifier such as `protein_id` or `locus_tag`. The special qualifier keys `hash`, `location`, and `record_location` are also supported. Use broad product regexes only when the annotation text is consistent across records.
 
-[< Back to the guide index](./TUTORIALS.md)
+[< Back to the guide index](./README.md)
 [< Previous: Create interactive SVGs and restore saved sessions](./8_Interactive_SVG_Sessions.md)
 
-[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./README.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

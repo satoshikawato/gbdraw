@@ -1,6 +1,6 @@
-[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./README.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the guide index](./TUTORIALS.md)
+[< Back to the guide index](./README.md)
 [< Previous: Use TSV manifests](./5_Table_Driven_Inputs.md) | [Next: Arrange linear tracks and labels >](./7_Linear_Layout.md)
 
 # Plot read depth and other numeric tracks
@@ -199,7 +199,7 @@ This writes `MjeNMV_two_skew_tracks.svg`.
 
 Use the same `nt=AT` pattern in circular track tables or circular track slots when you need an additional circular skew ring.
 
-[< Back to the guide index](./TUTORIALS.md)
+[< Back to the guide index](./README.md)
 [< Previous: Use TSV manifests](./5_Table_Driven_Inputs.md) | [Next: Arrange linear tracks and labels >](./7_Linear_Layout.md)
 
-[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./README.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

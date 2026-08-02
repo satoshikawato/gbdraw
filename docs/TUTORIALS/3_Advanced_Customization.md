@@ -1,6 +1,6 @@
-[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./README.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the guide index](./TUTORIALS.md)
+[< Back to the guide index](./README.md)
 [< Previous: Draw precomputed BLAST links](./2_Comparative_Genomics.md) | [Next: Draw protein matches from CDS features >](./4_Protein_Comparisons.md)
 
 # Set feature colors and labels
@@ -317,7 +317,7 @@ When each input needs its own selector, crop, label, or orientation, use a
 [the linear layout guide](./7_Linear_Layout.md#7-select-records-regions-and-orientation) and the
 [CLI Reference](../CLI_Reference.md) for the full syntax.
 
-[< Back to the guide index](./TUTORIALS.md)
+[< Back to the guide index](./README.md)
 [< Previous: Draw precomputed BLAST links](./2_Comparative_Genomics.md) | [Next: Draw protein matches from CDS features >](./4_Protein_Comparisons.md)
 
-[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./README.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

@@ -292,7 +292,7 @@ normal test runs do not write to `tests/reference_outputs/`.
   scientifically necessary qualifications. Do not make prose less accurate merely
   to avoid a statistical writing pattern.
 - Main docs: `docs/DOCS.md`
-- Tutorials: `docs/TUTORIALS/`
+- Canonical tutorial index: `docs/TUTORIALS/README.md`
 - CLI Reference: `docs/CLI_Reference.md`
 - **Web app development:** See `gbdraw/web/CLAUDE.md` for web-specific guidance
 - Web app: https://gbdraw.app/

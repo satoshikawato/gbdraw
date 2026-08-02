@@ -1,6 +1,6 @@
-[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./README.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
 
-[< Back to the guide index](./TUTORIALS.md)
+[< Back to the guide index](./README.md)
 [< Previous: Arrange linear tracks and labels](./7_Linear_Layout.md) | [Next: Control feature visibility and shapes >](./9_Feature_Visibility_Shapes.md)
 
 # Create interactive SVGs and restore saved sessions
@@ -153,7 +153,7 @@ selector contract.
 
 ![Local gbdraw web app after loading a session, with the embedded GenBank input, circular settings, and saved result restored](./images/tutorial-8-loaded-session.png)
 
-[< Back to the guide index](./TUTORIALS.md)
+[< Back to the guide index](./README.md)
 [< Previous: Arrange linear tracks and labels](./7_Linear_Layout.md) | [Next: Control feature visibility and shapes >](./9_Feature_Visibility_Shapes.md)
 
-[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./TUTORIALS.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)
+[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | [Tutorials](./README.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md) | [FAQ](../FAQ.md) | [About](../ABOUT.md)

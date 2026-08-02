@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **Python API** | [Export](./EXPORT.md)
+[Home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **Python API** | [Export](./EXPORT.md)
 
 # Draw genome diagrams from Python
 
@@ -463,4 +463,4 @@ Pin a gbdraw version in reproducible pipelines and test representative output af
 upgrading. SVG geometry can change intentionally even when the Python call remains
 valid.
 
-[Home](./DOCS.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **Python API** | [Typed API](./TYPED_API.md) | [Session compatibility](./SESSION_COMPATIBILITY.md)
+[Home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **Python API** | [Typed API](./TYPED_API.md) | [Session compatibility](./SESSION_COMPATIBILITY.md)

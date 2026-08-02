@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **GFF3 + FASTA** | [CLI Reference](./CLI_Reference.md)
+[Home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **GFF3 + FASTA** | [CLI Reference](./CLI_Reference.md)
 
 # Draw an annotated GFF3 + FASTA assembly
 
@@ -52,4 +52,4 @@ Protein-search modes require usable CDS translations. Check warnings and feature
 
 For production data, keep the annotation tool/version, source assembly accession, GFF3 checksum, FASTA checksum, and any normalization commands beside the figure recipe.
 
-[Home](./DOCS.md) | [Tutorials](./TUTORIALS/TUTORIALS.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **GFF3 + FASTA**
+[Home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Workflow guide](./WORKFLOW_GUIDE.md) | **GFF3 + FASTA**
