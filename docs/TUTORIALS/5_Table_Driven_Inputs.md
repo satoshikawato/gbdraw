@@ -36,13 +36,25 @@ Then run:
 ```bash
 gbdraw linear \
   --records_table linear_records.tsv \
-  -o majani_records_table \
+  -t tests/test_inputs/majani_custom_color_table.tsv \
+  -d examples/modified_default_colors.tsv \
+  --block_stroke_color gray \
+  --block_stroke_width 1 \
+  --line_stroke_color lightgray \
+  --line_stroke_width 2 \
+  --gc \
+  --skew \
+  --show_labels first \
+  --label_rendering embedded_only \
+  --scale_style ruler \
+  --plot_title "Majanivirus records table" \
+  -o tutorial-5-records-table \
   -f svg
 ```
 
-This writes `majani_records_table.svg`.
+This writes `tutorial-5-records-table.svg`. The `-t` and `-d` paths point to styling tables in a source checkout; omit those two options when following the tutorial with downloaded inputs.
 
-![Three majanivirus records using table-defined labels, subtitles, cropped regions, and reverse-complement orientation](../../examples/tutorial-5-records-table.svg)
+![Three styled majanivirus records with on-axis features and visible feature lines, table-defined labels, subtitles, cropped regions, reverse-complement orientation, rulers, GC content, and GC skew](../../examples/tutorial-5-records-table.svg)
 
 `--records_table` replaces `--gbk`, `--gff`, and `--fasta`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
 

@@ -64,6 +64,7 @@ python -m build
 
 ## Showcase Figure Quality
 
+- Treat `examples/gbdraw_social_preview.png` as an owner-maintained asset. Automated agents must not regenerate, replace, or edit it.
 - Treat every public figure that demonstrates a feature as a finished example, even when the underlying change is small.
 - Start from a realistic Gallery-quality recipe or session when one exists, and change only the setting being demonstrated where practical.
 - Keep the labels, legend, color rules, record metadata, quantitative tracks, and comparison context that make the source figure useful. Remove an element only when the example has a clear reason to omit it.

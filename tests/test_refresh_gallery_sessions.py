@@ -66,11 +66,69 @@ from tools.refresh_gallery_sessions import (
     _restore_rendered_palette_file_binding,
     _session_artifact_measurements,
     _session_path,
+    _sync_circular_track_draft_with_render_request,
+    _sync_legacy_legend_control_with_render_request,
     _validate_current_session_catalog_structure,
     _validate_gallery_session_inventory,
     _validate_staged_gallery_session,
     _with_interactive_svg_format,
 )
+
+
+def test_gallery_refresh_syncs_legacy_legend_control_with_render_request() -> None:
+    session = {
+        "renderRequest": {
+            "diagramOptions": {"output": {"legend": "right"}},
+        },
+        "config": {"form": {"legend": "bottom", "prefix": "example"}},
+    }
+
+    assert _sync_legacy_legend_control_with_render_request(session) is True
+    assert session["config"]["form"] == {
+        "legend": "right",
+        "prefix": "example",
+    }
+    assert _sync_legacy_legend_control_with_render_request(session) is False
+
+
+def test_gallery_refresh_syncs_circular_track_draft_with_render_request() -> None:
+    slots = [
+        {
+            "kind": "circularTrackSlot",
+            "id": "regions",
+            "renderer": "annotations",
+            "enabled": True,
+            "side": "inside",
+            "radius": {"value": 0.65, "unit": "factor"},
+            "width": {"value": 20, "unit": "px"},
+            "z": 0,
+            "params": {"set_id": "plastome_regions"},
+            "innerGapPx": 1,
+            "outerGapPx": 1,
+        }
+    ]
+    session = {
+        "renderRequest": {
+            "mode": "circular",
+            "diagramOptions": {
+                "tracks": {
+                    "circularTrackSlots": slots,
+                    "circularTrackAxisIndex": 0,
+                }
+            },
+        },
+        "config": {"adv": {"circular_track_slots_enabled": True}},
+    }
+
+    assert _sync_circular_track_draft_with_render_request(session) is True
+    assert session["config"]["adv"] == {
+        "circular_track_slots_enabled": True,
+        "circular_track_slots_schema_version": 4,
+        "circular_track_slots_axis_index": 0,
+        "circular_track_slots": slots,
+    }
+    assert session["config"]["adv"]["circular_track_slots"] is not slots
+    assert _sync_circular_track_draft_with_render_request(session) is False
 
 
 def _color_resource(kind: str, text: str) -> dict[str, object]:

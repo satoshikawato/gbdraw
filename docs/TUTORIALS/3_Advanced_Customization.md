@@ -296,13 +296,13 @@ The first montage compares center-label text at 20, 28, and 36 pt from left to r
 
 ![Human mitochondrial diagrams comparing 20, 28, and 36 pt center-label text](../../examples/definition_font_size_comparison.png)
 
-The second montage compares circular feature labels at 8, 12, and 16 pt from left to right.
+The second montage keeps the human mitochondrial feature colors, record metadata, legend, GC content, and GC skew fixed while comparing feature labels at 12, 18, and 24 pt from left to right. Each panel title identifies the selected size.
 
-![Circular WSSV diagrams comparing 8, 12, and 16 pt feature labels](../../examples/label_font_size_comparison.png)
+![Human mitochondrial diagrams comparing 12, 18, and 24 pt feature labels](../../examples/label_font_size_comparison.png)
 
-The final montage compares paired x/y outer-label offsets of 0.95, 1.00, 1.05, and 1.10 from top left to bottom right.
+The final montage changes the outer-label x offset across columns and the y offset across rows. Each axis uses 0.90, 1.00, and 1.10, while the WSSV record, feature tracks, quantitative tracks, metadata, colors, and legend remain fixed.
 
-![Circular WSSV diagrams comparing outer-label radius offsets from 0.95 through 1.10](../../examples/outer_label_offset_comparison.png)
+![Nine WSSV diagrams comparing independent outer-label x and y radius offsets of 0.90, 1.00, and 1.10](../../examples/outer_label_offset_comparison.png)
 
 ## Linear mode input selectors
 

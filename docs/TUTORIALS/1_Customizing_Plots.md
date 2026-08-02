@@ -46,9 +46,9 @@ Custom track slots can reorder tracks without replacing the preset geometry. Whe
 
 The circular axis radius is fixed at `canvas.circular.radius`; it cannot be moved or hidden with a circular track slot.
 
-The montage compares `tuckin`, `middle`, and `spreadout` from left to right. All three diagrams use `--separate_strands`.
+The montage compares `tuckin`, `middle`, and `spreadout` from left to right. The top row uses `--separate_strands`; the bottom row keeps both strands on one feature track. The *E. coli* record, feature colors, metadata, legend, GC content, and GC skew are unchanged across all six panels.
 
-![Circular WSSV diagrams comparing tuckin, middle, and spreadout presets with separate strand tracks](../../examples/track_layout_separate_strands.png)
+![Six E. coli diagrams comparing three circular track presets with separated strands in the top row and a combined feature track in the bottom row](../../examples/track_layout_separate_strands.png)
 
 ## 3. Add a center label or plot title
 

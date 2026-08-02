@@ -28,15 +28,29 @@ This example uses files under [`tests/test_inputs`](../../tests/test_inputs/):
 gbdraw linear \
   --gbk tests/test_inputs/AP027078.gb tests/test_inputs/AP027131.gb \
   --blast tests/test_inputs/AP027078_AP027131.tblastx.out \
+  --block_stroke_color gray \
+  --block_stroke_width 1 \
+  --line_stroke_color lightgray \
+  --line_stroke_width 2 \
   --separate_strands \
   --align_center \
+  --gc \
+  --skew \
+  --palette ajisai \
+  --scale_style ruler \
+  --pairwise_match_style curve \
+  --record_label "Candidatus Tyloplasma litorale" \
+  --record_label "Candidatus Hepatoplasma vulgare" \
+  --record_subtitle Fukuoka2020 \
+  --record_subtitle Av-JP \
+  --plot_title "Hepatoplasmataceae pairwise TBLASTX" \
   -o tutorial-2-pairwise-blast \
   -f svg
 ```
 
-![Two aligned Hepatoplasmataceae genomes connected by precomputed TBLASTX ribbons](../../examples/tutorial-2-pairwise-blast.svg)
+![Two named Hepatoplasmataceae genomes with colored features on their axes, GC content and skew tracks, and curved precomputed TBLASTX ribbons](../../examples/tutorial-2-pairwise-blast.svg)
 
-Each ribbon is one retained high-scoring segment pair (HSP). Its endpoints are the query and subject coordinate spans reported by BLAST. The default `ribbon` style draws straight filled spans; `--pairwise_match_style curve` bends those same spans without merging or resizing them.
+Each ribbon is one retained high-scoring segment pair (HSP). Its endpoints are the query and subject coordinate spans reported by BLAST. `--pairwise_match_style curve` bends the spans without merging or resizing them; omit it to use straight filled ribbons. The default on-axis feature placement, fill colors, feature lines, record metadata, GC content, and GC skew remain visible so the links retain their genomic context.
 
 The order matters:
 
@@ -137,6 +151,12 @@ gbdraw linear \
   --records_table linear_multi_records.tsv \
   --comparisons_table linear_multi_comparisons.tsv \
   --linear_record_gap 28 \
+  --block_stroke_color gray \
+  --block_stroke_width 1 \
+  --line_stroke_color lightgray \
+  --line_stroke_width 2 \
+  --scale_style ruler \
+  --show_labels none \
   --identity 97 \
   --alignment_length 500 \
   --pairwise_match_style curve \

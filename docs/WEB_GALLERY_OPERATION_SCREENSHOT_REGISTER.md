@@ -39,3 +39,24 @@ remain visible by default.
 The comparison-panel captures declare the exact saved session, comparison-plan
 state, LOSAT program, and visible selected controls. Record-upload crops no
 longer describe the retired per-record raw-result filename field.
+
+## Worked-example final previews
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `HmmtDNA_basic_circular` | `manual-04-01-final-preview.webp` | Add | Exact current session; labeled features; GC content and skew; ticks; metadata; right legend; tight SVG crop | Captured and visually verified (3072×1944, DSF 3, quality 94); replaces the card-thumbnail reference only in the tutorial |
+| `lambda_basic_linear` | `manual-05-01-final-preview.webp` | Add | Exact current session; both strand lanes; all labels; ruler; metadata; left legend; tight SVG crop | Captured and visually verified (4182×1440, DSF 3, quality 94); full ruler and rightmost labels remain in frame |
+| `hepatoplasmataceae_collinear` | `manual-06-01-collinear-overview.webp` | Replace | Exact current session; five records; both GC tracks; orientation-and-identity blocks; ruler; right legend without overlap | Captured and visually verified (4182×1278, DSF 3, quality 94); same-size comparison confirms the legend no longer overlaps the GC tracks |
+| `majanivirus_orthogroup` | `manual-07-01-orthogroup-preview.webp` | Recrop | Exact current session; nine labeled records; product colors; similarity-group ribbons; right legend; SVG-aspect crop | Captured and visually verified (4182×1020, DSF 3, quality 94); same-size comparison confirms removal of the letterboxed app chrome |
+| `tobacco-chloroplast` | `manual-08-01-chloroplast-preview.webp` | Replace | Exact current session; LSC/IRb/SSC/IRa brackets; radial labels; GC track; metadata; one entry per legend category | Captured and visually verified (3072×2250, DSF 3, quality 94); same-size comparison confirms the duplicate legend category is gone |
+
+Before these captures, the Gallery refresh path synchronizes the legacy
+`config.form.legend` control with the canonical render-request legend. The four
+affected sessions (`HmmtDNA_basic_circular`, both Hepatoplasmataceae examples,
+and `majanivirus_orthogroup`) must restore the same legend position that their
+saved result renders.
+
+The refresh path also copies canonical Circular track slots into the restored
+Web draft. This repairs the chloroplast session's region-annotation track state,
+so the documented session opens successfully before the final preview is
+captured.

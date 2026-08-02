@@ -24,13 +24,13 @@ from tools.capture_gallery_tutorial_screenshots import (
 BASIC_EXAMPLES = {
     "HmmtDNA_basic_circular": {
         "operation_count": 6,
-        "data_dependent_count": 4,
+        "data_dependent_count": 5,
         "filename": "HmmtDNA.gbk",
         "resource_marker": b"VERSION     NC_012920.1",
     },
     "lambda_basic_linear": {
         "operation_count": 9,
-        "data_dependent_count": 7,
+        "data_dependent_count": 8,
         "filename": "NC_001416.gb",
         "resource_marker": b"VERSION     NC_001416.1",
     },

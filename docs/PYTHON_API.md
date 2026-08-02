@@ -24,7 +24,9 @@ from pathlib import Path
 
 from gbdraw import (
     CircularOptions,
+    CircularTrackOptions,
     FeatureOptions,
+    LabelOptions,
     draw_circular,
     read_genbank,
 )
@@ -36,8 +38,36 @@ test_inputs_dir = Path(os.environ.get("GBDRAW_TEST_INPUTS_DIR", input_path.paren
 
 record = read_genbank(input_path)[0]
 options = CircularOptions(
-    features=FeatureOptions(types=("CDS",)),
-    species="Example genome",
+    features=FeatureOptions(
+        types=("CDS",),
+        color_table=examples_dir / "custom_color_table.tsv",
+        default_colors=examples_dir / "modified_default_colors.tsv",
+    ),
+    labels=LabelOptions(
+        whitelist=examples_dir / "python-api-label-whitelist.tsv",
+    ),
+    tracks=CircularTrackOptions(
+        slots=(
+            "features:features",
+            "ticks:ticks",
+            "gc_content:dinucleotide_content@nt=GC",
+            "gc_skew:dinucleotide_skew@nt=GC",
+        ),
+    ),
+    species="<i>Marsupenaeus japonicus endogenous nimavirus</i>",
+    strain="Ginoza2017",
+    legend="right",
+    config_overrides={
+        "canvas.show_gc": True,
+        "canvas.show_skew": True,
+        "canvas.strandedness": True,
+        "canvas.circular.track_type": "middle",
+        "labels.circular.scope": "both",
+        "objects.features.block_stroke_color": "gray",
+        "objects.features.block_stroke_width.long": 1.0,
+        "objects.features.line_stroke_color": "lightgray",
+        "objects.features.line_stroke_width.long": 2.0,
+    },
 )
 diagram = draw_circular(record, options=options)
 output_path = diagram.save(output_dir / "api_circular.svg", overwrite=True)
@@ -46,9 +76,11 @@ assert output_path == output_dir / "api_circular.svg"
 assert diagram.to_svg().startswith("<svg")
 ```
 
-The resulting circular diagram:
+This LC738868.1 example keeps selected functional labels, feature-specific fills,
+gray block outlines, light-gray connector lines, record metadata, GC content, GC
+skew, and the complete legend visible:
 
-![Circular MjeNMV genome diagram produced by the documented Python API example](../examples/python-api-circular.png)
+![Circular MjeNMV diagram with functional labels, record metadata, GC tracks, and feature legend](../examples/python-api-circular.png)
 
 ## The same function handles multiple circular records
 
@@ -86,6 +118,7 @@ from gbdraw import (
     LinearComparisonOptions,
     LinearOptions,
     Thresholds,
+    TitleOptions,
     draw_linear,
 )
 
@@ -95,19 +128,44 @@ linear_records = read_genbank(
 linear_diagram = draw_linear(
     linear_records,
     options=LinearOptions(
-        features=FeatureOptions(types=("CDS",)),
+        features=FeatureOptions(
+            types=("CDS",),
+            color_table=examples_dir / "custom_color_table.tsv",
+            default_colors=examples_dir / "modified_default_colors.tsv",
+        ),
+        labels=LabelOptions(
+            whitelist=examples_dir / "python-api-label-whitelist.tsv",
+        ),
+        title=TitleOptions(
+            text="Majanivirus genome comparison",
+            position="top",
+        ),
         comparisons=LinearComparisonOptions(
             blast_files=(str(examples_dir / "MjeNMV.MelaMJNV.tblastx.out"),),
         ),
-        thresholds=Thresholds(identity=0, bitscore=0),
+        thresholds=Thresholds(evalue=1e-5, identity=0, bitscore=0),
+        legend="right",
+        config_overrides={
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.strandedness": True,
+            "canvas.linear.align_center": True,
+            "labels.linear.scope": "first",
+            "objects.features.block_stroke_color": "gray",
+            "objects.features.block_stroke_width.long": 1.0,
+            "objects.features.line_stroke_color": "lightgray",
+            "objects.features.line_stroke_width.long": 2.0,
+        },
     ),
 )
 assert linear_diagram.to_svg().startswith("<svg")
 ```
 
-The resulting pairwise comparison:
+The pairwise comparison retains accession and length metadata for both records,
+selected labels on the first record, feature fills and lines, GC tracks, BLAST
+ribbons, and both legends:
 
-![Linear comparison of two majanivirus records produced by the documented Python API example](../examples/python-api-linear.png)
+![Linear majanivirus comparison with record metadata, selected labels, GC tracks, BLAST ribbons, and legends](../examples/python-api-linear.png)
 
 Use `LinearLayout` only when records need explicit multi-row placement:
 

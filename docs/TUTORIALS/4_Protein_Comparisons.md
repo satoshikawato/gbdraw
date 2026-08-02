@@ -63,16 +63,32 @@ Pass only one of `--losatp_bin` and `--ncbi_blastp_bin` in a command.
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb MelaMJNV.gb \
+  -t tests/test_inputs/majani_custom_color_table.tsv \
+  -d examples/modified_default_colors.tsv \
+  --block_stroke_color gray \
+  --block_stroke_width 1 \
+  --line_stroke_color lightgray \
+  --line_stroke_width 2 \
   --protein_blastp_mode pairwise \
   --align_center \
   --pairwise_match_style curve \
+  --gc \
+  --skew \
+  --show_labels first \
+  --label_rendering embedded_only \
+  --record_label "Marsupenaeus japonicus endogenous nimavirus" \
+  --record_label "Melicertus latisulcatus majanivirus" \
+  --record_subtitle Ginoza2017 \
+  --record_subtitle Okinawa2016 \
+  --scale_style ruler \
+  --plot_title "Majanivirus pairwise protein matches" \
   -o tutorial-protein-pairwise \
   -f svg
 ```
 
-This writes `tutorial-protein-pairwise.svg`. The curved ribbons connect CDS-derived protein hits between the two adjacent records.
+This writes `tutorial-protein-pairwise.svg`. The curved ribbons connect CDS-derived protein hits between the two adjacent records. The checked-in color tables distinguish WSSV-like proteins, BIRP features, tyrosine recombinase, and other proteins, while the block and line widths keep both filled features and feature lines legible. Features use the default on-axis placement. Omit `-t` and `-d` when running outside a source checkout.
 
-![Pairwise majanivirus protein comparison with curved ribbons between two linear records](../../examples/tutorial-protein-pairwise.svg)
+![Named majanivirus records with colored protein features on their axes, visible feature lines, GC content, GC skew, rulers, and curved pairwise protein-match ribbons](../../examples/tutorial-protein-pairwise.svg)
 
 ### Web app selected LOSAT pairs
 

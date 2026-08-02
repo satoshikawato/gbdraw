@@ -12,6 +12,7 @@ from tools.reproduce_examples_manifest import (
     MANUALLY_MANAGED_FIGURES,
     UNREFERENCED_FIGURE_RETENTION,
     CliRecipe,
+    CompositeRecipe,
     FigureSpec,
     build_figure_specs,
     load_palette_names,
@@ -64,7 +65,7 @@ def test_manifest_counts_and_unique_paths() -> None:
     palette_circular = [figure_id for figure_id in figures if figure_id.startswith("palette_circular_")]
     palette_linear = [figure_id for figure_id in figures if figure_id.startswith("palette_linear_")]
 
-    assert len(docs_and_readme) == 62
+    assert len(docs_and_readme) == 61
     assert palette_circular == [
         "palette_circular_default",
         "palette_circular_ajisai",
@@ -75,10 +76,116 @@ def test_manifest_counts_and_unique_paths() -> None:
         "palette_linear_ajisai",
         "palette_linear_soft_pastels",
     ]
-    assert len(figures) == 62 + 6
+    assert len(figures) == 61 + 6
+    assert "gbdraw_social_preview" not in figures
 
     output_paths = [spec.output_path for spec in figures.values()]
     assert len(output_paths) == len(set(output_paths))
+
+
+def test_showcase_comparisons_keep_worked_example_context() -> None:
+    figures = build_figure_specs()
+
+    track_recipe = figures["track_layout_separate_strands"].recipe
+    assert isinstance(track_recipe, CompositeRecipe)
+    assert len(track_recipe.panels) == 6
+    assert [
+        panel.recipe.extra_args[panel.recipe.extra_args.index("--track_type") + 1]
+        for panel in track_recipe.panels
+        if panel.recipe
+    ] == ["tuckin", "middle", "spreadout"] * 2
+
+    label_recipe = figures["label_font_size_comparison"].recipe
+    assert isinstance(label_recipe, CompositeRecipe)
+    assert figures["label_font_size_comparison"].required_inputs == ("HmmtDNA.gbk",)
+    assert label_recipe.tile_size == (3400, 2200)
+    assert [
+        panel.recipe.extra_args[panel.recipe.extra_args.index("--label_font_size") + 1]
+        for panel in label_recipe.panels
+        if panel.recipe
+    ] == ["12", "18", "24"]
+
+    offset_recipe = figures["outer_label_offset_comparison"].recipe
+    assert isinstance(offset_recipe, CompositeRecipe)
+    assert len(offset_recipe.panels) == 9
+    assert all(
+        "--plot_title" in panel.recipe.extra_args
+        for panel in offset_recipe.panels
+        if panel.recipe
+    )
+
+    skew_recipe = figures["skew_comparison"].recipe
+    assert isinstance(skew_recipe, CompositeRecipe)
+    assert len(skew_recipe.panels) == 12
+    assert skew_recipe.columns == 4
+    assert [
+        panel.recipe.extra_args[panel.recipe.extra_args.index("--nt") + 1]
+        for panel in skew_recipe.panels
+        if panel.recipe
+    ] == [
+        "GC",
+        "CG",
+        "AG",
+        "GA",
+        "CT",
+        "TC",
+        "TG",
+        "GT",
+        "CA",
+        "AC",
+        "AT",
+        "TA",
+    ]
+
+    window_recipe = figures["window_step_comparison"].recipe
+    assert isinstance(window_recipe, CompositeRecipe)
+    assert [
+        (
+            panel.recipe.extra_args[panel.recipe.extra_args.index("--window") + 1],
+            "--step",
+            panel.recipe.extra_args[panel.recipe.extra_args.index("--step") + 1],
+        )
+        for panel in window_recipe.panels
+        if panel.recipe
+    ] == [
+        ("100000", "--step", "10000"),
+        ("10000", "--step", "1000"),
+        ("1000", "--step", "100"),
+    ]
+
+    for recipe in (track_recipe, label_recipe, offset_recipe, window_recipe, skew_recipe):
+        for panel in recipe.panels:
+            assert panel.recipe is not None
+            assert "--no-gc" not in panel.recipe.extra_args
+            assert "--no-skew" not in panel.recipe.extra_args
+            assert "none" not in panel.recipe.extra_args
+
+
+def test_non_layout_linear_showcases_use_on_axis_features_and_line_styling() -> None:
+    figures = build_figure_specs()
+    on_axis_figure_ids = (
+        "tutorial_2_pairwise_blast",
+        "linear_multi_record",
+        "tutorial_protein_pairwise",
+        "tutorial_5_records_table",
+        "tutorial_7_linear_layout",
+        "tutorial_7_definition_lines",
+    )
+
+    for figure_id in on_axis_figure_ids:
+        recipe = figures[figure_id].recipe
+        assert isinstance(recipe, CliRecipe)
+        assert "--track_layout" not in recipe.extra_args
+        assert recipe.extra_args[recipe.extra_args.index("--block_stroke_color") + 1] == "gray"
+        assert recipe.extra_args[recipe.extra_args.index("--block_stroke_width") + 1] == "1"
+        assert recipe.extra_args[recipe.extra_args.index("--line_stroke_color") + 1] == "lightgray"
+        assert recipe.extra_args[recipe.extra_args.index("--line_stroke_width") + 1] == "2"
+
+    below_recipe = figures["tutorial_7_track_layout_below"].recipe
+    assert isinstance(below_recipe, CliRecipe)
+    assert below_recipe.extra_args[
+        below_recipe.extra_args.index("--track_layout") + 1
+    ] == "below"
 
 
 def test_palette_manifest_stays_in_sync_with_palette_file() -> None:
@@ -134,6 +241,7 @@ def test_public_figures_have_reproduction_inventory_coverage() -> None:
     assert all(reason.strip() for reason in MANUALLY_MANAGED_FIGURES.values())
     assert all(reason.strip() for reason in UNREFERENCED_FIGURE_RETENTION.values())
     assert all((PROJECT_ROOT / path).exists() for path in manual_paths)
+    assert "examples/gbdraw_social_preview.png" in manual_paths
 
 
 def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> None:

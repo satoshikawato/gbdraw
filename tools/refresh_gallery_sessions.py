@@ -262,6 +262,65 @@ def _session_cli_invocation(session: Mapping[str, Any]) -> Mapping[str, Any] | N
     return None
 
 
+def _sync_legacy_legend_control_with_render_request(
+    session: dict[str, Any],
+) -> bool:
+    """Keep the restored Web control aligned with the canonical Gallery result."""
+
+    render_request = session.get("renderRequest")
+    diagram_options = (
+        render_request.get("diagramOptions")
+        if isinstance(render_request, Mapping)
+        else None
+    )
+    output = (
+        diagram_options.get("output")
+        if isinstance(diagram_options, Mapping)
+        else None
+    )
+    legend = output.get("legend") if isinstance(output, Mapping) else None
+    config = session.get("config")
+    form = config.get("form") if isinstance(config, Mapping) else None
+    if not isinstance(legend, str) or not legend or not isinstance(form, dict):
+        return False
+    if form.get("legend") == legend:
+        return False
+    form["legend"] = legend
+    return True
+
+
+def _sync_circular_track_draft_with_render_request(
+    session: dict[str, Any],
+) -> bool:
+    """Keep a restored Circular track draft aligned with its committed request."""
+
+    render_request = session.get("renderRequest")
+    if not isinstance(render_request, Mapping) or render_request.get("mode") != "circular":
+        return False
+    diagram_options = render_request.get("diagramOptions")
+    tracks = (
+        diagram_options.get("tracks")
+        if isinstance(diagram_options, Mapping)
+        else None
+    )
+    slots = tracks.get("circularTrackSlots") if isinstance(tracks, Mapping) else None
+    config = session.get("config")
+    adv = config.get("adv") if isinstance(config, Mapping) else None
+    if not isinstance(slots, list) or not isinstance(adv, dict):
+        return False
+
+    expected = {
+        "circular_track_slots_enabled": True,
+        "circular_track_slots_schema_version": 4,
+        "circular_track_slots_axis_index": tracks.get("circularTrackAxisIndex"),
+        "circular_track_slots": copy.deepcopy(slots),
+    }
+    if all(adv.get(key) == value for key, value in expected.items()):
+        return False
+    adv.update(expected)
+    return True
+
+
 def _with_interactive_svg_format(args: list[Any]) -> list[str]:
     updated: list[str] = []
     index = 0
@@ -1242,6 +1301,8 @@ def _refresh_one_session(
     session = load_session(session_path)
     if session.get("version") == CURRENT_SESSION_VERSION:
         normalize_current_session_artifacts(session)
+    _sync_legacy_legend_control_with_render_request(session)
+    _sync_circular_track_draft_with_render_request(session)
     _restore_rendered_palette_file_binding(session)
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:

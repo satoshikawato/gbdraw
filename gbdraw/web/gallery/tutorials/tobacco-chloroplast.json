@@ -335,30 +335,47 @@
       "body": "Click Generate Diagram. Verify that LSC, IRb, SSC, and IRa form one labeled bracket lane between the feature ring and GC-content track. The radial gene labels should remain visible on both sides of the feature ring.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/tobacco-chloroplast/manual-08-01-chloroplast-preview.webp",
-            "alt": "Generated Nicotiana tabacum chloroplast map with four region brackets between the feature ring and GC-content track.",
-            "caption": "The completed map shows the four labeled region brackets, chloroplast feature colors, radial gene labels, and the inner GC-content track."
+            "alt": "Completed Nicotiana tabacum chloroplast map with four region brackets, chloroplast feature colors, radial gene labels, an inner GC-content track, record metadata, and one entry per legend category.",
+            "caption": "The completed map shows all four labeled region brackets, chloroplast feature colors, radial gene labels, the inner GC-content track, and one entry per legend category."
           },
           "capture": {
             "source": "webapp",
-            "selector": ".result-pane .shadow-xl.bg-white",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "selector": "svg[data-capture-chloroplast-final='true']",
             "viewport": {
-              "width": 1600,
-              "height": 1200
+              "width": 1400,
+              "height": 1000
             },
-            "cropPadding": 16,
+            "cropPadding": 12,
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 0.55; app.canvasPan.x = 0; app.canvasPan.y = 0; } document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important');"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('Nicotiana tabacum') || !content.includes('data-gbdraw-annotation-id=\"lsc\"') || content.includes('photosystem I (1)') || app?.form?.legend !== 'upper_left') throw new Error('Restored chloroplast SVG does not match the completed tutorial figure.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1000; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-chloroplast-final', 'true');"
               },
               {
                 "type": "waitForFunction",
                 "script": "() => ['lsc','irb','ssc','ira'].every((id) => document.querySelector(`[data-gbdraw-annotation-id='${id}']`))"
               }
             ],
-            "waitForSelector": "[data-gbdraw-annotation-id='lsc']"
+            "waitForSelector": "[data-gbdraw-annotation-id='lsc']",
+            "assertAppState": {
+              "mode": "circular",
+              "form.legend": "upper_left",
+              "annotationSets.0.id": "plastome_regions",
+              "adv.circular_track_slots_enabled": true
+            },
+            "visibleText": [
+              "Nicotiana tabacum",
+              "NC_001879.2",
+              "LSC",
+              "IRb",
+              "SSC",
+              "IRa",
+              "GC content"
+            ]
           }
         }
       ]

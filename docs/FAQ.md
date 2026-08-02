@@ -161,7 +161,9 @@ Increase the window and step sizes:
 gbdraw circular --gbk genome.gb --window 10000 --step 1000 -o output -f svg
 ```
 
-![window_step_comparison.png](../examples/window_step_comparison.png)
+The montage uses one *E. coli* record and changes only `--window`/`--step`: 100000/10000, 10000/1000, and 1000/100 from left to right. This wider range makes the smoothing tradeoff visible without removing the feature, metadata, legend, GC content, or GC skew context.
+
+![Three E. coli diagrams showing coarse, medium, and fine GC-content and GC-skew windows](../examples/window_step_comparison.png)
 
 ## Can I plot AT instead of GC?
 
@@ -171,7 +173,9 @@ Yes. Use `--nt AT`.
 gbdraw circular --gbk genome.gb --nt AT -o output -f svg
 ```
 
-![skew_comparison.png](../examples/skew_comparison.png)
+The 12-panel comparison keeps the *E. coli* record, feature tracks, metadata, and legend fixed. In reading order it shows GC, CG, AG, GA, CT, TC, TG, GT, CA, AC, AT, and TA; only `--nt` changes between panels. Reversing a pair keeps its content track unchanged while reversing the sign of its skew.
+
+![Twelve E. coli diagrams comparing dinucleotide content and skew for GC, CG, AG, GA, CT, TC, TG, GT, CA, AC, AT, and TA](../examples/skew_comparison.png)
 
 ## Why does SVG export work but PNG/PDF/EPS/PS export fail?
 

@@ -409,31 +409,45 @@
       "body": "Click Generate Diagram. The finished preview should show nine viral genome rows, many red identity-scaled similarity-group ribbons, and a right legend.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-07-01-orthogroup-preview.webp",
-            "alt": "Generated majanivirus protein-similarity preview showing nine viral genome rows and the right legend.",
-            "caption": "The generated preview includes nine rows and the right legend."
+            "alt": "Completed majanivirus protein-similarity diagram with nine labeled genome rows, product-based feature colors, dense red similarity-group ribbons, and a right legend.",
+            "caption": "The completed figure shows nine labeled genome rows, product-based feature colors, dense similarity-group ribbons, and the right legend."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {
-              "width": 1600,
+              "width": 1900,
               "height": 1000
             },
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 0.5; if (app.svgContainer) app.svgContainer.style.transform = 'translate(0px, 0px) scale(0.5)'; const svg = app.svgContainer?.querySelector('svg'); svg?.setAttribute('data-capture', 'majanivirus-final-preview'); }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('Marsupenaeus japonicus endogenous nimavirus') || !content.includes('WSSV-like proteins') || !content.includes('Pairwise match identity') || app?.form?.legend !== 'right') throw new Error('Restored majanivirus SVG does not match the completed tutorial figure.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'majanivirus-final-preview');"
               }
             ],
             "selector": "[data-capture='majanivirus-final-preview']",
             "cropPadding": {
-              "top": 0,
-              "right": 0,
-              "bottom": 0,
-              "left": 0
-            }
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 9,
+              "form.legend": "right",
+              "adv.linear_show_length": false,
+              "form.show_labels_linear": "none"
+            },
+            "visibleText": [
+              "Marsupenaeus japonicus endogenous nimavirus",
+              "Metapenaeus joyneri majanivirus",
+              "WSSV-like proteins",
+              "Pairwise match identity"
+            ]
           }
         }
       ]

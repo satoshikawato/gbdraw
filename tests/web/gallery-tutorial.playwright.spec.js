@@ -156,6 +156,12 @@ test('Gallery routes a sample path and tab hash while preserving Preview default
   await expect(
     page.getByRole('heading', { name: 'Create your first circular genome figure' })
   ).toBeVisible();
+  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
+  const finalPreview = tutorialPanel.locator('img[src$="manual-04-01-final-preview.webp"]');
+  await expect(finalPreview).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="thumbnails/HmmtDNA_basic_circular.webp"]')).toHaveCount(0);
+  await finalPreview.scrollIntoViewIfNeeded();
+  await expect.poll(() => finalPreview.evaluate((element) => element.naturalWidth)).toBeGreaterThan(3000);
   await expect(page).toHaveURL(`${baseUrl}/gallery/HmmtDNA_basic_circular#Tutorial`);
 
   await page.getByRole('tab', { name: 'Command' }).click();
@@ -185,6 +191,11 @@ test('Lambda tutorial shows how to disable LOSAT with No comparison', async ({ p
     tutorialPanel.getByText('Turn off sequence comparisons', { exact: true })
   ).toBeVisible();
   await expect(tutorialPanel.getByText(/Choose No comparison before generating/)).toBeVisible();
+  const finalPreview = tutorialPanel.locator('img[src$="manual-05-01-final-preview.webp"]');
+  await expect(finalPreview).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="thumbnails/lambda_basic_linear.webp"]')).toHaveCount(0);
+  await finalPreview.scrollIntoViewIfNeeded();
+  await expect.poll(() => finalPreview.evaluate((element) => element.naturalWidth)).toBeGreaterThan(4000);
 
   const noComparisonImage = tutorialPanel.locator(
     'img[src$="manual-02-03-no-comparison.webp"]'
@@ -218,7 +229,10 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-five-file-upload-order.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-05-02-layout-overview.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-06-01-collinear-overview.webp"]')).toHaveCount(1);
+  const finalPreview = tutorialPanel.locator('img[src$="manual-06-01-collinear-overview.webp"]');
+  await expect(finalPreview).toHaveCount(1);
+  await finalPreview.scrollIntoViewIfNeeded();
+  await expect.poll(() => finalPreview.evaluate((element) => element.naturalWidth)).toBeGreaterThan(4000);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-collinear-block-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="post-01-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-06-01-generate.webp"]')).toHaveCount(0);
@@ -535,7 +549,10 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
   await expect(tutorialPanel.locator('img[src$="thumbnails/tobacco-chloroplast.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-06-01-region-annotations.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-custom-track-slots.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-08-01-chloroplast-preview.webp"]')).toHaveCount(1);
+  const finalPreview = tutorialPanel.locator('img[src$="manual-08-01-chloroplast-preview.webp"]');
+  await expect(finalPreview).toHaveCount(1);
+  await finalPreview.scrollIntoViewIfNeeded();
+  await expect.poll(() => finalPreview.evaluate((element) => element.naturalWidth)).toBeGreaterThan(3000);
   for (let idx = 0; idx < await tutorialImages.count(); idx += 1) {
     const image = tutorialImages.nth(idx);
     await image.scrollIntoViewIfNeeded();
@@ -652,7 +669,15 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-label-context.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-nine-file-upload-order.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-05-01-record-labels.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-07-01-orthogroup-preview.webp"]')).toHaveCount(1);
+  const finalPreview = tutorialPanel.locator('img[src$="manual-07-01-orthogroup-preview.webp"]');
+  await expect(finalPreview).toHaveCount(1);
+  await finalPreview.scrollIntoViewIfNeeded();
+  await expect.poll(() => finalPreview.evaluate((element) => element.naturalWidth)).toBeGreaterThan(4000);
+  const finalPreviewSize = await finalPreview.evaluate((element) => ({
+    width: element.naturalWidth,
+    height: element.naturalHeight
+  }));
+  expect(finalPreviewSize.width / finalPreviewSize.height).toBeGreaterThan(3.8);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-files-tab.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-03-03-thread-threshold-settings.webp"]')).toHaveCount(0);

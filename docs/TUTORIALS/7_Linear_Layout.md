@@ -14,7 +14,22 @@ wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC
 wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=LC738874.1&rettype=gbwithparts&retmode=text" -O MelaMJNV.gb
 ```
 
-If you are working from a source checkout, the same files are available under `examples/`.
+The worked examples retain the same comparison and styling context while the
+layout setting changes. They also use a
+[precomputed MjeNMV-MelaMJNV TBLASTX table](../../examples/MjeNMV.MelaMJNV.tblastx.out),
+[majanivirus color rules](../../tests/test_inputs/majani_custom_color_table.tsv),
+and [default color overrides](../../examples/modified_default_colors.tsv).
+Download those three files into the same directory as the GenBank files. From
+a source checkout, create a working directory from the repository root:
+
+```bash
+mkdir -p tutorial-7-work
+cp examples/MjeNMV.gb examples/MelaMJNV.gb tutorial-7-work/
+cp examples/MjeNMV.MelaMJNV.tblastx.out tutorial-7-work/
+cp tests/test_inputs/majani_custom_color_table.tsv tutorial-7-work/
+cp examples/modified_default_colors.tsv tutorial-7-work/
+cd tutorial-7-work
+```
 
 ## 2. Place tracks above, middle, or below
 
@@ -23,21 +38,38 @@ If you are working from a source checkout, the same files are available under `e
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb MelaMJNV.gb \
+  --blast MjeNMV.MelaMJNV.tblastx.out \
+  -t majani_custom_color_table.tsv \
+  -d modified_default_colors.tsv \
+  --block_stroke_color gray \
+  --block_stroke_width 1 \
+  --line_stroke_color lightgray \
+  --line_stroke_width 2 \
   --track_layout below \
   --track_axis_gap auto \
   --gc \
   --skew \
-  -o majani_tracks_below \
+  --pairwise_match_style curve \
+  --show_labels first \
+  --label_rendering embedded_only \
+  --record_label "Marsupenaeus japonicus endogenous nimavirus" \
+  --record_label "Melicertus latisulcatus majanivirus" \
+  --record_subtitle "Ginoza2017" \
+  --record_subtitle "Okinawa2016" \
+  -o tutorial-7-track-layout-below \
   -f svg
 ```
 
-This writes `majani_tracks_below.svg`. Use `--track_axis_gap 12` when you want an explicit pixel gap instead of automatic spacing.
+This writes `tutorial-7-track-layout-below.svg`. The embedded labels, feature
+colors, GC tracks, and TBLASTX ribbons remain fixed so the track placement is
+the visible change. Use `--track_axis_gap 12` when you want an explicit pixel
+gap instead of automatic spacing.
 
 Add `--resolve_overlaps` when overlapping genomic features should use additional lanes. gbdraw measures the resulting feature lanes and labels for each record, then moves GC, skew, Depth, and other non-overlay tracks outward only when they need more clearance. Records with different feature occupancy can therefore use different vertical track positions. In the web app, the `middle` choice is labeled **Features on axis**.
 
 In a comparison diagram, ribbons attach directly to the outer edges of the two records' painted exclusion bands. Empty reservations, including missing Depth cells, do not move those endpoints. `--comparison_height` is the minimum clear corridor between the painted edges. Automatic row spacing evaluates the body, active comparison corridor, and definition text as separate horizontal collision bands, then uses the largest applicable clearance. It does not add all three reservations together. A comparison corridor is reserved only at a row boundary that an actual comparison crosses; left-column definition text does not enlarge plot spacing when their horizontal ranges do not overlap.
 
-![Two majanivirus records with feature, GC content, and GC skew tracks placed below each record axis](../../examples/tutorial-7-track-layout-below.svg)
+![Two labeled majanivirus records with colored features, GC content and skew tracks below each axis, and curved TBLASTX ribbons](../../examples/tutorial-7-track-layout-below.svg)
 
 ## 3. Choose, place, or hide the coordinate scale
 
@@ -85,9 +117,19 @@ become effective again when the checkbox is selected.
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb MelaMJNV.gb \
-  --track_layout below \
+  --blast MjeNMV.MelaMJNV.tblastx.out \
+  -t majani_custom_color_table.tsv \
+  -d modified_default_colors.tsv \
+  --block_stroke_color gray \
+  --block_stroke_width 1 \
+  --line_stroke_color lightgray \
+  --line_stroke_width 2 \
+  --gc \
+  --skew \
+  --pairwise_match_style curve \
+  --show_labels first \
+  --label_rendering embedded_only \
   --scale_style ruler \
-  --ruler_on_axis \
   --scale_interval 50000 \
   --record_label "Marsupenaeus japonicus endogenous nimavirus" \
   --record_label "Melicertus latisulcatus majanivirus" \
@@ -99,9 +141,11 @@ gbdraw linear \
   -f svg
 ```
 
-The result combines per-record axis rulers, ordered record-label lines, and a shared title:
+The result keeps the on-axis feature colors, feature lines, embedded labels,
+quantitative tracks, and comparison ribbons, then adds a bottom ruler and a
+shared title:
 
-![Linear majanivirus diagram with a top title, two record-label blocks, and 50 kbp rulers on the record axes](../../examples/tutorial-7-linear-layout.svg)
+![Linear majanivirus comparison with on-axis colored features, a top title, record-label blocks, a 50 kbp bottom ruler, quantitative tracks, and curved ribbons](../../examples/tutorial-7-linear-layout.svg)
 
 ## 5. Format the record-label block
 
@@ -110,6 +154,18 @@ Use the definition-line options when a publication figure needs compact record l
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb MelaMJNV.gb \
+  --blast MjeNMV.MelaMJNV.tblastx.out \
+  -t majani_custom_color_table.tsv \
+  -d modified_default_colors.tsv \
+  --block_stroke_color gray \
+  --block_stroke_width 1 \
+  --line_stroke_color lightgray \
+  --line_stroke_width 2 \
+  --gc \
+  --skew \
+  --pairwise_match_style curve \
+  --show_labels first \
+  --label_rendering embedded_only \
   --record_label "MjeNMV" \
   --record_label "MelaMJNV" \
   --record_subtitle "Ginoza2017" \
@@ -120,7 +176,7 @@ gbdraw linear \
   --keep_definition_left_aligned \
   --definition_line_style name:weight=bold,size=18 \
   --definition_line_style 'subtitle:size=14,color=#555555' \
-  -o majani_definition_lines \
+  -o tutorial-7-definition-lines \
   -f svg
 ```
 
@@ -130,7 +186,7 @@ The `Length / Coord.` definition line is independent of
 `--hide_scale`. Use `--hide_length`, or clear **Show Length / Coordinates** in
 the web app, when that text should also be removed.
 
-![Two centered majanivirus records with compact bold names and gray subtitles in a fixed left record-label column](../../examples/tutorial-7-definition-lines.svg)
+![Two centered majanivirus records with compact bold names and gray subtitles alongside on-axis colored features, visible feature lines, quantitative tracks, and comparison ribbons](../../examples/tutorial-7-definition-lines.svg)
 
 ## 6. Customize linear track slots
 
