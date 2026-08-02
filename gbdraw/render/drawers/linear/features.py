@@ -15,7 +15,6 @@ from ....svg.linear_features import (
     create_arrow_shaft_path_linear,
     create_intron_path_linear,
     create_rectangle_path_linear,
-    create_seven_vertex_arrowhead_path_linear,
 )
 
 
@@ -37,7 +36,7 @@ class FeatureDrawer:
             "auto",
         )
         self.shaft_width_ratio: float = float(
-            getattr(arrow_geometry, "shaft_width_ratio", 0.5)
+            getattr(arrow_geometry, "shaft_width_ratio", 1.0)
         )
 
     @staticmethod
@@ -211,7 +210,7 @@ class FeaturePathGenerator:
         track_axis_gap: float | None = None,
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
         head_length_ratio: str | float = "auto",
-        shaft_width_ratio: float = 0.5,
+        shaft_width_ratio: float = 1.0,
     ) -> None:
         self.genome_length = genome_length
         self.alignment_width = alignment_width
@@ -283,29 +282,13 @@ class FeaturePathGenerator:
                         track_axis_gap=self.track_axis_gap,
                         feature_y_positions=feature_y_positions,
                         head_length_ratio=self.head_length_ratio,
-                    )
-                elif (
-                    coord.is_last
-                    and glyph_kind == "arrowhead"
-                    and has_defined_strand
-                ):
-                    coord_path = create_seven_vertex_arrowhead_path_linear(
-                        coord_dict=coord_dict,
-                        arrow_length=self.arrow_length,
-                        cds_height=self.cds_height,
-                        feature_strand=self.feature_strand,
-                        genome_length=self.genome_length,
-                        alignment_width=self.alignment_width,
-                        genome_size_normalization_factor=self.genome_size_normalization_factor,
-                        separate_strands=self.separate_strands,
-                        feature_track_id=feature_track_id,
-                        track_layout=self.track_layout,
-                        track_axis_gap=self.track_axis_gap,
-                        feature_y_positions=feature_y_positions,
-                        head_length_ratio=self.head_length_ratio,
                         shaft_width_ratio=self.shaft_width_ratio,
                     )
-                elif glyph_kind == "arrowhead" and has_defined_strand:
+                elif (
+                    glyph_kind == "arrow"
+                    and has_defined_strand
+                    and self.shaft_width_ratio < 1.0
+                ):
                     coord_path = create_arrow_shaft_path_linear(
                         coord_dict=coord_dict,
                         genome_length=self.genome_length,

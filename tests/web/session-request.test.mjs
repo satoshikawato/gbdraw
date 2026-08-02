@@ -330,7 +330,7 @@ const state = {
   },
   adv: {
     features: ['CDS'], feature_shapes: { CDS: 'arrow' }, nt: 'GC', evalue: '1e-5',
-    arrow_head_length_ratio: null, arrowhead_shaft_width_ratio: 0.5,
+    arrow_head_length_ratio: null, arrow_shaft_width_ratio: 1.0,
     min_bitscore: 50, identity: 70, alignment_length: 0, plot_title_position: 'none',
     gc_content_mode: 'deviation', gc_content_show_axis: true, gc_content_show_ticks: true,
     depth_color: '#4A90E2', depth_show_axis: true, depth_show_ticks: true,
@@ -532,7 +532,7 @@ assert.equal(
 );
 assert.equal(
   circularConfigOverrides['objects.features.arrow_geometry.shaft_width_ratio'],
-  0.5
+  1.0
 );
 assert.equal(projectCanonicalSessionRequest(canonical).config.form.show_scale, true);
 assert.equal(circularConfigOverrides['labels.circular.scope'], 'none');
@@ -920,32 +920,32 @@ assert.equal(
   'underlay'
 );
 
-state.adv.feature_shapes.CDS = 'arrowhead';
+state.adv.feature_shapes.CDS = 'arrow';
 state.adv.arrow_head_length_ratio = 1.25;
-state.adv.arrowhead_shaft_width_ratio = 0.25;
-const arrowheadCanonical = buildCanonicalRenderRequest({ state, filesData });
+state.adv.arrow_shaft_width_ratio = 0.25;
+const arrowCanonical = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(
-  arrowheadCanonical.renderRequest.diagramOptions.featureShapes.CDS,
-  'arrowhead'
+  arrowCanonical.renderRequest.diagramOptions.featureShapes.CDS,
+  'arrow'
 );
 assert.equal(
-  arrowheadCanonical.renderRequest.diagramOptions.configOverrides[
+  arrowCanonical.renderRequest.diagramOptions.configOverrides[
     'objects.features.arrow_geometry.head_length_ratio'
   ],
   1.25
 );
 assert.equal(
-  arrowheadCanonical.renderRequest.diagramOptions.configOverrides[
+  arrowCanonical.renderRequest.diagramOptions.configOverrides[
     'objects.features.arrow_geometry.shaft_width_ratio'
   ],
   0.25
 );
-const arrowheadProjection = projectCanonicalSessionRequest(arrowheadCanonical);
-assert.equal(arrowheadProjection.config.adv.feature_shapes.CDS, 'arrowhead');
-assert.equal(arrowheadProjection.config.adv.arrow_head_length_ratio, 1.25);
-assert.equal(arrowheadProjection.config.adv.arrowhead_shaft_width_ratio, 0.25);
+const arrowProjection = projectCanonicalSessionRequest(arrowCanonical);
+assert.equal(arrowProjection.config.adv.feature_shapes.CDS, 'arrow');
+assert.equal(arrowProjection.config.adv.arrow_head_length_ratio, 1.25);
+assert.equal(arrowProjection.config.adv.arrow_shaft_width_ratio, 0.25);
 
-const sparseArrowGeometryCanonical = structuredClone(arrowheadCanonical);
+const sparseArrowGeometryCanonical = structuredClone(arrowCanonical);
 delete sparseArrowGeometryCanonical.renderRequest.diagramOptions.configOverrides[
   'objects.features.arrow_geometry.head_length_ratio'
 ];
@@ -956,7 +956,7 @@ const sparseArrowGeometryProjection = projectCanonicalSessionRequest(
   sparseArrowGeometryCanonical
 );
 assert.equal(sparseArrowGeometryProjection.config.adv.arrow_head_length_ratio, null);
-assert.equal(sparseArrowGeometryProjection.config.adv.arrowhead_shaft_width_ratio, 0.5);
+assert.equal(sparseArrowGeometryProjection.config.adv.arrow_shaft_width_ratio, 1.0);
 
 const fullConfigArrowGeometryCanonical = structuredClone(
   sparseArrowGeometryCanonical
@@ -979,7 +979,7 @@ assert.equal(
   1.75
 );
 assert.equal(
-  fullConfigArrowGeometryProjection.config.adv.arrowhead_shaft_width_ratio,
+  fullConfigArrowGeometryProjection.config.adv.arrow_shaft_width_ratio,
   0.6
 );
 
@@ -988,10 +988,10 @@ for (const [field, invalid, message] of [
   ['arrow_head_length_ratio', true, /positive finite number/],
   ['arrow_head_length_ratio', '1.25', /positive finite number/],
   ['arrow_head_length_ratio', [1.25], /positive finite number/],
-  ['arrowhead_shaft_width_ratio', 0, /at most 1/],
-  ['arrowhead_shaft_width_ratio', 1.01, /at most 1/],
-  ['arrowhead_shaft_width_ratio', '0.25', /at most 1/],
-  ['arrowhead_shaft_width_ratio', [0.25], /at most 1/]
+  ['arrow_shaft_width_ratio', 0, /at most 1/],
+  ['arrow_shaft_width_ratio', 1.01, /at most 1/],
+  ['arrow_shaft_width_ratio', '0.25', /at most 1/],
+  ['arrow_shaft_width_ratio', [0.25], /at most 1/]
 ]) {
   const previous = state.adv[field];
   state.adv[field] = invalid;
@@ -1000,7 +1000,7 @@ for (const [field, invalid, message] of [
 }
 state.adv.feature_shapes.CDS = 'arrow';
 state.adv.arrow_head_length_ratio = null;
-state.adv.arrowhead_shaft_width_ratio = 0.5;
+state.adv.arrow_shaft_width_ratio = 1.0;
 
 state.paletteDefinitions.value = { default: { CDS: '#cccccc' } };
 state.currentColors.value = { CDS: '#112233' };

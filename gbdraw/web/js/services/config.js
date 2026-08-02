@@ -122,7 +122,7 @@ import {
 import {
   arrowHeadLengthRatioForState,
   defaultFeatureRendering,
-  normalizeArrowheadShaftWidthRatio,
+  normalizeArrowShaftWidthRatio,
   normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
 import {
@@ -838,8 +838,8 @@ const normalizedArrowGeometryState = (adv = {}) => ({
   arrow_head_length_ratio: arrowHeadLengthRatioForState(
     adv?.arrow_head_length_ratio
   ),
-  arrowhead_shaft_width_ratio: normalizeArrowheadShaftWidthRatio(
-    adv?.arrowhead_shaft_width_ratio
+  arrow_shaft_width_ratio: normalizeArrowShaftWidthRatio(
+    adv?.arrow_shaft_width_ratio
   )
 });
 
@@ -854,8 +854,8 @@ const normalizedPersistedArrowGeometryState = (adv = {}) =>
     arrow_head_length_ratio: persistedArrowGeometryValue(
       adv?.arrow_head_length_ratio
     ),
-    arrowhead_shaft_width_ratio: persistedArrowGeometryValue(
-      adv?.arrowhead_shaft_width_ratio
+    arrow_shaft_width_ratio: persistedArrowGeometryValue(
+      adv?.arrow_shaft_width_ratio
     )
   });
 

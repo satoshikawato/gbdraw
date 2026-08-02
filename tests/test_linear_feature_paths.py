@@ -10,7 +10,6 @@ from gbdraw.render.drawers.linear.features import FeaturePathGenerator
 from gbdraw.svg.linear_features import (
     create_arrow_path_linear,
     create_arrowhead_path_linear,
-    create_seven_vertex_arrowhead_path_linear,
 )
 
 
@@ -104,11 +103,11 @@ def test_legacy_arrow_path_text_is_unchanged(strand: str, expected: str) -> None
             "positive",
             [
                 (100.0, 5.0),
-                (260.0, 5.0),
-                (260.0, 0.0),
+                (250.0, 5.0),
+                (250.0, 0.0),
                 (300.0, 10.0),
-                (260.0, 20.0),
-                (260.0, 15.0),
+                (250.0, 20.0),
+                (250.0, 15.0),
                 (100.0, 15.0),
             ],
         ),
@@ -116,26 +115,27 @@ def test_legacy_arrow_path_text_is_unchanged(strand: str, expected: str) -> None
             "negative",
             [
                 (300.0, 5.0),
-                (140.0, 5.0),
-                (140.0, 0.0),
+                (150.0, 5.0),
+                (150.0, 0.0),
                 (100.0, 10.0),
-                (140.0, 20.0),
-                (140.0, 15.0),
+                (150.0, 20.0),
+                (150.0, 15.0),
                 (300.0, 15.0),
             ],
         ),
     ],
 )
-def test_arrowhead_has_seven_mirrored_vertices(
+def test_narrow_arrow_auto_head_grows_and_has_seven_mirrored_vertices(
     strand: str,
     expected: list[tuple[float, float]],
 ) -> None:
-    result = create_seven_vertex_arrowhead_path_linear(
+    result = create_arrow_path_linear(
         **_linear_path(
             strand=strand,
             arrow_length=40.0,
             alignment_width=1000.0,
-        )
+        ),
+        shaft_width_ratio=0.5,
     )
 
     assert _points(result[1]) == expected
@@ -144,13 +144,13 @@ def test_arrowhead_has_seven_mirrored_vertices(
 
 @pytest.mark.parametrize(
     ("shaft_width_ratio", "expected_bounds"),
-    [(0.25, (7.5, 12.5)), (0.5, (5.0, 15.0)), (1.0, (0.0, 20.0))],
+    [(0.25, (7.5, 12.5)), (0.5, (5.0, 15.0))],
 )
-def test_arrowhead_shaft_width_ratios(
+def test_arrow_shaft_width_ratios(
     shaft_width_ratio: float,
     expected_bounds: tuple[float, float],
 ) -> None:
-    result = create_seven_vertex_arrowhead_path_linear(
+    result = create_arrow_path_linear(
         **_linear_path(
             arrow_length=40.0,
             alignment_width=1000.0,
@@ -166,38 +166,32 @@ def test_arrowhead_shaft_width_ratios(
     assert points[3][1] == pytest.approx(10.0)
 
 
-def test_full_width_arrowhead_has_same_visible_outline_as_arrow() -> None:
+def test_full_width_ratio_uses_exact_legacy_arrow_path() -> None:
     arguments = _linear_path(
         arrow_length=40.0,
         alignment_width=1000.0,
     )
-    arrow_points = _points(create_arrow_path_linear(**arguments)[1])
-    arrowhead_points = _points(
-        create_seven_vertex_arrowhead_path_linear(
-            **arguments,
-            shaft_width_ratio=1.0,
-        )[1]
-    )
-    deduplicated_arrowhead = [
-        point
-        for index, point in enumerate(arrowhead_points)
-        if index == 0 or point != arrowhead_points[index - 1]
-    ]
+    legacy_path = create_arrow_path_linear(**arguments)[1]
+    full_width_path = create_arrow_path_linear(
+        **arguments,
+        shaft_width_ratio=1.0,
+    )[1]
 
-    assert deduplicated_arrowhead == arrow_points
+    assert full_width_path == legacy_path
 
 
 @pytest.mark.parametrize("normalization_factor", [0.5, 1.0, 1.75])
 def test_numeric_head_ratio_is_resolved_after_record_normalization(
     normalization_factor: float,
 ) -> None:
-    result = create_seven_vertex_arrowhead_path_linear(
+    result = create_arrow_path_linear(
         **_linear_path(
             start=100,
             end=500,
             genome_size_normalization_factor=normalization_factor,
             head_length_ratio=2.0,
-        )
+        ),
+        shaft_width_ratio=0.5,
     )
     points = _points(result[1])
 
@@ -205,13 +199,13 @@ def test_numeric_head_ratio_is_resolved_after_record_normalization(
 
 
 @pytest.mark.parametrize(
-    ("feature_length", "legacy_vertex_count", "arrowhead_vertex_count"),
+    ("feature_length", "legacy_vertex_count", "narrow_vertex_count"),
     [(40, 3, 3), (50, 5, 3), (100, 5, 7)],
 )
-def test_short_and_equality_boundaries_are_shape_specific(
+def test_short_and_equality_boundaries_are_shaft_width_specific(
     feature_length: int,
     legacy_vertex_count: int,
-    arrowhead_vertex_count: int,
+    narrow_vertex_count: int,
 ) -> None:
     arguments = _linear_path(
         start=100,
@@ -222,8 +216,15 @@ def test_short_and_equality_boundaries_are_shape_specific(
 
     assert len(_points(create_arrow_path_linear(**arguments)[1])) == legacy_vertex_count
     assert (
-        len(_points(create_seven_vertex_arrowhead_path_linear(**arguments)[1]))
-        == arrowhead_vertex_count
+        len(
+            _points(
+                create_arrow_path_linear(
+                    **arguments,
+                    shaft_width_ratio=0.5,
+                )[1]
+            )
+        )
+        == narrow_vertex_count
     )
 
 
@@ -231,7 +232,7 @@ def test_short_and_equality_boundaries_are_shape_specific(
     ("strand", "track_id"),
     [("positive", 2), ("negative", -2)],
 )
-def test_multipart_arrowhead_uses_lane_center_and_reduced_width_shafts(
+def test_multipart_narrow_arrow_uses_lane_center_and_reduced_width_shafts(
     strand: str,
     track_id: int,
 ) -> None:
@@ -241,7 +242,7 @@ def test_multipart_arrowhead_uses_lane_center_and_reduced_width_shafts(
         FeatureLocationPart("block", "002", strand, 220, 400, True),
     ]
     feature = _feature(
-        glyph_kind="arrowhead",
+        glyph_kind="arrow",
         strand=strand,
         parts=parts,
         track_id=track_id,
@@ -288,10 +289,10 @@ def test_multipart_arrowhead_uses_lane_center_and_reduced_width_shafts(
     assert terminal_block[6][1] == pytest.approx(expected_shaft_bottom)
 
 
-def test_undefined_strand_arrowhead_falls_back_to_full_width_rectangle() -> None:
+def test_undefined_strand_narrow_arrow_falls_back_to_full_width_rectangle() -> None:
     part = FeatureLocationPart("block", "001", "undefined", 100, 300, True)
     feature = _feature(
-        glyph_kind="arrowhead",
+        glyph_kind="arrow",
         strand="undefined",
         parts=[part],
     )

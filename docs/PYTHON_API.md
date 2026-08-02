@@ -317,19 +317,17 @@ assert styled_diagram.to_svg().startswith("<svg")
 Use `FeatureOptions.color_table`, `default_colors`, `visibility`, and `shapes` for
 the corresponding feature controls.
 
-`FeatureOptions.shapes` accepts `arrow`, `arrowhead`, `rectangle`, and
-`underlay`. `arrow` retains the five-vertex, full-width outline;
-`arrowhead` uses seven vertices and a narrower shaft. Tune their shared head
-length and the arrowhead-only shaft width through canonical configuration
+`FeatureOptions.shapes` accepts `arrow`, `rectangle`, and `underlay`. Tune the
+global arrow head length and shaft width through canonical configuration
 overrides:
 
 ```python
-arrowhead_diagram = draw_linear(
+narrow_arrow_diagram = draw_linear(
     linear_records,
     options=LinearOptions(
         features=FeatureOptions(
             types=("CDS", "rRNA"),
-            shapes={"CDS": "arrowhead", "rRNA": "arrow"},
+            shapes={"CDS": "arrow", "rRNA": "arrow"},
         ),
         config_overrides={
             "objects.features.arrow_geometry.head_length_ratio": 1.0,
@@ -337,15 +335,17 @@ arrowhead_diagram = draw_linear(
         },
     ),
 )
-assert arrowhead_diagram.to_svg().startswith("<svg")
+assert narrow_arrow_diagram.to_svg().startswith("<svg")
 ```
 
-Set `head_length_ratio` to `"auto"` to retain the existing mode-specific head
-length. Numeric values must be positive and measure head length relative to the
-full rendered feature thickness. `shaft_width_ratio` must be in `(0, 1]`; `1`
-keeps the `arrowhead` selection but gives it the same visible full-width outline
-as `arrow`. An arrowhead with no positive shaft length is rendered as a
-triangle.
+Set `head_length_ratio` to `"auto"` for a head that starts from the existing
+mode-specific length and grows by the thickness removed from a narrowed shaft.
+Numeric values must be positive, measure head length relative to the full
+rendered feature thickness, and do not depend on shaft width.
+`shaft_width_ratio` must be in `(0, 1]` and applies to every feature type
+rendered as `arrow`. Its default is `1.0`, which preserves the legacy full-width
+outline; smaller values produce a centered, narrower shaft. An arrow with no
+positive shaft length is rendered as a triangle.
 
 ### Canonical label configuration overrides
 

@@ -113,27 +113,34 @@ Radial placement works with `auto`, `embedded_only`, and `external_only`. Unlike
 > [!WARNING]
 > Avoid `--labels` or `--labels both` on feature-dense genomes unless you also filter labels with `--label_blacklist` or `--label_whitelist`.
 
-## 5. Choose arrow, arrowhead, rectangle, or underlay rendering
+## 5. Choose arrow, rectangle, or underlay rendering
 
-Use repeatable `--feature_shape TYPE=SHAPE` options to choose how a feature type is drawn. `arrow` keeps the existing five-vertex, full-width glyph. `arrowhead` uses seven vertices and a narrower shaft. `rectangle` is a nondirectional foreground glyph. `underlay` uses the feature's resolved color to highlight the full feature-track band behind other features, without consuming an overlap lane or creating a feature label.
+Use repeatable `--feature_shape TYPE=SHAPE` options to choose how a feature type
+is drawn. `arrow` is strand-aware, `rectangle` is a nondirectional foreground
+glyph, and `underlay` uses the feature's resolved color to highlight the full
+feature-track band behind other features without consuming an overlap lane or
+creating a feature label. Arrow head length and shaft width are global geometry
+settings shared by every feature type rendered as `arrow`.
 
-For a seven-vertex CDS glyph with a head as long as the full rendered feature
-thickness and a half-width shaft, run:
+For CDS arrows with a head as long as the full rendered feature thickness and a
+half-width shaft, run:
 
 ```bash
 gbdraw circular \
   --gbk AP027280.gb \
-  --feature_shape CDS=arrowhead \
+  --feature_shape CDS=arrow \
   --arrow_head_length_ratio 1 \
-  --arrowhead_shaft_width_ratio 0.5 \
-  -o WSSV_arrowheads \
+  --arrow_shaft_width_ratio 0.5 \
+  -o WSSV_narrow_arrows \
   -f svg
 ```
 
-The head ratio applies to both arrow forms. Use `auto` to preserve the existing
-mode-specific head length. The shaft ratio applies only to `arrowhead`, accepts
-values in `(0, 1]`, and remains centered on the feature track. Short arrowheads
-become triangles when no positive shaft length remains.
+Use `auto` for a head that starts from the existing mode-specific length and
+grows by the thickness removed from a narrowed shaft. Numeric head ratios do
+not depend on shaft width. The shaft ratio accepts values in `(0, 1]` and
+remains centered on the feature track. Its default is `1.0`, which preserves
+the legacy full-width outline; smaller values narrow every arrow shaft in the
+diagram. Short arrows become triangles when no positive shaft length remains.
 
 `repeat_region` uses `underlay` by default in new commands. To restore the earlier foreground block style:
 

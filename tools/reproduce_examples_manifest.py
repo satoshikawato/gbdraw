@@ -2093,14 +2093,13 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
     )
 
     add(
-        "tutorial_9_arrow_vs_arrowhead",
-        "examples/tutorial-9-arrow-vs-arrowhead.svg",
+        "tutorial_9_arrow_geometry_circular",
+        "examples/tutorial-9-arrow-geometry-circular.svg",
         SessionVariantRecipe(
             source_session_path=(
                 "gbdraw/web/gallery/sessions/"
                 "HmmtDNA_ATskew.gbdraw-session.json"
             ),
-            feature_shapes=(("CDS", "arrowhead"),),
             config_overrides=(
                 (
                     "objects.features.arrow_geometry.head_length_ratio",
@@ -2108,7 +2107,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
                 ),
                 (
                     "objects.features.arrow_geometry.shaft_width_ratio",
-                    0.5,
+                    0.75,
                 ),
             ),
         ),
@@ -2117,14 +2116,13 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         ),
     )
     add(
-        "tutorial_9_arrowhead_linear_bgc",
-        "examples/tutorial-9-arrowhead-linear-bgc.svg",
+        "tutorial_9_arrow_geometry_linear",
+        "examples/tutorial-9-arrow-geometry-linear.svg",
         SessionVariantRecipe(
             source_session_path=(
                 "gbdraw/web/gallery/sessions/"
                 "BGC0000708-BGC0000713.gbdraw-session.json"
             ),
-            feature_shapes=(("CDS", "arrowhead"),),
             config_overrides=(
                 (
                     "objects.features.arrow_geometry.head_length_ratio",

@@ -4523,6 +4523,7 @@ def prepare_label_list(
     )
     automatic_circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
     arrow_head_length_ratio = cfg.objects.features.arrow_geometry.head_length_ratio
+    arrow_shaft_width_ratio = cfg.objects.features.arrow_geometry.shaft_width_ratio
 
     cached_candidates = (
         _candidate_cache.get("candidates")
@@ -4601,6 +4602,7 @@ def prepare_label_list(
                 automatic_circular_arrow_length_bp,
                 total_length,
                 feature_center_radius,
+                arrow_shaft_width_ratio,
             )
             is_short_directional_feature = (
                 bool(getattr(feature_object, "is_directional", False))

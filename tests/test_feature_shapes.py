@@ -81,10 +81,6 @@ def _build_test_feature(
 
 def test_parse_feature_shape_assignment_valid() -> None:
     assert parse_feature_shape_assignment("CDS=arrow") == ("CDS", "arrow")
-    assert parse_feature_shape_assignment("CDS=ARROWHEAD") == (
-        "CDS",
-        "arrowhead",
-    )
     assert parse_feature_shape_assignment("repeat_region=RECTANGLE") == (
         "repeat_region",
         "rectangle",
@@ -98,7 +94,6 @@ def test_parse_feature_shape_assignment_valid() -> None:
 def test_feature_rendering_defaults_and_resolvers() -> None:
     assert FEATURE_RENDERING_VALUES == {
         "arrow",
-        "arrowhead",
         "rectangle",
         "underlay",
     }
@@ -129,7 +124,7 @@ def test_python_and_web_feature_rendering_defaults_stay_in_sync() -> None:
 
 @pytest.mark.parametrize(
     "raw",
-    ["CDSarrow", "=arrow", "CDS=", "CDS=triangle"],
+    ["CDSarrow", "=arrow", "CDS=", "CDS=arrowhead", "CDS=triangle"],
 )
 def test_parse_feature_shape_assignment_invalid(raw: str) -> None:
     with pytest.raises(ValueError):
@@ -148,7 +143,7 @@ def test_resolve_directional_feature_types_with_overrides() -> None:
         {
             "CDS": "rectangle",
             "repeat_region": "arrow",
-            "misc_feature": "arrowhead",
+            "misc_feature": "arrow",
         }
     )
     assert "CDS" not in directional_types
@@ -161,15 +156,8 @@ def test_feature_object_glyph_is_the_directionality_source_of_truth() -> None:
     assert _build_test_feature(is_directional=True).glyph_kind == "arrow"
     assert _build_test_feature(is_directional=False).glyph_kind == "rectangle"
 
-    arrowhead = _build_test_feature(
-        is_directional=None,
-        glyph_kind="arrowhead",
-    )
-    assert arrowhead.glyph_kind == "arrowhead"
-    assert arrowhead.is_directional is True
-
-    with pytest.raises(ValueError, match="contradicts"):
-        _build_test_feature(is_directional=False, glyph_kind="arrowhead")
+    with pytest.raises(ValueError, match="glyph_kind"):
+        _build_test_feature(is_directional=None, glyph_kind="arrowhead")
     with pytest.raises(ValueError, match="contradicts"):
         _build_test_feature(is_directional=True, glyph_kind="rectangle")
 
@@ -233,7 +221,7 @@ def test_create_feature_layers_partitions_underlays_before_lane_assignment() -> 
     assert result.underlay_features[0].glyph_kind == "rectangle"
 
 
-@pytest.mark.parametrize("rendering", ["rectangle", "arrow", "arrowhead"])
+@pytest.mark.parametrize("rendering", ["rectangle", "arrow"])
 def test_explicit_repeat_foreground_rendering(rendering: str) -> None:
     default_colors = load_default_colors("", "default")
     color_table, default_colors = preprocess_color_tables(None, default_colors)
@@ -256,7 +244,7 @@ def test_explicit_repeat_foreground_rendering(rendering: str) -> None:
     repeat = next(iter(result.foreground_features.values()))
     assert repeat.feature_type == "repeat_region"
     assert repeat.glyph_kind == rendering
-    assert repeat.is_directional is (rendering in {"arrow", "arrowhead"})
+    assert repeat.is_directional is (rendering == "arrow")
 
 
 @pytest.mark.parametrize(
@@ -264,11 +252,11 @@ def test_explicit_repeat_foreground_rendering(rendering: str) -> None:
     [CircularDiagramOptions, LinearDiagramOptions],
 )
 def test_typed_options_validate_and_normalize_feature_shapes(options_type) -> None:
-    options = options_type(feature_shapes={"CDS": "ARROWHEAD"})
-    assert options.feature_shapes == {"CDS": "arrowhead"}
+    options = options_type(feature_shapes={"CDS": "ARROW"})
+    assert options.feature_shapes == {"CDS": "arrow"}
 
     with pytest.raises(ValidationError, match="invalid feature shape"):
-        options_type(feature_shapes={"CDS": "triangle"})
+        options_type(feature_shapes={"CDS": "arrowhead"})
 
 
 def test_linear_feature_paths_change_with_directionality() -> None:
@@ -506,12 +494,12 @@ def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tm
             "--gbk",
             "dummy.gb",
             "--feature_shape",
-            "CDS=arrowhead",
+            "CDS=arrow",
             "--feature_shape",
             "repeat_region=underlay",
             "--arrow_head_length_ratio",
             "1.25",
-            "--arrowhead_shaft_width_ratio",
+            "--arrow_shaft_width_ratio",
             "0.25",
             "--format",
             "svg",
@@ -520,7 +508,7 @@ def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tm
         ]
     )
     assert captured["feature_shapes"] == {
-        "CDS": "arrowhead",
+        "CDS": "arrow",
         "repeat_region": "underlay",
     }
     assert captured["config"].objects.features.arrow_geometry.head_length_ratio == 1.25
@@ -554,12 +542,12 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
             "--gbk",
             "dummy.gb",
             "--feature_shape",
-            "CDS=arrowhead",
+            "CDS=arrow",
             "--feature_shape",
             "repeat_region=underlay",
             "--arrow_head_length_ratio",
             "auto",
-            "--arrowhead_shaft_width_ratio",
+            "--arrow_shaft_width_ratio",
             "1",
             "--format",
             "svg",
@@ -568,7 +556,7 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
         ]
     )
     assert captured["canonical_request"].options.feature_shapes == {
-        "CDS": "arrowhead",
+        "CDS": "arrow",
         "repeat_region": "underlay",
     }
     geometry = captured["canonical_request"].options.config.objects.features.arrow_geometry
@@ -609,9 +597,9 @@ def test_linear_cli_feature_shape_validation(cmd_args: list[str]) -> None:
         ["--arrow_head_length_ratio", "0"],
         ["--arrow_head_length_ratio", "nan"],
         ["--arrow_head_length_ratio", "inf"],
-        ["--arrowhead_shaft_width_ratio", "0"],
-        ["--arrowhead_shaft_width_ratio", "1.01"],
-        ["--arrowhead_shaft_width_ratio", "nan"],
+        ["--arrow_shaft_width_ratio", "0"],
+        ["--arrow_shaft_width_ratio", "1.01"],
+        ["--arrow_shaft_width_ratio", "nan"],
     ],
 )
 def test_cli_arrow_geometry_validation(parser, option_and_value: list[str]) -> None:

@@ -82,7 +82,7 @@ usage: gbdraw circular [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [-n NT] [-w WINDOW] [-s STEP] [--species SPECIES]
               [--strain STRAIN] [-k FEATURES] [--feature_shape TYPE=SHAPE]
               [--arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO]
-              [--arrowhead_shaft_width_ratio ARROWHEAD_SHAFT_WIDTH_RATIO]
+              [--arrow_shaft_width_ratio ARROW_SHAFT_WIDTH_RATIO]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -201,14 +201,13 @@ options:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
   --feature_shape TYPE=SHAPE
                         Feature rendering override (repeatable): TYPE=SHAPE
-                        where SHAPE is arrow, arrowhead, rectangle, or
-                        underlay.
+                        where SHAPE is arrow, rectangle, or underlay.
   --arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO
                         Arrow head length divided by full feature thickness:
                         auto or a positive finite number (default: auto).
-  --arrowhead_shaft_width_ratio ARROWHEAD_SHAFT_WIDTH_RATIO
-                        Arrowhead shaft thickness divided by full head
-                        thickness: a finite number in (0, 1] (default: 0.5).
+  --arrow_shaft_width_ratio ARROW_SHAFT_WIDTH_RATIO
+                        Arrow shaft thickness divided by full head thickness:
+                        a finite number in (0, 1] (default: 1.0).
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -525,33 +524,36 @@ For `interactive_svg`, add one `--conservation_fasta` value per `--conservation_
 
 ## Feature rendering
 
-`--feature_shape TYPE=SHAPE` accepts four rendering policies and may be repeated:
+`--feature_shape TYPE=SHAPE` accepts three rendering policies and may be repeated:
 
-- `arrow` draws the existing five-vertex, full-width strand-aware glyph.
-- `arrowhead` draws a seven-vertex strand-aware glyph with a narrower shaft.
+- `arrow` draws a strand-aware glyph whose head length and shaft width are set globally.
 - `rectangle` draws a non-directional foreground glyph.
 - `underlay` removes the feature from overlap lanes and feature labels, then highlights the full feature-track band behind foreground features.
 
 Fresh configurations render `CDS`, `rRNA`, `tRNA`, `tmRNA`, `ncRNA`, and `misc_RNA` as arrows, `repeat_region` as an underlay, and other feature types as rectangles. Restore the earlier repeat appearance with `--feature_shape repeat_region=rectangle`. Underlays keep the feature's resolved palette or specific-rule color and remain in the feature legend, interactive metadata, and protein-matching inputs.
 
-Use `--arrow_head_length_ratio auto` to retain the existing mode-specific head
-length, or pass a positive finite ratio to set the head length relative to the
-full rendered feature thickness. This setting applies to both arrow styles.
-`--arrowhead_shaft_width_ratio` accepts a finite value in `(0, 1]` and applies
-only to `arrowhead`; its default is `0.5`. A short `arrowhead` whose head uses
-the entire terminal block is drawn as a triangle. Multipart arrowheads use the
-reduced shaft width for nonterminal blocks and keep connector lines centered.
+Use `--arrow_head_length_ratio auto` for a head that starts from the existing
+mode-specific length and grows by the thickness removed from a narrowed shaft.
+A positive finite ratio sets an explicit head length relative to the full
+rendered feature thickness and does not depend on shaft width.
+`--arrow_shaft_width_ratio` accepts a finite value in `(0, 1]` and applies to
+every feature type rendered as `arrow`. Its default is `1.0`, which preserves
+the full-width legacy outline; values below `1.0` produce a narrower centered
+shaft and visible head shoulders. An arrow whose head uses the entire terminal
+block is drawn as a triangle. Multipart arrows use the configured shaft width
+for nonterminal blocks and keep connector lines centered.
 
-For example, this selects the seven-vertex glyph while giving both arrow styles
-the same head-length rule:
+For example, this draws CDS features with a head as long as the full rendered
+feature thickness and a half-width shaft:
 
 ```bash
 gbdraw circular \
   --gbk genome.gb \
-  --feature_shape CDS=arrowhead \
+  -k CDS \
+  --feature_shape CDS=arrow \
   --arrow_head_length_ratio 1 \
-  --arrowhead_shaft_width_ratio 0.5 \
-  -o arrowhead-example
+  --arrow_shaft_width_ratio 0.5 \
+  -o narrow-arrow-example
 ```
 
 A rendering assignment does not make a feature visible. The selected feature list, specific color rules, and feature visibility table retain their existing precedence; `off` still hides the feature, while a matching `show` or specific color rule can reveal an otherwise unselected type and use its assigned rendering.
@@ -876,7 +878,7 @@ usage: gbdraw linear [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--pairwise_match_style {ribbon,curve}] [-k FEATURES]
               [--feature_shape TYPE=SHAPE]
               [--arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO]
-              [--arrowhead_shaft_width_ratio ARROWHEAD_SHAFT_WIDTH_RATIO]
+              [--arrow_shaft_width_ratio ARROW_SHAFT_WIDTH_RATIO]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -1118,14 +1120,13 @@ options:
                         CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,repeat_region)
   --feature_shape TYPE=SHAPE
                         Feature rendering override (repeatable): TYPE=SHAPE
-                        where SHAPE is arrow, arrowhead, rectangle, or
-                        underlay.
+                        where SHAPE is arrow, rectangle, or underlay.
   --arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO
                         Arrow head length divided by full feature thickness:
                         auto or a positive finite number (default: auto).
-  --arrowhead_shaft_width_ratio ARROWHEAD_SHAFT_WIDTH_RATIO
-                        Arrowhead shaft thickness divided by full head
-                        thickness: a finite number in (0, 1] (default: 0.5).
+  --arrow_shaft_width_ratio ARROW_SHAFT_WIDTH_RATIO
+                        Arrow shaft thickness divided by full head thickness:
+                        a finite number in (0, 1] (default: 1.0).
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH

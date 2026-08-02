@@ -1840,13 +1840,13 @@ def test_legacy_gui_config_migrates_repeat_to_rectangle_without_mutating_source(
     assert "feature_shapes" not in session["config"]["adv"]
 
 
-def test_gui_session_replays_arrowhead_shape_and_geometry_flags(tmp_path: Path) -> None:
+def test_gui_session_replays_arrow_shape_and_geometry_flags(tmp_path: Path) -> None:
     session = _minimal_session({"c_gb": _file_entry("input.gb", b"LOCUS       A\n")})
     session["config"]["adv"].update(
         {
-            "feature_shapes": {"CDS": "arrowhead"},
+            "feature_shapes": {"CDS": "arrow"},
             "arrow_head_length_ratio": "1.25",
-            "arrowhead_shaft_width_ratio": "0.25",
+            "arrow_shaft_width_ratio": "0.25",
         }
     )
 
@@ -1858,22 +1858,22 @@ def test_gui_session_replays_arrowhead_shape_and_geometry_flags(tmp_path: Path) 
         format_override=None,
     )
 
-    assert "CDS=arrowhead" in session_io_module._option_all_values(
+    assert "CDS=arrow" in session_io_module._option_all_values(
         spec.args,
         "--feature_shape",
     )
     head_index = spec.args.index("--arrow_head_length_ratio")
     assert spec.args[head_index + 1] == "1.25"
-    shaft_index = spec.args.index("--arrowhead_shaft_width_ratio")
+    shaft_index = spec.args.index("--arrow_shaft_width_ratio")
     assert spec.args[shaft_index + 1] == "0.25"
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 @pytest.mark.parametrize(
     ("head_ratio", "shaft_ratio"),
-    [("auto", "0.5"), ("1.25", "0.25")],
+    [("auto", "1"), ("1.25", "0.25")],
 )
-def test_cli_session_projects_arrowhead_shape_and_geometry_to_web_state(
+def test_cli_session_projects_arrow_shape_and_geometry_to_web_state(
     mode: str,
     head_ratio: str,
     shaft_ratio: str,
@@ -1887,10 +1887,10 @@ def test_cli_session_projects_arrowhead_shape_and_geometry_to_web_state(
                 "--gbk",
                 "input.gb",
                 "--feature_shape",
-                "CDS=arrowhead",
+                "CDS=arrow",
                 "--arrow_head_length_ratio",
                 head_ratio,
-                "--arrowhead_shaft_width_ratio",
+                "--arrow_shaft_width_ratio",
                 shaft_ratio,
             ),
         ),
@@ -1901,9 +1901,9 @@ def test_cli_session_projects_arrowhead_shape_and_geometry_to_web_state(
     )
 
     adv = payload["config"]["adv"]
-    assert adv["feature_shapes"] == {"CDS": "arrowhead"}
+    assert adv["feature_shapes"] == {"CDS": "arrow"}
     assert adv["arrow_head_length_ratio"] == head_ratio
-    assert adv["arrowhead_shaft_width_ratio"] == shaft_ratio
+    assert adv["arrow_shaft_width_ratio"] == shaft_ratio
 
 
 @pytest.mark.parametrize(

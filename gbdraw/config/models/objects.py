@@ -71,15 +71,15 @@ def _normalize_arrow_head_length_ratio(value: Any) -> ArrowHeadLengthRatio:
     return parsed
 
 
-def _normalize_arrowhead_shaft_width_ratio(value: Any) -> float:
+def _normalize_arrow_shaft_width_ratio(value: Any) -> float:
     if isinstance(value, bool) or not isinstance(value, Real):
         raise ValidationError(
-            "arrowhead shaft_width_ratio must be a finite number in (0, 1]"
+            "arrow shaft_width_ratio must be a finite number in (0, 1]"
         )
     parsed = float(value)
     if not math.isfinite(parsed) or parsed <= 0 or parsed > 1:
         raise ValidationError(
-            "arrowhead shaft_width_ratio must be a finite number in (0, 1]"
+            "arrow shaft_width_ratio must be a finite number in (0, 1]"
         )
     return parsed
 
@@ -340,8 +340,8 @@ class ObjectsFeaturesArrowGeometryConfig:
             head_length_ratio=_normalize_arrow_head_length_ratio(
                 d.get("head_length_ratio", "auto")
             ),
-            shaft_width_ratio=_normalize_arrowhead_shaft_width_ratio(
-                d.get("shaft_width_ratio", 0.5)
+            shaft_width_ratio=_normalize_arrow_shaft_width_ratio(
+                d.get("shaft_width_ratio", 1.0)
             ),
         )
 

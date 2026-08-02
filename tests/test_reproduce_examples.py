@@ -353,12 +353,12 @@ def test_smoke_render_subset_via_cli(tmp_path: Path) -> None:
     assert "majani" in payload["generated"]
 
 
-def test_gallery_session_arrowhead_variants_reproduce_tracked_svgs(
+def test_gallery_session_arrow_geometry_variants_reproduce_tracked_svgs(
     tmp_path: Path,
 ) -> None:
     figure_ids = (
-        "tutorial_9_arrow_vs_arrowhead",
-        "tutorial_9_arrowhead_linear_bgc",
+        "tutorial_9_arrow_geometry_circular",
+        "tutorial_9_arrow_geometry_linear",
     )
     reproducer = Reproducer(
         project_root=PROJECT_ROOT,
@@ -375,17 +375,17 @@ def test_gallery_session_arrowhead_variants_reproduce_tracked_svgs(
         reproducer.close()
 
 
-def test_gallery_session_arrowhead_variants_only_change_feature_paths() -> None:
+def test_gallery_session_arrow_geometry_variants_only_change_feature_paths() -> None:
     pairs = (
         (
             PROJECT_ROOT / "gbdraw/web/gallery/sources/HmmtDNA_ATskew.svg",
-            PROJECT_ROOT / "examples/tutorial-9-arrow-vs-arrowhead.svg",
-            13,
+            PROJECT_ROOT / "examples/tutorial-9-arrow-geometry-circular.svg",
+            15,
         ),
         (
             PROJECT_ROOT
             / "gbdraw/web/gallery/sources/BGC0000708-BGC0000713.svg",
-            PROJECT_ROOT / "examples/tutorial-9-arrowhead-linear-bgc.svg",
+            PROJECT_ROOT / "examples/tutorial-9-arrow-geometry-linear.svg",
             152,
         ),
     )

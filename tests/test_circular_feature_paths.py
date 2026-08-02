@@ -12,10 +12,11 @@ from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.render.drawers.circular.features import FeatureDrawer
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.svg.circular_features import generate_circular_arrowhead_path
+from gbdraw.svg.circular_features import generate_circular_arrow_path
 from gbdraw.svg.circular_features import generate_circular_arrow_path_with_radii
 from gbdraw.svg.circular_features import (
-    generate_circular_seven_vertex_arrowhead_path,
-    generate_circular_seven_vertex_arrowhead_path_with_radii,
+    generate_circular_narrow_arrow_path,
+    generate_circular_narrow_arrow_path_with_radii,
 )
 from gbdraw.svg.circular_features import generate_circular_intron_path
 from gbdraw.svg.arrows import calculate_circular_arrow_length
@@ -50,7 +51,11 @@ def _make_feature(location: list[FeatureLocationPart], is_directional: bool = Fa
     )
 
 
-def _make_generator(total_length: int) -> FeaturePathGenerator:
+def _make_generator(
+    total_length: int,
+    *,
+    shaft_width_ratio: float = 1.0,
+) -> FeaturePathGenerator:
     return FeaturePathGenerator(
         radius=TEST_RADIUS,
         total_length=total_length,
@@ -60,6 +65,7 @@ def _make_generator(total_length: int) -> FeaturePathGenerator:
         track_type=TEST_TRACK_TYPE,
         strandedness=TEST_STRANDEDNESS,
         track_id=TEST_TRACK_ID,
+        shaft_width_ratio=shaft_width_ratio,
     )
 
 
@@ -318,11 +324,11 @@ def test_origin_spanning_negative_arrow_midpoint_wraps_short_way() -> None:
 
 @pytest.mark.parametrize("strand", ["positive", "negative"])
 @pytest.mark.parametrize("shaft_width_ratio", [0.25, 0.5, 1.0])
-def test_seven_vertex_arrowhead_uses_reduced_shaft_radii(
+def test_narrow_arrow_uses_reduced_shaft_radii(
     strand: str,
     shaft_width_ratio: float,
 ) -> None:
-    _kind, path_data = generate_circular_seven_vertex_arrowhead_path_with_radii(
+    _kind, path_data = generate_circular_narrow_arrow_path_with_radii(
         coord_dict={
             "coord_strand": strand,
             "coord_start": 100,
@@ -360,7 +366,7 @@ def test_seven_vertex_arrowhead_uses_reduced_shaft_radii(
 
 
 @pytest.mark.parametrize("strand", ["positive", "negative"])
-def test_factor_based_seven_vertex_arrowhead_matches_explicit_radii_api(
+def test_factor_based_narrow_arrow_matches_explicit_radii_api(
     strand: str,
 ) -> None:
     coord_dict = {
@@ -379,7 +385,7 @@ def test_factor_based_seven_vertex_arrowhead_matches_explicit_radii_api(
         track_id=TEST_TRACK_ID,
     )
 
-    factor_based = generate_circular_seven_vertex_arrowhead_path(
+    factor_based = generate_circular_narrow_arrow_path(
         radius=TEST_RADIUS,
         coord_dict=coord_dict,
         total_length=1000,
@@ -392,7 +398,7 @@ def test_factor_based_seven_vertex_arrowhead_matches_explicit_radii_api(
         shaft_width_ratio=0.5,
         track_id=TEST_TRACK_ID,
     )
-    explicit_radii = generate_circular_seven_vertex_arrowhead_path_with_radii(
+    explicit_radii = generate_circular_narrow_arrow_path_with_radii(
         coord_dict=coord_dict,
         total_length=1000,
         head_length_bp=10.0,
@@ -410,12 +416,12 @@ def test_factor_based_seven_vertex_arrowhead_matches_explicit_radii_api(
     ("strand", "expected_sweeps"),
     [("positive", [1, 1, 0, 0]), ("negative", [0, 0, 1, 1])],
 )
-def test_long_factor_based_arrowhead_splits_both_shaft_arcs(
+def test_long_factor_based_narrow_arrow_splits_both_shaft_arcs(
     strand: str,
     expected_sweeps: list[int],
 ) -> None:
     shaft_width_ratio = 0.5
-    _kind, path_data = generate_circular_seven_vertex_arrowhead_path(
+    _kind, path_data = generate_circular_narrow_arrow_path(
         radius=TEST_RADIUS,
         coord_dict={
             "coord_strand": strand,
@@ -460,7 +466,7 @@ def test_long_factor_based_arrowhead_splits_both_shaft_arcs(
     ("strand", "expected_tip_position"),
     [("positive", 100.0), ("negative", 900.0)],
 )
-def test_origin_spanning_arrowhead_is_coalesced_with_reduced_shaft(
+def test_origin_spanning_narrow_arrow_is_coalesced_with_reduced_shaft(
     strand: str,
     expected_tip_position: float,
 ) -> None:
@@ -478,10 +484,13 @@ def test_origin_spanning_arrowhead_is_coalesced_with_reduced_shaft(
         coordinates=[],
         type="CDS",
         qualifiers={},
-        glyph_kind="arrowhead",
+        glyph_kind="arrow",
     )
 
-    paths = _make_generator(total_length=1000).generate_circular_gene_path(feature)
+    paths = _make_generator(
+        total_length=1000,
+        shaft_width_ratio=0.5,
+    ).generate_circular_gene_path(feature)
     endpoints = _path_command_endpoints(paths[0][1])
     factors = calculate_feature_position_factors_circular(
         total_length=1000,
@@ -520,10 +529,10 @@ def test_origin_spanning_arrowhead_is_coalesced_with_reduced_shaft(
 
 
 @pytest.mark.parametrize("head_length_bp", [10.0, 20.0])
-def test_arrowhead_without_positive_shaft_is_a_triangle(
+def test_narrow_arrow_without_positive_shaft_is_a_triangle(
     head_length_bp: float,
 ) -> None:
-    _kind, path_data = generate_circular_seven_vertex_arrowhead_path_with_radii(
+    _kind, path_data = generate_circular_narrow_arrow_path_with_radii(
         coord_dict={
             "coord_strand": "positive",
             "coord_start": 100,
@@ -559,7 +568,34 @@ def test_legacy_arrow_keeps_equality_boundary_as_five_vertex_path() -> None:
     assert len(_path_command_endpoints(path_data)) == 5
 
 
-def test_multipart_arrowhead_uses_shaft_width_before_terminal_head() -> None:
+def test_full_width_ratio_uses_exact_legacy_circular_arrow_path() -> None:
+    feature = _make_feature(
+        [FeatureLocationPart("block", "001", "positive", 100, 150, True)],
+        is_directional=True,
+    )
+    generator = _make_generator(total_length=1000, shaft_width_ratio=1.0)
+    actual = generator.generate_circular_gene_path(feature)
+    expected = generate_circular_arrow_path(
+        radius=TEST_RADIUS,
+        coord_dict={
+            "coord_strand": "positive",
+            "coord_start": 100,
+            "coord_end": 150,
+        },
+        total_length=1000,
+        cds_arrow_length=generator._resolved_arrow_length("positive", None),
+        track_ratio=TEST_TRACK_RATIO,
+        cds_ratio=TEST_CDS_RATIO,
+        offset=TEST_OFFSET,
+        track_type=TEST_TRACK_TYPE,
+        strandedness=TEST_STRANDEDNESS,
+        track_id=TEST_TRACK_ID,
+    )
+
+    assert actual == [expected]
+
+
+def test_multipart_narrow_arrow_uses_shaft_width_before_terminal_head() -> None:
     feature = FeatureObject(
         feature_id="feature_000000001",
         location=[
@@ -574,7 +610,7 @@ def test_multipart_arrowhead_uses_shaft_width_before_terminal_head() -> None:
         coordinates=[],
         type="CDS",
         qualifiers={},
-        glyph_kind="arrowhead",
+        glyph_kind="arrow",
     )
     generator = FeaturePathGenerator(
         radius=100.0,
@@ -597,7 +633,7 @@ def test_multipart_arrowhead_uses_shaft_width_before_terminal_head() -> None:
     assert max(terminal_radii) - min(terminal_radii) == pytest.approx(20.0)
 
 
-def test_undefined_strand_arrowhead_falls_back_to_rectangle() -> None:
+def test_undefined_strand_narrow_arrow_falls_back_to_rectangle() -> None:
     feature = FeatureObject(
         feature_id="feature_000000001",
         location=[FeatureLocationPart("block", "001", "undefined", 100, 150, True)],
@@ -608,7 +644,7 @@ def test_undefined_strand_arrowhead_falls_back_to_rectangle() -> None:
         coordinates=[],
         type="CDS",
         qualifiers={},
-        glyph_kind="arrowhead",
+        glyph_kind="arrow",
     )
 
     path = _make_generator(total_length=1000).generate_circular_gene_path(feature)[0][1]
@@ -616,7 +652,7 @@ def test_undefined_strand_arrowhead_falls_back_to_rectangle() -> None:
     assert len(_path_command_endpoints(path)) == 4
 
 
-def test_circular_numeric_head_ratio_resolves_in_display_space_without_rounding() -> None:
+def test_circular_numeric_head_ratio_is_independent_of_shaft_width() -> None:
     generator = FeaturePathGenerator(
         radius=100.0,
         total_length=1000,
@@ -626,6 +662,7 @@ def test_circular_numeric_head_ratio_resolves_in_display_space_without_rounding(
         track_type="middle",
         strandedness=False,
         head_length_ratio=0.75,
+        shaft_width_ratio=0.5,
     )
     inner_radius, center_radius, outer_radius = generator._feature_radii(
         "positive", None
@@ -645,6 +682,27 @@ def test_circular_auto_head_length_keeps_legacy_bp_value_exactly() -> None:
     assert generator._resolved_arrow_length(
         "positive", None
     ) == calculate_circular_arrow_length(1000)
+
+
+def test_circular_auto_head_length_grows_as_shaft_narrows() -> None:
+    generator = _make_generator(total_length=1000, shaft_width_ratio=0.5)
+    inner_radius, center_radius, outer_radius = generator._feature_radii(
+        "positive", None
+    )
+
+    resolved = generator._resolved_arrow_length("positive", None)
+
+    automatic_head_bp = calculate_circular_arrow_length(1000)
+    automatic_head_px = (
+        2.0 * math.pi * center_radius * automatic_head_bp / 1000.0
+    )
+    expected_head_px = automatic_head_px + 0.5 * abs(
+        outer_radius - inner_radius
+    )
+    expected_head_bp = expected_head_px * 1000.0 / (
+        2.0 * math.pi * center_radius
+    )
+    assert resolved == pytest.approx(expected_head_bp)
 
 
 @pytest.mark.parametrize(

@@ -2966,7 +2966,7 @@ def _append_common_gui_args(
         ("def_font_size", "--definition_font_size"),
         ("label_font_size", "--label_font_size"),
         ("arrow_head_length_ratio", "--arrow_head_length_ratio"),
-        ("arrowhead_shaft_width_ratio", "--arrowhead_shaft_width_ratio"),
+        ("arrow_shaft_width_ratio", "--arrow_shaft_width_ratio"),
         ("block_stroke_width", "--block_stroke_width"),
         ("block_stroke_color", "--block_stroke_color"),
         ("line_stroke_width", "--line_stroke_width"),
@@ -4219,9 +4219,9 @@ def _populate_shared_cli_config(args: Sequence[str], adv: dict[str, Any]) -> Non
             "--arrow_head_length_ratio",
             "--arrow-head-length-ratio",
         ),
-        "arrowhead_shaft_width_ratio": (
-            "--arrowhead_shaft_width_ratio",
-            "--arrowhead-shaft-width-ratio",
+        "arrow_shaft_width_ratio": (
+            "--arrow_shaft_width_ratio",
+            "--arrow-shaft-width-ratio",
         ),
         "axis_stroke_width": ("--axis_stroke_width", "--axis-stroke-width"),
         "axis_stroke_color": ("--axis_stroke_color", "--axis-stroke-color"),
@@ -4641,7 +4641,6 @@ def _feature_shapes_from_cli_args(args: Sequence[str]) -> dict[str, str]:
         shape = shape.strip().lower()
         if separator and feature_type and shape in {
             "arrow",
-            "arrowhead",
             "rectangle",
             "underlay",
         }:

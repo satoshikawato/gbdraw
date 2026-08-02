@@ -39,14 +39,12 @@ def _resolve_glyph_kind(
         return "arrow" if is_directional else "rectangle"
 
     normalized = str(glyph_kind).strip().lower()
-    if normalized not in {"arrow", "arrowhead", "rectangle"}:
-        raise ValueError(
-            "glyph_kind must be 'arrow', 'arrowhead', or 'rectangle'"
-        )
+    if normalized not in {"arrow", "rectangle"}:
+        raise ValueError("glyph_kind must be 'arrow' or 'rectangle'")
     resolved = cast(FeatureGlyph, normalized)
     if (
         is_directional is not None
-        and is_directional != (resolved in {"arrow", "arrowhead"})
+        and is_directional != (resolved == "arrow")
     ):
         raise ValueError("glyph_kind contradicts is_directional")
     return resolved
@@ -123,7 +121,7 @@ class FeatureObject:
     def is_directional(self) -> bool:
         """Backward-compatible directionality derived from the stored glyph."""
 
-        return self.glyph_kind in {"arrow", "arrowhead"}
+        return self.glyph_kind == "arrow"
 
     @property
     def type(self) -> str:

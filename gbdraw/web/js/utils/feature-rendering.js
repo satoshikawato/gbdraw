@@ -1,12 +1,11 @@
 export const FEATURE_RENDERING_VALUES = Object.freeze([
   'arrow',
-  'arrowhead',
   'rectangle',
   'underlay'
 ]);
 
 export const DEFAULT_ARROW_HEAD_LENGTH_RATIO = 'auto';
-export const DEFAULT_ARROWHEAD_SHAFT_WIDTH_RATIO = 0.5;
+export const DEFAULT_ARROW_SHAFT_WIDTH_RATIO = 1.0;
 
 export const DEFAULT_FEATURE_RENDERINGS = Object.freeze({
   CDS: 'arrow',
@@ -28,7 +27,7 @@ export const normalizeFeatureRendering = (value) => {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (!FEATURE_RENDERING_VALUE_SET.has(normalized)) {
     throw new Error(
-      `Unsupported feature rendering '${String(value)}'. Expected arrow, arrowhead, rectangle, or underlay.`
+      `Unsupported feature rendering '${String(value)}'. Expected arrow, rectangle, or underlay.`
     );
   }
   return normalized;
@@ -51,13 +50,13 @@ export const normalizeArrowHeadLengthRatio = (value) => {
   return value;
 };
 
-export const normalizeArrowheadShaftWidthRatio = (value) => {
+export const normalizeArrowShaftWidthRatio = (value) => {
   if (
     value === null ||
     value === undefined ||
     (typeof value === 'string' && value.trim() === '')
   ) {
-    return DEFAULT_ARROWHEAD_SHAFT_WIDTH_RATIO;
+    return DEFAULT_ARROW_SHAFT_WIDTH_RATIO;
   }
   if (
     typeof value !== 'number' ||
@@ -65,7 +64,7 @@ export const normalizeArrowheadShaftWidthRatio = (value) => {
     value <= 0 ||
     value > 1
   ) {
-    throw new Error('Arrowhead shaft width ratio must be a finite number greater than 0 and at most 1.');
+    throw new Error('Arrow shaft width ratio must be a finite number greater than 0 and at most 1.');
   }
   return value;
 };

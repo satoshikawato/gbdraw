@@ -30,7 +30,7 @@ from gbdraw.tracks import (
 
 WEB_RUNTIME_CAPABILITY_SCHEMA = 1
 WEB_RENDER_PROTOCOL = 2
-WEB_RENDER_OPTIONS_SCHEMA = 2
+WEB_RENDER_OPTIONS_SCHEMA = 3
 
 
 def get_web_runtime_capabilities() -> dict[str, Any]:

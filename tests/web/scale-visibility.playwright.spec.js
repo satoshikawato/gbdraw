@@ -215,7 +215,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   expect(hiddenLinearScale.recordAxisCount).toBeGreaterThan(0);
 });
 
-test('Arrowhead controls render in both modes and survive a session round trip', async ({ page }) => {
+test('Arrow controls render in both modes and survive a session round trip', async ({ page }) => {
   test.setTimeout(300000);
   const genbank = readFileSync(genbankPath, 'utf8');
 
@@ -246,18 +246,47 @@ test('Arrowhead controls render in both modes and survive a session round trip',
     has: page.locator('summary').filter({ hasText: 'Features' })
   }).first();
   await featuresCard.locator('summary').click();
-  await page.getByLabel('Rendering for CDS').selectOption('arrowhead');
-  await page.getByLabel('Arrow head length ratio').fill('0');
+  const rendering = page.getByLabel('Rendering for CDS');
+  const headRatio = page.getByLabel('Arrow head length ratio');
+  const shaftRatio = page.getByLabel('Arrow shaft width ratio');
+  expect(await rendering.locator('option').evaluateAll((options) => (
+    options.map((option) => ({ value: option.value, text: option.textContent.trim() }))
+  ))).toEqual([
+    { value: 'arrow', text: 'Arrow' },
+    { value: 'rectangle', text: 'Rectangle' },
+    { value: 'underlay', text: 'Underlay' }
+  ]);
+  await expect(rendering).toHaveValue('arrow');
+  await expect(headRatio).toHaveAttribute('min', '0.05');
+  await expect(headRatio).toHaveAttribute('step', '0.05');
+  expect(await headRatio.getAttribute('max')).toBeNull();
+  await expect(shaftRatio).toHaveAttribute('min', '0.05');
+  await expect(shaftRatio).toHaveAttribute('max', '1');
+  await expect(shaftRatio).toHaveAttribute('step', '0.05');
+  await expect(shaftRatio).toHaveValue('1');
+
+  await headRatio.fill('1.25');
+  await headRatio.press('ArrowUp');
+  await expect(headRatio).toHaveValue('1.3');
+  await headRatio.press('ArrowDown');
+  await expect(headRatio).toHaveValue('1.25');
+  await shaftRatio.fill('0.25');
+  await shaftRatio.press('ArrowUp');
+  await expect(shaftRatio).toHaveValue('0.3');
+  await shaftRatio.press('ArrowDown');
+  await expect(shaftRatio).toHaveValue('0.25');
+
+  await headRatio.fill('0');
   const invalidRun = await runDiagram(page);
   expect(invalidRun.result).toEqual({ status: 'error' });
   expect(invalidRun.errorSummary).toContain(
     'Arrow head length ratio must be Auto or a positive finite number.'
   );
-  await page.getByLabel('Arrow head length ratio').fill('1.25');
-  await page.getByLabel('Arrowhead shaft width ratio').fill('0.25');
-  await expect(page.getByLabel('Rendering for CDS')).toHaveValue('arrowhead');
-  await expect(page.getByLabel('Arrow head length ratio')).toHaveValue('1.25');
-  await expect(page.getByLabel('Arrowhead shaft width ratio')).toHaveValue('0.25');
+  await headRatio.fill('1.25');
+  await shaftRatio.fill('0.25');
+  await expect(rendering).toHaveValue('arrow');
+  await expect(headRatio).toHaveValue('1.25');
+  await expect(shaftRatio).toHaveValue('0.25');
 
   expect(await runDiagram(page)).toEqual({
     result: { status: 'ok' },
@@ -290,8 +319,8 @@ test('Arrowhead controls render in both modes and survive a session round trip',
   expect(await page.evaluate(() => ({
     shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,
     head: window.__GBDRAW_APP__.adv.arrow_head_length_ratio,
-    shaft: window.__GBDRAW_APP__.adv.arrowhead_shaft_width_ratio
-  }))).toEqual({ shape: 'arrowhead', head: 1.25, shaft: 0.25 });
+    shaft: window.__GBDRAW_APP__.adv.arrow_shaft_width_ratio
+  }))).toEqual({ shape: 'arrow', head: 1.25, shaft: 0.25 });
   expect(await runDiagram(page)).toEqual({
     result: { status: 'ok' },
     errorSummary: '',
@@ -323,7 +352,7 @@ test('Arrowhead controls render in both modes and survive a session round trip',
   expect(linearGeometry.shaftRatio).toBeCloseTo(0.25, 6);
 
   await page.evaluate(() => {
-    window.__GBDRAW_APP__.sessionTitle = 'arrowhead-browser-round-trip';
+    window.__GBDRAW_APP__.sessionTitle = 'arrow-browser-round-trip';
   });
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
   expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
@@ -338,17 +367,21 @@ test('Arrowhead controls render in both modes and survive a session round trip',
   expect(dialog.message()).toBe('Session loaded successfully!');
   await dialog.accept();
   await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.adv?.feature_shapes?.CDS === 'arrowhead'
+    () => (
+      window.__GBDRAW_APP__?.mode === 'linear'
+      && window.__GBDRAW_APP__?.adv?.arrow_head_length_ratio === 1.25
+      && window.__GBDRAW_APP__?.adv?.arrow_shaft_width_ratio === 0.25
+    )
   );
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
     shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,
     head: window.__GBDRAW_APP__.adv.arrow_head_length_ratio,
-    shaft: window.__GBDRAW_APP__.adv.arrowhead_shaft_width_ratio,
+    shaft: window.__GBDRAW_APP__.adv.arrow_shaft_width_ratio,
     content: window.__GBDRAW_APP__.results?.[0]?.content || ''
   }))).toMatchObject({
     mode: 'linear',
-    shape: 'arrowhead',
+    shape: 'arrow',
     head: 1.25,
     shaft: 0.25
   });
@@ -364,10 +397,10 @@ test('Arrowhead controls render in both modes and survive a session round trip',
       return {
         shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,
         head: window.__GBDRAW_APP__.adv.arrow_head_length_ratio,
-        shaft: window.__GBDRAW_APP__.adv.arrowhead_shaft_width_ratio
+        shaft: window.__GBDRAW_APP__.adv.arrow_shaft_width_ratio
       };
     } finally {
       window.confirm = originalConfirm;
     }
-  })).toEqual({ shape: 'arrow', head: null, shaft: 0.5 });
+  })).toEqual({ shape: 'arrow', head: null, shaft: 1.0 });
 });

@@ -210,6 +210,7 @@ staleCurrentConfig.config.losat.blastp.collinearMaxGeneGap =
 delete staleCurrentConfig.config.losat.blastp.collinearMaxUnitGap;
 const repairedCurrentConfig = promoteGallerySessionToCurrent(staleCurrentConfig);
 assert.equal(repairedCurrentConfig.config.losat.blastp.collinearMaxUnitGap, 4);
+assert.equal(repairedCurrentConfig.config.adv.arrow_shaft_width_ratio, 1.0);
 assert.equal(
   Object.hasOwn(repairedCurrentConfig.config.losat.blastp, 'collinearMaxGeneGap'),
   false

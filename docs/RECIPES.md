@@ -115,24 +115,26 @@ Use `--feature_shape repeat_region=rectangle` to restore the older foreground re
 
 Automatic feature underlays remain feature metadata, not region-annotation rows. With custom track slots, provide exactly one enabled feature slot; the underlay follows that slot even when its ID is not `features`.
 
-### Draw a narrower seven-vertex arrowhead
+### Draw narrower arrows
 
 The finished Circular HmmtDNA and Linear BGC examples in
 [Tutorial 9](./TUTORIALS/9_Feature_Visibility_Shapes.md) start from Interactive
-SVG Gallery sessions and change only CDS features to seven-vertex arrowheads.
-From a source checkout, reproduce both SVGs with:
+SVG Gallery sessions. The Circular example sets the global arrow shaft-width
+ratio to `0.75`; the Linear example sets it to `0.5`. From a source checkout,
+reproduce both SVGs with:
 
 ```bash
 python tools/reproduce_examples.py \
   --output-root . \
-  --figure tutorial_9_arrow_vs_arrowhead \
-  --figure tutorial_9_arrowhead_linear_bgc
+  --figure tutorial_9_arrow_geometry_circular \
+  --figure tutorial_9_arrow_geometry_linear
 ```
 
-For another CLI command, add `--feature_shape CDS=arrowhead`,
-`--arrow_head_length_ratio auto`, and
-`--arrowhead_shaft_width_ratio 0.5`. A numeric head ratio applies to both arrow
-forms. Ratios must be positive and finite; the shaft ratio must not exceed `1`.
+For another CLI command, add `--arrow_head_length_ratio auto` and a suitable
+`--arrow_shaft_width_ratio`. Auto extends the mode-specific head length by the
+thickness removed from the shaft. The settings apply to every feature type
+rendered as `arrow`. Ratios must be positive and finite; the shaft ratio must
+not exceed `1` and defaults to `1.0`.
 
 ### Place multiple records on one shared canvas
 

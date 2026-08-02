@@ -203,17 +203,17 @@ def test_arrow_geometry_defaults_and_missing_block_compatibility() -> None:
     default_config = load_default_config()
     assert default_config["objects"]["features"]["arrow_geometry"] == {
         "head_length_ratio": "auto",
-        "shaft_width_ratio": 0.5,
+        "shaft_width_ratio": 1.0,
     }
 
     typed = GbdrawConfig.from_dict(default_config)
     assert typed.objects.features.arrow_geometry.head_length_ratio == "auto"
-    assert typed.objects.features.arrow_geometry.shaft_width_ratio == 0.5
+    assert typed.objects.features.arrow_geometry.shaft_width_ratio == 1.0
 
     del default_config["objects"]["features"]["arrow_geometry"]
     compatible = GbdrawConfig.from_dict(default_config)
     assert compatible.objects.features.arrow_geometry.head_length_ratio == "auto"
-    assert compatible.objects.features.arrow_geometry.shaft_width_ratio == 0.5
+    assert compatible.objects.features.arrow_geometry.shaft_width_ratio == 1.0
 
 
 @pytest.mark.parametrize(

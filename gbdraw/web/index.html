@@ -3124,8 +3124,7 @@
                                             title="Feature rendering"
                                             :aria-label="`Rendering for ${f}`"
                                         >
-                                            <option value="arrow">Arrow (5 vertices)</option>
-                                            <option value="arrowhead">Arrowhead (7 vertices)</option>
+                                            <option value="arrow">Arrow</option>
                                             <option value="rectangle">Rectangle</option>
                                             <option value="underlay">Underlay</option>
                                         </select>
@@ -3146,14 +3145,14 @@
                             </div>
 
                             <div class="bg-slate-50 p-2 rounded border border-slate-200">
-                                <label class="input-label adv-section-title">Arrow Geometry <help-tip text="The head length applies to both arrow styles. Shaft width applies only to Arrowhead (7 vertices), and remains available even when no feature currently uses that rendering."></help-tip></label>
+                                <label class="input-label adv-section-title">Arrow Geometry <help-tip text="Head length and shaft width apply to Arrow features and remain available even when no feature currently uses that rendering."></help-tip></label>
                                 <div class="grid grid-cols-2 gap-2">
                                     <div>
-                                        <label class="input-label text-[10px]">Head Length Ratio <help-tip text="Head length divided by the full rendered feature thickness. Leave blank for Auto, which preserves the mode-specific default head length."></help-tip></label>
+                                        <label class="input-label text-[10px]">Head Length Ratio <help-tip text="Head length divided by the full rendered feature thickness. Leave blank for Auto. Auto starts from the mode-specific default and lengthens the head as the shaft narrows."></help-tip></label>
                                         <input
                                             type="number"
-                                            min="0"
-                                            step="any"
+                                            min="0.05"
+                                            step="0.05"
                                             v-model.number="adv.arrow_head_length_ratio"
                                             placeholder="Auto"
                                             aria-label="Arrow head length ratio"
@@ -3161,14 +3160,14 @@
                                         >
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Arrowhead Shaft Width Ratio <help-tip text="Shaft thickness divided by the full arrowhead thickness. Enter a value greater than 0 and at most 1."></help-tip></label>
+                                        <label class="input-label text-[10px]">Shaft Width Ratio <help-tip text="Shaft thickness divided by the full rendered feature thickness. Enter a value greater than 0 and at most 1: 1 keeps a full-width body, while smaller values narrow the shaft. Short arrows may render as triangles."></help-tip></label>
                                         <input
                                             type="number"
-                                            min="0"
+                                            min="0.05"
                                             max="1"
-                                            step="any"
-                                            v-model.number="adv.arrowhead_shaft_width_ratio"
-                                            aria-label="Arrowhead shaft width ratio"
+                                            step="0.05"
+                                            v-model.number="adv.arrow_shaft_width_ratio"
+                                            aria-label="Arrow shaft width ratio"
                                             class="form-input form-input-compact"
                                         >
                                     </div>

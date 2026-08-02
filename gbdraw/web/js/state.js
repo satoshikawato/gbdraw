@@ -20,7 +20,7 @@ import {
   resolveLinearComparisonPlan
 } from './app/linear-comparisons.js';
 import {
-  DEFAULT_ARROWHEAD_SHAFT_WIDTH_RATIO,
+  DEFAULT_ARROW_SHAFT_WIDTH_RATIO,
   createDefaultFeatureRenderings
 } from './utils/feature-rendering.js';
 import {
@@ -209,7 +209,7 @@ export const createDefaultAdv = (profileMode = 'circular') => ({
   features: [...MODE_DEFAULT_FEATURE_TYPES],
   feature_shapes: createDefaultFeatureShapes(),
   arrow_head_length_ratio: null,
-  arrowhead_shaft_width_ratio: DEFAULT_ARROWHEAD_SHAFT_WIDTH_RATIO,
+  arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO,
   window_size: null,
   step_size: null,
   nt: 'GC',

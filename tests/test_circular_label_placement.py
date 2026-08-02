@@ -332,12 +332,13 @@ def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
 
 
 @pytest.mark.parametrize(
-    ("head_length_ratio", "expected_short"),
-    [(1.0, False), (2.0, True)],
+    ("head_length_ratio", "shaft_width_ratio", "expected_short"),
+    [(1.0, 1.0, False), (2.0, 1.0, True), ("auto", 0.5, True)],
 )
-def test_circular_label_fit_uses_drawer_numeric_head_span(
+def test_circular_label_fit_uses_drawer_head_span(
     monkeypatch: pytest.MonkeyPatch,
-    head_length_ratio: float,
+    head_length_ratio: str | float,
+    shaft_width_ratio: float,
     expected_short: bool,
 ) -> None:
     total_length = 1000
@@ -351,6 +352,7 @@ def test_circular_label_fit_uses_drawer_numeric_head_span(
             "canvas.circular.track_type": "middle",
             "labels.circular.scope": "outer",
             "objects.features.arrow_geometry.head_length_ratio": head_length_ratio,
+            "objects.features.arrow_geometry.shaft_width_ratio": shaft_width_ratio,
         },
     )
     cfg = GbdrawConfig.from_dict(config_dict)
@@ -378,6 +380,7 @@ def test_circular_label_fit_uses_drawer_numeric_head_span(
         strandedness=False,
         track_id=0,
         head_length_ratio=head_length_ratio,
+        shaft_width_ratio=shaft_width_ratio,
     )
     drawer_head_span = drawer._resolved_arrow_length("positive", None)
     assert ((segment_end - segment_start) < drawer_head_span) is expected_short
@@ -401,7 +404,7 @@ def test_circular_label_fit_uses_drawer_numeric_head_span(
         coordinates=[],
         type="CDS",
         qualifiers={},
-        glyph_kind="arrowhead",
+        glyph_kind="arrow",
     )
     candidate = CircularLabelCandidate(
         stable_id=feature.feature_id,

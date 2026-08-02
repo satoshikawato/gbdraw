@@ -17,14 +17,14 @@ from ....svg.ids import instance_svg_id
 from ....svg.circular_features import (
     generate_circular_arrow_path,
     generate_circular_arrow_path_with_radii,
-    generate_circular_arrowhead_shaft_path,
-    generate_circular_arrowhead_shaft_path_with_radii,
     generate_circular_intron_path,
     generate_circular_intron_path_with_radii,
+    generate_circular_narrow_arrow_path,
+    generate_circular_narrow_arrow_path_with_radii,
+    generate_circular_narrow_arrow_shaft_path,
+    generate_circular_narrow_arrow_shaft_path_with_radii,
     generate_circular_rectangle_path,
     generate_circular_rectangle_path_with_radii,
-    generate_circular_seven_vertex_arrowhead_path,
-    generate_circular_seven_vertex_arrowhead_path_with_radii,
 )
 from ....svg.arrows import (
     calculate_circular_arrow_length,
@@ -54,8 +54,8 @@ class FeatureDrawer:
         self.arrow_head_length_ratio = getattr(
             arrow_geometry, "head_length_ratio", "auto"
         )
-        self.arrowhead_shaft_width_ratio = float(
-            getattr(arrow_geometry, "shaft_width_ratio", 0.5)
+        self.arrow_shaft_width_ratio = float(
+            getattr(arrow_geometry, "shaft_width_ratio", 1.0)
         )
         self.feature_layout = feature_layout
 
@@ -149,7 +149,7 @@ class FeatureDrawer:
             track_id,
             feature_layout=self.feature_layout,
             head_length_ratio=self.arrow_head_length_ratio,
-            shaft_width_ratio=self.arrowhead_shaft_width_ratio,
+            shaft_width_ratio=self.arrow_shaft_width_ratio,
         ).generate_circular_gene_path(feature_object)
 
         # Get feature identifier for instant preview support
@@ -235,7 +235,7 @@ class FeaturePathGenerator:
         track_id: int = 0,
         feature_layout: CircularFeatureLayout | None = None,
         head_length_ratio: str | float = "auto",
-        shaft_width_ratio: float = 0.5,
+        shaft_width_ratio: float = 1.0,
     ) -> None:
         """
         Initialize the path generator.
@@ -299,6 +299,7 @@ class FeaturePathGenerator:
             self.arrow_length,
             self.total_length,
             center_radius_px,
+            self.shaft_width_ratio,
         )
 
     def _generate_terminal_block(
@@ -308,14 +309,14 @@ class FeaturePathGenerator:
         lane,
     ) -> list[str]:
         strand = str(coord_dict["coord_strand"])
-        if glyph_kind not in {"arrow", "arrowhead"} or strand not in {
+        if glyph_kind != "arrow" or strand not in {
             "positive",
             "negative",
         }:
             return self._generate_rectangle(coord_dict, lane)
 
         head_length_bp = self._resolved_arrow_length(strand, lane)
-        if glyph_kind == "arrow":
+        if self.shaft_width_ratio == 1.0:
             if lane is None:
                 return generate_circular_arrow_path(
                     self.radius,
@@ -339,7 +340,7 @@ class FeaturePathGenerator:
             )
 
         if lane is None:
-            return generate_circular_seven_vertex_arrowhead_path(
+            return generate_circular_narrow_arrow_path(
                 self.radius,
                 coord_dict,
                 self.total_length,
@@ -352,7 +353,7 @@ class FeaturePathGenerator:
                 self.shaft_width_ratio,
                 self.track_id,
             )
-        return generate_circular_seven_vertex_arrowhead_path_with_radii(
+        return generate_circular_narrow_arrow_path_with_radii(
             coord_dict,
             self.total_length,
             head_length_bp,
@@ -391,13 +392,13 @@ class FeaturePathGenerator:
             lane.outer_px,
         )
 
-    def _generate_arrowhead_shaft(
+    def _generate_narrow_arrow_shaft(
         self,
         coord_dict: Dict[str, Union[str, int]],
         lane,
     ) -> list[str]:
         if lane is None:
-            return generate_circular_arrowhead_shaft_path(
+            return generate_circular_narrow_arrow_shaft_path(
                 self.radius,
                 coord_dict,
                 self.total_length,
@@ -409,7 +410,7 @@ class FeaturePathGenerator:
                 self.shaft_width_ratio,
                 self.track_id,
             )
-        return generate_circular_arrowhead_shaft_path_with_radii(
+        return generate_circular_narrow_arrow_shaft_path_with_radii(
             coord_dict,
             self.total_length,
             lane.inner_px,
@@ -513,14 +514,14 @@ class FeaturePathGenerator:
                 coord_strand = str(coord_dict["coord_strand"])
                 if coord_strand not in {"positive", "negative"}:
                     coord_path = self._generate_rectangle(coord_dict, lane)
-                elif coord.is_last and glyph_kind in {"arrow", "arrowhead"}:
+                elif coord.is_last and glyph_kind == "arrow":
                     coord_path = self._generate_terminal_block(
                         coord_dict,
                         glyph_kind,
                         lane,
                     )
-                elif glyph_kind == "arrowhead":
-                    coord_path = self._generate_arrowhead_shaft(coord_dict, lane)
+                elif glyph_kind == "arrow" and self.shaft_width_ratio < 1.0:
+                    coord_path = self._generate_narrow_arrow_shaft(coord_dict, lane)
                 else:
                     coord_path = self._generate_rectangle(coord_dict, lane)
             else:

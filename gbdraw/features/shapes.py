@@ -12,12 +12,12 @@ from __future__ import annotations
 from typing import Iterable, Literal, Mapping, cast
 
 
-FeatureGlyph = Literal["arrow", "arrowhead", "rectangle"]
-FeatureRendering = Literal["arrow", "arrowhead", "rectangle", "underlay"]
+FeatureGlyph = Literal["arrow", "rectangle"]
+FeatureRendering = Literal["arrow", "rectangle", "underlay"]
 FeatureShape = FeatureRendering
 
 FEATURE_RENDERING_VALUES: frozenset[str] = frozenset(
-    {"arrow", "arrowhead", "rectangle", "underlay"}
+    {"arrow", "rectangle", "underlay"}
 )
 
 DEFAULT_FEATURE_RENDERINGS: dict[str, FeatureRendering] = {
@@ -39,8 +39,8 @@ def normalize_feature_shape(value: str) -> FeatureShape:
     normalized = str(value).strip().lower()
     if normalized not in FEATURE_RENDERING_VALUES:
         raise ValueError(
-            f"invalid feature shape '{value}': expected 'arrow', 'arrowhead', "
-            "'rectangle', or 'underlay'"
+            f"invalid feature shape '{value}': expected 'arrow', 'rectangle', "
+            "or 'underlay'"
         )
     return cast(FeatureShape, normalized)
 
@@ -112,7 +112,7 @@ def resolve_directional_feature_types(
     directional_types = {str(feature_type) for feature_type in base_directional_types}
     normalized_shapes = normalize_feature_shape_overrides(feature_shapes)
     for feature_type, shape in normalized_shapes.items():
-        if shape in {"arrow", "arrowhead"}:
+        if shape == "arrow":
             directional_types.add(feature_type)
         else:
             directional_types.discard(feature_type)

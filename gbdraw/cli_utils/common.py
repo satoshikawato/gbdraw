@@ -95,7 +95,7 @@ def _add_feature_shape_arg(parser: argparse.ArgumentParser) -> None:
         '--feature_shape',
         help=(
             'Feature rendering override (repeatable): TYPE=SHAPE where SHAPE is '
-            'arrow, arrowhead, rectangle, or underlay.'
+            'arrow, rectangle, or underlay.'
         ),
         type=parse_feature_shape_assignment_arg,
         action='append',
@@ -114,12 +114,12 @@ def _add_arrow_geometry_args(parser: argparse.ArgumentParser) -> None:
         type=parse_arrow_head_length_ratio_arg,
     )
     parser.add_argument(
-        '--arrowhead_shaft_width_ratio',
+        '--arrow_shaft_width_ratio',
         help=(
-            'Arrowhead shaft thickness divided by full head thickness: a '
-            'finite number in (0, 1] (default: 0.5).'
+            'Arrow shaft thickness divided by full head thickness: a '
+            'finite number in (0, 1] (default: 1.0).'
         ),
-        type=parse_arrowhead_shaft_width_ratio_arg,
+        type=parse_arrow_shaft_width_ratio_arg,
     )
 
 
@@ -517,16 +517,16 @@ def parse_arrow_head_length_ratio_arg(value: str) -> str | float:
     return parsed
 
 
-def parse_arrowhead_shaft_width_ratio_arg(value: str) -> float:
+def parse_arrow_shaft_width_ratio_arg(value: str) -> float:
     try:
         parsed = float(str(value).strip())
     except ValueError as exc:
         raise argparse.ArgumentTypeError(
-            "arrowhead shaft width ratio must be a finite number in (0, 1]"
+            "arrow shaft width ratio must be a finite number in (0, 1]"
         ) from exc
     if not math.isfinite(parsed) or parsed <= 0 or parsed > 1:
         raise argparse.ArgumentTypeError(
-            "arrowhead shaft width ratio must be a finite number in (0, 1]"
+            "arrow shaft width ratio must be a finite number in (0, 1]"
         )
     return parsed
 

@@ -694,7 +694,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     selected_features_set: str = args.features.split(',')
     feature_shapes = parse_feature_shape_overrides(args.feature_shape)
     arrow_head_length_ratio: str | float | None = args.arrow_head_length_ratio
-    arrowhead_shaft_width_ratio: float | None = args.arrowhead_shaft_width_ratio
+    arrow_shaft_width_ratio: float | None = args.arrow_shaft_width_ratio
     species: str = args.species
     strain: str = args.strain
     legend: str = args.legend
@@ -877,7 +877,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     override_candidates: dict[str, object | None] = {
         "objects.features.block_stroke_color": block_stroke_color,
         "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
-        "objects.features.arrow_geometry.shaft_width_ratio": arrowhead_shaft_width_ratio,
+        "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,
         "objects.axis.circular.stroke_color": axis_stroke_color,
         "objects.features.line_stroke_color": line_stroke_color,
         "labels.circular.scope": (

@@ -15,10 +15,10 @@ const {
 const cloneExpected = () =>
   JSON.parse(JSON.stringify(EXPECTED_WEB_RUNTIME_CAPABILITIES));
 
-assert.equal(EXPECTED_WEB_RUNTIME_CAPABILITIES.rendering.optionSchema, 2);
+assert.equal(EXPECTED_WEB_RUNTIME_CAPABILITIES.rendering.optionSchema, 3);
 assert.deepEqual(
   EXPECTED_WEB_RUNTIME_CAPABILITIES.rendering.featureRenderings,
-  ['arrow', 'arrowhead', 'rectangle', 'underlay']
+  ['arrow', 'rectangle', 'underlay']
 );
 
 {
@@ -45,7 +45,7 @@ for (const mutate of [
     manifest.rendering.optionSchema = 1;
   },
   (manifest) => {
-    manifest.rendering.featureRenderings = ['arrow', 'rectangle', 'underlay'];
+    manifest.rendering.featureRenderings = ['arrow', 'arrowhead', 'rectangle', 'underlay'];
   },
   (manifest) => {
     manifest.unexpected = true;
@@ -156,8 +156,8 @@ const {
 
 {
   const oldWheel = cloneExpected();
-  oldWheel.rendering.optionSchema = 1;
-  oldWheel.rendering.featureRenderings = ['arrow', 'rectangle', 'underlay'];
+  oldWheel.rendering.optionSchema = 2;
+  oldWheel.rendering.featureRenderings = ['arrow', 'arrowhead', 'rectangle', 'underlay'];
   FakeWorker.capabilities = oldWheel;
   await assert.rejects(
     preinitializeDiagramGenerationWorker(),

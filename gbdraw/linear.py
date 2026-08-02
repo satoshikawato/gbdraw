@@ -1097,7 +1097,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     selected_features_set: str = args.features.split(',')
     feature_shapes = parse_feature_shape_overrides(args.feature_shape)
     arrow_head_length_ratio: str | float | None = args.arrow_head_length_ratio
-    arrowhead_shaft_width_ratio: float | None = args.arrowhead_shaft_width_ratio
+    arrow_shaft_width_ratio: float | None = args.arrow_shaft_width_ratio
     feature_height: Optional[float] = args.feature_height
     comparison_height: Optional[float] = args.comparison_height
 
@@ -1198,7 +1198,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     override_candidates: dict[str, object | None] = {
         "objects.features.block_stroke_color": block_stroke_color,
         "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
-        "objects.features.arrow_geometry.shaft_width_ratio": arrowhead_shaft_width_ratio,
+        "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,
         "objects.axis.linear.stroke_color": axis_stroke_color,
         "objects.definition.linear.show_replicon": definition_show_replicon,
         "objects.definition.linear.show_accession": definition_show_accession,

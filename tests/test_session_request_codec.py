@@ -1268,7 +1268,7 @@ def test_schema5_round_trips_scale_visibility_in_full_config_and_override(
         (LinearDiagramRequest, LinearDiagramOptions),
     ],
 )
-def test_schema5_round_trips_arrowhead_shape_and_geometry_overrides(
+def test_schema5_round_trips_arrow_shape_and_geometry_overrides(
     tmp_path: Path,
     request_type,
     options_type,
@@ -1281,7 +1281,7 @@ def test_schema5_round_trips_arrowhead_shape_and_geometry_overrides(
     request = request_type(
         records=(RecordInput(source=InMemoryRecordSource(record)),),
         options=options_type(
-            feature_shapes={"CDS": "arrowhead"},
+            feature_shapes={"CDS": "arrow"},
             config_overrides={
                 "objects.features.arrow_geometry.head_length_ratio": 1.25,
                 "objects.features.arrow_geometry.shaft_width_ratio": 0.25,
@@ -1291,7 +1291,7 @@ def test_schema5_round_trips_arrowhead_shape_and_geometry_overrides(
 
     encoded = encode_canonical_request(request)
     diagram_options = encoded.payload["diagramOptions"]
-    assert diagram_options["featureShapes"] == {"CDS": "arrowhead"}
+    assert diagram_options["featureShapes"] == {"CDS": "arrow"}
     assert (
         diagram_options["configOverrides"][
             "objects.features.arrow_geometry.head_length_ratio"
@@ -1313,7 +1313,7 @@ def test_schema5_round_trips_arrowhead_shape_and_geometry_overrides(
         ),
         output_directory=tmp_path / "output",
     )
-    assert decoded.options.feature_shapes == {"CDS": "arrowhead"}
+    assert decoded.options.feature_shapes == {"CDS": "arrow"}
     assert decoded.options.config_overrides == request.options.config_overrides
     assert encode_canonical_request(decoded).payload == encoded.payload
 

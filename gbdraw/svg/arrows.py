@@ -20,7 +20,7 @@ def set_arrow_shoulder(feat_strand: str, arrow_end: float, cds_arrow_length: flo
 
 
 def calculate_circular_arrow_length(total_length: int) -> float:
-    """Return circular arrowhead length (bp) derived from genome size."""
+    """Return circular arrow head length (bp) derived from genome size."""
     min_arrow_length = 30.0
     max_arrow_length = 700.0
     param_a = 3.0
@@ -34,10 +34,13 @@ def resolve_arrow_head_length_px(
     head_length_ratio: ArrowHeadLengthRatio,
     feature_thickness_px: float,
     automatic_head_length_px: float,
+    shaft_width_ratio: float = 1.0,
 ) -> float:
-    """Resolve an arrow head length in display space."""
+    """Resolve a head in display space, extending Auto for a narrowed shaft."""
     if head_length_ratio == "auto":
-        return float(automatic_head_length_px)
+        return float(automatic_head_length_px) + abs(
+            float(feature_thickness_px)
+        ) * (1.0 - float(shaft_width_ratio))
     return abs(float(feature_thickness_px)) * float(head_length_ratio)
 
 
@@ -71,14 +74,25 @@ def resolve_circular_arrow_head_length_bp(
     automatic_head_length_bp: float,
     total_length: int,
     center_radius_px: float,
+    shaft_width_ratio: float = 1.0,
 ) -> float:
-    """Resolve a Circular arrow head span without perturbing the legacy auto value."""
-    if head_length_ratio == "auto":
+    """Resolve a Circular head span, keeping full-width Auto exactly legacy."""
+    if head_length_ratio == "auto" and float(shaft_width_ratio) == 1.0:
         return float(automatic_head_length_bp)
+    automatic_head_length_px = (
+        circular_head_length_bp_to_px(
+            automatic_head_length_bp,
+            total_length,
+            center_radius_px,
+        )
+        if head_length_ratio == "auto"
+        else 0.0
+    )
     head_length_px = resolve_arrow_head_length_px(
         head_length_ratio,
         feature_thickness_px,
-        automatic_head_length_px=0.0,
+        automatic_head_length_px,
+        shaft_width_ratio,
     )
     return circular_head_length_px_to_bp(
         head_length_px,
@@ -97,8 +111,8 @@ def is_legacy_arrow_short(feature_length: float, head_length: float) -> bool:
     return abs(float(feature_length)) < float(head_length)
 
 
-def has_arrowhead_shaft(feature_length: float, head_length: float) -> bool:
-    """Return whether a seven-vertex arrowhead has positive shaft length."""
+def has_arrow_shaft(feature_length: float, head_length: float) -> bool:
+    """Return whether an arrow has positive shaft length."""
     return abs(float(feature_length)) > float(head_length)
 
 
@@ -124,7 +138,7 @@ __all__ = [
     "cap_arrow_head_length",
     "circular_head_length_bp_to_px",
     "circular_head_length_px_to_bp",
-    "has_arrowhead_shaft",
+    "has_arrow_shaft",
     "is_legacy_arrow_short",
     "resolve_arrow_head_length_px",
     "resolve_circular_arrow_head_length_bp",
