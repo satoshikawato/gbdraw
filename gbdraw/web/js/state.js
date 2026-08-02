@@ -15,7 +15,14 @@ import {
   updateActiveLayoutPreference
 } from './app/layout-preferences.js';
 import { createSequenceSourceRegistry } from './app/match-sequences.js';
-import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
+import {
+  createDefaultLinearComparisonPlan,
+  resolveLinearComparisonPlan
+} from './app/linear-comparisons.js';
+import {
+  DEFAULT_ARROW_SHAFT_WIDTH_RATIO,
+  createDefaultFeatureRenderings
+} from './utils/feature-rendering.js';
 import {
   MODE_DEFAULT_FEATURE_TYPES,
   comparisonStateForMode,
@@ -24,6 +31,7 @@ import {
   trackDefaultsForMode
 } from './mode-profiles.js';
 import { WEB_UX_PROFILE } from './web-ux-profile.js';
+import { sanitizeSvgContent } from './services/svg-sanitization.js';
 const { ref, reactive, computed } = window.Vue;
 const DOMPurify = window.DOMPurify;
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -57,156 +65,7 @@ const svgContent = computed(() => {
 
     // Sanitize the SVG output from svgwrite to ensure safety and prevent DOMXSS
     const sanitizeStartedAt = getNow();
-    const sanitizedSvg = DOMPurify.sanitize(rawSvg, {
-      USE_PROFILES: { svg: true },
-      // Only allow main tags used by svgwrite
-      ADD_TAGS: [
-        'use',
-        'g',
-        'defs',
-        'linearGradient',
-        'radialGradient',
-        'stop',
-        'path',
-        'rect',
-        'circle',
-        'line',
-        'polyline',
-        'polygon',
-        'text',
-        'tspan'
-      ],
-      // Allowed attributes list (event handlers are automatically excluded, but can be explicitly forbidden as well)
-      ADD_ATTR: [
-        'xlink:href',
-        'href',
-        'id',
-        'class',
-        'data-definition-line-kind',
-        'data-gbdraw-feature-id',
-        'data-gbdraw-stable-feature-id',
-        'data-gbdraw-feature-part',
-        'data-gbdraw-auto-feature-underlay',
-        'data-legend-key',
-        'data-legend-owner',
-        'data-label-key',
-        'data-label-feature-id',
-        'data-label-source-text',
-        'data-label-editable',
-        'data-collinearity-block-id',
-        'data-collinearity-block-kind',
-        'data-collinearity-orientation',
-        'data-collinearity-block-evalue',
-        'data-collinearity-color-mode',
-        'data-group-kind',
-        'data-group-scope',
-        'data-collinear-group-scope',
-        'data-orthogroup-id',
-        'data-query-protein-id',
-        'data-subject-protein-id',
-        'data-query-feature-svg-id',
-        'data-subject-feature-svg-id',
-        'data-query-unit-id',
-        'data-subject-unit-id',
-        'data-gbdraw-match-id',
-        'data-gbdraw-pairwise-match-id',
-        'data-match-kind',
-        'data-query-record-index',
-        'data-subject-record-index',
-        'data-query-record-id',
-        'data-subject-record-id',
-        'data-qstart',
-        'data-qend',
-        'data-sstart',
-        'data-send',
-        'data-alignment-length',
-        'data-mismatches',
-        'data-gap-opens',
-        'data-collinearity-block-score',
-        'data-collinearity-anchor-index',
-        'data-collinearity-anchor-count',
-        'data-query-locus-id',
-        'data-subject-locus-id',
-        'data-query-display-name',
-        'data-subject-display-name',
-        'data-pairwise-match-style',
-        'data-identity-factor',
-        'data-source-index',
-        'data-track-index',
-        'data-track-label',
-        'data-track-color',
-        'data-reference-side',
-        'data-identity',
-        'data-query',
-        'data-subject',
-        'data-evalue',
-        'data-bitscore',
-        'data-orientation',
-        'data-reference-record-id',
-        'data-gbdraw-annotation-id',
-        'data-gbdraw-annotation-set-id',
-        'data-gbdraw-annotation-track-id',
-        'data-gbdraw-record-id',
-        'data-gbdraw-record-index',
-        'data-gbdraw-annotation-mark',
-        'data-gbdraw-annotation-label',
-        'data-gbdraw-role',
-        'data-gbdraw-orientation',
-        'data-annotation-set-id',
-        'data-annotation-track-id',
-        'data-annotation-record-id',
-        'data-annotation-record-index',
-        'data-annotation-mark',
-        'data-annotation-label',
-        'fill',
-        'fill-opacity',
-        'stroke',
-        'stroke-width',
-        'stroke-opacity',
-        'stroke-dasharray',
-        'stroke-linecap',
-        'stroke-linejoin',
-        'd',
-        'x',
-        'y',
-        'x1',
-        'y1',
-        'x2',
-        'y2',
-        'cx',
-        'cy',
-        'r',
-        'rx',
-        'ry',
-        'width',
-        'height',
-        'transform',
-        'viewBox',
-        'preserveAspectRatio',
-        'font-family',
-        'font-size',
-        'font-weight',
-        'text-anchor',
-        'dominant-baseline',
-        'writing-mode',
-        'letter-spacing',
-        'display'
-      ],
-      // Forbid <style> tags (to prevent breaking parent page CSS). Also forbid script-related tags.
-      FORBID_TAGS: [
-        'style',
-        'script',
-        'foreignObject',
-        'iframe',
-        'embed',
-        'object',
-        'animate',
-        'set',
-        'animateTransform',
-        'image'
-      ],
-      FORBID_ATTR: ['name', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onerror']
-    });
+    const sanitizedSvg = sanitizeSvgContent(rawSvg, DOMPurify);
     console.info(
       `post-gbdraw timing: DOMPurify.sanitize SVG: ${formatTimingMs(getNow() - sanitizeStartedAt)} (${String(rawSvg || '').length} chars)`
     );
@@ -230,7 +89,6 @@ const layoutPreferences = reactive(createDefaultLayoutPreferences());
 const suppressCircularMultiRecordDefaults = ref(false);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
-const blastSource = ref('losat'); // 'upload' | 'losat'
 const losatProgram = ref('blastn'); // 'blastn' | 'tblastx' | 'blastp'
 const files = reactive({
   c_gb: null,
@@ -275,9 +133,7 @@ export const createLinearSeq = (overrides = {}) => {
     gff: source.gff ?? null,
     fasta: source.fasta ?? null,
     depth: source.depth ?? null,
-    blast: source.blast ?? null,
     losat_gencode: Number.isFinite(rawLosatGencode) && rawLosatGencode > 0 ? rawLosatGencode : 1,
-    losat_filename: String(source.losat_filename ?? ''),
     definition: String(source.definition ?? ''),
     record_subtitle: String(source.record_subtitle ?? ''),
     region_record_id: String(source.region_record_id ?? ''),
@@ -286,14 +142,6 @@ export const createLinearSeq = (overrides = {}) => {
     region_reverse: Boolean(source.region_reverse)
   };
 };
-
-export const clearLinearSeqGapData = (seq) => ({
-  ...createLinearSeq(seq),
-  blast: null,
-  losat_filename: ''
-});
-
-const getLinearPairKey = (leftUid, rightUid) => `${String(leftUid || '').trim()}->${String(rightUid || '').trim()}`;
 
 export const normalizeLinearSeqList = (items) => {
   const baseItems = Array.isArray(items) && items.length > 0 ? items : [null];
@@ -306,53 +154,7 @@ export const normalizeLinearSeqList = (items) => {
     seenUids.add(next.uid);
     return next;
   });
-  const lastIndex = normalized.length - 1;
-  return normalized.map((seq, index) => (index === lastIndex ? clearLinearSeqGapData(seq) : seq));
-};
-
-export const reconcileLinearSeqPairData = (previousItems, nextItems) => {
-  const previous = normalizeLinearSeqList(previousItems);
-  const next = normalizeLinearSeqList(nextItems);
-  const previousPairs = new Map();
-
-  for (let index = 0; index < previous.length - 1; index += 1) {
-    const left = previous[index];
-    const right = previous[index + 1];
-    previousPairs.set(getLinearPairKey(left.uid, right.uid), {
-      blast: left.blast ?? null,
-      losatFilename: String(left.losat_filename ?? '')
-    });
-  }
-
-  for (let index = 0; index < next.length; index += 1) {
-    next[index] = clearLinearSeqGapData(next[index]);
-  }
-
-  const restoredPairKeys = new Set();
-  for (let index = 0; index < next.length - 1; index += 1) {
-    const left = next[index];
-    const right = next[index + 1];
-    const pairKey = getLinearPairKey(left.uid, right.uid);
-    const previousPair = previousPairs.get(pairKey);
-    if (!previousPair) continue;
-    restoredPairKeys.add(pairKey);
-    left.blast = previousPair.blast ?? null;
-    left.losat_filename = String(previousPair.losatFilename ?? '');
-  }
-
-  let clearedBlastSlots = 0;
-  let clearedLosatNames = 0;
-  previousPairs.forEach((previousPair, pairKey) => {
-    if (restoredPairKeys.has(pairKey)) return;
-    if (previousPair.blast) clearedBlastSlots += 1;
-    if (String(previousPair.losatFilename || '').trim()) clearedLosatNames += 1;
-  });
-
-  return {
-    linearSeqs: next,
-    clearedBlastSlots,
-    clearedLosatNames
-  };
+  return normalized;
 };
 
 const hasLinearSeqPrimaryInput = (seq) => Boolean(seq?.gb || seq?.gff || seq?.fasta);
@@ -362,14 +164,14 @@ export const collapseEmptyLinearSeqList = (items) => {
   if (previous.length <= 1) return previous;
   const collapsed = previous.filter((seq) => hasLinearSeqPrimaryInput(seq));
   if (collapsed.length === previous.length) return previous;
-  return reconcileLinearSeqPairData(previous, collapsed).linearSeqs;
+  return normalizeLinearSeqList(collapsed);
 };
 
 const linearSeqs = reactive(normalizeLinearSeqList([]));
 const linearRecordLayoutEnabled = ref(false);
 const linearRecordGap = ref(24);
 const linearRecordRows = reactive([]);
-const linearComparisons = reactive([]);
+const linearComparisonPlan = reactive(createDefaultLinearComparisonPlan());
 const annotationSets = reactive([]);
 const selectedAnnotation = ref(null);
 
@@ -385,6 +187,7 @@ export const createDefaultForm = () => ({
   plot_title: '',
   track_type: 'tuckin',
   linear_track_layout: 'middle',
+  show_scale: true,
   scale_style: 'bar',
   linear_ruler_on_axis: false,
   labels_mode: 'none',
@@ -405,6 +208,8 @@ export const createDefaultAdv = (profileMode = 'circular') => ({
   rich_feature_popup: true,
   features: [...MODE_DEFAULT_FEATURE_TYPES],
   feature_shapes: createDefaultFeatureShapes(),
+  arrow_head_length_ratio: null,
+  arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO,
   window_size: null,
   step_size: null,
   nt: 'GC',
@@ -623,6 +428,17 @@ Object.defineProperty(adv, 'plot_title_position', {
 
 const losat = reactive(createDefaultLosat());
 
+const linearComparisonResolution = computed(() => resolveLinearComparisonPlan({
+  plan: linearComparisonPlan,
+  sequences: linearSeqs,
+  layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
+  losatProgram: losatProgram.value,
+  blastpMode: losat.blastp?.mode
+}));
+const hasLinearComparisonIntent = computed(() => linearComparisonResolution.value.hasComparisonIntent);
+const hasActiveLinearLosatIntent = computed(() => linearComparisonResolution.value.hasLosatIntent);
+const hasActiveLinearUploadIntent = computed(() => linearComparisonResolution.value.hasUploadIntent);
+
 const losatCacheInfo = ref([]);
 const losatThreadingStatus = ref({
   state: 'unknown',
@@ -697,6 +513,7 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
 const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
+const featureCatalog = ref(null); // Validated schema-3 metadata for committed Results
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, manualSpecificRules)
 );
@@ -1177,7 +994,6 @@ export const state = {
   suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,
-  blastSource,
   losatProgram,
   files,
   circularConservation,
@@ -1187,7 +1003,11 @@ export const state = {
   linearRecordLayoutEnabled,
   linearRecordGap,
   linearRecordRows,
-  linearComparisons,
+  linearComparisonPlan,
+  linearComparisonResolution,
+  hasLinearComparisonIntent,
+  hasActiveLinearLosatIntent,
+  hasActiveLinearUploadIntent,
   form,
   adv,
   modeProfileStateManager,
@@ -1234,6 +1054,7 @@ export const state = {
   downloadDpi,
   extractedFeatures,
   biologicalFeatures,
+  featureCatalog,
   featureSelectorSafetyScope,
   featuresBySvgId,
   selectedFeatureIds,

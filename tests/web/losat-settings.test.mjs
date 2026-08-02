@@ -44,8 +44,19 @@ await writeFile(
 
 const { createLosatSettings } = await import(pathToFileURL(tempModulePath));
 
+const resolved = ({ mode = 'adjacent', defaultSource = 'losat', sources = [], valid = true } = {}) => ({
+  value: {
+    mode,
+    defaultSource,
+    valid,
+    hasLosatIntent: sources.includes('losat'),
+    edges: sources.map((source, ordinal) => ({ source, ordinal }))
+  }
+});
+
 const state = {
   linearSeqs: [{}, {}, {}, {}, {}],
+  linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
   losat: {
     totalThreadBudget: 'safe',
     threadsPerJob: '32',
@@ -66,6 +77,7 @@ assert(settings.losatThreadOptions.value.some((option) => option.value === '32')
 
 const loadingOrderState = {
   linearSeqs: [{}, {}, {}, {}, {}],
+  linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
   losat: {
     totalThreadBudget: 'safe',
     threadsPerJob: '32',
@@ -80,5 +92,66 @@ const loadingOrderState = {
 
 createLosatSettings({ state: loadingOrderState });
 assert.equal(loadingOrderState.losat.threadsPerJob, '32');
+
+const noneState = {
+  linearSeqs: [{}, {}, {}],
+  linearComparisonResolution: resolved({ mode: 'none', sources: [] }),
+  losat: {
+    totalThreadBudget: 'safe',
+    threadsPerJob: 'auto',
+    parallelWorkers: undefined,
+    blastp: { mode: 'pairwise', collinearSearchScope: 'adjacent' }
+  },
+  losatProgram: { value: 'blastn' }
+};
+const noneSettings = createLosatSettings({ state: noneState });
+assert.equal(noneSettings.losatEstimatedJobCount.value, 0);
+assert.equal(noneSettings.losatMaxPairWorkers.value, 0);
+assert.equal(noneSettings.losatAutoPairWorkers.value, 0);
+assert.deepEqual(noneSettings.losatPairWorkerOptions.value, []);
+
+const mixedState = {
+  linearSeqs: [{}, {}, {}, {}],
+  linearComparisonResolution: resolved({
+    mode: 'selected',
+    defaultSource: 'upload',
+    sources: ['losat', 'upload', 'losat']
+  }),
+  losat: {
+    totalThreadBudget: 'safe',
+    threadsPerJob: 'auto',
+    parallelWorkers: undefined,
+    blastp: { mode: 'pairwise', collinearSearchScope: 'adjacent' }
+  },
+  losatProgram: { value: 'blastn' }
+};
+const mixedSettings = createLosatSettings({ state: mixedState });
+assert.equal(mixedSettings.losatEstimatedJobCount.value, 2);
+mixedState.losatProgram.value = 'blastp';
+assert.equal(mixedSettings.losatEstimatedJobCount.value, 2);
+
+const expansionState = {
+  linearSeqs: [{}, {}, {}, {}, {}],
+  linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
+  losat: {
+    totalThreadBudget: 'safe',
+    threadsPerJob: 'auto',
+    parallelWorkers: undefined,
+    blastp: { mode: 'orthogroup', collinearSearchScope: 'adjacent' }
+  },
+  losatProgram: { value: 'blastp' }
+};
+const expansionSettings = createLosatSettings({ state: expansionState });
+assert.equal(expansionSettings.losatEstimatedJobCount.value, 25);
+expansionState.losat.blastp.mode = 'collinear';
+assert.equal(expansionSettings.losatEstimatedJobCount.value, 13);
+expansionState.losat.blastp.collinearSearchScope = 'all';
+assert.equal(expansionSettings.losatEstimatedJobCount.value, 25);
+
+expansionState.linearComparisonResolution.value = {
+  ...expansionState.linearComparisonResolution.value,
+  valid: false
+};
+assert.equal(expansionSettings.losatEstimatedJobCount.value, 0);
 
 console.log('losat-settings tests passed');

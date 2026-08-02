@@ -58,7 +58,13 @@ export const findSingleRecordDefinitionGroup = (svg) => {
   );
 };
 
-export const createResultsManager = ({ state, getPyodide, legendLayout, rerenderLinearDefinitions = null }) => {
+export const createResultsManager = ({
+  state,
+  getPyodide,
+  ensurePyodide = null,
+  legendLayout,
+  rerenderLinearDefinitions = null
+}) => {
   const {
     pyodideReady,
     svgContent,
@@ -285,6 +291,9 @@ export const createResultsManager = ({ state, getPyodide, legendLayout, rerender
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
 
     if (mode.value === 'circular') {
+      if (!pyodideReady.value && typeof ensurePyodide === 'function') {
+        await ensurePyodide();
+      }
       if (!pyodideReady.value) return;
       const pyodide = getPyodide();
       if (!pyodide) return;

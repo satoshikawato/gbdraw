@@ -173,26 +173,29 @@ def test_interactive_svg_maps_biological_id_to_actual_reversed_dom_path() -> Non
       fill="#54bcf8" d="M 1 1 L 2 2" /></svg>"""
     enriched = enrich_svg(source, context)
     payload = _metadata(enriched)
+    assert payload["schema"] == 3
+    item = payload["items"][0]
 
-    feature = next(
-        item
-        for item in payload["features"]
-        if item["source_protein_id"] == SOURCE_PROTEIN_ID
-    )
     biological = next(
-        item
-        for item in payload["biological_features"]
-        if item.get("source_protein_id") == SOURCE_PROTEIN_ID
+        feature
+        for feature in item["biologicalFeatures"]
+        if feature.get("source_protein_id") == SOURCE_PROTEIN_ID
     )
-    member = payload["orthogroups"][0]["members"][0]
-    assert feature["svg_id"] == rendered_id
-    assert feature["rendered_feature_svg_id"] == rendered_id
-    assert feature["stable_svg_id"] == BIOLOGICAL_FEATURE_ID
-    assert biological["svg_id"] == BIOLOGICAL_FEATURE_ID
-    assert biological["rendered_svg_id"] == rendered_id
-    assert member["feature_svg_id"] == BIOLOGICAL_FEATURE_ID
-    assert member["stable_feature_svg_id"] == BIOLOGICAL_FEATURE_ID
-    assert member["rendered_feature_svg_id"] == rendered_id
+    feature = next(
+        reference
+        for reference in item["features"]
+        if (
+            reference["recordKey"] == biological["recordKey"]
+            and reference["biologicalFeatureId"]
+            == biological["biologicalFeatureId"]
+        )
+    )
+    member = item["orthogroups"][0]["members"][0]
+    assert feature["svgId"] == rendered_id
+    assert biological["biologicalFeatureId"] == BIOLOGICAL_FEATURE_ID
+    assert "stableFeatureId" not in biological
+    assert member["recordKey"] == biological["recordKey"]
+    assert member["biologicalFeatureId"] == biological["biologicalFeatureId"]
 
     root = ET.fromstring(enriched)
     path = next(element for element in root.iter() if element.get("id") == rendered_id)

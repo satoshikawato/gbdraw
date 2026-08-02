@@ -29,7 +29,11 @@ const { encodeAnnotationTable, parseAnnotationTable } = await load('app/annotati
 const { createAnnotationEditor } = await load('app/annotations.js');
 const { buildLinearTrackSlotSpec, normalizeLinearTrackSlots } = await load('app/linear-track-slots.js');
 const { buildCircularTrackSlotSpec, normalizeCircularTrackSlots } = await load('app/circular-track-slots.js');
-const { hasLinearComparisonIntent } = await load('app/linear-comparisons.js');
+const {
+  createLinearComparisonEdge,
+  hasLinearComparisonIntent,
+  resolveLinearComparisonPlan
+} = await load('app/linear-comparisons.js');
 
 const set = createAnnotationSet({
   id: 'review',
@@ -189,10 +193,34 @@ const gffComparisonCatalog = buildAnnotationRecordCatalog({
   linearSources: [{ sourceKey: 'gff-only', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'G1' }, { recordId: 'G2' }] }]
 });
 assert.deepEqual(gffComparisonCatalog.records.map((record) => record.recordId), ['G1']);
-assert.equal(hasLinearComparisonIntent({ sequences: [{}, {}], blastSource: 'losat' }), true);
-assert.equal(hasLinearComparisonIntent({ sequences: [{}], blastSource: 'losat' }), false);
-assert.equal(hasLinearComparisonIntent({ sequences: [{ blast: {} }, {}], blastSource: 'upload' }), true);
-assert.equal(hasLinearComparisonIntent({ layoutEnabled: true, comparisons: [{}], sequences: [] }), true);
+const comparisonSequences = [{ uid: 'a' }, { uid: 'b' }];
+assert.equal(hasLinearComparisonIntent(resolveLinearComparisonPlan({
+  plan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+  sequences: comparisonSequences
+})), true);
+assert.equal(hasLinearComparisonIntent(resolveLinearComparisonPlan({
+  plan: { mode: 'none', defaultSource: 'losat', edges: [] },
+  sequences: comparisonSequences
+})), false);
+assert.equal(hasLinearComparisonIntent(resolveLinearComparisonPlan({
+  plan: { mode: 'selected', defaultSource: 'losat', edges: [] },
+  sequences: comparisonSequences
+})), false);
+assert.equal(hasLinearComparisonIntent(resolveLinearComparisonPlan({
+  plan: { mode: 'adjacent', defaultSource: 'upload', edges: [] },
+  sequences: comparisonSequences
+})), false);
+assert.equal(hasLinearComparisonIntent(resolveLinearComparisonPlan({
+  plan: {
+    mode: 'selected',
+    defaultSource: 'upload',
+    edges: [createLinearComparisonEdge({
+      queryUid: 'a', subjectUid: 'b', source: 'upload',
+      file: { name: 'a-b.tsv' }, fileActive: true
+    })]
+  },
+  sequences: comparisonSequences
+})), true);
 
 const duplicateTargetSet = createAnnotationSet({
   id: 'duplicates',

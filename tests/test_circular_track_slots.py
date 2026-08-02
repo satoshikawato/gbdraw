@@ -119,6 +119,30 @@ def test_circular_track_slot_geometry_metadata_preserves_factor_width_and_gaps()
     assert gc_slot["outerGapPx"] == pytest.approx(6.0)
 
 
+def test_circular_spacer_reserves_resolved_geometry_without_rendering_a_group() -> None:
+    record = _load_record()
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        cfg=GbdrawConfig.from_dict(_base_config(track_type="tuckin")),
+        default_colors=load_default_colors("", palette="default"),
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=[
+            "features:features@side=inside,lane_direction=inside,r=0.8",
+            "space:spacer@side=inside,w=12px,r=0.55,inner_gap_px=3,outer_gap_px=4",
+        ],
+    )
+
+    geometry = canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    spacer = next(slot for slot in geometry if slot["slotId"] == "space")
+    assert spacer["renderer"] == "spacer"
+    assert spacer["widthPx"] == pytest.approx(12.0)
+    assert spacer["radiusFactor"] == pytest.approx(0.55)
+    assert spacer["innerGapPx"] == pytest.approx(3.0)
+    assert spacer["outerGapPx"] == pytest.approx(4.0)
+    assert 'data-gbdraw-slot-id="space"' not in canvas.tostring()
+
+
 def _axis_circle_radius(svg_text: str) -> float:
     match = re.search(r'<g id="Axis"[^>]*>.*?<circle\b[^>]*\br="([^"]+)"', svg_text, re.S)
     assert match is not None
@@ -2061,6 +2085,81 @@ def test_slot_mode_draws_axis_when_ticks_are_disabled() -> None:
 
 
 @pytest.mark.circular
+def test_hidden_implicit_scale_omits_tick_slot_but_keeps_axis_and_numeric_tracks() -> None:
+    record = _load_record()
+    config_dict = modify_config_dict(
+        _base_config(track_type="middle"),
+        {
+            "objects.scale.show": False,
+            "objects.gc_content.mode": "percent",
+        },
+    )
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        cfg=GbdrawConfig.from_dict(config_dict),
+        default_colors=load_default_colors("", palette="default"),
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+    )
+    svg = canvas.tostring()
+    renderers = {
+        slot["renderer"]
+        for slot in canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert 'id="Axis"' in svg
+    assert 'id="tick"' not in svg
+    assert 'id="gc_content_axis"' in svg
+    assert "ticks" not in renderers
+    assert {"dinucleotide_content", "dinucleotide_skew"} <= renderers
+
+
+@pytest.mark.parametrize(
+    ("slots", "expect_ticks"),
+    [
+        (["features:features", "ticks:ticks"], True),
+        (["features:features"], False),
+        (
+            [
+                "features:features",
+                CircularTrackSlot(id="ticks", renderer="ticks", enabled=False),
+            ],
+            False,
+        ),
+    ],
+)
+@pytest.mark.circular
+def test_hidden_scale_defers_to_explicit_tick_slots(
+    slots: list[str | CircularTrackSlot],
+    expect_ticks: bool,
+) -> None:
+    record = _load_record()
+    config_dict = modify_config_dict(
+        _base_config(track_type="middle"),
+        {"objects.scale.show": False},
+    )
+
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        cfg=GbdrawConfig.from_dict(config_dict),
+        default_colors=load_default_colors("", palette="default"),
+        selected_features_set=SELECTED_FEATURES,
+        legend="none",
+        circular_track_slots=slots,
+    )
+    svg = canvas.tostring()
+    renderers = [
+        slot["renderer"]
+        for slot in canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    ]
+
+    assert ("ticks" in renderers) is expect_ticks
+    assert ('data-gbdraw-slot-renderer="ticks"' in svg) is expect_ticks
+    assert 'id="Axis"' in svg
+
+
+@pytest.mark.circular
 def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatch) -> None:
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
 
@@ -2141,6 +2240,74 @@ def test_cli_circular_track_order_forwards_slots(monkeypatch: pytest.MonkeyPatch
     assert [slot.id for slot in slots] == ["features", "ticks", "gc_skew"]
     assert slots[2].renderer == "dinucleotide_skew"
     assert slots[2].params["nt"] == "AT"
+
+
+@pytest.mark.parametrize(
+    ("track_args", "expect_ticks", "expect_warning"),
+    [
+        (["--circular_track_order", "features,ticks"], True, True),
+        (["--circular_track_order", "features"], False, False),
+        (
+            [
+                "--circular_track_slot",
+                "features:features",
+                "--circular_track_slot",
+                "ticks:ticks@enabled=false",
+            ],
+            False,
+            False,
+        ),
+    ],
+)
+def test_cli_hidden_scale_preserves_explicit_tick_slot_authority(
+    track_args: list[str],
+    expect_ticks: bool,
+    expect_warning: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    record = _load_record()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    _stub_typed_request_export(monkeypatch)
+
+    def fake_assemble(*args, **kwargs):
+        options = kwargs["options"]
+        captured["config"] = options.config
+        captured["slots"] = options.tracks.circular_track_slots
+        return Drawing(filename=str(tmp_path / "dummy.svg"))
+
+    monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
+
+    with caplog.at_level("WARNING"):
+        circular_cli_module.circular_main(
+            [
+                "--gbk",
+                "dummy.gb",
+                "--hide_scale",
+                *track_args,
+                "--format",
+                "svg",
+                "-o",
+                str(tmp_path / "out"),
+            ]
+        )
+
+    config = captured["config"]
+    slots = captured["slots"]
+    assert isinstance(config, GbdrawConfig)
+    assert config.objects.scale.show is False
+    assert isinstance(slots, list)
+    assert (
+        any(slot.enabled and slot.renderer == "ticks" for slot in slots)
+        is expect_ticks
+    )
+    assert (
+        "--hide_scale does not suppress an enabled ticks slot" in caplog.text
+    ) is expect_warning
 
 
 def test_cli_circular_track_slot_forwards_typed_slots(

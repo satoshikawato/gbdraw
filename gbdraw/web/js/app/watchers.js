@@ -16,6 +16,8 @@ import {
   normalizeCircularPlotTitlePosition
 } from './plot-title-position.js';
 import { resolveCircularLayoutPreference } from './layout-preferences.js';
+import { readFileText } from '../services/file-content-cache.js';
+import { circularInputNeedsRecordDiscovery } from './record-discovery.js';
 
 export const setupWatchers = ({
   state,
@@ -23,7 +25,6 @@ export const setupWatchers = ({
   nextTick,
   onMounted,
   debugLog,
-  pyodideManager,
   legendActions,
   svgActions,
   featureActions,
@@ -34,6 +35,7 @@ export const setupWatchers = ({
   refreshLinearRecordSelectors,
   resetPreviewViewport,
   previewRuntime = null,
+  preparePaletteDefinitions = null,
   prepareDiagramGenerationWorker
 }) => {
   const {
@@ -65,11 +67,9 @@ export const setupWatchers = ({
     suppressCircularMultiRecordDefaults,
     featureRecordIds,
     selectedFeatureRecordIdx,
-    featureColorOverrides,
     featureVisibilityManualRules,
     featureVisibilityOverrides,
     featureVisibilitySelectorCache,
-    featureStrokeOverrides,
     featurePanelTab,
     labelSearch,
     orthogroups,
@@ -98,7 +98,6 @@ export const setupWatchers = ({
     currentColors,
     paletteInstantPreviewEnabled,
     pendingPaletteName,
-    pyodideReady,
     fileLegendCaptions,
     semanticFileWatchersSuppressed,
     manualPriorityRules,
@@ -521,11 +520,9 @@ export const setupWatchers = ({
       featureSelectorSafetyScope.value = [];
       featureRecordIds.value = [];
       selectedFeatureRecordIdx.value = 0;
-      Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
       featureVisibilityManualRules.splice(0);
       Object.keys(featureVisibilityOverrides).forEach((k) => delete featureVisibilityOverrides[k]);
       Object.keys(featureVisibilitySelectorCache).forEach((k) => delete featureVisibilitySelectorCache[k]);
-      Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
       editableLabels.value = [];
       Object.keys(labelTextFeatureOverrides).forEach((k) => delete labelTextFeatureOverrides[k]);
       Object.keys(labelTextBulkOverrides).forEach((k) => delete labelTextBulkOverrides[k]);
@@ -566,7 +563,7 @@ export const setupWatchers = ({
     if (semanticFileWatchersSuppressed.value) return;
     if (!newFile) return;
     try {
-      const text = await newFile.text();
+      const text = await readFileText(newFile);
       const { colors, count } = parseColorTable(text);
       Object.entries(colors).forEach(([key, color]) => {
         currentColors.value[key] = color;
@@ -582,14 +579,14 @@ export const setupWatchers = ({
     if (semanticFileWatchersSuppressed.value) return;
     if (!newFile) return;
     try {
-      const text = await newFile.text();
+      const text = await readFileText(newFile);
       const prepared = prepareSpecificColorImport(text, manualSpecificRules);
       const previousCaptions = Array.from(fileLegendCaptions.value);
       const previousFileIntents = buildLegendIntents(
         manualSpecificRules.filter((rule) => rule.fromFile),
         { conflictPolicy: 'last-wins' }
       ).intents;
-      if (pyodideReady.value && svgContent.value) {
+      if (svgContent.value) {
         await nextTick();
         await syncFileLegendEntries(prepared.intents, { previousFileIntents });
       }
@@ -610,7 +607,7 @@ export const setupWatchers = ({
     if (semanticFileWatchersSuppressed.value) return;
     if (!newFile) return;
     try {
-      const text = await newFile.text();
+      const text = await readFileText(newFile);
       const { rules, count } = parsePriorityRules(text);
       rules.forEach((rule) => {
         const idx = manualPriorityRules.findIndex((r) => r.feat === rule.feat);
@@ -631,7 +628,7 @@ export const setupWatchers = ({
     if (semanticFileWatchersSuppressed.value) return;
     if (!newFile) return;
     try {
-      const text = await newFile.text();
+      const text = await readFileText(newFile);
       const { rules, count } = parseWhitelistRules(text);
       rules.forEach((rule) => manualWhitelist.push(rule));
       console.log(`Loaded ${count} whitelist rules.`);
@@ -645,7 +642,7 @@ export const setupWatchers = ({
     if (semanticFileWatchersSuppressed.value) return;
     if (!newFile) return;
     try {
-      const text = await newFile.text();
+      const text = await readFileText(newFile);
       const { words, count } = parseBlacklistWords(text);
       if (words.length > 0) {
         const existing = manualBlacklist.value ? manualBlacklist.value.trim() : '';
@@ -682,17 +679,31 @@ export const setupWatchers = ({
   watch(() => state.adv.plot_title_font_size, scheduleCircularDefinitionUpdate);
   watch(() => state.adv.keep_full_definition_with_plot_title, scheduleCircularDefinitionUpdate);
   watch(
-    () => [mode.value, cInputType.value, files.c_gb, files.c_gff, files.c_fasta, pyodideReady.value],
-    async () => {
+    () => [
+      mode.value,
+      cInputType.value,
+      files.c_gb,
+      files.c_gff,
+      files.c_fasta,
+      (
+        mode.value === 'circular' &&
+        circularInputNeedsRecordDiscovery({
+          form,
+          adv: state.adv,
+          files,
+          annotationSets: state.annotationSets
+        })
+      )
+    ],
+    async ([, , , , , discoverRecords]) => {
       if (typeof refreshCircularRecordOrder !== 'function') return;
-      await refreshCircularRecordOrder();
+      await refreshCircularRecordOrder({ discoverRecords });
     }
   );
   watch(
     () => [
       mode.value,
       lInputType.value,
-      pyodideReady.value,
       ...linearSeqs.flatMap((seq) => [
         seq.uid,
         lInputType.value === 'gff' ? seq.gff : seq.gb,
@@ -707,14 +718,15 @@ export const setupWatchers = ({
   );
 
   onMounted(async () => {
-    const diagramWorkerPromise = typeof prepareDiagramGenerationWorker === 'function'
-      ? (async () => {
-          await nextTick();
-          await prepareDiagramGenerationWorker();
-        })()
+    await nextTick();
+    const palettePromise = typeof preparePaletteDefinitions === 'function'
+      ? preparePaletteDefinitions().catch((error) => {
+          console.warn('Could not load browser palette definitions.', error);
+        })
       : Promise.resolve();
-
-    await pyodideManager.initPyodide();
-    await diagramWorkerPromise;
+    const workerPromise = typeof prepareDiagramGenerationWorker === 'function'
+      ? prepareDiagramGenerationWorker()
+      : Promise.resolve();
+    await Promise.all([palettePromise, workerPromise]);
   });
 };

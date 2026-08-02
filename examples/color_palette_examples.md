@@ -93,11 +93,11 @@ The table keeps the most frequently compared roles visible. Open the TOML source
 ## Reproduce the images
 
 ```bash
-python tools/reproduce_examples.py --figure palette_circular_default
+python tools/reproduce_examples.py --group palettes
 python tools/generate_palette_explorer_assets.py --source-svg _reproduced/examples/AP027078_tuckin_separate_strands_default.svg
 ```
 
-The explorer stores one Circular SVG plus the TOML-derived palette definitions. Only the three representative Circular/Linear pairs above are retained as standalone examples.
+The first command reproduces all three Circular/Linear pairs shown above. The explorer stores one Circular SVG plus the TOML-derived palette definitions.
 
 ## Accessibility
 

@@ -2,6 +2,8 @@ const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
   'gbdraw-preview-feature-search-match',
   'gbdraw-preview-feature-search-active-match',
   'gbdraw-preview-feature-search-dimmed',
+  'gbdraw-preview-feature-search-results-active',
+  'gbdraw-preview-feature-search-updating',
   'gbdraw-feature-selected',
   'gbdraw-feature-selection-anchor',
   'gbdraw-feature-selection-candidate',
@@ -57,6 +59,7 @@ const stripEditorOnlyCursorStyles = (svg) => {
 export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => {
   if (!svg) return;
   TRANSIENT_PREVIEW_CLASSES.forEach((className) => {
+    removeClassToken(svg, className);
     svg.querySelectorAll(`.${className}`).forEach((element) => removeClassToken(element, className));
   });
   if (stripCursor) stripEditorOnlyCursorStyles(svg);

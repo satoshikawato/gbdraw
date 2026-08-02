@@ -53,6 +53,14 @@ def _metadata_payload(svg_source: str) -> dict[str, object]:
     return json.loads(metadata.text or "{}")
 
 
+def _catalog_item(svg_source: str) -> dict[str, object]:
+    payload = _metadata_payload(svg_source)
+    assert payload["schema"] == 3
+    items = payload["items"]
+    assert isinstance(items, list) and len(items) == 1
+    return items[0]
+
+
 def _metadata_text(svg_source: str) -> str:
     root = ET.fromstring(svg_source)
     metadata = next(
@@ -73,6 +81,81 @@ def _script_payload(svg_source: str) -> str:
         and element.get("id") == "gbdraw-interactive-feature-script"
     )
     return script.text or ""
+
+
+def test_enrich_svg_embeds_selected_schema_three_catalog_item_exactly() -> None:
+    item = {
+        "resultIndex": 1,
+        "resultName": "selected.svg",
+        "recordKeys": ["record-key"],
+        "features": [
+            {
+                "svgId": "rendered-feature",
+                "recordKey": "record-key",
+                "biologicalFeatureId": "biological-feature",
+                "fillColor": "#123456",
+            }
+        ],
+        "biologicalFeatures": [
+            {
+                "recordKey": "record-key",
+                "biologicalFeatureId": "biological-feature",
+                "stableFeatureId": "stable-feature",
+                "type": "CDS",
+                "qualifiers": {"product": ["example"]},
+                "nucleotide_sequence": "ATG",
+            }
+        ],
+        "orthogroups": [],
+        "annotations": [],
+        "comparisonMatches": [],
+    }
+    catalog = {
+        "schema": 3,
+        "items": [
+            {
+                "resultIndex": 0,
+                "resultName": "other.svg",
+                "recordKeys": [],
+                "features": [],
+                "biologicalFeatures": [],
+                "orthogroups": [],
+                "annotations": [],
+                "comparisonMatches": [],
+            },
+            item,
+        ],
+    }
+    svg = """\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path id="rendered-feature"
+        data-gbdraw-feature-id="rendered-feature"
+        fill="#123456" />
+</svg>
+"""
+
+    enriched = enrich_svg(
+        svg,
+        result_index=1,
+        result_name="selected.svg",
+        feature_catalog=catalog,
+    )
+
+    assert _metadata_payload(enriched) == {"schema": 3, "items": [item]}
+    root = ET.fromstring(enriched)
+    metadata = next(
+        element
+        for element in root.iter()
+        if element.get("id") == "gbdraw-interactive-feature-metadata"
+    )
+    assert metadata.get("data-result-index") == "1"
+    assert metadata.get("data-result-name") == "selected.svg"
+    feature = next(
+        element
+        for element in root.iter()
+        if element.get("id") == "rendered-feature"
+    )
+    assert feature.get("data-gbdraw-stable-feature-id") == "stable-feature"
 
 
 def test_interactive_types_and_builder_are_public() -> None:
@@ -212,9 +295,9 @@ def test_enrich_svg_marks_features_matches_and_embeds_assets() -> None:
     assert "gbdraw-interactive-feature-glow" in enriched
     assert 'data-gbdraw-interactive-feature="true"' in enriched
     assert 'data-gbdraw-interactive-match="true"' in enriched
-    payload = _metadata_payload(enriched)
-    assert payload["features"][0]["svg_id"] == "fabc12345"
-    assert payload["matches"][0]["id"] == "m1"
+    item = _catalog_item(enriched)
+    assert item["features"][0]["svgId"] == "fabc12345"
+    assert item["comparisonMatches"][0]["id"] == "m1"
 
 
 def test_enrich_svg_embeds_valid_regexp_escape_runtime() -> None:
@@ -244,10 +327,10 @@ def test_enrich_svg_embeds_match_sequence_sources_once() -> None:
     ]
 
     enriched = enrich_svg(svg, InteractiveSvgContext(sequence_sources=sources))
-    payload = _metadata_payload(enriched)
+    payload = _catalog_item(enriched)
 
-    assert payload["matches"][0]["id"] == "comparison1_match1"
-    assert [source["key"] for source in payload["sequence_sources"]] == [
+    assert payload["comparisonMatches"][0]["id"] == "comparison1_match1"
+    assert [source["key"] for source in payload["sequenceSources"]] == [
         "linear:record:0",
         "linear:record:1",
     ]
@@ -264,13 +347,13 @@ def test_enrich_svg_generates_fallback_feature_payload() -> None:
       <path id="fabc12345__part1" data-gbdraw-feature-id="fabc12345" fill="#54bcf8" d="M 1 1 L 2 2" />
     </svg>"""
 
-    payload = _metadata_payload(enrich_svg(svg))
+    payload = _catalog_item(enrich_svg(svg))
 
-    assert payload["features"][0]["svg_id"] == "fabc12345"
-    assert payload["features"][0]["fill_color"] == "#54bcf8"
+    assert payload["features"][0]["svgId"] == "fabc12345"
+    assert payload["features"][0]["fillColor"] == "#54bcf8"
 
 
-def test_enrich_svg_v2_embeds_sequences_without_precomputed_fastas() -> None:
+def test_enrich_svg_v3_embeds_sequences_without_precomputed_fastas() -> None:
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
       <path id="fseq" data-gbdraw-feature-id="fseq" fill="#54bcf8" d="M 1 1 L 2 2" />
     </svg>"""
@@ -296,16 +379,16 @@ def test_enrich_svg_v2_embeds_sequences_without_precomputed_fastas() -> None:
     )
 
     payload = _metadata_payload(enriched)
-    feature = payload["features"][0]
+    feature = payload["items"][0]["biologicalFeatures"][0]
 
-    assert payload["schema"] == "gbdraw-interactive-feature-popup-v2"
+    assert payload["schema"] == 3
     assert feature["nucleotide_sequence"] == "ATGAAATAA"
     assert feature["amino_acid_sequence"] == "MK"
     assert "nucleotide_fasta" not in feature
     assert "amino_acid_fasta" not in feature
 
 
-def test_enrich_svg_v2_deduplicates_translation_sequence() -> None:
+def test_enrich_svg_v3_deduplicates_translation_sequence() -> None:
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
       <path id="fseq" data-gbdraw-feature-id="fseq" fill="#54bcf8" d="M 1 1 L 2 2" />
     </svg>"""
@@ -325,12 +408,12 @@ def test_enrich_svg_v2_deduplicates_translation_sequence() -> None:
         )
     )
 
-    feature = payload["features"][0]
-    assert feature["qualifiers"]["translation"] == ["MPEPTIDE"]
-    assert "amino_acid_sequence" not in feature
+    feature = payload["items"][0]["biologicalFeatures"][0]
+    assert "qualifiers" not in feature or "translation" not in feature["qualifiers"]
+    assert feature["amino_acid_sequence"] == "MPEPTIDE"
 
 
-def test_enrich_svg_v2_metadata_is_at_least_35_percent_smaller_than_v1_fixture() -> None:
+def test_enrich_svg_v3_metadata_is_at_least_35_percent_smaller_than_v1_fixture() -> None:
     source = (Path(__file__).parent / "test_inputs" / "AP027280_comparison.interactive.svg").read_text(
         encoding="utf-8"
     )
@@ -344,10 +427,10 @@ def test_enrich_svg_v2_metadata_is_at_least_35_percent_smaller_than_v1_fixture()
             popup_mode="rich",
         ),
     )
-    v2_text = _metadata_text(enriched)
+    v3_text = _metadata_text(enriched)
 
-    assert _metadata_payload(enriched)["schema"] == "gbdraw-interactive-feature-popup-v2"
-    assert len(v2_text.encode("utf-8")) <= len(v1_text.encode("utf-8")) * 0.65
+    assert _metadata_payload(enriched)["schema"] == 3
+    assert len(v3_text.encode("utf-8")) <= len(v1_text.encode("utf-8")) * 0.65
 
 
 def test_enrich_svg_matches_record_suffixed_session_feature_ids() -> None:
@@ -374,10 +457,11 @@ def test_enrich_svg_matches_record_suffixed_session_feature_ids() -> None:
         ),
     )
 
-    feature = _metadata_payload(enriched)["features"][0]
+    feature = _catalog_item(enriched)["features"][0]
 
-    assert feature["svg_id"] == "fseq"
-    assert feature["nucleotide_sequence"] == "ATGAAATAA"
+    assert feature["svgId"] == "fseq"
+    biological = _catalog_item(enriched)["biologicalFeatures"][0]
+    assert biological["nucleotide_sequence"] == "ATGAAATAA"
     assert 'data-gbdraw-interactive-feature="true"' in enriched
 
 
@@ -587,11 +671,14 @@ def test_enrich_svg_uses_orthogroup_payload_for_feature_and_match_metadata() -> 
         ),
     )
 
-    payload = _metadata_payload(enriched)
+    payload = _catalog_item(enriched)
 
-    assert payload["features"][0]["orthogroup_id"] == "og_1"
+    rendered = payload["features"][0]
+    member = payload["orthogroups"][0]["members"][0]
+    assert rendered["recordKey"] == member["recordKey"]
+    assert rendered["biologicalFeatureId"] == member["biologicalFeatureId"]
     assert payload["orthogroups"][0]["id"] == "og_1"
-    match = payload["matches"][0]
+    match = payload["comparisonMatches"][0]
     assert match["match_kind"] == "orthogroup"
     assert match["orthogroup_ids"] == ["og_1"]
     assert "sections" not in match
@@ -613,7 +700,7 @@ def test_enrich_svg_uses_stable_orthogroup_member_feature_ids() -> None:
         "strand": "+",
     }
 
-    payload = _metadata_payload(
+    payload = _catalog_item(
         enrich_svg(
             svg,
             InteractiveSvgContext(
@@ -644,9 +731,11 @@ def test_enrich_svg_uses_stable_orthogroup_member_feature_ids() -> None:
         )
     )
 
-    assert payload["features"][0]["svg_id"] == "fstable"
-    assert payload["features"][0]["orthogroup_member"]["feature_svg_id"] == "fstable"
-    assert payload["orthogroups"][0]["members"][0]["feature_svg_id"] == "fstable"
+    rendered = payload["features"][0]
+    member_ref = payload["orthogroups"][0]["members"][0]
+    assert rendered["svgId"] == "fstable"
+    assert member_ref["recordKey"] == rendered["recordKey"]
+    assert member_ref["biologicalFeatureId"] == rendered["biologicalFeatureId"]
 
 
 def test_enrich_svg_keeps_hidden_biological_features_and_orthogroup_members() -> None:
@@ -680,7 +769,7 @@ def test_enrich_svg_keeps_hidden_biological_features_and_orthogroup_members() ->
         "sourceProteinId": "WP_HIDDEN_ONLY.1",
     }
 
-    payload = _metadata_payload(
+    payload = _catalog_item(
         enrich_svg(
             svg,
             InteractiveSvgContext(
@@ -748,28 +837,38 @@ def test_enrich_svg_keeps_hidden_biological_features_and_orthogroup_members() ->
         )
     )
 
-    assert [feature["svg_id"] for feature in payload["features"]] == [
+    assert [feature["svgId"] for feature in payload["features"]] == [
         "fvisible_record_1"
     ]
     biological_by_key = {
-        (feature["record_idx"], feature["stable_feature_id"]): feature
-        for feature in payload["biological_features"]
+        (
+            feature["recordKey"],
+            feature.get("stableFeatureId") or feature["biologicalFeatureId"],
+        ): feature
+        for feature in payload["biologicalFeatures"]
     }
-    assert biological_by_key[(0, "fvisible")]["rendered_svg_id"] == "fvisible_record_1"
-    assert "rendered_svg_id" not in biological_by_key[(1, "fvisible")]
-    assert biological_by_key[(1, "fvisible")]["amino_acid_sequence"] == "MP"
+    rendered = payload["features"][0]
+    assert rendered["biologicalFeatureId"] == biological_by_key[
+        ("record-1", "fvisible")
+    ]["biologicalFeatureId"]
+    assert "rendered_svg_id" not in biological_by_key[("record-1", "fvisible")]
+    assert "rendered_svg_id" not in biological_by_key[("record-2", "fvisible")]
+    assert biological_by_key[("record-2", "fvisible")]["amino_acid_sequence"] == "MP"
 
     groups = {group["id"]: group for group in payload["orthogroups"]}
     assert set(groups) == {"og_shared", "og_hidden"}
     shared_members = {
-        member["record_index"]: member for member in groups["og_shared"]["members"]
+        member["recordKey"]: member for member in groups["og_shared"]["members"]
     }
-    assert shared_members[0]["stable_feature_svg_id"] == "fvisible"
-    assert shared_members[0]["rendered_feature_svg_id"] == "fvisible_record_1"
-    assert shared_members[1]["feature_svg_id"] == "fvisible"
-    assert "rendered_feature_svg_id" not in shared_members[1]
-    assert groups["og_hidden"]["members"][0]["feature_svg_id"] == "fhiddenonly"
-    assert "rendered_feature_svg_id" not in groups["og_hidden"]["members"][0]
+    assert shared_members["record-1"]["biologicalFeatureId"] == (
+        biological_by_key[("record-1", "fvisible")]["biologicalFeatureId"]
+    )
+    assert shared_members["record-2"]["biologicalFeatureId"] == (
+        biological_by_key[("record-2", "fvisible")]["biologicalFeatureId"]
+    )
+    assert groups["og_hidden"]["members"][0]["biologicalFeatureId"] == (
+        biological_by_key[("record-2", "fhiddenonly")]["biologicalFeatureId"]
+    )
 
 
 def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> None:
@@ -867,14 +966,16 @@ def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> Non
         ),
     )
 
-    match = _metadata_payload(enriched)["matches"][0]
+    match = _catalog_item(enriched)["comparisonMatches"][0]
 
     assert match["match_kind"] == "pairwise"
     assert match["orthogroup_ids"] == ["og_1"]
     assert match["query_record_id"] == "rec1"
     assert match["subject_record_id"] == "rec2"
-    assert match["query_feature_svg_id"] == "fquery"
-    assert match["subject_feature_svg_id"] == "fsubject"
+    assert "query_feature_svg_id" not in match
+    assert "subject_feature_svg_id" not in match
+    assert match["queryBiologicalFeatureId"]
+    assert match["subjectBiologicalFeatureId"]
     assert match["identity"] == "99.1"
     assert "sections" not in match
 
@@ -944,7 +1045,7 @@ def test_enrich_svg_match_metadata_matches_standalone_collinear_sections() -> No
         ],
     )
 
-    match = _metadata_payload(enrich_svg(svg, context))["matches"][0]
+    match = _catalog_item(enrich_svg(svg, context))["comparisonMatches"][0]
 
     assert match["match_kind"] == "collinear"
     assert match["orthogroup_ids"] == ["og_1"]
@@ -961,7 +1062,11 @@ def test_save_figure_to_interactive_png_uses_cairosvg_only_for_png(
     monkeypatch,
 ) -> None:
     drawing = _drawing(tmp_path / "out.svg")
-    monkeypatch.setattr(api_render, "enrich_svg", lambda _source, context=None: "<svg />")
+    monkeypatch.setattr(
+        api_render,
+        "enrich_svg",
+        lambda _source, context=None, **_kwargs: "<svg />",
+    )
 
     class FakeCairoSvg:
         @staticmethod
@@ -981,7 +1086,11 @@ def test_save_figure_to_returns_interactive_path_and_checks_overwrite(
     monkeypatch,
 ) -> None:
     drawing = _drawing(tmp_path / "ignored.svg")
-    monkeypatch.setattr(api_render, "enrich_svg", lambda _source, context=None: "<svg />")
+    monkeypatch.setattr(
+        api_render,
+        "enrich_svg",
+        lambda _source, context=None, **_kwargs: "<svg />",
+    )
 
     paths = api_render.save_figure_to(
         drawing,

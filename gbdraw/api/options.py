@@ -36,6 +36,9 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.config.modify import validate_config_overrides  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.features.shapes import (  # type: ignore[reportMissingImports]
+    normalize_feature_shape_overrides,
+)
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.mode_profiles import (
     ComparisonThresholds,
@@ -608,6 +611,14 @@ class _ModeDiagramOptions:
             if value is not None and not isinstance(value, Mapping):
                 raise ValidationError(f"{field_name} must be a mapping or None.")
         validate_config_overrides(self.config_overrides)
+        if self.feature_shapes is not None:
+            try:
+                normalized_shapes = normalize_feature_shape_overrides(
+                    self.feature_shapes
+                )
+            except ValueError as exc:
+                raise ValidationError(str(exc)) from exc
+            object.__setattr__(self, "feature_shapes", normalized_shapes)
         if self.selected_features_set is not None:
             if isinstance(self.selected_features_set, (str, bytes)) or not isinstance(
                 self.selected_features_set,

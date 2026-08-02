@@ -125,6 +125,40 @@
       ]
     },
     {
+      "title": "Turn off sequence comparisons",
+      "body": "Choose No comparison before generating. This makes the no-search intent explicit and prevents the app from running LOSAT or using a retained BLAST TSV.",
+      "operations": [
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/lambda_basic_linear/manual-02-03-no-comparison.webp",
+            "alt": "Linear comparison choices with No comparison selected.",
+            "caption": "Select No comparison to generate the Linear diagram without running LOSAT."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "viewport": {"width": 1280, "height": 900},
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.linearComparisonPlan.mode = 'none'; app.linearComparisonPlan.defaultSource = 'losat';"
+              }
+            ],
+            "selector": "[data-capture='linear-blast-source']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "none"
+            },
+            "visibleControls": [
+              {"label": "No comparison", "checked": true}
+            ]
+          }
+        }
+      ]
+    },
+    {
       "title": "Set strands, labels, ruler, and legend",
       "body": "Apply the four Linear presentation settings below.",
       "table": {
@@ -140,6 +174,10 @@
           [
             "Show Labels",
             "All Records"
+          ],
+          [
+            "Show Coordinate Scale",
+            "On"
           ],
           [
             "Scale Style",
@@ -249,8 +287,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/lambda_basic_linear/manual-03-03-scale-style-ruler.webp",
-            "alt": "Scale Style selector with Ruler highlighted.",
-            "caption": "Set Scale Style to Ruler (Ticks)."
+            "alt": "Axis and Scale card with Show Coordinate Scale selected and the Scale Style menu open on Ruler.",
+            "caption": "Leave Show Coordinate Scale selected and set Scale Style to Ruler (Ticks)."
           },
           "capture": {
             "source": "webapp",
@@ -265,13 +303,13 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.form.scale_style = 'ruler';"
+                "script": "const app = window.__GBDRAW_APP__; app.form.show_scale = true; app.form.scale_style = 'ruler';"
               }
             ],
             "crop": "openSelect",
             "cropPadding": {
-              "top": 54,
-              "right": 80,
+              "top": 145,
+              "right": 130,
               "bottom": 24,
               "left": 80
             },
@@ -285,9 +323,14 @@
             },
             "assertAppState": {
               "mode": "linear",
+              "form.show_scale": true,
               "form.scale_style": "ruler"
             },
             "visibleControls": [
+              {
+                "label": "Show Coordinate Scale",
+                "checked": true
+              },
               {
                 "label": "Scale Style",
                 "value": "Ruler (Ticks)"
@@ -355,10 +398,45 @@
       "body": "Click Generate Diagram. Check that both strand lanes, feature labels, and the ruler are visible, then export SVG.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
-            "src": "./thumbnails/lambda_basic_linear.webp",
-            "alt": "Linear lambda phage genome diagram with labels and a genomic ruler.",
-            "caption": "The completed one-record linear figure requires no pairwise search."
+            "src": "./media/lambda_basic_linear/manual-05-01-final-preview.webp",
+            "alt": "Completed linear lambda phage diagram with two strand lanes, feature labels, a coordinate ruler, record metadata, and a left CDS legend.",
+            "caption": "The completed figure retains both strand lanes, all feature labels, the ruler, record metadata, and the left legend."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/lambda_basic_linear.gbdraw-session.json",
+            "viewport": {
+              "width": 1900,
+              "height": 900
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('NC_001416.1') || !content.includes('48,502 bp') || !content.includes('major capsid protein') || app?.form?.legend !== 'left') throw new Error('Restored lambda SVG does not match the completed tutorial figure.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-lambda-final', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-lambda-final='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 1,
+              "linearComparisonPlan.mode": "none",
+              "form.legend": "left",
+              "form.show_labels_linear": "all",
+              "form.scale_style": "ruler"
+            },
+            "visibleText": [
+              "NC_001416.1",
+              "48,502 bp",
+              "major capsid protein",
+              "CDS"
+            ]
           }
         }
       ]

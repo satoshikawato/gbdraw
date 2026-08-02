@@ -1,3 +1,9 @@
+import {
+  colorValueForMode,
+  colorValueMode,
+  toNativeColorInputValue
+} from './app/color-utils.js';
+
 const { ref, reactive, computed, nextTick } = window.Vue;
 
 export const HelpTip = {
@@ -55,6 +61,58 @@ export const AutoValueField = {
     <div class="auto-value-field">
       <span v-if="visible" class="auto-value-placeholder">{{ text }}</span>
       <slot></slot>
+    </div>
+  `
+};
+
+export const ColorValueControl = {
+  props: {
+    modelValue: { default: null },
+    fallback: { type: String, default: '#000000' },
+    allowNone: { type: Boolean, default: true },
+    ariaLabel: { type: String, default: 'Color value' }
+  },
+  emits: ['update:modelValue'],
+  setup(props, { emit }) {
+    const mode = computed(() => colorValueMode(props.modelValue));
+    const pickerValue = computed(() => (
+      toNativeColorInputValue(props.modelValue, props.fallback)
+    ));
+    const updateMode = (event) => {
+      const nextMode = String(event?.target?.value || 'auto');
+      emit(
+        'update:modelValue',
+        colorValueForMode(nextMode, props.modelValue, props.fallback)
+      );
+    };
+    const updateColor = (event) => {
+      emit(
+        'update:modelValue',
+        toNativeColorInputValue(event?.target?.value, props.fallback)
+      );
+    };
+    return { mode, pickerValue, updateMode, updateColor };
+  },
+  template: `
+    <div class="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-1 items-center">
+      <select
+        :value="mode"
+        @change="updateMode"
+        class="form-input form-input-compact min-w-0"
+        :aria-label="\`\${ariaLabel} mode\`"
+      >
+        <option value="auto">Auto</option>
+        <option v-if="allowNone" value="none">None</option>
+        <option value="color">Color</option>
+      </select>
+      <input
+        type="color"
+        :value="pickerValue"
+        @input="updateColor"
+        :disabled="mode !== 'color'"
+        class="h-8 w-full p-0 border rounded disabled:opacity-40"
+        :aria-label="ariaLabel"
+      >
     </div>
   `
 };

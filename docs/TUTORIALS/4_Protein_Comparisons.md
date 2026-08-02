@@ -63,16 +63,47 @@ Pass only one of `--losatp_bin` and `--ncbi_blastp_bin` in a command.
 ```bash
 gbdraw linear \
   --gbk MjeNMV.gb MelaMJNV.gb \
+  -t tests/test_inputs/majani_custom_color_table.tsv \
+  -d examples/modified_default_colors.tsv \
+  --block_stroke_color gray \
+  --block_stroke_width 1 \
+  --line_stroke_color lightgray \
+  --line_stroke_width 2 \
   --protein_blastp_mode pairwise \
   --align_center \
   --pairwise_match_style curve \
+  --gc \
+  --skew \
+  --show_labels first \
+  --label_rendering embedded_only \
+  --record_label "Marsupenaeus japonicus endogenous nimavirus" \
+  --record_label "Melicertus latisulcatus majanivirus" \
+  --record_subtitle Ginoza2017 \
+  --record_subtitle Okinawa2016 \
+  --scale_style ruler \
+  --plot_title "Majanivirus pairwise protein matches" \
   -o tutorial-protein-pairwise \
   -f svg
 ```
 
-This writes `tutorial-protein-pairwise.svg`. The curved ribbons connect CDS-derived protein hits between the two adjacent records.
+This writes `tutorial-protein-pairwise.svg`. The curved ribbons connect CDS-derived protein hits between the two adjacent records. The checked-in color tables distinguish WSSV-like proteins, BIRP features, tyrosine recombinase, and other proteins, while the block and line widths keep both filled features and feature lines legible. Features use the default on-axis placement. Omit `-t` and `-d` when running outside a source checkout.
 
-![Pairwise majanivirus protein comparison with curved ribbons between two linear records](../../examples/tutorial-protein-pairwise.svg)
+![Named majanivirus records with colored protein features on their axes, visible feature lines, GC content, GC skew, rulers, and curved pairwise protein-match ribbons](../../examples/tutorial-protein-pairwise.svg)
+
+### Web app selected LOSAT pairs
+
+For a sparse browser workflow, edit one entry under **Adjacent gaps**, or click
+**Add** under **Selected pairs and retained drafts** for custom endpoints.
+Either action creates a **Selected pairs** plan. Set each included edge to **Run
+LOSAT**. Selected edges support LOSATN, TLOSATX, and LOSATP when the LOSATP mode
+is **Pairwise**. One plan can also mix those LOSAT edges with uploaded BLAST TSV
+edges and omitted pairs.
+
+**Similarity groups** and **Collinear blocks** still collect evidence across
+all records and are available with the global adjacent LOSAT plan. The web app
+rejects an active selected LOSAT edge in either of those modes instead of
+silently expanding it. A selected plan containing only uploaded edges remains
+valid because it does not request LOSAT evidence expansion.
 
 ## 4. gbdraw similarity-group ribbons (`orthogroup` mode)
 
@@ -126,6 +157,9 @@ For a multi-record layout, add `--collinear_search_scope all` to search every re
 Use precomputed BLAST tables when you need to preserve an existing result, use custom database settings, compare nucleotide or translated nucleotide sequences, or draw hits that were filtered by an upstream workflow.
 
 Do not combine `-b/--blast` with `--protein_blastp_mode`. The CLI rejects that combination because the two options define different comparison sources.
+
+The selected mixed-source plan described above is a web app feature. It does
+not change the CLI restriction or the Python `pairs` contract.
 
 For Python workflows with multi-record rows, use `LinearComparisonOptions(protein_mode="pairwise", pairs=((0, 2), (1, 3)))` to run only the declared record pairs. Pair indices are zero-based and must connect adjacent layout rows. Omitting `pairs` preserves adjacent-record behavior. See the [Python API linear example](../PYTHON_API.md#linear-diagrams-and-comparisons).
 

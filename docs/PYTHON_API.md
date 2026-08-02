@@ -24,7 +24,9 @@ from pathlib import Path
 
 from gbdraw import (
     CircularOptions,
+    CircularTrackOptions,
     FeatureOptions,
+    LabelOptions,
     draw_circular,
     read_genbank,
 )
@@ -36,8 +38,36 @@ test_inputs_dir = Path(os.environ.get("GBDRAW_TEST_INPUTS_DIR", input_path.paren
 
 record = read_genbank(input_path)[0]
 options = CircularOptions(
-    features=FeatureOptions(types=("CDS",)),
-    species="Example genome",
+    features=FeatureOptions(
+        types=("CDS",),
+        color_table=examples_dir / "custom_color_table.tsv",
+        default_colors=examples_dir / "modified_default_colors.tsv",
+    ),
+    labels=LabelOptions(
+        whitelist=examples_dir / "python-api-label-whitelist.tsv",
+    ),
+    tracks=CircularTrackOptions(
+        slots=(
+            "features:features",
+            "ticks:ticks",
+            "gc_content:dinucleotide_content@nt=GC",
+            "gc_skew:dinucleotide_skew@nt=GC",
+        ),
+    ),
+    species="<i>Marsupenaeus japonicus endogenous nimavirus</i>",
+    strain="Ginoza2017",
+    legend="right",
+    config_overrides={
+        "canvas.show_gc": True,
+        "canvas.show_skew": True,
+        "canvas.strandedness": True,
+        "canvas.circular.track_type": "middle",
+        "labels.circular.scope": "both",
+        "objects.features.block_stroke_color": "gray",
+        "objects.features.block_stroke_width.long": 1.0,
+        "objects.features.line_stroke_color": "lightgray",
+        "objects.features.line_stroke_width.long": 2.0,
+    },
 )
 diagram = draw_circular(record, options=options)
 output_path = diagram.save(output_dir / "api_circular.svg", overwrite=True)
@@ -46,9 +76,11 @@ assert output_path == output_dir / "api_circular.svg"
 assert diagram.to_svg().startswith("<svg")
 ```
 
-The resulting circular diagram:
+This LC738868.1 example keeps selected functional labels, feature-specific fills,
+gray block outlines, light-gray connector lines, record metadata, GC content, GC
+skew, and the complete legend visible:
 
-![Circular MjeNMV genome diagram produced by the documented Python API example](../examples/python-api-circular.png)
+![Circular MjeNMV diagram with functional labels, record metadata, GC tracks, and feature legend](../examples/python-api-circular.png)
 
 ## The same function handles multiple circular records
 
@@ -86,6 +118,7 @@ from gbdraw import (
     LinearComparisonOptions,
     LinearOptions,
     Thresholds,
+    TitleOptions,
     draw_linear,
 )
 
@@ -95,19 +128,44 @@ linear_records = read_genbank(
 linear_diagram = draw_linear(
     linear_records,
     options=LinearOptions(
-        features=FeatureOptions(types=("CDS",)),
+        features=FeatureOptions(
+            types=("CDS",),
+            color_table=examples_dir / "custom_color_table.tsv",
+            default_colors=examples_dir / "modified_default_colors.tsv",
+        ),
+        labels=LabelOptions(
+            whitelist=examples_dir / "python-api-label-whitelist.tsv",
+        ),
+        title=TitleOptions(
+            text="Majanivirus genome comparison",
+            position="top",
+        ),
         comparisons=LinearComparisonOptions(
             blast_files=(str(examples_dir / "MjeNMV.MelaMJNV.tblastx.out"),),
         ),
-        thresholds=Thresholds(identity=0, bitscore=0),
+        thresholds=Thresholds(evalue=1e-5, identity=0, bitscore=0),
+        legend="right",
+        config_overrides={
+            "canvas.show_gc": True,
+            "canvas.show_skew": True,
+            "canvas.strandedness": True,
+            "canvas.linear.align_center": True,
+            "labels.linear.scope": "first",
+            "objects.features.block_stroke_color": "gray",
+            "objects.features.block_stroke_width.long": 1.0,
+            "objects.features.line_stroke_color": "lightgray",
+            "objects.features.line_stroke_width.long": 2.0,
+        },
     ),
 )
 assert linear_diagram.to_svg().startswith("<svg")
 ```
 
-The resulting pairwise comparison:
+The pairwise comparison retains accession and length metadata for both records,
+selected labels on the first record, feature fills and lines, GC tracks, BLAST
+ribbons, and both legends:
 
-![Linear comparison of two majanivirus records produced by the documented Python API example](../examples/python-api-linear.png)
+![Linear majanivirus comparison with record metadata, selected labels, GC tracks, BLAST ribbons, and legends](../examples/python-api-linear.png)
 
 Use `LinearLayout` only when records need explicit multi-row placement:
 
@@ -196,6 +254,41 @@ The lower-level request transport retains its
 `ConservationTrackOptions` class names are identity aliases for
 `ComparisonRingOptions` and `ComparisonRingTrackOptions`.
 
+## Coordinate-scale visibility
+
+Use the shared canonical override `objects.scale.show` to hide the primary
+genome-coordinate scale. The same path works with both diagram modes:
+
+```python
+scale_free_circular = draw_circular(
+    record,
+    options=CircularOptions(
+        features=FeatureOptions(types=("CDS",)),
+        config_overrides={"objects.scale.show": False},
+    ),
+)
+scale_free_linear = draw_linear(
+    linear_records,
+    options=LinearOptions(
+        features=FeatureOptions(types=("CDS",)),
+        config_overrides={"objects.scale.show": False},
+    ),
+)
+
+assert scale_free_circular.to_svg().startswith("<svg")
+assert scale_free_linear.to_svg().startswith("<svg")
+```
+
+The override hides Circular coordinate ticks in an implicit layout, or the
+Linear bottom scale and record-axis coordinate ticks and labels. It does not
+hide the Circular axis, Linear record axes, GC-content axes, Depth axes, or
+Linear definition text.
+
+`objects.scale.style` remains a separate `bar` or `ruler` choice. When
+`CircularOptions.tracks` supplies `CircularTrackOptions(slots=...)`, that
+explicit list is authoritative: an enabled `ticks` slot is rendered even when
+`objects.scale.show` is `False`.
+
 ## Feature colors, visibility, and labels
 
 Table inputs accept either a path or a validated DataFrame. One field represents one
@@ -223,6 +316,36 @@ assert styled_diagram.to_svg().startswith("<svg")
 
 Use `FeatureOptions.color_table`, `default_colors`, `visibility`, and `shapes` for
 the corresponding feature controls.
+
+`FeatureOptions.shapes` accepts `arrow`, `rectangle`, and `underlay`. Tune the
+global arrow head length and shaft width through canonical configuration
+overrides:
+
+```python
+narrow_arrow_diagram = draw_linear(
+    linear_records,
+    options=LinearOptions(
+        features=FeatureOptions(
+            types=("CDS", "rRNA"),
+            shapes={"CDS": "arrow", "rRNA": "arrow"},
+        ),
+        config_overrides={
+            "objects.features.arrow_geometry.head_length_ratio": 1.0,
+            "objects.features.arrow_geometry.shaft_width_ratio": 0.5,
+        },
+    ),
+)
+assert narrow_arrow_diagram.to_svg().startswith("<svg")
+```
+
+Set `head_length_ratio` to `"auto"` for a head that starts from the existing
+mode-specific length and grows by the thickness removed from a narrowed shaft.
+Numeric values must be positive, measure head length relative to the full
+rendered feature thickness, and do not depend on shaft width.
+`shaft_width_ratio` must be in `(0, 1]` and applies to every feature type
+rendered as `arrow`. Its default is `1.0`, which preserves the legacy full-width
+outline; smaller values produce a centered, narrower shaft. An arrow with no
+positive shaft length is rendered as a triangle.
 
 ### Canonical label configuration overrides
 

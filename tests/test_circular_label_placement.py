@@ -21,6 +21,7 @@ from gbdraw.core.sequence import determine_length_parameter
 from gbdraw.features.coordinates import get_strand
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
+from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.layout.common import calculate_cds_ratio
@@ -35,6 +36,8 @@ from gbdraw.labels.circular import (
     y_overlap,
 )
 from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering
+from gbdraw.labels.circular_types import CircularLabelCandidate
+from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.render.drawers.circular.labels import LabelDrawer as CircularLabelDrawer
 from gbdraw.svg.arrows import calculate_circular_arrow_length
 
@@ -326,6 +329,136 @@ def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
         label_blacklist="",
     )
     return external_labels, total_length
+
+
+@pytest.mark.parametrize(
+    ("head_length_ratio", "shaft_width_ratio", "expected_short"),
+    [(1.0, 1.0, False), (2.0, 1.0, True), ("auto", 0.5, True)],
+)
+def test_circular_label_fit_uses_drawer_head_span(
+    monkeypatch: pytest.MonkeyPatch,
+    head_length_ratio: str | float,
+    shaft_width_ratio: float,
+    expected_short: bool,
+) -> None:
+    total_length = 1000
+    segment_start = 100
+    segment_end = 120
+    config_dict = modify_config_dict(
+        load_config_toml("gbdraw.data", "config.toml"),
+        {
+            "canvas.strandedness": False,
+            "canvas.resolve_overlaps": True,
+            "canvas.circular.track_type": "middle",
+            "labels.circular.scope": "outer",
+            "objects.features.arrow_geometry.head_length_ratio": head_length_ratio,
+            "objects.features.arrow_geometry.shaft_width_ratio": shaft_width_ratio,
+        },
+    )
+    cfg = GbdrawConfig.from_dict(config_dict)
+    radius = float(cfg.canvas.circular.radius)
+    track_ratio = float(cfg.canvas.circular.track_ratio)
+    length_param = determine_length_parameter(
+        total_length,
+        cfg.labels.length_threshold.circular,
+    )
+    track_ratio_factor = float(
+        cfg.canvas.circular.track_ratio_factors[length_param][0]
+    )
+    cds_ratio, offset = calculate_cds_ratio(
+        track_ratio,
+        length_param,
+        track_ratio_factor,
+    )
+    drawer = FeaturePathGenerator(
+        radius=radius,
+        total_length=total_length,
+        track_ratio=track_ratio,
+        cds_ratio=cds_ratio,
+        offset=offset,
+        track_type="middle",
+        strandedness=False,
+        track_id=0,
+        head_length_ratio=head_length_ratio,
+        shaft_width_ratio=shaft_width_ratio,
+    )
+    drawer_head_span = drawer._resolved_arrow_length("positive", None)
+    assert ((segment_end - segment_start) < drawer_head_span) is expected_short
+
+    feature = FeatureObject(
+        feature_id="feature_000000001",
+        location=[
+            FeatureLocationPart(
+                "block",
+                "001",
+                "positive",
+                segment_start,
+                segment_end,
+                True,
+            )
+        ],
+        is_directional=None,
+        color="#cccccc",
+        note="",
+        label_text="head span",
+        coordinates=[],
+        type="CDS",
+        qualifiers={},
+        glyph_kind="arrow",
+    )
+    candidate = CircularLabelCandidate(
+        stable_id=feature.feature_id,
+        input_order=0,
+        text="head span",
+        font_family=cfg.objects.text.font_family,
+        font_size=10.0,
+        width_px=100.0,
+        height_px=10.0,
+        feature_type="CDS",
+        strand="positive",
+        track_id=0,
+        directional=True,
+        segment_start_bp=float(segment_start),
+        segment_end_bp=float(segment_end),
+        segment_middle_bp=0.5 * (segment_start + segment_end),
+        segment_span_bp=float(segment_end - segment_start),
+        feature_coordinates=((float(segment_start), float(segment_end)),),
+    )
+    resolved_label_spans: list[float] = []
+    real_resolver = circular_labels_module.resolve_circular_arrow_head_length_bp
+
+    def recording_resolver(*args, **kwargs) -> float:
+        resolved = real_resolver(*args, **kwargs)
+        resolved_label_spans.append(resolved)
+        return resolved
+
+    monkeypatch.setattr(
+        circular_labels_module,
+        "resolve_circular_arrow_head_length_bp",
+        recording_resolver,
+    )
+    labels = prepare_label_list(
+        {feature.feature_id: feature},
+        total_length,
+        radius,
+        track_ratio,
+        CircularRenderProfile(cfg),
+        _candidate_cache={"candidates": (candidate,)},
+    )
+
+    assert resolved_label_spans == pytest.approx([drawer_head_span])
+    assert len(labels) == 1
+    label = labels[0]
+    anchor_radius = math.hypot(
+        float(label["feature_anchor_x"]),
+        float(label["feature_anchor_y"]),
+    )
+    expected_anchor_radius = (
+        float(label["feature_center_radius_px"])
+        if expected_short
+        else float(label["feature_outer_radius_px"])
+    )
+    assert anchor_radius == pytest.approx(expected_anchor_radius)
 
 
 def _load_hmmtdna_external_labels(*, label_font_size: float = 22.0) -> tuple[list[dict], int]:

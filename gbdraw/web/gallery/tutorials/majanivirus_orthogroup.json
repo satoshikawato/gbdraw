@@ -117,10 +117,35 @@
       },
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-02-01-upload-row-label-context.webp",
             "alt": "Linear GenBank input row 1 with MjeNMV.gb uploaded and its Organism / strain label in the same input card.",
             "caption": "The first uploaded row shows MjeNMV.gb and its Organism / strain label in the Linear input card; repeat the remaining rows from the table."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
+            "viewport": {"width": 1280, "height": 1000},
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const expected = ['MjeNMV.gb', 'MelaMJNV.gb', 'PemoMJNVA.gb', 'PeseMJNV.gb', 'PemoMJNVB.gb', 'LvMJNV.gb', 'TrcuMJNV.gb', 'MeenMJNV.gb', 'MejoMJNV.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Majanivirus GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = 'Marsupenaeus japonicus endogenous nimavirus'; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = Array.from(card?.querySelectorAll('div') || []).find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); if (!row) throw new Error('Majanivirus Linear input row 1 was not found.'); const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === 'Organism / strain (optional)' && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error('Majanivirus Organism / strain input was not found.'); input.dataset.capture = 'majanivirus-organism-input'; row.dataset.capture = 'majanivirus-record-row'; row.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='majanivirus-record-row']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 9,
+              "linearSeqs.0.gb.name": "MjeNMV.gb",
+              "linearSeqs.0.definition": "Marsupenaeus japonicus endogenous nimavirus",
+              "linearSeqs.8.gb.name": "MejoMJNV.gb"
+            },
+            "visibleText": ["MjeNMV.gb", "Organism / strain (optional)"],
+            "visibleControls": [
+              {"selector": "[data-capture='majanivirus-organism-input']", "value": "Marsupenaeus japonicus endogenous nimavirus"}
+            ]
           }
         }
       ]
@@ -145,6 +170,7 @@
       "note": "This is a large browser workload. The displayed 32 is a requested per-run maximum, not 32 guaranteed workers: Total threads = Safe caps the effective value to the safe browser budget. Similarity groups forms visualization groups; it does not infer phylogeny-based orthology.",
       "operations": [
         {
+          "dataDependent": true,
           "title": "Pairwise Comparisons panel",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-01-open-pairwise.webp",
@@ -161,7 +187,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) { app.blastSource = 'losat'; app.losatProgram = 'blastp'; app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = '32'; app.losat.blastp.mode = 'orthogroup'; app.adv.min_bitscore = 100; app.adv.evalue = '1e-3'; app.adv.identity = 20; app.adv.alignment_length = 0; }"
+                "script": "const app = window.__GBDRAW_APP__; if (app) { app.linearComparisonPlan.mode = 'adjacent'; app.linearComparisonPlan.defaultSource = 'losat'; app.losatProgram = 'blastp'; app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = '32'; app.losat.blastp.mode = 'orthogroup'; app.adv.min_bitscore = 100; app.adv.evalue = '1e-3'; app.adv.identity = 20; app.adv.alignment_length = 0; }"
               }
             ],
             "clipSelectors": ["[data-capture='linear-blast-source']", "[data-capture='linear-losat-settings']"],
@@ -171,7 +197,25 @@
               "bottom": 12,
               "left": 12
             },
-            "waitForSelector": "[data-capture='linear-losat-settings']"
+            "waitForSelector": "[data-capture='linear-losat-settings']",
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "orthogroup",
+              "losat.executionMode": "auto",
+              "losat.totalThreadBudget": "safe",
+              "losat.threadsPerJob": "32",
+              "adv.min_bitscore": 100,
+              "adv.evalue": "1e-3",
+              "adv.identity": 20,
+              "adv.alignment_length": 0
+            },
+            "visibleControls": [
+              {"label": "Run LOSAT", "checked": true},
+              {"label": "LOSATP", "checked": true}
+            ]
           }
         },
         {
@@ -365,31 +409,45 @@
       "body": "Click Generate Diagram. The finished preview should show nine viral genome rows, many red identity-scaled similarity-group ribbons, and a right legend.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-07-01-orthogroup-preview.webp",
-            "alt": "Generated majanivirus protein-similarity preview showing nine viral genome rows and the right legend.",
-            "caption": "The generated preview includes nine rows and the right legend."
+            "alt": "Completed majanivirus protein-similarity diagram with nine labeled genome rows, product-based feature colors, dense red similarity-group ribbons, and a right legend.",
+            "caption": "The completed figure shows nine labeled genome rows, product-based feature colors, dense similarity-group ribbons, and the right legend."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {
-              "width": 1600,
+              "width": 1900,
               "height": 1000
             },
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 0.5; if (app.svgContainer) app.svgContainer.style.transform = 'translate(0px, 0px) scale(0.5)'; const svg = app.svgContainer?.querySelector('svg'); svg?.setAttribute('data-capture', 'majanivirus-final-preview'); }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('Marsupenaeus japonicus endogenous nimavirus') || !content.includes('WSSV-like proteins') || !content.includes('Pairwise match identity') || app?.form?.legend !== 'right') throw new Error('Restored majanivirus SVG does not match the completed tutorial figure.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture', 'majanivirus-final-preview');"
               }
             ],
             "selector": "[data-capture='majanivirus-final-preview']",
             "cropPadding": {
-              "top": 0,
-              "right": 0,
-              "bottom": 0,
-              "left": 0
-            }
+              "top": 12,
+              "right": 12,
+              "bottom": 12,
+              "left": 12
+            },
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 9,
+              "form.legend": "right",
+              "adv.linear_show_length": false,
+              "form.show_labels_linear": "none"
+            },
+            "visibleText": [
+              "Marsupenaeus japonicus endogenous nimavirus",
+              "Metapenaeus joyneri majanivirus",
+              "WSSV-like proteins",
+              "Pairwise match identity"
+            ]
           }
         }
       ]

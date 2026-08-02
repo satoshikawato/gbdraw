@@ -26,7 +26,10 @@ from ..layout.circular import (
     feature_radius_intervals,
 )
 from ..layout.spatial import Aabb, candidate_aabb_pairs
-from ..svg.arrows import calculate_circular_arrow_length
+from ..svg.arrows import (
+    calculate_circular_arrow_length,
+    resolve_circular_arrow_head_length_bp,
+)
 
 # Keep dense large-font labels from being pushed excessively far from features.
 MIN_BBOX_GAP_RATIO = 0.01
@@ -4518,7 +4521,9 @@ def prepare_label_list(
         lane_direction=lane_direction,
         feature_band_width_px=feature_band_width_px,
     )
-    circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
+    automatic_circular_arrow_length_bp = calculate_circular_arrow_length(total_length)
+    arrow_head_length_ratio = cfg.objects.features.arrow_geometry.head_length_ratio
+    arrow_shaft_width_ratio = cfg.objects.features.arrow_geometry.shaft_width_ratio
 
     cached_candidates = (
         _candidate_cache.get("candidates")
@@ -4590,6 +4595,14 @@ def prepare_label_list(
                 longest_segment_start,
                 longest_segment_end,
                 total_length,
+            )
+            circular_arrow_length_bp = resolve_circular_arrow_head_length_bp(
+                arrow_head_length_ratio,
+                abs(feature_outer_radius - feature_inner_radius),
+                automatic_circular_arrow_length_bp,
+                total_length,
+                feature_center_radius,
+                arrow_shaft_width_ratio,
             )
             is_short_directional_feature = (
                 bool(getattr(feature_object, "is_directional", False))

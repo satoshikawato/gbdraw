@@ -168,6 +168,7 @@
           }
         },
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-04-03-adjacent-pairs.webp",
             "alt": "LOSAT Settings panel with the Evidence scope menu open and Adjacent pairs highlighted.",
@@ -187,7 +188,21 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const blastp = window.__GBDRAW_APP__?.losat?.blastp; if (Number(blastp?.collinearMinAnchors) !== 3 || Number(blastp?.collinearMaxUnitGap) !== 2 || Number(blastp?.collinearMaxDiagonalDrift) !== 2 || blastp?.collinearColorMode !== 'orientation_identity' || blastp?.collinearSearchScope !== 'adjacent') throw new Error(`Restored collinear settings do not match the tutorial: ${JSON.stringify(blastp)}`);"
+                "script": "const app = window.__GBDRAW_APP__; app.linearComparisonPlan.mode = 'adjacent'; app.linearComparisonPlan.defaultSource = 'losat'; const blastp = app.losat?.blastp; if (Number(blastp?.collinearMinAnchors) !== 3 || Number(blastp?.collinearMaxUnitGap) !== 2 || Number(blastp?.collinearMaxDiagonalDrift) !== 2 || blastp?.collinearColorMode !== 'orientation_identity' || blastp?.collinearSearchScope !== 'adjacent') throw new Error(`Restored collinear settings do not match the tutorial: ${JSON.stringify(blastp)}`);"
+              }
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear",
+              "losat.blastp.collinearSearchScope": "adjacent"
+            },
+            "visibleControls": [
+              {
+                "label": "Evidence scope",
+                "value": "Adjacent pairs"
               }
             ]
           }

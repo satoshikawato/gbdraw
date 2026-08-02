@@ -1207,6 +1207,43 @@ def test_circular_multiple_depth_tracks_render_distinct_rings() -> None:
 
 
 @pytest.mark.circular
+def test_circular_multiple_depth_auto_slots_do_not_restore_hidden_scale() -> None:
+    record = _make_record("rec1", length=40)
+    canvas = assemble_circular_diagram_from_record(
+        record,
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 40, length=40),
+            ]
+        ],
+        cfg=apply_config_overrides(
+            None,
+            {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.scale.show": False,
+            },
+        ),
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    )
+    svg = canvas.tostring()
+    renderers = {
+        slot["renderer"]
+        for slot in canvas._gbdraw_track_slot_geometry["records"][0]["slots"]
+    }
+
+    assert "ticks" not in renderers
+    assert len(_semantic_depth_axis_groups(svg, "depth_1")) == 1
+    assert len(_semantic_depth_axis_groups(svg, "depth_2")) == 1
+    assert 'id="Axis"' in svg
+
+
+@pytest.mark.circular
 def test_circular_custom_depth_slot_selects_track_index() -> None:
     record = _make_record("rec1", length=40)
     svg = assemble_circular_diagram_from_record(
@@ -1641,6 +1678,47 @@ def test_circular_multi_record_diagonal_sparse_depth_uses_logical_binding() -> N
         {slot["slotId"] for slot in record_geometry["slots"]} >= {"depth_1", "depth_2"}
         for record_geometry in geometry["records"]
     )
+
+
+@pytest.mark.circular
+def test_circular_multi_record_depth_auto_slots_do_not_restore_hidden_scale() -> None:
+    records = [_make_record("rec1", length=40), _make_record("rec2", length=40)]
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        legend="none",
+        depth_track_tables=[
+            [
+                _constant_depth_table("rec1", 10, length=40),
+                _constant_depth_table("rec1", 30, length=40),
+            ],
+            [
+                _constant_depth_table("rec2", 20, length=40),
+                _constant_depth_table("rec2", 40, length=40),
+            ],
+        ],
+        cfg=apply_config_overrides(
+            None,
+            {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "objects.scale.show": False,
+            },
+        ),
+        window=10,
+        step=10,
+        depth_window=10,
+        depth_step=10,
+    )
+    svg = canvas.tostring()
+
+    assert all(
+        all(slot["renderer"] != "ticks" for slot in record_geometry["slots"])
+        for record_geometry in canvas._gbdraw_track_slot_geometry["records"]
+    )
+    assert len(_semantic_depth_axis_groups(svg, "depth_1")) == 2
+    assert len(_semantic_depth_axis_groups(svg, "depth_2")) == 2
+    assert 'id="Axis_0"' in svg
+    assert 'id="Axis_1"' in svg
 
 
 @pytest.mark.linear

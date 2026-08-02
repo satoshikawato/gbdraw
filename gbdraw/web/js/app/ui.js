@@ -56,7 +56,7 @@ export const createPanZoom = (state) => {
     return nextPan;
   };
 
-  const resetPreviewViewport = ({ resetZoom = false } = {}) => {
+  const resetPreviewViewport = ({ resetZoom = false, pan = null } = {}) => {
     cancelPanFrame();
     pendingPanPointer = null;
     isPanning.value = false;
@@ -64,8 +64,8 @@ export const createPanZoom = (state) => {
     panStart.y = 0;
     panStart.panX = 0;
     panStart.panY = 0;
-    canvasPan.x = 0;
-    canvasPan.y = 0;
+    canvasPan.x = Number(pan?.x) || 0;
+    canvasPan.y = Number(pan?.y) || 0;
     if (resetZoom) {
       zoom.value = 1.0;
     }
@@ -74,7 +74,7 @@ export const createPanZoom = (state) => {
     if (container) {
       container.style.cursor = 'grab';
     }
-    applyPreviewTransform(0, 0, zoom.value, false);
+    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, false);
   };
 
   const handleWheel = (event) => {

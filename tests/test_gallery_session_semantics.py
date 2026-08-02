@@ -65,6 +65,15 @@ def test_gallery_sessions_do_not_persist_overwrite_permission(
     )
 
 
+def test_lambda_basic_linear_gallery_session_opts_out_of_comparisons() -> None:
+    _, session = _session("lambda_basic_linear")
+
+    plan = session["config"]["linearComparisonPlan"]
+    assert plan["mode"] == "none"
+    assert plan["edges"] == []
+    assert _request(session)["comparisons"] == []
+
+
 def _resource_bytes(
     session: dict[str, object], ref: dict[str, object]
 ) -> bytes:
@@ -405,7 +414,7 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles() -> None:
         assert set(expected_labels) <= texts, location
         assert set(expected_subtitles) <= texts, location
         assert rule_captions <= texts, location
-        assert {"#dddddd", *rule_colors} <= fills, location
+        assert {"#54bcf8", *rule_colors} <= fills, location
         assert "livZ" in texts, location
         assert len(definitions) == 5, location
         for definition in definitions:
@@ -583,7 +592,15 @@ def test_gallery_sessions_keep_precomputed_comparisons_and_orthogroups(
 
     state = session["orthogroupState"]
     assert isinstance(state, dict)
-    groups = state["groups"]
+    assert "groups" not in state
+
+    editor_state = session["editorState"]
+    assert isinstance(editor_state, dict)
+    catalog = editor_state["featureCatalog"]
+    assert isinstance(catalog, dict)
+    items = catalog["items"]
+    assert isinstance(items, list) and len(items) == 1
+    groups = items[0]["orthogroups"]
     assert isinstance(groups, list)
     assert len(groups) == orthogroup_count
     assert all(group.get("members") for group in groups)

@@ -170,6 +170,15 @@ def build_interactive_svg_context(
         orthogroups=orthogroup_payload,
         annotations=annotation_payload,
         sequence_sources=sequence_sources,
+        record_keys=tuple(
+            str(
+                (getattr(record, "annotations", {}) or {}).get(
+                    "gbdraw_record_key",
+                    f"record-{record_index + 1}",
+                )
+            )
+            for record_index, record in enumerate(record_list)
+        ),
     )
 
 

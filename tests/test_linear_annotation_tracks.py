@@ -171,6 +171,76 @@ def test_linear_annotation_overlay_rejects_annotation_anchor() -> None:
         normalize_linear_track_slots([anchor, annotation])
 
 
+def test_linear_annotation_overlay_rejects_spacer_anchor() -> None:
+    spacer = parse_linear_track_slot("space:spacer@side=above,h=12px")
+    annotation = LinearTrackSlot(
+        "overlay_notes",
+        "annotations",
+        side="overlay",
+        z=1,
+        params={
+            "set_id": "overlay",
+            "anchor_slot": "space",
+            "layer": "foreground",
+        },
+    )
+
+    with pytest.raises(ValueError, match="anchor 'space' has no drawable band"):
+        normalize_linear_track_slots([spacer, annotation])
+
+
+def test_linear_annotation_cover_anchor_expands_overlay_to_feature_band() -> None:
+    record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    record.features = [
+        SeqFeature(FeatureLocation(120, 250, strand=1), type="CDS")
+    ]
+    annotation_options = AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "regions",
+                (
+                    RegionAnnotation(
+                        "band",
+                        CoordinateSpan(None, 100, 300),
+                        mark="band",
+                    ),
+                ),
+            ),
+        )
+    )
+
+    def band_height(cover_anchor: bool) -> float:
+        drawing = assemble_linear_diagram_from_records(
+            [record],
+            cfg=apply_config_overrides(None, None),
+            legend="none",
+            selected_features_set=["CDS"],
+            linear_track_slots=[
+                "features:features@side=overlay",
+                (
+                    "regions:annotations@side=overlay,h=14px,set_id=regions,"
+                    "anchor_slot=features,layer=foreground,padding_px=0,z=1,"
+                    f"cover_anchor={'true' if cover_anchor else 'false'}"
+                ),
+            ],
+            linear_track_axis_index=0,
+            annotation_options=annotation_options,
+        )
+        root = ElementTree.fromstring(drawing.tostring())
+        group = next(
+            element
+            for element in root.iter()
+            if element.attrib.get("data-gbdraw-annotation-id") == "band"
+        )
+        rect = next(element for element in group if element.tag.endswith("rect"))
+        return float(rect.attrib["height"])
+
+    uncovered_height = band_height(False)
+    covered_height = band_height(True)
+    assert uncovered_height == pytest.approx(11.76)
+    assert covered_height > uncovered_height
+
+
 def test_linear_annotation_clip_policy_creates_clip_path() -> None:
     record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
     annotations = (

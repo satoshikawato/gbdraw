@@ -17,7 +17,67 @@ If you are working from a source checkout, the same record is available as `test
 
 ## 2. Override feature shapes
 
-`--feature_shape TYPE=SHAPE` is repeatable. Supported shapes are `arrow` and `rectangle`.
+`--feature_shape TYPE=SHAPE` is repeatable and accepts three rendering values:
+
+| Value | Result |
+| --- | --- |
+| `arrow` | Directional glyph using the global arrow geometry settings |
+| `rectangle` | Nondirectional foreground block |
+| `underlay` | Full-band highlight behind foreground features |
+
+The default assignments do not change: CDS and RNA feature types use `arrow`,
+`repeat_region` uses `underlay`, and other feature types use `rectangle`.
+
+The two examples below are derived from the canonical sessions used by the
+Interactive SVG Gallery. Both use automatic head length. The Circular variant
+sets the global shaft-width ratio to `0.75`, while the Linear variant uses
+`0.5`. Auto starts from the mode-specific head length and extends it by the
+thickness removed from the shaft. The Gallery resources and all other diagram
+settings remain unchanged.
+
+From a source checkout, reproduce both figures with:
+
+```bash
+python tools/reproduce_examples.py \
+  --output-root . \
+  --figure tutorial_9_arrow_geometry_circular \
+  --figure tutorial_9_arrow_geometry_linear
+```
+
+The Circular figure starts from the Gallery's `HmmtDNA_ATskew` session. CDS,
+rRNA, and tRNA features retain the `arrow` rendering and share the
+three-quarter-width setting; short tRNAs remain triangles. The GC content, GC
+skew, and AT skew tracks, tick layout, labels, center definition, and legend
+remain unchanged.
+
+![Human mitochondrial genome with narrow-shaft CDS and RNA arrows, GC content, GC skew, AT skew, labels, and a left legend](../../examples/tutorial-9-arrow-geometry-circular.svg)
+
+The Linear figure starts from the Gallery's five-record aminoglycoside BGC
+session. It retains the curved protein-similarity matches, antiSMASH category
+colors, rotated first-record gene labels, record definitions, ruler, title, and
+bottom legend. Only the global arrow geometry changes. Auto lengthens the heads
+to match the half-width shafts.
+
+![Five aminoglycoside biosynthetic gene clusters with narrow-shaft arrows, curved similarity matches, gene labels, a ruler, and a bottom legend](../../examples/tutorial-9-arrow-geometry-linear.svg)
+
+For a regular CLI command, use `--arrow_head_length_ratio auto` with
+`--arrow_shaft_width_ratio 0.75` for the Circular example or `0.5` for the
+Linear example. Geometry settings do not change colors, labels, tracks,
+comparisons, or feature visibility.
+
+A numeric head ratio must be positive and finite. The arrow shaft ratio must be
+in `(0, 1]`; `1` preserves the legacy full-width outline and smaller values
+produce a centered, narrower shaft for every feature type rendered as `arrow`.
+With Auto head length, narrowing the shaft also lengthens the head by the
+thickness removed from the shaft. Numeric head ratios remain explicit and do
+not depend on shaft width.
+
+A short arrow becomes a triangle when the terminal block has no positive-length
+shaft. Multipart arrows draw nonterminal blocks at shaft width and keep their
+connectors on the feature center line.
+
+To compare the foreground shapes with rectangles, render every selected type as
+a block:
 
 ```bash
 gbdraw circular \
@@ -35,6 +95,11 @@ gbdraw circular \
 Shape overrides apply by feature type. In this result, the CDS, rRNA, and tRNA features are all rectangles, while their colors continue to distinguish the feature types. Shape overrides do not change colors, labels, or feature selection by themselves.
 
 ![Human mitochondrial genome with rectangular CDS, rRNA, and tRNA features](../../examples/tutorial-9-feature-shapes.svg)
+
+In the web app or local GUI, open **Features**, choose **Arrow** for each feature
+type that should be directional, then set **Head Length Ratio** and **Shaft
+Width Ratio** in **Arrow Geometry**. Both geometry values apply globally and
+are retained even when no feature type currently uses `arrow`.
 
 ## 3. Create a feature visibility table
 

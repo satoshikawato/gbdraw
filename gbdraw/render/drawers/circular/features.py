@@ -11,17 +11,25 @@ from svgwrite.path import Path
 from ....features.objects import FeatureObject
 from ....features.ids import compute_feature_object_hash
 from ....layout.common import calculate_cds_ratio
+from ....layout.circular import calculate_feature_position_factors_circular
 from ....configurators import FeatureDrawingConfigurator
 from ....svg.ids import instance_svg_id
 from ....svg.circular_features import (
-    generate_circular_arrowhead_path,
-    generate_circular_arrowhead_path_with_radii,
+    generate_circular_arrow_path,
+    generate_circular_arrow_path_with_radii,
     generate_circular_intron_path,
     generate_circular_intron_path_with_radii,
+    generate_circular_narrow_arrow_path,
+    generate_circular_narrow_arrow_path_with_radii,
+    generate_circular_narrow_arrow_shaft_path,
+    generate_circular_narrow_arrow_shaft_path_with_radii,
     generate_circular_rectangle_path,
     generate_circular_rectangle_path_with_radii,
 )
-from ....svg.arrows import calculate_circular_arrow_length
+from ....svg.arrows import (
+    calculate_circular_arrow_length,
+    resolve_circular_arrow_head_length_bp,
+)
 
 if TYPE_CHECKING:
     from ....layout.circular import CircularFeatureLayout
@@ -42,6 +50,13 @@ class FeatureDrawer:
         self.default_stroke_width: float = feature_config.block_stroke_width
         self.intron_stroke_color: str = feature_config.line_stroke_color
         self.intron_stroke_width: float = feature_config.line_stroke_width
+        arrow_geometry = getattr(feature_config, "arrow_geometry", None)
+        self.arrow_head_length_ratio = getattr(
+            arrow_geometry, "head_length_ratio", "auto"
+        )
+        self.arrow_shaft_width_ratio = float(
+            getattr(arrow_geometry, "shaft_width_ratio", 1.0)
+        )
         self.feature_layout = feature_layout
 
     @staticmethod
@@ -57,6 +72,7 @@ class FeatureDrawer:
         stroke_width_specified: Optional[float] = None,
         feature_data_id: Optional[str] = None,
         dom_element_id: Optional[str] = None,
+        rendered_feature_id: Optional[str] = None,
         feature_part: Optional[str] = None,
     ) -> None:
         stroke_color: str = (
@@ -78,6 +94,10 @@ class FeatureDrawer:
         if feature_data_id:
             path.attribs["data-gbdraw-feature-id"] = feature_data_id
             path.attribs["id"] = dom_element_id or feature_data_id
+            if rendered_feature_id:
+                path.attribs["data-gbdraw-rendered-feature-id"] = (
+                    rendered_feature_id
+                )
             if feature_part:
                 path.attribs["data-gbdraw-feature-part"] = feature_part
         group.add(path)
@@ -128,18 +148,24 @@ class FeatureDrawer:
             strandedness,
             track_id,
             feature_layout=self.feature_layout,
+            head_length_ratio=self.arrow_head_length_ratio,
+            shaft_width_ratio=self.arrow_shaft_width_ratio,
         ).generate_circular_gene_path(feature_object)
 
         # Get feature identifier for instant preview support
-        feature_data_id = self.get_feature_data_id(feature_object)
-        feature_dom_id = feature_data_id
+        stable_feature_id = self.get_feature_data_id(feature_object)
+        feature_data_id = stable_feature_id
+        rendered_feature_id = (
+            instance_svg_id(feature_data_id, feature_instance_id)
+            if feature_data_id and feature_instance_id is not None
+            else None
+        )
+        feature_dom_id = rendered_feature_id or feature_data_id
         if feature_dom_id and feature_dom_namespace:
             feature_dom_id = instance_svg_id(
                 feature_dom_id,
                 f"slot_{feature_dom_namespace}",
             )
-        if feature_dom_id and feature_instance_id:
-            feature_dom_id = instance_svg_id(feature_dom_id, feature_instance_id)
 
         # Keep intron lines behind blocks for the same feature by drawing lines first.
         ordered_types: tuple[str, ...] = ("line", "block", "label")
@@ -169,6 +195,7 @@ class FeatureDrawer:
                         fill_color=feature_object.color,
                         feature_data_id=feature_data_id,
                         dom_element_id=dom_element_id,
+                        rendered_feature_id=rendered_feature_id,
                         feature_part="block",
                     )
                 elif path_type == "line":
@@ -182,6 +209,7 @@ class FeatureDrawer:
                         stroke_width_specified=self.intron_stroke_width,
                         feature_data_id=feature_data_id,
                         dom_element_id=dom_element_id,
+                        rendered_feature_id=rendered_feature_id,
                         feature_part="connector",
                     )
                 elif path_type == "label":
@@ -206,6 +234,8 @@ class FeaturePathGenerator:
         strandedness: bool,
         track_id: int = 0,
         feature_layout: CircularFeatureLayout | None = None,
+        head_length_ratio: str | float = "auto",
+        shaft_width_ratio: float = 1.0,
     ) -> None:
         """
         Initialize the path generator.
@@ -229,10 +259,165 @@ class FeaturePathGenerator:
         self.strandedness = strandedness
         self.track_id = track_id
         self.feature_layout = feature_layout
+        self.head_length_ratio = head_length_ratio
+        self.shaft_width_ratio = float(shaft_width_ratio)
         self.set_arrow_length()
 
     def set_arrow_length(self) -> None:
         self.arrow_length = calculate_circular_arrow_length(self.total_length)
+
+    def _feature_radii(self, strand: str, lane) -> tuple[float, float, float]:
+        if lane is not None:
+            return (
+                float(lane.inner_px),
+                float(lane.center_px),
+                float(lane.outer_px),
+            )
+        factors = calculate_feature_position_factors_circular(
+            self.total_length,
+            strand,
+            self.track_ratio,
+            self.cds_ratio,
+            self.offset,
+            self.track_type,
+            self.strandedness,
+            self.track_id,
+        )
+        return (
+            self.radius * float(factors[0]),
+            self.radius * float(factors[1]),
+            self.radius * float(factors[2]),
+        )
+
+    def _resolved_arrow_length(self, strand: str, lane) -> float:
+        inner_radius_px, center_radius_px, outer_radius_px = self._feature_radii(
+            strand, lane
+        )
+        return resolve_circular_arrow_head_length_bp(
+            self.head_length_ratio,
+            abs(outer_radius_px - inner_radius_px),
+            self.arrow_length,
+            self.total_length,
+            center_radius_px,
+            self.shaft_width_ratio,
+        )
+
+    def _generate_terminal_block(
+        self,
+        coord_dict: Dict[str, Union[str, int]],
+        glyph_kind: str,
+        lane,
+    ) -> list[str]:
+        strand = str(coord_dict["coord_strand"])
+        if glyph_kind != "arrow" or strand not in {
+            "positive",
+            "negative",
+        }:
+            return self._generate_rectangle(coord_dict, lane)
+
+        head_length_bp = self._resolved_arrow_length(strand, lane)
+        if self.shaft_width_ratio == 1.0:
+            if lane is None:
+                return generate_circular_arrow_path(
+                    self.radius,
+                    coord_dict,
+                    self.total_length,
+                    head_length_bp,
+                    self.track_ratio,
+                    self.cds_ratio,
+                    self.offset,
+                    self.track_type,
+                    self.strandedness,
+                    self.track_id,
+                )
+            return generate_circular_arrow_path_with_radii(
+                coord_dict,
+                self.total_length,
+                head_length_bp,
+                lane.inner_px,
+                lane.center_px,
+                lane.outer_px,
+            )
+
+        if lane is None:
+            return generate_circular_narrow_arrow_path(
+                self.radius,
+                coord_dict,
+                self.total_length,
+                head_length_bp,
+                self.track_ratio,
+                self.cds_ratio,
+                self.offset,
+                self.track_type,
+                self.strandedness,
+                self.shaft_width_ratio,
+                self.track_id,
+            )
+        return generate_circular_narrow_arrow_path_with_radii(
+            coord_dict,
+            self.total_length,
+            head_length_bp,
+            lane.inner_px,
+            lane.center_px,
+            lane.outer_px,
+            self.shaft_width_ratio,
+        )
+
+    def _generate_rectangle(
+        self,
+        coord_dict: Dict[str, Union[str, int]],
+        lane,
+    ) -> list[str]:
+        coord_for_draw = coord_dict
+        if str(coord_dict["coord_strand"]) not in {"positive", "negative"}:
+            coord_for_draw = dict(coord_dict)
+            coord_for_draw["coord_strand"] = "positive"
+        if lane is None:
+            return generate_circular_rectangle_path(
+                self.radius,
+                coord_for_draw,
+                self.total_length,
+                self.track_ratio,
+                self.cds_ratio,
+                self.offset,
+                self.track_type,
+                self.strandedness,
+                self.track_id,
+            )
+        return generate_circular_rectangle_path_with_radii(
+            coord_for_draw,
+            self.total_length,
+            lane.inner_px,
+            lane.center_px,
+            lane.outer_px,
+        )
+
+    def _generate_narrow_arrow_shaft(
+        self,
+        coord_dict: Dict[str, Union[str, int]],
+        lane,
+    ) -> list[str]:
+        if lane is None:
+            return generate_circular_narrow_arrow_shaft_path(
+                self.radius,
+                coord_dict,
+                self.total_length,
+                self.track_ratio,
+                self.cds_ratio,
+                self.offset,
+                self.track_type,
+                self.strandedness,
+                self.shaft_width_ratio,
+                self.track_id,
+            )
+        return generate_circular_narrow_arrow_shaft_path_with_radii(
+            coord_dict,
+            self.total_length,
+            lane.inner_px,
+            lane.center_px,
+            lane.outer_px,
+            self.shaft_width_ratio,
+        )
 
     def _coalesce_origin_spanning_block(self, feature_object: FeatureObject) -> Optional[Dict[str, Union[str, int]]]:
         """
@@ -285,55 +470,14 @@ class FeaturePathGenerator:
         merged_coord = self._coalesce_origin_spanning_block(feature_object)
         if merged_coord is not None:
             merged_strand = str(merged_coord["coord_strand"])
-            merged_coord_for_draw = merged_coord
+            glyph_kind = str(getattr(feature_object, "glyph_kind", "rectangle"))
             if merged_strand not in {"positive", "negative"}:
-                merged_coord_for_draw = dict(merged_coord)
-                merged_coord_for_draw["coord_strand"] = "positive"
-            if feature_object.is_directional and merged_strand in {"positive", "negative"}:
-                if lane is None:
-                    merged_path = generate_circular_arrowhead_path(
-                        self.radius,
-                        merged_coord_for_draw,
-                        self.total_length,
-                        self.arrow_length,
-                        self.track_ratio,
-                        self.cds_ratio,
-                        self.offset,
-                        self.track_type,
-                        self.strandedness,
-                        self.track_id,
-                    )
-                else:
-                    merged_path = generate_circular_arrowhead_path_with_radii(
-                        merged_coord_for_draw,
-                        self.total_length,
-                        self.arrow_length,
-                        lane.inner_px,
-                        lane.center_px,
-                        lane.outer_px,
-                    )
-            else:
-                # Fallback to rectangle for undefined strand to avoid arrow path errors.
-                if lane is None:
-                    merged_path = generate_circular_rectangle_path(
-                        self.radius,
-                        merged_coord_for_draw,
-                        self.total_length,
-                        self.track_ratio,
-                        self.cds_ratio,
-                        self.offset,
-                        self.track_type,
-                        self.strandedness,
-                        self.track_id,
-                    )
-                else:
-                    merged_path = generate_circular_rectangle_path_with_radii(
-                        merged_coord_for_draw,
-                        self.total_length,
-                        lane.inner_px,
-                        lane.center_px,
-                        lane.outer_px,
-                    )
+                glyph_kind = "rectangle"
+            merged_path = self._generate_terminal_block(
+                merged_coord,
+                glyph_kind,
+                lane,
+            )
             return [merged_path]
 
         coords = feature_object.location
@@ -366,50 +510,20 @@ class FeaturePathGenerator:
                         lane.center_px,
                     )
             elif coord_type == "block":
-                if coord.is_last and feature_object.is_directional is True:
-                    if lane is None:
-                        coord_path = generate_circular_arrowhead_path(
-                            self.radius,
-                            coord_dict,
-                            self.total_length,
-                            self.arrow_length,
-                            self.track_ratio,
-                            self.cds_ratio,
-                            self.offset,
-                            self.track_type,
-                            self.strandedness,
-                            self.track_id,
-                        )
-                    else:
-                        coord_path = generate_circular_arrowhead_path_with_radii(
-                            coord_dict,
-                            self.total_length,
-                            self.arrow_length,
-                            lane.inner_px,
-                            lane.center_px,
-                            lane.outer_px,
-                        )
+                glyph_kind = str(getattr(feature_object, "glyph_kind", "rectangle"))
+                coord_strand = str(coord_dict["coord_strand"])
+                if coord_strand not in {"positive", "negative"}:
+                    coord_path = self._generate_rectangle(coord_dict, lane)
+                elif coord.is_last and glyph_kind == "arrow":
+                    coord_path = self._generate_terminal_block(
+                        coord_dict,
+                        glyph_kind,
+                        lane,
+                    )
+                elif glyph_kind == "arrow" and self.shaft_width_ratio < 1.0:
+                    coord_path = self._generate_narrow_arrow_shaft(coord_dict, lane)
                 else:
-                    if lane is None:
-                        coord_path = generate_circular_rectangle_path(
-                            self.radius,
-                            coord_dict,
-                            self.total_length,
-                            self.track_ratio,
-                            self.cds_ratio,
-                            self.offset,
-                            self.track_type,
-                            self.strandedness,
-                            self.track_id,
-                        )
-                    else:
-                        coord_path = generate_circular_rectangle_path_with_radii(
-                            coord_dict,
-                            self.total_length,
-                            lane.inner_px,
-                            lane.center_px,
-                            lane.outer_px,
-                        )
+                    coord_path = self._generate_rectangle(coord_dict, lane)
             else:
                 coord_path = []
             coordinates_paths.append(coord_path)

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 import pandas as pd
 import pytest
 
 from gbdraw.api import (
+    CircularBatchRequest,
     CircularDiagramRequest,
     InMemoryRecordSource,
     LinearDiagramOptions,
@@ -246,3 +248,143 @@ def test_embedded_web_request_preserves_in_memory_comparison_metadata(
     assert 'data-group-kind="orthogroup"' in svg
     assert 'data-group-scope="cross_record"' in svg
     assert 'data-orthogroup-id="og-web"' in svg
+
+
+@pytest.mark.parametrize(
+    ("formats", "output_prefix"),
+    [
+        (("svg",), "catalog-result"),
+        (("interactive_svg",), "catalog-result.interactive"),
+    ],
+)
+def test_web_request_returns_one_base_svg_and_compact_catalog(
+    tmp_path,
+    formats,
+    output_prefix,
+) -> None:
+    record = SeqRecord(
+        Seq("ATGAAATAAGGG"),
+        id="catalog-record",
+        annotations={"molecule_type": "DNA"},
+        features=[
+            SeqFeature(
+                FeatureLocation(0, 12, strand=1),
+                type="source",
+                qualifiers={"organism": ["Catalog organism"]},
+            ),
+            SeqFeature(
+                FeatureLocation(0, 9, strand=1),
+                type="CDS",
+                qualifiers={
+                    "locus_tag": ["CATALOG_001"],
+                    "product": ["catalog protein"],
+                    "translation": ["MK"],
+                },
+            ),
+        ],
+    )
+    document = build_session_document(
+        CircularDiagramRequest(
+            records=(
+                RecordInput(
+                    source=InMemoryRecordSource(record),
+                    record_key="catalog-record-key",
+                ),
+            ),
+            output=RenderOutputRequest(
+                output_prefix=output_prefix,
+                formats=formats,
+            ),
+        )
+    ).to_dict()
+
+    response = render_embedded_canonical_web_request(
+        document["renderRequest"],
+        resources=document["resources"],
+        workspace=tmp_path / f"catalog-{'-'.join(formats)}",
+    )
+
+    assert [result["name"] for result in response["results"]] == [
+        f"{output_prefix}.svg"
+    ]
+    catalog = response["metadata"]["featureCatalog"]
+    assert catalog["schema"] == 3
+    assert len(catalog["items"]) == 1
+    item = catalog["items"][0]
+    assert item["resultIndex"] == 0
+    assert item["resultName"] == f"{output_prefix}.svg"
+    assert item["recordKeys"] == ["catalog-record-key"]
+    assert item["comparisonMatches"] == []
+    assert "sequenceSources" not in item
+
+    assert [feature["type"] for feature in item["biologicalFeatures"]] == ["CDS"]
+    biological = item["biologicalFeatures"][0]
+    assert biological["recordKey"] == "catalog-record-key"
+    assert biological["amino_acid_sequence"] == "MK"
+    assert "translation" not in biological["qualifiers"]
+
+    assert len(item["features"]) == 1
+    rendered = item["features"][0]
+    assert rendered["recordKey"] == biological["recordKey"]
+    assert (
+        rendered["biologicalFeatureId"]
+        == biological["biologicalFeatureId"]
+    )
+    assert rendered["svgId"]
+    assert "qualifiers" not in rendered
+    assert "nucleotide_sequence" not in rendered
+    assert "amino_acid_sequence" not in rendered
+
+
+def test_web_circular_batch_has_one_catalog_item_per_logical_result(tmp_path) -> None:
+    records = []
+    for index in range(2):
+        record = SeqRecord(
+            Seq("ATGAAATAA"),
+            id=f"batch-catalog-{index + 1}",
+            annotations={"molecule_type": "DNA"},
+            features=[
+                SeqFeature(
+                    FeatureLocation(0, 9, strand=1),
+                    type="CDS",
+                    qualifiers={"locus_tag": [f"BATCH_{index + 1:03d}"]},
+                )
+            ],
+        )
+        records.append(
+            RecordInput(
+                source=InMemoryRecordSource(record),
+                record_key=f"batch-record-key-{index + 1}",
+            )
+        )
+    document = build_session_document(
+        CircularBatchRequest(
+            records=tuple(records),
+            outputs=tuple(
+                RenderOutputRequest(
+                    output_prefix=f"batch-catalog-{index + 1}",
+                    formats=("interactive_svg",),
+                )
+                for index in range(2)
+            ),
+        )
+    ).to_dict()
+
+    response = render_embedded_canonical_web_request(
+        document["renderRequest"],
+        resources=document["resources"],
+        workspace=tmp_path / "batch-catalog-workspace",
+    )
+
+    assert [result["name"] for result in response["results"]] == [
+        "batch-catalog-1.svg",
+        "batch-catalog-2.svg",
+    ]
+    items = response["metadata"]["featureCatalog"]["items"]
+    assert [
+        (item["resultIndex"], item["resultName"], item["recordKeys"])
+        for item in items
+    ] == [
+        (0, "batch-catalog-1.svg", ["batch-record-key-1"]),
+        (1, "batch-catalog-2.svg", ["batch-record-key-2"]),
+    ]

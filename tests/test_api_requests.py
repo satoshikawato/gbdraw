@@ -317,6 +317,18 @@ def test_mode_specific_options_accept_owned_config_override_paths(
 
 
 @pytest.mark.parametrize(
+    "options_type",
+    [CircularDiagramOptions, LinearDiagramOptions],
+)
+def test_both_modes_accept_shared_scale_visibility_override(options_type) -> None:
+    options = options_type(
+        config_overrides={"objects.scale.show": False},
+    )
+
+    assert options.config_overrides["objects.scale.show"] is False
+
+
+@pytest.mark.parametrize(
     ("options_type", "path", "value", "other_mode"),
     [
         (

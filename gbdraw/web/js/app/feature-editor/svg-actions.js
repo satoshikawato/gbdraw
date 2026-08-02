@@ -7,6 +7,7 @@ import {
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
 import {
   FEATURE_ID_ATTRIBUTE,
@@ -349,7 +350,7 @@ export const createFeatureSvgActions = ({
 
   const buildClickedFeaturePayload = (feat, featureElement = null, renderedSvgId = '') => {
     const defaultLabel = getFeatureCaption(feat);
-    const existingOverride = featureColorOverrides[feat.id];
+    const existingOverride = getFeatureOverride(featureColorOverrides, feat);
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
     const locationText = buildFeatureLocation(feat);
     const locationParts = Array.isArray(feat.location_parts) ? feat.location_parts : [];
@@ -989,9 +990,7 @@ export const createFeatureSvgActions = ({
         const modifierSelection = Boolean(e.ctrlKey || e.metaKey);
         if (modifierSelection || e.shiftKey) {
           if (selectableFeatureEl) {
-            const selectionId = normalizeFeatureIdentity(
-              selectableFeatureEl.getAttribute(FEATURE_ID_ATTRIBUTE)
-            );
+            const selectionId = getFeatureIdentity(selectableFeatureEl);
             e.preventDefault();
             e.stopPropagation();
             hideHoverSummary();
@@ -1026,7 +1025,7 @@ export const createFeatureSvgActions = ({
           if (!svgId) return;
           e.stopPropagation();
           hideHoverSummary();
-          featureSelection?.markPlainFeatureClick?.(featureEl.getAttribute(FEATURE_ID_ATTRIBUTE) || svgId);
+          featureSelection?.markPlainFeatureClick?.(svgId);
           const feat = handlerState.featureLookup.get(svgId);
           if (feat) {
             openFeatureEditorForFeature(feat, e);

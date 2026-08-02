@@ -81,6 +81,8 @@ usage: gbdraw circular [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--overwrite] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS]
               [-n NT] [-w WINDOW] [-s STEP] [--species SPECIES]
               [--strain STRAIN] [-k FEATURES] [--feature_shape TYPE=SHAPE]
+              [--arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO]
+              [--arrow_shaft_width_ratio ARROW_SHAFT_WIDTH_RATIO]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -139,7 +141,7 @@ usage: gbdraw circular [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--outer_label_y_radius_offset OUTER_LABEL_Y_RADIUS_OFFSET]
               [--inner_label_x_radius_offset INNER_LABEL_X_RADIUS_OFFSET]
               [--inner_label_y_radius_offset INNER_LABEL_Y_RADIUS_OFFSET]
-              [--scale_interval SCALE_INTERVAL]
+              [--scale_interval SCALE_INTERVAL] [--hide_scale]
               [--tick_label_font_size TICK_LABEL_FONT_SIZE]
               [--circular_label_spacing CIRCULAR_LABEL_SPACING]
               [--feature_width FEATURE_WIDTH]
@@ -200,6 +202,12 @@ options:
   --feature_shape TYPE=SHAPE
                         Feature rendering override (repeatable): TYPE=SHAPE
                         where SHAPE is arrow, rectangle, or underlay.
+  --arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO
+                        Arrow head length divided by full feature thickness:
+                        auto or a positive finite number (default: auto).
+  --arrow_shaft_width_ratio ARROW_SHAFT_WIDTH_RATIO
+                        Arrow shaft thickness divided by full head thickness:
+                        a finite number in (0, 1] (default: 1.0).
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -402,6 +410,8 @@ options:
   --scale_interval SCALE_INTERVAL
                         Manual scale interval for circular mode (in bp).
                         Overrides automatic calculation.
+  --hide_scale          Hide the primary genome-coordinate scale while
+                        retaining the circular axis.
   --tick_label_font_size TICK_LABEL_FONT_SIZE
                         Tick label font size for circular mode (optional;
                         float; default: 14 (pt)).
@@ -493,6 +503,14 @@ options:
 
 <!-- END GENERATED CIRCULAR HELP -->
 
+`--hide_scale` omits primary coordinate ticks and their labels from an
+implicit Circular layout. The circular genome axis remains visible, and
+GC-content and Depth axes and ticks are unaffected. User-explicit
+`--circular_track_order`, `--circular_track_slot`, and
+`--circular_track_table` inputs are authoritative. An enabled `ticks` slot
+remains visible and causes a warning when combined with `--hide_scale`; omit or
+disable that slot to hide the scale.
+
 For fresh Circular input, output names are derived from record IDs when
 `--output` is omitted. An ID used this way must be one filename component:
 directory separators, absolute paths, `.` or `..`, ASCII control characters,
@@ -508,11 +526,35 @@ For `interactive_svg`, add one `--conservation_fasta` value per `--conservation_
 
 `--feature_shape TYPE=SHAPE` accepts three rendering policies and may be repeated:
 
-- `arrow` draws a strand-aware foreground glyph.
+- `arrow` draws a strand-aware glyph whose head length and shaft width are set globally.
 - `rectangle` draws a non-directional foreground glyph.
 - `underlay` removes the feature from overlap lanes and feature labels, then highlights the full feature-track band behind foreground features.
 
 Fresh configurations render `CDS`, `rRNA`, `tRNA`, `tmRNA`, `ncRNA`, and `misc_RNA` as arrows, `repeat_region` as an underlay, and other feature types as rectangles. Restore the earlier repeat appearance with `--feature_shape repeat_region=rectangle`. Underlays keep the feature's resolved palette or specific-rule color and remain in the feature legend, interactive metadata, and protein-matching inputs.
+
+Use `--arrow_head_length_ratio auto` for a head that starts from the existing
+mode-specific length and grows by the thickness removed from a narrowed shaft.
+A positive finite ratio sets an explicit head length relative to the full
+rendered feature thickness and does not depend on shaft width.
+`--arrow_shaft_width_ratio` accepts a finite value in `(0, 1]` and applies to
+every feature type rendered as `arrow`. Its default is `1.0`, which preserves
+the full-width legacy outline; values below `1.0` produce a narrower centered
+shaft and visible head shoulders. An arrow whose head uses the entire terminal
+block is drawn as a triangle. Multipart arrows use the configured shaft width
+for nonterminal blocks and keep connector lines centered.
+
+For example, this draws CDS features with a head as long as the full rendered
+feature thickness and a half-width shaft:
+
+```bash
+gbdraw circular \
+  --gbk genome.gb \
+  -k CDS \
+  --feature_shape CDS=arrow \
+  --arrow_head_length_ratio 1 \
+  --arrow_shaft_width_ratio 0.5 \
+  -o narrow-arrow-example
+```
 
 A rendering assignment does not make a feature visible. The selected feature list, specific color rules, and feature visibility table retain their existing precedence; `off` still hides the feature, while a matching `show` or specific color rule can reveal an otherwise unselected type and use its assigned rendering.
 
@@ -835,6 +877,8 @@ usage: gbdraw linear [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--alignment_length ALIGNMENT_LENGTH]
               [--pairwise_match_style {ribbon,curve}] [-k FEATURES]
               [--feature_shape TYPE=SHAPE]
+              [--arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO]
+              [--arrow_shaft_width_ratio ARROW_SHAFT_WIDTH_RATIO]
               [--block_stroke_color BLOCK_STROKE_COLOR]
               [--block_stroke_width BLOCK_STROKE_WIDTH]
               [--axis_stroke_color AXIS_STROKE_COLOR]
@@ -867,7 +911,7 @@ usage: gbdraw linear [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--feature_visibility_table FEATURE_TABLE]
               [--annotation_table ANNOTATION_TABLE]
               [--feature_height FEATURE_HEIGHT] [--gc_height GC_HEIGHT]
-              [--comparison_height COMPARISON_HEIGHT]
+              [--comparison_height COMPARISON_HEIGHT] [--hide_scale]
               [--scale_style {bar,ruler}]
               [--scale_stroke_color SCALE_STROKE_COLOR]
               [--scale_stroke_width SCALE_STROKE_WIDTH]
@@ -1077,6 +1121,12 @@ options:
   --feature_shape TYPE=SHAPE
                         Feature rendering override (repeatable): TYPE=SHAPE
                         where SHAPE is arrow, rectangle, or underlay.
+  --arrow_head_length_ratio ARROW_HEAD_LENGTH_RATIO
+                        Arrow head length divided by full feature thickness:
+                        auto or a positive finite number (default: auto).
+  --arrow_shaft_width_ratio ARROW_SHAFT_WIDTH_RATIO
+                        Arrow shaft thickness divided by full head thickness:
+                        a finite number in (0, 1] (default: 1.0).
   --block_stroke_color BLOCK_STROKE_COLOR
                         Block stroke color (str; default: "gray")
   --block_stroke_width BLOCK_STROKE_WIDTH
@@ -1164,8 +1214,8 @@ options:
   --linear_track_axis_index LINEAR_TRACK_AXIS_INDEX
                         Axis boundary index for linear custom track slots.
   --ruler_on_axis       Use each record axis as the ruler in linear mode.
-                        Effective only with --scale_style ruler and
-                        --track_layout above|below.
+                        Effective only with a visible scale, --scale_style
+                        ruler, and --track_layout above|below.
   -f, --format FORMAT   Comma-separated list of output file formats (svg,
                         interactive_svg, png, pdf, eps, ps; default: svg;
                         png/pdf/eps/ps require CairoSVG).
@@ -1205,6 +1255,8 @@ options:
   --comparison_height COMPARISON_HEIGHT
                         Comparison block height (optional; float; optional;
                         default: 60 (pixels, 96 dpi))
+  --hide_scale          Hide the coordinate scale while retaining each record
+                        axis (default: False).
   --scale_style {bar,ruler}
                         Style for the length scale (default: "bar"; "bar",
                         "ruler")
@@ -1261,6 +1313,12 @@ options:
 ```
 
 <!-- END GENERATED LINEAR HELP -->
+
+`--hide_scale` omits the bottom bar or ruler and suppresses ruler ticks and
+coordinate labels on record axes without removing those axes or reserving a
+blank scale band. `--ruler_on_axis` is ignored with a warning when the scale is
+hidden. GC-content and Depth axes remain independent, as does the definition
+line controlled by `--hide_length`.
 
 `--resolve_overlaps` assigns overlapping genomic features to additional lanes.
 Linear layout measures those lanes and their labels per record, then repacks

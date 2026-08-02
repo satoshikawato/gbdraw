@@ -25,7 +25,12 @@ const findLegendEntryGroup = (targetGroup, caption) => (
     .find((entry) => entry.getAttribute('data-legend-key') === caption) || null
 );
 
-export const createLegendEntryActions = ({ state, getPyodide, layoutActions }) => {
+export const createLegendEntryActions = ({
+  state,
+  getPyodide,
+  ensurePyodide = null,
+  layoutActions
+}) => {
   const {
     pyodideReady,
     results,
@@ -53,6 +58,9 @@ export const createLegendEntryActions = ({ state, getPyodide, layoutActions }) =
     const shouldCommit = options.commit !== false;
     const shouldReflow = options.reflow !== false;
     console.log(`addLegendEntry called with caption="${caption}", color="${color}"`);
+    if (svgContainer.value && !pyodideReady.value && typeof ensurePyodide === 'function') {
+      await ensurePyodide();
+    }
     if (!svgContainer.value || !pyodideReady.value) {
       console.log(
         `addLegendEntry early return: svgContainer=${!!svgContainer.value}, pyodideReady=${pyodideReady.value}`
@@ -457,6 +465,9 @@ json.dumps({"width": width})
   };
 
   const syncFileLegendEntries = async (intents, { previousFileIntents = [] } = {}) => {
+    if (svgContainer.value && !pyodideReady.value && typeof ensurePyodide === 'function') {
+      await ensurePyodide();
+    }
     if (!svgContainer.value || !pyodideReady.value) {
       return { add: [], update: [], remove: [], unchanged: [] };
     }

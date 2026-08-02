@@ -1,5 +1,6 @@
 import { runFeatureExtraction } from '../services/diagram-generation.js';
 import { cloneJsonValue } from '../services/json-clone.js';
+import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
 
 const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
 const featureExtractionCache = new WeakMap();
@@ -129,7 +130,7 @@ export const readFeatureExtractionData = async ({
   }
 
   const startedAt = getNow();
-  const buffer = await file.arrayBuffer();
+  const buffer = await cloneFileBytesForTransfer(file);
   const requestFiles = [{
     path,
     name: file.name || path.split('/').pop() || 'input.gb',
@@ -139,7 +140,7 @@ export const readFeatureExtractionData = async ({
     requestFiles.push({
       path: fastaPath,
       name: fastaFile.name || fastaPath.split('/').pop() || 'input.fasta',
-      bytes: await fastaFile.arrayBuffer()
+      bytes: await cloneFileBytesForTransfer(fastaFile)
     });
   }
   if (featureVisibilityTablePath && featureVisibilityTsv) {

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import base64
 import gzip
 import io
@@ -15,9 +16,16 @@ from typing import Any
 import cairosvg
 from PIL import Image, ImageDraw, ImageFont
 
+from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 from gbdraw.session_io import load_session, write_session_json
+from gbdraw.web_support.feature_catalog import (
+    FEATURE_CATALOG_SCHEMA,
+    canonical_catalog_sequence_sources,
+    materialize_catalog_nucleotide_sequence,
+    select_feature_catalog_item,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +39,9 @@ GZIP_SESSION_SOURCE_NOTE = (
     "The complete gzip-compressed Session JSON and generated SVG output are stored "
     "with the gallery assets."
 )
+INTERACTIVE_SVG_HARD_LIMIT = 41_943_040
+DECODED_METADATA_HARD_LIMIT = 200_000_000
+DECODED_METADATA_REGRESSION_CEILING = 220_000_000
 
 GENOME_SUFFIXES = (".gb", ".gbk", ".gbff")
 _RENDERED_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
@@ -456,20 +467,114 @@ def _session_feature_sources(session: dict[str, Any]) -> list[str]:
     return sources
 
 
-def _session_result_svg(session: dict[str, Any], example: GallerySessionExample) -> str:
+def _session_result(
+    session: dict[str, Any],
+    example: GallerySessionExample,
+) -> tuple[int, dict[str, Any]]:
     results = session.get("results")
     if not isinstance(results, list):
         raise ValueError(f"{example.session_path} does not contain a results array.")
-    for result in results:
+    for result_index, result in enumerate(results):
         if not isinstance(result, dict):
             continue
         content = result.get("content")
         if isinstance(content, str) and "<svg" in content:
-            return content
+            return result_index, result
     raise ValueError(f"{example.session_path} does not contain a generated SVG result.")
 
 
-def _session_interactive_context(session: dict[str, Any]) -> InteractiveSvgContext:
+def _session_result_svg(session: dict[str, Any], example: GallerySessionExample) -> str:
+    return str(_session_result(session, example)[1]["content"])
+
+
+def _session_feature_catalog(
+    session: dict[str, Any],
+) -> dict[str, object] | None:
+    editor_state = session.get("editorState")
+    catalog = (
+        editor_state.get("featureCatalog")
+        if isinstance(editor_state, dict)
+        else None
+    )
+    if catalog is None:
+        return None
+    if (
+        not isinstance(catalog, dict)
+        or catalog.get("schema") != FEATURE_CATALOG_SCHEMA
+        or not isinstance(catalog.get("items"), list)
+    ):
+        raise ValueError("Session contains an invalid schema-3 feature catalog.")
+    return catalog
+
+
+def _session_catalog_item(
+    session: dict[str, Any],
+    *,
+    result_index: int,
+    result_name: str,
+) -> dict[str, object] | None:
+    catalog = _session_feature_catalog(session)
+    if catalog is None:
+        return None
+    try:
+        return select_feature_catalog_item(
+            catalog,
+            result_index=result_index,
+            result_name=result_name,
+        )
+    except GbdrawError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def _session_interactive_context(
+    session: dict[str, Any],
+    *,
+    result_index: int = 0,
+    result_name: str | None = None,
+) -> InteractiveSvgContext:
+    catalog = _session_feature_catalog(session)
+    if catalog is not None:
+        results = session.get("results")
+        if result_name is None and isinstance(results, list):
+            if 0 <= result_index < len(results) and isinstance(
+                results[result_index], dict
+            ):
+                result_name = str(results[result_index].get("name") or "")
+        item = _session_catalog_item(
+            session,
+            result_index=result_index,
+            result_name=str(result_name or ""),
+        )
+        assert item is not None
+        return InteractiveSvgContext(
+            features=tuple(
+                feature
+                for feature in item["features"]
+                if isinstance(feature, dict)
+            ),
+            biological_features=tuple(
+                feature
+                for feature in item["biologicalFeatures"]
+                if isinstance(feature, dict)
+            ),
+            orthogroups=tuple(
+                group
+                for group in item["orthogroups"]
+                if isinstance(group, dict)
+            ),
+            annotations=tuple(
+                annotation
+                for annotation in item["annotations"]
+                if isinstance(annotation, dict)
+            ),
+            sequence_sources=tuple(
+                source
+                for source in item.get("sequenceSources", [])
+                if isinstance(source, dict)
+            ),
+            record_keys=tuple(str(key) for key in item["recordKeys"]),
+        )
+
     feature_state = session.get("features") if isinstance(session.get("features"), dict) else {}
     editor_state = session.get("editorState") if isinstance(session.get("editorState"), dict) else {}
     orthogroup_state = (
@@ -551,11 +656,179 @@ def _migrate_legacy_multipart_feature_ids(source: str, session: dict[str, Any]) 
     return migrated
 
 
+def _catalog_sequence_sources(
+    item: dict[str, object],
+) -> tuple[dict[str, object], ...]:
+    raw_sources = item.get("sequenceSources")
+    return (
+        tuple(
+            source if isinstance(source, dict) else {}
+            for source in raw_sources
+        )
+        if isinstance(raw_sources, list)
+        else ()
+    )
+
+
+def _catalog_nucleotide_sequence(
+    feature: dict[str, Any],
+    item: dict[str, object],
+    *,
+    canonical_sources: tuple[str | None, ...] | None = None,
+) -> str:
+    sources = _catalog_sequence_sources(item)
+    source_index = feature.get("sequenceSourceIndex")
+    inline_sequence = str(
+        feature.get("nucleotide_sequence")
+        or feature.get("nucleotideSequence")
+        or ""
+    ).strip()
+    if not inline_sequence and type(source_index) is int:
+        record_keys = item.get("recordKeys")
+        record_key = str(feature.get("recordKey") or "").strip()
+        normalized_record_keys = (
+            [str(value or "").strip() for value in record_keys]
+            if isinstance(record_keys, list)
+            else []
+        )
+        try:
+            expected_record_index = normalized_record_keys.index(record_key)
+        except ValueError:
+            expected_record_index = -1
+        source = (
+            sources[source_index]
+            if 0 <= source_index < len(sources)
+            else {}
+        )
+        if (
+            str(source.get("origin") or "").strip()
+            not in {"linear-record", "circular-reference"}
+            or type(source.get("recordIndex")) is not int
+            or source.get("recordIndex") != expected_record_index
+        ):
+            return ""
+    return materialize_catalog_nucleotide_sequence(
+        feature,
+        sources,
+        canonical_sources=canonical_sources,
+    )
+
+
+def _catalog_location_parts(feature: dict[str, Any]) -> list[dict[str, object]]:
+    raw_parts = feature.get("location_parts", feature.get("locationParts"))
+    if isinstance(raw_parts, list) and raw_parts:
+        return [
+            dict(part)
+            for part in raw_parts
+            if isinstance(part, dict)
+        ]
+    start = feature.get("start")
+    end = feature.get("end")
+    if type(start) is not int or type(end) is not int:
+        return []
+    return [
+        {
+            "start": start,
+            "end": end,
+            "strand": feature.get("strand", ""),
+            "display": f"{start + 1}..{end}",
+        }
+    ]
+
+
 def _validate_source_feature_ids(
     example: GallerySessionExample,
     session: dict[str, Any],
     source: str,
 ) -> None:
+    item = None
+    if _session_feature_catalog(session) is not None:
+        result_index, result = _session_result(session, example)
+        item = _session_catalog_item(
+            session,
+            result_index=result_index,
+            result_name=str(result.get("name") or ""),
+        )
+    if item is not None:
+        canonical_sources = tuple(
+            source.get("sequence")
+            if isinstance(source.get("sequence"), str)
+            else None
+            for source in _catalog_sequence_sources(item)
+        )
+        biological_by_key = {
+            (
+                str(feature.get("recordKey") or "").strip(),
+                str(feature.get("biologicalFeatureId") or "").strip(),
+            ): feature
+            for feature in item["biologicalFeatures"]
+            if isinstance(feature, dict)
+        }
+        rendered_by_id = {
+            str(feature.get("svgId") or "").strip(): feature
+            for feature in item["features"]
+            if isinstance(feature, dict)
+            and str(feature.get("svgId") or "").strip()
+        }
+        metadata_ids = set(rendered_by_id)
+        metadata_ids.update(
+            str(feature.get("stableFeatureId") or "").strip()
+            for feature in biological_by_key.values()
+            if str(feature.get("stableFeatureId") or "").strip()
+        )
+        rendered_ids = {
+            _SVG_PART_SUFFIX_RE.sub("", match)
+            for match in _SVG_FEATURE_ID_RE.findall(source)
+        }
+        missing_ids = sorted(
+            rendered_id
+            for rendered_id in rendered_ids
+            if rendered_id not in metadata_ids
+            and _RENDERED_RECORD_SUFFIX_RE.sub("", rendered_id)
+            not in metadata_ids
+        )
+        if missing_ids:
+            preview = ", ".join(missing_ids[:5])
+            raise ValueError(
+                f"{example.id} source SVG contains {len(missing_ids)} "
+                f"feature ID(s) without session metadata: {preview}"
+            )
+
+        problems: list[str] = []
+        for svg_id, rendered in rendered_by_id.items():
+            key = (
+                str(rendered.get("recordKey") or "").strip(),
+                str(rendered.get("biologicalFeatureId") or "").strip(),
+            )
+            biological = biological_by_key.get(key)
+            if biological is None:
+                problems.append(f"{svg_id}: unresolved biological reference")
+                continue
+            location_parts = _catalog_location_parts(biological)
+            qualifiers = biological.get("qualifiers")
+            if (
+                not str(biological.get("record_id") or biological.get("recordId") or "").strip()
+                or not str(biological.get("type") or "").strip()
+                or not isinstance(biological.get("start"), int)
+                or not isinstance(biological.get("end"), int)
+                or not isinstance(location_parts, list)
+                or not location_parts
+                or (qualifiers is not None and not isinstance(qualifiers, dict))
+                or not _catalog_nucleotide_sequence(
+                    biological,
+                    item,
+                    canonical_sources=canonical_sources,
+                )
+            ):
+                problems.append(f"{svg_id}: incomplete popup details")
+        if problems:
+            preview = "; ".join(problems[:5])
+            raise ValueError(
+                f"{example.id} session contains {len(problems)} feature "
+                f"metadata problem(s): {preview}"
+            )
+        return
+
     feature_state = session.get("features") if isinstance(session.get("features"), dict) else {}
     features = feature_state.get("extractedFeatures")
     metadata_ids = {
@@ -638,6 +911,116 @@ def _validate_interactive_orthogroup_payload(
     example: GallerySessionExample,
     payload: dict[str, Any],
 ) -> None:
+    if payload.get("schema") == FEATURE_CATALOG_SCHEMA:
+        items = payload.get("items")
+        if not isinstance(items, list) or len(items) != 1 or not isinstance(
+            items[0], dict
+        ):
+            raise ValueError(
+                f"{example.id} interactive metadata must contain one catalog item"
+            )
+        payload = items[0]
+    if "biologicalFeatures" in payload:
+        catalog_item = payload
+        canonical_sources = canonical_catalog_sequence_sources(
+            _catalog_sequence_sources(catalog_item)
+        )
+        if any(source is None for source in canonical_sources):
+            raise ValueError(
+                f"{example.id} interactive metadata contains an invalid "
+                "nucleotide sequence source"
+            )
+        biological_features = [
+            feature
+            for feature in payload.get("biologicalFeatures", [])
+            if isinstance(feature, dict)
+        ]
+        biological_by_key = {
+            (
+                str(feature.get("recordKey") or "").strip(),
+                str(feature.get("biologicalFeatureId") or "").strip(),
+            ): feature
+            for feature in biological_features
+        }
+        rendered_features = [
+            feature
+            for feature in payload.get("features", [])
+            if isinstance(feature, dict)
+        ]
+        rendered_by_id = {
+            str(feature.get("svgId") or "").strip(): feature
+            for feature in rendered_features
+            if str(feature.get("svgId") or "").strip()
+        }
+        groups = [
+            group
+            for group in payload.get("orthogroups", [])
+            if isinstance(group, dict)
+        ]
+        problems: list[str] = []
+        for svg_id, rendered in rendered_by_id.items():
+            key = (
+                str(rendered.get("recordKey") or "").strip(),
+                str(rendered.get("biologicalFeatureId") or "").strip(),
+            )
+            if key not in biological_by_key:
+                problems.append(f"rendered feature {svg_id} is unresolved")
+        for group in groups:
+            group_id = str(
+                group.get("id")
+                or group.get("orthogroupId")
+                or group.get("orthogroup_id")
+                or ""
+            ).strip()
+            members = group.get("members")
+            members = (
+                [member for member in members if isinstance(member, dict)]
+                if isinstance(members, list)
+                else []
+            )
+            if not members:
+                problems.append(f"{group_id or '<unnamed>'}: no members")
+                continue
+            declared_count = group.get(
+                "member_count",
+                group.get("memberCount"),
+            )
+            if (
+                isinstance(declared_count, int)
+                and declared_count != len(members)
+            ):
+                problems.append(
+                    f"{group_id}: declares {declared_count} members, "
+                    f"contains {len(members)}"
+                )
+            for member in members:
+                key = (
+                    str(member.get("recordKey") or "").strip(),
+                    str(member.get("biologicalFeatureId") or "").strip(),
+                )
+                feature = biological_by_key.get(key)
+                if feature is None:
+                    problems.append(
+                        f"{group_id}: unresolved member {key[1] or '<empty>'}"
+                    )
+                    continue
+                sequence = _catalog_nucleotide_sequence(
+                    feature,
+                    catalog_item,
+                    canonical_sources=canonical_sources,
+                )
+                if not sequence:
+                    problems.append(
+                        f"{group_id}: member {key[1]} has no nucleotide sequence"
+                    )
+        if problems:
+            preview = "; ".join(problems[:5])
+            raise ValueError(
+                f"{example.id} interactive orthogroup metadata is inconsistent "
+                f"({len(problems)} problem(s)): {preview}"
+            )
+        return
+
     features = [item for item in payload.get("features", []) if isinstance(item, dict)]
     biological_features = [
         item for item in payload.get("biological_features", []) if isinstance(item, dict)
@@ -741,6 +1124,15 @@ def _validate_session_interactive_orthogroups(
     example: GallerySessionExample,
     session: dict[str, Any],
 ) -> None:
+    catalog = _session_feature_catalog(session)
+    if catalog is not None:
+        for item in catalog["items"]:
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"{example.id} session contains an invalid catalog item"
+                )
+            _validate_interactive_orthogroup_payload(example, item)
+        return
     context = _session_interactive_context(session)
     _validate_interactive_orthogroup_payload(
         example,
@@ -767,10 +1159,92 @@ def _validate_gallery_svg_orthogroups(
     )
     if metadata is None:
         raise ValueError(f"Interactive metadata is missing from {example.id}")
-    payload = json.loads(metadata.text or "{}")
+    payload = json.loads(_decoded_metadata_bytes(metadata).decode("utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"Interactive metadata is invalid in {example.id}")
     _validate_interactive_orthogroup_payload(example, payload)
+
+
+def _decoded_metadata_bytes(metadata: ET.Element) -> bytes:
+    text = metadata.text or "{}"
+    if metadata.get("data-encoding") != "gzip-base64":
+        return text.encode("utf-8")
+    try:
+        return gzip.decompress(base64.b64decode("".join(text.split())))
+    except (OSError, ValueError) as exc:
+        raise ValueError("Interactive metadata is not valid gzip-base64.") from exc
+
+
+def _interactive_svg_measurements(output: str) -> dict[str, int]:
+    root = ET.fromstring(output)
+    metadata = next(
+        (
+            element
+            for element in root.iter()
+            if element.get("id") == "gbdraw-interactive-feature-metadata"
+        ),
+        None,
+    )
+    if metadata is None:
+        raise ValueError("Interactive SVG metadata is missing.")
+    decoded = _decoded_metadata_bytes(metadata)
+    payload = json.loads(decoded.decode("utf-8"))
+    items = (
+        payload.get("items", [])
+        if isinstance(payload, dict)
+        and payload.get("schema") == FEATURE_CATALOG_SCHEMA
+        else []
+    )
+    if not isinstance(items, list):
+        items = []
+    stored_metadata = (
+        base64.b64decode("".join((metadata.text or "").split()))
+        if metadata.get("data-encoding") == "gzip-base64"
+        else (metadata.text or "").encode("utf-8")
+    )
+    return {
+        "totalInteractiveSvgBytes": len(output.encode("utf-8")),
+        "compressedMetadataBytes": len(stored_metadata),
+        "decodedMetadataBytes": len(decoded),
+        "renderedFeatureCount": sum(
+            len(item.get("features", []))
+            for item in items
+            if isinstance(item, dict)
+            and isinstance(item.get("features"), list)
+        ),
+        "biologicalFeatureCount": sum(
+            len(item.get("biologicalFeatures", []))
+            for item in items
+            if isinstance(item, dict)
+            and isinstance(item.get("biologicalFeatures"), list)
+        ),
+    }
+
+
+def _format_artifact_measurements(measurements: dict[str, int]) -> str:
+    return ", ".join(
+        f"{key}={value}" for key, value in measurements.items()
+    )
+
+
+def _validate_interactive_svg_size(
+    example: GallerySessionExample,
+    output: str,
+) -> dict[str, int]:
+    measurements = _interactive_svg_measurements(output)
+    if measurements["totalInteractiveSvgBytes"] >= INTERACTIVE_SVG_HARD_LIMIT:
+        raise ValueError(
+            f"{example.id} interactive SVG exceeds the "
+            f"{INTERACTIVE_SVG_HARD_LIMIT}-byte limit "
+            f"({_format_artifact_measurements(measurements)})"
+        )
+    if measurements["decodedMetadataBytes"] > DECODED_METADATA_HARD_LIMIT:
+        raise ValueError(
+            f"{example.id} decoded metadata exceeds the "
+            f"{DECODED_METADATA_HARD_LIMIT}-byte limit "
+            f"({_format_artifact_measurements(measurements)})"
+        )
+    return measurements
 
 
 def _read_or_create_source_svg(
@@ -805,11 +1279,26 @@ def _write_gallery_svg(
     session: dict[str, Any],
     source: str,
 ) -> None:
-    output = (
-        enrich_svg(source, context=_session_interactive_context(session))
-        if example.interactive_svg
-        else source
-    )
+    result_index, result = _session_result(session, example)
+    result_name = str(result.get("name") or "")
+    catalog = _session_feature_catalog(session)
+    output = source
+    if example.interactive_svg:
+        output = enrich_svg(
+            source,
+            context=(
+                None
+                if catalog is not None
+                else _session_interactive_context(
+                    session,
+                    result_index=result_index,
+                    result_name=result_name,
+                )
+            ),
+            result_index=result_index,
+            result_name=result_name,
+            feature_catalog=catalog,
+        )
     if example.interactive_svg:
         _validate_gallery_svg_orthogroups(example, output)
     if example.compressed_metadata:
@@ -832,6 +1321,13 @@ def _write_gallery_svg(
         metadata.set("data-encoding", "gzip-base64")
         metadata.text = base64.b64encode(compressed).decode("ascii")
         output = ET.tostring(root, encoding="unicode")
+    if example.interactive_svg:
+        measurements = _validate_interactive_svg_size(example, output)
+        if example.compressed_metadata:
+            print(
+                f"Gallery artifact metrics [{example.id}]: "
+                f"{_format_artifact_measurements(measurements)}"
+            )
     example.gallery_svg_path.write_text(output, encoding="utf-8")
 
 
@@ -844,6 +1340,7 @@ def _sync_session_result_svg(
     if not isinstance(results, list) or not results or not isinstance(results[0], dict):
         return
     result = results[0]
+    old_result_name = str(result.get("name") or "")
     changed = False
     if result.get("name") != example.id:
         result["name"] = example.id
@@ -869,6 +1366,17 @@ def _sync_session_result_svg(
                 and record.get("resultName") != example.id
             ):
                 record["resultName"] = example.id
+                changed = True
+    catalog = _session_feature_catalog(session)
+    if catalog is not None:
+        for item in catalog["items"]:
+            if (
+                isinstance(item, dict)
+                and item.get("resultIndex") == 0
+                and str(item.get("resultName") or "") == old_result_name
+                and item.get("resultName") != example.id
+            ):
+                item["resultName"] = example.id
                 changed = True
     if changed:
         write_session_json(example.session_path, session)
@@ -999,7 +1507,14 @@ def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, o
     return payload
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Regenerate interactive Gallery SVGs, thumbnails, and examples.json "
+            "from the bundled current-version sessions."
+        )
+    )
+    parser.parse_args(argv)
     payload = prepare_gallery_assets()
     print(f"Prepared {len(payload)} interactive gallery examples in {GALLERY_ROOT.relative_to(REPO_ROOT)}")
     return 0

@@ -55,6 +55,7 @@ normalize_length = false
 
 [objects.scale]
 style = "bar"
+show = true
 stroke_color = 'black'
 label_color = 'black'
 stroke_width = 3
@@ -206,6 +207,9 @@ features_drawn = ["CDS", "rRNA", "tRNA" ,"tmRNA", "ncRNA", "misc_RNA", "repeat_r
 block_stroke_color = 'gray'
 line_stroke_color = 'lightgray'
 font_weight = 'normal'
+[objects.features.arrow_geometry]
+head_length_ratio = "auto"
+shaft_width_ratio = 1.0
 [objects.features.line_stroke_width]
 short = 5
 long = 1.0

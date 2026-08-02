@@ -14,10 +14,15 @@ await writeFile(
 );
 
 const {
+  DEFAULT_ARROW_HEAD_LENGTH_RATIO,
+  DEFAULT_ARROW_SHAFT_WIDTH_RATIO,
   DEFAULT_FEATURE_RENDERINGS,
   FEATURE_RENDERING_VALUES,
+  arrowHeadLengthRatioForState,
   createDefaultFeatureRenderings,
   defaultFeatureRendering,
+  normalizeArrowHeadLengthRatio,
+  normalizeArrowShaftWidthRatio,
   normalizeFeatureRendering,
   normalizeFeatureRenderingMap
 } = await import(pathToFileURL(modulePath));
@@ -40,7 +45,25 @@ assert.deepEqual(
   { repeat_region: 'rectangle', CDS: 'underlay' }
 );
 assert.throws(() => normalizeFeatureRendering('triangle'), /Unsupported feature rendering/);
+assert.throws(() => normalizeFeatureRendering('arrowhead'), /Unsupported feature rendering/);
 assert.throws(() => normalizeFeatureRenderingMap({ ' ': 'arrow' }), /must not be empty/);
+
+assert.equal(DEFAULT_ARROW_HEAD_LENGTH_RATIO, 'auto');
+assert.equal(DEFAULT_ARROW_SHAFT_WIDTH_RATIO, 1.0);
+assert.equal(normalizeArrowHeadLengthRatio(undefined), 'auto');
+assert.equal(normalizeArrowHeadLengthRatio(' AUTO '), 'auto');
+assert.equal(normalizeArrowHeadLengthRatio(1.25), 1.25);
+assert.equal(arrowHeadLengthRatioForState('auto'), null);
+assert.equal(arrowHeadLengthRatioForState(0.75), 0.75);
+for (const invalid of [true, false, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, '1.25', [], [1], {}]) {
+  assert.throws(() => normalizeArrowHeadLengthRatio(invalid), /positive finite number/);
+}
+assert.equal(normalizeArrowShaftWidthRatio(undefined), 1.0);
+assert.equal(normalizeArrowShaftWidthRatio(0.25), 0.25);
+assert.equal(normalizeArrowShaftWidthRatio(1), 1);
+for (const invalid of [true, false, 0, -1, 1.01, Number.NaN, Number.POSITIVE_INFINITY, '0.25', 'auto', [], [0.25], {}]) {
+  assert.throws(() => normalizeArrowShaftWidthRatio(invalid), /at most 1/);
+}
 
 const first = createDefaultFeatureRenderings();
 const second = createDefaultFeatureRenderings();

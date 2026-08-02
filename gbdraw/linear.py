@@ -59,6 +59,7 @@ from .tracks import (
 
 
 from .cli_utils.common import (
+    _add_arrow_geometry_args,
     _add_block_stroke_args,
     _add_depth_axis_args,
     _add_depth_track_arg,
@@ -549,6 +550,7 @@ def _get_args(args) -> argparse.Namespace:
         default="ribbon")
     add_feature_args(parser)
     _add_feature_shape_arg(parser)
+    _add_arrow_geometry_args(parser)
     _add_block_stroke_args(parser)
     parser.add_argument(
         '--axis_stroke_color',
@@ -690,7 +692,8 @@ def _get_args(args) -> argparse.Namespace:
         '--ruler_on_axis',
         help=(
             'Use each record axis as the ruler in linear mode. '
-            'Effective only with --scale_style ruler and --track_layout above|below.'
+            'Effective only with a visible scale, --scale_style ruler, '
+            'and --track_layout above|below.'
         ),
         action='store_true',
     )
@@ -727,6 +730,10 @@ def _get_args(args) -> argparse.Namespace:
         '--comparison_height',
         help='Comparison block height (optional; float; optional; default: 60 (pixels, 96 dpi))',
         type=float)
+    parser.add_argument(
+        '--hide_scale',
+        help='Hide the coordinate scale while retaining each record axis (default: False).',
+        action='store_true')
     parser.add_argument(
         '--scale_style',
         help='Style for the length scale (default: "bar"; "bar", "ruler")',
@@ -1089,12 +1096,15 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     feature_table_path: str = args.feature_table
     selected_features_set: str = args.features.split(',')
     feature_shapes = parse_feature_shape_overrides(args.feature_shape)
+    arrow_head_length_ratio: str | float | None = args.arrow_head_length_ratio
+    arrow_shaft_width_ratio: float | None = args.arrow_shaft_width_ratio
     feature_height: Optional[float] = args.feature_height
     comparison_height: Optional[float] = args.comparison_height
 
     out_formats: list[str] = parse_formats(args.format)
     out_formats = handle_output_formats(out_formats)
     user_defined_default_colors: str = args.default_colors
+    show_scale: bool = not bool(args.hide_scale)
     scale_style: str = args.scale_style
     scale_stroke_color: Optional[str] = args.scale_stroke_color
     scale_stroke_width: Optional[float] = args.scale_stroke_width
@@ -1143,7 +1153,12 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     linear_track_slot_specs = args.linear_track_slot_specs
     linear_track_axis_index: int | None = args.linear_track_axis_index
     ruler_on_axis: bool = bool(args.ruler_on_axis)
-    if ruler_on_axis and not (scale_style == "ruler" and track_layout in {"above", "below"}):
+    if ruler_on_axis and not show_scale:
+        logger.warning(
+            "WARNING: --ruler_on_axis is ignored when --hide_scale is set."
+        )
+        ruler_on_axis = False
+    elif ruler_on_axis and not (scale_style == "ruler" and track_layout in {"above", "below"}):
         logger.warning(
             "WARNING: --ruler_on_axis is ignored unless --scale_style ruler and --track_layout above|below are set."
         )
@@ -1182,6 +1197,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     override_candidates: dict[str, object | None] = {
         "objects.features.block_stroke_color": block_stroke_color,
+        "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
+        "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,
         "objects.axis.linear.stroke_color": axis_stroke_color,
         "objects.definition.linear.show_replicon": definition_show_replicon,
         "objects.definition.linear.show_accession": definition_show_accession,
@@ -1224,6 +1241,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "labels.filtering.raw": filtering_override,
         "canvas.linear.comparison_height": comparison_height,
         "canvas.linear.default_gc_height": gc_height,
+        "objects.scale.show": show_scale,
         "objects.scale.style": scale_style,
         "objects.scale.stroke_color": scale_stroke_color,
         "objects.scale.label_color": scale_label_color,
@@ -1425,10 +1443,12 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     legacy_protein_raw_candidates = None
     legacy_protein_derived_evidence = None
+    include_feature_catalog = bool(args.save_session or args.session_output)
     if source_session is not None:
         render_result = render_session_compatible_request(
             canonical_request,
             source_session,
+            include_feature_catalog=include_feature_catalog,
         )
         legacy_protein_raw_candidates = (
             render_result.legacy_protein_raw_candidates
@@ -1440,6 +1460,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         render_result = render_request(
             canonical_request,
             artifacts=CurrentRequestArtifacts(),
+            include_feature_catalog=include_feature_catalog,
         )
     canvas = render_result.drawing
     interactive_context = render_result.interactive_context
@@ -1465,6 +1486,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             if interactive_context
             else ()
         ),
+        interactive_contexts=(interactive_context,),
         orthogroup_metadata=(
             tuple(interactive_context.orthogroups)
             if interactive_context is not None

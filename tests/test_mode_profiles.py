@@ -198,6 +198,25 @@ def test_mode_resolution_preserves_explicit_values_and_applies_track_defaults() 
     }
 
 
+def test_hidden_linear_scale_does_not_apply_ruler_axis_managed_color() -> None:
+    resolved = resolve_linear_diagram_options(
+        LinearDiagramOptions(
+            config_overrides={
+                "canvas.linear.ruler_on_axis": True,
+                "objects.scale.show": False,
+            },
+        )
+    )
+
+    assert resolved.config_overrides == {
+        "canvas.show_gc": False,
+        "canvas.show_skew": False,
+        "objects.axis.linear.stroke_color": "lightgray",
+        "canvas.linear.ruler_on_axis": True,
+        "objects.scale.show": False,
+    }
+
+
 @pytest.mark.parametrize(
     ("options_type", "expected"),
     [

@@ -27,6 +27,7 @@ from gbdraw.session_io import (
     DEPTH_FILE_ENCODING,
     SESSION_FORMAT,
     _read_session_text,
+    _attach_current_web_file_bindings,
     _reject_duplicate_json_keys,
     expand_session_feature_catalog,
     materialize_embedded_file,
@@ -340,6 +341,7 @@ def build_session_document(
     title: str | None = None,
     created_at: datetime | None = None,
     adjunct: Mapping[str, Any] | None = None,
+    web_file_inventory: Mapping[str, Any] | None = None,
 ) -> SessionDocument:
     """Build a current-version document from one typed request.
 
@@ -378,8 +380,17 @@ def build_session_document(
         "createdAt": timestamp.isoformat(),
         "renderRequest": encoded.payload,
         "resources": resources,
+        "results": [],
+        "editorState": {"featureCatalog": None},
     }
     data.update(adjunct_data)
+    if web_file_inventory is not None:
+        _attach_current_web_file_bindings(data, web_file_inventory)
+    editor_state = data.get("editorState")
+    if isinstance(editor_state, Mapping):
+        normalized_editor_state = copy.deepcopy(dict(editor_state))
+        normalized_editor_state.setdefault("featureCatalog", None)
+        data["editorState"] = normalized_editor_state
     if title is not None:
         data["title"] = str(title)
     normalize_current_session_artifacts(data)
@@ -393,6 +404,7 @@ def save_session_document(
     title: str | None = None,
     created_at: datetime | None = None,
     adjunct: Mapping[str, Any] | None = None,
+    web_file_inventory: Mapping[str, Any] | None = None,
     overwrite: bool = False,
 ) -> SessionDocument:
     """Build and write a current canonical session through a staged commit."""
@@ -402,6 +414,7 @@ def save_session_document(
         title=title,
         created_at=created_at,
         adjunct=adjunct,
+        web_file_inventory=web_file_inventory,
     )
     try:
         output_path = Path(path)

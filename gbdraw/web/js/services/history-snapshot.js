@@ -26,6 +26,33 @@ const replacePlainObject = (target, source) => {
   });
 };
 
+const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
+  mode: String(plan?.mode || 'adjacent'),
+  defaultSource: String(plan?.defaultSource || 'losat'),
+  edges: (Array.isArray(plan?.edges) ? plan.edges : []).map((edge) => ({
+    id: String(edge?.id || ''),
+    queryUid: String(edge?.queryUid || ''),
+    subjectUid: String(edge?.subjectUid || ''),
+    included: edge?.included === true,
+    fileActive: edge?.fileActive === true,
+    losatFilenameActive: edge?.losatFilenameActive === true,
+    source: String(edge?.source || 'upload'),
+    losatFilename: String(edge?.losatFilename || '')
+  }))
+});
+
+const replaceLinearComparisonPlan = (target, plan = {}) => {
+  if (!target || typeof target !== 'object') return;
+  const cloned = cloneLinearComparisonPlanMetadata(plan);
+  target.mode = cloned.mode;
+  target.defaultSource = cloned.defaultSource;
+  if (!Array.isArray(target.edges)) target.edges = [];
+  target.edges.splice(0, target.edges.length, ...cloned.edges.map((edge) => ({
+    ...edge,
+    file: null
+  })));
+};
+
 const cloneFeatureVisibilityRules = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
 );
@@ -111,7 +138,6 @@ const buildFallbackUiStateData = (state) => ({
   mode: getRef(state.mode, 'circular'),
   cInputType: getRef(state.cInputType, 'gb'),
   lInputType: getRef(state.lInputType, 'gb'),
-  blastSource: getRef(state.blastSource, 'losat'),
   losatProgram: getRef(state.losatProgram, 'blastn'),
   selectedResultIndex: getRef(state.selectedResultIndex, 0),
   downloadDpi: getRef(state.downloadDpi, 300),
@@ -143,7 +169,6 @@ const applyFallbackUiStateData = (state, ui = {}) => {
   if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
   if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
   if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
-  if (ui.blastSource) setRef(state.blastSource, ui.blastSource);
   if (ui.losatProgram) setRef(state.losatProgram, ui.losatProgram);
   if (ui.downloadDpi) setRef(state.downloadDpi, ui.downloadDpi);
   if (ui.generatedLegendPosition) setRef(state.generatedLegendPosition, ui.generatedLegendPosition);
@@ -306,9 +331,7 @@ const buildFilesData = (state, fileStore) => ({
     gff: fileStore.describeValue(seq.gff),
     fasta: fileStore.describeValue(seq.fasta),
     depth: fileStore.describeValue(seq.depth),
-    blast: fileStore.describeValue(seq.blast),
     losat_gencode: seq.losat_gencode ?? 1,
-    losat_filename: seq.losat_filename ?? '',
     definition: seq.definition ?? '',
     record_subtitle: seq.record_subtitle ?? '',
     region_record_id: seq.region_record_id ?? '',
@@ -316,9 +339,9 @@ const buildFilesData = (state, fileStore) => ({
     region_end: seq.region_end ?? null,
     region_reverse: Boolean(seq.region_reverse)
   })),
-  linearComparisons: Array.from(state.linearComparisons || []).map((comparison) => ({
-    id: String(comparison?.id || ''),
-    file: fileStore.describeValue(comparison?.file)
+  linearComparisons: Array.from(state.linearComparisonPlan?.edges || []).map((edge) => ({
+    id: String(edge?.id || ''),
+    file: fileStore.describeValue(edge?.file)
   }))
 });
 
@@ -363,9 +386,7 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
         gff: restore(seq.gff),
         fasta: restore(seq.fasta),
         depth: restore(seq.depth),
-        blast: restore(seq.blast),
         losat_gencode: seq.losat_gencode ?? 1,
-        losat_filename: seq.losat_filename ?? '',
         definition: seq.definition ?? '',
         record_subtitle: seq.record_subtitle ?? '',
         region_record_id: seq.region_record_id ?? '',
@@ -378,13 +399,13 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
     ? normalizeLinearSeqList(rows)
     : rows;
   state.linearSeqs.splice(0, state.linearSeqs.length, ...normalized);
-  if (state.linearComparisons && typeof state.linearComparisons.splice === 'function') {
+  if (state.linearComparisonPlan && Array.isArray(state.linearComparisonPlan.edges)) {
     const comparisonFiles = new Map(
       (Array.isArray(filesData?.linearComparisons) ? filesData.linearComparisons : [])
         .map((comparison) => [String(comparison?.id || ''), restore(comparison?.file)])
     );
-    state.linearComparisons.forEach((comparison) => {
-      comparison.file = comparisonFiles.get(String(comparison?.id || '')) || null;
+    state.linearComparisonPlan.edges.forEach((edge) => {
+      edge.file = comparisonFiles.get(String(edge?.id || '')) || null;
     });
   }
 };
@@ -416,7 +437,11 @@ export const createHistorySnapshotService = ({
   const buildHistorySnapshot = async () => {
     const config = typeof buildConfigData === 'function'
       ? buildConfigData()
-      : { form: state.form, adv: state.adv };
+      : {
+          form: state.form,
+          adv: state.adv,
+          linearComparisonPlan: cloneLinearComparisonPlanMetadata(state.linearComparisonPlan)
+        };
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData({ includePreviewNavigation: false })
       : buildFallbackUiStateData(state);
@@ -465,6 +490,11 @@ export const createHistorySnapshotService = ({
 
     if (typeof applyConfigData === 'function' && snapshot.config) {
       applyConfigData(snapshot.config);
+    } else if (snapshot.config?.linearComparisonPlan) {
+      replaceLinearComparisonPlan(
+        state.linearComparisonPlan,
+        snapshot.config.linearComparisonPlan
+      );
     }
 
     if (typeof applyUiStateData === 'function') {

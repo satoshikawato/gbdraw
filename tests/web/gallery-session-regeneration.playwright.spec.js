@@ -49,7 +49,6 @@ test('Gallery session colors, record labels, and feature labels survive regenera
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.pyodideReady === true, null, { timeout: 180000 });
 
   const imported = await page.evaluate(async () => {
     const inspectSettings = (app) => ({
@@ -63,6 +62,7 @@ test('Gallery session colors, record labels, and feature labels survive regenera
     const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
     const text = await response.text();
     const legacySession = JSON.parse(text);
+    legacySession.version = 39;
     legacySession.renderRequest.schema = 2;
     legacySession.renderRequest.records.forEach((record) => {
       record.presentation = {
@@ -74,19 +74,19 @@ test('Gallery session colors, record labels, and feature labels survive regenera
       };
     });
     const legacyOptions = legacySession.renderRequest.diagramOptions;
-    delete legacyOptions.configOverrides;
-    delete legacyOptions.featureShapes;
-    delete legacyOptions.plotTitle;
-    delete legacyOptions.qualifierPriorityFile;
+    legacyOptions.output.outputPrefix = legacySession.renderRequest.output.prefix;
     legacyOptions.colors = {
       colorTable: null,
-      colorTableFile: null,
-      defaultColors: {
-        resourceId: 'colors-default-colors',
-        representation: 'canonicalTsv'
+      colorTableFile: {
+        resourceId: 'colors-color-table-file',
+        representation: 'file'
       },
+      defaultColors: null,
       defaultColorsPalette: 'default',
-      defaultColorsFile: null
+      defaultColorsFile: {
+        resourceId: 'colors-default-colors-file',
+        representation: 'file'
+      }
     };
     const file = new File([JSON.stringify(legacySession)], 'BGC0000708-BGC0000713.gbdraw-session.json', {
       type: 'application/json'
@@ -101,6 +101,11 @@ test('Gallery session colors, record labels, and feature labels survive regenera
   });
 
   expect(imported.result).toBe('ok');
+  await page.waitForFunction(
+    () => window.__GBDRAW_APP__?.pyodideReady === true,
+    null,
+    { timeout: 180000 }
+  );
   expect(imported.settings.cdsColor).toBe('#dddddd');
   expect(imported.settings.labels).toBe('first');
   expect(imported.settings.recordLabels[0]).toContain('Streptomyces lividus');

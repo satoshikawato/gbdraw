@@ -62,6 +62,14 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   stroke-width: 2.5;
   paint-order: stroke fill markers;
 }
+.gbdraw-interactive-annotation {
+  cursor: pointer;
+  transition: opacity 120ms ease, filter 120ms ease;
+}
+.gbdraw-interactive-annotation:hover {
+  opacity: 0.88;
+  filter: url(#gbdraw-interactive-feature-glow);
+}
 .gbdraw-feature-popup {
   overflow: visible;
   pointer-events: auto;
@@ -719,11 +727,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   'use strict';
 
   var FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
+  var RENDERED_FEATURE_ID_ATTRIBUTE = 'data-gbdraw-rendered-feature-id';
   var FEATURE_SELECTOR =
     'path[' + FEATURE_ID_ATTRIBUTE + '], polygon[' + FEATURE_ID_ATTRIBUTE + '], rect[' + FEATURE_ID_ATTRIBUTE + '], ' +
     'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
   var MATCH_SELECTOR =
     'path[data-gbdraw-match-id], path[data-gbdraw-pairwise-match-id], path[data-match-kind], path[data-pairwise-match-style]';
+  var ANNOTATION_SELECTOR = '[data-gbdraw-interactive-annotation="true"][data-gbdraw-annotation-id]';
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var XHTML_NS = 'http://www.w3.org/1999/xhtml';
   var VIEWPORT_CONTROLS_ID = 'gbdraw-viewport-controls';
@@ -798,11 +808,444 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function getElementFeatureId(element) {
     return normalizeFeatureElementId(
       element && (
+        element.getAttribute(RENDERED_FEATURE_ID_ATTRIBUTE) ||
         element.getAttribute(FEATURE_ID_ATTRIBUTE) ||
         element.getAttribute('id') ||
         element.id
       ) || ''
     );
+  }
+
+  function catalogFeatureKey(recordKey, biologicalFeatureId) {
+    return JSON.stringify([
+      String(recordKey || '').trim(),
+      String(biologicalFeatureId || '').trim()
+    ]);
+  }
+
+  function catalogRecordIndex(item, feature) {
+    var explicit = feature && (
+      feature.record_idx !== undefined ? feature.record_idx :
+      feature.recordIndex !== undefined ? feature.recordIndex :
+      feature.record_index
+    );
+    if (explicit !== null && explicit !== undefined && explicit !== '') {
+      var parsed = Number(explicit);
+      if (Number.isInteger(parsed)) return parsed;
+    }
+    var recordKey = String(feature && (feature.recordKey || feature.record_key) || '').trim();
+    var recordKeys = Array.isArray(item && item.recordKeys) ? item.recordKeys : [];
+    var index = recordKeys.map(String).indexOf(recordKey);
+    return index >= 0 ? index : null;
+  }
+
+  function catalogStableFeatureId(feature) {
+    return String(feature && (
+      feature.stableFeatureId ||
+      feature.stable_feature_id ||
+      feature.biologicalFeatureId ||
+      feature.biological_feature_id
+    ) || '').trim();
+  }
+
+  function catalogSequenceSourceStrings(item) {
+    var sources = Array.isArray(item && item.sequenceSources)
+      ? item.sequenceSources
+      : [];
+    return sources.map(function (source) {
+      if (
+        !source
+        || typeof source !== 'object'
+        || typeof source.sequence !== 'string'
+        || !source.sequence
+        || /\\s/.test(source.sequence)
+      ) {
+        throw new Error('Invalid catalog sequence source.');
+      }
+      return source.sequence;
+    });
+  }
+
+  function catalogNucleotideSequence(item, feature, sourceSequences) {
+    var explicit = String(feature && (
+      feature.nucleotide_sequence || feature.nucleotideSequence
+    ) || '').trim();
+    if (explicit) return explicit;
+    var sourceIndex = feature && feature.sequenceSourceIndex;
+    var sources = Array.isArray(item && item.sequenceSources)
+      ? item.sequenceSources
+      : [];
+    if (!Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex >= sources.length) {
+      return '';
+    }
+    var source = sources[sourceIndex];
+    var origin = String(source && source.origin || '').trim();
+    var expectedRecordIndex = catalogRecordIndex(item, feature);
+    if (
+      ['linear-record', 'circular-reference'].indexOf(origin) < 0
+      || !Number.isInteger(source && source.recordIndex)
+      || source.recordIndex !== expectedRecordIndex
+    ) {
+      return '';
+    }
+    var sourceSequence = sourceSequences && sourceSequences[sourceIndex];
+    if (typeof sourceSequence !== 'string') {
+      return '';
+    }
+    var rawParts = feature && (feature.location_parts || feature.locationParts);
+    var parts = Array.isArray(rawParts) && rawParts.length
+      ? rawParts
+      : [feature];
+    var sequences = [];
+    for (var index = 0; index < parts.length; index += 1) {
+      var part = parts[index];
+      var start = Number(part && part.start);
+      var end = Number(part && part.end);
+      if (
+        !Number.isInteger(start)
+        || !Number.isInteger(end)
+        || start < 0
+        || end < start
+        || end > sourceSequence.length
+      ) {
+        return '';
+      }
+      var sequence = sourceSequence.slice(start, end);
+      var strand = part && part.strand !== undefined
+        ? part.strand
+        : feature && feature.strand;
+      sequences.push(
+        strand === '-' || Number(strand) < 0
+          ? reverseComplementMatchSequence(sequence)
+          : sequence
+      );
+    }
+    return sequences.join('');
+  }
+
+  function expandCatalogBiologicalFeature(item, feature, sourceSequences) {
+    var expanded = Object.assign({}, feature || {});
+    var recordKey = String(expanded.recordKey || expanded.record_key || '').trim();
+    var biologicalFeatureId = String(
+      expanded.biologicalFeatureId || expanded.biological_feature_id || ''
+    ).trim();
+    var stableId = catalogStableFeatureId(expanded);
+    var recordIndex = catalogRecordIndex(item, expanded);
+    expanded.recordKey = recordKey;
+    expanded.record_key = recordKey;
+    expanded.biologicalFeatureId = biologicalFeatureId;
+    expanded.biological_feature_id = biologicalFeatureId;
+    expanded.stableFeatureId = stableId;
+    expanded.stable_feature_id = stableId;
+    expanded.stable_svg_id = stableId;
+    expanded.svg_id = stableId;
+    if (Number.isInteger(recordIndex)) {
+      expanded.record_idx = recordIndex;
+      expanded.recordIndex = recordIndex;
+    }
+    var qualifiers = expanded.qualifiers && typeof expanded.qualifiers === 'object'
+      ? expanded.qualifiers
+      : {};
+    if (expanded.translationFromAminoAcidSequence !== undefined) {
+      var rawAminoAcidSequence = Object.prototype.hasOwnProperty.call(
+        expanded,
+        'amino_acid_sequence'
+      )
+        ? expanded.amino_acid_sequence
+        : expanded.aminoAcidSequence;
+      if (
+        expanded.translationFromAminoAcidSequence !== true
+        || typeof rawAminoAcidSequence !== 'string'
+        || !rawAminoAcidSequence.trim()
+        || Object.prototype.hasOwnProperty.call(qualifiers, 'translation')
+      ) {
+        throw new Error('Invalid feature translation-source reference.');
+      }
+      var aminoAcidSequence = rawAminoAcidSequence.trim();
+      qualifiers.translation = [aminoAcidSequence];
+      expanded.qualifiers = qualifiers;
+      delete expanded.translationFromAminoAcidSequence;
+    }
+    [
+      'protein_id',
+      'locus_tag',
+      'gene_id',
+      'old_locus_tag',
+      'gene',
+      'product'
+    ].forEach(function (field) {
+      if (String(expanded[field] || '').trim()) return;
+      var value = firstCatalogValue(catalogQualifier(expanded, field));
+      if (value) expanded[field] = value;
+    });
+    if (!String(expanded.note || '').trim()) {
+      var note = firstCatalogValue(catalogQualifier(expanded, 'note'));
+      if (note) expanded.note = Array.from(note).slice(0, 50).join('');
+    }
+    var locationParts = expanded.location_parts || expanded.locationParts;
+    var start = Number(expanded.start);
+    var end = Number(expanded.end);
+    if (
+      !Array.isArray(locationParts)
+      && Number.isInteger(start)
+      && Number.isInteger(end)
+    ) {
+      expanded.location_parts = [{
+        start: start,
+        end: end,
+        strand: expanded.strand == null ? '' : expanded.strand,
+        display: String(start + 1) + '..' + String(end)
+      }];
+    }
+    var nucleotideSequence = catalogNucleotideSequence(
+      item,
+      expanded,
+      sourceSequences
+    );
+    if (
+      expanded.sequenceSourceIndex !== undefined
+      && (
+        Object.prototype.hasOwnProperty.call(expanded, 'nucleotide_sequence')
+        || Object.prototype.hasOwnProperty.call(expanded, 'nucleotideSequence')
+      )
+    ) {
+      throw new Error('Invalid feature sequence-source reference.');
+    }
+    if (expanded.sequenceSourceIndex !== undefined && !nucleotideSequence) {
+      throw new Error('Invalid feature sequence-source reference.');
+    }
+    if (nucleotideSequence && !String(expanded.nucleotide_sequence || '').trim()) {
+      expanded.nucleotide_sequence = nucleotideSequence;
+    }
+    return expanded;
+  }
+
+  function firstCatalogText() {
+    for (var index = 0; index < arguments.length; index += 1) {
+      var value = arguments[index];
+      if (Array.isArray(value)) {
+        value = value.filter(function (entry) {
+          return String(entry || '').trim();
+        })[0];
+      }
+      var normalized = String(value || '').trim();
+      if (normalized) return normalized;
+    }
+    return '';
+  }
+
+  function firstCatalogValue(value) {
+    var values = Array.isArray(value) ? value : [value];
+    for (var index = 0; index < values.length; index += 1) {
+      if (String(values[index] || '').trim()) return String(values[index]);
+    }
+    return '';
+  }
+
+  function catalogQualifier(feature, name) {
+    var qualifiers = feature && feature.qualifiers;
+    return qualifiers && typeof qualifiers === 'object' ? qualifiers[name] : '';
+  }
+
+  function expandCatalogItem(item, popupMode) {
+    var sourceSequences = catalogSequenceSourceStrings(item);
+    var biologicalFeatures = (Array.isArray(item && item.biologicalFeatures)
+      ? item.biologicalFeatures
+      : []
+    ).map(function (feature) {
+      return expandCatalogBiologicalFeature(item, feature, sourceSequences);
+    });
+    var biologicalByKey = new Map();
+    biologicalFeatures.forEach(function (feature) {
+      biologicalByKey.set(
+        catalogFeatureKey(feature.recordKey, feature.biologicalFeatureId),
+        feature
+      );
+    });
+
+    var renderedByKey = new Map();
+    var features = (Array.isArray(item && item.features) ? item.features : []).map(function (reference) {
+      var key = catalogFeatureKey(reference && reference.recordKey, reference && reference.biologicalFeatureId);
+      var biological = biologicalByKey.get(key) || {};
+      var svgId = String(reference && reference.svgId || '').trim();
+      var expanded = Object.assign({}, biological, {
+        svg_id: svgId,
+        rendered_svg_id: svgId,
+        renderedSvgId: svgId,
+        rendered_feature_svg_id: svgId,
+        recordKey: String(reference && reference.recordKey || '').trim(),
+        record_key: String(reference && reference.recordKey || '').trim(),
+        biologicalFeatureId: String(reference && reference.biologicalFeatureId || '').trim(),
+        biological_feature_id: String(reference && reference.biologicalFeatureId || '').trim()
+      });
+      if (reference && reference.fillColor) expanded.fill_color = reference.fillColor;
+      if (reference && (reference.displayLabel || reference.display_label)) {
+        expanded.display_label = firstCatalogText(
+          reference.displayLabel,
+          reference.display_label
+        );
+      }
+      if (!renderedByKey.has(key)) renderedByKey.set(key, []);
+      renderedByKey.get(key).push(expanded);
+      return expanded;
+    });
+
+    var orthogroups = (Array.isArray(item && item.orthogroups) ? item.orthogroups : []).map(function (group) {
+      var expandedGroup = Object.assign({}, group || {});
+      var groupId = String(
+        expandedGroup.id || expandedGroup.orthogroupId || expandedGroup.orthogroup_id || ''
+      ).trim();
+      expandedGroup.members = (Array.isArray(group && group.members) ? group.members : []).map(function (member) {
+        var key = catalogFeatureKey(member && member.recordKey, member && member.biologicalFeatureId);
+        var biological = biologicalByKey.get(key) || {};
+        var rendered = renderedByKey.get(key) || [];
+        var stableId = catalogStableFeatureId(biological);
+        var renderedId = String(rendered[0] && rendered[0].svg_id || '').trim();
+        var recordIndex = catalogRecordIndex(item, biological);
+        var expandedMember = Object.assign({}, member || {}, {
+          recordKey: String(member && member.recordKey || '').trim(),
+          record_key: String(member && member.recordKey || '').trim(),
+          biologicalFeatureId: String(member && member.biologicalFeatureId || '').trim(),
+          biological_feature_id: String(member && member.biologicalFeatureId || '').trim(),
+          stableFeatureSvgId: stableId,
+          stable_feature_svg_id: stableId,
+          featureSvgId: stableId,
+          feature_svg_id: stableId,
+          recordIndex: recordIndex,
+          record_index: recordIndex,
+          record_id: firstCatalogText(biological.record_id, biological.recordId),
+          recordId: firstCatalogText(biological.record_id, biological.recordId),
+          proteinId: firstCatalogText(
+            biological.protein_id,
+            biological.proteinId,
+            catalogQualifier(biological, 'protein_id')
+          ),
+          sourceProteinId: firstCatalogText(
+            biological.source_protein_id,
+            biological.sourceProteinId,
+            biological.protein_id,
+            biological.proteinId
+          ),
+          displayProteinId: firstCatalogText(
+            biological.display_protein_id,
+            biological.displayProteinId,
+            biological.protein_id,
+            biological.proteinId,
+            catalogQualifier(biological, 'protein_id')
+          ),
+          start: biological.start,
+          end: biological.end,
+          strand: biological.strand,
+          gene: firstCatalogText(biological.gene, catalogQualifier(biological, 'gene')),
+          locusTag: firstCatalogText(
+            biological.locus_tag,
+            biological.locusTag,
+            catalogQualifier(biological, 'locus_tag')
+          ),
+          product: firstCatalogText(biological.product, catalogQualifier(biological, 'product')),
+          note: firstCatalogText(biological.note, catalogQualifier(biological, 'note'))
+        });
+        if (renderedId) {
+          expandedMember.renderedFeatureSvgId = renderedId;
+          expandedMember.rendered_feature_svg_id = renderedId;
+        }
+        rendered.forEach(function (feature) {
+          var existingIds = String(feature.orthogroup_id || '').split(';').filter(Boolean);
+          if (groupId && existingIds.indexOf(groupId) < 0) existingIds.push(groupId);
+          feature.orthogroup_id = existingIds.join(';');
+          feature.orthogroupId = feature.orthogroup_id;
+          feature.orthogroup_member_count =
+            expandedGroup.member_count || expandedGroup.memberCount || expandedGroup.members.length;
+          feature.orthogroup_record_coverage =
+            expandedGroup.record_coverage_count || expandedGroup.recordCoverage || '';
+          feature.orthogroup_representative = Boolean(expandedMember.representative);
+          feature.orthogroup_member = expandedMember;
+        });
+        return expandedMember;
+      });
+      return expandedGroup;
+    });
+
+    var matches = (Array.isArray(item && item.comparisonMatches)
+      ? item.comparisonMatches
+      : []
+    ).map(function (match) {
+      var expanded = Object.assign({}, match || {});
+      ['query', 'subject'].forEach(function (role) {
+        var recordKey = match && match[role + 'RecordKey'];
+        var biologicalFeatureId = match && match[role + 'BiologicalFeatureId'];
+        if (!recordKey || !biologicalFeatureId) return;
+        var key = catalogFeatureKey(recordKey, biologicalFeatureId);
+        var biological = biologicalByKey.get(key) || {};
+        var rendered = renderedByKey.get(key) || [];
+        var renderedIds = rendered.map(function (feature) {
+          return String(feature.svg_id || '').trim();
+        }).filter(Boolean);
+        if (renderedIds.length) expanded[role + '_feature_svg_id'] = renderedIds.join(';');
+        if (expanded[role + '_record_id'] === undefined) {
+          expanded[role + '_record_id'] = firstCatalogText(
+            biological.record_id,
+            biological.recordId
+          );
+        }
+        if (expanded[role + '_record_index'] === undefined) {
+          expanded[role + '_record_index'] = catalogRecordIndex(item, biological);
+        }
+        if (expanded[role + '_protein_id'] === undefined) {
+          expanded[role + '_protein_id'] = firstCatalogText(
+            biological.protein_id,
+            biological.proteinId,
+            catalogQualifier(biological, 'protein_id')
+          );
+        }
+        if (expanded[role + '_locus_id'] === undefined) {
+          expanded[role + '_locus_id'] = firstCatalogText(
+            biological.locus_tag,
+            biological.locusTag,
+            catalogQualifier(biological, 'locus_tag')
+          );
+        }
+        if (expanded[role + '_display_name'] === undefined) {
+          expanded[role + '_display_name'] = firstCatalogText(
+            biological.product,
+            catalogQualifier(biological, 'product'),
+            biological.gene,
+            catalogQualifier(biological, 'gene')
+          );
+        }
+      });
+      return expanded;
+    });
+    return {
+      schema: 3,
+      popup_mode: popupMode,
+      features: features,
+      biological_features: biologicalFeatures,
+      orthogroups: orthogroups,
+      matches: matches,
+      annotations: Array.isArray(item && item.annotations) ? item.annotations : [],
+      sequence_sources: Array.isArray(item && item.sequenceSources) ? item.sequenceSources : []
+    };
+  }
+
+  function decodeCatalogPayload(catalog) {
+    var items = Array.isArray(catalog && catalog.items) ? catalog.items : [];
+    var resultIndexText = metadata && metadata.getAttribute('data-result-index');
+    var resultName = String(metadata && metadata.getAttribute('data-result-name') || '').trim();
+    var resultIndex = String(resultIndexText || '').trim() === '' ? null : Number(resultIndexText);
+    var item = items.find(function (candidate) {
+      if (!candidate) return false;
+      if (Number.isInteger(resultIndex) && candidate.resultIndex !== resultIndex) return false;
+      if (resultName && String(candidate.resultName || '').trim() !== resultName) return false;
+      return true;
+    });
+    if (!item && items.length === 1 && !Number.isInteger(resultIndex) && !resultName) {
+      item = items[0];
+    }
+    var popupMode = metadata && metadata.getAttribute('data-popup-mode') === 'simple'
+      ? 'simple'
+      : 'rich';
+    return item ? expandCatalogItem(item, popupMode) : {};
   }
 
   try {
@@ -823,6 +1266,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       metadataText = await new Response(decompressed).text();
     }
     payload = JSON.parse(metadataText);
+    if (payload && payload.schema === 3 && Array.isArray(payload.items)) {
+      payload = decodeCatalogPayload(payload);
+    }
   } catch (error) {
     payload = {};
   }
@@ -832,8 +1278,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   var biologicalFeatures = hasBiologicalFeatureCatalog ? payload.biological_features : features;
   var orthogroups = Array.isArray(payload.orthogroups) ? payload.orthogroups : [];
   var matches = Array.isArray(payload.matches) ? payload.matches : [];
+  var annotations = Array.isArray(payload.annotations) ? payload.annotations : [];
   var sequenceSources = Array.isArray(payload.sequence_sources) ? payload.sequence_sources : [];
-  var popupMode = payload.popup_mode === 'simple' ? 'simple' : 'rich';
+  var popupMode = (
+    payload.popup_mode === 'simple'
+    || metadata && metadata.getAttribute('data-popup-mode') === 'simple'
+  ) ? 'simple' : 'rich';
   var searchFieldIds = {
     all: true,
     label: true,
@@ -958,6 +1408,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var id = String(match && match.id || '').trim();
     if (id && !matchesById.has(id)) {
       matchesById.set(id, match);
+    }
+  });
+  var annotationsByDomId = new Map();
+  annotations.forEach(function (annotation) {
+    var domId = String(annotation && (annotation.dom_id || annotation.domId) || '').trim();
+    if (domId && !annotationsByDomId.has(domId)) {
+      annotationsByDomId.set(domId, annotation);
     }
   });
 
@@ -3290,10 +3747,6 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function featureFasta(feature, sequenceKind) {
     if (!feature) return '';
     var label = sequenceKindLabel(sequenceKind);
-    var existing = label === 'aa'
-      ? firstDisplayText(feature.amino_acid_fasta, feature.aminoAcidFasta)
-      : firstDisplayText(feature.nucleotide_fasta, feature.nucleotideFasta);
-    if (existing && !containsInternalProteinDisplayId(existing)) return existing;
     var sequence = label === 'aa'
       ? featureAminoAcidSequence(feature)
       : firstDisplayText(feature.nucleotide_sequence, feature.nucleotideSequence);
@@ -3305,11 +3758,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     );
     var id = label === 'aa'
       ? displayProteinId(feature, null, proteinFallback)
-      : firstDisplayText(
+      : firstNonInternalDisplayText(
         feature.record_id,
         feature.recordId,
-        biologicalFeatureStableSvgId(feature),
-        feature.svg_id || 'record'
+        feature.displayRecordId,
+        feature.accession,
+        'record'
       ) + ':' + locationText(feature);
     return formatFastaEntry(id, featureDescription(feature), sequence);
   }
@@ -3442,6 +3896,39 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     Array.prototype.push.apply(rows, orthogroupRows(feature));
     return rows.filter(function (row) {
       return String(row[1] == null ? '' : row[1]) !== '';
+    });
+  }
+
+  function annotationLocationText(annotation) {
+    var segments = Array.isArray(annotation && annotation.segments)
+      ? annotation.segments
+      : [];
+    return segments.map(function (segment) {
+      if (!Array.isArray(segment) || segment.length < 2) return '';
+      var start = Number(segment[0]);
+      var end = Number(segment[1]);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) return '';
+      return String(start + 1) + '..' + String(end);
+    }).filter(Boolean).join('; ');
+  }
+
+  function annotationRows(annotation) {
+    var metadataValue = annotation && annotation.metadata &&
+      typeof annotation.metadata === 'object'
+      ? JSON.stringify(annotation.metadata)
+      : '';
+    return [
+      ['Label', annotation && annotation.label || ''],
+      ['Annotation ID', annotation && annotation.id || ''],
+      ['Set ID', annotation && (annotation.set_id || annotation.setId) || ''],
+      ['Track ID', annotation && (annotation.track_id || annotation.trackId) || ''],
+      ['Record ID', annotation && (annotation.record_id || annotation.recordId) || ''],
+      ['Location', annotationLocationText(annotation)],
+      ['Mark', annotation && annotation.mark || ''],
+      ['Lane', annotation && annotation.lane],
+      ['Metadata', metadataValue]
+    ].filter(function (row) {
+      return row[1] !== null && row[1] !== undefined && String(row[1]) !== '';
     });
   }
 
@@ -3687,6 +4174,24 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       '</div>' +
       '<div class="gfi-content">' + panel + '</div>' +
       '<button type="button" class="gfi-resize-handle" data-resize="true" title="Drag to resize" aria-label="Resize popup"></button>' +
+      '</div>';
+  }
+
+  function renderAnnotationPopup(annotation) {
+    copyValues = [];
+    downloadValues = [];
+    var title = firstDisplayText(
+      annotation && annotation.label,
+      annotation && annotation.id,
+      'Annotation'
+    );
+    return '<div class="gfi gfi--simple">' +
+      '<div class="gfi-header" data-drag-handle="true">' +
+      '<div><div class="gfi-title">' + escapeHtml(title) + '</div>' +
+      '<div class="gfi-subtitle">' + escapeHtml(annotationLocationText(annotation)) + '</div></div>' +
+      '<button type="button" class="gfi-close" data-close="true">x</button>' +
+      '</div>' +
+      '<div class="gfi-content">' + renderRows(annotationRows(annotation)) + '</div>' +
       '</div>';
   }
 
@@ -4758,7 +5263,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (!supportsStandaloneControls()) return;
     closeHoverPopup();
     closePopup();
-    var kind = popupKind === 'match' ? 'match' : 'feature';
+    var kind = popupKind === 'match'
+      ? 'match'
+      : (popupKind === 'annotation' ? 'annotation' : 'feature');
     var viewport = getViewportClientRect();
     var view = getVisibleViewRect();
     var scale = getScreenScale();
@@ -4951,7 +5458,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }
 
     function redraw() {
-      root.innerHTML = kind === 'match' ? renderMatchPopup(feature) : renderPopup(feature, activeTab);
+      root.innerHTML = kind === 'match'
+        ? renderMatchPopup(feature)
+        : (kind === 'annotation'
+          ? renderAnnotationPopup(feature)
+          : renderPopup(feature, activeTab));
     }
 
     function closestFromTarget(target, selector) {
@@ -5068,6 +5579,14 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function closestMatch(node) {
     while (node && node !== svg) {
       if (node.matches && node.matches(MATCH_SELECTOR)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  function closestAnnotation(node) {
+    while (node && node !== svg) {
+      if (node.matches && node.matches(ANNOTATION_SELECTOR)) return node;
       node = node.parentNode;
     }
     return null;
@@ -5194,6 +5713,16 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       suppressNextCanvasClick = false;
       event.preventDefault();
       event.stopPropagation();
+      return;
+    }
+    var annotationElement = closestAnnotation(event.target);
+    if (annotationElement) {
+      var annotation = annotationsByDomId.get(String(annotationElement.id || '').trim());
+      if (!annotation) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeHoverPopup();
+      openPopup(annotation, event, 'annotation');
       return;
     }
     var featureElement = closestFeature(event.target);

@@ -1,13 +1,19 @@
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 
 let runtimePromise = null;
 let runtime = null;
 
-export const serializeError = (error) => ({
-  name: error?.name ? String(error.name) : 'Error',
-  message: error?.message ? String(error.message) : String(error || 'Unknown diagram generation error'),
-  stack: error?.stack ? String(error.stack) : ''
-});
+export const serializeError = (error) => {
+  const normalized = normalizeUserFacingError(error);
+  return {
+    name: error?.name ? String(error.name) : 'Error',
+    message: normalized?.summary || 'Unknown diagram generation error',
+    details: Array.isArray(normalized?.details) ? normalized.details : [],
+    notes: Array.isArray(error?.notes) ? error.notes.map(String) : [],
+    stack: error?.stack ? String(error.stack) : ''
+  };
+};
 
 const errorDiagnostic = (error) => {
   const name = error?.name ? String(error.name) : 'Error';

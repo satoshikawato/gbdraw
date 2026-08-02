@@ -21,6 +21,8 @@ const copyModule = async (sourceRelative, targetRelative) => {
 await copyModule('gbdraw/web/js/app/session-feature-metadata.js', 'app/session-feature-metadata.js');
 await copyModule('gbdraw/web/js/app/feature-metadata-extraction.js', 'app/feature-metadata-extraction.js');
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
+await copyModule('gbdraw/web/js/services/error-normalization.js', 'services/error-normalization.js');
+await copyModule('gbdraw/web/js/services/file-content-cache.js', 'services/file-content-cache.js');
 await copyModule('gbdraw/web/js/services/json-clone.js', 'services/json-clone.js');
 await copyModule('gbdraw/web/js/services/pyodide-assets.js', 'services/pyodide-assets.js');
 await copyModule('gbdraw/web/js/services/runtime-capabilities.js', 'services/runtime-capabilities.js');
@@ -420,6 +422,32 @@ const svgWithFeature = ({
   });
   assert.equal(plan.status, 'aligned');
   assert.equal(plan.recoveredFeatureState.extractedFeatures[0].svg_id, 'rendered-a');
+}
+
+{
+  let extractionCalls = 0;
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'linear',
+      lInputType: 'gb',
+      selectedResultIndex: 0,
+      results: [],
+      linearSeqs: [{ gb: { name: 'unused.gb' } }],
+      featureState: {
+        extractedFeatures: [],
+        biologicalFeatures: []
+      },
+      editorState: {}
+    },
+    featureVisibilityTsv: '',
+    extractFeatureMetadataForPreviewImpl: async () => {
+      extractionCalls += 1;
+      throw new Error('Feature extraction must not run without a preview result.');
+    }
+  });
+  assert.equal(plan.status, 'ready');
+  assert.equal(plan.reason, 'not-needed');
+  assert.equal(extractionCalls, 0);
 }
 
 console.log('session feature metadata tests passed');

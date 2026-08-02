@@ -6,7 +6,7 @@ import json
 import math
 import re
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib import resources
 from typing import Literal, Mapping, Sequence
 
@@ -21,7 +21,7 @@ INTERACTIVE_STYLE_ID = "gbdraw-interactive-feature-style"
 INTERACTIVE_SCRIPT_ID = "gbdraw-interactive-feature-script"
 INTERACTIVE_GLOW_FILTER_ID = "gbdraw-interactive-feature-glow"
 INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
-INTERACTIVE_SCHEMA = "gbdraw-interactive-feature-popup-v2"
+INTERACTIVE_SCHEMA = 3
 
 _FEATURE_ELEMENT_SUFFIX_RE = re.compile(r"__(?:part|line)\d+$")
 _FEATURE_CONNECTOR_SUFFIX_RE = re.compile(r"__line\d+$")
@@ -55,6 +55,7 @@ class InteractiveSvgContext:
     annotations: Sequence[Mapping[str, object]] = ()
     sequence_sources: Sequence[Mapping[str, object]] = ()
     biological_features: Sequence[Mapping[str, object]] = ()
+    record_keys: Sequence[str] = ()
 
 
 @dataclass
@@ -109,7 +110,10 @@ def _normalize_feature_id(value: object | None) -> str:
 
 def _element_feature_id(element: ET.Element) -> str:
     return _normalize_feature_id(
-        element.get("data-gbdraw-feature-id") or element.get("id") or ""
+        element.get("data-gbdraw-rendered-feature-id")
+        or element.get("data-gbdraw-feature-id")
+        or element.get("id")
+        or ""
     )
 
 
@@ -159,6 +163,8 @@ def _feature_stable_id(feature: Mapping[str, object]) -> str:
             feature.get("stableFeatureSvgId"),
             feature.get("stableFeatureId"),
             feature.get("stableSvgId"),
+            feature.get("feature_svg_id"),
+            feature.get("featureSvgId"),
             feature.get("svg_id"),
             feature.get("svgId"),
         )
@@ -617,7 +623,12 @@ def _orthogroup_payloads(
     return payloads
 
 
-def _fallback_feature_payload(svg_id: str, entry: _RenderedFeatureEntry) -> dict[str, object]:
+def _fallback_feature_payload(
+    svg_id: str,
+    entry: _RenderedFeatureEntry,
+    *,
+    feature_index: int,
+) -> dict[str, object]:
     fill_color = entry.fill
     stable_svg_id = _first_text(entry.element.get("data-gbdraw-stable-feature-id"), svg_id)
     label = _first_text(entry.element.get("data-label"), entry.element.get("id"), svg_id)
@@ -632,7 +643,10 @@ def _fallback_feature_payload(svg_id: str, entry: _RenderedFeatureEntry) -> dict
         "display_label": label,
         "search_labels": search_labels,
         "record_id": "",
-        "record_idx": None,
+        "record_idx": _int_or_none(
+            entry.element.get("data-gbdraw-record-index")
+        ),
+        "feature_index": feature_index,
         "type": "Feature",
         "start": None,
         "end": None,
@@ -744,6 +758,7 @@ def _feature_payloads(
             "search_labels": _get_search_labels(feature, fallback_label, display_label),
             "record_id": _first_text(feature.get("record_id")),
             "record_idx": _int_or_none(feature.get("record_idx")),
+            "feature_index": _int_or_none(feature.get("feature_index")),
             "type": _first_text(feature.get("type")),
             "start": _int_or_none(feature.get("start")),
             "end": _int_or_none(feature.get("end")),
@@ -813,11 +828,22 @@ def _feature_payloads(
         if stable_feature_id:
             element.set("data-gbdraw-stable-feature-id", stable_feature_id)
 
-    for svg_id, entry in rendered.items():
+    for fallback_index, (svg_id, entry) in enumerate(rendered.items()):
         if svg_id in seen:
             continue
         seen.add(svg_id)
-        payloads.append(dict(_compact_wire_value(_fallback_feature_payload(svg_id, entry)) or {}))
+        payloads.append(
+            dict(
+                _compact_wire_value(
+                    _fallback_feature_payload(
+                        svg_id,
+                        entry,
+                        feature_index=fallback_index,
+                    )
+                )
+                or {}
+            )
+        )
 
     feature_ids = {str(feature.get("svg_id") or "").strip() for feature in payloads}
     for element in root.iter():
@@ -2246,6 +2272,10 @@ def _apply_viewport_root(root: ET.Element) -> None:
 def enrich_svg(
     svg_source: str,
     context: InteractiveSvgContext | None = None,
+    *,
+    result_index: int = 0,
+    result_name: str = "interactive.svg",
+    feature_catalog: Mapping[str, object] | None = None,
 ) -> str:
     """Return a standalone interactive SVG source string."""
 
@@ -2272,60 +2302,95 @@ def enrich_svg(
         _remove_class_token(element, "gbdraw-interactive-feature--dimmed")
         _remove_class_token(element, "gbdraw-interactive-feature--match")
         _remove_class_token(element, "gbdraw-interactive-feature--active-match")
-    features = _feature_payloads(root, context)
-    biological_features = _biological_feature_payloads(root, context)
-    orthogroups = _orthogroup_payloads(root, context)
-    matches = _match_payloads(root, features, orthogroups)
-    sequence_sources = _sequence_sources_for_matches(matches, context.sequence_sources)
-    annotation_context = {
+    from gbdraw.web_support.feature_catalog import (
+        build_feature_catalog,
+        build_feature_catalog_item,
+        select_feature_catalog_item,
+    )
+
+    if feature_catalog is not None:
+        catalog_item = select_feature_catalog_item(
+            feature_catalog,
+            result_index=result_index,
+            result_name=result_name,
+        )
+    else:
+        if not context.biological_features:
+            fallback_features = (
+                list(context.features)
+                if context.features
+                else _feature_payloads(root, context)
+            )
+            context = replace(
+                context,
+                features=fallback_features,
+                biological_features=fallback_features,
+            )
+        catalog_item = build_feature_catalog_item(
+            ET.tostring(root, encoding="unicode"),
+            context,
+            result_index=result_index,
+            result_name=result_name,
+        )
+    catalog = build_feature_catalog([catalog_item])
+
+    biological_by_key = {
         (
-            str(item.get("record_index", "")),
-            str(item.get("track_id", "")),
-            str(item.get("set_id", "")),
-            str(item.get("id", "")),
-        ): dict(item)
-        for item in context.annotations
+            str(feature.get("recordKey") or ""),
+            str(feature.get("biologicalFeatureId") or ""),
+        ): feature
+        for feature in catalog_item["biologicalFeatures"]
+        if isinstance(feature, Mapping)
     }
-    annotations: list[dict[str, object]] = []
+    rendered_features_by_id = {
+        str(feature.get("svgId") or ""): feature
+        for feature in catalog_item["features"]
+        if isinstance(feature, Mapping)
+    }
     for element in root.iter():
-        annotation_id = str(element.get("data-gbdraw-annotation-id") or "")
-        if not annotation_id:
+        if not _is_feature_candidate(element):
             continue
-        key = (
-            str(element.get("data-gbdraw-record-index") or ""),
-            str(element.get("data-gbdraw-annotation-track-id") or ""),
-            str(element.get("data-gbdraw-annotation-set-id") or ""),
-            annotation_id,
+        rendered = rendered_features_by_id.get(_element_feature_id(element))
+        if rendered is None:
+            continue
+        biological = biological_by_key.get(
+            (
+                str(rendered.get("recordKey") or ""),
+                str(rendered.get("biologicalFeatureId") or ""),
+            )
         )
-        payload = annotation_context.get(key, annotation_context.get((key[0], "", key[2], key[3]), {})).copy()
-        payload.update(
-            {
-                "dom_id": str(element.get("id") or ""),
-                "id": annotation_id,
-                "set_id": key[2],
-                "track_id": key[1],
-                "record_id": str(element.get("data-gbdraw-record-id") or ""),
-                "record_index": int(key[0]) if key[0].isdigit() else key[0],
-                "mark": str(element.get("data-gbdraw-annotation-mark") or payload.get("mark") or ""),
-                "label": str(element.get("data-gbdraw-annotation-label") or payload.get("label") or ""),
-            }
+        stable_id = (
+            str(
+                biological.get("stableFeatureId")
+                or biological.get("biologicalFeatureId")
+                or ""
+            )
+            if biological is not None
+            else ""
         )
-        annotations.append(payload)
+        if stable_id:
+            element.set("data-gbdraw-stable-feature-id", stable_id)
+        element.set("data-gbdraw-interactive-feature", "true")
+        _add_class_token(element, "gbdraw-interactive-feature")
+
+    matches = [
+        match
+        for match in catalog_item["comparisonMatches"]
+        if isinstance(match, Mapping)
+    ]
+    match_elements = [element for element in root.iter() if _is_match_candidate(element)]
+    for index, element in enumerate(match_elements):
+        match = matches[index] if index < len(matches) else {}
+        match_id = _first_text(match.get("id"))
+        if match_id:
+            element.set("data-gbdraw-match-id", match_id)
+            element.set("data-gbdraw-pairwise-match-id", match_id)
+        element.set("data-gbdraw-interactive-match", "true")
+        _add_class_token(element, "gbdraw-interactive-pairwise-match")
 
     try:
         metadata_payload = json.dumps(
-            _compact_wire_value(
-                {
-                    "schema": INTERACTIVE_SCHEMA,
-                    "popup_mode": popup_mode,
-                    "features": features,
-                    "biological_features": biological_features,
-                    "orthogroups": orthogroups,
-                    "matches": matches,
-                    "annotations": annotations,
-                    "sequence_sources": sequence_sources,
-                }
-            ),
+            catalog,
             ensure_ascii=False,
             separators=(",", ":"),
         )
@@ -2336,8 +2401,10 @@ def enrich_svg(
 
     metadata = ET.SubElement(root, _svg_tag("metadata"))
     metadata.set("id", INTERACTIVE_METADATA_ID)
-    metadata.set("data-schema", INTERACTIVE_SCHEMA)
+    metadata.set("data-schema", str(INTERACTIVE_SCHEMA))
     metadata.set("data-popup-mode", popup_mode)
+    metadata.set("data-result-index", str(result_index))
+    metadata.set("data-result-name", result_name)
     metadata.text = metadata_payload
 
     style = ET.SubElement(root, _svg_tag("style"))

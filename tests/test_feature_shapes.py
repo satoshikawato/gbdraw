@@ -17,6 +17,8 @@ import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_circular_diagram_from_record, assemble_linear_diagram_from_records
+from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
+from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict, create_feature_layers
@@ -57,7 +59,11 @@ def _build_test_record() -> SeqRecord:
     return record
 
 
-def _build_test_feature(*, is_directional: bool) -> FeatureObject:
+def _build_test_feature(
+    *,
+    is_directional: bool | None,
+    glyph_kind: str | None = None,
+) -> FeatureObject:
     location = [FeatureLocationPart("block", "001", "positive", 100, 200, True)]
     return FeatureObject(
         feature_id="feature_000000001",
@@ -69,6 +75,7 @@ def _build_test_feature(*, is_directional: bool) -> FeatureObject:
         coordinates=location,
         type="CDS",
         qualifiers={},
+        glyph_kind=glyph_kind,
     )
 
 
@@ -85,7 +92,11 @@ def test_parse_feature_shape_assignment_valid() -> None:
 
 
 def test_feature_rendering_defaults_and_resolvers() -> None:
-    assert FEATURE_RENDERING_VALUES == {"arrow", "rectangle", "underlay"}
+    assert FEATURE_RENDERING_VALUES == {
+        "arrow",
+        "rectangle",
+        "underlay",
+    }
     assert DEFAULT_FEATURE_RENDERINGS["repeat_region"] == "underlay"
     assert default_feature_rendering("CDS") == "arrow"
     assert default_feature_rendering("repeat_region") == "underlay"
@@ -113,7 +124,7 @@ def test_python_and_web_feature_rendering_defaults_stay_in_sync() -> None:
 
 @pytest.mark.parametrize(
     "raw",
-    ["CDSarrow", "=arrow", "CDS=", "CDS=triangle"],
+    ["CDSarrow", "=arrow", "CDS=", "CDS=arrowhead", "CDS=triangle"],
 )
 def test_parse_feature_shape_assignment_invalid(raw: str) -> None:
     with pytest.raises(ValueError):
@@ -129,11 +140,26 @@ def test_parse_feature_shape_overrides_last_wins() -> None:
 
 def test_resolve_directional_feature_types_with_overrides() -> None:
     directional_types = resolve_directional_feature_types(
-        {"CDS": "rectangle", "repeat_region": "arrow"}
+        {
+            "CDS": "rectangle",
+            "repeat_region": "arrow",
+            "misc_feature": "arrow",
+        }
     )
     assert "CDS" not in directional_types
     assert "repeat_region" in directional_types
+    assert "misc_feature" in directional_types
     assert "rRNA" in directional_types
+
+
+def test_feature_object_glyph_is_the_directionality_source_of_truth() -> None:
+    assert _build_test_feature(is_directional=True).glyph_kind == "arrow"
+    assert _build_test_feature(is_directional=False).glyph_kind == "rectangle"
+
+    with pytest.raises(ValueError, match="glyph_kind"):
+        _build_test_feature(is_directional=None, glyph_kind="arrowhead")
+    with pytest.raises(ValueError, match="contradicts"):
+        _build_test_feature(is_directional=True, glyph_kind="rectangle")
 
 
 def test_create_feature_dict_applies_directional_feature_types() -> None:
@@ -192,6 +218,7 @@ def test_create_feature_layers_partitions_underlays_before_lane_assignment() -> 
     ]
     assert result.underlay_features[0].label_text == ""
     assert result.underlay_features[0].feature_track_id == 0
+    assert result.underlay_features[0].glyph_kind == "rectangle"
 
 
 @pytest.mark.parametrize("rendering", ["rectangle", "arrow"])
@@ -216,7 +243,20 @@ def test_explicit_repeat_foreground_rendering(rendering: str) -> None:
     assert not result.underlay_features
     repeat = next(iter(result.foreground_features.values()))
     assert repeat.feature_type == "repeat_region"
+    assert repeat.glyph_kind == rendering
     assert repeat.is_directional is (rendering == "arrow")
+
+
+@pytest.mark.parametrize(
+    "options_type",
+    [CircularDiagramOptions, LinearDiagramOptions],
+)
+def test_typed_options_validate_and_normalize_feature_shapes(options_type) -> None:
+    options = options_type(feature_shapes={"CDS": "ARROW"})
+    assert options.feature_shapes == {"CDS": "arrow"}
+
+    with pytest.raises(ValidationError, match="invalid feature shape"):
+        options_type(feature_shapes={"CDS": "arrowhead"})
 
 
 def test_linear_feature_paths_change_with_directionality() -> None:
@@ -444,6 +484,7 @@ def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tm
 
     def fake_assemble(*_args, **kwargs):
         captured["feature_shapes"] = kwargs["options"].feature_shapes
+        captured["config"] = kwargs["options"].config
         return Drawing(filename=str(tmp_path / "dummy.svg"))
 
     monkeypatch.setattr(request_render_module, "build_circular_diagram", fake_assemble)
@@ -453,9 +494,13 @@ def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tm
             "--gbk",
             "dummy.gb",
             "--feature_shape",
-            "CDS=rectangle",
+            "CDS=arrow",
             "--feature_shape",
             "repeat_region=underlay",
+            "--arrow_head_length_ratio",
+            "1.25",
+            "--arrow_shaft_width_ratio",
+            "0.25",
             "--format",
             "svg",
             "-o",
@@ -463,9 +508,11 @@ def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tm
         ]
     )
     assert captured["feature_shapes"] == {
-        "CDS": "rectangle",
+        "CDS": "arrow",
         "repeat_region": "underlay",
     }
+    assert captured["config"].objects.features.arrow_geometry.head_length_ratio == 1.25
+    assert captured["config"].objects.features.arrow_geometry.shaft_width_ratio == 0.25
 
 
 def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -495,9 +542,13 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
             "--gbk",
             "dummy.gb",
             "--feature_shape",
-            "CDS=rectangle",
+            "CDS=arrow",
             "--feature_shape",
             "repeat_region=underlay",
+            "--arrow_head_length_ratio",
+            "auto",
+            "--arrow_shaft_width_ratio",
+            "1",
             "--format",
             "svg",
             "-o",
@@ -505,9 +556,12 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
         ]
     )
     assert captured["canonical_request"].options.feature_shapes == {
-        "CDS": "rectangle",
+        "CDS": "arrow",
         "repeat_region": "underlay",
     }
+    geometry = captured["canonical_request"].options.config.objects.features.arrow_geometry
+    assert geometry.head_length_ratio == "auto"
+    assert geometry.shaft_width_ratio == 1.0
 
 
 @pytest.mark.parametrize(
@@ -534,3 +588,20 @@ def test_circular_cli_feature_shape_validation(cmd_args: list[str]) -> None:
 def test_linear_cli_feature_shape_validation(cmd_args: list[str]) -> None:
     with pytest.raises(SystemExit):
         linear_cli_module._get_args(cmd_args)
+
+
+@pytest.mark.parametrize("parser", [circular_cli_module._get_args, linear_cli_module._get_args])
+@pytest.mark.parametrize(
+    "option_and_value",
+    [
+        ["--arrow_head_length_ratio", "0"],
+        ["--arrow_head_length_ratio", "nan"],
+        ["--arrow_head_length_ratio", "inf"],
+        ["--arrow_shaft_width_ratio", "0"],
+        ["--arrow_shaft_width_ratio", "1.01"],
+        ["--arrow_shaft_width_ratio", "nan"],
+    ],
+)
+def test_cli_arrow_geometry_validation(parser, option_and_value: list[str]) -> None:
+    with pytest.raises(SystemExit):
+        parser(["--gbk", "dummy.gb", *option_and_value])

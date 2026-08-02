@@ -71,10 +71,31 @@
       },
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-02-01-upload-row-context.webp",
-            "alt": "Linear GenBank input row 1 with AP027078.gb uploaded and the organism, subtitle, region, and LOSAT filename controls visible.",
+            "alt": "Linear GenBank input row 1 with AP027078.gb uploaded and the organism, subtitle, and region controls visible.",
             "caption": "The first uploaded row shows AP027078.gb in the Linear input card; repeat the remaining files in the table order."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1280, "height": 1000},
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; const expected = ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Hepatoplasmataceae GenBank order was not restored.'); const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = Array.from(card?.querySelectorAll('div') || []).find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); if (!row) throw new Error('Hepatoplasmataceae Linear input row 1 was not found.'); row.dataset.capture = 'hepatoplasmataceae-record-row'; row.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='hepatoplasmataceae-record-row']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "linearSeqs.0.gb.name": "AP027078.gb",
+              "linearSeqs.4.gb.name": "NZ_CP006932.gb"
+            },
+            "visibleText": ["AP027078.gb", "Organism / strain (optional)", "Subtitle / title (optional)", "Region (optional)"]
           }
         }
       ]
@@ -93,10 +114,30 @@
       },
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-01-open-pairwise.webp",
             "alt": "Pairwise Comparisons panel with Run LOSAT and LOSATP selected.",
             "caption": "Select Run LOSAT and set LOSAT Mode to LOSATP."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
+            "clipSelectors": ["[data-capture='linear-blast-source']", "[data-capture='linear-losat-settings']"],
+            "cropPadding": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+            "waitForSelector": "[data-capture='linear-losat-settings']",
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear"
+            },
+            "visibleControls": [
+              {"label": "Run LOSAT", "checked": true},
+              {"label": "LOSATP", "checked": true}
+            ]
           }
         }
       ]
@@ -181,6 +222,7 @@
           ["Track Layout", "Middle"],
           ["Align to Center", "On"],
           ["Separate Strands", "On"],
+          ["Show Coordinate Scale", "On"],
           ["Scale Style", "Ruler (Ticks)"],
           ["Show GC Content", "On"],
           ["Show GC Skew", "On"],
@@ -190,19 +232,28 @@
       },
       "operations": [
         {
+          "dataDependent": true,
           "title": "Scale style selector",
           "body": "Open Scale Style and choose Ruler.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-05-01-layout-gc-skew-ruler.webp",
-            "alt": "Axis and Scale card with the Scale Style menu open and the Ruler option highlighted.",
-            "caption": "Open Scale Style in the Axis & Scale card and choose the highlighted Ruler option."
+            "alt": "Axis and Scale card with Show Coordinate Scale selected and the Scale Style menu open on Ruler.",
+            "caption": "Leave Show Coordinate Scale selected and choose Ruler (Ticks) for Scale Style."
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1280, "height": 1000},
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.form.show_scale = true; app.form.scale_style = 'ruler';"
+              }
+            ],
             "crop": "openSelect",
             "cropPadding": {
-              "top": 54,
-              "right": 80,
+              "top": 145,
+              "right": 130,
               "bottom": 24,
               "left": 80
             },
@@ -211,7 +262,22 @@
               "options": ["Bar (Simple)", "Ruler (Ticks)"],
               "label": "Scale Style"
             },
-            "openDetails": ["Axis & Scale"]
+            "openDetails": ["Axis & Scale"],
+            "assertAppState": {
+              "mode": "linear",
+              "form.show_scale": true,
+              "form.scale_style": "ruler"
+            },
+            "visibleControls": [
+              {
+                "label": "Show Coordinate Scale",
+                "checked": true
+              },
+              {
+                "label": "Scale Style",
+                "value": "Ruler (Ticks)"
+              }
+            ]
           }
         },
         {
@@ -242,24 +308,40 @@
       "body": "Click Generate Diagram. The first LOSATP search can take time; later runs reuse its results when the input files and LOSAT settings have not changed. The preview should show orientation-colored collinear blocks between adjacent records.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-06-01-collinear-overview.webp",
-            "alt": "Generated five-genome Hepatoplasmataceae preview with red and blue collinear blocks, GC content and skew tracks, a ruler, and the legend.",
-            "caption": "The generated preview shows orientation-colored collinear blocks between five genome records."
+            "alt": "Completed five-genome Hepatoplasmataceae diagram with red and blue collinear blocks, GC content and skew tracks, a ruler, record metadata, and a right legend.",
+            "caption": "The completed figure shows orientation-colored collinear blocks, both GC tracks, the ruler, record metadata, and the right legend."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1600, "height": 1000},
+            "viewport": {"width": 1900, "height": 1000},
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('block_0024') || !content.includes('data-collinearity-block-id')) throw new Error('Restored collinear SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 0.5; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } svg.setAttribute('data-capture-tutorial-overview', 'true');"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('block_0024') || !content.includes('data-collinearity-block-id') || app?.form?.legend !== 'right') throw new Error('Restored collinear SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = 1370; const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-tutorial-overview', 'true');"
               },
               {"type": "wait", "ms": 100}
             ],
             "selector": "svg[data-capture-tutorial-overview='true']",
-            "cropPadding": 12
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 5,
+              "form.legend": "right",
+              "form.show_gc": true,
+              "form.show_skew": true,
+              "form.scale_style": "ruler"
+            },
+            "visibleText": [
+              "AP027078.1",
+              "NZ_CP006932.1",
+              "GC content",
+              "Collinear",
+              "Inverted"
+            ]
           }
         }
       ]

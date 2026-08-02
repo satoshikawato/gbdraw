@@ -2,6 +2,10 @@ import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, getFeatureHashCandidates, ruleMatchesFeature } from '../feature-utils.js';
 import { exactRegexValue } from '../feature-selector.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import {
+  featureOverrideKey,
+  getFeatureOverride
+} from '../../services/feature-override-identity.js';
 
 export const createFeatureColorActions = ({
   state,
@@ -13,7 +17,6 @@ export const createFeatureColorActions = ({
   previewRuntime = null
 }) => {
   const {
-    pyodideReady,
     results,
     selectedResultIndex,
     appliedPaletteColors,
@@ -101,8 +104,8 @@ export const createFeatureColorActions = ({
   };
 
   const featureStrokeKey = (featureLike, fallbackSvgId = '') => {
-    const key = String(featureLike?.id || featureLike?.feat?.id || fallbackSvgId || '').trim();
-    return key || String(featureLike?.svg_id || featureLike?.feat?.svg_id || '').trim();
+    const feature = featureLike?.feat || featureLike;
+    return featureOverrideKey(feature) || String(fallbackSvgId || '').trim();
   };
 
   const recordFeatureStrokeOverride = (
@@ -336,7 +339,7 @@ export const createFeatureColorActions = ({
       }
     }
 
-    const overrideColor = featureColorOverrides[feat.id]?.color;
+    const overrideColor = getFeatureOverride(featureColorOverrides, feat)?.color;
     if (overrideColor) {
       return resolveColorToHex(overrideColor) || overrideColor;
     }
@@ -518,7 +521,7 @@ export const createFeatureColorActions = ({
   const syncFeatureLegendOverrides = (features, caption, color) => {
     for (const feature of features) {
       upsertFeatureHashRule(feature, color, caption);
-      featureColorOverrides[feature.id] = { color, caption };
+      featureColorOverrides[featureOverrideKey(feature)] = { color, caption };
       updateClickedFeatureLegendState(feature, caption, color);
       applyInstantPreview(feature, color, caption);
     }
@@ -975,7 +978,7 @@ export const createFeatureColorActions = ({
       }
     }
     for (const feature of features) {
-      featureColorOverrides[feature.id] = { color, caption: finalCaption };
+      featureColorOverrides[featureOverrideKey(feature)] = { color, caption: finalCaption };
       updateClickedFeatureLegendState(feature, finalCaption, color);
     }
 
@@ -1023,7 +1026,7 @@ export const createFeatureColorActions = ({
     });
     affectedFeatures.forEach((feature) => {
       if (!feature?.id) return;
-      featureColorOverrides[feature.id] = { color, caption: finalCaption };
+      featureColorOverrides[featureOverrideKey(feature)] = { color, caption: finalCaption };
       updateClickedFeatureLegendState(feature, finalCaption, color);
     });
 
@@ -1266,7 +1269,10 @@ export const createFeatureColorActions = ({
           clickedFeature.value.legendName = targetLegendName;
           clickedFeature.value.appliedLegendName = targetLegendName;
         }
-        featureColorOverrides[feat.id] = { color: existingCaptionColor, caption: targetLegendName };
+        featureColorOverrides[featureOverrideKey(feat)] = {
+          color: existingCaptionColor,
+          caption: targetLegendName
+        };
         applyInstantPreview(feat, existingCaptionColor, targetLegendName);
         applySpecificRulesToSvg();
       }
@@ -1338,6 +1344,43 @@ export const createFeatureColorActions = ({
     clickedFeature.value.strokeWidth = originalWidth ?? '';
     clearFeatureStrokeOverride(clickedFeature.value.feat || clickedFeature.value, svgId);
 
+    persistCurrentSvg(svg);
+  };
+
+  const getFeatureStrokeColorValue = (featureLike) => {
+    const feature = featureLike?.feat || featureLike;
+    const override = getFeatureOverride(featureStrokeOverrides, feature);
+    return override && hasOwn(override, 'strokeColor')
+      ? override.strokeColor
+      : null;
+  };
+
+  const setClickedFeatureStrokeColorValue = (value) => {
+    if (value !== null) {
+      updateClickedFeatureStroke(String(value || '').trim(), null);
+      return;
+    }
+    if (!clickedFeature.value || !svgContainer.value) return;
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg) return;
+    const feature = clickedFeature.value.feat || clickedFeature.value;
+    const key = featureStrokeKey(feature, clickedFeature.value.svg_id);
+    const override = key ? featureStrokeOverrides[key] : null;
+    const inheritedColor = override && hasOwn(override, 'originalStrokeColor')
+      ? override.originalStrokeColor
+      : (clickedFeature.value.originalStrokeColor ?? originalSvgStroke.value.color);
+    if (override) {
+      delete override.strokeColor;
+      if (!hasOwn(override, 'strokeWidth')) delete featureStrokeOverrides[key];
+    }
+    getFeatureElements(svg, clickedFeature.value.svg_id).forEach((element) => {
+      if (inheritedColor === null || inheritedColor === '') {
+        element.removeAttribute('stroke');
+      } else {
+        element.setAttribute('stroke', inheritedColor);
+      }
+    });
+    clickedFeature.value.strokeColor = inheritedColor || '';
     persistCurrentSvg(svg);
   };
 
@@ -1424,9 +1467,12 @@ export const createFeatureColorActions = ({
       );
       if (remainsCoveredBySpecificRule || choice === 'this_with_legend') {
         upsertFeatureHashRule(feat, defaultColor, resetCaption);
-        featureColorOverrides[feat.id] = { color: defaultColor, caption: resetCaption };
+        featureColorOverrides[featureOverrideKey(feat)] = {
+          color: defaultColor,
+          caption: resetCaption
+        };
       } else {
-        delete featureColorOverrides[feat.id];
+        delete featureColorOverrides[featureOverrideKey(feat)];
       }
       applySpecificRulesToSvg();
 
@@ -1673,7 +1719,7 @@ export const createFeatureColorActions = ({
       );
       return;
     }
-    const featureKey = feat.id;
+    const featureKey = featureOverrideKey(feat);
 
     const caption = normalizeCaption(
       customCaption || feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`
@@ -1688,7 +1734,7 @@ export const createFeatureColorActions = ({
 
     await nextTick();
     let actualCaption = caption;
-    if (pyodideReady.value && caption) {
+    if (caption) {
       if (oldCaption) {
         if (captionsMatch(oldCaption, caption)) {
           const hasNonHashRule = manualSpecificRules.some(
@@ -1742,6 +1788,43 @@ export const createFeatureColorActions = ({
     extractLegendEntries();
   };
 
+  const setFeatureColorValue = async (feat, value, customCaption = null) => {
+    if (!feat) return;
+    const featureKey = featureOverrideKey(feat);
+    if (!featureKey) return;
+    if (value === null) {
+      delete featureColorOverrides[featureKey];
+      removeFeatureHashRules(feat);
+      const inheritedColor = appliedPaletteColors.value[feat.type] || '#cccccc';
+      applyInstantPreview(
+        feat,
+        inheritedColor,
+        normalizeCaption(getEffectiveLegendCaption(feat) || getFeatureCaption(feat))
+      );
+      applySpecificRulesToSvg();
+      if (clickedFeature.value?.feat === feat || clickedFeature.value?.svg_id === feat.svg_id) {
+        clickedFeature.value.color = inheritedColor;
+      }
+      return;
+    }
+    const normalizedValue = String(value || '').trim();
+    if (normalizedValue.toLowerCase() === 'none') {
+      const caption = normalizeCaption(
+        customCaption
+        || getEffectiveLegendCaption(feat)
+        || getFeatureCaption(feat)
+        || feat.type
+      );
+      featureColorOverrides[featureKey] = { color: 'none', caption };
+      upsertFeatureHashRule(feat, 'none', caption);
+      applyInstantPreview(feat, 'none', caption);
+      applySpecificRulesToSvg();
+      updateClickedFeatureLegendState(feat, caption, 'none');
+      return;
+    }
+    await setFeatureColor(feat, normalizedValue, customCaption);
+  };
+
   return {
     applyStrokeToAllSiblings,
     handleColorScopeChoice,
@@ -1755,7 +1838,10 @@ export const createFeatureColorActions = ({
     applyStrokeToSelectedFeatures,
     resetClickedFeatureFillColor,
     resetClickedFeatureStroke,
+    getFeatureStrokeColorValue,
+    setClickedFeatureStrokeColorValue,
     setFeatureColor,
+    setFeatureColorValue,
     updateClickedFeatureColor,
     updateClickedFeatureStroke
   };

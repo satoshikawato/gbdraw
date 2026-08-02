@@ -58,6 +58,9 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(
         encoding="utf-8"
     )
+    sanitization_source = (
+        WEB_ROOT / "js" / "services" / "svg-sanitization.js"
+    ).read_text(encoding="utf-8")
 
     assert "createDefaultAdv = (profileMode = 'circular')" in state_source
     assert "...comparisonStateForMode(profileMode)" in state_source
@@ -65,8 +68,8 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert "trackDefaultsForMode('circular')" in state_source
     assert "trackDefaultsForMode('linear')" in state_source
     assert "managedAdvStateForMode(profileMode).axis_stroke_color" in state_source
-    assert "'data-gbdraw-role'" in state_source
-    assert "'data-gbdraw-orientation'" in state_source
+    assert "'data-gbdraw-role'" in sanitization_source
+    assert "'data-gbdraw-orientation'" in sanitization_source
     assert "createDefaultAdv(state.mode.value)" in reset_source
     assert "modeProfileStateManager?.reset?" in reset_source
     assert "modeProfileStateManager.invalidate(nextMode)" in setup_source

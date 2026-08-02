@@ -19,6 +19,8 @@ await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(so
 await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join(sourceDir, 'app', 'feature-selector.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'color-utils.js'), await readFile(join(sourceDir, 'app', 'color-utils.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'svg-serialization.js'), await readFile(join(sourceDir, 'services', 'svg-serialization.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'services', 'feature-catalog.js'), await readFile(join(sourceDir, 'services', 'feature-catalog.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'services', 'feature-override-identity.js'), await readFile(join(sourceDir, 'services', 'feature-override-identity.js'), 'utf8'), 'utf8');
 
 const { createFeatureColorActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'color-actions.js'))
@@ -454,3 +456,25 @@ biologicalFeatures.value = [labelFeatureA];
 await actions.setFeatureColor(labelFeatureA, '#778899', 'exact hash rule');
 assert.equal(manualSpecificRules[0].val, 'f11111111');
 assert.equal(manualSpecificRules[1].val, '^f.*$');
+
+const stableColorFeature = {
+  ...labelFeatureA,
+  id: 'legacy-color-id',
+  recordKey: 'record-key-a',
+  biologicalFeatureId: 'biological-a'
+};
+const stableColorKey = 'record-key-a\u0000biological-a';
+manualSpecificRules.splice(0);
+featureColorOverrides[stableColorKey] = {
+  color: '#123456',
+  caption: 'Stable feature'
+};
+await actions.setFeatureColorValue(stableColorFeature, null);
+assert.equal(featureColorOverrides[stableColorKey], undefined);
+
+await actions.setFeatureColorValue(stableColorFeature, 'none', 'No fill');
+assert.deepEqual(featureColorOverrides[stableColorKey], {
+  color: 'none',
+  caption: 'No fill'
+});
+assert.equal(manualSpecificRules[0].color, 'none');

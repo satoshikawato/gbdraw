@@ -8,6 +8,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 
+from ..core.record_metadata import (
+    _feature_source_index_map,
+    _source_feature_index,
+)
 from .objects import GeneObject, RepeatObject, FeatureObject
 from .visibility import should_render_feature
 from ..labels.filtering import get_label_text
@@ -15,6 +19,7 @@ from .colors import get_color, get_color_with_info
 from .coordinates import get_exon_and_intron_coordinates
 from .shapes import (
     DEFAULT_DIRECTIONAL_FEATURE_TYPES,
+    FeatureGlyph,
     FeatureRendering,
     default_feature_rendering,
     normalize_feature_shape_overrides,
@@ -29,9 +34,10 @@ def create_repeat_object(
     default_colors,
     genome_length: int,
     label_filtering,
-    is_directional: bool,
+    is_directional: bool | None,
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
+    glyph_kind: FeatureGlyph | None = None,
 ) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
@@ -58,6 +64,7 @@ def create_repeat_object(
         feature_type,
         qualifiers=feature.qualifiers,
         record_id=record_id,
+        glyph_kind=glyph_kind,
     )
     return repeat_object
 
@@ -69,9 +76,10 @@ def create_feature_object(
     default_colors,
     genome_length: int,
     label_filtering,
-    is_directional: bool,
+    is_directional: bool | None,
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
+    glyph_kind: FeatureGlyph | None = None,
 ) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
@@ -94,6 +102,7 @@ def create_feature_object(
         feature_type,
         qualifiers=feature.qualifiers,
         record_id=record_id,
+        glyph_kind=glyph_kind,
     )
     return feature_object
 
@@ -105,9 +114,10 @@ def create_gene_object(
     default_colors,
     genome_length: int,
     label_filtering,
-    is_directional: bool,
+    is_directional: bool | None,
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
+    glyph_kind: FeatureGlyph | None = None,
 ) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.
@@ -136,6 +146,7 @@ def create_gene_object(
         feature_type,
         qualifiers=feature.qualifiers,
         record_id=record_id,
+        glyph_kind=glyph_kind,
     )
     return gene_object
 
@@ -169,6 +180,7 @@ def _build_feature_layers(
     repeat_count: int = 0
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
+    source_indexes = _feature_source_index_map(gb_record.features)
 
     for feature in gb_record.features:
         if not should_render_feature(
@@ -185,7 +197,9 @@ def _build_feature_layers(
         if caption:
             used_color_rules.add((caption, color))
         rendering = rendering_resolver(str(feature.type))
-        is_directional = rendering == "arrow"
+        glyph_kind: FeatureGlyph = (
+            "rectangle" if rendering == "underlay" else rendering
+        )
         include_label = compute_label_text and rendering != "underlay"
 
         if feature.type in {"CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA"}:
@@ -198,9 +212,10 @@ def _build_feature_layers(
                 default_colors,
                 genome_length,
                 label_filtering,
-                is_directional,
+                None,
                 record_id=gb_record.id,
                 compute_label_text=include_label,
+                glyph_kind=glyph_kind,
             )
             feature_id, feature_object = locus_id, gene_object
         elif feature.type == "repeat_region":
@@ -213,9 +228,10 @@ def _build_feature_layers(
                 default_colors,
                 genome_length,
                 label_filtering,
-                is_directional,
+                None,
                 record_id=gb_record.id,
                 compute_label_text=include_label,
+                glyph_kind=glyph_kind,
             )
             feature_id, feature_object = repeat_id, repeat_object
         else:
@@ -228,10 +244,17 @@ def _build_feature_layers(
                 default_colors,
                 genome_length,
                 label_filtering,
-                is_directional,
+                None,
                 record_id=gb_record.id,
                 compute_label_text=include_label,
+                glyph_kind=glyph_kind,
             )
+        source_feature_index = _source_feature_index(feature)
+        feature_object.source_feature_index = (
+            source_indexes[id(feature)]
+            if source_feature_index is None
+            else source_feature_index
+        )
         if rendering == "underlay":
             underlay_features.append(feature_object)
         else:
@@ -264,7 +287,7 @@ def create_feature_layers(
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
 ) -> FeatureBuildResult:
-    """Build visible features using the current three-value rendering contract."""
+    """Build visible features using the current rendering contract."""
 
     normalized_shapes = normalize_feature_shape_overrides(feature_shapes)
     return _build_feature_layers(

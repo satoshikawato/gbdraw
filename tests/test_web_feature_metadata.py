@@ -548,3 +548,45 @@ def test_biological_feature_catalog_keeps_features_excluded_from_rendering() -> 
     assert hidden["svg_id"] == hidden["stable_feature_id"] == hidden["stable_svg_id"]
     assert hidden["nucleotide_sequence"] == "ATGAAATAA"
     assert hidden["amino_acid_sequence"] == "MK"
+
+
+def test_biological_feature_catalog_excludes_non_rendered_source_features() -> None:
+    source = SeqFeature(
+        FeatureLocation(0, 12, strand=1),
+        type="source",
+        qualifiers={"organism": ["Catalog organism"]},
+    )
+    cds = SeqFeature(
+        FeatureLocation(0, 9, strand=1),
+        type="CDS",
+        qualifiers={"locus_tag": ["CATALOG_001"], "translation": ["MK"]},
+    )
+    record = SeqRecord(
+        Seq("ATGAAATAAGGG"),
+        id="catalog-record",
+        features=[source, cds],
+    )
+
+    payload = extract_features_from_records_payload(
+        [record],
+        selected_features=["CDS"],
+        include_biological_features=True,
+    )
+
+    assert [feature["type"] for feature in payload["features"]] == ["CDS"]
+    assert [feature["type"] for feature in payload["biological_features"]] == [
+        "CDS"
+    ]
+
+    source_payload = extract_features_from_records_payload(
+        [record],
+        selected_features=["source"],
+        include_biological_features=True,
+    )
+
+    assert [feature["type"] for feature in source_payload["features"]] == [
+        "source"
+    ]
+    assert [
+        feature["type"] for feature in source_payload["biological_features"]
+    ] == ["source", "CDS"]

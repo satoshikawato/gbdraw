@@ -834,6 +834,15 @@ export const buildSessionFeatureRecoveryPlan = async ({
   });
   const biologicalCatalogReady = hasUsableBiologicalFeatureCatalog(snapshot?.featureState);
 
+  if (validation.state === 'not-needed') {
+    return {
+      status: 'ready',
+      reason: 'not-needed',
+      validation,
+      errors: []
+    };
+  }
+
   if (isClickReadyValidation(validation) && validation.renderedCount > 0) {
     const existingAlignment = alignFeatureStateToRenderedSvg({
       snapshot,

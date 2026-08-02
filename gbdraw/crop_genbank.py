@@ -10,6 +10,10 @@ from Bio.SeqFeature import (
     SeqFeature, FeatureLocation, CompoundLocation,
     BeforePosition, AfterPosition
 )
+from gbdraw.core.record_metadata import (
+    _copy_source_feature_identity,
+    _feature_source_index_map,
+)
 
 def _get_args():
     parser = argparse.ArgumentParser(description='Crop genbank file. ')
@@ -122,12 +126,25 @@ def _crop_and_shift_location(loc_before, loc_current, loc_next, crop_start_0, cr
             strand=loc_current.strand
         )
 
-def crop_and_shift_features(original_features, start_0, end_0):
+def crop_and_shift_features(
+    original_features,
+    start_0,
+    end_0,
+    *,
+    coord_base=1,
+    coord_step=1,
+    _source_indexes=None,
+):
     """
     Iterates over old features, crops/shifts them relative to the
     crop window (start_0, end_0), and returns a new list of features.
     """
     new_features_list = []
+    source_indexes = (
+        _feature_source_index_map(original_features)
+        if _source_indexes is None
+        else _source_indexes
+    )
     for old_feature in original_features:
 
         if not (old_feature.location.start < end_0 and old_feature.location.end > start_0):
@@ -170,6 +187,23 @@ def crop_and_shift_features(original_features, start_0, end_0):
             qualifiers=old_feature.qualifiers,
             id=old_feature.id
         )
+        _copy_source_feature_identity(
+            old_feature,
+            new_feature,
+            fallback_index=source_indexes[id(old_feature)],
+            coord_base=coord_base,
+            coord_step=coord_step,
+        )
+        sub_features = getattr(old_feature, "sub_features", None)
+        if sub_features is not None:
+            new_feature.sub_features = crop_and_shift_features(
+                sub_features,
+                start_0,
+                end_0,
+                coord_base=coord_base,
+                coord_step=coord_step,
+                _source_indexes=source_indexes,
+            )
         new_features_list.append(new_feature)
 
     return new_features_list

@@ -1,4 +1,5 @@
 import { buildPyodideAssetManifest } from './pyodide-assets.js';
+import { normalizeUserFacingError } from './error-normalization.js';
 import { validateWebRuntimeCapabilities } from './runtime-capabilities.js';
 
 export class DiagramGenerationCanceledError extends Error {
@@ -51,10 +52,22 @@ const buildInitPayload = (id) => {
   };
 };
 
-const deserializeWorkerError = (serialized, fallbackMessage = 'Diagram generation worker failed') => {
+export const deserializeWorkerError = (
+  serialized,
+  fallbackMessage = 'Diagram generation worker failed'
+) => {
   const message = serialized?.message ? String(serialized.message) : fallbackMessage;
   const error = new Error(message);
   error.name = serialized?.name ? String(serialized.name) : 'DiagramGenerationWorkerError';
+  if (Array.isArray(serialized?.details)) {
+    error.details = normalizeUserFacingError({
+      message,
+      details: serialized.details
+    })?.details || [];
+  }
+  if (Array.isArray(serialized?.notes)) {
+    error.notes = serialized.notes.map((note) => String(note));
+  }
   if (serialized?.stack) error.stack = String(serialized.stack);
   return error;
 };

@@ -1703,12 +1703,14 @@ def _interactive_context(
     prepared: PreparedDiagramRequest,
     *,
     comparison_sequence_records: Sequence[Sequence[SeqRecord]] = (),
+    include_feature_catalog: bool = False,
 ) -> InteractiveSvgContext | None:
     output = prepared.request.output
-    if (
-        "interactive_svg" not in output.formats
-        or output.interactive_metadata_policy == "omit"
-    ):
+    needs_interactive_metadata = (
+        "interactive_svg" in output.formats
+        and output.interactive_metadata_policy != "omit"
+    )
+    if not needs_interactive_metadata and not include_feature_catalog:
         return None
     return build_prepared_interactive_context(
         prepared,
@@ -1720,6 +1722,7 @@ def render_request(
     request: DiagramRequest,
     *,
     artifacts: CurrentRequestArtifacts | None = None,
+    include_feature_catalog: bool = False,
 ) -> RequestRenderResult | CircularBatchRenderResult:
     """Build and save one typed request from current typed artifacts."""
 
@@ -1734,6 +1737,7 @@ def render_request(
     return render_prepared_request(
         prepared,
         batch_outputs_preflighted=batch_outputs_preflighted,
+        include_feature_catalog=include_feature_catalog,
     )
 
 
@@ -1741,6 +1745,7 @@ def render_prepared_request(
     prepared: PreparedDiagramRequest | PreparedCircularBatchRequest,
     *,
     batch_outputs_preflighted: bool = False,
+    include_feature_catalog: bool = False,
 ) -> RequestRenderResult | CircularBatchRenderResult:
     """Save an already-built request without planning or loading it again."""
 
@@ -1752,13 +1757,21 @@ def render_prepared_request(
     if isinstance(prepared, PreparedCircularBatchRequest):
         if not batch_outputs_preflighted:
             _preflight_circular_batch_outputs(prepared.request)
-    return _render_request_diagram(prepared)
+    return _render_request_diagram(
+        prepared,
+        include_feature_catalog=include_feature_catalog,
+    )
 
 
 def _render_request_diagram(
     prepared: PreparedDiagramRequest | PreparedCircularBatchRequest,
+    *,
+    include_feature_catalog: bool = False,
 ) -> RequestRenderResult | CircularBatchRenderResult:
-    comparison_sequence_records = _comparison_sequence_records(prepared)
+    comparison_sequence_records = _comparison_sequence_records(
+        prepared,
+        include_feature_catalog=include_feature_catalog,
+    )
     if isinstance(prepared, PreparedCircularBatchRequest):
         return CircularBatchRenderResult(
             request=prepared.request,
@@ -1767,6 +1780,7 @@ def _render_request_diagram(
                 _render_prepared_request(
                     item,
                     comparison_sequence_records=comparison_sequence_records,
+                    include_feature_catalog=include_feature_catalog,
                 )
                 for item in prepared.items
             ),
@@ -1774,11 +1788,14 @@ def _render_request_diagram(
     return _render_prepared_request(
         prepared,
         comparison_sequence_records=comparison_sequence_records,
+        include_feature_catalog=include_feature_catalog,
     )
 
 
 def _comparison_sequence_records(
     prepared: PreparedDiagramRequest | PreparedCircularBatchRequest,
+    *,
+    include_feature_catalog: bool = False,
 ) -> tuple[tuple[SeqRecord, ...], ...]:
     """Load optional Circular comparison FASTA sources once per render."""
 
@@ -1790,7 +1807,7 @@ def _comparison_sequence_records(
         if isinstance(prepared, PreparedCircularBatchRequest)
         else (prepared.request.output,)
     )
-    if not any(
+    if not include_feature_catalog and not any(
         "interactive_svg" in output.formats
         and output.interactive_metadata_policy != "omit"
         for output in outputs
@@ -1860,6 +1877,7 @@ def _render_prepared_request(
     prepared: PreparedDiagramRequest,
     *,
     comparison_sequence_records: Sequence[Sequence[SeqRecord]] = (),
+    include_feature_catalog: bool = False,
 ) -> RequestRenderResult:
     """Write one already-planned diagram using its canonical output request."""
 
@@ -1867,6 +1885,15 @@ def _render_prepared_request(
     interactive_context = _interactive_context(
         prepared,
         comparison_sequence_records=comparison_sequence_records,
+        include_feature_catalog=include_feature_catalog,
+    )
+    export_interactive_context = (
+        interactive_context
+        if (
+            "interactive_svg" in output.formats
+            and output.interactive_metadata_policy != "omit"
+        )
+        else None
     )
     paths = save_figure_to(
         prepared.drawing,
@@ -1878,7 +1905,7 @@ def _render_prepared_request(
         ),
         output_prefix=output.output_prefix,
         overwrite=output.overwrite,
-        interactive_context=interactive_context,
+        interactive_context=export_interactive_context,
     )
     return RequestRenderResult(
         mode=prepared.mode,

@@ -58,6 +58,7 @@ from .tracks import (  # type: ignore[reportMissingImports]
 )
 
 from .cli_utils.common import (
+    _add_arrow_geometry_args,
     _add_block_stroke_args,
     _add_comparison_filter_args,
     _add_depth_axis_args,
@@ -198,6 +199,7 @@ def _get_args(
         type=str)
     add_feature_args(parser)
     _add_feature_shape_arg(parser)
+    _add_arrow_geometry_args(parser)
     _add_block_stroke_args(parser)
     parser.add_argument(
         '--axis_stroke_color',
@@ -401,6 +403,10 @@ def _get_args(
         '--scale_interval',
         help='Manual scale interval for circular mode (in bp). Overrides automatic calculation.',
         type=int)
+    parser.add_argument(
+        '--hide_scale',
+        help='Hide the primary genome-coordinate scale while retaining the circular axis.',
+        action='store_true')
     parser.add_argument(
         '--tick_label_font_size',
         help='Tick label font size for circular mode (optional; float; default: 14 (pt)).',
@@ -687,6 +693,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     color_table_path: str = args.table
     selected_features_set: str = args.features.split(',')
     feature_shapes = parse_feature_shape_overrides(args.feature_shape)
+    arrow_head_length_ratio: str | float | None = args.arrow_head_length_ratio
+    arrow_shaft_width_ratio: float | None = args.arrow_shaft_width_ratio
     species: str = args.species
     strain: str = args.strain
     legend: str = args.legend
@@ -765,6 +773,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         else None
     )
     scale_interval: Optional[int] = args.scale_interval
+    hide_scale: bool = bool(args.hide_scale)
     tick_label_font_size: Optional[float] = args.tick_label_font_size
     circular_label_spacing: Optional[float] = args.circular_label_spacing
     legend_box_size = args.legend_box_size
@@ -867,6 +876,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     override_candidates: dict[str, object | None] = {
         "objects.features.block_stroke_color": block_stroke_color,
+        "objects.features.arrow_geometry.head_length_ratio": arrow_head_length_ratio,
+        "objects.features.arrow_geometry.shaft_width_ratio": arrow_shaft_width_ratio,
         "objects.axis.circular.stroke_color": axis_stroke_color,
         "objects.features.line_stroke_color": line_stroke_color,
         "labels.circular.scope": (
@@ -906,6 +917,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "labels.unified_adjustment.inner_labels.x_radius_offset": inner_label_x_radius_offset,
         "labels.unified_adjustment.inner_labels.y_radius_offset": inner_label_y_radius_offset,
         "objects.scale.interval": scale_interval,
+        "objects.scale.show": not hide_scale,
         "objects.ticks.tick_labels.font_size": tick_label_font_size,
         "labels.spacing.circular": circular_label_spacing,
     }
@@ -987,11 +999,33 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     elif shortcut_geometry_requested:
         circular_track_slots_or_none = circular_track_slots_from_order(
             "features,ticks,depth,gc_content,gc_skew",
+            show_ticks=not hide_scale,
             show_depth=show_depth,
             depth_track_count=max(1, logical_depth_track_count),
             show_gc=show_gc,
             show_skew=show_skew,
             dinucleotide=dinucleotide,
+        )
+
+    user_explicit_track_slots = bool(
+        circular_track_table
+        or circular_track_order
+        or circular_track_slot_specs
+    )
+    if (
+        hide_scale
+        and user_explicit_track_slots
+        and any(
+            slot.enabled and str(slot.renderer) == "ticks"
+            for slot in parse_circular_track_slots(
+                circular_track_slots_or_none or (),
+                _allow_legacy_transport=allow_legacy_track_transport,
+            )
+        )
+    ):
+        logger.warning(
+            "WARNING: --hide_scale does not suppress an enabled ticks slot in a "
+            "user-explicit Circular track list; the explicit slot wins."
         )
 
     if circular_track_slots_or_none is not None and not circular_track_slot_specs:
@@ -1135,6 +1169,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         rendered = render_prepared_request(
             prepared,
             batch_outputs_preflighted=batch_outputs_preflighted,
+            include_feature_catalog=True,
         )
     else:
         rendered = render_request(canonical_request)
@@ -1151,6 +1186,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     track_slot_geometry_records = []
     session_feature_metadata = []
     session_biological_feature_metadata = []
+    session_interactive_contexts = []
     for result_index, rendered_item in enumerate(rendered_items):
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")
@@ -1169,6 +1205,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             )
         )
         interactive_context = rendered_item.interactive_context
+        session_interactive_contexts.append(interactive_context)
         if interactive_context is not None:
             session_feature_metadata.extend(interactive_context.features)
             session_biological_feature_metadata.extend(
@@ -1181,6 +1218,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         outputs=tuple(outputs),
         feature_metadata=tuple(session_feature_metadata),
         biological_feature_metadata=tuple(session_biological_feature_metadata),
+        interactive_contexts=tuple(session_interactive_contexts),
         run_metadata=build_track_slot_geometry_run_metadata(
             mode="circular",
             records=track_slot_geometry_records,

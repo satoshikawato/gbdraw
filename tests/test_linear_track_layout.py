@@ -1122,6 +1122,104 @@ def test_linear_ruler_on_axis_hides_bottom_length_bar(tmp_path: Path, layout: st
 
 
 @pytest.mark.linear
+@pytest.mark.parametrize("scale_style", ["bar", "ruler"])
+def test_linear_hide_scale_removes_bottom_scale_and_its_canvas_reservation(
+    tmp_path: Path,
+    scale_style: str,
+) -> None:
+    scale_args = ["--scale_style", scale_style]
+    if scale_style == "ruler":
+        scale_args.extend(["--scale_interval", "50000"])
+    visible_result = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_GBK],
+        scale_args,
+        output_name=f"linear_visible_{scale_style}_scale",
+    )
+    hidden_result = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_GBK],
+        [*scale_args, "--hide_scale"],
+        output_name=f"linear_hidden_{scale_style}_scale",
+    )
+    visible_returncode, visible_stdout, visible_stderr, visible_svg = visible_result
+    hidden_returncode, hidden_stdout, hidden_stderr, hidden_svg = hidden_result
+    assert visible_returncode == 0, f"stdout={visible_stdout}\nstderr={visible_stderr}"
+    assert hidden_returncode == 0, f"stdout={hidden_stdout}\nstderr={hidden_stderr}"
+
+    visible_content = visible_svg.read_text(encoding="utf-8")
+    hidden_content = hidden_svg.read_text(encoding="utf-8")
+    assert 'id="length_bar"' in visible_content
+    assert 'id="length_bar"' not in hidden_content
+    assert _extract_viewbox_bottom(hidden_content) < _extract_viewbox_bottom(
+        visible_content
+    )
+    _extract_first_record_axis(hidden_content)
+
+
+@pytest.mark.linear
+def test_linear_hide_scale_ignores_axis_ruler_and_keeps_the_main_axis(
+    tmp_path: Path,
+) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear(
+        tmp_path,
+        [
+            "--track_layout",
+            "above",
+            "--scale_style",
+            "ruler",
+            "--ruler_on_axis",
+            "--scale_interval",
+            "50000",
+            "--hide_scale",
+        ],
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    assert "--ruler_on_axis is ignored when --hide_scale is set." in (
+        f"{stdout}\n{stderr}"
+    )
+    assert 'id="length_bar"' not in svg_content
+    assert _count_ruler_ticks(svg_content) == 0
+    _extract_first_record_axis(svg_content)
+    assert 'stroke="lightgray"' in svg_content
+
+
+@pytest.mark.linear
+def test_linear_hide_scale_suppresses_multi_record_axis_rulers(
+    tmp_path: Path,
+) -> None:
+    returncode, stdout, stderr, output_svg = _run_linear_with_gbks(
+        tmp_path,
+        [INPUT_GBK, INPUT_MELA_GBK],
+        [
+            "--track_layout",
+            "above",
+            "--scale_style",
+            "ruler",
+            "--ruler_on_axis",
+            "--scale_interval",
+            "50000",
+            "--hide_scale",
+        ],
+        output_name="linear_hidden_multi_record_rulers",
+    )
+    assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
+    svg_content = output_svg.read_text(encoding="utf-8")
+    root = ET.fromstring(svg_content)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    record_axis_groups = [
+        group
+        for group in root.findall("svg:g", namespace)
+        if group.attrib.get("data-gbdraw-record-id")
+        and group.find('svg:line[@y1="0"][@y2="0"]', namespace) is not None
+    ]
+
+    assert len(record_axis_groups) == 2
+    assert _count_ruler_ticks(svg_content) == 0
+
+
+@pytest.mark.linear
 def test_linear_default_axis_color_stays_legacy_without_ruler_on_axis(tmp_path: Path) -> None:
     returncode, stdout, stderr, output_svg = _run_linear(
         tmp_path,

@@ -84,9 +84,9 @@ class FeatureDrawingConfigurator:
         self.block_stroke_width: float = cfg.objects.features.block_stroke_width.for_length_param(self.length_param)
         self.line_stroke_color: str = cfg.objects.features.line_stroke_color
         self.line_stroke_width: float = cfg.objects.features.line_stroke_width.for_length_param(self.length_param)
+        self.arrow_geometry = cfg.objects.features.arrow_geometry
         self.qualifier_priority = cfg.labels.filtering.qualifier_priority
         self.blacklist_keywords: List[str] = cfg.labels.filtering.blacklist_keywords
 
 
 __all__ = ["FeatureDrawingConfigurator"]
-

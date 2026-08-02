@@ -4,6 +4,7 @@ import { ensureSvgDefs } from './svg-serialization.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
+const RENDERED_FEATURE_ID_ATTRIBUTE = 'data-gbdraw-rendered-feature-id';
 const FEATURE_SELECTOR = [
   `path[${FEATURE_ID_ATTRIBUTE}]`,
   `polygon[${FEATURE_ID_ATTRIBUTE}]`,
@@ -18,6 +19,7 @@ const STANDALONE_MATCH_SELECTOR = [
   'path[data-match-kind]',
   'path[data-pairwise-match-style]'
 ].join(', ');
+const STANDALONE_ANNOTATION_SELECTOR = '[data-gbdraw-annotation-id]';
 const INTERACTIVE_METADATA_ID = 'gbdraw-interactive-feature-metadata';
 const INTERACTIVE_STYLE_ID = 'gbdraw-interactive-feature-style';
 const INTERACTIVE_SCRIPT_ID = 'gbdraw-interactive-feature-script';
@@ -26,6 +28,7 @@ const INTERACTIVE_MATCH_GLOW_FILTER_ID = 'gbdraw-interactive-feature-match-glow'
 const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
 const FEATURE_RECORD_SUFFIX_RE = /_record_\d+$/;
 const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
+const INTERACTIVE_CATALOG_SCHEMA = 3;
 
 const compactWireValue = (value) => {
   if (Array.isArray(value)) {
@@ -61,6 +64,7 @@ export const stripEditorOnlyCursorStyles = (svg) => {
 
 const getElementFeatureId = (element) =>
   normalizeFeatureElementId(
+    element?.getAttribute?.(RENDERED_FEATURE_ID_ATTRIBUTE) ||
     element?.getAttribute?.(FEATURE_ID_ATTRIBUTE) ||
     element?.getAttribute?.('id') ||
     ''
@@ -191,6 +195,15 @@ const standaloneMemberRecordIndex = (member) => {
 
 const normalizeStandaloneContext = (options = {}) => ({
   popupMode: normalizeStandalonePopupMode(options.popupMode),
+  featureCatalog:
+    options.featureCatalog && typeof options.featureCatalog === 'object'
+      ? options.featureCatalog
+      : null,
+  catalogResultIndex: Number.isInteger(Number(options.catalogResultIndex))
+    ? Number(options.catalogResultIndex)
+    : null,
+  catalogResultName: String(options.catalogResultName || '').trim(),
+  requireFeatureCatalog: options.requireFeatureCatalog === true,
   features: Array.isArray(options.features) ? options.features : [],
   editableLabels: Array.isArray(options.editableLabels) ? options.editableLabels : [],
   labelTextFeatureOverrides:
@@ -220,6 +233,33 @@ const normalizeStandaloneContext = (options = {}) => ({
       : {},
   sequenceSources: Array.isArray(options.sequenceSources) ? options.sequenceSources : []
 });
+
+const selectStandaloneCatalogItem = (context) => {
+  const catalog = context?.featureCatalog;
+  if (
+    !catalog
+    || catalog.schema !== INTERACTIVE_CATALOG_SCHEMA
+    || !Array.isArray(catalog.items)
+  ) {
+    return null;
+  }
+  const hasResultIndex = Number.isInteger(context.catalogResultIndex);
+  const hasResultName = Boolean(context.catalogResultName);
+  if (!hasResultIndex && !hasResultName) {
+    return catalog.items.length === 1 ? catalog.items[0] : null;
+  }
+  return catalog.items.find((item) => (
+    item
+    && (!hasResultIndex || item.resultIndex === context.catalogResultIndex)
+    && (!hasResultName || String(item.resultName || '').trim() === context.catalogResultName)
+  )) || null;
+};
+
+const cloneStandaloneCatalogItem = (item) => JSON.parse(JSON.stringify(item));
+
+const standaloneCatalogFeatureKey = (recordKey, biologicalFeatureId) => (
+  `${String(recordKey || '').trim()}\u0000${String(biologicalFeatureId || '').trim()}`
+);
 
 const getEditableLabelEntryForStandaloneFeature = (feature, context) => {
   const entries = Array.isArray(context?.editableLabels) ? context.editableLabels : [];
@@ -393,6 +433,55 @@ const getStandaloneOrthogroupDescription = (group, context) => {
   const id = String(group?.id || '').trim();
   const override = id ? String(context?.orthogroupDescriptionOverrides?.[id] || '').trim() : '';
   return override || String(group?.description || '').trim();
+};
+
+const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
+  const item = cloneStandaloneCatalogItem(sourceItem);
+  const biologicalByKey = new Map(
+    (Array.isArray(item.biologicalFeatures) ? item.biologicalFeatures : [])
+      .map((feature) => [
+        standaloneCatalogFeatureKey(
+          feature?.recordKey,
+          feature?.biologicalFeatureId
+        ),
+        feature
+      ])
+  );
+  item.features = (Array.isArray(item.features) ? item.features : []).map((reference) => {
+    const biological = biologicalByKey.get(standaloneCatalogFeatureKey(
+      reference?.recordKey,
+      reference?.biologicalFeatureId
+    )) || {};
+    const feature = {
+      ...biological,
+      id: standaloneCatalogFeatureKey(
+        reference?.recordKey,
+        reference?.biologicalFeatureId
+      ),
+      svg_id: String(reference?.svgId || '').trim()
+    };
+    const fallbackLabel = getStandaloneFeatureLabel(feature);
+    const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel, context);
+    return displayLabel && displayLabel !== fallbackLabel
+      ? { ...reference, displayLabel }
+      : reference;
+  });
+  item.orthogroups = (Array.isArray(item.orthogroups) ? item.orthogroups : [])
+    .map((group) => {
+      const id = String(group?.id || '').trim();
+      const displayName = id
+        ? String(context?.orthogroupNameOverrides?.[id] || '').trim()
+        : '';
+      const description = id
+        ? String(context?.orthogroupDescriptionOverrides?.[id] || '').trim()
+        : '';
+      return {
+        ...group,
+        ...(displayName ? { display_name: displayName } : {}),
+        ...(description ? { description } : {})
+      };
+    });
+  return item;
 };
 
 const createStandaloneBiologicalFeatureResolver = (features) => {
@@ -1885,6 +1974,13 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   if (!svg) return false;
 
   const context = normalizeStandaloneContext(options);
+  const sourceCatalogItem = selectStandaloneCatalogItem(context);
+  if ((context.featureCatalog || context.requireFeatureCatalog) && !sourceCatalogItem) {
+    return false;
+  }
+  const catalogItem = sourceCatalogItem
+    ? catalogItemWithStandaloneOverrides(sourceCatalogItem, context)
+    : null;
   const originalGeometry = resolveStandaloneOriginalGeometry(svg);
   const normalizedPopupMode = normalizeStandalonePopupMode(context.popupMode);
   removeExistingStandaloneInteractivityAssets(svg);
@@ -1896,16 +1992,32 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
       removeClassToken(element, 'gbdraw-interactive-feature--match');
       removeClassToken(element, 'gbdraw-interactive-feature--active-match');
     });
-  const features = buildStandaloneFeaturePayloads(svg, {
-    ...context,
-    popupMode: normalizedPopupMode
+  svg.querySelectorAll('[data-gbdraw-interactive-annotation]').forEach((element) => {
+    element.removeAttribute('data-gbdraw-interactive-annotation');
+    removeClassToken(element, 'gbdraw-interactive-annotation');
   });
-  const biologicalFeatures = buildStandaloneBiologicalFeaturePayloads(context, features);
-  const orthogroups = buildStandaloneOrthogroupPayloads(features, context);
-  const matches = buildStandaloneMatchPayloads(svg, { features, orthogroups });
-  const sequenceSources = selectStandaloneSequenceSources(matches, context.sequenceSources);
+  const features = catalogItem
+    ? catalogItem.features
+    : buildStandaloneFeaturePayloads(svg, {
+      ...context,
+      popupMode: normalizedPopupMode
+    });
+  const biologicalFeatures = catalogItem
+    ? catalogItem.biologicalFeatures
+    : buildStandaloneBiologicalFeaturePayloads(context, features);
+  const orthogroups = catalogItem
+    ? catalogItem.orthogroups
+    : buildStandaloneOrthogroupPayloads(features, context);
+  const matches = catalogItem
+    ? catalogItem.comparisonMatches
+    : buildStandaloneMatchPayloads(svg, { features, orthogroups });
+  const sequenceSources = catalogItem
+    ? (catalogItem.sequenceSources || [])
+    : selectStandaloneSequenceSources(matches, context.sequenceSources);
 
-  const featureIds = new Set(features.map((feature) => feature.svg_id));
+  const featureIds = new Set(features.map((feature) => (
+    catalogItem ? feature.svgId : feature.svg_id
+  )));
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
     const id = getElementFeatureId(element);
     if (!featureIds.has(id)) return;
@@ -1922,20 +2034,40 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     element.setAttribute('data-gbdraw-interactive-match', 'true');
     addClassToken(element, 'gbdraw-interactive-pairwise-match');
   });
+  const annotationDomIds = new Set(
+    (Array.isArray(catalogItem?.annotations) ? catalogItem.annotations : [])
+      .map((annotation) => String(annotation?.dom_id || annotation?.domId || '').trim())
+      .filter(Boolean)
+  );
+  svg.querySelectorAll(STANDALONE_ANNOTATION_SELECTOR).forEach((element) => {
+    if (!annotationDomIds.has(String(element.id || '').trim())) return;
+    element.setAttribute('data-gbdraw-interactive-annotation', 'true');
+    addClassToken(element, 'gbdraw-interactive-annotation');
+  });
 
   const metadata = document.createElementNS(SVG_NS, 'metadata');
   metadata.setAttribute('id', INTERACTIVE_METADATA_ID);
-  metadata.setAttribute('data-schema', INTERACTIVE_SCHEMA);
   metadata.setAttribute('data-popup-mode', normalizedPopupMode);
-  metadata.textContent = JSON.stringify(compactWireValue({
-    schema: INTERACTIVE_SCHEMA,
-    popup_mode: normalizedPopupMode,
-    features,
-    biological_features: biologicalFeatures,
-    orthogroups,
-    matches,
-    sequence_sources: sequenceSources
-  }));
+  if (catalogItem) {
+    metadata.setAttribute('data-schema', String(INTERACTIVE_CATALOG_SCHEMA));
+    metadata.setAttribute('data-result-index', String(catalogItem.resultIndex));
+    metadata.setAttribute('data-result-name', String(catalogItem.resultName || ''));
+    metadata.textContent = JSON.stringify({
+      schema: INTERACTIVE_CATALOG_SCHEMA,
+      items: [catalogItem]
+    });
+  } else {
+    metadata.setAttribute('data-schema', INTERACTIVE_SCHEMA);
+    metadata.textContent = JSON.stringify(compactWireValue({
+      schema: INTERACTIVE_SCHEMA,
+      popup_mode: normalizedPopupMode,
+      features,
+      biological_features: biologicalFeatures,
+      orthogroups,
+      matches,
+      sequence_sources: sequenceSources
+    }));
+  }
 
   const style = document.createElementNS(SVG_NS, 'style');
   style.setAttribute('id', INTERACTIVE_STYLE_ID);

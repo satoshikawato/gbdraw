@@ -15,6 +15,12 @@ const {
 const cloneExpected = () =>
   JSON.parse(JSON.stringify(EXPECTED_WEB_RUNTIME_CAPABILITIES));
 
+assert.equal(EXPECTED_WEB_RUNTIME_CAPABILITIES.rendering.optionSchema, 3);
+assert.deepEqual(
+  EXPECTED_WEB_RUNTIME_CAPABILITIES.rendering.featureRenderings,
+  ['arrow', 'rectangle', 'underlay']
+);
+
 {
   const source = cloneExpected();
   const validated = validateWebRuntimeCapabilities(source);
@@ -34,6 +40,12 @@ for (const mutate of [
   },
   (manifest) => {
     delete manifest.rendering.optionSchema;
+  },
+  (manifest) => {
+    manifest.rendering.optionSchema = 1;
+  },
+  (manifest) => {
+    manifest.rendering.featureRenderings = ['arrow', 'arrowhead', 'rectangle', 'underlay'];
   },
   (manifest) => {
     manifest.unexpected = true;
@@ -134,6 +146,25 @@ const {
       assert.equal(error instanceof DiagramRuntimeCompatibilityError, true);
       assert.equal(error.message, DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE);
       assert.match(error.diagnostic, /renderProtocol/);
+      return true;
+    }
+  );
+  const worker = FakeWorker.instances.at(-1);
+  assert.equal(worker.terminated, true);
+  assert.equal(getDiagramGenerationWorkerCapabilities(), null);
+}
+
+{
+  const oldWheel = cloneExpected();
+  oldWheel.rendering.optionSchema = 2;
+  oldWheel.rendering.featureRenderings = ['arrow', 'arrowhead', 'rectangle', 'underlay'];
+  FakeWorker.capabilities = oldWheel;
+  await assert.rejects(
+    preinitializeDiagramGenerationWorker(),
+    (error) => {
+      assert.equal(error instanceof DiagramRuntimeCompatibilityError, true);
+      assert.equal(error.message, DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE);
+      assert.match(error.diagnostic, /rendering\.(?:featureRenderings|optionSchema)/);
       return true;
     }
   );

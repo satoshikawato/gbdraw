@@ -235,12 +235,25 @@ def test_duplicate_rendered_feature_payload_entries_do_not_collapse() -> None:
         ),
     )
     payload = _metadata_payload(enriched)
-    feature_ids = {feature["svg_id"] for feature in payload["features"]}
+    assert payload["schema"] == 3
+    item = payload["items"][0]
+    feature_ids = {feature["svgId"] for feature in item["features"]}
+    biological_by_key = {
+        (feature["recordKey"], feature["biologicalFeatureId"]): feature
+        for feature in item["biologicalFeatures"]
+    }
 
     assert rendered_ids.issubset(feature_ids)
+    resolved_record_keys = set()
     for rendered_id in rendered_ids:
-        feature = next(item for item in payload["features"] if item["svg_id"] == rendered_id)
-        assert feature["stable_svg_id"] == stable_id
+        feature = next(
+            entry for entry in item["features"] if entry["svgId"] == rendered_id
+        )
+        reference = (feature["recordKey"], feature["biologicalFeatureId"])
+        biological = biological_by_key[reference]
+        resolved_record_keys.add(feature["recordKey"])
+        assert biological["biologicalFeatureId"] == stable_id
+    assert resolved_record_keys == set(item["recordKeys"])
 
 
 @pytest.mark.linear

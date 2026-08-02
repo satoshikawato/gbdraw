@@ -1,4 +1,4 @@
-import { state, createLinearSeq, normalizeLinearSeqList, reconcileLinearSeqPairData } from '../state.js';
+import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
 import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import {
@@ -19,7 +19,7 @@ import {
   exportSession,
   importSession as importSessionFromFile,
   SESSION_VERSION,
-  serializeFiles,
+  serializeActiveRenderFiles,
   serializeResults,
   setPreviewRuntime
 } from '../services/config.js';
@@ -38,6 +38,7 @@ import {
   DIAGRAM_ENGINE_STARTUP_MESSAGE
 } from '../services/runtime-capabilities.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
+import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -46,6 +47,7 @@ import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPyodideManager } from './pyodide.js';
 import { createRunAnalysis } from './run-analysis.js';
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import { createResultsManager } from './results.js';
@@ -79,10 +81,14 @@ import {
   setLinearRecordRow as updateLinearRecordRow
 } from './linear-record-layout.js';
 import {
-  addLinearComparison as appendLinearComparison,
+  LINEAR_COMPARISON_MODES,
+  LINEAR_COMPARISON_SOURCES,
   adjacentRowPairs,
-  hasLinearComparisonIntent,
-  reconcileLinearComparisons
+  createLinearComparisonEdge,
+  linearComparisonEdgeKey,
+  materializeResolvedEdgesAsSelectedPlan,
+  normalizeLinearComparisonPlan,
+  reconcileLinearComparisonPlan
 } from './linear-comparisons.js';
 import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import {
@@ -153,7 +159,6 @@ export const createAppSetup = () => {
     mode,
     cInputType,
     lInputType,
-    blastSource,
     losatProgram,
     files,
     circularConservation,
@@ -163,7 +168,11 @@ export const createAppSetup = () => {
     linearRecordLayoutEnabled,
     linearRecordGap,
     linearRecordRows,
-    linearComparisons,
+    linearComparisonPlan,
+    linearComparisonResolution,
+    hasLinearComparisonIntent,
+    hasActiveLinearLosatIntent,
+    hasActiveLinearUploadIntent,
     form,
     adv,
     losat,
@@ -327,50 +336,324 @@ export const createAppSetup = () => {
       : ''
   ));
 
+  const sameLinearComparisonEdge = (left, right) => (
+    left?.id === right?.id &&
+    left?.queryUid === right?.queryUid &&
+    left?.subjectUid === right?.subjectUid &&
+    left?.included === right?.included &&
+    left?.fileActive === right?.fileActive &&
+    left?.losatFilenameActive === right?.losatFilenameActive &&
+    left?.source === right?.source &&
+    left?.file === right?.file &&
+    left?.losatFilename === right?.losatFilename
+  );
+
+  const invalidateLinearComparisonArtifacts = () => {
+    files.linearCanonicalComparisons = [];
+    if (Array.isArray(losatCacheInfo.value)) {
+      losatCacheInfo.value = losatCacheInfo.value.filter((entry) => !entry?.edgeKey);
+    }
+  };
+
+  const replaceLinearComparisonPlan = (nextPlan, { invalidate = true } = {}) => {
+    const normalized = normalizeLinearComparisonPlan(nextPlan);
+    linearComparisonPlan.mode = normalized.mode;
+    linearComparisonPlan.defaultSource = normalized.defaultSource;
+    linearComparisonPlan.edges.splice(
+      0,
+      linearComparisonPlan.edges.length,
+      ...normalized.edges
+    );
+    if (invalidate) invalidateLinearComparisonArtifacts();
+  };
+
+  const mutateLinearComparisonPlan = (mutator) => {
+    const next = normalizeLinearComparisonPlan(linearComparisonPlan);
+    mutator(next);
+    replaceLinearComparisonPlan(next);
+  };
+
+  const effectiveLinearComparisonLayout = () => (
+    linearRecordLayoutEnabled.value ? linearRecordRows : []
+  );
+
+  const syncLinearComparisonRecords = ({ invalidate = true } = {}) => {
+    const next = reconcileLinearComparisonPlan(linearComparisonPlan, linearSeqs);
+    const currentEdges = linearComparisonPlan.edges;
+    const unchanged = (
+      next.mode === linearComparisonPlan.mode &&
+      next.defaultSource === linearComparisonPlan.defaultSource &&
+      next.edges.length === currentEdges.length &&
+      next.edges.every((edge, index) => sameLinearComparisonEdge(edge, currentEdges[index]))
+    );
+    if (!unchanged) replaceLinearComparisonPlan(next, { invalidate });
+    return !unchanged;
+  };
+
   const syncLinearRecordLayout = () => {
     const next = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
     const rowsUnchanged = next.length === linearRecordRows.length && next.every((entry, index) => (
       entry.uid === linearRecordRows[index]?.uid && entry.row === linearRecordRows[index]?.row
     ));
     if (!rowsUnchanged) linearRecordRows.splice(0, linearRecordRows.length, ...next);
-    const nextComparisons = reconcileLinearComparisons(linearSeqs, linearComparisons);
-    const comparisonsUnchanged = nextComparisons.length === linearComparisons.length &&
-      nextComparisons.every((comparison, index) => (
-        comparison.id === linearComparisons[index]?.id &&
-        comparison.queryUid === linearComparisons[index]?.queryUid &&
-        comparison.subjectUid === linearComparisons[index]?.subjectUid &&
-        comparison.source === linearComparisons[index]?.source &&
-        comparison.file === linearComparisons[index]?.file
-      ));
-    if (!comparisonsUnchanged) {
-      linearComparisons.splice(0, linearComparisons.length, ...nextComparisons);
-    }
-    return !rowsUnchanged || !comparisonsUnchanged;
+    const comparisonsChanged = syncLinearComparisonRecords({ invalidate: false });
+    if (!rowsUnchanged || comparisonsChanged) invalidateLinearComparisonArtifacts();
+    return !rowsUnchanged || comparisonsChanged;
   };
   const setLinearRecordRow = (uid, row) => {
     syncLinearRecordLayout();
+    const previous = linearRecordRows.find((entry) => entry.uid === uid)?.row;
     updateLinearRecordRow(linearRecordRows, uid, row);
+    if (linearRecordRows.find((entry) => entry.uid === uid)?.row !== previous) {
+      invalidateLinearComparisonArtifacts();
+    }
+  };
+  const setLinearRecordLayoutEnabled = (enabled) => {
+    const nextEnabled = Boolean(enabled);
+    if (linearRecordLayoutEnabled.value === nextEnabled) return;
+    linearRecordLayoutEnabled.value = nextEnabled;
+    syncLinearRecordLayout();
+    invalidateLinearComparisonArtifacts();
   };
   const moveLinearRecordWithinRow = (uid, direction) => {
     const next = moveLinearRecordInRow(linearSeqs, linearRecordRows, uid, direction);
     linearRecordRows.splice(0, linearRecordRows.length, ...next);
+    syncLinearComparisonRecords();
+    invalidateLinearComparisonArtifacts();
   };
+
+  const linearComparisonGlobalAction = computed(() => {
+    if (linearComparisonPlan.mode === LINEAR_COMPARISON_MODES.NONE) return 'none';
+    if (linearComparisonPlan.mode !== LINEAR_COMPARISON_MODES.ADJACENT) return 'selected';
+    return linearComparisonPlan.defaultSource;
+  });
+
+  const setLinearComparisonGlobalAction = (action) => {
+    const normalized = String(action || '').trim().toLowerCase();
+    mutateLinearComparisonPlan((next) => {
+      if (normalized === 'none') {
+        next.mode = LINEAR_COMPARISON_MODES.NONE;
+        return;
+      }
+      next.mode = LINEAR_COMPARISON_MODES.ADJACENT;
+      next.defaultSource = normalized === LINEAR_COMPARISON_SOURCES.UPLOAD
+        ? LINEAR_COMPARISON_SOURCES.UPLOAD
+        : LINEAR_COMPARISON_SOURCES.LOSAT;
+    });
+  };
+
+  const setLinearLosatProgram = (program) => {
+    const normalized = String(program || '').trim().toLowerCase();
+    if (!['blastn', 'blastp', 'tblastx'].includes(normalized)) return;
+    if (losatProgram.value === normalized) return;
+    losatProgram.value = normalized;
+    invalidateLinearComparisonArtifacts();
+  };
+
+  const selectedPlanForEdit = () => {
+    if (linearComparisonPlan.mode === LINEAR_COMPARISON_MODES.SELECTED) {
+      return normalizeLinearComparisonPlan(linearComparisonPlan);
+    }
+    return materializeResolvedEdgesAsSelectedPlan(
+      linearComparisonPlan,
+      linearComparisonResolution.value
+    );
+  };
+
+  const findEdgeIndex = (edges, id) => edges.findIndex((edge) => edge.id === id);
+  const findEdgeIndexByKey = (edges, edgeKey) => edges.findIndex((edge) => (
+    linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) === edgeKey
+  ));
+
+  const upsertSelectedComparison = (next, {
+    id = '',
+    queryUid,
+    subjectUid,
+    source = next.defaultSource
+  }) => {
+    const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
+    let index = id ? findEdgeIndex(next.edges, id) : -1;
+    if (index < 0) index = findEdgeIndexByKey(next.edges, edgeKey);
+    if (index < 0) {
+      next.edges.push(createLinearComparisonEdge({
+        queryUid,
+        subjectUid,
+        included: true,
+        source
+      }));
+      return next.edges[next.edges.length - 1];
+    }
+    const edge = next.edges[index];
+    edge.queryUid = String(queryUid || '');
+    edge.subjectUid = String(subjectUid || '');
+    edge.included = true;
+    edge.source = source;
+    return edge;
+  };
+
   const addLinearComparison = () => {
     if (linearSeqs.length < 2) return;
     syncLinearRecordLayout();
-    appendLinearComparison(linearComparisons, linearSeqs[0].uid, linearSeqs[1].uid);
+    const [firstPair] = adjacentRowPairs(
+      linearSeqs,
+      effectiveLinearComparisonLayout()
+    );
+    const [queryUid, subjectUid] = firstPair || [linearSeqs[0].uid, linearSeqs[1].uid];
+    const next = selectedPlanForEdit();
+    upsertSelectedComparison(next, { queryUid, subjectUid });
+    replaceLinearComparisonPlan(next);
   };
-  const removeLinearComparison = (index) => {
-    if (Number.isInteger(index) && index >= 0) linearComparisons.splice(index, 1);
+  const omitLinearComparison = (id) => {
+    const next = selectedPlanForEdit();
+    const index = findEdgeIndex(next.edges, id);
+    if (index < 0) return;
+    const edge = next.edges[index];
+    edge.included = false;
+    if (!edge.file && !String(edge.losatFilename || '').trim()) next.edges.splice(index, 1);
+    replaceLinearComparisonPlan(next);
   };
-  const setLinearComparisonFile = (index, file) => {
-    if (linearComparisons[index]) linearComparisons[index].file = file || null;
+  const clearSelectedLinearComparisons = () => {
+    const next = selectedPlanForEdit();
+    next.edges = next.edges
+      .filter((edge) => edge.file || String(edge.losatFilename || '').trim())
+      .map((edge) => ({ ...edge, included: false }));
+    replaceLinearComparisonPlan(next);
+  };
+  const setLinearComparisonEndpoint = (id, endpoint, uid) => {
+    if (!['queryUid', 'subjectUid'].includes(endpoint)) return;
+    const next = selectedPlanForEdit();
+    const edge = next.edges.find((entry) => entry.id === id);
+    if (!edge) return;
+    edge[endpoint] = String(uid || '');
+    edge.included = true;
+    replaceLinearComparisonPlan(next);
+  };
+  const setLinearComparisonSource = (id, source) => {
+    const normalized = source === LINEAR_COMPARISON_SOURCES.LOSAT
+      ? LINEAR_COMPARISON_SOURCES.LOSAT
+      : LINEAR_COMPARISON_SOURCES.UPLOAD;
+    const next = selectedPlanForEdit();
+    const edge = next.edges.find((entry) => entry.id === id);
+    if (!edge) return;
+    edge.source = normalized;
+    edge.included = true;
+    replaceLinearComparisonPlan(next);
+  };
+  const setLinearComparisonFile = (id, file) => {
+    const next = selectedPlanForEdit();
+    const edge = next.edges.find((entry) => entry.id === id);
+    if (!edge) return;
+    edge.file = file || null;
+    edge.fileActive = Boolean(file);
+    edge.source = LINEAR_COMPARISON_SOURCES.UPLOAD;
+    edge.included = Boolean(file) || edge.included;
+    replaceLinearComparisonPlan(next);
+  };
+  const reuseLinearComparisonFile = (id) => {
+    const next = selectedPlanForEdit();
+    const edge = next.edges.find((entry) => entry.id === id);
+    if (!edge?.file) return;
+    edge.fileActive = true;
+    edge.source = LINEAR_COMPARISON_SOURCES.UPLOAD;
+    edge.included = true;
+    replaceLinearComparisonPlan(next);
+  };
+  const deactivateLinearComparisonFile = (id) => {
+    const next = selectedPlanForEdit();
+    const edge = next.edges.find((entry) => entry.id === id);
+    if (!edge?.file) return;
+    edge.fileActive = false;
+    if (edge.source === LINEAR_COMPARISON_SOURCES.UPLOAD) edge.included = false;
+    replaceLinearComparisonPlan(next);
+  };
+  const setLinearComparisonLosatFilename = (id, value) => {
+    const next = selectedPlanForEdit();
+    const edge = next.edges.find((entry) => entry.id === id);
+    if (!edge) return;
+    edge.losatFilename = String(value || '');
+    edge.losatFilenameActive = Boolean(edge.losatFilename.trim());
+    replaceLinearComparisonPlan(next);
+  };
+  const reuseLinearComparisonLosatFilename = (id) => {
+    const next = selectedPlanForEdit();
+    const edge = next.edges.find((entry) => entry.id === id);
+    if (!edge || !String(edge.losatFilename || '').trim()) return;
+    edge.losatFilenameActive = true;
+    edge.source = LINEAR_COMPARISON_SOURCES.LOSAT;
+    edge.included = true;
+    replaceLinearComparisonPlan(next);
+  };
+  const deactivateLinearComparisonLosatFilename = (id) => {
+    const next = selectedPlanForEdit();
+    const edge = next.edges.find((entry) => entry.id === id);
+    if (!edge) return;
+    edge.losatFilenameActive = false;
+    replaceLinearComparisonPlan(next);
+  };
+  const updateResolvedLosatFilenameDraft = (edgeKey, updater) => {
+    const resolved = linearComparisonResolution.value.edges.find((edge) => edge.edgeKey === edgeKey);
+    if (!resolved) return;
+    const next = normalizeLinearComparisonPlan(linearComparisonPlan);
+    let index = findEdgeIndexByKey(next.edges, edgeKey);
+    if (index < 0) {
+      next.edges.push(createLinearComparisonEdge({
+        queryUid: resolved.queryUid,
+        subjectUid: resolved.subjectUid,
+        included: false,
+        source: LINEAR_COMPARISON_SOURCES.LOSAT
+      }));
+      index = next.edges.length - 1;
+    }
+    updater(next.edges[index]);
+    replaceLinearComparisonPlan(next);
+  };
+  const setResolvedLinearComparisonLosatFilename = (edgeKey, value) => {
+    updateResolvedLosatFilenameDraft(edgeKey, (edge) => {
+      edge.losatFilename = String(value || '');
+      edge.losatFilenameActive = Boolean(edge.losatFilename.trim());
+    });
+  };
+  const reuseResolvedLinearComparisonLosatFilename = (edgeKey) => {
+    updateResolvedLosatFilenameDraft(edgeKey, (edge) => {
+      if (String(edge.losatFilename || '').trim()) edge.losatFilenameActive = true;
+    });
+  };
+  const deactivateResolvedLinearComparisonLosatFilename = (edgeKey) => {
+    updateResolvedLosatFilenameDraft(edgeKey, (edge) => {
+      edge.losatFilenameActive = false;
+    });
   };
   const addLinearComparisonBatch = (allPairs = false) => {
     syncLinearRecordLayout();
-    adjacentRowPairs(linearSeqs, linearRecordRows, allPairs).forEach(([queryUid, subjectUid]) => {
-      appendLinearComparison(linearComparisons, queryUid, subjectUid);
+    const next = selectedPlanForEdit();
+    adjacentRowPairs(linearSeqs, effectiveLinearComparisonLayout(), allPairs).forEach(([queryUid, subjectUid]) => {
+      upsertSelectedComparison(next, { queryUid, subjectUid });
     });
+    replaceLinearComparisonPlan(next);
+  };
+  const setLinearComparisonGapAction = (edgeKey, action) => {
+    const gap = linearAdjacentComparisonRows.value.find((entry) => entry.edgeKey === edgeKey);
+    if (!gap) return;
+    const next = selectedPlanForEdit();
+    const index = findEdgeIndexByKey(next.edges, edgeKey);
+    if (action === 'none') {
+      if (index >= 0) {
+        next.edges[index].included = false;
+        if (!next.edges[index].file && !String(next.edges[index].losatFilename || '').trim()) {
+          next.edges.splice(index, 1);
+        }
+      }
+      replaceLinearComparisonPlan(next);
+      return;
+    }
+    upsertSelectedComparison(next, {
+      queryUid: gap.queryUid,
+      subjectUid: gap.subjectUid,
+      source: action === LINEAR_COMPARISON_SOURCES.UPLOAD
+        ? LINEAR_COMPARISON_SOURCES.UPLOAD
+        : LINEAR_COMPARISON_SOURCES.LOSAT
+    });
+    replaceLinearComparisonPlan(next);
   };
   const linearRecordRowFor = (uid, fallback) => {
     return linearRecordRows.find((entry) => entry.uid === uid)?.row || fallback;
@@ -380,12 +663,48 @@ export const createAppSetup = () => {
       ? linearRecordPositionTokens(linearSeqs, linearRecordRows)
       : []
   ));
+  const linearAdjacentComparisonRows = computed(() => {
+    const resolvedByKey = new Map(
+      linearComparisonResolution.value.edges.map((edge) => [edge.edgeKey, edge])
+    );
+    const draftByKey = new Map(
+      linearComparisonPlan.edges.map((edge) => [
+        linearComparisonEdgeKey(edge.queryUid, edge.subjectUid),
+        edge
+      ])
+    );
+    const indexByUid = new Map(linearSeqs.map((sequence, index) => [sequence.uid, index]));
+    return adjacentRowPairs(linearSeqs, effectiveLinearComparisonLayout()).map(([queryUid, subjectUid]) => {
+      const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
+      const resolved = resolvedByKey.get(edgeKey) || null;
+      const draft = draftByKey.get(edgeKey) || null;
+      return {
+        edgeKey,
+        queryUid,
+        subjectUid,
+        queryIndex: indexByUid.get(queryUid),
+        subjectIndex: indexByUid.get(subjectUid),
+        source: resolved?.source || 'none',
+        active: Boolean(resolved),
+        draft
+      };
+    });
+  });
+  const linearResolvedLosatEdges = computed(() => (
+    linearComparisonResolution.value.edges.filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT)
+  ));
+  const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
+    (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [])
+      .filter((entry) => String(entry?.edgeKey || ''))
+      .map((entry) => [String(entry.edgeKey), entry])
+  ));
 
   const pyodideManager = createPyodideManager({ state });
   const getPyodide = pyodideManager.getPyodide;
   const linearRecordSelector = createLinearRecordSelector({
     state,
     reactive,
+    ensureRuntime: pyodideManager.initPyodide,
     recordReader: ({ inputType, primaryFile, pairedFile, temporaryPathPrefix }) => (
       inputType === 'gff'
         ? discoverGffFastaRecords({
@@ -417,12 +736,7 @@ export const createAppSetup = () => {
       circularRecordDiscovery.primaryFile === circularPrimaryFile &&
       circularRecordDiscovery.pairedFile === circularPairedFile;
     const loadComparison = loadComparisonOverride == null
-      ? hasLinearComparisonIntent({
-          layoutEnabled: linearRecordLayoutEnabled.value,
-          comparisons: linearComparisons,
-          sequences: linearSeqs,
-          blastSource: blastSource.value
-        })
+      ? mode.value === 'linear' && hasLinearComparisonIntent.value
       : Boolean(loadComparisonOverride);
     return buildAnnotationRecordCatalog({
       mode: mode.value,
@@ -520,8 +834,19 @@ export const createAppSetup = () => {
   const { handleWheel, startPan, doPan, endPan, resetPreviewViewport } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
-  const legendActions = createLegendManager({ state, getPyodide, debugLog, history });
-  const svgActions = createSvgStyles({ state, watch, legendActions });
+  const legendActions = createLegendManager({
+    state,
+    getPyodide,
+    ensurePyodide: pyodideManager.initPyodide,
+    debugLog,
+    history
+  });
+  const svgActions = createSvgStyles({
+    state,
+    watch,
+    nextTick,
+    legendActions
+  });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
     state,
@@ -603,7 +928,11 @@ export const createAppSetup = () => {
 
   const circularTrackNewRenderer = ref('dinucleotide_skew');
   const linearTrackNewRenderer = ref('dinucleotide_skew');
+  const circularTrackSlotsPanelOpen = ref(false);
   const linearTrackSlotsPanelOpen = ref(false);
+  const toggleCircularTrackSlotsPanel = () => {
+    circularTrackSlotsPanelOpen.value = !circularTrackSlotsPanelOpen.value;
+  };
   const toggleLinearTrackSlotsPanel = () => {
     linearTrackSlotsPanelOpen.value = !linearTrackSlotsPanelOpen.value;
   };
@@ -814,9 +1143,11 @@ export const createAppSetup = () => {
     const normalized = String(value || '').trim();
     ensureDefinitionLineStyle(kind).fill = normalized || null;
   };
+  const getDefinitionLineStyleColorMode = (kind) => (
+    colorValueMode(getDefinitionLineStyleFill(kind))
+  );
   const getDefinitionLineStyleSwatchValue = (kind) => {
-    const fill = getDefinitionLineStyleFill(kind);
-    return /^#[0-9a-fA-F]{6}$/.test(fill) ? fill : '#000000';
+    return toNativeColorInputValue(getDefinitionLineStyleFill(kind));
   };
   const isDefinitionLineStyleMuted = (row) => {
     const key = row?.visibilityKey;
@@ -1326,11 +1657,15 @@ export const createAppSetup = () => {
   } = createRunAnalysis({
     state,
     getPyodide,
+    ensurePyodide: pyodideManager.initPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
-    serializeCanonicalFiles: serializeFiles,
+    serializeCanonicalFiles: (comparisonPlanSnapshot) => serializeActiveRenderFiles(
+      state.mode.value,
+      state,
+      comparisonPlanSnapshot
+    ),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
-    refreshFeatureOverrides: featureActions.refreshFeatureOverrides,
     resetPreviewViewport,
     validateAnnotationTargets: ({ loadComparison }) => {
       const catalog = getAnnotationRecordCatalog(loadComparison);
@@ -1341,6 +1676,7 @@ export const createAppSetup = () => {
   const resultsManager = createResultsManager({
     state,
     getPyodide,
+    ensurePyodide: pyodideManager.initPyodide,
     legendLayout,
     rerenderLinearDefinitions: runLabelReflow
   });
@@ -1351,7 +1687,6 @@ export const createAppSetup = () => {
     nextTick,
     onMounted,
     debugLog,
-    pyodideManager,
     legendActions,
     svgActions,
     featureActions,
@@ -1362,6 +1697,7 @@ export const createAppSetup = () => {
     refreshLinearRecordSelectors: linearRecordSelector.refresh,
     resetPreviewViewport,
     previewRuntime,
+    preparePaletteDefinitions: pyodideManager.loadPaletteAsset,
     prepareDiagramGenerationWorker: async () => {
       diagramGenerationWorkerReady.value = false;
       diagramGenerationWorkerError.value = null;
@@ -1424,12 +1760,8 @@ export const createAppSetup = () => {
       : [];
     if (!entries.length || !svgContent.value) return;
 
-    let pyodideReadyForLegend = pyodideReady.value;
-    for (let attempt = 0; !pyodideReadyForLegend && attempt < 150; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      pyodideReadyForLegend = pyodideReady.value;
-    }
-    if (!pyodideReadyForLegend) return;
+    if (!pyodideReady.value) await pyodideManager.initPyodide();
+    if (!pyodideReady.value) return;
 
     let svgReady = false;
     for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -1486,6 +1818,7 @@ export const createAppSetup = () => {
     resetLegendPosition,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    setLegendEntryStrokeColorValue,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
     resetLegendEntryStroke,
@@ -1512,6 +1845,7 @@ export const createAppSetup = () => {
     featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail,
     getFeatureColor,
+    getFeatureColorValue,
     canEditFeatureColor,
     getFeatureVisibility,
     handleFeatureVisibilityScopeChoice,
@@ -1522,6 +1856,7 @@ export const createAppSetup = () => {
     setFeatureVisibilityRuleField,
     updateClickedFeatureVisibility,
     requestFeatureColorChange,
+    setFeatureColorValue,
     updateClickedFeatureColor,
     handleColorScopeChoice,
     handleLegendNameCommit,
@@ -1530,6 +1865,8 @@ export const createAppSetup = () => {
     renameLegendEntry,
     handleResetColorChoice,
     resetClickedFeatureFillColor,
+    getFeatureStrokeColorValue,
+    setClickedFeatureStrokeColorValue,
     updateClickedFeatureStroke,
     resetClickedFeatureStroke,
     applyStrokeToAllSiblings,
@@ -1570,13 +1907,22 @@ export const createAppSetup = () => {
     handleFeatureVisibilityScopeChoice
   );
   const requestFeatureColorChangeWithHistory = undoableAction('Change feature color', requestFeatureColorChange);
+  const setFeatureColorValueWithHistory = undoableAction('Change feature color', setFeatureColorValue);
   const updateClickedFeatureColorWithHistory = undoableAction('Change feature color', updateClickedFeatureColor);
+  const setLegendEntryStrokeColorValueWithHistory = undoableAction(
+    'Change legend stroke color',
+    setLegendEntryStrokeColorValue
+  );
   const handleColorScopeChoiceWithHistory = undoableAction('Change feature color', handleColorScopeChoice);
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
   const handleLegendRenameChoiceWithHistory = undoableAction('Rename legend item', handleLegendRenameChoice);
   const handleResetColorChoiceWithHistory = undoableAction('Reset feature color', handleResetColorChoice);
   const resetClickedFeatureFillColorWithHistory = undoableAction('Reset feature color', resetClickedFeatureFillColor);
   const updateClickedFeatureStrokeWithHistory = undoableAction('Change feature stroke', updateClickedFeatureStroke);
+  const setClickedFeatureStrokeColorValueWithHistory = undoableAction(
+    'Change feature stroke',
+    setClickedFeatureStrokeColorValue
+  );
   const resetClickedFeatureStrokeWithHistory = undoableAction('Reset feature stroke', resetClickedFeatureStroke);
   const applyStrokeToAllSiblingsWithHistory = undoableAction('Change feature stroke', applyStrokeToAllSiblings);
   const setFeatureColorWithHistory = undoableAction('Change feature color', setFeatureColor);
@@ -1670,30 +2016,20 @@ export const createAppSetup = () => {
 
   const runAnalysis = async () => history.runUndoable('Generate diagram', async () => {
     cancelDefinitionUpdate();
-    if (!pyodideReady.value) {
-      if (processing.value) return { status: 'skipped' };
-      generationCancelRequested.value = false;
-      processing.value = true;
-      processingStatus.value = loadingStatus.value || 'Preparing Python environment...';
-      await pyodideManager.initPyodide();
-      if (generationCancelRequested.value || !pyodideReady.value) {
-        const wasCanceled = generationCancelRequested.value;
-        processing.value = false;
-        processingStatus.value = '';
-        generationCancelRequested.value = false;
-        return { status: wasCanceled ? 'canceled' : 'error' };
-      }
-    }
+    const comparisonPlanSnapshot = mode.value === 'linear'
+      ? linearComparisonResolution.value
+      : null;
+    const annotationComparisonIntent = comparisonPlanSnapshot?.hasComparisonIntent ?? null;
 
     const hasRegionAnnotations = annotationSets.some((set) => (
       Array.isArray(set?.annotations) && set.annotations.length > 0
     ));
     if (hasRegionAnnotations) {
-      let catalog = getAnnotationRecordCatalog();
+      let catalog = getAnnotationRecordCatalog(annotationComparisonIntent);
       if (catalog.status !== 'ready') {
         if (mode.value === 'linear') await linearRecordSelector.refresh();
         else await refreshCircularRecordOrder();
-        catalog = getAnnotationRecordCatalog();
+        catalog = getAnnotationRecordCatalog(annotationComparisonIntent);
       }
       reconcileAnnotationRecordBindings(annotationSets, catalog);
       const annotationTargetError = validateAnnotationRecordTargets(annotationSets, catalog);
@@ -1711,9 +2047,10 @@ export const createAppSetup = () => {
       diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
     }
 
-    featureSelection.clearFeatureSelection({ clearStatus: true });
-    const result = await runGeneratedDiagramAnalysis();
-    featureSelection.clearFeatureSelection({ clearStatus: true });
+    const result = await runGeneratedDiagramAnalysis(comparisonPlanSnapshot);
+    if (result?.status === 'ok') {
+      featureSelection.clearFeatureSelection({ clearStatus: true });
+    }
     if (result?.status === 'ok' && !diagramGenerationWorkerReady.value) {
       diagramGenerationWorkerReady.value = true;
       diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
@@ -1736,7 +2073,8 @@ export const createAppSetup = () => {
     return Boolean(
       cf &&
       mode.value === 'linear' &&
-      blastSource.value === 'losat' &&
+      hasActiveLinearLosatIntent.value &&
+      linearComparisonResolution.value.valid &&
       losatProgram.value === 'blastp' &&
       losat.blastp?.mode === 'orthogroup' &&
       lInputType.value === 'gb' &&
@@ -1835,6 +2173,7 @@ export const createAppSetup = () => {
 
     cancelDefinitionUpdate();
     resetSettingsState(state);
+    invalidateLinearComparisonArtifacts();
     matchSequenceRegistry?.reset?.();
     circularTrackNewRenderer.value = 'dinucleotide_skew';
     linearTrackNewRenderer.value = 'dinucleotide_skew';
@@ -2149,47 +2488,7 @@ export const createAppSetup = () => {
     return String(value).trim();
   };
 
-  const getLastLine = (text) => {
-    const trimmed = String(text || '').trim();
-    if (!trimmed) return '';
-    const lines = trimmed.split(/\r?\n/);
-    return lines[lines.length - 1] || '';
-  };
-
-  const normalizeErrorSections = (sections) =>
-    sections.filter((section) => section && typeof section.text === 'string' && section.text.trim() !== '');
-
-  const buildErrorDisplay = (value) => {
-    if (!value) return null;
-    if (typeof value === 'object' && value.summary) {
-      return {
-        summary: value.summary,
-        details: normalizeErrorSections(value.details || [])
-      };
-    }
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (parsed && typeof parsed === 'object' && parsed.summary) {
-            return {
-              summary: parsed.summary,
-              details: normalizeErrorSections(parsed.details || [])
-            };
-          }
-        } catch {
-          // Fall through to plain string handling.
-        }
-      }
-      const summary = getLastLine(trimmed) || 'Unknown error';
-      const details = trimmed ? normalizeErrorSections([{ label: 'Details', text: trimmed }]) : [];
-      return { summary, details };
-    }
-    return { summary: String(value), details: [] };
-  };
-
-  const errorDisplay = computed(() => buildErrorDisplay(errorLog.value));
+  const errorDisplay = computed(() => normalizeUserFacingError(errorLog.value));
 
   const sessionTitleLabel = computed(() => {
     const title = normalizeSessionTitle(sessionTitle.value);
@@ -2197,7 +2496,22 @@ export const createAppSetup = () => {
   });
 
   const canUseLinearRulerOnAxis = computed(
-    () => form.scale_style === 'ruler' && ['above', 'below'].includes(form.linear_track_layout)
+    () => (
+      form.show_scale !== false &&
+      form.scale_style === 'ruler' &&
+      ['above', 'below'].includes(form.linear_track_layout)
+    )
+  );
+
+  const canUseCircularScaleStyling = computed(
+    () => (
+      adv.circular_track_slots_enabled
+        ? adv.circular_track_slots.some((slot) => (
+            slot?.renderer === 'ticks' &&
+            circularTrackSlotEditor.circularTrackSlotEffectiveEnabled(slot)
+          ))
+        : form.show_scale !== false
+    )
   );
 
   const clickedFeatureLocation = computed(() => {
@@ -2289,7 +2603,12 @@ export const createAppSetup = () => {
       title = normalizeSessionTitle(input);
       sessionTitle.value = title;
     }
-    await exportSession(title);
+    try {
+      return await exportSession(title);
+    } catch (error) {
+      errorLog.value = normalizeUserFacingError(error);
+      return { status: 'error' };
+    }
   };
 
   const openFeatureEditorFromList = (feat, event) => {
@@ -2399,39 +2718,27 @@ export const createAppSetup = () => {
     adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
   };
 
-  const formatLinearReorderCount = (count, label) => {
-    const numeric = Number(count);
-    return `${numeric} ${label}${numeric === 1 ? '' : 's'}`;
-  };
-
-  const buildLinearReorderNotice = ({ clearedBlastSlots = 0, clearedLosatNames = 0, actionLabel = 'Reordering' } = {}) => {
-    const parts = [];
-    if (clearedBlastSlots > 0) {
-      parts.push(formatLinearReorderCount(clearedBlastSlots, 'BLAST TSV slot'));
-    }
-    if (clearedLosatNames > 0) {
-      parts.push(formatLinearReorderCount(clearedLosatNames, 'LOSAT filename'));
-    }
-    if (parts.length === 0) return '';
-    return `${actionLabel} cleared ${parts.join(' and ')} because adjacent pairs changed.`;
-  };
-
-  const applyLinearSeqMutation = (items, { actionLabel = 'Updating sequences' } = {}) => {
+  const applyLinearSeqMutation = (items) => {
     const depthWidth = linearDepthLogicalWidth();
-    const { linearSeqs: next, clearedBlastSlots, clearedLosatNames } = reconcileLinearSeqPairData(Array.from(linearSeqs), items);
+    const next = normalizeLinearSeqList(items);
     if (depthWidth > 0) {
       next.forEach((seq) => {
         seq.depth = padDepthFileSlots(seq.depth, depthWidth);
       });
     }
     linearSeqs.splice(0, linearSeqs.length, ...next);
-    files.linearCanonicalComparisons = [];
-    losatCacheInfo.value = [];
-    linearReorderNotice.value = buildLinearReorderNotice({ clearedBlastSlots, clearedLosatNames, actionLabel });
+    const nextRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
+    linearRecordRows.splice(0, linearRecordRows.length, ...nextRows);
+    replaceLinearComparisonPlan(
+      reconcileLinearComparisonPlan(linearComparisonPlan, linearSeqs),
+      { invalidate: false }
+    );
+    invalidateLinearComparisonArtifacts();
+    linearReorderNotice.value = '';
   };
 
   const addLinearSeq = () => {
-    applyLinearSeqMutation([...linearSeqs, createLinearSeq()], { actionLabel: 'Adding a sequence' });
+    applyLinearSeqMutation([...linearSeqs, createLinearSeq()]);
   };
 
   const removeLinearSeqAt = (index) => {
@@ -2439,7 +2746,7 @@ export const createAppSetup = () => {
     if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
     const current = Array.from(linearSeqs);
     const next = current.filter((_, currentIndex) => currentIndex !== idx);
-    applyLinearSeqMutation(next, { actionLabel: 'Removing a sequence' });
+    applyLinearSeqMutation(next);
   };
 
   const removeLastLinearSeq = () => {
@@ -2461,8 +2768,7 @@ export const createAppSetup = () => {
         return;
       }
       seq.gb = nextValue;
-      files.linearCanonicalComparisons = [];
-      losatCacheInfo.value = [];
+      invalidateLinearComparisonArtifacts();
       linearReorderNotice.value = '';
       return;
     }
@@ -2474,8 +2780,7 @@ export const createAppSetup = () => {
     }
 
     seq[field] = nextValue;
-    files.linearCanonicalComparisons = [];
-    losatCacheInfo.value = [];
+    invalidateLinearComparisonArtifacts();
     linearReorderNotice.value = '';
   };
 
@@ -2498,7 +2803,7 @@ export const createAppSetup = () => {
     const current = Array.from(linearSeqs);
     const [moved] = current.splice(from, 1);
     current.splice(to, 0, moved);
-    applyLinearSeqMutation(current, { actionLabel: 'Reordering' });
+    applyLinearSeqMutation(current);
   };
 
   const moveLinearSeqUp = (index) => {
@@ -2545,8 +2850,8 @@ export const createAppSetup = () => {
     mode,
     cInputType,
     lInputType,
-    blastSource,
     losatProgram,
+    setLinearLosatProgram,
     files,
     circularConservation,
     annotationSets,
@@ -2611,14 +2916,36 @@ export const createAppSetup = () => {
     linearRecordLayoutEnabled,
     linearRecordGap,
     linearRecordRows,
-    linearComparisons,
+    linearComparisonPlan,
+    linearComparisonResolution,
+    linearComparisonGlobalAction,
+    hasLinearComparisonIntent,
+    hasActiveLinearLosatIntent,
+    hasActiveLinearUploadIntent,
+    linearAdjacentComparisonRows,
+    linearResolvedLosatEdges,
+    linearLosatCacheInfoByEdgeKey,
     linearLayoutTokens,
     syncLinearRecordLayout,
+    setLinearRecordLayoutEnabled,
     setLinearRecordRow,
     moveLinearRecordWithinRow,
+    setLinearComparisonGlobalAction,
+    setLinearComparisonGapAction,
     addLinearComparison,
-    removeLinearComparison,
+    omitLinearComparison,
+    clearSelectedLinearComparisons,
+    setLinearComparisonEndpoint,
+    setLinearComparisonSource,
     setLinearComparisonFile,
+    reuseLinearComparisonFile,
+    deactivateLinearComparisonFile,
+    setLinearComparisonLosatFilename,
+    reuseLinearComparisonLosatFilename,
+    deactivateLinearComparisonLosatFilename,
+    setResolvedLinearComparisonLosatFilename,
+    reuseResolvedLinearComparisonLosatFilename,
+    deactivateResolvedLinearComparisonLosatFilename,
     addLinearComparisonBatch,
     linearRecordRowFor,
     linearReorderNotice,
@@ -2642,11 +2969,15 @@ export const createAppSetup = () => {
     autoValueText: autoValueDisplay.autoValueText,
     autoValueVisible: autoValueDisplay.autoValueVisible,
     canUseLinearRulerOnAxis,
+    canUseCircularScaleStyling,
     circularTrackNewRenderer,
     linearTrackNewRenderer,
+    circularTrackSlotsPanelOpen,
+    toggleCircularTrackSlotsPanel,
     linearTrackSlotsPanelOpen,
     toggleLinearTrackSlotsPanel,
     circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
+    circularTrackSlotEditorKey: circularTrackSlotEditor.circularTrackSlotEditorKey,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
     resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset,
@@ -2655,7 +2986,9 @@ export const createAppSetup = () => {
     setCircularGcSuppressed: circularTrackSlotEditor.setCircularGcSuppressed,
     setCircularSkewSuppressed: circularTrackSlotEditor.setCircularSkewSuppressed,
     addCircularTrackSlot: circularTrackSlotEditor.addCircularTrackSlot,
+    canAddCircularTrackRenderer: circularTrackSlotEditor.canAddCircularTrackRenderer,
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
+    canDuplicateCircularTrackSlot: circularTrackSlotEditor.canDuplicateCircularTrackSlot,
     removeCircularTrackSlot: circularTrackSlotEditor.removeCircularTrackSlot,
     setCircularTrackSlotEnabled: circularTrackSlotEditor.setCircularTrackSlotEnabled,
     circularTrackSlotEffectiveEnabled: circularTrackSlotEditor.circularTrackSlotEffectiveEnabled,
@@ -2672,6 +3005,19 @@ export const createAppSetup = () => {
     updateCircularTrackSlotRenderer: circularTrackSlotEditor.updateCircularTrackSlotRenderer,
     updateCircularTrackSlotPlacement: circularTrackSlotEditor.updateCircularTrackSlotPlacement,
     updateCircularTrackFeatureLane: circularTrackSlotEditor.updateCircularTrackFeatureLane,
+    circularTrackSlotIssue: circularTrackSlotEditor.circularTrackSlotIssue,
+    circularTrackGlobalIssues: circularTrackSlotEditor.circularTrackGlobalIssues,
+    circularAnnotationAnchorOptions: circularTrackSlotEditor.circularAnnotationAnchorOptions,
+    circularAnnotationAnchorIsKnown: circularTrackSlotEditor.circularAnnotationAnchorIsKnown,
+    annotationTrackMarkOptions: circularTrackSlotEditor.annotationTrackMarkOptions,
+    circularAnnotationMarkSelected: circularTrackSlotEditor.circularAnnotationMarkSelected,
+    setCircularAnnotationMarkSelected: circularTrackSlotEditor.setCircularAnnotationMarkSelected,
+    circularAnnotationLaneGapValue: circularTrackSlotEditor.circularAnnotationLaneGapValue,
+    setCircularAnnotationLaneGap: circularTrackSlotEditor.setCircularAnnotationLaneGap,
+    circularAnnotationPaddingValue: circularTrackSlotEditor.circularAnnotationPaddingValue,
+    setCircularAnnotationPadding: circularTrackSlotEditor.setCircularAnnotationPadding,
+    circularAnnotationCoverAnchor: circularTrackSlotEditor.circularAnnotationCoverAnchor,
+    setCircularAnnotationCoverAnchor: circularTrackSlotEditor.setCircularAnnotationCoverAnchor,
     supportsCircularTrackSlotPlacement: circularTrackSlotEditor.supportsCircularTrackSlotPlacement,
     circularTrackSlots: circularTrackSlotEditor.circularTrackSlots,
     circularTrackStackEntries: circularTrackSlotEditor.circularTrackStackEntries,
@@ -2691,12 +3037,15 @@ export const createAppSetup = () => {
     circularTrackPresetSummary: circularTrackSlotEditor.circularTrackPresetSummary,
     circularTrackSlotUsesPresetGeometry: circularTrackSlotEditor.circularTrackSlotUsesPresetGeometry,
     linearTrackRenderers: linearTrackSlotEditor.linearTrackRenderers,
+    linearTrackSlotEditorKey: linearTrackSlotEditor.linearTrackSlotEditorKey,
     linearTrackRendererLabel: linearTrackSlotEditor.linearTrackRendererLabel,
     resetLinearTrackSlotsFromSimpleControls: linearTrackSlotEditor.resetLinearTrackSlotsFromSimpleControls,
     ensureLinearTrackDepthSlots: linearTrackSlotEditor.ensureLinearTrackDepthSlots,
     setLinearTrackSlotsEnabled: linearTrackSlotEditor.setLinearTrackSlotsEnabled,
     addLinearTrackSlot: linearTrackSlotEditor.addLinearTrackSlot,
+    canAddLinearTrackRenderer: linearTrackSlotEditor.canAddLinearTrackRenderer,
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
+    canDuplicateLinearTrackSlot: linearTrackSlotEditor.canDuplicateLinearTrackSlot,
     removeLinearTrackSlot: linearTrackSlotEditor.removeLinearTrackSlot,
     moveLinearTrackSlot: linearTrackSlotEditor.moveLinearTrackSlot,
     canMoveLinearTrackSlot: linearTrackSlotEditor.canMoveLinearTrackSlot,
@@ -2709,6 +3058,18 @@ export const createAppSetup = () => {
     canMoveLinearTrackSlotToAxis: linearTrackSlotEditor.canMoveLinearTrackSlotToAxis,
     updateLinearTrackSlotRenderer: linearTrackSlotEditor.updateLinearTrackSlotRenderer,
     updateLinearTrackSlotPlacement: linearTrackSlotEditor.updateLinearTrackSlotPlacement,
+    linearTrackSlotIssue: linearTrackSlotEditor.linearTrackSlotIssue,
+    linearTrackGlobalIssues: linearTrackSlotEditor.linearTrackGlobalIssues,
+    linearAnnotationAnchorOptions: linearTrackSlotEditor.linearAnnotationAnchorOptions,
+    linearAnnotationAnchorIsKnown: linearTrackSlotEditor.linearAnnotationAnchorIsKnown,
+    linearAnnotationMarkSelected: linearTrackSlotEditor.linearAnnotationMarkSelected,
+    setLinearAnnotationMarkSelected: linearTrackSlotEditor.setLinearAnnotationMarkSelected,
+    linearAnnotationLaneGapValue: linearTrackSlotEditor.linearAnnotationLaneGapValue,
+    setLinearAnnotationLaneGap: linearTrackSlotEditor.setLinearAnnotationLaneGap,
+    linearAnnotationPaddingValue: linearTrackSlotEditor.linearAnnotationPaddingValue,
+    setLinearAnnotationPadding: linearTrackSlotEditor.setLinearAnnotationPadding,
+    linearAnnotationCoverAnchor: linearTrackSlotEditor.linearAnnotationCoverAnchor,
+    setLinearAnnotationCoverAnchor: linearTrackSlotEditor.setLinearAnnotationCoverAnchor,
     linearTrackSlotHeightValue: linearTrackSlotEditor.linearTrackSlotHeightValue,
     linearTrackSlotGeometryAutoText: linearTrackSlotEditor.linearTrackSlotGeometryAutoText,
     linearTrackSlotGeometryHasManual: linearTrackSlotEditor.linearTrackSlotGeometryHasManual,
@@ -2909,6 +3270,7 @@ export const createAppSetup = () => {
     featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail,
     getFeatureColor,
+    getFeatureColorValue,
     getFeatureVisibility,
     moveFeatureVisibilityRuleDown: moveFeatureVisibilityRuleDownWithHistory,
     moveFeatureVisibilityRuleUp: moveFeatureVisibilityRuleUpWithHistory,
@@ -2916,6 +3278,7 @@ export const createAppSetup = () => {
     setFeatureVisibility: setFeatureVisibilityWithHistory,
     setFeatureVisibilityRuleField: setFeatureVisibilityRuleFieldWithHistory,
     requestFeatureColorChange: requestFeatureColorChangeWithHistory,
+    setFeatureColorValue: setFeatureColorValueWithHistory,
     setFeatureColor: setFeatureColorWithHistory,
     canEditFeatureColor,
     getEditableLabelByFeatureId,
@@ -2956,6 +3319,8 @@ export const createAppSetup = () => {
     selectLegendNameOption,
     resetClickedFeatureFillColor: resetClickedFeatureFillColorWithHistory,
     updateClickedFeatureStroke: updateClickedFeatureStrokeWithHistory,
+    getFeatureStrokeColorValue,
+    setClickedFeatureStrokeColorValue: setClickedFeatureStrokeColorValueWithHistory,
     resetClickedFeatureStroke: resetClickedFeatureStrokeWithHistory,
     applyStrokeToAllSiblings: applyStrokeToAllSiblingsWithHistory,
     colorScopeDialog,
@@ -2992,6 +3357,7 @@ export const createAppSetup = () => {
     resetLegendPosition,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
     resetLegendEntryStroke,
@@ -3008,6 +3374,7 @@ export const createAppSetup = () => {
     setDefinitionLineStyleWeight,
     getDefinitionLineStyleFill,
     setDefinitionLineStyleColor,
+    getDefinitionLineStyleColorMode,
     getDefinitionLineStyleSwatchValue,
     isDefinitionLineStyleMuted,
     downloadDpi,

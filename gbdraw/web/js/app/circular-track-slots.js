@@ -21,6 +21,7 @@ import {
   normalizeOptionalText,
   parseCircularScalarDisplay
 } from './track-slot-display.js';
+import { validateCustomTrackPlan } from './track-slot-validation.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -33,7 +34,9 @@ const SUPPORTED_RENDERERS = [
   'spacer'
 ];
 
-const UI_RENDERERS = SUPPORTED_RENDERERS.filter((renderer) => renderer !== 'spacer');
+const UI_RENDERERS = SUPPORTED_RENDERERS.filter(
+  (renderer) => renderer !== 'sequence_conservation'
+);
 
 const RENDERER_LABELS = {
   features: 'Features',
@@ -118,6 +121,12 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = new Set([
   'strict',
   'compress',
   'reserve'
+]);
+const ANNOTATION_MARK_OPTIONS = Object.freeze([
+  'line',
+  'bracket',
+  'band',
+  'highlight'
 ]);
 
 export const CIRCULAR_TRACK_PRESETS = ['tuckin', 'middle', 'spreadout'];
@@ -432,11 +441,16 @@ export const migrateLegacyCircularTrackSlotSpec = (spec) => {
   return retained.length > 0 ? `${head}@${retained.join(',')}` : head;
 };
 
-const circularDepthTrackCountForState = (state) => {
-  if (!Boolean(state?.form?.show_depth)) return 0;
+const circularAvailableDepthTrackCountForState = (state) => {
   const files = representativeDepthFiles(state?.files?.c_depth);
   return files.some(Boolean) ? files.length : 0;
 };
+
+const circularDepthTrackCountForState = (state) => (
+  Boolean(state?.form?.show_depth)
+    ? circularAvailableDepthTrackCountForState(state)
+    : 0
+);
 
 const normalizeSlotSide = (value) => normalizeOptionalPlacement(value);
 
@@ -685,6 +699,7 @@ export const createDefaultCircularTrackSlots = ({
   depthTrackCount = 1,
   showGc = true,
   showSkew = true,
+  showTicks = true,
   preset = 'tuckin'
 } = {}) => {
   void nt;
@@ -693,15 +708,17 @@ export const createDefaultCircularTrackSlots = ({
     makeSlot({
       id: 'features',
       renderer: 'features'
-    }),
-    makeSlot({
+    })
+  ];
+  if (showTicks) {
+    slots.push(makeSlot({
       id: 'ticks',
       renderer: 'ticks',
       params: {
         tick_label_layout: defaultPresetTickLabelLayout(preset)
       }
-    })
-  ];
+    }));
+  }
   if (showDepth) {
     const count = Math.max(1, Number(depthTrackCount) || 1);
     if (count === 1) {
@@ -731,6 +748,87 @@ export const createDefaultCircularTrackSlots = ({
     }));
   }
   return slots;
+};
+
+const CIRCULAR_GEOMETRY_SHORTCUT_FIELDS = Object.freeze({
+  featureWidth: 'Feature Width',
+  depthWidth: 'Depth Width',
+  gcContentWidth: 'GC Content Width',
+  gcContentRadius: 'GC Content Radius',
+  gcSkewWidth: 'GC Skew Width',
+  gcSkewRadius: 'GC Skew Radius'
+});
+
+export const normalizeCircularGeometryShortcuts = (values = {}) => {
+  const normalized = {};
+  for (const [field, label] of Object.entries(CIRCULAR_GEOMETRY_SHORTCUT_FIELDS)) {
+    const raw = values?.[field];
+    if (raw === null || raw === undefined || raw === '') {
+      normalized[field] = null;
+      continue;
+    }
+    if (typeof raw === 'boolean') {
+      throw new Error(`${label} must be Auto or a positive finite number.`);
+    }
+    const numeric = Number(raw);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      throw new Error(`${label} must be Auto or a positive finite number.`);
+    }
+    normalized[field] = numeric;
+  }
+  return normalized;
+};
+
+export const hasCircularGeometryShortcuts = (values = {}) => (
+  Object.values(normalizeCircularGeometryShortcuts(values))
+    .some((value) => value !== null)
+);
+
+export const applyCircularGeometryShortcuts = (slots, values = {}) => {
+  const geometry = normalizeCircularGeometryShortcuts(values);
+  return (Array.isArray(slots) ? slots : []).map((slot) => {
+    const next = {
+      ...slot,
+      params: cloneParams(slot?.params)
+    };
+    const renderer = String(next.renderer || '').trim();
+    if (renderer === 'features' && geometry.featureWidth !== null) {
+      next.width = `${geometry.featureWidth}px`;
+    } else if (renderer === 'depth' && geometry.depthWidth !== null) {
+      next.width = `${geometry.depthWidth}px`;
+    } else if (renderer === 'dinucleotide_content') {
+      if (geometry.gcContentWidth !== null) {
+        next.width = `${geometry.gcContentWidth}px`;
+      }
+      if (geometry.gcContentRadius !== null) {
+        next.radius = String(geometry.gcContentRadius);
+      }
+    } else if (renderer === 'dinucleotide_skew') {
+      if (geometry.gcSkewWidth !== null) {
+        next.width = `${geometry.gcSkewWidth}px`;
+      }
+      if (geometry.gcSkewRadius !== null) {
+        next.radius = String(geometry.gcSkewRadius);
+      }
+    }
+    return next;
+  });
+};
+
+export const circularTrackAxisIndexForEnabledSlots = (
+  slots,
+  axisIndex = null,
+  preset = 'tuckin'
+) => {
+  const source = Array.isArray(slots) ? slots : [];
+  const resolvedAxis = (
+    clampCircularTrackAxisIndex(axisIndex, source.length) ??
+    inferLegacyAxisIndexFromFeature(source, preset)
+  );
+  return source
+    .slice(0, resolvedAxis)
+    .filter((slot) => slot?.enabled !== false)
+    .length;
 };
 
 export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [], nt = 'GC', placement = null) => {
@@ -867,6 +965,30 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
       : 'error';
     params.show_labels = params.show_labels !== false && String(params.show_labels).toLowerCase() !== 'false';
     params.layer = String(params.layer || '').toLowerCase() === 'underlay' ? 'underlay' : 'foreground';
+    if (Array.isArray(params.marks)) {
+      params.marks = Array.from(new Set(
+        params.marks
+          .map((mark) => String(mark || '').trim().toLowerCase())
+          .filter(Boolean)
+      ));
+      if (params.marks.length === 0) delete params.marks;
+    }
+    for (const [field, defaultValue] of [['lane_gap_px', 3], ['padding_px', 2]]) {
+      if (params[field] === null || params[field] === undefined || params[field] === '') {
+        delete params[field];
+        continue;
+      }
+      const numeric = Number(params[field]);
+      if (Number.isFinite(numeric) && numeric >= 0) {
+        if (numeric === defaultValue) delete params[field];
+        else params[field] = numeric;
+      }
+    }
+    if (params.cover_anchor === true || String(params.cover_anchor).toLowerCase() === 'true') {
+      params.cover_anchor = true;
+    } else if (params.cover_anchor === false || String(params.cover_anchor).toLowerCase() === 'false') {
+      delete params.cover_anchor;
+    }
     if (side === null) side = 'outside';
   }
 
@@ -1000,16 +1122,131 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
     appendOption(options, 'source_index', params.source_index);
   } else if (normalized.renderer === 'annotations') {
     appendOption(options, 'set_id', params.set_id);
+    if (Array.isArray(params.marks) && params.marks.length > 0) {
+      appendOption(options, 'marks', params.marks.join('|'));
+    }
     appendOption(options, 'lane_gap_px', params.lane_gap_px);
     appendOption(options, 'padding_px', params.padding_px);
     appendOption(options, 'overflow', params.overflow);
     appendOption(options, 'show_labels', params.show_labels === false ? 'false' : 'true');
     appendOption(options, 'anchor_slot', params.anchor_slot);
     appendOption(options, 'layer', params.layer);
+    if (params.cover_anchor === true) {
+      appendOption(options, 'cover_anchor', 'true');
+    }
   }
   appendOption(options, 'legend_label', params.legend_label);
 
   return `${normalized.id}:${normalized.renderer}${options.length ? `@${options.join(',')}` : ''}`;
+};
+
+const circularScalarPayload = (value, fieldName) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const numeric = Number(value.value);
+    const unit = String(value.unit || '').trim().toLowerCase();
+    if (!Number.isFinite(numeric) || numeric <= 0 || !['px', 'factor'].includes(unit)) {
+      throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
+    }
+    return { value: numeric, unit };
+  }
+  const text = String(value).trim();
+  const isPx = /px$/i.test(text);
+  const isPercent = /%$/.test(text);
+  const numericText = isPx || isPercent ? text.slice(0, -2 + Number(isPercent)) : text;
+  const numeric = Number(numericText.trim());
+  const resolved = isPercent ? numeric / 100 : numeric;
+  if (!Number.isFinite(resolved) || resolved <= 0) {
+    throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
+  }
+  return { value: resolved, unit: isPx ? 'px' : 'factor' };
+};
+
+const circularGapPayload = (value, fieldName) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    throw new Error(`${fieldName} must be a nonnegative finite pixel value.`);
+  }
+  return numeric;
+};
+
+const canonicalAnnotationParams = (params) => {
+  const next = { ...params };
+  if (!Array.isArray(next.marks) || next.marks.length === 0) {
+    delete next.marks;
+  } else {
+    next.marks = Array.from(new Set(
+      next.marks.map((mark) => String(mark || '').trim().toLowerCase()).filter(Boolean)
+    ));
+  }
+  const laneGap = next.lane_gap_px === null || next.lane_gap_px === undefined || next.lane_gap_px === ''
+    ? null
+    : Number(next.lane_gap_px);
+  if (laneGap === null || laneGap === 3) delete next.lane_gap_px;
+  else next.lane_gap_px = laneGap;
+  const padding = next.padding_px === null || next.padding_px === undefined || next.padding_px === ''
+    ? null
+    : Number(next.padding_px);
+  if (padding === null || padding === 2) delete next.padding_px;
+  else next.padding_px = padding;
+  if (next.cover_anchor !== true) delete next.cover_anchor;
+  if (String(next.overflow || '').trim().toLowerCase() === 'error') delete next.overflow;
+  if (next.show_labels !== false) delete next.show_labels;
+  if (String(next.layer || '').trim().toLowerCase() === 'foreground') delete next.layer;
+  if (!String(next.anchor_slot || '').trim()) delete next.anchor_slot;
+  return next;
+};
+
+const canonicalCircularParams = (slot) => {
+  const params = cloneParams(slot?.params);
+  Object.keys(params).forEach((key) => {
+    if (params[key] === null || params[key] === undefined || key.startsWith('_')) {
+      delete params[key];
+    }
+  });
+  if (slot?.renderer === 'annotations') return canonicalAnnotationParams(params);
+  return params;
+};
+
+/**
+ * Encode one Web draft row as the exact schema-5 CircularTrackSlot object.
+ *
+ * This path is intentionally structured so nested annotation style overrides
+ * and mark arrays survive request/session round trips.
+ */
+export const buildCircularTrackSlotPayload = (
+  slot,
+  defaultNt = 'GC',
+  preset = 'tuckin'
+) => {
+  const normalized = normalizeCircularTrackSlot(slot, 0, defaultNt, preset);
+  const params = canonicalCircularParams(normalized);
+  let side = normalized.side;
+  if (normalized.renderer === 'features') {
+    const placement = resolveCircularTrackFeaturePlacement(normalized, preset);
+    side = placement.side;
+    params.lane_direction = placement.laneDirection;
+  }
+  return {
+    kind: 'circularTrackSlot',
+    id: normalized.id,
+    renderer: normalized.renderer,
+    enabled: normalized.enabled,
+    side,
+    radius: circularScalarPayload(normalized.radius, `Circular track '${normalized.id}' radius`),
+    width: circularScalarPayload(normalized.width, `Circular track '${normalized.id}' width`),
+    z: Number(normalized.z) || 0,
+    params,
+    innerGapPx: circularGapPayload(
+      normalized.inner_gap_px,
+      `Circular track '${normalized.id}' inner gap`
+    ),
+    outerGapPx: circularGapPayload(
+      normalized.outer_gap_px,
+      `Circular track '${normalized.id}' outer gap`
+    )
+  };
 };
 
 export const hasEnabledCircularTrackRenderer = (slots, renderer) =>
@@ -1153,7 +1390,52 @@ const makeManagedConservationSlot = (entry, orderIndex, existingIds) => refreshM
   orderIndex
 );
 
+const replaceObjectContents = (target, source) => {
+  if (
+    !target || typeof target !== 'object' || Array.isArray(target) ||
+    !source || typeof source !== 'object' || Array.isArray(source)
+  ) {
+    return source;
+  }
+  Object.keys(target).forEach((key) => {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) delete target[key];
+  });
+  Object.assign(target, source);
+  return target;
+};
+
+const circularGeometryShortcutsForState = (state) => ({
+  featureWidth: state?.adv?.feature_width_circular,
+  depthWidth: state?.adv?.depth_width_circular,
+  gcContentWidth: state?.adv?.gc_content_width_circular,
+  gcContentRadius: state?.adv?.gc_content_radius_circular,
+  gcSkewWidth: state?.adv?.gc_skew_width_circular,
+  gcSkewRadius: state?.adv?.gc_skew_radius_circular
+});
+
+const visibleCircularFeatureUnderlays = (state) => (
+  (Array.isArray(state?.adv?.features) ? state.adv.features : []).filter((featureType) => {
+    const key = String(featureType || '').trim();
+    const explicit = String(state?.adv?.feature_shapes?.[key] || '').trim().toLowerCase();
+    const rendering = explicit || (key === 'repeat_region' ? 'underlay' : 'rectangle');
+    return rendering === 'underlay';
+  })
+);
+
 export const createCircularTrackSlotEditor = ({ state }) => {
+  const editorKeys = new WeakMap();
+  let nextEditorKey = 1;
+  const circularTrackSlotEditorKey = (slot) => {
+    if (!slot || typeof slot !== 'object') return 'circular-slot-invalid';
+    let key = editorKeys.get(slot);
+    if (!key) {
+      key = `circular-editor-slot-${nextEditorKey}`;
+      nextEditorKey += 1;
+      editorKeys.set(slot, key);
+    }
+    return key;
+  };
+
   const axisIndexForCurrentSlots = (slots) => {
     const current = clampCircularTrackAxisIndex(state.adv.circular_track_slots_axis_index, slots.length);
     if (current !== null) {
@@ -1173,6 +1455,145 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   );
 
   const desiredCircularDepthTrackCount = () => circularDepthTrackCountForState(state);
+
+  const annotationSetIds = () => (
+    (Array.isArray(state.annotationSets) ? state.annotationSets : [])
+      .map((set) => String(set?.id || '').trim())
+      .filter(Boolean)
+  );
+
+  const circularTrackValidationPlan = () => validateCustomTrackPlan({
+    mode: 'circular',
+    slots: state.adv.circular_track_slots,
+    axisIndex: state.adv.circular_track_slots_axis_index,
+    trackType: state.form.track_type,
+    depthTrackCount: circularAvailableDepthTrackCountForState(state),
+    annotationSetIds: annotationSetIds(),
+    visibleFeatureUnderlays: visibleCircularFeatureUnderlays(state),
+    conservationSeries: conservationEntriesForState(state)
+  });
+
+  const circularTrackSlotIssue = (slot, index = null) => {
+    const resolvedIndex = Number.isInteger(Number(index))
+      ? Number(index)
+      : state.adv.circular_track_slots.findIndex((candidate) => candidate === slot);
+    if (resolvedIndex < 0) return '';
+    return (circularTrackValidationPlan().rowIssues.get(resolvedIndex) || [])
+      .map((issue) => issue.message)
+      .join(' ');
+  };
+
+  const circularTrackGlobalIssues = () => (
+    circularTrackValidationPlan().globalIssues.map((issue) => issue.message)
+  );
+
+  const circularAnnotationAnchorOptions = (slot = null) => (
+    state.adv.circular_track_slots
+      .filter((candidate) => (
+        candidate &&
+        candidate !== slot &&
+        candidate.enabled !== false &&
+        !['annotations', 'ticks', 'spacer'].includes(String(candidate.renderer || '').trim()) &&
+        String(candidate.id || '').trim()
+      ))
+      .map((candidate) => ({
+        id: String(candidate.id).trim(),
+        label: `${String(candidate.id).trim()} · ${circularTrackRendererLabel(candidate.renderer)}`
+      }))
+  );
+
+  const circularAnnotationAnchorIsKnown = (slot) => {
+    const anchor = String(slot?.params?.anchor_slot || '').trim();
+    return !anchor || circularAnnotationAnchorOptions(slot).some((option) => option.id === anchor);
+  };
+
+  const bindOnlyCircularAnnotationAnchor = (slot) => {
+    if (!slot || slot.renderer !== 'annotations') return;
+    slot.params = cloneParams(slot.params);
+    const options = circularAnnotationAnchorOptions(slot);
+    const current = String(slot.params.anchor_slot || '').trim();
+    if (options.some((option) => option.id === current)) return;
+    if (options.length === 1) slot.params.anchor_slot = options[0].id;
+    else delete slot.params.anchor_slot;
+  };
+
+  const canAddCircularTrackRenderer = (renderer) => {
+    const normalizedRenderer = String(renderer || '').trim();
+    if (!UI_RENDERERS.includes(normalizedRenderer)) return false;
+    if (normalizedRenderer === 'annotations') return annotationSetIds().length > 0;
+    if (normalizedRenderer === 'depth') {
+      return circularAvailableDepthTrackCountForState(state) > 0;
+    }
+    if (
+      normalizedRenderer === 'features' &&
+      visibleCircularFeatureUnderlays(state).length > 0
+    ) {
+      return !state.adv.circular_track_slots.some((slot) => (
+        slot?.enabled !== false && slot?.renderer === 'features'
+      ));
+    }
+    return true;
+  };
+
+  const canDuplicateCircularTrackSlot = (slot) => {
+    if (!slot || isManagedConservationSlot(slot)) return false;
+    if (slot.enabled === false) return true;
+    if (
+      slot.renderer === 'features' &&
+      visibleCircularFeatureUnderlays(state).length > 0
+    ) {
+      return false;
+    }
+    if (slot.renderer === 'annotations') return annotationSetIds().length > 0;
+    if (slot.renderer === 'depth') return circularAvailableDepthTrackCountForState(state) > 0;
+    return true;
+  };
+
+  const circularAnnotationMarkSelected = (slot, mark) => {
+    const selected = Array.isArray(slot?.params?.marks)
+      ? slot.params.marks.map((value) => String(value).trim().toLowerCase()).filter(Boolean)
+      : [];
+    return selected.length === 0 || selected.includes(mark);
+  };
+
+  const setCircularAnnotationMarkSelected = (slot, mark, checked) => {
+    if (!slot || slot.renderer !== 'annotations' || !ANNOTATION_MARK_OPTIONS.includes(mark)) return;
+    slot.params = cloneParams(slot.params);
+    const current = Array.isArray(slot.params.marks) && slot.params.marks.length > 0
+      ? Array.from(new Set(slot.params.marks.map((value) => String(value).trim().toLowerCase())))
+      : ANNOTATION_MARK_OPTIONS.slice();
+    const next = checked
+      ? Array.from(new Set([...current, mark]))
+      : current.filter((value) => value !== mark);
+    if (next.length === 0 || next.length === ANNOTATION_MARK_OPTIONS.length) delete slot.params.marks;
+    else slot.params.marks = next;
+  };
+
+  const circularAnnotationNumberValue = (slot, field, defaultValue) => {
+    const raw = slot?.params?.[field];
+    return raw === null || raw === undefined || raw === '' ? defaultValue : raw;
+  };
+
+  const setCircularAnnotationNumber = (slot, field, value, defaultValue) => {
+    if (!slot || slot.renderer !== 'annotations') return;
+    slot.params = cloneParams(slot.params);
+    if (value === null || value === undefined || value === '') {
+      delete slot.params[field];
+      return;
+    }
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric === defaultValue) delete slot.params[field];
+    else slot.params[field] = numeric;
+  };
+
+  const circularAnnotationCoverAnchor = (slot) => slot?.params?.cover_anchor === true;
+
+  const setCircularAnnotationCoverAnchor = (slot, checked) => {
+    if (!slot || slot.renderer !== 'annotations') return;
+    slot.params = cloneParams(slot.params);
+    if (checked) slot.params.cover_anchor = true;
+    else delete slot.params.cover_anchor;
+  };
 
   const depthTrackIndexForSlot = (slot, fallbackIndex = null) => {
     const paramIndex = normalizeTrackIndex(slot?.params?.track_index);
@@ -1218,22 +1639,26 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       state.form.track_type
     );
     const suppressed = applyCircularSuppressControlsToSlots(normalized, state.form);
+    const identityPreserving = suppressed.map((slot, index) => (
+      replaceObjectContents(state.adv.circular_track_slots[index], slot)
+    ));
     state.adv.circular_track_slots.splice(
       0,
       state.adv.circular_track_slots.length,
-      ...suppressed
+      ...identityPreserving
     );
   };
 
   const resetCircularTrackSlotsFromSimpleControls = () => {
-    const slots = createDefaultCircularTrackSlots({
+    const slots = applyCircularGeometryShortcuts(createDefaultCircularTrackSlots({
       nt: state.adv.nt,
       showDepth: Boolean(state.form.show_depth),
       depthTrackCount: desiredCircularDepthTrackCount(),
       showGc: !state.form.suppress_gc,
       showSkew: !state.form.suppress_skew,
+      showTicks: state.form.show_scale !== false,
       preset: state.form.track_type
-    });
+    }), circularGeometryShortcutsForState(state));
     state.adv.circular_track_slots_axis_index = inferLegacyAxisIndexFromFeature(
       normalizeCircularTrackSlots(slots, state.adv.nt, state.form.track_type),
       state.form.track_type
@@ -1276,6 +1701,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
         showDepth: false,
         showGc: !state.form.suppress_gc,
         showSkew: !state.form.suppress_skew,
+        showTicks: state.form.show_scale !== false,
         preset: state.form.track_type
       }),
       state.adv.nt,
@@ -1409,14 +1835,14 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const resetCircularTrackSlotsToPreset = (preset) => {
     const normalizedPreset = normalizeCircularTrackPreset(preset);
-    const templateSlots = createDefaultCircularTrackSlots({
+    const templateSlots = applyCircularGeometryShortcuts(createDefaultCircularTrackSlots({
       nt: state.adv.nt,
       showDepth: Boolean(state.form.show_depth),
       depthTrackCount: desiredCircularDepthTrackCount(),
       showGc: !state.form.suppress_gc,
       showSkew: !state.form.suppress_skew,
       preset: normalizedPreset
-    });
+    }), circularGeometryShortcutsForState(state));
     state.adv.circular_track_slots_axis_index = inferLegacyAxisIndexFromFeature(
       normalizeCircularTrackSlots(templateSlots, state.adv.nt, normalizedPreset),
       normalizedPreset
@@ -1436,14 +1862,32 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const setCircularTrackSlotsEnabled = (enabled) => {
     state.adv.circular_track_slots_enabled = Boolean(enabled);
-    if (state.adv.circular_track_slots_enabled) {
+    if (
+      state.adv.circular_track_slots_enabled &&
+      (!Array.isArray(state.adv.circular_track_slots) || state.adv.circular_track_slots.length === 0)
+    ) {
       resetCircularTrackSlotsFromSimpleControls();
     }
   };
 
   const addCircularTrackSlot = (renderer, placement = null) => {
+    if (!canAddCircularTrackRenderer(renderer)) return;
     normalizeSlotsInPlace();
     const slot = createCircularTrackSlotForRenderer(renderer, state.adv.circular_track_slots, state.adv.nt, placement);
+    if (slot.renderer === 'annotations') {
+      slot.params.set_id = String(state.annotationSets?.[0]?.id || '').trim();
+    } else if (slot.renderer === 'depth') {
+      const available = circularAvailableDepthTrackCountForState(state);
+      const claimed = new Set(
+        state.adv.circular_track_slots
+          .filter((candidate) => candidate?.enabled !== false && candidate?.renderer === 'depth')
+          .map((candidate) => normalizeTrackIndex(candidate?.params?.track_index))
+          .filter((trackIndex) => trackIndex !== null)
+      );
+      let trackIndex = 0;
+      while (trackIndex < available && claimed.has(trackIndex)) trackIndex += 1;
+      slot.params.track_index = trackIndex < available ? trackIndex : 0;
+    }
     applyGlobalSuppressToSlot(slot);
     state.adv.circular_track_slots.push(slot);
     normalizeSlotsInPlace();
@@ -1453,6 +1897,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeSlotsInPlace();
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= state.adv.circular_track_slots.length) return;
+    if (!canDuplicateCircularTrackSlot(state.adv.circular_track_slots[idx])) return;
     const source = normalizeCircularTrackSlot(state.adv.circular_track_slots[idx], idx, state.adv.nt, state.form.track_type);
     const duplicate = createCircularTrackSlotForRenderer(source.renderer, state.adv.circular_track_slots, state.adv.nt);
     duplicate.enabled = source.enabled;
@@ -1562,10 +2007,15 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     const targetPlacement = normalizePlacement(placement);
 
     const directOverlaySlot = state.adv.circular_track_slots[idx];
+    if (directOverlaySlot?.renderer === 'annotations' && targetPlacement !== 'overlay') {
+      directOverlaySlot.params = cloneParams(directOverlaySlot.params);
+      delete directOverlaySlot.params.anchor_slot;
+      delete directOverlaySlot.params.cover_anchor;
+    }
     if (targetPlacement === 'overlay' && directOverlaySlot?.renderer === 'annotations') {
       syncSlotPlacementFromSide(directOverlaySlot, 'overlay');
       directOverlaySlot.params = cloneParams(directOverlaySlot.params);
-      if (!normalizeOptionalText(directOverlaySlot.params.anchor_slot)) directOverlaySlot.params.anchor_slot = 'features';
+      bindOnlyCircularAnnotationAnchor(directOverlaySlot);
       normalizeSlotsInPlace();
       return;
     }
@@ -1795,6 +2245,15 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       return;
     }
     applyPlacementDefaults(slot, placement);
+    if (slot.renderer === 'annotations') {
+      slot.params = cloneParams(slot.params);
+      if (normalizePlacement(placement) === 'overlay') {
+        bindOnlyCircularAnnotationAnchor(slot);
+      } else {
+        delete slot.params.anchor_slot;
+        delete slot.params.cover_anchor;
+      }
+    }
     normalizeSlotsInPlace();
   };
 
@@ -2036,6 +2495,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   return {
     circularTrackRenderers: UI_RENDERERS,
+    circularTrackSlotEditorKey,
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,
@@ -2047,7 +2507,9 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     setCircularGcSuppressed,
     setCircularSkewSuppressed,
     addCircularTrackSlot,
+    canAddCircularTrackRenderer,
     duplicateCircularTrackSlot,
+    canDuplicateCircularTrackSlot,
     removeCircularTrackSlot,
     setCircularTrackSlotEnabled,
     circularTrackSlotEffectiveEnabled,
@@ -2064,6 +2526,19 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     updateCircularTrackSlotRenderer,
     updateCircularTrackSlotPlacement,
     updateCircularTrackFeatureLane,
+    circularTrackSlotIssue,
+    circularTrackGlobalIssues,
+    circularAnnotationAnchorOptions,
+    circularAnnotationAnchorIsKnown,
+    annotationTrackMarkOptions: ANNOTATION_MARK_OPTIONS,
+    circularAnnotationMarkSelected,
+    setCircularAnnotationMarkSelected,
+    circularAnnotationLaneGapValue: (slot) => circularAnnotationNumberValue(slot, 'lane_gap_px', 3),
+    setCircularAnnotationLaneGap: (slot, value) => setCircularAnnotationNumber(slot, 'lane_gap_px', value, 3),
+    circularAnnotationPaddingValue: (slot) => circularAnnotationNumberValue(slot, 'padding_px', 2),
+    setCircularAnnotationPadding: (slot, value) => setCircularAnnotationNumber(slot, 'padding_px', value, 2),
+    circularAnnotationCoverAnchor,
+    setCircularAnnotationCoverAnchor,
     supportsCircularTrackSlotPlacement,
     isManagedCircularConservationSlot,
     circularTrackSlots,

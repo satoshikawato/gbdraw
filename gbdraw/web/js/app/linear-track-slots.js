@@ -12,6 +12,7 @@ import {
   normalizeOptionalText
 } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
+import { validateCustomTrackPlan } from './track-slot-validation.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -22,7 +23,7 @@ const SUPPORTED_RENDERERS = [
   'spacer'
 ];
 
-const UI_RENDERERS = SUPPORTED_RENDERERS.filter((renderer) => renderer !== 'spacer');
+const UI_RENDERERS = SUPPORTED_RENDERERS.slice();
 
 const RENDERER_LABELS = {
   features: 'Features',
@@ -55,6 +56,12 @@ const DEFAULT_LINEAR_SLOT_MANAGER = 'linear-default';
 const ESTIMATED_LINEAR_GC_HEIGHT_PX = 20;
 const ESTIMATED_LINEAR_DEPTH_HEIGHT_PX = 10;
 const ESTIMATED_LINEAR_DEPTH_SPACING_PX = 8;
+const ANNOTATION_MARK_OPTIONS = Object.freeze([
+  'line',
+  'bracket',
+  'band',
+  'highlight'
+]);
 
 export const LINEAR_TRACK_SLOT_SCHEMA_VERSION = 2;
 export const LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION = 1;
@@ -146,11 +153,16 @@ const defaultSlot = (renderer, overrides = {}) => {
   };
 };
 
-export const linearDepthTrackCountForState = (state) => {
-  if (!Boolean(state?.form?.show_depth)) return 0;
+export const linearAvailableDepthTrackCountForState = (state) => {
   const seqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
   return depthTrackMatrixWidth(seqs.map((seq) => seq?.depth));
 };
+
+export const linearDepthTrackCountForState = (state) => (
+  Boolean(state?.form?.show_depth)
+    ? linearAvailableDepthTrackCountForState(state)
+    : 0
+);
 
 export const createDefaultLinearTrackSlots = ({
   showDepth = false,
@@ -240,6 +252,30 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
           : 'error';
         params.show_labels = params.show_labels !== false && String(params.show_labels).toLowerCase() !== 'false';
         params.layer = String(params.layer || '').toLowerCase() === 'underlay' ? 'underlay' : 'foreground';
+        if (Array.isArray(params.marks)) {
+          params.marks = Array.from(new Set(
+            params.marks
+              .map((mark) => String(mark || '').trim().toLowerCase())
+              .filter(Boolean)
+          ));
+          if (params.marks.length === 0) delete params.marks;
+        }
+        for (const [field, defaultValue] of [['lane_gap_px', 3], ['padding_px', 2]]) {
+          if (params[field] === null || params[field] === undefined || params[field] === '') {
+            delete params[field];
+            continue;
+          }
+          const numeric = Number(params[field]);
+          if (Number.isFinite(numeric) && numeric >= 0) {
+            if (numeric === defaultValue) delete params[field];
+            else params[field] = numeric;
+          }
+        }
+        if (params.cover_anchor === true || String(params.cover_anchor).toLowerCase() === 'true') {
+          params.cover_anchor = true;
+        } else if (params.cover_anchor === false || String(params.cover_anchor).toLowerCase() === 'false') {
+          delete params.cover_anchor;
+        }
       }
       let id = String(slot.id || DEFAULT_SLOT_IDS[renderer] || `slot_${index + 1}`).trim();
       if (!id) id = `slot_${index + 1}`;
@@ -386,16 +422,116 @@ export const buildLinearTrackSlotSpec = (slot, { includeEnabled = false, include
     }
   }
   if (normalized.renderer === 'annotations') {
+    if (Array.isArray(params.marks) && params.marks.length > 0) {
+      parts.push(`marks=${params.marks.join('|')}`);
+    }
     ['set_id', 'lane_gap_px', 'padding_px', 'overflow', 'anchor_slot', 'layer'].forEach((key) => {
       if (normalizeOptionalText(params[key])) parts.push(`${key}=${String(params[key]).trim()}`);
     });
     parts.push(`show_labels=${params.show_labels === false ? 'false' : 'true'}`);
+    if (params.cover_anchor === true) parts.push('cover_anchor=true');
   }
   if (normalizeOptionalText(params.legend_label)) {
     parts.push(`legend_label=${String(params.legend_label).trim()}`);
   }
   const suffix = parts.length > 0 ? `@${parts.join(',')}` : '';
   return `${normalized.id}:${normalized.renderer}${suffix}`;
+};
+
+const linearScalarPayload = (value, fieldName, { allowZero }) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const numeric = Number(value.value);
+    const unit = String(value.unit || '').trim().toLowerCase();
+    if (
+      unit !== 'px' ||
+      !Number.isFinite(numeric) ||
+      numeric < 0 ||
+      (!allowZero && numeric === 0)
+    ) {
+      throw new Error(`${fieldName} must be ${allowZero ? 'nonnegative' : 'positive'} px.`);
+    }
+    return { value: numeric, unit: 'px' };
+  }
+  const text = String(value).trim();
+  if (/%$/i.test(text)) {
+    throw new Error(`${fieldName} only accepts px or unitless px values.`);
+  }
+  const numericText = /px$/i.test(text) ? text.slice(0, -2).trim() : text;
+  const numeric = Number(numericText);
+  if (
+    !Number.isFinite(numeric) ||
+    numeric < 0 ||
+    (!allowZero && numeric === 0)
+  ) {
+    throw new Error(`${fieldName} must be ${allowZero ? 'nonnegative' : 'positive'} px.`);
+  }
+  return { value: numeric, unit: 'px' };
+};
+
+const canonicalLinearAnnotationParams = (params) => {
+  const next = { ...params };
+  if (!Array.isArray(next.marks) || next.marks.length === 0) {
+    delete next.marks;
+  } else {
+    next.marks = Array.from(new Set(
+      next.marks.map((mark) => String(mark || '').trim().toLowerCase()).filter(Boolean)
+    ));
+  }
+  const laneGap = next.lane_gap_px === null || next.lane_gap_px === undefined || next.lane_gap_px === ''
+    ? null
+    : Number(next.lane_gap_px);
+  if (laneGap === null || laneGap === 3) delete next.lane_gap_px;
+  else next.lane_gap_px = laneGap;
+  const padding = next.padding_px === null || next.padding_px === undefined || next.padding_px === ''
+    ? null
+    : Number(next.padding_px);
+  if (padding === null || padding === 2) delete next.padding_px;
+  else next.padding_px = padding;
+  if (next.cover_anchor !== true) delete next.cover_anchor;
+  if (String(next.overflow || '').trim().toLowerCase() === 'error') delete next.overflow;
+  if (next.show_labels !== false) delete next.show_labels;
+  if (String(next.layer || '').trim().toLowerCase() === 'foreground') delete next.layer;
+  if (!String(next.anchor_slot || '').trim()) delete next.anchor_slot;
+  return next;
+};
+
+const canonicalLinearParams = (slot) => {
+  const params = cloneParams(slot?.params);
+  Object.keys(params).forEach((key) => {
+    if (params[key] === null || params[key] === undefined || key.startsWith('_')) {
+      delete params[key];
+    }
+  });
+  if (slot?.renderer === 'annotations') return canonicalLinearAnnotationParams(params);
+  return params;
+};
+
+/**
+ * Encode one Web draft row as the exact schema-5 LinearTrackSlot object.
+ */
+export const buildLinearTrackSlotPayload = (slot) => {
+  const normalized = normalizeLinearTrackSlots([slot])[0];
+  if (!normalized) throw new Error('Linear track slot must be an object.');
+  return {
+    kind: 'linearTrackSlot',
+    id: normalized.id,
+    renderer: normalized.renderer,
+    enabled: normalized.enabled,
+    side: normalized.side,
+    height: linearScalarPayload(
+      normalized.height,
+      `Linear track '${normalized.id}' height`,
+      { allowZero: false }
+    ),
+    spacing: linearScalarPayload(
+      normalized.spacing,
+      `Linear track '${normalized.id}' spacing`,
+      { allowZero: true }
+    ),
+    z: Number(normalized.z) || 0,
+    params: canonicalLinearParams(normalized)
+  };
 };
 
 const parseLinearTrackSlotRenderer = (value) => {
@@ -695,11 +831,166 @@ const isDefaultManagedLinearSlot = (slot, renderer = null) => {
   return false;
 };
 
+const replaceObjectContents = (target, source) => {
+  if (
+    !target || typeof target !== 'object' || Array.isArray(target) ||
+    !source || typeof source !== 'object' || Array.isArray(source)
+  ) {
+    return source;
+  }
+  Object.keys(target).forEach((key) => {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) delete target[key];
+  });
+  Object.assign(target, source);
+  return target;
+};
+
 export const createLinearTrackSlotEditor = ({ state }) => {
   const { adv, form } = state;
+  const editorKeys = new WeakMap();
+  let nextEditorKey = 1;
+  const linearTrackSlotEditorKey = (slot) => {
+    if (!slot || typeof slot !== 'object') return 'linear-slot-invalid';
+    let key = editorKeys.get(slot);
+    if (!key) {
+      key = `linear-editor-slot-${nextEditorKey}`;
+      nextEditorKey += 1;
+      editorKeys.set(slot, key);
+    }
+    return key;
+  };
 
   const linearTrackRenderers = UI_RENDERERS.slice();
   const linearTrackRendererLabel = (renderer) => RENDERER_LABELS[normalizeRenderer(renderer)] || String(renderer || '');
+  const annotationSetIds = () => (
+    (Array.isArray(state.annotationSets) ? state.annotationSets : [])
+      .map((set) => String(set?.id || '').trim())
+      .filter(Boolean)
+  );
+
+  const linearTrackValidationPlan = () => validateCustomTrackPlan({
+    mode: 'linear',
+    slots: adv.linear_track_slots,
+    axisIndex: adv.linear_track_slots_axis_index,
+    trackType: form.linear_track_layout,
+    depthTrackCount: linearAvailableDepthTrackCountForState(state),
+    annotationSetIds: annotationSetIds(),
+    visibleFeatureUnderlays: false,
+    conservationSeries: []
+  });
+
+  const linearTrackSlotIssue = (slot, index = null) => {
+    const resolvedIndex = Number.isInteger(Number(index))
+      ? Number(index)
+      : adv.linear_track_slots.findIndex((candidate) => candidate === slot);
+    if (resolvedIndex < 0) return '';
+    return (linearTrackValidationPlan().rowIssues.get(resolvedIndex) || [])
+      .map((issue) => issue.message)
+      .join(' ');
+  };
+
+  const linearTrackGlobalIssues = () => (
+    linearTrackValidationPlan().globalIssues.map((issue) => issue.message)
+  );
+
+  const linearAnnotationAnchorOptions = (slot = null) => (
+    adv.linear_track_slots
+      .filter((candidate) => (
+        candidate &&
+        candidate !== slot &&
+        candidate.enabled !== false &&
+        !['annotations', 'spacer'].includes(normalizeRenderer(candidate.renderer)) &&
+        String(candidate.id || '').trim()
+      ))
+      .map((candidate) => ({
+        id: String(candidate.id).trim(),
+        label: `${String(candidate.id).trim()} · ${linearTrackRendererLabel(candidate.renderer)}`
+      }))
+  );
+
+  const linearAnnotationAnchorIsKnown = (slot) => {
+    const anchor = String(slot?.params?.anchor_slot || '').trim();
+    return !anchor || linearAnnotationAnchorOptions(slot).some((option) => option.id === anchor);
+  };
+
+  const bindOnlyLinearAnnotationAnchor = (slot) => {
+    if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
+    slot.params = cloneParams(slot.params);
+    const options = linearAnnotationAnchorOptions(slot);
+    const current = String(slot.params.anchor_slot || '').trim();
+    if (options.some((option) => option.id === current)) return;
+    if (options.length === 1) slot.params.anchor_slot = options[0].id;
+    else delete slot.params.anchor_slot;
+  };
+
+  const canAddLinearTrackRenderer = (renderer) => {
+    const normalizedRenderer = normalizeRenderer(renderer, 'spacer');
+    if (normalizedRenderer === 'annotations') return annotationSetIds().length > 0;
+    if (normalizedRenderer === 'depth') {
+      return linearAvailableDepthTrackCountForState(state) > 0;
+    }
+    if (normalizedRenderer === 'features') {
+      return !adv.linear_track_slots.some((slot) => (
+        slot?.enabled !== false && normalizeRenderer(slot?.renderer) === 'features'
+      ));
+    }
+    return true;
+  };
+
+  const canDuplicateLinearTrackSlot = (slot) => {
+    if (!slot || slot.enabled === false) return Boolean(slot);
+    const renderer = normalizeRenderer(slot.renderer);
+    if (renderer === 'features') return false;
+    if (renderer === 'annotations') return annotationSetIds().length > 0;
+    if (renderer === 'depth') return linearAvailableDepthTrackCountForState(state) > 0;
+    return true;
+  };
+
+  const linearAnnotationMarkSelected = (slot, mark) => {
+    const selected = Array.isArray(slot?.params?.marks)
+      ? slot.params.marks.map((value) => String(value).trim().toLowerCase()).filter(Boolean)
+      : [];
+    return selected.length === 0 || selected.includes(mark);
+  };
+
+  const setLinearAnnotationMarkSelected = (slot, mark, checked) => {
+    if (!slot || normalizeRenderer(slot.renderer) !== 'annotations' || !ANNOTATION_MARK_OPTIONS.includes(mark)) return;
+    slot.params = cloneParams(slot.params);
+    const current = Array.isArray(slot.params.marks) && slot.params.marks.length > 0
+      ? Array.from(new Set(slot.params.marks.map((value) => String(value).trim().toLowerCase())))
+      : ANNOTATION_MARK_OPTIONS.slice();
+    const next = checked
+      ? Array.from(new Set([...current, mark]))
+      : current.filter((value) => value !== mark);
+    if (next.length === 0 || next.length === ANNOTATION_MARK_OPTIONS.length) delete slot.params.marks;
+    else slot.params.marks = next;
+  };
+
+  const linearAnnotationNumberValue = (slot, field, defaultValue) => {
+    const raw = slot?.params?.[field];
+    return raw === null || raw === undefined || raw === '' ? defaultValue : raw;
+  };
+
+  const setLinearAnnotationNumber = (slot, field, value, defaultValue) => {
+    if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
+    slot.params = cloneParams(slot.params);
+    if (value === null || value === undefined || value === '') {
+      delete slot.params[field];
+      return;
+    }
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric === defaultValue) delete slot.params[field];
+    else slot.params[field] = numeric;
+  };
+
+  const linearAnnotationCoverAnchor = (slot) => slot?.params?.cover_anchor === true;
+
+  const setLinearAnnotationCoverAnchor = (slot, checked) => {
+    if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
+    slot.params = cloneParams(slot.params);
+    if (checked) slot.params.cover_anchor = true;
+    else delete slot.params.cover_anchor;
+  };
 
   const axisIndexForCurrentLinearSlots = (slots) => {
     const current = clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, slots.length);
@@ -727,7 +1018,14 @@ export const createLinearTrackSlotEditor = ({ state }) => {
       normalized,
       axis
     );
-    adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...normalized);
+    const identityPreserving = normalized.map((slot, index) => (
+      replaceObjectContents(adv.linear_track_slots[index], slot)
+    ));
+    adv.linear_track_slots.splice(
+      0,
+      adv.linear_track_slots.length,
+      ...identityPreserving
+    );
   };
 
   const resetLinearTrackSlotsFromSimpleControls = () => {
@@ -754,8 +1052,9 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const addLinearTrackSlot = (renderer = 'spacer') => {
-    normalizeCurrentSlots();
     const normalizedRenderer = normalizeRenderer(renderer, 'spacer');
+    if (!canAddLinearTrackRenderer(normalizedRenderer)) return;
+    normalizeCurrentSlots();
     const baseId = DEFAULT_SLOT_IDS[normalizedRenderer] || 'slot';
     let nextId = baseId;
     let suffix = 2;
@@ -764,11 +1063,32 @@ export const createLinearTrackSlotEditor = ({ state }) => {
       nextId = `${baseId}_${suffix}`;
       suffix += 1;
     }
-    adv.linear_track_slots.push(defaultSlot(normalizedRenderer, {
+    const slot = defaultSlot(normalizedRenderer, {
       id: nextId,
       side: normalizedRenderer === 'spacer' ? 'below' : undefined,
-      height: normalizedRenderer === 'spacer' ? '12px' : ''
-    }));
+      height: normalizedRenderer === 'spacer' ? '12px' : '',
+      params: normalizedRenderer === 'annotations'
+        ? {
+            set_id: annotationSetIds()[0] || '',
+            overflow: 'error',
+            show_labels: true,
+            layer: 'foreground'
+          }
+        : {}
+    });
+    if (normalizedRenderer === 'depth') {
+      const available = linearAvailableDepthTrackCountForState(state);
+      const claimed = new Set(
+        adv.linear_track_slots
+          .filter((candidate) => candidate?.enabled !== false && normalizeRenderer(candidate?.renderer) === 'depth')
+          .map((candidate) => normalizeTrackIndex(candidate?.params?.track_index))
+          .filter((trackIndex) => trackIndex !== null)
+      );
+      let trackIndex = 0;
+      while (trackIndex < available && claimed.has(trackIndex)) trackIndex += 1;
+      slot.params.track_index = trackIndex < available ? trackIndex : 0;
+    }
+    adv.linear_track_slots.push(slot);
     normalizeCurrentSlots();
   };
 
@@ -777,6 +1097,7 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     const idx = Number(index);
     const source = adv.linear_track_slots[idx];
     if (!source) return;
+    if (!canDuplicateLinearTrackSlot(source)) return;
     const copy = {
       ...source,
       id: `${source.id || source.renderer}_copy`,
@@ -885,10 +1206,15 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     const movingSlot = adv.linear_track_slots[idx];
     const movingRenderer = normalizeRenderer(movingSlot?.renderer);
     if (targetPlacement === 'overlay' && !['features', 'annotations'].includes(movingRenderer)) return;
+    if (movingRenderer === 'annotations' && targetPlacement !== 'overlay') {
+      movingSlot.params = cloneParams(movingSlot.params);
+      delete movingSlot.params.anchor_slot;
+      delete movingSlot.params.cover_anchor;
+    }
     if (targetPlacement === 'overlay' && movingRenderer === 'annotations') {
       syncLinearSlotPlacementFromSide(movingSlot, 'overlay');
       movingSlot.params = cloneParams(movingSlot.params);
-      if (!normalizeOptionalText(movingSlot.params.anchor_slot)) movingSlot.params.anchor_slot = 'features';
+      bindOnlyLinearAnnotationAnchor(movingSlot);
       normalizeCurrentSlots();
       return;
     }
@@ -984,6 +1310,15 @@ export const createLinearTrackSlotEditor = ({ state }) => {
       return;
     }
     syncLinearSlotPlacementFromSide(slot, placement);
+    if (normalizeRenderer(slot.renderer) === 'annotations') {
+      slot.params = cloneParams(slot.params);
+      if (normalizePlacement(placement) === 'overlay') {
+        bindOnlyLinearAnnotationAnchor(slot);
+      } else {
+        delete slot.params.anchor_slot;
+        delete slot.params.cover_anchor;
+      }
+    }
     normalizeCurrentSlots();
   };
 
@@ -1296,13 +1631,16 @@ export const createLinearTrackSlotEditor = ({ state }) => {
 
   return {
     linearTrackRenderers,
+    linearTrackSlotEditorKey,
     linearTrackRendererLabel,
     normalizeLinearTrackSlots: normalizeCurrentSlots,
     resetLinearTrackSlotsFromSimpleControls,
     ensureLinearTrackDepthSlots,
     setLinearTrackSlotsEnabled,
     addLinearTrackSlot,
+    canAddLinearTrackRenderer,
     duplicateLinearTrackSlot,
+    canDuplicateLinearTrackSlot,
     removeLinearTrackSlot,
     moveLinearTrackSlot,
     canMoveLinearTrackSlot,
@@ -1315,6 +1653,19 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     canMoveLinearTrackSlotToAxis,
     updateLinearTrackSlotRenderer,
     updateLinearTrackSlotPlacement,
+    linearTrackSlotIssue,
+    linearTrackGlobalIssues,
+    linearAnnotationAnchorOptions,
+    linearAnnotationAnchorIsKnown,
+    annotationTrackMarkOptions: ANNOTATION_MARK_OPTIONS,
+    linearAnnotationMarkSelected,
+    setLinearAnnotationMarkSelected,
+    linearAnnotationLaneGapValue: (slot) => linearAnnotationNumberValue(slot, 'lane_gap_px', 3),
+    setLinearAnnotationLaneGap: (slot, value) => setLinearAnnotationNumber(slot, 'lane_gap_px', value, 3),
+    linearAnnotationPaddingValue: (slot) => linearAnnotationNumberValue(slot, 'padding_px', 2),
+    setLinearAnnotationPadding: (slot, value) => setLinearAnnotationNumber(slot, 'padding_px', value, 2),
+    linearAnnotationCoverAnchor,
+    setLinearAnnotationCoverAnchor,
     linearTrackSlotHeightValue,
     linearTrackSlotGeometryAutoText,
     linearTrackSlotGeometryHasManual,

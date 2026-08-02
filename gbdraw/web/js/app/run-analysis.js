@@ -47,18 +47,14 @@ import {
   normalizeGroupMetadataScope
 } from './losat-normalization.js';
 import { buildRunInfo } from './run-info.js';
-import { reconcileLinearRecordLayout } from './linear-record-layout.js';
-import { validateLinearComparisons } from './linear-comparisons.js';
+import {
+  buildPairwiseLosatJobSpecs,
+  resolveLinearComparisonPlan
+} from './linear-comparisons.js';
 import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
 } from './color-utils.js';
-import { extractFeatureMetadataForPreview } from './feature-metadata-extraction.js';
-import {
-  alignRecoveredFeatureIdsToRenderedSvg,
-  collectRenderedFeatureIdsFromResults,
-  featureRenderedCandidate
-} from './session-feature-metadata.js';
 import { serializeSpecificRules } from './file-imports.js';
 import { serializeFeatureVisibilityRules } from './feature-visibility.js';
 import {
@@ -78,7 +74,11 @@ import {
   requireCurrentLinearTrackLayout
 } from './current-option-values.js';
 import { PAIRWISE_LEGEND_SELECTOR } from './legend/utils.js';
-import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
+import {
+  circularInputNeedsRecordDiscovery,
+  discoverGffFastaRecords,
+  discoverSequenceRecords
+} from './record-discovery.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -96,6 +96,12 @@ import {
   validateProteinIdentityManifest
 } from './losat-cache.js';
 import { comparisonFiltersForMode } from '../mode-profiles.js';
+import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { readFileBytes, readFileText } from '../services/file-content-cache.js';
+import {
+  validateFeatureCatalog
+} from '../services/feature-catalog.js';
+import { prepareCandidateRenderCommit } from './candidate-render.js';
 
 const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('circular')
@@ -598,7 +604,7 @@ const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelect
   if (typeof text !== 'string' && !file?.text) {
     throw new Error('Input file is not available for browser FASTA extraction.');
   }
-  const sourceText = typeof text === 'string' ? text : await file.text();
+  const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
   const selected = selectParsedRecord(records, recordSelector);
   const transformed = applyLosatSequenceTransforms(selected, regionSpec, reverseFlag);
@@ -612,7 +618,7 @@ const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
   if (typeof text !== 'string' && !file?.text) {
     throw new Error('Input file is not available for browser FASTA extraction.');
   }
-  const sourceText = typeof text === 'string' ? text : await file.text();
+  const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
   if (!records.length) throw new Error('No records found for circular conservation reference.');
   return {
@@ -758,14 +764,15 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
 export const createRunAnalysis = ({
   state,
   getPyodide,
+  ensurePyodide = null,
   writeFileToFs,
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
-  refreshFeatureOverrides,
   resetPreviewViewport,
   validateAnnotationTargets = null,
-  losatExecutor = runLosatPairsParallel
+  losatExecutor = runLosatPairsParallel,
+  prepareCandidateCommit = prepareCandidateRenderCommit
 }) => {
   const {
     pyodideReady,
@@ -781,6 +788,7 @@ export const createRunAnalysis = ({
     trackSlotResolvedGeometry,
     errorLog,
     zoom,
+    canvasPan,
     skipCaptureBaseConfig,
     skipPositionReapply,
     pairwiseMatchFactors,
@@ -811,7 +819,6 @@ export const createRunAnalysis = ({
     mode,
     cInputType,
     lInputType,
-    blastSource,
     losatProgram,
     losat,
     losatCacheInfo,
@@ -835,7 +842,8 @@ export const createRunAnalysis = ({
     linearSeqs,
     linearRecordLayoutEnabled,
     linearRecordRows,
-    linearComparisons,
+    linearComparisonPlan,
+    linearComparisonResolution,
     generatedLegendPosition,
     generatedMode,
     generatedMultiRecordCanvas,
@@ -843,12 +851,16 @@ export const createRunAnalysis = ({
     shouldDeferCircularPreviewUpdates,
     extractedFeatures,
     biologicalFeatures,
+    featureCatalog,
     featureSelectorSafetyScope,
     featureEditorStatus,
     featureExtractionPending,
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
+    selectedFeatureIds,
+    selectedFeatureAnchorId,
+    featureSelectionStatus,
     editableLabels,
     clickedLabel,
     labelTextScopeDialog,
@@ -875,12 +887,13 @@ export const createRunAnalysis = ({
   let latestCliHelperFiles = [];
   let latestCliHelperArchiveName = 'out-cli-files.zip';
 
-  const setLatestCliHelperFiles = (runInfo, generatedCliFileMap, archiveBaseName) => {
+  const buildLatestCliHelperFiles = (runInfo, generatedCliFileMap, archiveBaseName) => {
     const helperFiles = Array.isArray(runInfo?.helperFiles) ? runInfo.helperFiles : [];
     if (helperFiles.length === 0) {
-      latestCliHelperFiles = [];
-      latestCliHelperArchiveName = 'out-cli-files.zip';
-      return;
+      return {
+        files: [],
+        archiveName: 'out-cli-files.zip'
+      };
     }
 
     const bySlot = new Map();
@@ -889,7 +902,7 @@ export const createRunAnalysis = ({
       if (slot && !bySlot.has(slot)) bySlot.set(slot, entry);
     });
 
-    latestCliHelperFiles = helperFiles
+    const files = helperFiles
       .map((helper) => {
         const path = String(helper?.path || '').trim();
         const slot = String(helper?.slot || '').trim();
@@ -902,7 +915,10 @@ export const createRunAnalysis = ({
       })
       .filter(Boolean);
     const archiveStem = makeSafeFilename(`${archiveBaseName || form.prefix || 'out'}-cli-files`);
-    latestCliHelperArchiveName = `${archiveStem}.zip`;
+    return {
+      files,
+      archiveName: `${archiveStem}.zip`
+    };
   };
 
   const downloadCliHelperFiles = () => {
@@ -919,16 +935,6 @@ export const createRunAnalysis = ({
     }
     downloadZipFile(latestCliHelperArchiveName, latestCliHelperFiles);
   };
-
-  const getLastLine = (text) => {
-    const trimmed = String(text || '').trim();
-    if (!trimmed) return '';
-    const lines = trimmed.split(/\r?\n/);
-    return lines[lines.length - 1] || '';
-  };
-
-  const normalizeSections = (sections) =>
-    sections.filter((section) => section && typeof section.text === 'string' && section.text.trim() !== '');
 
   const extractCircularTrackSlotError = (err) => {
     const texts = [
@@ -950,35 +956,15 @@ export const createRunAnalysis = ({
   };
 
   const formatPythonError = (err) => {
-    if (err && typeof err === 'object') {
-      const details = normalizeSections([
-        { label: 'STDERR', text: err.stderr || '' },
-        { label: 'STDOUT', text: err.stdout || '' },
-        { label: 'Traceback', text: err.traceback || '' }
-      ]);
-      const circularTrackSlotError = extractCircularTrackSlotError(err);
-      let summary =
-        circularTrackSlotError ||
-        (err.type === 'SystemExit' && err.stderr ? getLastLine(err.stderr) : '') ||
-        err.message ||
-        getLastLine(err.stderr || err.stdout || err.traceback) ||
-        'Unknown error';
-      if (!circularTrackSlotError && err.type && summary && !summary.startsWith(err.type)) {
-        summary = `${err.type}: ${summary}`;
-      }
-      return { summary, details };
-    }
-
-    const text = String(err || '').trim();
-    const summary = getLastLine(text) || 'Unknown error';
-    const details = normalizeSections([{ label: 'Details', text }]);
-    return { summary, details };
+    const circularTrackSlotError = extractCircularTrackSlotError(err);
+    return normalizeUserFacingError(
+      circularTrackSlotError
+        ? { type: err?.type || 'ValidationError', message: circularTrackSlotError, notes: err?.notes }
+        : err
+    );
   };
 
-  const formatJsError = (err) => {
-    const message = err?.message ? String(err.message) : String(err || 'Unknown error');
-    return { summary: message, details: [] };
-  };
+  const formatJsError = (err) => normalizeUserFacingError(err);
 
   const getGenerationCancelReason = (signal) =>
     signal?.reason instanceof Error ? signal.reason : new DiagramGenerationCanceledError();
@@ -1099,43 +1085,6 @@ export const createRunAnalysis = ({
     if (clearOverrides) pruneOrthogroupOverrides([], { clearAll: true });
   };
 
-  const enrichFeatureWithOrthogroup = (feature, recordIndex) => {
-    const svgId = String(feature?.svg_id || '').trim();
-    if (!svgId) return feature;
-    const stableSvgId = String(
-      feature?.stable_svg_id ||
-      feature?.stableFeatureSvgId ||
-      feature?.stable_feature_id ||
-      ''
-    ).trim();
-    const index = featureOrthogroupIndex.value instanceof Map ? featureOrthogroupIndex.value : new Map();
-    const entry =
-      index.get(buildOrthogroupIndexKey(recordIndex, svgId)) ||
-      index.get(svgId) ||
-      index.get(buildOrthogroupIndexKey(recordIndex, stableSvgId)) ||
-      index.get(stableSvgId);
-    if (!entry) return feature;
-    return {
-      ...feature,
-      proteinId: entry.proteinId,
-      sourceProteinId: entry.sourceProteinId,
-      orthogroupId: entry.orthogroupId,
-      orthogroupMemberCount: entry.orthogroupMemberCount,
-      orthogroupRecordCoverage: entry.orthogroupRecordCoverage,
-      orthogroupRepresentative: entry.orthogroupRepresentative,
-      orthogroupScope: entry.orthogroupScope,
-      orthogroupSourceRecordIndex: entry.orthogroupSourceRecordIndex,
-      orthogroupMember: entry.orthogroupMember
-    };
-  };
-
-  const isCurrentFeatureExtractionContext = (context) =>
-    Boolean(context) &&
-    context.requestId === featureExtractionRequestId &&
-    context.mode === mode.value &&
-    context.cInputType === cInputType.value &&
-    context.lInputType === lInputType.value;
-
   const setFeatureEditorStatus = (updates = {}) => {
     if (!featureEditorStatus || typeof featureEditorStatus !== 'object') return;
     Object.assign(featureEditorStatus, {
@@ -1145,121 +1094,6 @@ export const createRunAnalysis = ({
       summaryCount: updates.summaryCount ?? featureEditorStatus.summaryCount,
       detailsCacheSize: updates.detailsCacheSize ?? featureEditorStatus.detailsCacheSize
     });
-  };
-
-  const extractFeaturesForColorEditor = async (context) => {
-    if (!context) return;
-    if (!isCurrentFeatureExtractionContext(context)) {
-      if (context.requestId === featureExtractionRequestId) {
-        featureExtractionPending.value = false;
-      }
-      return;
-    }
-
-    const timingEntries = [];
-    try {
-      const metadata = await extractFeatureMetadataForPreview({
-        mode: context.mode,
-        cInputType: context.cInputType,
-        lInputType: context.lInputType,
-        circularFile: context.circularFile,
-        circularFastaFile: context.circularFastaFile,
-        linearSeqs: context.linearSeqs,
-        regionSpecs: context.regionSpecs,
-        recordSelectors: context.recordSelectors,
-        reverseFlags: context.reverseFlags,
-        featureVisibilityTablePath: context.featureVisibilityTablePath,
-        featureVisibilityTsv: context.featureVisibilityTsv,
-        enrichFeature: enrichFeatureWithOrthogroup,
-        timingEntries
-      });
-
-      if (!isCurrentFeatureExtractionContext(context)) return;
-
-      (metadata.errors || []).forEach((entry) => {
-        const label = Number.isInteger(entry?.inputIndex)
-          ? `input #${Number(entry.inputIndex) + 1}`
-          : 'input';
-        console.warn(`Feature extraction failed for ${label}:`, entry?.message || entry);
-      });
-
-      if (context.mode === 'circular' && metadata.errors?.length) {
-        const message = String(metadata.errors[0]?.message || 'Feature extraction failed');
-        featureExtractionError.value = { summary: message, details: [] };
-        setFeatureEditorStatus({
-          status: 'failed',
-          generationId: context.requestId,
-          error: message,
-          summaryCount: 0
-        });
-        return;
-      }
-
-      const renderedIdentities = collectRenderedFeatureIdsFromResults(results.value).allIdentities;
-      const alignedFeatures = alignRecoveredFeatureIdsToRenderedSvg({
-        features: metadata.extractedFeatures || [],
-        renderedIdentities,
-        writeRenderedSvgIdToSvgId: true
-      });
-      extractedFeatures.value = alignedFeatures.features
-        .filter((feature) => Boolean(featureRenderedCandidate(feature)));
-      if (biologicalFeatures) {
-        biologicalFeatures.value = alignRecoveredFeatureIdsToRenderedSvg({
-          features: metadata.biologicalFeatures || metadata.extractedFeatures || [],
-          renderedIdentities
-        }).features;
-      }
-      featureSelectorSafetyScope.value = metadata.featureSelectorSafetyScope || [];
-      featureRecordIds.value = metadata.featureRecordIds || [];
-      selectedFeatureRecordIdx.value = Number.isInteger(metadata.selectedFeatureRecordIdx)
-        ? metadata.selectedFeatureRecordIdx
-        : 0;
-      refreshFeatureOverrides(extractedFeatures.value);
-      setFeatureEditorStatus({
-        status: 'summary-ready',
-        generationId: context.requestId,
-        error: null,
-        summaryCount: extractedFeatures.value.length
-      });
-
-      if (context.mode === 'circular') {
-        console.log(
-          `Extracted ${extractedFeatures.value.length} features from ${featureRecordIds.value.length} record(s) for color editor.`
-        );
-      } else if (context.mode === 'linear') {
-        console.log(
-          `Extracted ${extractedFeatures.value.length} features from ${context.linearSeqs.length} file(s) for color editor.`
-        );
-      }
-    } catch (e) {
-      if (context.requestId === featureExtractionRequestId) {
-        featureExtractionError.value = formatJsError(e);
-        setFeatureEditorStatus({
-          status: 'failed',
-          generationId: context.requestId,
-          error: featureExtractionError.value?.summary || String(e?.message || e || 'Feature extraction failed'),
-          summaryCount: 0
-        });
-      }
-      console.log('Could not extract features:', e);
-    } finally {
-      if (context.requestId === featureExtractionRequestId) {
-        featureExtractionPending.value = false;
-        logPostGbdrawTimings(timingEntries);
-      }
-    }
-  };
-
-  const extractGeneratedDiagramFeatures = async (context) => {
-    featureExtractionPending.value = true;
-    featureExtractionError.value = null;
-    setFeatureEditorStatus({
-      status: 'pending-summary',
-      generationId: context?.requestId || featureExtractionRequestId,
-      error: null,
-      summaryCount: 0
-    });
-    await extractFeaturesForColorEditor(context);
   };
 
   const getSeqLabel = (seq, fallback) => {
@@ -1292,9 +1126,33 @@ export const createRunAnalysis = ({
     return `${left}.${right}.${buildLosatSuffix()}.tsv`;
   };
 
-  const getLosatPairDefaultName = (pairIndex, queryEntry = null, subjectEntry = null) => {
-    const leftLabel = getSeqLabel(linearSeqs[pairIndex], queryEntry?.recordId || `seq_${pairIndex + 1}`);
-    const rightLabel = getSeqLabel(linearSeqs[pairIndex + 1], subjectEntry?.recordId || `seq_${pairIndex + 2}`);
+  const getResolvedLinearEdge = (edgeKey) => {
+    const normalizedKey = String(edgeKey || '').trim();
+    if (!normalizedKey) return null;
+    const edges = linearComparisonResolution?.value?.edges;
+    return (Array.isArray(edges) ? edges : []).find((edge) => edge.edgeKey === normalizedKey) || null;
+  };
+
+  const getLosatCacheInfoEntry = (edgeKey) => {
+    const entries = Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [];
+    if (Number.isInteger(edgeKey)) return entries[edgeKey] || null;
+    const normalizedKey = String(edgeKey || '').trim();
+    return entries.find((entry) => String(entry?.edgeKey || '') === normalizedKey) || null;
+  };
+
+  const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
+    const cacheEntry = getLosatCacheInfoEntry(edgeKey);
+    const edge = getResolvedLinearEdge(edgeKey) || cacheEntry;
+    const queryIndex = Number(edge?.queryIndex);
+    const subjectIndex = Number(edge?.subjectIndex);
+    const leftLabel = getSeqLabel(
+      linearSeqs[queryIndex],
+      queryEntry?.recordId || `seq_${Number.isInteger(queryIndex) ? queryIndex + 1 : 1}`
+    );
+    const rightLabel = getSeqLabel(
+      linearSeqs[subjectIndex],
+      subjectEntry?.recordId || `seq_${Number.isInteger(subjectIndex) ? subjectIndex + 1 : 2}`
+    );
     return buildLosatFilename(leftLabel, rightLabel);
   };
 
@@ -1353,6 +1211,17 @@ export const createRunAnalysis = ({
     return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
   };
 
+  const ensureHelperRuntime = async () => {
+    let runtime = getPyodide();
+    if (runtime && pyodideReady.value) return runtime;
+    if (typeof ensurePyodide === 'function') await ensurePyodide();
+    runtime = getPyodide();
+    if (!runtime || !pyodideReady.value) {
+      throw new Error('The Python helper runtime could not be started.');
+    }
+    return runtime;
+  };
+
   const hydrateLosatDownloadText = (cacheKey, cached) => {
     if (classifyRawLosatCacheEntry(cached) !== 'protein-current') {
       return {
@@ -1386,16 +1255,22 @@ export const createRunAnalysis = ({
     }
   };
 
-  const downloadLosatPair = async (pairIndex, customName) => {
-    const entry = losatCacheInfo.value?.[pairIndex];
+  const downloadLosatPair = async (edgeKey, customName) => {
+    const entry = getLosatCacheInfoEntry(edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
-    const defaultName = getLosatPairDefaultName(pairIndex);
+    if (classifyRawLosatCacheEntry(cached) === 'protein-current') {
+      await ensureHelperRuntime();
+    }
+    const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
+    const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
+      ? Number(entry.ordinal)
+      : 0;
     const filename = normalizeLosatFilename(
       customName,
-      entry.filename || defaultName || `losat_pair_${pairIndex + 1}.tsv`
+      entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
     entry.filename = filename;
     const hydrated = hydrateLosatDownloadText(entry.key, cached);
@@ -1406,13 +1281,16 @@ export const createRunAnalysis = ({
     );
   };
 
-  const setLosatPairFilename = (pairIndex, customName) => {
-    const entry = losatCacheInfo.value?.[pairIndex];
+  const setLosatPairFilename = (edgeKey, customName) => {
+    const entry = getLosatCacheInfoEntry(edgeKey);
     if (!entry) return;
-    const defaultName = getLosatPairDefaultName(pairIndex);
+    const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
+    const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
+      ? Number(entry.ordinal)
+      : 0;
     entry.filename = normalizeLosatFilename(
       customName,
-      entry.filename || defaultName || `losat_pair_${pairIndex + 1}.tsv`
+      entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
   };
 
@@ -1424,6 +1302,22 @@ export const createRunAnalysis = ({
     labelTextScopeDialog.featureId = '';
     labelTextScopeDialog.matchingCount = 0;
   };
+
+  const circularDiscoveryTargetsCurrentInput = () => {
+    const inputType = cInputType.value;
+    const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
+    const pairedFile = inputType === 'gff' ? files.c_fasta : null;
+    return (
+      circularRecordDiscovery.inputType === inputType &&
+      circularRecordDiscovery.primaryFile === primaryFile &&
+      circularRecordDiscovery.pairedFile === pairedFile
+    );
+  };
+
+  const circularDiscoveryMatchesCurrentInput = () => (
+    circularRecordDiscovery.status === 'ready' &&
+    circularDiscoveryTargetsCurrentInput()
+  );
 
   const validateDepthInputPresence = () => {
     const customDepthRequested = mode.value === 'linear'
@@ -1438,10 +1332,13 @@ export const createRunAnalysis = ({
           (Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots : []).some((slot) => (
             slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
           ))
-        );
+    );
     if (!form.show_depth && !customDepthRequested) return '';
     if (mode.value === 'circular') {
-      const discoveredCount = Array.isArray(circularRecordList.value)
+      const discoveredCount = (
+        circularDiscoveryMatchesCurrentInput() &&
+        Array.isArray(circularRecordList.value)
+      )
         ? circularRecordList.value.length
         : 0;
       const recordCount = discoveredCount > 0
@@ -1480,10 +1377,10 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const shouldSuppressPairwiseIdentityLegend = () => {
+  const shouldSuppressPairwiseIdentityLegend = (comparisonPlanSnapshot = null) => {
     return (
       mode.value === 'linear' &&
-      blastSource.value === 'losat' &&
+      comparisonPlanSnapshot?.hasLosatIntent === true &&
       losatProgram.value === 'blastp' &&
       normalizeBlastpMode(losat.blastp?.mode) === 'collinear' &&
       normalizeCollinearColorMode(losat.blastp?.collinearColorMode) === 'orientation'
@@ -1515,18 +1412,19 @@ export const createRunAnalysis = ({
     });
   };
 
-  const refreshCircularRecordOrder = async () => {
+  const refreshCircularRecordOrder = async ({ discoverRecords = true } = {}) => {
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (!Array.isArray(adv.multi_record_positions)) {
       adv.multi_record_positions = [];
     }
-    const pyodide = getPyodide();
+    let pyodide = getPyodide();
     const inputType = cInputType.value;
     const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
     const pairedFile = inputType === 'gff' ? files.c_fasta : null;
     const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
+    const shouldDiscoverRecords = discoverRecords !== false;
     Object.assign(circularRecordDiscovery, {
-      status: hasCompleteInput ? 'loading' : 'idle',
+      status: hasCompleteInput && shouldDiscoverRecords ? 'loading' : 'idle',
       error: '',
       inputType,
       primaryFile: primaryFile || null,
@@ -1535,15 +1433,34 @@ export const createRunAnalysis = ({
     if (
       mode.value !== 'circular' ||
       !hasCompleteInput ||
-      !pyodideReady.value ||
-      !pyodide
+      !shouldDiscoverRecords
     ) {
       circularRecordList.value = [];
-      if (!hasCompleteInput) {
+      if (!hasCompleteInput || !shouldDiscoverRecords) {
         adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
       }
       return;
     }
+    if (!pyodideReady.value || !pyodide) {
+      try {
+        pyodide = await ensureHelperRuntime();
+      } catch (error) {
+        if (refreshGeneration !== circularRecordRefreshGeneration) return;
+        console.warn('Failed to start record discovery runtime:', error);
+        circularRecordList.value = [];
+        circularRecordDiscovery.status = 'error';
+        circularRecordDiscovery.error = 'Could not start the record discovery helper.';
+        adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
+        return;
+      }
+    }
+    if (
+      refreshGeneration !== circularRecordRefreshGeneration ||
+      mode.value !== 'circular' ||
+      cInputType.value !== inputType ||
+      (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
+      (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
+    ) return;
 
     try {
       const records = inputType === 'gff'
@@ -1594,11 +1511,24 @@ export const createRunAnalysis = ({
     }
   };
 
-  const runAnalysisInternal = async ({ runMode = 'manual', requestId = 0 } = {}) => {
+  const runAnalysisInternal = async ({
+    runMode = 'manual',
+    requestId = 0,
+    comparisonPlanSnapshot = null
+  } = {}) => {
     const isReflow = runMode === 'reflow';
-    if (!pyodideReady.value) return { status: 'skipped' };
-    const pyodide = getPyodide();
-    if (!pyodide) return { status: 'skipped' };
+    let pyodide = getPyodide();
+    const activeComparisonPlanSnapshot = mode.value === 'linear'
+      ? (
+          comparisonPlanSnapshot || resolveLinearComparisonPlan({
+            plan: linearComparisonPlan,
+            sequences: linearSeqs,
+            layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
+            losatProgram: losatProgram.value,
+            blastpMode: normalizeBlastpMode(losat.blastp?.mode)
+          })
+        )
+      : null;
 
     const generationToken = ++latestGenerationToken;
     let keepProcessingStatus = false;
@@ -1615,6 +1545,55 @@ export const createRunAnalysis = ({
     if (isReflow && mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
     }
+    generationAbortController =
+      !isReflow && typeof AbortController === 'function' ? new AbortController() : null;
+    generationAbortSignal = generationAbortController?.signal || null;
+    if (!isReflow) activeLosatAbortController = generationAbortController;
+    if (!isReflow && mode.value === 'circular') {
+      const inputType = cInputType.value;
+      const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
+      const pairedFile = inputType === 'gff' ? files.c_fasta : null;
+      const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
+      const recordAwarePreflightNeeded = circularInputNeedsRecordDiscovery({
+        form,
+        adv,
+        files,
+        annotationSets
+      });
+      if (
+        hasCompleteInput &&
+        recordAwarePreflightNeeded &&
+        !circularDiscoveryMatchesCurrentInput()
+      ) {
+        processing.value = true;
+        processingStatus.value = 'Reading input records...';
+        try {
+          await refreshCircularRecordOrder();
+        } finally {
+          processing.value = false;
+          processingStatus.value = '';
+        }
+        if (
+          generationAbortSignal?.aborted ||
+          generationCancelRequested.value ||
+          generationToken !== latestGenerationToken
+        ) {
+          if (activeLosatAbortController === generationAbortController) {
+            activeLosatAbortController = null;
+          }
+          generationCancelRequested.value = false;
+          return { status: 'canceled' };
+        }
+        if (!circularDiscoveryMatchesCurrentInput()) {
+          const message = circularRecordDiscovery.error || 'Could not read records from the circular input file(s).';
+          errorLog.value = formatJsError(new Error(message));
+          if (activeLosatAbortController === generationAbortController) {
+            activeLosatAbortController = null;
+          }
+          return { status: 'error' };
+        }
+      }
+    }
     const depthInputError = validateDepthInputPresence();
     if (depthInputError) {
       if (isReflow) {
@@ -1622,12 +1601,11 @@ export const createRunAnalysis = ({
       } else {
         errorLog.value = formatJsError(new Error(depthInputError));
       }
+      if (activeLosatAbortController === generationAbortController) {
+        activeLosatAbortController = null;
+      }
       return { status: 'error' };
     }
-    generationAbortController =
-      !isReflow && typeof AbortController === 'function' ? new AbortController() : null;
-    generationAbortSignal = generationAbortController?.signal || null;
-    if (!isReflow) activeLosatAbortController = generationAbortController;
     const previousSelectedResultIndex = selectedResultIndex.value;
     const manualCancelSnapshot = isReflow
       ? null
@@ -1635,7 +1613,17 @@ export const createRunAnalysis = ({
           results: Array.isArray(results.value) ? results.value.map((entry) => ({ ...entry })) : [],
           trackSlotResolvedGeometry: cloneJsonValue(trackSlotResolvedGeometry.value || null, null),
           selectedResultIndex: selectedResultIndex.value,
+          resultGenerationKey: resultGenerationKey?.value ?? 0,
+          resultPanelTab: resultPanelTab.value,
+          lastRunInfo: cloneJsonValue(lastRunInfo.value, null),
+          errorLog: cloneJsonValue(errorLog.value, null),
+          latestCliHelperFiles: cloneJsonValue(latestCliHelperFiles, []),
+          latestCliHelperArchiveName,
           zoom: zoom.value,
+          canvasPan: {
+            x: Number(canvasPan?.x) || 0,
+            y: Number(canvasPan?.y) || 0
+          },
           pairwiseMatchFactors: { ...(pairwiseMatchFactors.value || {}) },
           matchSequenceSources: matchSequenceRegistry?.values?.() || [],
           addedLegendCaptions: new Set(addedLegendCaptions.value || []),
@@ -1647,10 +1635,22 @@ export const createRunAnalysis = ({
           legendColorOverrides: cloneJsonValue(legendColorOverrides, {}),
           originalLegendOrder: cloneJsonValue(originalLegendOrder.value || [], []),
           originalLegendColors: cloneJsonValue(originalLegendColors.value || {}, {}),
+          appliedPaletteName: appliedPaletteName.value,
+          appliedPaletteColors: cloneJsonValue(appliedPaletteColors.value || {}, {}),
+          pendingPaletteName: pendingPaletteName.value,
+          pendingPaletteColors: cloneJsonValue(pendingPaletteColors.value || {}, {}),
           extractedFeatures: cloneJsonValue(extractedFeatures.value || [], []),
-          biologicalFeatures: biologicalFeatures ? biologicalFeatures.value : null,
+          biologicalFeatures: biologicalFeatures
+            ? cloneJsonValue(biologicalFeatures.value || [], [])
+            : null,
+          featureCatalog: cloneJsonValue(featureCatalog?.value, null),
           featureSelectorSafetyScope: cloneJsonValue(featureSelectorSafetyScope.value || [], []),
+          selectedFeatureIds: new Set(selectedFeatureIds?.value || []),
+          selectedFeatureAnchorId: selectedFeatureAnchorId?.value || '',
+          featureSelectionStatus: featureSelectionStatus?.value || '',
           editableLabels: cloneJsonValue(editableLabels.value || [], []),
+          clickedLabel: cloneJsonValue(clickedLabel.value, null),
+          labelTextScopeDialog: cloneJsonValue(labelTextScopeDialog, {}),
           featureEditorStatus: cloneJsonValue(featureEditorStatus || {}, {}),
           featureExtractionPending: featureExtractionPending.value,
           featureExtractionError: featureExtractionError.value,
@@ -1667,6 +1667,10 @@ export const createRunAnalysis = ({
           featureOrthogroupIndex: featureOrthogroupIndex.value,
           selectedOrthogroupAlignmentFeature: selectedOrthogroupAlignmentFeature.value,
           selectedOrthogroupId: selectedOrthogroupId.value,
+          generatedLegendPosition: generatedLegendPosition.value,
+          generatedMode: generatedMode.value,
+          generatedMultiRecordCanvas: generatedMultiRecordCanvas.value,
+          generatedCircularPlotTitlePosition: generatedCircularPlotTitlePosition.value,
           orthogroupNameOverrides: cloneJsonValue(orthogroupNameOverrides, {}),
           orthogroupDescriptionOverrides: cloneJsonValue(
             orthogroupDescriptionOverrides,
@@ -1712,13 +1716,47 @@ export const createRunAnalysis = ({
     };
     const restoreManualCancelSnapshot = () => {
       if (!manualCancelSnapshot) return;
-      results.value = manualCancelSnapshot.results;
+      const currentResults = Array.isArray(results.value) ? results.value : [];
+      const snapshotResults = manualCancelSnapshot.results;
+      const resultsUnchanged = (
+        currentResults.length === snapshotResults.length
+        && currentResults.every((entry, index) => {
+          const snapshotEntry = snapshotResults[index];
+          if (entry === snapshotEntry) return true;
+          if (!entry || !snapshotEntry) return entry === snapshotEntry;
+          const keys = new Set([
+            ...Object.keys(entry),
+            ...Object.keys(snapshotEntry)
+          ]);
+          return Array.from(keys).every((key) => entry[key] === snapshotEntry[key]);
+        })
+      );
+      if (!resultsUnchanged) {
+        skipCaptureBaseConfig.value = true;
+        skipPositionReapply.value = true;
+        results.value = snapshotResults;
+      }
       trackSlotResolvedGeometry.value = manualCancelSnapshot.trackSlotResolvedGeometry;
       selectedResultIndex.value = Math.max(
         0,
         Math.min(manualCancelSnapshot.selectedResultIndex, Math.max(0, manualCancelSnapshot.results.length - 1))
       );
       zoom.value = manualCancelSnapshot.zoom;
+      if (canvasPan) {
+        canvasPan.x = manualCancelSnapshot.canvasPan.x;
+        canvasPan.y = manualCancelSnapshot.canvasPan.y;
+      }
+      if (typeof resetPreviewViewport === 'function') {
+        resetPreviewViewport({ pan: manualCancelSnapshot.canvasPan });
+      }
+      if (resultGenerationKey) {
+        resultGenerationKey.value = manualCancelSnapshot.resultGenerationKey;
+      }
+      resultPanelTab.value = manualCancelSnapshot.resultPanelTab;
+      lastRunInfo.value = cloneJsonValue(manualCancelSnapshot.lastRunInfo, null);
+      errorLog.value = cloneJsonValue(manualCancelSnapshot.errorLog, null);
+      latestCliHelperFiles = cloneJsonValue(manualCancelSnapshot.latestCliHelperFiles, []);
+      latestCliHelperArchiveName = manualCancelSnapshot.latestCliHelperArchiveName;
       pairwiseMatchFactors.value = { ...manualCancelSnapshot.pairwiseMatchFactors };
       matchSequenceRegistry?.reset?.(manualCancelSnapshot.matchSequenceSources);
       addedLegendCaptions.value = new Set(manualCancelSnapshot.addedLegendCaptions);
@@ -1733,14 +1771,40 @@ export const createRunAnalysis = ({
       Object.assign(legendColorOverrides, cloneJsonValue(manualCancelSnapshot.legendColorOverrides, {}));
       originalLegendOrder.value = cloneJsonValue(manualCancelSnapshot.originalLegendOrder, []);
       originalLegendColors.value = cloneJsonValue(manualCancelSnapshot.originalLegendColors, {});
+      appliedPaletteName.value = manualCancelSnapshot.appliedPaletteName;
+      appliedPaletteColors.value = cloneJsonValue(manualCancelSnapshot.appliedPaletteColors, {});
+      pendingPaletteName.value = manualCancelSnapshot.pendingPaletteName;
+      pendingPaletteColors.value = cloneJsonValue(manualCancelSnapshot.pendingPaletteColors, {});
       featureSelectorSafetyScope.value = cloneJsonValue(manualCancelSnapshot.featureSelectorSafetyScope, []);
+      if (featureCatalog) {
+        featureCatalog.value = cloneJsonValue(manualCancelSnapshot.featureCatalog, null);
+      }
+      if (selectedFeatureIds) {
+        selectedFeatureIds.value = new Set(manualCancelSnapshot.selectedFeatureIds);
+      }
+      if (selectedFeatureAnchorId) {
+        selectedFeatureAnchorId.value = manualCancelSnapshot.selectedFeatureAnchorId;
+      }
+      if (featureSelectionStatus) {
+        featureSelectionStatus.value = manualCancelSnapshot.featureSelectionStatus;
+      }
       editableLabels.value = cloneJsonValue(manualCancelSnapshot.editableLabels, []);
+      clickedLabel.value = cloneJsonValue(manualCancelSnapshot.clickedLabel, null);
+      Object.assign(
+        labelTextScopeDialog,
+        cloneJsonValue(manualCancelSnapshot.labelTextScopeDialog, {})
+      );
       setFeatureEditorStatus(cloneJsonValue(manualCancelSnapshot.featureEditorStatus, {}));
       featureExtractionPending.value = manualCancelSnapshot.featureExtractionPending;
       featureExtractionError.value = manualCancelSnapshot.featureExtractionError;
       featureRecordIds.value = cloneJsonValue(manualCancelSnapshot.featureRecordIds, []);
       selectedFeatureRecordIdx.value = manualCancelSnapshot.selectedFeatureRecordIdx;
       labelOverrideBuildWarning.value = manualCancelSnapshot.labelOverrideBuildWarning;
+      generatedLegendPosition.value = manualCancelSnapshot.generatedLegendPosition;
+      generatedMode.value = manualCancelSnapshot.generatedMode;
+      generatedMultiRecordCanvas.value = manualCancelSnapshot.generatedMultiRecordCanvas;
+      generatedCircularPlotTitlePosition.value =
+        manualCancelSnapshot.generatedCircularPlotTitlePosition;
       restoreManualMigrationSnapshot();
     };
     const finishCanceledManualRun = () => {
@@ -1793,45 +1857,26 @@ export const createRunAnalysis = ({
       });
       processing.value = true;
       processingStatus.value = 'Preparing input files...';
-      results.value = [];
-      trackSlotResolvedGeometry.value = null;
-      selectedResultIndex.value = 0;
       resultPanelTab.value = 'preview';
-      lastRunInfo.value = null;
-      latestCliHelperFiles = [];
       errorLog.value = null;
-      if (typeof resetPreviewViewport === 'function') {
-        resetPreviewViewport({ resetZoom: true });
-      } else {
-        zoom.value = 1.0;
-      }
       skipCaptureBaseConfig.value = false;
       skipPositionReapply.value = false;
-      pairwiseMatchFactors.value = {};
-      matchSequenceRegistry?.reset?.();
-      clickedLabel.value = null;
       resetLabelScopeDialogState();
-      addedLegendCaptions.value = new Set();
-      fileLegendCaptions.value = new Set();
-      Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
-      Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
-      legendEntries.value = [];
-      deletedLegendEntries.value = [];
-      Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
-      originalLegendOrder.value = [];
-      originalLegendColors.value = {};
       window._origPairwiseMin = activeRunColors.pairwise_match_min || '#FFE7E7';
       window._origPairwiseMax = activeRunColors.pairwise_match_max || '#FF7272';
     }
     labelOverrideBuildWarning.value = '';
 
     try {
+      if (mode.value === 'linear') {
+        if (!activeComparisonPlanSnapshot || !Array.isArray(activeComparisonPlanSnapshot.edges)) {
+          throw new Error('A resolved Linear comparison plan is required.');
+        }
+        if (activeComparisonPlanSnapshot.error) {
+          throw new Error(activeComparisonPlanSnapshot.error);
+        }
+      }
       let annotationLoadComparison = false;
-      const pendingMatchSequenceSources = [];
-      const queueMatchSequenceSource = (source) => {
-        if (!source?.key || !source?.sequence) return;
-        pendingMatchSequenceSources.push(source);
-      };
       let regionSpecs = [];
       let recordSelectors = [];
       let reverseFlags = [];
@@ -1883,10 +1928,19 @@ export const createRunAnalysis = ({
           data: String(data ?? '')
         });
       };
-      const stageTextFile = (path, text, { name = '', slot = '' } = {}) => {
+      const stageTextFile = (
+        path,
+        text,
+        { name = '', slot = '', writeToRuntime = false } = {}
+      ) => {
         throwIfGenerationCanceled();
-        const bytes = textEncoder.encode(String(text ?? ''));
-        pyodide.FS.writeFile(path, bytes);
+        if (writeToRuntime) {
+          if (!pyodide) {
+            throw new Error('The Python helper runtime is not ready.');
+          }
+          const bytes = textEncoder.encode(String(text ?? ''));
+          pyodide.FS.writeFile(path, bytes);
+        }
         const displayName = name || getPayloadName(path);
         const resolvedSlot = slot || generatedSlotForPath(path);
         registerRunInfoFile(path, {
@@ -1905,10 +1959,12 @@ export const createRunAnalysis = ({
         slot = ''
       } = {}) => {
         if (!fileObj) return false;
+        if (!pyodide) {
+          throw new Error('The Python helper runtime is not ready.');
+        }
         throwIfGenerationCanceled();
-        const buffer = await fileObj.arrayBuffer();
+        const bytes = await readFileBytes(fileObj);
         throwIfGenerationCanceled();
-        const bytes = new Uint8Array(buffer);
         pyodide.FS.writeFile(path, bytes);
         if (cacheText && textCache) {
           textCache.set(fileObj, textDecoder.decode(bytes));
@@ -1990,10 +2046,6 @@ export const createRunAnalysis = ({
         featureVisibilityCacheKey = featureVisibilityTsv;
         stageTextFile(featureVisibilityTablePath, featureVisibilityCacheKey);
       }
-      if (!isReflow) {
-        editableLabels.value = [];
-      }
-
       const validateDepthStyleSettings = () => {
         if (
           adv.depth_min !== null &&
@@ -2275,7 +2327,10 @@ export const createRunAnalysis = ({
 
         const normalizedCircularLabelSpacing = normalizePositiveNumberOrNull(adv.circular_label_spacing);
         adv.circular_label_spacing = normalizedCircularLabelSpacing;
-        const discoveredCircularRecordCount = Array.isArray(circularRecordList.value)
+        const discoveredCircularRecordCount = (
+          circularDiscoveryMatchesCurrentInput() &&
+          Array.isArray(circularRecordList.value)
+        )
           ? circularRecordList.value.length
           : 0;
         const circularDepthRecordCount = discoveredCircularRecordCount > 0
@@ -2320,41 +2375,14 @@ export const createRunAnalysis = ({
                 `Depth series #${depthIndex + 1} (logical track index ${depthIndex}) has no TSV source in any record.`
               );
             }
-            for (let recordIndex = 0; recordIndex < entry.files.length; recordIndex += 1) {
-              const depthFile = entry.files[recordIndex];
-              if (!depthFile) continue;
-              const depthPath = `/depth_track_${depthIndex + 1}_record_${recordIndex + 1}.tsv`;
-              await stageUploadedFile(depthFile, depthPath, {
-                slot: `files.c_depth[${recordIndex}][${depthIndex}]`
-              });
-            }
           }
           validateDepthStyleSettings();
         }
 
         if (cInputType.value === 'gb') {
           if (!files.c_gb) throw new Error('Please upload a GenBank file.');
-          await stageUploadedFile(files.c_gb, '/input.gb', { slot: 'files.c_gb' });
         } else {
           if (!files.c_gff || !files.c_fasta) throw new Error('GFF3 and FASTA are required.');
-          await stageUploadedFile(files.c_gff, '/input.gff', { slot: 'files.c_gff' });
-          await stageUploadedFile(files.c_fasta, '/input.fasta', { slot: 'files.c_fasta' });
-        }
-
-        if (!isReflow) {
-          const circularSequenceFile = cInputType.value === 'gb' ? files.c_gb : files.c_fasta;
-          const circularSequenceText = await circularSequenceFile.text();
-          const circularRecords = cInputType.value === 'gb'
-            ? parseGenbankRecordsFast(circularSequenceText)
-            : parseFastaRecordsFast(circularSequenceText);
-          circularRecords.forEach((record, recordIndex) => queueMatchSequenceSource({
-            key: `circular:record:${recordIndex}`,
-            recordId: record.id,
-            aliases: [record.id],
-            sequence: record.sequence,
-            origin: 'circular-reference',
-            recordIndex
-          }));
         }
 
         const sourceMode = String(circularConservation.source || '').trim().toLowerCase() === 'upload'
@@ -2433,23 +2461,13 @@ export const createRunAnalysis = ({
               throwIfGenerationCanceled();
               const comparisonEntry = comparisonEntries[index];
               const fileObj = comparisonEntry?.file || comparisonEntry;
-              const queryFasta = await fileObj.text();
+              const queryFasta = await readFileText(fileObj);
               if (getFastaSequenceLength(queryFasta) <= 0) {
                 throw new Error(`Pairwise comparison FASTA #${index + 1} has no sequence data.`);
               }
               const queryHash = await hashText(queryFasta);
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
-              if (!isReflow) {
-                parseFastaRecordsFast(queryFasta).forEach((record) => queueMatchSequenceSource({
-                  key: `homology:comparison:${index}:${record.id}`,
-                  recordId: record.id,
-                  aliases: [record.id],
-                  sequence: record.sequence,
-                  origin: 'homology-comparison',
-                  sourceIndex: index
-                }));
-              }
               const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
               const cacheMetadata = {
                 flow: 'circular-conservation',
@@ -2563,29 +2581,6 @@ export const createRunAnalysis = ({
             if (blastFiles.length === 0) {
               throw new Error('Please upload at least one BLAST outfmt 6/7 file for Pairwise Comparisons.');
             }
-            const conservationEntries = orderedConservationSources(blastFiles, circularConservation);
-            for (let index = 0; index < conservationEntries.length; index += 1) {
-              const blastPath = `/conservation_blast_${index}.txt`;
-              await stageUploadedFile(conservationEntries[index].file, blastPath, {
-                slot: `files.c_conservation_blasts[${conservationEntries[index].sourceIndex}]`
-              });
-              if (!isReflow) {
-                const comparisonFile = files.c_conservation_sequence_sources?.[
-                  conservationEntries[index].sourceIndex
-                ] || null;
-                if (comparisonFile) {
-                  const comparisonText = await comparisonFile.text();
-                  parseFastaRecordsFast(comparisonText).forEach((record) => queueMatchSequenceSource({
-                    key: `homology:comparison:${index}:${record.id}`,
-                    recordId: record.id,
-                    aliases: [record.id],
-                    sequence: record.sequence,
-                    origin: 'homology-comparison',
-                    sourceIndex: index
-                  }));
-                }
-              }
-            }
             const rawReference = String(circularConservation.reference || 'auto').trim().toLowerCase();
             circularConservation.reference = ['query', 'subject'].includes(rawReference)
               ? rawReference
@@ -2672,19 +2667,10 @@ export const createRunAnalysis = ({
           adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
           adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
         }
-        const explicitLosatPairs = linearRecordLayoutEnabled.value
-          ? linearComparisons.filter((comparison) => comparison.source === 'losat')
-          : [];
-        const useLosat = linearRecordLayoutEnabled.value
-          ? explicitLosatPairs.length > 0
-          : blastSource.value === 'losat';
+        const comparisonResolution = activeComparisonPlanSnapshot;
+        const useLosat = comparisonResolution.hasLosatIntent === true;
         const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
-        if (explicitLosatPairs.length > 0 && !useProteinBlastp) {
-          throw new Error('Comparison-list LOSAT sources require the blastp program.');
-        }
-        const blastpMode = explicitLosatPairs.length > 0
-          ? 'pairwise'
-          : normalizeBlastpMode(losat.blastp?.mode);
+        const blastpMode = normalizeBlastpMode(losat.blastp?.mode);
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         adv.min_bitscore = normalizeBlastThresholdNumber(
@@ -2827,7 +2813,7 @@ export const createRunAnalysis = ({
           return null;
         };
 
-        let hasLinearComparisonData = false;
+        let hasLinearComparisonData = comparisonResolution.hasComparisonIntent === true;
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
@@ -2890,6 +2876,16 @@ export const createRunAnalysis = ({
           : null;
 
         if (useLosat) {
+          if (!pyodideReady.value || !pyodide) {
+            setProcessingStatus('Starting Python helper runtime...');
+            pyodide = await ensureHelperRuntime();
+            throwIfGenerationCanceled();
+          }
+          if (useProteinBlastp && featureVisibilityTablePath && featureVisibilityCacheKey) {
+            stageTextFile(featureVisibilityTablePath, featureVisibilityCacheKey, {
+              writeToRuntime: true
+            });
+          }
           if (useProteinBlastp) {
             extractProteinFasta = pyodide.globals.get('extract_cds_protein_fasta');
             buildProteinLosatCacheKey = pyodide.globals.get('build_protein_losat_cache_key_json');
@@ -3218,8 +3214,20 @@ export const createRunAnalysis = ({
           return verified;
         };
 
-        const buildCacheFilename = (pairIndex, queryEntry, subjectEntry) =>
-          getLosatPairDefaultName(pairIndex, queryEntry, subjectEntry);
+        const buildCacheFilename = (spec, queryEntry, subjectEntry) => {
+          const edge = comparisonResolution.edges.find(
+            (candidate) => candidate.edgeKey === spec.edgeKey
+          );
+          const fallback = getLosatPairDefaultName(
+            spec.edgeKey,
+            queryEntry,
+            subjectEntry
+          );
+          return normalizeLosatFilename(
+            edge?.losatFilenameActive ? edge.losatFilename : '',
+            fallback
+          );
+        };
 
         const pushArg = (arr, flag, value) => {
           if (value === null || value === undefined || value === '') return;
@@ -3264,58 +3272,48 @@ export const createRunAnalysis = ({
 
         {
           const inputWriteStartedAt = getNow();
+          const losatRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
+            ? new Set(linearSeqs.map((_, index) => index))
+            : new Set(comparisonResolution.edges
+                .filter((edge) => edge.source === 'losat')
+                .flatMap((edge) => [edge.queryIndex, edge.subjectIndex]));
           for (let i = 0; i < linearSeqs.length; i++) {
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
               if (!seq.gb) throw new Error(`Sequence #${i + 1}: Missing GenBank file.`);
-              await writeLinearFileToFs(seq.gb, `/seq_${i}.gb`, {
-                cacheText: useLosat,
-                slot: `files.linearSeqs[${i}].gb`
-              });
+              if (useLosat && losatRecordIndexes.has(i)) {
+                await writeLinearFileToFs(seq.gb, `/seq_${i}.gb`, {
+                  cacheText: true,
+                  slot: `files.linearSeqs[${i}].gb`
+                });
+              }
             } else {
               if (!seq.gff || !seq.fasta) throw new Error(`Sequence #${i + 1}: GFF3 and FASTA are required.`);
-              await writeLinearFileToFs(seq.gff, `/seq_${i}.gff`, {
-                slot: `files.linearSeqs[${i}].gff`
-              });
-              await writeLinearFileToFs(seq.fasta, `/seq_${i}.fasta`, {
-                cacheText: useLosat,
-                slot: `files.linearSeqs[${i}].fasta`
-              });
+              if (useLosat && losatRecordIndexes.has(i)) {
+                await writeLinearFileToFs(seq.gff, `/seq_${i}.gff`, {
+                  slot: `files.linearSeqs[${i}].gff`
+                });
+                await writeLinearFileToFs(seq.fasta, `/seq_${i}.fasta`, {
+                  cacheText: true,
+                  slot: `files.linearSeqs[${i}].fasta`
+                });
+              }
             }
           }
           if (losatTiming) losatTiming.inputWriteMs += getNow() - inputWriteStartedAt;
         }
 
         regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
-        if (!isReflow) {
-          for (let index = 0; index < linearSeqs.length; index += 1) {
-            const sourceFile = lInputType.value === 'gb' ? linearSeqs[index].gb : linearSeqs[index].fasta;
-            const entry = await extractLosatFastaFast({
-              file: sourceFile,
-              fmt: lInputType.value === 'gb' ? 'genbank' : 'fasta',
-              regionSpec: regionSpecs[index]?.file || null,
-              recordSelector: recordSelectors[index] || '',
-              reverseFlag: '0'
-            });
-            const materialized = parseFastaRecordsFast(entry.fasta)[0];
-            if (!materialized) continue;
-            const sequence = viewTransformSpecs[index]?.reverse
-              ? reverseComplementSequence(materialized.sequence)
-              : materialized.sequence;
-            queueMatchSequenceSource({
-              key: `linear:record:${index}`,
-              recordId: entry.recordId || materialized.id,
-              aliases: [entry.recordId, materialized.id],
-              sequence,
-              origin: 'linear-record',
-              recordIndex: index
-            });
-          }
-        }
         if (useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
+          const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
+            ? linearSeqs.map((_, index) => index)
+            : Array.from(new Set(comparisonResolution.edges
+                .filter((edge) => edge.source === 'losat')
+                .flatMap((edge) => [edge.queryIndex, edge.subjectIndex])))
+                .sort((left, right) => left - right);
           const proteinEntries = [];
-          for (let index = 0; index < linearSeqs.length; index += 1) {
+          for (const index of proteinRecordIndexes) {
             proteinEntries.push(await getSeqEntry(index));
           }
           const manifests = proteinEntries.map((entry) => entry.identityManifest);
@@ -3391,43 +3389,51 @@ export const createRunAnalysis = ({
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
           const jobSpecs = [];
+          const resolvedLosatEdges = comparisonResolution.edges.filter(
+            (edge) => edge.source === 'losat'
+          );
+          const edgeForOrdinal = (ordinal) => (
+            resolvedLosatEdges.find((edge) => edge.ordinal === ordinal) ||
+            resolvedLosatEdges[Math.max(0, Math.min(ordinal, resolvedLosatEdges.length - 1))]
+          );
+          const pushExpandedJobSpec = (queryIndex, subjectIndex, ordinal) => {
+            const edge = edgeForOrdinal(ordinal);
+            if (!edge) return;
+            jobSpecs.push({
+              edgeKey: edge.edgeKey,
+              ordinal: edge.ordinal,
+              queryUid: edge.queryUid,
+              subjectUid: edge.subjectUid,
+              queryIndex,
+              subjectIndex,
+              program: losatProgram.value
+            });
+          };
           if (useOrthogroupBlastp) {
             for (let i = 0; i < linearSeqs.length; i++) {
-              jobSpecs.push({ queryIndex: i, subjectIndex: i, pairIndex: Math.min(i, Math.max(0, linearSeqs.length - 2)) });
+              pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
               for (let j = i + 1; j < linearSeqs.length; j++) {
-                jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
-                jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
+                pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
+                pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
               }
             }
           } else if (useCollinearBlastp) {
             for (let i = 0; i < linearSeqs.length; i++) {
-              jobSpecs.push({ queryIndex: i, subjectIndex: i, pairIndex: Math.min(i, Math.max(0, linearSeqs.length - 2)) });
+              pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
             }
             for (let i = 0; i < linearSeqs.length - 1; i++) {
               const subjectEnd = collinearSearchScope === 'all' ? linearSeqs.length : i + 2;
               for (let j = i + 1; j < subjectEnd; j++) {
-                jobSpecs.push({ queryIndex: i, subjectIndex: j, pairIndex: i });
-                jobSpecs.push({ queryIndex: j, subjectIndex: i, pairIndex: i });
+                pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
+                pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
               }
             }
           } else {
-            if (linearRecordLayoutEnabled.value) {
-              const indexByUid = new Map(
-                linearSeqs.map((sequence, index) => [sequence.uid, index])
-              );
-              linearComparisons.forEach((comparison, comparisonIndex) => {
-                if (comparison.source !== 'losat') return;
-                jobSpecs.push({
-                  queryIndex: indexByUid.get(comparison.queryUid),
-                  subjectIndex: indexByUid.get(comparison.subjectUid),
-                  pairIndex: comparisonIndex
-                });
-              });
-            } else {
-              for (let i = 0; i < linearSeqs.length - 1; i++) {
-                jobSpecs.push({ queryIndex: i, subjectIndex: i + 1, pairIndex: i });
-              }
-            }
+            jobSpecs.push(...buildPairwiseLosatJobSpecs({
+              resolution: comparisonResolution,
+              program: losatProgram.value,
+              blastpMode
+            }));
           }
 
           for (const spec of jobSpecs) {
@@ -3469,30 +3475,54 @@ export const createRunAnalysis = ({
             losatTiming.totalPairs += 1;
             if (hasCachedText) losatTiming.cacheHits += 1;
             else losatTiming.cacheMisses += 1;
-            const isAdjacentForwardDisplayPair = linearRecordLayoutEnabled.value
-              ? true
-              : spec.subjectIndex === spec.queryIndex + 1;
+            const resolvedEdge = comparisonResolution.edges.find(
+              (edge) => edge.edgeKey === spec.edgeKey
+            );
+            const isResolvedDisplayPair = Boolean(
+              resolvedEdge &&
+              spec.queryIndex === resolvedEdge.queryIndex &&
+              spec.subjectIndex === resolvedEdge.subjectIndex
+            );
             const pair = {
-              pairIndex: spec.pairIndex,
+              pairIndex: spec.ordinal,
+              ordinal: spec.ordinal,
+              edgeKey: spec.edgeKey,
+              queryUid: spec.queryUid,
+              subjectUid: spec.subjectUid,
               queryIndex: spec.queryIndex,
               subjectIndex: spec.subjectIndex,
               cacheKey,
-              filename: buildCacheFilename(spec.pairIndex, queryEntry, subjectEntry),
-              displayPair: isAdjacentForwardDisplayPair
+              filename: buildCacheFilename(spec, queryEntry, subjectEntry),
+              displayPair: isResolvedDisplayPair
             };
             losatPairs.push(pair);
-            if (isAdjacentForwardDisplayPair) {
+            if (
+              isResolvedDisplayPair &&
+              !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
+            ) {
               cacheInfo.push({
                 key: cacheKey,
                 filename: pair.filename,
-                display: true
+                display: true,
+                edgeKey: spec.edgeKey,
+                ordinal: spec.ordinal,
+                queryUid: resolvedEdge.queryUid,
+                subjectUid: resolvedEdge.subjectUid,
+                queryIndex: resolvedEdge.queryIndex,
+                subjectIndex: resolvedEdge.subjectIndex
               });
             }
 
             if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
               pendingJobKeys.add(cacheKey);
               losatJobs.push({
-                pairIndex: spec.pairIndex,
+                pairIndex: spec.ordinal,
+                ordinal: spec.ordinal,
+                edgeKey: spec.edgeKey,
+                queryUid: spec.queryUid,
+                subjectUid: spec.subjectUid,
+                queryIndex: spec.queryIndex,
+                subjectIndex: spec.subjectIndex,
                 cacheKey,
                 program: losatProgram.value,
                 querySequenceKey: queryEntry.sequenceKey,
@@ -3582,7 +3612,13 @@ export const createRunAnalysis = ({
               );
             }
             const recordPayloads = [];
-            for (let i = 0; i < linearSeqs.length; i += 1) {
+            const recordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
+              ? linearSeqs.map((_, index) => index)
+              : Array.from(new Set(losatPairs.flatMap((pair) => [
+                  pair.queryIndex,
+                  pair.subjectIndex
+                ]))).sort((left, right) => left - right);
+            for (const i of recordIndexes) {
               const entry = await getSeqEntry(i);
               recordPayloads.push({
                 recordIndex: i,
@@ -3601,6 +3637,8 @@ export const createRunAnalysis = ({
               const losatText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
               pairPayloads.push({
                 pairIndex: pair.pairIndex,
+                ordinal: pair.ordinal,
+                edgeKey: pair.edgeKey,
                 queryIndex: pair.queryIndex,
                 subjectIndex: pair.subjectIndex,
                 cacheKey: pair.cacheKey,
@@ -3717,6 +3755,8 @@ export const createRunAnalysis = ({
               });
               resolvedComparisons.push({
                 kind: 'precomputedProteinComparison',
+                edgeKey: sourcePair?.edgeKey || '',
+                ordinal: Number(sourcePair?.ordinal),
                 queryRecordIndex: Number(sourcePair?.queryIndex),
                 subjectRecordIndex: Number(sourcePair?.subjectIndex),
                 rows: Array.isArray(converted.rows) ? converted.rows : []
@@ -3755,6 +3795,8 @@ export const createRunAnalysis = ({
               });
               resolvedComparisons.push({
                 kind: 'nucleotideBlast',
+                edgeKey: pair.edgeKey,
+                ordinal: pair.ordinal,
                 queryRecordIndex: pair.queryIndex,
                 subjectRecordIndex: pair.subjectIndex,
                 text: converted.tsv || '',
@@ -3849,26 +3891,6 @@ export const createRunAnalysis = ({
               `FASTA chars=${losatTiming.totalFastaChars.toLocaleString()}`
             ].join(', ')
           );
-        } else if (!linearRecordLayoutEnabled.value) {
-          for (let i = 0; i < linearSeqs.length - 1; i++) {
-            const seq = linearSeqs[i];
-            if (seq.blast) {
-              await stageUploadedFile(seq.blast, `/blast_${i}.txt`, {
-                slot: `files.linearSeqs[${i}].blast`
-              });
-              hasLinearComparisonData = true;
-            }
-          }
-        }
-        if (linearRecordLayoutEnabled.value && linearComparisons.length > 0) {
-          const layoutRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
-          const comparisonError = validateLinearComparisons(
-            linearSeqs,
-            layoutRows,
-            linearComparisons
-          );
-          if (comparisonError) throw new Error(comparisonError);
-          hasLinearComparisonData = true;
         }
         if (extractFirstFasta) {
           extractFirstFasta.destroy();
@@ -3892,7 +3914,9 @@ export const createRunAnalysis = ({
           convertNucleotideBlast.destroy();
         }
         if (useLosat) {
-          losatCacheInfo.value = cacheInfo;
+          losatCacheInfo.value = cacheInfo.sort(
+            (left, right) => Number(left?.ordinal) - Number(right?.ordinal)
+          );
           losatCache.value = cacheMap;
         }
         if ((!useLinearTrackSlots && form.show_depth) || linearSlotNeedsDepth) {
@@ -3909,17 +3933,6 @@ export const createRunAnalysis = ({
               throw new Error(
                 `Depth series #${depthTrackIndex + 1} (logical track index ${depthTrackIndex}) has no TSV source in any record. Add a TSV or remove the series.`
               );
-            }
-            for (const entry of entries) {
-              if (entry.file) {
-                const depthPath = `/seq_${entry.idx}.depth_${depthTrackIndex + 1}.tsv`;
-                const rawDepthValue = linearSeqs[entry.idx]?.depth;
-                await stageUploadedFile(entry.file, depthPath, {
-                  slot: Array.isArray(rawDepthValue)
-                    ? `files.linearSeqs[${entry.idx}].depth[${depthTrackIndex}]`
-                    : `files.linearSeqs[${entry.idx}].depth`
-                });
-              }
             }
           }
           validateDepthStyleSettings();
@@ -3944,7 +3957,7 @@ export const createRunAnalysis = ({
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }
-      const serializedFiles = await serializeCanonicalFiles();
+      const serializedFiles = await serializeCanonicalFiles(activeComparisonPlanSnapshot);
       const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
         ...entry,
         fasta: serializedFiles.c_conservation_fastas?.[entry.sourceIndex] || null
@@ -3952,6 +3965,7 @@ export const createRunAnalysis = ({
       const canonical = buildCanonicalRenderRequest({
         state,
         filesData: serializedFiles,
+        comparisonPlanSnapshot: activeComparisonPlanSnapshot,
         resolvedComparisons,
         resolvedCircularConservation: canonicalCircularConservation
       });
@@ -3996,21 +4010,25 @@ export const createRunAnalysis = ({
       )
         ? generationResponse.metadata
         : {};
-      if (res.error) {
+      if (res?.error) {
         logPostGbdrawTimings(postGbdrawTimingEntries);
         if (isReflow) {
           labelReflowLastError.value = formatPythonError(res.error)?.summary || 'Auto reflow failed';
           return { status: 'error' };
         }
-        restoreManualMigrationSnapshot();
+        restoreManualCancelSnapshot();
         errorLog.value = formatPythonError(res.error);
         return { status: 'error' };
+      }
+      if (!Array.isArray(res)) {
+        throw new Error('The diagram engine returned an invalid Result list.');
       }
 
       if (generationToken !== latestGenerationToken) {
         if (!isReflow && generationCancelRequested.value) {
           return finishCanceledManualRun();
         }
+        if (!isReflow) restoreManualCancelSnapshot();
         return { status: 'stale' };
       }
 
@@ -4023,33 +4041,65 @@ export const createRunAnalysis = ({
         skipPositionReapply.value = true;
       }
 
+      const candidateResults = shouldSuppressPairwiseIdentityLegend(activeComparisonPlanSnapshot)
+        ? stripPairwiseIdentityLegendsFromResults(res)
+        : res;
+      const candidateCatalog = isReflow
+        ? null
+        : validateFeatureCatalog(generationMetadata.featureCatalog, candidateResults);
+      const candidateCommit = candidateCatalog
+        ? measureTiming(
+            postGbdrawTimingEntries,
+            'run-analysis sanitize and reapply editor overrides',
+            () => prepareCandidateCommit({
+              results: candidateResults,
+              catalog: candidateCatalog,
+              mode: mode.value,
+              featureColorOverrides,
+              featureStrokeOverrides,
+              manualSpecificRules,
+              legacyFeatures: manualCancelSnapshot?.extractedFeatures || []
+            })
+          )
+        : null;
+
+      if (generationToken !== latestGenerationToken) {
+        if (
+          !isReflow
+          && (generationCancelRequested.value || generationAbortSignal?.aborted)
+        ) {
+          return finishCanceledManualRun();
+        }
+        if (!isReflow) restoreManualCancelSnapshot();
+        return { status: 'stale' };
+      }
+
+      if (isReflow && requestId !== pendingReflowRequestId) {
+        return { status: 'stale' };
+      }
+
       measureTiming(postGbdrawTimingEntries, 'run-analysis assign results', () => {
-        results.value = shouldSuppressPairwiseIdentityLegend()
-          ? stripPairwiseIdentityLegendsFromResults(res)
-          : res;
-        if (!isReflow) {
-          trackSlotResolvedGeometry.value = generationMetadata.trackSlotGeometry || null;
-        }
-        if (!isReflow && resultGenerationKey) {
-          resultGenerationKey.value += 1;
-        }
-        if (!isReflow) matchSequenceRegistry?.reset?.(pendingMatchSequenceSources);
+        if (isReflow) results.value = candidateResults;
       });
+      let candidateRunInfo = null;
+      let candidateCliHelpers = null;
       if (!isReflow && manualRunStartedAt !== null) {
-        const runInfo = buildRunInfo({
+        candidateRunInfo = buildRunInfo({
           mode: mode.value,
           args: ['--session', canonicalReplayPath],
           fileMetadata: runInfoFileMap,
           elapsedMs: getNow() - manualRunStartedAt,
-          resultCount: results.value.length,
+          resultCount: candidateCommit.results.length,
           startedAtIso: manualRunStartedAtIso
         });
         if (structuredLosatTelemetry) {
-          runInfo.losatTelemetry = cloneJsonData(structuredLosatTelemetry);
+          candidateRunInfo.losatTelemetry = cloneJsonData(structuredLosatTelemetry);
         }
-        lastRunInfo.value = runInfo;
-        setLatestCliHelperFiles(runInfo, generatedCliFileMap, normalizedOutputPrefix || 'out');
-        resultPanelTab.value = 'preview';
+        candidateCliHelpers = buildLatestCliHelperFiles(
+          candidateRunInfo,
+          generatedCliFileMap,
+          normalizedOutputPrefix || 'out'
+        );
       }
       logPostGbdrawTimings(postGbdrawTimingEntries);
       if (isReflow) {
@@ -4059,63 +4109,62 @@ export const createRunAnalysis = ({
         }
       }
 
-      generatedLegendPosition.value = form.legend;
-      generatedMode.value = mode.value;
-      generatedMultiRecordCanvas.value = mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false;
-      if (mode.value === 'circular') {
-        generatedCircularPlotTitlePosition.value = normalizeCircularPlotTitlePosition(adv.plot_title_position);
-      }
-
       if (!isReflow) {
-        extractedFeatures.value = [];
-        if (biologicalFeatures) biologicalFeatures.value = [];
-        featureSelectorSafetyScope.value = [];
-        featureRecordIds.value = [];
+        results.value = candidateCommit.results;
+        trackSlotResolvedGeometry.value = generationMetadata.trackSlotGeometry || null;
+        if (resultGenerationKey) resultGenerationKey.value += 1;
+        selectedResultIndex.value = Math.max(
+          0,
+          Math.min(previousSelectedResultIndex, Math.max(0, candidateCommit.results.length - 1))
+        );
+        featureCatalog.value = candidateCatalog;
+        extractedFeatures.value = candidateCommit.featureState.extractedFeatures;
+        if (biologicalFeatures) {
+          biologicalFeatures.value = candidateCommit.featureState.biologicalFeatures;
+        }
+        featureSelectorSafetyScope.value =
+          candidateCommit.featureState.featureSelectorSafetyScope;
+        featureRecordIds.value = candidateCommit.featureState.featureRecordIds;
         selectedFeatureRecordIdx.value = 0;
-
-        const shouldExtractFeatures =
-          (mode.value === 'circular' && (
-            (cInputType.value === 'gb' && Boolean(files.c_gb)) ||
-            (cInputType.value === 'gff' && Boolean(files.c_gff) && Boolean(files.c_fasta))
-          )) ||
-          (mode.value === 'linear' && ['gb', 'gff'].includes(lInputType.value) && linearSeqs.length > 0);
-
-        if (shouldExtractFeatures) {
-          setProcessingStatus('Indexing features...');
-          await extractGeneratedDiagramFeatures({
-            requestId: featureExtractionRequestId,
-            mode: mode.value,
-            cInputType: cInputType.value,
-            lInputType: lInputType.value,
-            circularFile: cInputType.value === 'gff' ? files.c_gff || null : files.c_gb || null,
-            circularFastaFile: cInputType.value === 'gff' ? files.c_fasta || null : null,
-            linearSeqs: linearSeqs.map((seq) => ({
-              gb: seq.gb || null,
-              gff: seq.gff || null,
-              fasta: seq.fasta || null
-            })),
-            regionSpecs: regionSpecs.map((spec) => ({ file: spec?.displayFile || spec?.file || null })),
-            recordSelectors: [...recordSelectors],
-            reverseFlags: [...reverseFlags],
-            featureVisibilityTablePath,
-            featureVisibilityTsv: featureVisibilityCacheKey
-          });
-          if (generationToken !== latestGenerationToken) {
-            if (generationCancelRequested.value) {
-              return finishCanceledManualRun();
-            }
-            return { status: 'stale' };
-          }
+        editableLabels.value = [];
+        setOrthogroupMetadata(candidateCommit.featureState.orthogroups);
+        matchSequenceRegistry?.reset?.(candidateCommit.featureState.sequenceSources);
+        featureExtractionPending.value = false;
+        featureExtractionError.value = null;
+        Object.keys(featureColorOverrides).forEach((key) => delete featureColorOverrides[key]);
+        Object.assign(
+          featureColorOverrides,
+          cloneJsonValue(candidateCommit.featureColorOverrides, {})
+        );
+        Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
+        Object.assign(
+          featureStrokeOverrides,
+          cloneJsonValue(candidateCommit.featureStrokeOverrides, {})
+        );
+        setFeatureEditorStatus({
+          status: extractedFeatures.value.length ? 'summary-ready' : 'idle',
+          generationId: featureExtractionRequestId,
+          error: null,
+          summaryCount: extractedFeatures.value.length,
+          detailsCacheSize: 0
+        });
+        generatedLegendPosition.value = form.legend;
+        generatedMode.value = mode.value;
+        generatedMultiRecordCanvas.value =
+          mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false;
+        if (mode.value === 'circular') {
+          generatedCircularPlotTitlePosition.value =
+            normalizeCircularPlotTitlePosition(adv.plot_title_position);
+        }
+        lastRunInfo.value = candidateRunInfo;
+        latestCliHelperFiles = cloneJsonValue(candidateCliHelpers?.files, []);
+        latestCliHelperArchiveName =
+          candidateCliHelpers?.archiveName || 'out-cli-files.zip';
+        resultPanelTab.value = 'preview';
+        if (typeof resetPreviewViewport === 'function') {
+          resetPreviewViewport({ resetZoom: true });
         } else {
-          featureExtractionPending.value = false;
-          featureExtractionError.value = null;
-          setFeatureEditorStatus({
-            status: 'idle',
-            generationId: featureExtractionRequestId,
-            error: null,
-            summaryCount: 0,
-            detailsCacheSize: 0
-          });
+          zoom.value = 1.0;
         }
       }
       if (!isReflow) {
@@ -4147,7 +4196,7 @@ export const createRunAnalysis = ({
         labelReflowLastError.value = formatJsError(e)?.summary || 'Auto reflow failed';
         return { status: 'error' };
       }
-      restoreManualMigrationSnapshot();
+      restoreManualCancelSnapshot();
       errorLog.value = formatJsError(e);
       return { status: 'error' };
     } finally {
@@ -4164,7 +4213,10 @@ export const createRunAnalysis = ({
     }
   };
 
-  const runAnalysis = async () => runAnalysisInternal({ runMode: 'manual' });
+  const runAnalysis = async (comparisonPlanSnapshot = null) => runAnalysisInternal({
+    runMode: 'manual',
+    comparisonPlanSnapshot
+  });
 
   const cancelRunAnalysis = () => {
     latestGenerationToken += 1;
@@ -4199,6 +4251,10 @@ export const createRunAnalysis = ({
     if (!losatCacheInfo.value || losatCacheInfo.value.length === 0) return;
     const cacheMap = losatCache.value;
     if (!cacheMap || cacheMap.size === 0) return;
+    const requiresProteinHydration = losatCacheInfo.value.some((entry) => (
+      classifyRawLosatCacheEntry(cacheMap.get(entry.key)) === 'protein-current'
+    ));
+    if (requiresProteinHydration) await ensureHelperRuntime();
 
     const hydratedEntries = losatCacheInfo.value.map((entry, idx) => {
       const cached = cacheMap.get(entry.key);

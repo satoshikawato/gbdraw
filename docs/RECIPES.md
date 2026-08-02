@@ -81,6 +81,17 @@ gbdraw circular --gbk genome.gb -o output -f svg --track_type middle --labels bo
 gbdraw circular --gbk genome.gb -o output -f svg --no-gc --no-skew --legend none
 ```
 
+### Hide coordinate ticks but keep the circular axis
+
+```bash
+gbdraw circular --gbk genome.gb -o output -f svg --hide_scale
+```
+
+This hides the primary coordinate ticks and labels in an implicit Circular
+layout. An explicit `--circular_track_order`, `--circular_track_slot`, or
+`--circular_track_table` remains authoritative: omit or disable its `ticks`
+slot to hide that scale.
+
 ### Resolve overlapping features
 
 ```bash
@@ -103,6 +114,27 @@ gbdraw circular \
 Use `--feature_shape repeat_region=rectangle` to restore the older foreground repeat blocks, or `repeat_region=arrow` for strand-aware repeat glyphs. Rendering does not change visibility: an unselected feature remains hidden unless a specific color rule or feature visibility `show` rule reveals it.
 
 Automatic feature underlays remain feature metadata, not region-annotation rows. With custom track slots, provide exactly one enabled feature slot; the underlay follows that slot even when its ID is not `features`.
+
+### Draw narrower arrows
+
+The finished Circular HmmtDNA and Linear BGC examples in
+[Tutorial 9](./TUTORIALS/9_Feature_Visibility_Shapes.md) start from Interactive
+SVG Gallery sessions. The Circular example sets the global arrow shaft-width
+ratio to `0.75`; the Linear example sets it to `0.5`. From a source checkout,
+reproduce both SVGs with:
+
+```bash
+python tools/reproduce_examples.py \
+  --output-root . \
+  --figure tutorial_9_arrow_geometry_circular \
+  --figure tutorial_9_arrow_geometry_linear
+```
+
+For another CLI command, add `--arrow_head_length_ratio auto` and a suitable
+`--arrow_shaft_width_ratio`. Auto extends the mode-specific head length by the
+thickness removed from the shaft. The settings apply to every feature type
+rendered as `arrow`. Ratios must be positive and finite; the shaft ratio must
+not exceed `1` and defaults to `1.0`.
 
 ### Place multiple records on one shared canvas
 
@@ -152,6 +184,19 @@ gbdraw linear \
   --scale_style ruler \
   --ruler_on_axis
 ```
+
+### Hide the coordinate scale but keep record axes
+
+```bash
+gbdraw linear \
+  --gbk genome.gb \
+  -o output \
+  -f svg \
+  --hide_scale
+```
+
+This removes the bottom bar or ruler and any coordinate ticks and labels on
+record axes. Each record's main axis line remains visible.
 
 ### Crop a region
 

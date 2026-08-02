@@ -18,6 +18,7 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.linear import linear_main
+import gbdraw.cli_utils.session as cli_session_module
 from gbdraw.api.request_render import (
     CurrentRequestArtifacts,
     PreparedDiagramRequest,
@@ -34,6 +35,7 @@ from gbdraw.api.requests import (
 from gbdraw.api.session_compat import (
     SessionCompatibleRequestRenderResult,
     adapt_session_request,
+    canonical_payload_for_session_decode,
     render_session_compatible_request,
     rewrite_protein_artifact_references,
 )
@@ -54,6 +56,80 @@ _RELEASED_SCHEMA_V2_SESSION = (
     / "sessions"
     / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
 )
+_VERSION_39_SESSION = (
+    Path(__file__).parent
+    / "fixtures"
+    / "sessions"
+    / "BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"
+)
+_WSSV_CURRENT_SESSION = (
+    Path(__file__).parent.parent
+    / "gbdraw"
+    / "web"
+    / "gallery"
+    / "sessions"
+    / "WSSV_genome_comparison.gbdraw-session.json"
+)
+
+
+def test_version_39_multiline_conservation_labels_expand_at_compat_boundary() -> None:
+    payload = {
+        "diagramOptions": {
+            "conservationBlastFiles": [
+                {"resourceId": "comparison-1", "representation": "file"},
+                {"resourceId": "comparison-2", "representation": "file"},
+            ],
+            "conservationLabels": ["First comparison\nSecond comparison"],
+        }
+    }
+
+    migrated = canonical_payload_for_session_decode(39, payload)
+
+    assert migrated["diagramOptions"]["conservationLabels"] == [
+        "First comparison",
+        "Second comparison",
+    ]
+    assert payload["diagramOptions"]["conservationLabels"] == [
+        "First comparison\nSecond comparison"
+    ]
+
+
+@pytest.mark.parametrize("version", (33, CURRENT_SESSION_VERSION))
+def test_multiline_conservation_label_migration_is_version_39_only(
+    version: int,
+) -> None:
+    labels = ["First comparison\nSecond comparison"]
+    payload = {
+        "diagramOptions": {
+            "conservationBlastFiles": [
+                {"resourceId": "comparison-1", "representation": "file"},
+                {"resourceId": "comparison-2", "representation": "file"},
+            ],
+            "conservationLabels": labels,
+        }
+    }
+
+    migrated = canonical_payload_for_session_decode(version, payload)
+
+    assert migrated["diagramOptions"]["conservationLabels"] == labels
+
+
+def test_version_39_multiline_conservation_label_count_mismatch_stays_strict() -> None:
+    labels = ["First comparison\nSecond comparison"]
+    payload = {
+        "diagramOptions": {
+            "conservationBlastFiles": [
+                {"resourceId": "comparison-1", "representation": "file"},
+                {"resourceId": "comparison-2", "representation": "file"},
+                {"resourceId": "comparison-3", "representation": "file"},
+            ],
+            "conservationLabels": labels,
+        }
+    }
+
+    migrated = canonical_payload_for_session_decode(39, payload)
+
+    assert migrated["diagramOptions"]["conservationLabels"] == labels
 
 
 def _linear_request(
@@ -612,6 +688,133 @@ def test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders(
         ]
     )
     assert rerendered_prefix.with_suffix(".svg").is_file()
+
+
+def test_version_39_typed_replay_retains_dormant_comparison_resource(
+    tmp_path: Path,
+) -> None:
+    source_document = load_session_document(_VERSION_39_SESSION)
+    source_payload = source_document.to_dict()
+    record_uids = [
+        str(row["uid"])
+        for row in source_payload["config"]["linearRecordLayout"]["rows"]
+    ]
+    sequence_files = []
+    for uid, record in zip(
+        record_uids,
+        source_payload["renderRequest"]["records"],
+        strict=True,
+    ):
+        resource_id = str(record["source"]["resourceId"])
+        entry = dict(source_payload["resources"][resource_id])
+        entry["name"] = f"{uid}.gb"
+        sequence_files.append({"uid": uid, "gb": entry})
+    dormant_bytes = b"query\tsubject\t97\n"
+    dormant_file = {
+        "name": "retained-non-adjacent.tsv",
+        "type": "text/tab-separated-values",
+        "size": len(dormant_bytes),
+        "lastModified": 0,
+        "encoding": "base64",
+        "data": base64.b64encode(dormant_bytes).decode("ascii"),
+    }
+    migration_source = {
+        "config": source_payload["config"],
+        "ui": source_payload["ui"],
+        "webFiles": source_payload["webFiles"],
+        "resources": source_payload["resources"],
+        "files": {
+            "linearSeqs": sequence_files,
+            "linearComparisons": [
+                {
+                    "id": "dormant-v39-upload",
+                    "queryUid": record_uids[0],
+                    "subjectUid": record_uids[2],
+                    "source": "upload",
+                    "file": dormant_file,
+                }
+            ],
+        },
+    }
+    adjunct, web_file_inventory = (
+        cli_session_module._project_session_adjunct_for_current_write(
+            migration_source,
+            source_version=39,
+        )
+    )
+
+    with materialize_session(source_document, output_directory=tmp_path) as materialized:
+        rewritten = build_session_document(
+            session_to_request(materialized),
+            adjunct=adjunct,
+            web_file_inventory=web_file_inventory,
+        ).to_dict()
+
+    assert rewritten["config"]["linearComparisonPlan"]["edges"] == [
+        {
+            "id": "dormant-v39-upload",
+            "queryUid": record_uids[0],
+            "subjectUid": record_uids[2],
+            "included": False,
+            "fileActive": False,
+            "losatFilenameActive": False,
+            "source": "upload",
+            "losatFilename": "",
+        }
+    ]
+    comparison_bindings = rewritten["webFiles"]["bindings"]["linearComparisons"]
+    assert [set(binding) for binding in comparison_bindings] == [{"id", "file"}]
+    retained_resource_id = comparison_bindings[0]["file"]["resourceId"]
+    assert base64.b64decode(
+        rewritten["resources"][retained_resource_id]["data"]
+    ) == dormant_bytes
+    assert sum(
+        base64.b64decode(resource["data"]) == dormant_bytes
+        for resource in rewritten["resources"].values()
+    ) == 1
+
+
+def test_current_typed_replay_retains_web_only_losat_fastas(
+    tmp_path: Path,
+) -> None:
+    source_document = load_session_document(_WSSV_CURRENT_SESSION)
+    source_payload = source_document.to_dict()
+    source_web_files = source_payload["webFiles"]
+    source_resources = source_payload["resources"]
+    source_ids = source_web_files["conservationLosatFastaSources"]
+    expected_data = [source_resources[resource_id]["data"] for resource_id in source_ids]
+    expected_names = [
+        source_web_files["resourceOriginalNames"][resource_id]
+        for resource_id in source_ids
+    ]
+
+    adjunct, web_file_inventory = (
+        cli_session_module._project_session_adjunct_for_current_write(
+            source_payload,
+            source_version=source_document.version,
+        )
+    )
+    assert web_file_inventory is not None
+
+    with materialize_session(source_document, output_directory=tmp_path) as materialized:
+        rewritten = build_session_document(
+            session_to_request(materialized),
+            adjunct=adjunct,
+            web_file_inventory=web_file_inventory,
+        ).to_dict()
+
+    rewritten_web_files = rewritten["webFiles"]
+    rewritten_resources = rewritten["resources"]
+    rewritten_ids = rewritten_web_files["conservationLosatFastaSources"]
+    fasta_bindings = rewritten_web_files["bindings"]["c_conservation_fastas"]
+    assert rewritten_ids == [binding["resourceId"] for binding in fasta_bindings]
+    assert [rewritten_resources[resource_id]["data"] for resource_id in rewritten_ids] == (
+        expected_data
+    )
+    assert [
+        rewritten_web_files["resourceOriginalNames"][resource_id]
+        for resource_id in rewritten_ids
+    ] == expected_names
 
 
 def test_released_schema_v2_fixture_sidecar_collision_is_atomic(

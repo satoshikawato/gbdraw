@@ -7,6 +7,13 @@
 
 Add per-base read depth tracks, GC content (%) tracks, and numeric axes to circular and linear diagrams.
 
+The primary genome-coordinate scale is independent of quantitative track axes.
+Adding `--hide_scale` to an example below hides only the Circular coordinate
+ticks or the Linear bottom bar or ruler and any record-axis coordinate labels.
+Depth axes and ticks continue to follow `--show_depth_axis` and
+`--show_depth_ticks`; GC-content axes and ticks continue to follow
+`--show_gc_content_axis` and `--show_gc_content_ticks`.
+
 ## 1. Prepare inputs
 
 Sections 2 through 4 use Hepatoplasmataceae genomes and matching per-base depth files. In a source checkout, the files are available under [`tests/test_inputs`](../../tests/test_inputs/):

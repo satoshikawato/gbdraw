@@ -39,6 +39,8 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import read_records_table
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.render.formats import ACCEPTED_FORMATS
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.api.requests import (
     CircularDiagramRequest,
     InMemoryRecordSource,
@@ -98,6 +100,21 @@ def _canonical_request(mode: str):
     if mode == "linear":
         return LinearDiagramRequest(records=(record_input,))
     return CircularDiagramRequest(records=(record_input,))
+
+
+def _canonical_request_with_scale_visibility(mode: str, *, show: bool):
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    record_input = RecordInput(source=InMemoryRecordSource(record))
+    config = apply_config_overrides(None, {"objects.scale.show": show})
+    if mode == "linear":
+        return LinearDiagramRequest(
+            records=(record_input,),
+            options=LinearDiagramOptions(config=config),
+        )
+    return CircularDiagramRequest(
+        records=(record_input,),
+        options=CircularDiagramOptions(config=config),
+    )
 
 
 def test_write_session_json_does_not_use_predictable_temp_path(
@@ -424,6 +441,7 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
                 ],
             },
         ),
+        losat_derived_cache_entries=({"schema": LOSAT_DERIVED_CACHE_SCHEMA},),
         canonical_request=_canonical_request("linear"),
     )
 
@@ -437,17 +455,23 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
 
     assert saved == sidecar
     payload = load_session(sidecar)
-    assert payload["features"]["extractedFeatures"][0]["orthogroup_id"] == "og_1"
+    assert payload["features"] == {}
+    assert payload["orthogroupState"] == {}
+    catalog = payload["editorState"]["featureCatalog"]
+    assert catalog["schema"] == 3
+    item = catalog["items"][0]
+    assert item["resultIndex"] == 0
+    assert item["resultName"] == "diagram"
     assert [
-        feature["stable_feature_id"]
-        for feature in payload["features"]["biologicalFeatures"]
+        feature.get("stableFeatureId", feature["biologicalFeatureId"])
+        for feature in item["biologicalFeatures"]
     ] == ["feature-1", "feature-2"]
-    group = payload["orthogroupState"]["groups"][0]
+    group = item["orthogroups"][0]
     assert group["id"] == "og_1"
-    assert [member["proteinId"] for member in group["members"]] == [
-        "protein-1",
-        "protein-2",
-    ]
+    assert {
+        member["biologicalFeatureId"] for member in group["members"]
+    } == {"feature-1", "feature-2"}
+    assert payload["losatDerivedCache"] == {"entries": []}
 
     sidecar.write_text("keep this session", encoding="utf-8")
     with pytest.raises(ValidationError, match="--overwrite"):
@@ -475,60 +499,95 @@ def test_current_session_version_matches_web_config() -> None:
     source = Path("gbdraw/web/js/services/config.js").read_text(encoding="utf-8")
     match = re.search(r"const\s+SESSION_VERSION\s*=\s*(\d+);", source)
     assert match is not None
-    assert CURRENT_SESSION_VERSION == 39
+    supported_match = re.search(
+        r"SUPPORTED_SESSION_VERSIONS\s*=\s*new Set\(\[([\s\S]*?)\]\)",
+        source,
+    )
+    assert supported_match is not None
+    web_supported_versions = {
+        int(value) for value in re.findall(r"\b\d+\b", supported_match.group(1))
+    }
+    if "SESSION_VERSION" in supported_match.group(1):
+        web_supported_versions.add(int(match.group(1)))
+
+    assert CURRENT_SESSION_VERSION == 40
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
+    assert web_supported_versions == SUPPORTED_SESSION_VERSIONS
+
+    authority_source = Path(
+        "gbdraw/web/js/services/session-authority.js"
+    ).read_text(encoding="utf-8")
+    forbidden_match = re.search(
+        r"CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS\s*=\s*Object\.freeze\(\["
+        r"([\s\S]*?)\]\)",
+        authority_source,
+    )
+    assert forbidden_match is not None
+    web_forbidden_fields = frozenset(
+        re.findall(r"'([^']+)'", forbidden_match.group(1))
+    )
+    assert session_io_module.CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS == (
+        web_forbidden_fields
+    )
+    authority_match = re.search(
+        r"SESSION_TOP_LEVEL_AUTHORITY\s*=\s*Object\.freeze\(\{"
+        r"([\s\S]*?)\}\);",
+        authority_source,
+    )
+    assert authority_match is not None
+    web_authority_fields = frozenset(
+        re.findall(
+            r"^\s{2}([A-Za-z][A-Za-z0-9]*):",
+            authority_match.group(1),
+            flags=re.MULTILINE,
+        )
+    )
+    assert session_io_module.CURRENT_SESSION_TOP_LEVEL_FIELDS == (
+        web_authority_fields
+    )
 
 
-def test_current_session_feature_catalog_is_compact_and_lossless(
+def test_current_session_feature_catalog_is_single_and_lossless(
     tmp_path: Path,
 ) -> None:
-    long_note = ("😀" * 30) + ("x" * 30)
-    qualifiers = {
-        "protein_id": ["protein-1"],
-        "locus_tag": ["locus-1"],
-        "product": ["example protein"],
-        "translation": ["M"],
-        "note": [long_note],
+    catalog = {
+        "schema": 3,
+        "items": [
+            {
+                "resultIndex": 0,
+                "resultName": "out",
+                "recordKeys": ["record-key"],
+                "features": [
+                    {
+                        "svgId": "rendered-feature",
+                        "recordKey": "record-key",
+                        "biologicalFeatureId": "feature-1",
+                        "fillColor": "#123456",
+                    }
+                ],
+                "biologicalFeatures": [
+                    {
+                        "recordKey": "record-key",
+                        "biologicalFeatureId": "feature-1",
+                        "stableFeatureId": "stable-feature",
+                        "record_id": "public-record",
+                        "type": "CDS",
+                        "start": 1,
+                        "end": 3,
+                        "qualifiers": {"product": ["example"]},
+                        "nucleotide_sequence": "ATG",
+                        "amino_acid_sequence": "M",
+                    }
+                ],
+                "orthogroups": [],
+                "annotations": [],
+                "comparisonMatches": [],
+            }
+        ],
     }
-    biological = {
-        "id": "f0",
-        "svg_id": "f_stable",
-        "stable_svg_id": "f_stable",
-        "stable_feature_id": "f_stable",
-        "record_id": "record",
-        "record_idx": 0,
-        "feature_index": 0,
-        "organism": "Example",
-        "type": "CDS",
-        "start": 1,
-        "end": 3,
-        "strand": "+",
-        "protein_id": "protein-1",
-        "source_protein_id": "protein-1",
-        "locus_tag": "locus-1",
-        "gene_id": "",
-        "old_locus_tag": "",
-        "gene": "",
-        "product": "example protein",
-        "note": long_note[:50],
-        "qualifiers": qualifiers,
-        "selector": {
-            "qualifiers": copy.deepcopy(qualifiers),
-            "hash": "f_stable",
-            "location": "1..3",
-            "record_location": "record:1..3:+",
-        },
-        "location_parts": [{"start": 1, "end": 3, "strand": 1}],
-        "nucleotide_sequence": "ATG",
-        "amino_acid_sequence": "M",
-        "sequence_warnings": [],
-    }
-    extracted = copy.deepcopy(biological)
-    extracted.pop("feature_index")
-    extracted["rendered_feature_svg_id"] = "f_stable_record_1"
     payload = build_session_json(
         SessionBuildContext(
             mode="linear",
@@ -538,103 +597,131 @@ def test_current_session_feature_catalog_is_compact_and_lossless(
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={"linearSeqs": []},
         generated_at=datetime(2026, 7, 24),
+        feature_catalog=catalog,
         canonical_request=_canonical_request("linear"),
     )
-    payload["features"] = {
-        "extractedFeatures": [extracted],
-        "biologicalFeatures": [biological],
-        "selectedFeatureRecordIdx": 0,
-    }
-    expected_features = copy.deepcopy(payload["features"])
-    path = tmp_path / "compact-feature-catalog.gbdraw-session.json"
+    payload["features"]["selectedFeatureRecordIdx"] = 0
+    path = tmp_path / "schema-3-feature-catalog.gbdraw-session.json"
 
     write_session_json(path, payload)
 
     on_disk = json.loads(path.read_text(encoding="utf-8"))
-    assert "extractedFeatures" not in on_disk["features"]
-    assert on_disk["features"]["featureCatalog"] == {
-        "schema": 1,
-        "encoding": "biological-authority-v1",
-        "profile": "rich-v1",
-        "extracted": [[0, "f0", "f_stable_record_1"]],
-    }
-    assert "stable_svg_id" not in on_disk["features"]["biologicalFeatures"][0]
-    loaded_features = load_session(path)["features"]
-    assert loaded_features == expected_features
-    assert load_session_document(path).to_dict()["features"] == expected_features
+    assert on_disk["editorState"]["featureCatalog"] == catalog
+    assert on_disk["features"] == {"selectedFeatureRecordIdx": 0}
+    assert on_disk["orthogroupState"] == {}
+    assert load_session(path) == on_disk
+    assert load_session_document(path).to_dict() == on_disk
 
-    malformed_schema = copy.deepcopy(on_disk)
-    malformed_schema["features"]["featureCatalog"]["schema"] = True
-    path.write_text(
-        json.dumps(
-            malformed_schema,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ),
-        encoding="utf-8",
-    )
-    with pytest.raises(ValidationError, match="Invalid compact session feature catalog"):
-        load_session(path)
-
-    null_catalog = copy.deepcopy(on_disk)
-    null_catalog["features"]["featureCatalog"] = None
-    path.write_text(
-        json.dumps(null_catalog, ensure_ascii=False, separators=(",", ":")),
-        encoding="utf-8",
-    )
-    with pytest.raises(ValidationError, match="Invalid compact session feature catalog"):
-        load_session(path)
-    with pytest.raises(ValidationError, match="Invalid compact session feature catalog"):
-        write_session_json(tmp_path / "rejected-session.json", null_catalog)
-
-    malformed_qualifier = copy.deepcopy(on_disk)
-    malformed_qualifier["features"]["biologicalFeatures"][0]["qualifiers"][
-        "protein_id"
-    ] = [None]
-    path.write_text(
-        json.dumps(
-            malformed_qualifier,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ),
-        encoding="utf-8",
-    )
+    unknown_field = copy.deepcopy(on_disk)
+    unknown_field["branchOnlyState"] = {}
     with pytest.raises(
         ValidationError,
-        match="feature qualifiers must contain string arrays",
+        match="unclassified top-level field.*branchOnlyState",
     ):
-        load_session(path)
+        write_session_json(tmp_path / "unknown-field.json", unknown_field)
 
-    duplicate_reference = copy.deepcopy(on_disk)
-    duplicate_reference["features"]["featureCatalog"]["extracted"].append(
+    missing_results = copy.deepcopy(on_disk)
+    missing_results.pop("results")
+    with pytest.raises(
+        ValidationError,
+        match="requires a results array",
+    ):
+        write_session_json(tmp_path / "missing-results.json", missing_results)
+
+    empty_draft = copy.deepcopy(on_disk)
+    empty_draft["results"] = []
+    empty_draft["editorState"]["featureCatalog"] = None
+    write_session_json(tmp_path / "empty-draft.json", empty_draft)
+
+    missing_empty_catalog = copy.deepcopy(empty_draft)
+    missing_empty_catalog["editorState"].pop("featureCatalog")
+    with pytest.raises(
+        ValidationError,
+        match="requires editorState.featureCatalog",
+    ):
+        write_session_json(
+            tmp_path / "missing-empty-catalog.json",
+            missing_empty_catalog,
+        )
+
+    for field in ("features", "orthogroupState"):
+        invalid_container = copy.deepcopy(on_disk)
+        invalid_container[field] = []
+        with pytest.raises(
+            ValidationError,
+            match=rf"Session {field} must be an object",
+        ):
+            write_session_json(
+                tmp_path / f"invalid-{field}.json",
+                invalid_container,
+            )
+
+    interactive_result = copy.deepcopy(on_disk)
+    interactive_result["results"][0]["name"] = "out.interactive.svg"
+    interactive_result["editorState"]["featureCatalog"]["items"][0][
+        "resultName"
+    ] = "out.interactive.svg"
+    with pytest.raises(
+        ValidationError,
+        match="named plain SVG",
+    ):
+        write_session_json(
+            tmp_path / "interactive-result.json",
+            interactive_result,
+        )
+
+    missing_catalog = copy.deepcopy(on_disk)
+    missing_catalog["editorState"].pop("featureCatalog")
+    with pytest.raises(
+        ValidationError,
+        match="Results require editorState.featureCatalog",
+    ):
+        write_session_json(
+            tmp_path / "missing-catalog.json",
+            missing_catalog,
+        )
+
+    duplicate_feature = copy.deepcopy(on_disk)
+    duplicate_feature["editorState"]["featureCatalog"]["items"][0][
+        "biologicalFeatures"
+    ].append(
         copy.deepcopy(
-            duplicate_reference["features"]["featureCatalog"]["extracted"][0]
+            duplicate_feature["editorState"]["featureCatalog"]["items"][0][
+                "biologicalFeatures"
+            ][0]
         )
     )
-    path.write_text(
-        json.dumps(
-            duplicate_reference,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ),
-        encoding="utf-8",
-    )
     with pytest.raises(
         ValidationError,
-        match="Invalid compact extracted-feature reference",
+        match="invalid biological feature reference",
     ):
-        load_session(path)
+        write_session_json(
+            tmp_path / "duplicate-feature.json",
+            duplicate_feature,
+        )
 
-    on_disk["features"]["featureCatalog"]["extracted"][0][0] = 99
-    path.write_text(
-        json.dumps(on_disk, ensure_ascii=False, separators=(",", ":")),
-        encoding="utf-8",
-    )
+    duplicated_legacy = copy.deepcopy(on_disk)
+    duplicated_legacy["features"]["biologicalFeatures"] = []
     with pytest.raises(
         ValidationError,
-        match="Invalid compact extracted-feature reference",
+        match="derived feature payloads",
     ):
-        load_session(path)
+        write_session_json(
+            tmp_path / "duplicated-legacy.json",
+            duplicated_legacy,
+        )
+
+    for field in ("featureSelectorSafetyScope", "featureRecordIds"):
+        duplicated_legacy = copy.deepcopy(on_disk)
+        duplicated_legacy["features"][field] = []
+        with pytest.raises(
+            ValidationError,
+            match="derived feature payloads",
+        ):
+            write_session_json(
+                tmp_path / f"duplicated-{field}.json",
+                duplicated_legacy,
+            )
 
 
 def test_feature_catalog_compaction_falls_back_for_partial_metadata() -> None:
@@ -1146,6 +1233,399 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
     )
 
 
+def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
+    fixture_path = (
+        Path(__file__).parent
+        / "fixtures"
+        / "sessions"
+        / "BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"
+    )
+    source = load_session(fixture_path)
+    assert source["version"] == 39
+    source["webFiles"] = {"linearRecords": [{"uid": "record-1"}]}
+    source["editorState"] = {"legend": {"entries": []}}
+    source["features"] = {
+        "featureSelectorSafetyScope": "all-records",
+        "featureRecordIds": ["record-1"],
+        "selectedFeatureRecordIdx": 0,
+    }
+    source["config"]["adv"]["circular_track_slots_enabled"] = False
+    source["config"]["adv"]["circular_track_slots"] = [
+        {"id": "circular-disabled", "enabled": False}
+    ]
+    source["config"]["adv"]["linear_track_slots_enabled"] = True
+    source["config"]["adv"]["linear_track_slots"] = [
+        {"id": "linear-active", "enabled": True}
+    ]
+    source["config"]["modeProfiles"] = {
+        "schema": 1,
+        "activeMode": "linear",
+        "profiles": {
+            "circular": {
+                "values": {"identity": 88},
+                "managed": {"identity": False},
+            },
+            "linear": {
+                "values": {"identity": 77},
+                "managed": {"identity": False},
+            },
+        },
+    }
+
+    promoted = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="new",
+            render_formats=("svg",),
+            source_session=source,
+        ),
+        svg_results=(("new", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 31),
+        canonical_request=_canonical_request("linear"),
+    )
+    rewritten = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="again",
+            render_formats=("svg",),
+            source_session=promoted,
+        ),
+        svg_results=(("again", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 8, 1),
+        canonical_request=_canonical_request("linear"),
+    )
+
+    assert source["version"] == 39
+    assert promoted["version"] == CURRENT_SESSION_VERSION
+    assert rewritten["version"] == CURRENT_SESSION_VERSION
+    for payload in (promoted, rewritten):
+        assert "files" not in payload
+        assert payload["webFiles"]["linearRecords"] == source["webFiles"][
+            "linearRecords"
+        ]
+        assert payload["webFiles"]["bindings"]["schema"] == 1
+        assert "linearCanonicalComparisons" not in payload["webFiles"]["bindings"]
+        assert payload["config"]["linearComparisonPlan"] == {
+            "mode": "adjacent",
+            "defaultSource": "losat",
+            "edges": [],
+        }
+        assert "blastSource" not in payload["config"]
+        assert "comparisons" not in payload["config"]["linearRecordLayout"]
+        assert payload["editorState"]["legend"] == source["editorState"]["legend"]
+        assert payload["editorState"]["featureCatalog"]["schema"] == 3
+        assert len(payload["editorState"]["featureCatalog"]["items"]) == 1
+        assert payload["features"] == {"selectedFeatureRecordIdx": 0}
+        assert (
+            payload["config"]["adv"]["circular_track_slots"]
+            == source["config"]["adv"]["circular_track_slots"]
+        )
+        assert (
+            payload["config"]["adv"]["linear_track_slots"]
+            == source["config"]["adv"]["linear_track_slots"]
+        )
+        assert payload["config"]["modeProfiles"] == source["config"]["modeProfiles"]
+
+
+def test_genuine_version_39_shape_retains_disabled_layout_upload_draft() -> None:
+    fixture_path = (
+        Path(__file__).parent
+        / "fixtures"
+        / "sessions"
+        / "BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"
+    )
+    source = load_session(fixture_path)
+    assert source["version"] == 39
+    assert source["config"]["linearRecordLayout"]["enabled"] is False
+    record_uids = [
+        str(row["uid"])
+        for row in source["config"]["linearRecordLayout"]["rows"]
+    ]
+    dormant_file = _file_entry("retained-non-adjacent.tsv", b"a\tc\t97\n")
+
+    migrated_config, migrated_files = (
+        session_io_module.migrate_legacy_linear_comparison_draft_for_current_writer(
+            source["config"],
+            {
+                "linearSeqs": [{"uid": uid} for uid in record_uids],
+                "linearComparisons": [
+                    {
+                        "id": "dormant-v39-upload",
+                        "queryUid": record_uids[0],
+                        "subjectUid": record_uids[2],
+                        "source": "upload",
+                        "file": dormant_file,
+                    }
+                ],
+            },
+            force_web_draft=True,
+        )
+    )
+
+    assert migrated_config["linearComparisonPlan"] == {
+        "mode": "adjacent",
+        "defaultSource": "losat",
+        "edges": [
+            {
+                "id": "dormant-v39-upload",
+                "queryUid": record_uids[0],
+                "subjectUid": record_uids[2],
+                "included": False,
+                "fileActive": False,
+                "losatFilenameActive": False,
+                "source": "upload",
+                "losatFilename": "",
+            }
+        ],
+    }
+    assert migrated_files["linearComparisons"] == [
+        {"id": "dormant-v39-upload", "file": dormant_file}
+    ]
+
+
+def test_pre40_web_comparison_draft_migrates_directly_to_final_plan() -> None:
+    source = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="old",
+            render_formats=("svg",),
+        ),
+        svg_results=(("old", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 20),
+        canonical_request=_canonical_request("linear"),
+    )
+    source["version"] = 33
+    source["config"]["blastSource"] = "upload"
+    source["config"]["linearRecordLayout"] = {
+        "enabled": True,
+        "recordGap": 18,
+        "rows": [{"uid": "record-a", "row": 1}, {"uid": "record-b", "row": 2}],
+        "comparisons": [
+            {
+                "id": "selected-a-b",
+                "queryUid": "record-a",
+                "subjectUid": "record-b",
+                "source": "upload",
+            }
+        ],
+    }
+    comparison_file = _file_entry("selected.tsv", b"query\tsubject\t99\n")
+
+    promoted = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="new",
+            render_formats=("svg",),
+            source_session=source,
+        ),
+        svg_results=(("new", "<svg></svg>"),),
+        embedded_files={
+            "linearSeqs": [
+                {
+                    "uid": "record-a",
+                    "blast": comparison_file,
+                    "losat_filename": "custom-a.fna",
+                },
+                {"uid": "record-b"},
+            ],
+            "linearComparisons": [
+                {
+                    "id": "selected-a-b",
+                    "queryUid": "record-a",
+                    "subjectUid": "record-b",
+                    "source": "upload",
+                    "file": comparison_file,
+                }
+            ],
+        },
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+
+    assert "blastSource" not in promoted["config"]
+    assert "comparisons" not in promoted["config"]["linearRecordLayout"]
+    assert promoted["config"]["linearComparisonPlan"] == {
+        "mode": "selected",
+        "defaultSource": "upload",
+        "edges": [
+            {
+                "id": "selected-a-b",
+                "queryUid": "record-a",
+                "subjectUid": "record-b",
+                "included": True,
+                "fileActive": True,
+                "losatFilenameActive": True,
+                "source": "upload",
+                "losatFilename": "custom-a.fna",
+            }
+        ],
+    }
+    sequence_binding = promoted["webFiles"]["bindings"]["linearSeqs"][0]
+    assert "blast" not in sequence_binding
+    assert "losat_filename" not in sequence_binding
+    comparison_binding = promoted["webFiles"]["bindings"]["linearComparisons"]
+    assert [set(binding) for binding in comparison_binding] == [{"id", "file"}]
+    resource_id = comparison_binding[0]["file"]["resourceId"]
+    assert base64.b64decode(promoted["resources"][resource_id]["data"]) == (
+        b"query\tsubject\t99\n"
+    )
+    matching_payloads = [
+        resource
+        for resource in promoted["resources"].values()
+        if base64.b64decode(resource["data"]) == b"query\tsubject\t99\n"
+    ]
+    assert len(matching_payloads) == 1
+
+
+def test_pre40_adjacent_upload_migration_consumes_mirrored_binding() -> None:
+    comparison_file = _file_entry("adjacent.tsv", b"query\tsubject\t99\n")
+
+    migrated_config, migrated_files = (
+        session_io_module.migrate_legacy_linear_comparison_draft_for_current_writer(
+            {
+                "blastSource": "upload",
+                "linearRecordLayout": {
+                    "enabled": False,
+                    "rows": [
+                        {"uid": "record-a", "row": 1},
+                        {"uid": "record-b", "row": 2},
+                    ],
+                },
+            },
+            {
+                "linearSeqs": [
+                    {"uid": "record-a", "blast": comparison_file},
+                    {"uid": "record-b"},
+                ],
+                "linearComparisons": [
+                    {
+                        "id": "mirrored-a-b",
+                        "queryUid": "record-a",
+                        "subjectUid": "record-b",
+                        "source": "upload",
+                        "file": comparison_file,
+                    }
+                ],
+            },
+            force_web_draft=True,
+        )
+    )
+
+    assert migrated_config["linearComparisonPlan"]["edges"] == [
+        {
+            "id": "linear-comparison-migrated-adjacent-1-record-a-record-b",
+            "queryUid": "record-a",
+            "subjectUid": "record-b",
+            "included": True,
+            "fileActive": True,
+            "losatFilenameActive": False,
+            "source": "upload",
+            "losatFilename": "",
+        }
+    ]
+    assert migrated_files["linearComparisons"] == [
+        {
+            "id": "linear-comparison-migrated-adjacent-1-record-a-record-b",
+            "file": comparison_file,
+        }
+    ]
+
+
+def test_current_comparison_authority_rejects_retired_version40_shape() -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+    payload["config"]["blastSource"] = "losat"
+    with pytest.raises(ValidationError, match="retired blastSource"):
+        validate_session(payload)
+
+    payload["config"].pop("blastSource")
+    payload["config"]["linearRecordLayout"] = {
+        "enabled": False,
+        "recordGap": 24,
+        "rows": [],
+        "comparisons": [],
+    }
+    with pytest.raises(ValidationError, match="linearRecordLayout.comparisons"):
+        validate_session(payload)
+
+
+def test_current_comparison_authority_validates_file_bindings() -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=_canonical_request("linear"),
+    )
+    resource_id = next(iter(payload["resources"]))
+    payload["config"]["linearComparisonPlan"] = {
+        "mode": "selected",
+        "defaultSource": "losat",
+        "edges": [
+            {
+                "id": "edge-a-b",
+                "queryUid": "a",
+                "subjectUid": "b",
+                "included": True,
+                "fileActive": True,
+                "losatFilenameActive": False,
+                "source": "upload",
+                "losatFilename": "",
+            }
+        ],
+    }
+    payload["webFiles"] = {
+        "bindings": {
+            "schema": 1,
+            "linearComparisons": [
+                {"id": "edge-a-b", "file": {"resourceId": resource_id}}
+            ],
+        }
+    }
+    validate_session(payload)
+
+    unsupported_schema = copy.deepcopy(payload)
+    unsupported_schema["webFiles"]["bindings"]["schema"] = 2
+    with pytest.raises(ValidationError, match="Unsupported Web file binding schema"):
+        validate_session(unsupported_schema)
+
+    malformed_file = copy.deepcopy(payload)
+    malformed_file["webFiles"]["bindings"]["linearComparisons"][0]["file"] = None
+    with pytest.raises(ValidationError, match="requires a file resource binding"):
+        validate_session(malformed_file)
+
+    missing_resource = copy.deepcopy(payload)
+    missing_resource["webFiles"]["bindings"]["linearComparisons"][0]["file"] = {
+        "resourceId": "missing-resource"
+    }
+    with pytest.raises(ValidationError, match="references a missing resource"):
+        validate_session(missing_resource)
+
+    missing_active_binding = copy.deepcopy(payload)
+    missing_active_binding["webFiles"]["bindings"]["linearComparisons"] = []
+    with pytest.raises(
+        ValidationError,
+        match="Active comparison file is missing its Web file binding",
+    ):
+        validate_session(missing_active_binding)
+
+
 def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
     tmp_path: Path,
 ) -> None:
@@ -1217,6 +1697,27 @@ def test_future_session_version_fails() -> None:
 
     with pytest.raises(ValidationError, match="newer"):
         validate_session(session)
+
+
+def test_current_session_rejects_legacy_files_but_version_39_accepts_them() -> None:
+    session = build_session_json(
+        SessionBuildContext(
+            mode="circular",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 7, 31),
+        canonical_request=_canonical_request("circular"),
+    )
+    session["files"] = {}
+
+    with pytest.raises(ValidationError, match="cannot contain legacy files"):
+        validate_session(session)
+
+    session["version"] = 39
+    validate_session(session)
 
 
 @pytest.mark.parametrize("version", (34, 35, 36, 37, 38))
@@ -1339,9 +1840,81 @@ def test_legacy_gui_config_migrates_repeat_to_rectangle_without_mutating_source(
     assert "feature_shapes" not in session["config"]["adv"]
 
 
+def test_gui_session_replays_arrow_shape_and_geometry_flags(tmp_path: Path) -> None:
+    session = _minimal_session({"c_gb": _file_entry("input.gb", b"LOCUS       A\n")})
+    session["config"]["adv"].update(
+        {
+            "feature_shapes": {"CDS": "arrow"},
+            "arrow_head_length_ratio": "1.25",
+            "arrow_shaft_width_ratio": "0.25",
+        }
+    )
+
+    spec = session_to_cli_args(
+        session,
+        mode="circular",
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assert "CDS=arrow" in session_io_module._option_all_values(
+        spec.args,
+        "--feature_shape",
+    )
+    head_index = spec.args.index("--arrow_head_length_ratio")
+    assert spec.args[head_index + 1] == "1.25"
+    shaft_index = spec.args.index("--arrow_shaft_width_ratio")
+    assert spec.args[shaft_index + 1] == "0.25"
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize(
+    ("head_ratio", "shaft_ratio"),
+    [("auto", "1"), ("1.25", "0.25")],
+)
+def test_cli_session_projects_arrow_shape_and_geometry_to_web_state(
+    mode: str,
+    head_ratio: str,
+    shaft_ratio: str,
+) -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode=mode,
+            output_prefix="out",
+            render_formats=("svg",),
+            cli_invocation_args=(
+                "--gbk",
+                "input.gb",
+                "--feature_shape",
+                "CDS=arrow",
+                "--arrow_head_length_ratio",
+                head_ratio,
+                "--arrow_shaft_width_ratio",
+                shaft_ratio,
+            ),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 8, 1),
+        canonical_request=_canonical_request(mode),
+    )
+
+    adv = payload["config"]["adv"]
+    assert adv["feature_shapes"] == {"CDS": "arrow"}
+    assert adv["arrow_head_length_ratio"] == head_ratio
+    assert adv["arrow_shaft_width_ratio"] == shaft_ratio
+
+
 @pytest.mark.parametrize(
     ("version", "request_schema"),
-    ((31, 1), (32, 2), (33, 2), (CURRENT_SESSION_VERSION, CANONICAL_REQUEST_SCHEMA)),
+    (
+        (31, 1),
+        (32, 2),
+        (33, 2),
+        (39, CANONICAL_REQUEST_SCHEMA),
+        (CURRENT_SESSION_VERSION, CANONICAL_REQUEST_SCHEMA),
+    ),
 )
 def test_main_backed_and_current_canonical_session_schemas_remain_supported(
     version: int,
@@ -1353,6 +1926,9 @@ def test_main_backed_and_current_canonical_session_schemas_remain_supported(
         "renderRequest": {"schema": request_schema},
         "resources": {},
     }
+    if version == CURRENT_SESSION_VERSION:
+        session["results"] = []
+        session["editorState"] = {"featureCatalog": None}
 
     validate_session(session)
     assert version in SUPPORTED_SESSION_VERSIONS
@@ -1823,6 +2399,65 @@ def test_gui_only_circular_session_maps_to_cli_args(tmp_path: Path) -> None:
     assert "--suppress_skew" not in spec.args
 
 
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_gui_only_session_restores_hidden_scale_as_cli_flag(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    files = (
+        {"c_gb": _file_entry("input.gb", b"LOCUS       TEST\n")}
+        if mode == "circular"
+        else {
+            "linearSeqs": [
+                {"gb": _file_entry("input.gb", b"LOCUS       TEST\n")}
+            ]
+        }
+    )
+    session = _minimal_session(files, mode=mode)
+    session["config"]["form"]["show_scale"] = False
+    if mode == "linear":
+        session["config"]["form"]["linear_ruler_on_axis"] = True
+
+    spec = session_to_cli_args(
+        session,
+        mode=mode,
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assert "--hide_scale" in spec.args
+    if mode == "linear":
+        assert "--ruler_on_axis" in spec.args
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_sparse_gui_session_keeps_scale_visible_by_default(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    files = (
+        {"c_gb": _file_entry("input.gb", b"LOCUS       TEST\n")}
+        if mode == "circular"
+        else {
+            "linearSeqs": [
+                {"gb": _file_entry("input.gb", b"LOCUS       TEST\n")}
+            ]
+        }
+    )
+    session = _minimal_session(files, mode=mode)
+
+    spec = session_to_cli_args(
+        session,
+        mode=mode,
+        temp_dir=tmp_path,
+        output_override=None,
+        format_override=None,
+    )
+
+    assert "--hide_scale" not in spec.args
+
+
 def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> None:
     session = _minimal_session(
         {
@@ -2014,6 +2649,48 @@ def test_gui_only_linear_session_restores_top_level_losatp_keys(tmp_path: Path) 
     assert spec.args[spec.args.index("--losatp_threads") + 1] == "4"
 
 
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_session_projects_hidden_scale_to_web_and_canonical_state(
+    mode: str,
+) -> None:
+    args = ["--gbk", "input.gb", "--hide_scale"]
+    if mode == "linear":
+        args.extend(
+            [
+                "--track_layout",
+                "above",
+                "--scale_style",
+                "ruler",
+                "--ruler_on_axis",
+            ]
+        )
+    payload = build_session_json(
+        SessionBuildContext(
+            mode=mode,
+            output_prefix="out",
+            render_formats=("svg",),
+            cli_invocation_args=tuple(args),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 7, 31),
+        canonical_request=_canonical_request_with_scale_visibility(
+            mode,
+            show=False,
+        ),
+    )
+
+    assert payload["config"]["form"]["show_scale"] is False
+    assert (
+        payload["renderRequest"]["diagramOptions"]["config"]["objects"]["scale"][
+            "show"
+        ]
+        is False
+    )
+    if mode == "linear":
+        assert payload["config"]["form"]["linear_ruler_on_axis"] is False
+
+
 def test_cli_session_config_includes_lossless_cli_options() -> None:
     args = (
         "-f",
@@ -2083,6 +2760,7 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
     assert config["form"]["prefix"] == "out"
     assert config["form"]["align_center"] is True
     assert config["form"]["separate_strands"] is True
+    assert config["form"]["show_scale"] is True
     assert config["form"]["scale_style"] == "ruler"
     assert config["form"]["show_gc"] is True
     assert config["form"]["show_skew"] is True
@@ -2091,7 +2769,8 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
     assert config["adv"]["depth_large_tick_interval"] == "4"
     assert "depth_tick_interval" not in config["adv"]
     assert config["palette"] == "ajisai"
-    assert config["blastSource"] == "losat"
+    assert "blastSource" not in config
+    assert "blastSource" not in config["adv"]
     assert config["losatProgram"] == "blastp"
     assert config["losat"]["threadsPerJob"] == "32"
     assert config["losat"]["blastp"]["mode"] == "orthogroup"
@@ -2108,7 +2787,7 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
     ]
 
 
-def test_cli_session_config_populates_safe_linear_row_fields() -> None:
+def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
     args = (
         "--gbk",
         "a.gb",
@@ -2174,21 +2853,16 @@ def test_cli_session_config_populates_safe_linear_row_fields() -> None:
         canonical_request=_canonical_request("linear"),
     )
 
-    seqs = payload["files"]["linearSeqs"]
-    assert seqs[0]["definition"] == "Alpha"
-    assert seqs[0]["record_subtitle"] == "Alpha subtitle"
-    assert seqs[0]["region_record_id"] == "RecA"
-    assert seqs[0]["region_reverse"] is True
-    assert seqs[1]["definition"] == "Beta"
-    assert seqs[1]["record_subtitle"] == "Beta subtitle"
-    assert seqs[1]["region_record_id"] == "RecB"
-    assert seqs[1]["region_start"] == 10
-    assert seqs[1]["region_end"] == 20
-    assert seqs[1]["region_reverse"] is True
+    assert payload["version"] == CURRENT_SESSION_VERSION
+    assert "files" not in payload
+    assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert payload["resources"]
     assert payload["orthogroupState"]["selectedOrthogroupAlignmentFeature"] == "target_feature"
+    assert "linearRecordLayout" not in payload["config"]
+    assert "linearComparisonPlan" not in payload["config"]
 
 
-def test_cli_session_config_omits_ambiguous_multi_record_row_fields() -> None:
+def test_current_cli_session_writer_omits_legacy_ambiguous_linear_files() -> None:
     args = (
         "--gbk",
         "multi.gb",
@@ -2238,11 +2912,10 @@ def test_cli_session_config_omits_ambiguous_multi_record_row_fields() -> None:
         canonical_request=_canonical_request("linear"),
     )
 
-    seq = payload["files"]["linearSeqs"][0]
-    assert seq["definition"] == ""
-    assert seq["region_start"] is None
-    assert seq["region_end"] is None
-    assert seq["region_reverse"] is False
+    assert payload["version"] == CURRENT_SESSION_VERSION
+    assert "files" not in payload
+    assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert payload["resources"]
 
 
 def test_session_pre_parse_rejects_unsupported_options() -> None:
@@ -2363,6 +3036,17 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert "files" not in payload
     assert payload["resources"]["record-1-genbank"]["data"]
     assert "<svg" in payload["results"][0]["content"]
+    catalog = payload["editorState"]["featureCatalog"]
+    assert catalog["schema"] == 3
+    assert len(catalog["items"]) == len(payload["results"]) == 1
+    assert catalog["items"][0]["features"]
+    assert catalog["items"][0]["biologicalFeatures"]
+    assert not {
+        "extractedFeatures",
+        "biologicalFeatures",
+        "featureCatalog",
+    }.intersection(payload["features"])
+    assert "groups" not in payload["orthogroupState"]
     assert payload["cliInvocation"]["mode"] == "circular"
     assert payload["cliInvocation"]["fileBindings"][0]["slot"] == "files.c_gb"
     stored_args = payload["cliInvocation"]["args"]

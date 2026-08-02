@@ -164,6 +164,7 @@ def resolve_mode_profile_overrides(
     if (
         profile.mode == "linear"
         and explicit.get("canvas.linear.ruler_on_axis") is True
+        and explicit.get("objects.scale.show", True) is True
         and "objects.axis.linear.stroke_color" not in explicit
     ):
         resolved["objects.axis.linear.stroke_color"] = profile.linear_ruler_axis_color

@@ -1,8 +1,23 @@
 const GZIP_MAGIC = Object.freeze([0x1f, 0x8b]);
 const MAX_SESSION_FILE_BYTES = 200 * 1024 * 1024;
 const MAX_EXPANDED_SESSION_BYTES = 512 * 1024 * 1024;
+export const SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
-const downloadBlob = (blob, filename) => {
+export const confirmLargeSessionBlob = (
+  blob,
+  confirmFn = globalThis.confirm
+) => {
+  if (!(blob instanceof Blob)) {
+    throw new TypeError('Session download confirmation requires a Blob.');
+  }
+  if (blob.size <= SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES) return true;
+  if (typeof confirmFn !== 'function') return true;
+  return Boolean(confirmFn(
+    `Compressed session size is ${(blob.size / (1024 * 1024)).toFixed(1)} MB. Continue?`
+  ));
+};
+
+export const downloadSessionBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -42,7 +57,7 @@ const isGzipFile = async (file) => {
   return GZIP_MAGIC.every((byte, index) => header[index] === byte);
 };
 
-export const downloadCompressedSession = async (data, filename) => {
+export const compressSessionData = async (data) => {
   if (typeof CompressionStream !== 'function') {
     throw new Error('This browser does not support gzip session export.');
   }
@@ -50,7 +65,7 @@ export const downloadCompressedSession = async (data, filename) => {
   const source = new Blob([json], { type: 'application/json' });
   const compressedStream = source.stream().pipeThrough(new CompressionStream('gzip'));
   const compressed = await new Response(compressedStream).blob();
-  downloadBlob(compressed.slice(0, compressed.size, 'application/gzip'), filename);
+  return compressed.slice(0, compressed.size, 'application/gzip');
 };
 
 export const readSessionText = async (file) => {

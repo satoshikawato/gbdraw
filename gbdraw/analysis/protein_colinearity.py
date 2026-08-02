@@ -35,6 +35,8 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 from gbdraw.core.record_metadata import (
     _absolute_display_interval,
     _read_coord_map as _read_record_coord_map,
+    _source_feature_index,
+    _source_feature_location_parts,
 )
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
@@ -2673,7 +2675,14 @@ def _iter_record_features(
     items: list[tuple[int, SeqFeature, tuple[SeqFeature, ...]]] = []
 
     def walk(feature: SeqFeature, ancestors: tuple[SeqFeature, ...]) -> None:
-        items.append((len(items), feature, ancestors))
+        source_index = _source_feature_index(feature)
+        items.append(
+            (
+                len(items) if source_index is None else source_index,
+                feature,
+                ancestors,
+            )
+        )
         sub_features = getattr(feature, "sub_features", None) or []
         for sub_feature in sub_features:
             walk(sub_feature, ancestors + (feature,))
@@ -2776,6 +2785,9 @@ def _feature_hash_parts(
 ) -> tuple[tuple[int, int, int | None], ...]:
     """Return hash parts in the source-record biological coordinate system."""
 
+    source_parts = _source_feature_location_parts(feature)
+    if source_parts is not None:
+        return source_parts
     location = feature.location
     if location is None:
         return ()

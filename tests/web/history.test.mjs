@@ -331,9 +331,70 @@ const createLayoutPreferences = () => ({
   const proteinTable = makeFile('resolved-protein.tsv', 40);
   const orthogroupsJson = makeFile('orthogroups.json', 50);
   const collinearityJson = makeFile('collinearity.json', 60);
+  const comparisonUpload = makeFile('selected-comparison.tsv', 70);
+  const nestedStyleOverride = {
+    stroke: '#123456',
+    strokeWidth: 2,
+    hatch: {
+      angle: 45,
+      spacing: 4,
+      color: '#654321',
+      width: 1,
+      cross: true
+    }
+  };
+  let modeProfiles = {
+    schema: 1,
+    activeMode: 'circular',
+    profiles: {
+      circular: { values: { identity: 88 }, managed: { identity: false } },
+      linear: { values: { identity: 77 }, managed: { identity: false } }
+    }
+  };
   const state = {
-    form: { prefix: 'before' },
-    adv: { features: ['CDS'] },
+    form: { prefix: 'before', show_scale: true },
+    adv: {
+      features: ['CDS'],
+      feature_shapes: { CDS: 'arrow' },
+      arrow_head_length_ratio: 1.5,
+      arrow_shaft_width_ratio: 0.25,
+      circular_track_slots_enabled: true,
+      circular_track_slots_axis_index: 1,
+      circular_track_slots: [
+        {
+          id: 'notes',
+          renderer: 'annotations',
+          enabled: true,
+          side: 'outside',
+          params: {
+            set_id: 'review',
+            lane_gap_px: 5,
+            style_override: nestedStyleOverride
+          }
+        },
+        {
+          id: 'disabled_space',
+          renderer: 'spacer',
+          enabled: false,
+          side: 'inside',
+          width: '8px',
+          params: {}
+        }
+      ],
+      linear_track_slots_enabled: false,
+      linear_track_slots_axis_index: 1,
+      linear_track_slots: [
+        {
+          id: 'inactive_space',
+          renderer: 'spacer',
+          enabled: true,
+          side: 'below',
+          height: '12px',
+          spacing: '3px',
+          params: {}
+        }
+      ]
+    },
     files: {
       c_gb: file,
       c_gff: null,
@@ -374,7 +435,25 @@ const createLayoutPreferences = () => ({
       whitelist: null,
       qualifier_priority: null
     },
-    linearSeqs: [],
+    linearSeqs: [
+      { uid: 'record-a', gb: null, gff: null, fasta: null, depth: null },
+      { uid: 'record-b', gb: null, gff: null, fasta: null, depth: null }
+    ],
+    linearComparisonPlan: {
+      mode: 'selected',
+      defaultSource: 'losat',
+      edges: [{
+        id: 'edge-a-b',
+        queryUid: 'record-a',
+        subjectUid: 'record-b',
+        included: true,
+        fileActive: true,
+        losatFilenameActive: true,
+        source: 'upload',
+        file: comparisonUpload,
+        losatFilename: 'custom-query.fna'
+      }]
+    },
     results: ref([{ name: 'r1', content: '<svg id="a"></svg>' }]),
     selectedResultIndex: ref(0),
     mode: ref('circular'),
@@ -411,30 +490,70 @@ const createLayoutPreferences = () => ({
     state,
     fileStore,
     nextTick: async () => {},
-    buildConfigData: () => ({ form: state.form, adv: state.adv }),
+    buildConfigData: () => ({
+      form: state.form,
+      adv: state.adv,
+      modeProfiles,
+      linearComparisonPlan: {
+        mode: state.linearComparisonPlan.mode,
+        defaultSource: state.linearComparisonPlan.defaultSource,
+        edges: state.linearComparisonPlan.edges.map(({ file: _file, ...edge }) => edge)
+      }
+    }),
     applyConfigData: (config) => {
       state.form = { ...config.form };
       state.adv = { ...config.adv };
+      modeProfiles = structuredClone(config.modeProfiles);
+      state.linearComparisonPlan.mode = config.linearComparisonPlan.mode;
+      state.linearComparisonPlan.defaultSource = config.linearComparisonPlan.defaultSource;
+      state.linearComparisonPlan.edges.splice(
+        0,
+        state.linearComparisonPlan.edges.length,
+        ...structuredClone(config.linearComparisonPlan.edges).map((edge) => ({
+          ...edge,
+          file: null
+        }))
+      );
     }
   });
 
   const snapshot = await snapshots.buildHistorySnapshot();
   state.form.prefix = 'after';
+  state.form.show_scale = false;
+  state.adv.arrow_head_length_ratio = null;
+  state.adv.arrow_shaft_width_ratio = 1.0;
   state.files.c_gb = null;
   state.files.c_conservation_blasts_source = null;
   state.files.linearCanonicalComparisons = [];
+  state.linearComparisonPlan.mode = 'none';
+  state.linearComparisonPlan.defaultSource = 'upload';
+  state.linearComparisonPlan.edges.splice(0);
   state.results.value = [{ name: 'r2', content: '<svg id="b"></svg>' }];
   state.featureColorOverrides.f1.color = '#222222';
+  modeProfiles.profiles.circular.values.identity = 70;
 
   assert.equal(snapshot.config.form.prefix, 'before');
   assert.equal(snapshot.files.c_gb.name, 'restore.gb');
   await snapshots.applyHistorySnapshot(snapshot);
   assert.equal(state.form.prefix, 'before');
+  assert.equal(state.form.show_scale, true);
+  assert.equal(state.adv.feature_shapes.CDS, 'arrow');
+  assert.equal(state.adv.arrow_head_length_ratio, 1.5);
+  assert.equal(state.adv.arrow_shaft_width_ratio, 0.25);
   assert.equal(state.files.c_gb.name, 'restore.gb');
   assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
   assert.equal(state.files.c_conservation_fastas.length, 2);
   assert.equal(state.files.c_conservation_fastas[0], null);
   assert.equal(state.files.c_conservation_fastas[1].name, 'comparison-2.fa');
+  assert.equal(state.linearComparisonPlan.mode, 'selected');
+  assert.equal(state.linearComparisonPlan.defaultSource, 'losat');
+  assert.equal(state.linearComparisonPlan.edges[0].id, 'edge-a-b');
+  assert.equal(state.linearComparisonPlan.edges[0].source, 'upload');
+  assert.equal(state.linearComparisonPlan.edges[0].included, true);
+  assert.equal(state.linearComparisonPlan.edges[0].fileActive, true);
+  assert.equal(state.linearComparisonPlan.edges[0].losatFilenameActive, true);
+  assert.equal(state.linearComparisonPlan.edges[0].losatFilename, 'custom-query.fna');
+  assert.equal(state.linearComparisonPlan.edges[0].file.name, 'selected-comparison.tsv');
   assert.equal(
     state.files.linearCanonicalComparisons[0].file.name,
     'resolved-protein.tsv'
@@ -457,8 +576,103 @@ const createLayoutPreferences = () => ({
   );
   assert.equal(state.results.value[0].name, 'r1');
   assert.equal(state.featureColorOverrides.f1.color, '#111111');
+  assert.equal(modeProfiles.profiles.circular.values.identity, 88);
+  assert.equal(modeProfiles.profiles.circular.managed.identity, false);
+  assert.equal(modeProfiles.profiles.linear.values.identity, 77);
   assert.deepEqual(state.featureVisibilityManualRules, []);
   assert.equal(state.canvasPadding.top, 1);
+
+  const history = createHistoryManager({
+    fileStore,
+    buildSnapshot: snapshots.buildHistorySnapshot,
+    applySnapshot: snapshots.applyHistorySnapshot
+  });
+  await history.captureBaseline('P3 baseline');
+  await history.runUndoable('Hide coordinate scale', () => {
+    state.form.show_scale = false;
+  });
+  assert.equal(state.form.show_scale, false);
+  await history.undo();
+  assert.equal(state.form.show_scale, true);
+  await history.redo();
+  assert.equal(state.form.show_scale, false);
+  await history.undo();
+  assert.equal(state.form.show_scale, true);
+
+  await history.runUndoable('Edit arrow geometry', () => {
+    state.adv.arrow_head_length_ratio = 2;
+    state.adv.arrow_shaft_width_ratio = 0.75;
+  });
+  assert.equal(state.adv.arrow_head_length_ratio, 2);
+  assert.equal(state.adv.arrow_shaft_width_ratio, 0.75);
+  await history.undo();
+  assert.equal(state.adv.arrow_head_length_ratio, 1.5);
+  assert.equal(state.adv.arrow_shaft_width_ratio, 0.25);
+  await history.redo();
+  assert.equal(state.adv.arrow_head_length_ratio, 2);
+  assert.equal(state.adv.arrow_shaft_width_ratio, 0.75);
+  await history.undo();
+
+  await history.runUndoable('Edit Annotation lane gap', () => {
+    state.adv.circular_track_slots[0].params.lane_gap_px = 9;
+  });
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+  await history.undo();
+  assert.equal(state.adv.circular_track_slots[0].params.lane_gap_px, 5);
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+  await history.redo();
+  assert.equal(state.adv.circular_track_slots[0].params.lane_gap_px, 9);
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+
+  const beforeCustomReset = structuredClone({
+    slots: state.adv.circular_track_slots,
+    axisIndex: state.adv.circular_track_slots_axis_index,
+    linearSlots: state.adv.linear_track_slots,
+    linearEnabled: state.adv.linear_track_slots_enabled
+  });
+  await history.runUndoable('Reset Circular Custom Tracks', () => {
+    state.adv.circular_track_slots.splice(
+      0,
+      state.adv.circular_track_slots.length,
+      {
+        id: 'features',
+        renderer: 'features',
+        enabled: true,
+        side: 'inside',
+        params: { lane_direction: 'inside' }
+      }
+    );
+    state.adv.circular_track_slots_axis_index = 0;
+  });
+  await history.undo();
+  assert.deepEqual(state.adv.circular_track_slots, beforeCustomReset.slots);
+  assert.equal(
+    state.adv.circular_track_slots_axis_index,
+    beforeCustomReset.axisIndex
+  );
+  assert.deepEqual(state.adv.linear_track_slots, beforeCustomReset.linearSlots);
+  assert.equal(
+    state.adv.linear_track_slots_enabled,
+    beforeCustomReset.linearEnabled
+  );
+  assert.deepEqual(
+    state.adv.circular_track_slots[0].params.style_override,
+    nestedStyleOverride
+  );
+  await history.redo();
+  assert.deepEqual(
+    state.adv.circular_track_slots.map((slot) => slot.id),
+    ['features']
+  );
 }
 
 {

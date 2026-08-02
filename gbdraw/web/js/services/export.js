@@ -39,23 +39,24 @@ const getCurrentSvgString = ({ interactive = false } = {}) => {
   stripTransientPreviewState(clone, { stripCursor: false });
   stripPreviewFeatureSearchClasses(clone);
   if (interactive) {
-    const biologicalFeatures = Array.isArray(state.biologicalFeatures?.value) && state.biologicalFeatures.value.length > 0
-      ? state.biologicalFeatures.value
-      : state.extractedFeatures.value;
-    enrichSvgWithStandaloneInteractivity(clone, {
-      features: biologicalFeatures,
+    const resultIndex = Number(state.selectedResultIndex.value);
+    const result = state.results.value?.[resultIndex] || null;
+    const enriched = enrichSvgWithStandaloneInteractivity(clone, {
       popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich',
-      editableLabels: state.editableLabels.value,
+      featureCatalog: state.featureCatalog?.value,
+      catalogResultIndex: resultIndex,
+      catalogResultName: result?.name,
+      requireFeatureCatalog: true,
+      editableLabels: state.editableLabels?.value,
       labelTextFeatureOverrides: state.labelTextFeatureOverrides,
       labelTextBulkOverrides: state.labelTextBulkOverrides,
-      featureOrthogroupIndex: state.featureOrthogroupIndex.value,
-      orthogroups: state.orthogroups.value,
       orthogroupNameOverrides: state.orthogroupNameOverrides,
-      orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides,
-      legendEntries: state.legendEntries.value,
-      currentColors: state.currentColors.value,
-      sequenceSources: state.matchSequenceRegistry?.values?.() || []
+      orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides
     });
+    if (!enriched) {
+      console.warn('Interactive SVG export requires the committed feature catalog.');
+      return '';
+    }
   } else {
     stripEditorOnlyCursorStyles(clone);
   }

@@ -5,7 +5,15 @@ from __future__ import annotations
 
 from typing import Tuple
 
-from .arrows import set_arrow_shoulder
+from .arrows import (
+    ArrowHeadLengthRatio,
+    calculate_arrow_shaft_bounds,
+    cap_arrow_head_length,
+    has_arrow_shaft,
+    is_legacy_arrow_short,
+    resolve_arrow_head_length_px,
+    set_arrow_shoulder,
+)
 from ..layout.linear import calculate_feature_position_factors_linear
 from ..layout.linear_coords import normalize_position_to_linear_track
 
@@ -156,7 +164,7 @@ def normalize_feature_positions(
     return normalized_start, normalized_end
 
 
-def construct_arrowhead_path(
+def construct_arrow_path(
     arrow_start: float,
     arrow_end: float,
     shoulder: float,
@@ -166,7 +174,7 @@ def construct_arrowhead_path(
     cds_height: float,
     feature_y_positions: FeatureYPositions | None = None,
 ) -> list[str]:
-    """Construct the SVG path for an arrowhead."""
+    """Construct the legacy five-vertex arrow path without changing its text."""
     if feature_y_positions is None:
         if factors is None:
             raise ValueError("factors or feature_y_positions is required")
@@ -181,7 +189,7 @@ def construct_arrowhead_path(
     start_x_1, start_y_1 = arrow_start, top_y
     start_x_2, start_y_2 = arrow_start, bottom_y
 
-    if abs(normalized_feat_len) < normalized_arrow_length:
+    if is_legacy_arrow_short(normalized_feat_len, normalized_arrow_length):
         feature_path = f"M {start_x_1},{start_y_1} L {point_x},{point_y} L {start_x_2},{start_y_2} z"
     else:
         end_x_1, end_y_1 = shoulder, top_y
@@ -197,6 +205,143 @@ def construct_arrowhead_path(
     return ["block", feature_path]
 
 
+def construct_arrowhead_path(
+    arrow_start: float,
+    arrow_end: float,
+    shoulder: float,
+    factors: list[float] | None,
+    normalized_feat_len: float,
+    normalized_arrow_length: float,
+    cds_height: float,
+    feature_y_positions: FeatureYPositions | None = None,
+) -> list[str]:
+    """Compatibility wrapper for the legacy five-vertex arrow builder."""
+    return construct_arrow_path(
+        arrow_start,
+        arrow_end,
+        shoulder,
+        factors,
+        normalized_feat_len,
+        normalized_arrow_length,
+        cds_height,
+        feature_y_positions=feature_y_positions,
+    )
+
+
+def _construct_narrow_arrow_path(
+    arrow_start: float,
+    arrow_end: float,
+    shoulder: float,
+    normalized_feat_len: float,
+    resolved_head_length: float,
+    feature_y_positions: FeatureYPositions,
+    shaft_width_ratio: float,
+) -> list[str]:
+    """Construct a narrow-shaft arrow, or a triangle when no shaft remains."""
+    top_y, middle_y, bottom_y = feature_y_positions
+    if not has_arrow_shaft(normalized_feat_len, resolved_head_length):
+        feature_path = (
+            f"M {arrow_start},{top_y} "
+            f"L {arrow_end},{middle_y} "
+            f"L {arrow_start},{bottom_y} z"
+        )
+        return ["block", feature_path]
+
+    shaft_top_y, shaft_bottom_y = calculate_arrow_shaft_bounds(
+        top_y,
+        middle_y,
+        bottom_y,
+        shaft_width_ratio,
+    )
+    feature_path = (
+        f"M {arrow_start},{shaft_top_y} "
+        f"L {shoulder},{shaft_top_y} "
+        f"L {shoulder},{top_y} "
+        f"L {arrow_end},{middle_y} "
+        f"L {shoulder},{bottom_y} "
+        f"L {shoulder},{shaft_bottom_y} "
+        f"L {arrow_start},{shaft_bottom_y} z"
+    )
+    return ["block", feature_path]
+
+
+def create_arrow_path_linear(
+    coord_dict: dict,
+    arrow_length: float,
+    cds_height: float,
+    feature_strand: str,
+    genome_length: int,
+    alignment_width: float,
+    genome_size_normalization_factor: float,
+    separate_strands: bool,
+    feature_track_id: int = 0,
+    track_layout: str = "middle",
+    track_axis_gap: float | None = None,
+    feature_y_positions: FeatureYPositions | None = None,
+    head_length_ratio: ArrowHeadLengthRatio = "auto",
+    shaft_width_ratio: float = 1.0,
+) -> list[str]:
+    """Create a Linear arrow, preserving the legacy path at full shaft width."""
+    normalized_start, normalized_end = normalize_feature_positions(
+        coord_dict, genome_length, alignment_width, genome_size_normalization_factor
+    )
+    normalized_feat_len = normalized_end - normalized_start
+
+    automatic_head_length_px = calculate_normalized_arrow_length(
+        arrow_length, genome_length, alignment_width, genome_size_normalization_factor
+    )
+
+    arrow_start, arrow_end = get_arrow_strand_positions(normalized_start, normalized_end)[coord_dict["feat_strand"]]
+    resolved_y_positions = _resolve_feature_y_positions(
+        cds_height=cds_height,
+        feature_strand=feature_strand,
+        separate_strands=separate_strands,
+        feature_track_id=feature_track_id,
+        track_layout=track_layout,
+        track_axis_gap=track_axis_gap,
+        feature_y_positions=feature_y_positions,
+    )
+    requested_head_length = resolve_arrow_head_length_px(
+        head_length_ratio,
+        abs(resolved_y_positions[2] - resolved_y_positions[0]),
+        automatic_head_length_px,
+        shaft_width_ratio,
+    )
+    if float(shaft_width_ratio) == 1.0:
+        shoulder = set_arrow_shoulder(
+            coord_dict["feat_strand"], arrow_end, requested_head_length
+        )
+        return construct_arrow_path(
+            arrow_start,
+            arrow_end,
+            shoulder,
+            None,
+            normalized_feat_len,
+            requested_head_length,
+            cds_height,
+            feature_y_positions=resolved_y_positions,
+        )
+
+    resolved_head_length = cap_arrow_head_length(
+        normalized_feat_len,
+        requested_head_length,
+    )
+    shoulder = set_arrow_shoulder(
+        coord_dict["feat_strand"],
+        arrow_end,
+        resolved_head_length,
+    )
+    return _construct_narrow_arrow_path(
+        arrow_start,
+        arrow_end,
+        shoulder,
+        normalized_feat_len,
+        resolved_head_length,
+        resolved_y_positions,
+        shaft_width_ratio,
+    )
+
+
 def create_arrowhead_path_linear(
     coord_dict: dict,
     arrow_length: float,
@@ -210,20 +355,46 @@ def create_arrowhead_path_linear(
     track_layout: str = "middle",
     track_axis_gap: float | None = None,
     feature_y_positions: FeatureYPositions | None = None,
+    head_length_ratio: ArrowHeadLengthRatio = "auto",
 ) -> list[str]:
-    """Creates a linear SVG path for an arrowhead feature."""
+    """Compatibility wrapper for the legacy five-vertex Linear arrow."""
+    return create_arrow_path_linear(
+        coord_dict=coord_dict,
+        arrow_length=arrow_length,
+        cds_height=cds_height,
+        feature_strand=feature_strand,
+        genome_length=genome_length,
+        alignment_width=alignment_width,
+        genome_size_normalization_factor=genome_size_normalization_factor,
+        separate_strands=separate_strands,
+        feature_track_id=feature_track_id,
+        track_layout=track_layout,
+        track_axis_gap=track_axis_gap,
+        feature_y_positions=feature_y_positions,
+        head_length_ratio=head_length_ratio,
+        shaft_width_ratio=1.0,
+    )
+
+
+def create_arrow_shaft_path_linear(
+    coord_dict: dict,
+    genome_length: int,
+    alignment_width: float,
+    genome_size_normalization_factor: float,
+    cds_height: float,
+    feature_strand: str,
+    separate_strands: bool,
+    feature_track_id: int,
+    shaft_width_ratio: float,
+    track_layout: str = "middle",
+    track_axis_gap: float | None = None,
+    feature_y_positions: FeatureYPositions | None = None,
+) -> list[str]:
+    """Create a reduced-width shaft block for a multipart arrow."""
     normalized_start, normalized_end = normalize_feature_positions(
         coord_dict, genome_length, alignment_width, genome_size_normalization_factor
     )
-    normalized_feat_len = normalized_end - normalized_start
-
-    normalized_arrow_length = calculate_normalized_arrow_length(
-        arrow_length, genome_length, alignment_width, genome_size_normalization_factor
-    )
-
-    arrow_start, arrow_end = get_arrow_strand_positions(normalized_start, normalized_end)[coord_dict["feat_strand"]]
-    shoulder = set_arrow_shoulder(coord_dict["feat_strand"], arrow_end, normalized_arrow_length)
-    resolved_y_positions = _resolve_feature_y_positions(
+    top_y, middle_y, bottom_y = _resolve_feature_y_positions(
         cds_height=cds_height,
         feature_strand=feature_strand,
         separate_strands=separate_strands,
@@ -232,27 +403,31 @@ def create_arrowhead_path_linear(
         track_axis_gap=track_axis_gap,
         feature_y_positions=feature_y_positions,
     )
-
-    return construct_arrowhead_path(
-        arrow_start,
-        arrow_end,
-        shoulder,
-        None,
-        normalized_feat_len,
-        normalized_arrow_length,
-        cds_height,
-        feature_y_positions=resolved_y_positions,
+    shaft_top_y, shaft_bottom_y = calculate_arrow_shaft_bounds(
+        top_y,
+        middle_y,
+        bottom_y,
+        shaft_width_ratio,
     )
+    feature_path = (
+        f"M {normalized_start},{shaft_top_y} "
+        f"L {normalized_end},{shaft_top_y} "
+        f"L {normalized_end},{shaft_bottom_y} "
+        f"L {normalized_start},{shaft_bottom_y} z"
+    )
+    return ["block", feature_path]
 
 
 __all__ = [
     "calculate_normalized_arrow_length",
+    "construct_arrow_path",
     "construct_arrowhead_path",
+    "create_arrow_path_linear",
+    "create_arrow_shaft_path_linear",
     "create_arrowhead_path_linear",
     "create_intron_path_linear",
     "create_rectangle_path_linear",
     "get_arrow_strand_positions",
     "normalize_feature_positions",
 ]
-
 

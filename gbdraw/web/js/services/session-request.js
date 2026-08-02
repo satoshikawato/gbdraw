@@ -16,18 +16,21 @@ import {
   serializeFeatureVisibilityRules
 } from '../app/feature-visibility.js';
 import {
-  buildCircularTrackSlotSpec,
+  applyCircularGeometryShortcuts,
+  buildCircularTrackSlotPayload,
   CIRCULAR_TRACK_RENDERERS,
+  createDefaultCircularTrackSlots,
+  hasCircularGeometryShortcuts,
+  inferLegacyAxisIndexFromFeature,
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
 import {
-  buildLinearTrackSlotSpec,
+  buildLinearTrackSlotPayload,
   LINEAR_TRACK_RENDERERS,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-  linearTrackAxisIndexForEnabledSlots,
   migrateLinearTrackSlotsToCurrentSchema,
   parseLinearTrackSlotSpecs
 } from '../app/linear-track-slots.js';
@@ -41,11 +44,18 @@ import {
   orderedConservationSources,
   orderedOptionalConservationFiles
 } from '../app/conservation-series.js';
-import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
+import {
+  assertValidCustomTrackPlan,
+  validateCustomTrackPlan,
+  validateTrackSlotBindingInvariants
+} from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import {
+  arrowHeadLengthRatioForState,
   defaultFeatureRendering,
+  normalizeArrowHeadLengthRatio,
+  normalizeArrowShaftWidthRatio,
   normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
 import {
@@ -109,6 +119,8 @@ const HISTORICAL_CONFIG_OVERRIDES = Object.freeze({
 // The snake_case aliases derived below exist solely in the persisted-session
 // reader; they are never emitted by buildConfigOverrides().
 const CONFIG_OVERRIDE_PATHS = Object.freeze({
+  arrowHeadLengthRatio: 'objects.features.arrow_geometry.head_length_ratio',
+  arrowShaftWidthRatio: 'objects.features.arrow_geometry.shaft_width_ratio',
   blockStrokeColor: 'objects.features.block_stroke_color',
   circularAxisStrokeColor: 'objects.axis.circular.stroke_color',
   linearAxisStrokeColor: 'objects.axis.linear.stroke_color',
@@ -158,6 +170,7 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   depthSmallTickInterval: 'objects.depth.small_tick_interval',
   depthTickFontSize: 'objects.depth.tick_font_size',
   depthShareAxis: 'objects.depth.share_axis',
+  showScale: 'objects.scale.show',
   scaleStyle: 'objects.scale.style',
   scaleStrokeColor: 'objects.scale.stroke_color',
   scaleLabelColor: 'objects.scale.label_color',
@@ -243,9 +256,9 @@ const resolveCircularBatchPrefixes = (records, explicitPrefix) => {
 
 const renderOutputPayload = (prefix) => ({
   prefix,
-  formats: ['interactive_svg'],
+  formats: ['svg'],
   overwrite: false,
-  interactiveMetadataPolicy: 'auto'
+  interactiveMetadataPolicy: 'omit'
 });
 
 const optionalNumber = (value) => {
@@ -508,7 +521,7 @@ const buildRecords = ({ state, filesData, resources }) => {
   }));
 };
 
-const buildConfigOverrides = (state) => {
+const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_depth) } = {}) => {
   const { form, adv } = state;
   const circular = state.mode.value === 'circular';
   const linearLabelPlacement = circular
@@ -529,10 +542,15 @@ const buildConfigOverrides = (state) => {
     ? null
     : effectiveLinearAxisColor({
         axisColor: adv.axis_stroke_color,
-        rulerOnAxis: Boolean(form.linear_ruler_on_axis),
+        rulerOnAxis:
+          form.show_scale !== false && Boolean(form.linear_ruler_on_axis),
         managed: linearAxisManaged
       });
   const overrides = {
+    [CONFIG_OVERRIDE_PATHS.arrowHeadLengthRatio]:
+      normalizeArrowHeadLengthRatio(adv.arrow_head_length_ratio),
+    [CONFIG_OVERRIDE_PATHS.arrowShaftWidthRatio]:
+      normalizeArrowShaftWidthRatio(adv.arrow_shaft_width_ratio),
     [CONFIG_OVERRIDE_PATHS.blockStrokeColor]: adv.block_stroke_color || null,
     [CONFIG_OVERRIDE_PATHS.lineStrokeColor]: adv.line_stroke_color || null,
     [CONFIG_OVERRIDE_PATHS.labelRendering]: adv.label_rendering || 'auto',
@@ -540,7 +558,7 @@ const buildConfigOverrides = (state) => {
     [CONFIG_OVERRIDE_PATHS.showSkew]: circular
       ? !form.suppress_skew
       : Boolean(form.show_skew),
-    [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(form.show_depth),
+    [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(depthRequested),
     [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: circular
       ? ({ none: 'none', out: 'outer', both: 'both' }[form.labels_mode] || 'none')
       : form.show_labels_linear,
@@ -569,6 +587,7 @@ const buildConfigOverrides = (state) => {
       optionalNumber(adv.depth_small_tick_interval),
     [CONFIG_OVERRIDE_PATHS.depthTickFontSize]: optionalNumber(adv.depth_tick_font_size),
     [CONFIG_OVERRIDE_PATHS.depthShareAxis]: Boolean(adv.depth_share_axis),
+    [CONFIG_OVERRIDE_PATHS.showScale]: form.show_scale !== false,
     [CONFIG_OVERRIDE_PATHS.scaleInterval]: optionalNumber(adv.scale_interval),
     ...(state.filterMode.value === 'Blacklist'
       ? {
@@ -759,6 +778,21 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
   }
 };
 
+const depthSourceRowsForRequest = ({ state, filesData, recordCount }) => (
+  state.mode.value === 'linear'
+    ? (filesData.linearSeqs || []).map((seq) => (
+        Array.isArray(seq.depth) ? seq.depth : (seq.depth ? [seq.depth] : [])
+      ))
+    : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount)
+);
+
+const logicalDepthTrackCountForRequest = ({ state, filesData, recordCount }) => {
+  const rows = depthSourceRowsForRequest({ state, filesData, recordCount });
+  return rows.reduce((maximum, row) => (
+    Math.max(maximum, Array.isArray(row) ? row.length : 0)
+  ), 0);
+};
+
 const buildDepthResources = ({ state, filesData, resources, diagramOptions, recordCount }) => {
   if (
     state.mode.value === 'circular' &&
@@ -769,9 +803,7 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
       `Circular Depth matrix has ${filesData.c_depth.length} record rows; expected ${recordCount}.`
     );
   }
-  const rows = state.mode.value === 'linear'
-    ? (filesData.linearSeqs || []).map((seq) => Array.isArray(seq.depth) ? seq.depth : (seq.depth ? [seq.depth] : []))
-    : normalizeRecordMajorDepthFileRows(filesData.c_depth, recordCount);
+  const rows = depthSourceRowsForRequest({ state, filesData, recordCount });
   if (!rows.some((row) => row.some(Boolean))) return;
   if (rows.length !== recordCount || rows.some((row) => !Array.isArray(row))) {
     throw new Error(
@@ -830,35 +862,251 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
   });
 };
 
-const buildTracks = (state) => {
-  const circular = state.mode.value === 'circular';
-  const storedLinearAxisIndex = optionalNumber(state.adv.linear_track_slots_axis_index);
-  const emittedLinearAxisIndex = (
-    !circular &&
-    state.adv.linear_track_slots_enabled &&
-    storedLinearAxisIndex !== null
+const circularGeometryShortcutsForState = (state) => ({
+  featureWidth: state.adv.feature_width_circular,
+  depthWidth: state.adv.depth_width_circular,
+  gcContentWidth: state.adv.gc_content_width_circular,
+  gcContentRadius: state.adv.gc_content_radius_circular,
+  gcSkewWidth: state.adv.gc_skew_width_circular,
+  gcSkewRadius: state.adv.gc_skew_radius_circular
+});
+
+const annotationSetIdsForState = (state) => (
+  (Array.isArray(state.annotationSets) ? state.annotationSets : [])
+    .map((set) => String(set?.id || '').trim())
+    .filter(Boolean)
+);
+
+const visibleFeatureUnderlaysForState = (state) => {
+  const featureShapes = {
+    repeat_region: defaultFeatureRendering('repeat_region'),
+    ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
+  };
+  return Array.from(state.adv.features || [])
+    .map((featureType) => String(featureType || '').trim())
+    .filter((featureType) => (
+      (featureShapes[featureType] || defaultFeatureRendering(featureType)) === 'underlay'
+    ));
+};
+
+const automaticCircularAnnotationSlots = (state) => {
+  const slots = [];
+  (Array.isArray(state.annotationSets) ? state.annotationSets : [])
+    .forEach((set, index) => {
+      const setId = String(set?.id || '').trim();
+      if (!setId) return;
+      const marks = Array.from(new Set(
+        (Array.isArray(set.annotations) ? set.annotations : [])
+          .map((annotation) => String(annotation?.mark || '').trim().toLowerCase())
+          .filter(Boolean)
+      ));
+      const laneMarks = marks.filter((mark) => mark !== 'highlight');
+      if (laneMarks.length > 0) {
+        slots.push({
+          id: `annotations_${index + 1}`,
+          renderer: 'annotations',
+          enabled: true,
+          width: null,
+          radius: null,
+          inner_gap_px: null,
+          outer_gap_px: null,
+          side: 'outside',
+          z: 0,
+          params: { set_id: setId, marks: laneMarks }
+        });
+      }
+      if (marks.includes('highlight')) {
+        slots.push({
+          id: `annotations_${index + 1}${laneMarks.length > 0 ? '_highlight' : ''}`,
+          renderer: 'annotations',
+          enabled: true,
+          width: null,
+          radius: null,
+          inner_gap_px: null,
+          outer_gap_px: null,
+          side: 'overlay',
+          z: -1,
+          params: {
+            set_id: setId,
+            marks: ['highlight'],
+            anchor_slot: 'features',
+            layer: 'underlay',
+            cover_anchor: true,
+            padding_px: 0
+          }
+        });
+      }
+    });
+  return slots;
+};
+
+const conservationSeriesForValidation = ({
+  state,
+  filesData,
+  resolvedCircularConservation
+}) => {
+  if (state.circularConservation?.enabled !== true) return [];
+  const conservationSource = String(
+    state.circularConservation?.source || ''
+  ).trim().toLowerCase();
+  const blastsAreDerived = filesData.c_conservation_blasts_source === 'losat-cache';
+  const sourceFiles = (
+    conservationSource === 'upload' || blastsAreDerived
   )
-    ? linearTrackAxisIndexForEnabledSlots(
-        state.adv.linear_track_slots,
-        storedLinearAxisIndex
-      )
-    : null;
+    ? filesData.c_conservation_blasts
+    : filesData.c_conservation_fastas;
+  let ordered = [];
+  try {
+    ordered = orderedConservationSources(
+      Array.isArray(sourceFiles) ? sourceFiles : [],
+      state.circularConservation || {}
+    );
+  } catch {
+    ordered = [];
+  }
+  const resolved = (Array.isArray(resolvedCircularConservation)
+    ? resolvedCircularConservation
+    : []
+  ).map((entry, index) => ({
+    ...entry,
+    sourceKey: String(entry?.sourceKey || entry?.seriesKey || `resolved-${index + 1}`),
+    sourceIndex: index,
+    orderIndex: index
+  }));
+  return [...ordered, ...resolved];
+};
+
+const buildTrackPlan = ({
+  state,
+  filesData,
+  recordCount,
+  resolvedCircularConservation
+}) => {
+  const circular = state.mode.value === 'circular';
+  const depthTrackCount = logicalDepthTrackCountForRequest({
+    state,
+    filesData,
+    recordCount
+  });
+  const annotationSetIds = annotationSetIdsForState(state);
+  const visibleFeatureUnderlays = visibleFeatureUnderlaysForState(state);
+
+  if (circular && state.adv.circular_track_slots_enabled) {
+    const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
+      mode: 'circular',
+      slots: state.adv.circular_track_slots,
+      axisIndex: state.adv.circular_track_slots_axis_index,
+      trackType: state.form.track_type,
+      depthTrackCount,
+      annotationSetIds,
+      visibleFeatureUnderlays,
+      conservationSeries: conservationSeriesForValidation({
+        state,
+        filesData,
+        resolvedCircularConservation
+      })
+    }));
+    const depthRequested = validation.enabledSlots.some(
+      (slot) => slot.renderer === 'depth'
+    );
+    return {
+      depthRequested,
+      tracks: {
+        circularTrackSlots: validation.enabledSlots.map((slot) => (
+          buildCircularTrackSlotPayload(slot, state.adv.nt, state.form.track_type)
+        )),
+        circularTrackAxisIndex: validation.emittedAxisIndex,
+        linearTrackSlots: null,
+        linearTrackAxisIndex: null,
+        centerReservedRadius: optionalNumber(state.adv.center_reserved_radius)
+      }
+    };
+  }
+
+  if (!circular && state.adv.linear_track_slots_enabled) {
+    const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
+      mode: 'linear',
+      slots: state.adv.linear_track_slots,
+      axisIndex: state.adv.linear_track_slots_axis_index,
+      trackType: state.form.linear_track_layout,
+      depthTrackCount,
+      annotationSetIds,
+      visibleFeatureUnderlays: false,
+      conservationSeries: []
+    }));
+    const depthRequested = validation.enabledSlots.some(
+      (slot) => slot.renderer === 'depth'
+    );
+    return {
+      depthRequested,
+      tracks: {
+        circularTrackSlots: null,
+        circularTrackAxisIndex: null,
+        linearTrackSlots: validation.enabledSlots.map(buildLinearTrackSlotPayload),
+        linearTrackAxisIndex: validation.emittedAxisIndex,
+        centerReservedRadius: null
+      }
+    };
+  }
+
+  const depthRequested = Boolean(state.form.show_depth);
+  if (circular) {
+    const shortcuts = circularGeometryShortcutsForState(state);
+    if (hasCircularGeometryShortcuts(shortcuts)) {
+      const implicitSlots = applyCircularGeometryShortcuts(
+        createDefaultCircularTrackSlots({
+          nt: state.adv.nt,
+          showDepth: depthRequested,
+          depthTrackCount: Math.max(1, depthTrackCount),
+          showGc: !state.form.suppress_gc,
+          showSkew: !state.form.suppress_skew,
+          showTicks: state.form.show_scale !== false,
+          preset: state.form.track_type
+        }),
+        shortcuts
+      );
+      const slots = [
+        ...automaticCircularAnnotationSlots(state),
+        ...implicitSlots
+      ];
+      const axisIndex = inferLegacyAxisIndexFromFeature(
+        slots,
+        state.form.track_type
+      );
+      const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
+        mode: 'circular',
+        slots,
+        axisIndex,
+        trackType: state.form.track_type,
+        depthTrackCount,
+        annotationSetIds,
+        visibleFeatureUnderlays,
+        conservationSeries: []
+      }));
+      return {
+        depthRequested,
+        tracks: {
+          circularTrackSlots: validation.enabledSlots.map((slot) => (
+            buildCircularTrackSlotPayload(slot, state.adv.nt, state.form.track_type)
+          )),
+          circularTrackAxisIndex: validation.emittedAxisIndex,
+          linearTrackSlots: null,
+          linearTrackAxisIndex: null,
+          centerReservedRadius: optionalNumber(state.adv.center_reserved_radius)
+        }
+      };
+    }
+  }
+
   return {
-    circularTrackSlots: circular && state.adv.circular_track_slots_enabled
-      ? state.adv.circular_track_slots
-          .filter((slot) => slot?.enabled !== false)
-          .map((slot) => buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type))
-      : null,
-    circularTrackAxisIndex: circular && state.adv.circular_track_slots_enabled
-      ? optionalNumber(state.adv.circular_track_slots_axis_index)
-      : null,
-    linearTrackSlots: !circular && state.adv.linear_track_slots_enabled
-      ? state.adv.linear_track_slots
-          .filter((slot) => slot?.enabled !== false)
-          .map((slot) => buildLinearTrackSlotSpec(slot))
-      : null,
-    linearTrackAxisIndex: circular ? null : emittedLinearAxisIndex,
-    centerReservedRadius: circular ? optionalNumber(state.adv.center_reserved_radius) : null
+    depthRequested,
+    tracks: {
+      circularTrackSlots: null,
+      circularTrackAxisIndex: null,
+      linearTrackSlots: null,
+      linearTrackAxisIndex: null,
+      centerReservedRadius: circular ? optionalNumber(state.adv.center_reserved_radius) : null
+    }
   };
 };
 
@@ -907,79 +1155,148 @@ const generatedProteinSettings = (state, baseline = {}) => {
   };
 };
 
+const comparisonPlanErrorMessage = (snapshot) => {
+  const direct = String(snapshot?.error || '').trim();
+  if (direct) return direct;
+  const issue = Array.isArray(snapshot?.errors) ? snapshot.errors[0] : null;
+  return String(issue?.message || issue || '').trim();
+};
+
+const requireLinearComparisonPlanSnapshot = (snapshot) => {
+  if (!snapshot || !Array.isArray(snapshot.edges)) {
+    throw new Error('A resolved Linear comparison plan is required.');
+  }
+  const error = comparisonPlanErrorMessage(snapshot);
+  if (error) throw new Error(error);
+  return snapshot;
+};
+
+const orderedComparisonPlanEdges = (snapshot) => (
+  (Array.isArray(snapshot?.edges) ? snapshot.edges : [])
+    .slice()
+    .sort((left, right) => Number(left?.ordinal) - Number(right?.ordinal))
+);
+
+const comparisonEndpointKey = (queryRecordIndex, subjectRecordIndex) => (
+  `${Number(queryRecordIndex)}->${Number(subjectRecordIndex)}`
+);
+
+const addResolvedComparisonResource = ({
+  comparison,
+  edge,
+  resources
+}) => {
+  const resourceId = `comparison-resolved-${edge.ordinal + 1}`;
+  if (comparison.kind === 'precomputedProteinComparison') {
+    return {
+      kind: 'precomputedProteinComparison',
+      resourceId: resources.addCanonicalTable(
+        resourceId,
+        comparison.rows,
+        comparison.columns
+      ),
+      encoding: 'canonicalTsv',
+      queryRecordIndex: edge.queryIndex,
+      subjectRecordIndex: edge.subjectIndex
+    };
+  }
+  if (comparison.kind !== 'nucleotideBlast') {
+    throw new Error(`Unsupported resolved comparison kind for '${edge.edgeKey}'.`);
+  }
+  return {
+    kind: 'nucleotideBlast',
+    resourceId: resources.addText(
+      resourceId,
+      'nucleotide-blast',
+      `${resourceId}.tsv`,
+      String(comparison.text || '')
+    ),
+    queryRecordIndex: edge.queryIndex,
+    subjectRecordIndex: edge.subjectIndex
+  };
+};
+
+const addPersistedProteinComparisonResource = ({
+  comparison,
+  edge,
+  resources
+}) => ({
+  kind: 'precomputedProteinComparison',
+  resourceId: resources.addFile(
+    `comparison-canonical-protein-${edge.ordinal + 1}`,
+    canonicalComparisonResourceKind(comparison),
+    comparison.file
+  ),
+  encoding: String(comparison.encoding || 'canonicalTsv'),
+  queryRecordIndex: edge.queryIndex,
+  subjectRecordIndex: edge.subjectIndex
+});
+
+const addCanonicalInputProteinComparisonResource = ({
+  comparison,
+  index,
+  resources
+}) => ({
+  kind: 'precomputedProteinComparison',
+  resourceId: resources.addFile(
+    `comparison-canonical-input-protein-${index + 1}`,
+    canonicalComparisonResourceKind(comparison),
+    comparison.file
+  ),
+  encoding: String(comparison.encoding || 'canonicalTsv'),
+  queryRecordIndex: Number(comparison.queryRecordIndex),
+  subjectRecordIndex: Number(comparison.subjectRecordIndex)
+});
+
 const buildComparisons = ({
   state,
   filesData,
   resources,
+  comparisonPlanSnapshot,
   resolvedComparisons = []
 }) => {
   if (state.mode.value !== 'linear') return [];
+  const snapshot = requireLinearComparisonPlanSnapshot(comparisonPlanSnapshot);
+  const edges = orderedComparisonPlanEdges(snapshot);
+  // The plan is the permission boundary. Do not inspect dormant uploads,
+  // committed artifacts, or generated-protein metadata for an empty plan.
+  if (snapshot.mode === 'none' || edges.length === 0) return [];
+
   const comparisons = [];
-  const indexByUid = new Map((filesData.linearSeqs || []).map((seq, index) => [String(seq.uid || ''), index]));
-  const explicitComparisons = Array.isArray(filesData.linearComparisons)
-    ? filesData.linearComparisons
-    : [];
-  explicitComparisons.forEach((comparison, index) => {
-    if (!comparison?.file) return;
-    const queryRecordIndex = indexByUid.get(String(comparison.queryUid || ''));
-    const subjectRecordIndex = indexByUid.get(String(comparison.subjectUid || ''));
-    if (!Number.isInteger(queryRecordIndex) || !Number.isInteger(subjectRecordIndex)) return;
-    const id = `comparison-nucleotide-${index + 1}`;
-    comparisons.push({
-      kind: 'nucleotideBlast',
-      resourceId: resources.addFile(id, 'nucleotide-blast', comparison.file),
-      queryRecordIndex,
-      subjectRecordIndex
-    });
-  });
-  if (explicitComparisons.length === 0) {
-    (filesData.linearSeqs || []).forEach((seq, index) => {
-      if (!seq.blast || index + 1 >= filesData.linearSeqs.length) return;
-      const id = `comparison-nucleotide-${index + 1}`;
-      comparisons.push({
-        kind: 'nucleotideBlast',
-        resourceId: resources.addFile(id, 'nucleotide-blast', seq.blast),
-        queryRecordIndex: index,
-        subjectRecordIndex: index + 1
-      });
-    });
-  }
-  const normalizedResolvedComparisons = Array.isArray(resolvedComparisons)
-    ? resolvedComparisons.filter((comparison) => (
-        comparison &&
-        Number.isInteger(comparison.queryRecordIndex) &&
-        Number.isInteger(comparison.subjectRecordIndex)
-      ))
-    : [];
-  const hasResolvedProteinComparisons = normalizedResolvedComparisons.some(
-    (comparison) => comparison.kind === 'precomputedProteinComparison'
+  const uploadFilesByEdgeId = new Map(
+    (Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
+      .filter((binding) => binding?.file)
+      .map((binding) => [String(binding.id || ''), binding.file])
   );
+  const resolvedByEdgeKey = new Map();
+  (Array.isArray(resolvedComparisons) ? resolvedComparisons : []).forEach((comparison) => {
+    const edgeKey = String(comparison?.edgeKey || '').trim();
+    if (!edgeKey) return;
+    if (resolvedByEdgeKey.has(edgeKey)) {
+      throw new Error(`Multiple resolved comparison results were produced for '${edgeKey}'.`);
+    }
+    resolvedByEdgeKey.set(edgeKey, comparison);
+  });
+
   const persistedCanonicalComparisons = Array.isArray(filesData.linearCanonicalComparisons)
     ? filesData.linearCanonicalComparisons
     : [];
-  const hasPersistedGeneratedProteinPipeline = persistedCanonicalComparisons.some(
+  const persistedGeneratedComparison = persistedCanonicalComparisons.find(
     (comparison) => comparison?.kind === 'generatedProteinComparison'
   );
-  const usesCanonicalProteinPipeline = (
-    state.blastSource?.value === 'losat' &&
-    state.losatProgram?.value === 'blastp'
+  const activeProteinPipeline = (
+    snapshot.hasLosatIntent === true && state.losatProgram?.value === 'blastp'
   );
-  // A generated descriptor marks artifacts owned by the Web protein-analysis
-  // pipeline, so changing to a nucleotide pipeline invalidates that whole set.
-  // Typed Python requests may instead provide orthogroup, collinearity, or
-  // precomputed-protein inputs directly without a generated descriptor; those
-  // remain canonical diagram inputs regardless of the Web analysis controls.
-  const persistedResourceComparisons = (
-    usesCanonicalProteinPipeline || !hasPersistedGeneratedProteinPipeline
-      ? persistedCanonicalComparisons
-      : []
-  )
-    .filter(isResourceBackedCanonicalComparison)
-    .filter((comparison) => (
-      !hasResolvedProteinComparisons ||
-      comparison.kind !== 'precomputedProteinComparison'
-    ));
-  persistedResourceComparisons.forEach((comparison, index) => {
+  const persistedCanonicalInputs = persistedCanonicalComparisons.filter(
+    (comparison) => comparison?.canonicalInput === true
+  );
+  const persistedMetadata = persistedCanonicalComparisons.filter((comparison) => (
+    (
+      comparison?.kind === 'orthogroupResult' ||
+      comparison?.kind === 'collinearityResult'
+    ) && activeProteinPipeline && comparison.canonicalInput !== true
+  ));
+  [...persistedCanonicalInputs, ...persistedMetadata].forEach((comparison, index) => {
     if (!comparison.file) return;
     if (comparison.kind === 'orthogroupResult') {
       comparisons.push({
@@ -1006,6 +1323,7 @@ const buildComparisons = ({
       });
       return;
     }
+    if (comparison.kind !== 'precomputedProteinComparison') return;
     const queryRecordIndex = Number(comparison.queryRecordIndex);
     const subjectRecordIndex = Number(comparison.subjectRecordIndex);
     if (
@@ -1014,85 +1332,128 @@ const buildComparisons = ({
       !filesData.linearSeqs?.[queryRecordIndex] ||
       !filesData.linearSeqs?.[subjectRecordIndex]
     ) return;
-    const resourceId = `comparison-canonical-protein-${index + 1}`;
-    comparisons.push({
-      kind: 'precomputedProteinComparison',
-      resourceId: resources.addFile(
-        resourceId,
-        canonicalComparisonResourceKind(comparison),
+    comparisons.push(addCanonicalInputProteinComparisonResource({
+      comparison,
+      index,
+      resources
+    }));
+  });
+
+  const persistedProteinByEdgeKey = new Map();
+  const persistedProteinByEndpoints = new Map();
+  if (activeProteinPipeline) {
+    persistedCanonicalComparisons
+      .filter((comparison) => (
+        comparison?.kind === 'precomputedProteinComparison' &&
+        comparison.canonicalInput !== true &&
         comparison.file
-      ),
-      encoding: String(comparison.encoding || 'canonicalTsv'),
-      queryRecordIndex,
-      subjectRecordIndex
-    });
-  });
-  normalizedResolvedComparisons.forEach((comparison, index) => {
-    const resourceId = `comparison-resolved-${index + 1}`;
-    if (comparison.kind === 'precomputedProteinComparison') {
-      comparisons.push({
-        kind: 'precomputedProteinComparison',
-        resourceId: resources.addCanonicalTable(
-          resourceId,
-          comparison.rows,
-          comparison.columns
-        ),
-        encoding: 'canonicalTsv',
-        queryRecordIndex: comparison.queryRecordIndex,
-        subjectRecordIndex: comparison.subjectRecordIndex
+      ))
+      .forEach((comparison) => {
+        const edgeKey = String(comparison.edgeKey || '').trim();
+        if (edgeKey && !persistedProteinByEdgeKey.has(edgeKey)) {
+          persistedProteinByEdgeKey.set(edgeKey, comparison);
+        }
+        const endpointKey = comparisonEndpointKey(
+          comparison.queryRecordIndex,
+          comparison.subjectRecordIndex
+        );
+        if (!persistedProteinByEndpoints.has(endpointKey)) {
+          persistedProteinByEndpoints.set(endpointKey, comparison);
+        }
       });
-      return;
+  }
+
+  let hasPrecomputedProteinComparisons = false;
+  for (const edge of edges) {
+    if (
+      !Number.isInteger(edge?.ordinal) ||
+      !Number.isInteger(edge?.queryIndex) ||
+      !Number.isInteger(edge?.subjectIndex) ||
+      !String(edge?.edgeKey || '').trim()
+    ) {
+      throw new Error('The resolved Linear comparison plan contains an invalid edge.');
     }
-    comparisons.push({
-      kind: 'nucleotideBlast',
-      resourceId: resources.addText(
-        resourceId,
-        'nucleotide-blast',
-        `${resourceId}.tsv`,
-        String(comparison.text || '')
-      ),
-      queryRecordIndex: comparison.queryRecordIndex,
-      subjectRecordIndex: comparison.subjectRecordIndex
-    });
-  });
-  const hasPrecomputedProteinComparisons = (
-    hasResolvedProteinComparisons ||
-    persistedResourceComparisons.some(
-      (comparison) => comparison.kind === 'precomputedProteinComparison'
-    )
+    if (edge.source === 'upload') {
+      const file = uploadFilesByEdgeId.get(String(edge.id || ''));
+      if (!file) {
+        throw new Error(`The uploaded comparison '${edge.edgeKey}' has no active BLAST TSV file.`);
+      }
+      const resourceId = `comparison-nucleotide-${edge.ordinal + 1}`;
+      comparisons.push({
+        kind: 'nucleotideBlast',
+        resourceId: resources.addFile(resourceId, 'nucleotide-blast', file),
+        queryRecordIndex: edge.queryIndex,
+        subjectRecordIndex: edge.subjectIndex
+      });
+      continue;
+    }
+    if (edge.source !== 'losat') {
+      throw new Error(`Unsupported comparison source for '${edge.edgeKey}'.`);
+    }
+    const resolved = resolvedByEdgeKey.get(edge.edgeKey);
+    if (resolved) {
+      const descriptor = addResolvedComparisonResource({
+        comparison: resolved,
+        edge,
+        resources
+      });
+      comparisons.push(descriptor);
+      if (descriptor.kind === 'precomputedProteinComparison') {
+        hasPrecomputedProteinComparisons = true;
+      }
+      continue;
+    }
+    if (activeProteinPipeline) {
+      const persisted = persistedProteinByEdgeKey.get(edge.edgeKey) ||
+        persistedProteinByEndpoints.get(comparisonEndpointKey(edge.queryIndex, edge.subjectIndex));
+      if (persisted) {
+        comparisons.push(addPersistedProteinComparisonResource({
+          comparison: persisted,
+          edge,
+          resources
+        }));
+        hasPrecomputedProteinComparisons = true;
+      }
+    }
+  }
+
+  const activeLosatEdges = edges.filter((edge) => edge.source === 'losat');
+  const selectedPairwiseLosat = (
+    snapshot.mode === 'selected' &&
+    activeProteinPipeline &&
+    String(state.losat?.blastp?.mode || '').trim().toLowerCase() === 'pairwise'
   );
-  const generatedPairs = explicitComparisons
-    .filter((comparison) => comparison?.source === 'losat')
-    .map((comparison) => ({
-      queryRecordIndex: indexByUid.get(String(comparison.queryUid || '')),
-      subjectRecordIndex: indexByUid.get(String(comparison.subjectUid || ''))
-    }))
-    .filter((pair) => Number.isInteger(pair.queryRecordIndex) && Number.isInteger(pair.subjectRecordIndex));
-  const shouldGenerateProteinComparisons = (
-    !hasPrecomputedProteinComparisons &&
-    state.losatProgram.value === 'blastp' &&
-    (generatedPairs.length > 0 || state.blastSource.value === 'losat')
+  const shouldEmitResolvedProteinMarker = (
+    activeProteinPipeline &&
+    activeLosatEdges.length > 0 &&
+    hasPrecomputedProteinComparisons
   );
-  const persistedGeneratedComparison = (usesCanonicalProteinPipeline
-    ? persistedCanonicalComparisons
-    : []
-  ).find(
-    (comparison) => comparison?.kind === 'generatedProteinComparison'
+  const shouldGenerateSelectedProteinPairs = (
+    selectedPairwiseLosat &&
+    activeLosatEdges.length > 0 &&
+    !hasPrecomputedProteinComparisons
   );
-  if (
-    hasPrecomputedProteinComparisons ||
-    shouldGenerateProteinComparisons ||
-    persistedGeneratedComparison
-  ) {
-    const mode = hasPrecomputedProteinComparisons
+  const shouldGenerateAdjacentProteinPipeline = (
+    snapshot.mode === 'adjacent' &&
+    activeProteinPipeline &&
+    activeLosatEdges.length > 0 &&
+    !hasPrecomputedProteinComparisons
+  );
+  if (shouldEmitResolvedProteinMarker || shouldGenerateSelectedProteinPairs || shouldGenerateAdjacentProteinPipeline) {
+    const mode = shouldEmitResolvedProteinMarker
       ? 'none'
-      : persistedGeneratedComparison?.mode === 'none'
-        ? 'none'
-        : String(state.losat.blastp?.mode || persistedGeneratedComparison?.mode || 'orthogroup');
+      : selectedPairwiseLosat
+        ? 'pairwise'
+        : String(state.losat?.blastp?.mode || persistedGeneratedComparison?.mode || 'orthogroup');
     comparisons.push({
       kind: 'generatedProteinComparison',
       mode,
-      pairs: mode === 'none' ? [] : generatedPairs,
+      pairs: mode === 'pairwise'
+        ? activeLosatEdges.map((edge) => ({
+            queryRecordIndex: edge.queryIndex,
+            subjectRecordIndex: edge.subjectIndex
+          }))
+        : [],
       settings: generatedProteinSettings(
         state,
         persistedGeneratedComparison?.settings || {}
@@ -1140,6 +1501,7 @@ const buildLayout = (state, filesData) => {
 export const buildCanonicalRenderRequest = ({
   state,
   filesData,
+  comparisonPlanSnapshot = null,
   resolvedComparisons = [],
   resolvedCircularConservation = []
 }) => {
@@ -1147,21 +1509,16 @@ export const buildCanonicalRenderRequest = ({
   requireCurrentCircularMultiRecordSizeMode(state.adv.multi_record_size_mode);
   requireCurrentLinearTrackLayout(state.form.linear_track_layout);
   requireCurrentLinearLabelPlacement(state.adv.label_placement);
-  (state.adv.circular_track_slots || []).forEach((slot, index) => {
-    if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
-      throw new Error(`Circular track slot #${index + 1} must be an object.`);
-    }
-    normalizeCircularTrackSlot(
-      slot,
-      index,
-      state.adv.nt,
-      state.form.track_type
-    );
-  });
   const resources = createResourceBuilder();
   const webFiles = {};
   const records = buildRecords({ state, filesData, resources });
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
+  const trackPlan = buildTrackPlan({
+    state,
+    filesData,
+    recordCount: records.length,
+    resolvedCircularConservation
+  });
   const circularGroupingIntent = ['single', 'batch'].includes(
     state.adv.circular_grouping_intent
   )
@@ -1199,8 +1556,10 @@ export const buildCanonicalRenderRequest = ({
         explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : 'out')
       );
   const diagramOptions = {
-    configOverrides: buildConfigOverrides(state),
-    tracks: buildTracks(state),
+    configOverrides: buildConfigOverrides(state, {
+      depthRequested: trackPlan.depthRequested
+    }),
+    tracks: trackPlan.tracks,
     output: {
       legend: String(state.form.legend || 'right'),
       plotTitlePosition: String(state.adv.plot_title_position || (state.mode.value === 'linear' ? 'bottom' : 'none'))
@@ -1345,7 +1704,15 @@ export const buildCanonicalRenderRequest = ({
   }
 
   addGeneratedTableResources(state, resources, diagramOptions);
-  buildDepthResources({ state, filesData, resources, diagramOptions, recordCount: records.length });
+  if (trackPlan.depthRequested) {
+    buildDepthResources({
+      state,
+      filesData,
+      resources,
+      diagramOptions,
+      recordCount: records.length
+    });
+  }
 
   [
     ['colors-default-colors-file', filesData.d_color],
@@ -1368,8 +1735,7 @@ export const buildCanonicalRenderRequest = ({
   if (state.mode.value === 'linear') {
     webFiles.linearRecordMetadata = (filesData.linearSeqs || []).map((sequence, index) => ({
       recordKey: String(records[index]?.recordKey || sequence?.uid || `record-${index + 1}`),
-      losatGencode: optionalPositiveInteger(sequence?.losat_gencode) || 1,
-      losatFilename: String(sequence?.losat_filename || '')
+      losatGencode: optionalPositiveInteger(sequence?.losat_gencode) || 1
     }));
   }
 
@@ -1382,11 +1748,12 @@ export const buildCanonicalRenderRequest = ({
       diagramOptions,
       layout: buildLayout(state, filesData),
       comparisons: buildComparisons({
-        state,
-        filesData,
-        resources,
-        resolvedComparisons
-      }),
+      state,
+      filesData,
+      resources,
+      comparisonPlanSnapshot,
+      resolvedComparisons
+    }),
       output
     },
     resources: resources.resources,
@@ -1509,6 +1876,96 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   if (!entry || typeof entry !== 'object') throw new Error(`Missing canonical resource: ${resourceId}`);
   const { kind: _kind, ...file } = entry;
   return file;
+};
+
+const webBindingAsLegacyFile = (resources, binding) => {
+  if (binding === null || binding === undefined) return null;
+  if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
+    throw new Error('Web file bindings must be objects or null.');
+  }
+  const resourceId = String(binding.resourceId || '').trim();
+  if (!resourceId) throw new Error('A Web file binding requires a resourceId.');
+  const file = resourceAsLegacyFile(resources, resourceId);
+  return {
+    ...file,
+    name: normalizeOriginalResourceName(binding.name) || file.name,
+    type: String(binding.type || ''),
+    lastModified: Number(binding.lastModified) || 0
+  };
+};
+
+const webBindingValueAsLegacyFile = (resources, value) => (
+  Array.isArray(value)
+    ? value.map((item) => webBindingValueAsLegacyFile(resources, item))
+    : webBindingAsLegacyFile(resources, value)
+);
+
+const applyWebFileBindings = (files, webMetadata, resources) => {
+  const bindings = webMetadata?.bindings;
+  if (bindings === undefined || bindings === null) return files;
+  if (!bindings || typeof bindings !== 'object' || Array.isArray(bindings)) {
+    throw new Error('Session webFiles.bindings must be an object.');
+  }
+  if (bindings.schema !== 1) {
+    throw new Error('Unsupported Web file binding schema.');
+  }
+
+  const restored = { ...files };
+  [
+    'c_gb',
+    'c_gff',
+    'c_fasta',
+    'c_depth',
+    'c_conservation_blasts',
+    'c_conservation_fastas',
+    'c_conservation_sequence_sources',
+    'd_color',
+    't_color',
+    'blacklist',
+    'whitelist',
+    'qualifier_priority'
+  ].forEach((field) => {
+    if (!Object.prototype.hasOwnProperty.call(bindings, field)) return;
+    restored[field] = webBindingValueAsLegacyFile(resources, bindings[field]);
+  });
+  restored.c_conservation_blasts_source =
+    bindings.c_conservation_blasts_source === 'losat-cache' ? 'losat-cache' : null;
+
+  if (Array.isArray(bindings.linearSeqs)) {
+    restored.linearSeqs = bindings.linearSeqs.map((sequence, index) => ({
+      uid: String(sequence?.uid || `canonical-seq-${index + 1}`),
+      gb: webBindingValueAsLegacyFile(resources, sequence?.gb),
+      gff: webBindingValueAsLegacyFile(resources, sequence?.gff),
+      fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta),
+      depth: webBindingValueAsLegacyFile(resources, sequence?.depth),
+      blast: webBindingValueAsLegacyFile(resources, sequence?.blast),
+      losat_gencode: optionalPositiveInteger(sequence?.losat_gencode) || 1,
+      losat_filename: String(sequence?.losat_filename || ''),
+      definition: String(sequence?.definition || ''),
+      record_subtitle: String(sequence?.record_subtitle || ''),
+      region_record_id: String(sequence?.region_record_id || ''),
+      region_start: sequence?.region_start ?? null,
+      region_end: sequence?.region_end ?? null,
+      region_reverse: Boolean(sequence?.region_reverse)
+    }));
+  }
+  if (Array.isArray(bindings.linearComparisons)) {
+    restored.linearComparisons = bindings.linearComparisons.map((comparison, index) => ({
+      ...cloneCanonicalJsonValue(comparison),
+      id: String(comparison?.id || `linear-comparison-restored-${index + 1}`),
+      queryUid: String(comparison?.queryUid || ''),
+      subjectUid: String(comparison?.subjectUid || ''),
+      source: String(comparison?.source || 'upload'),
+      file: webBindingValueAsLegacyFile(resources, comparison?.file)
+    }));
+  }
+  if (Array.isArray(bindings.linearCanonicalComparisons)) {
+    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((comparison) => ({
+      ...cloneCanonicalJsonValue(comparison),
+      file: webBindingValueAsLegacyFile(resources, comparison?.file)
+    }));
+  }
+  return restored;
 };
 
 const cloneCanonicalJsonValue = (value) => (
@@ -2164,6 +2621,9 @@ export const projectCanonicalSessionRequest = ({
       (comparison) => comparison?.kind === 'generatedProteinComparison'
     )
   );
+  const comparisonsContainGeneratedProteinPipeline = (
+    renderRequest.comparisons || []
+  ).some((comparison) => comparison?.kind === 'generatedProteinComparison');
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     const source = records[0]?.source || {};
@@ -2240,10 +2700,20 @@ export const projectCanonicalSessionRequest = ({
           )
         ) return;
         files.linearCanonicalComparisons.push(
-          mapResourceBackedCanonicalComparison(
-            comparison,
-            () => resourceAsLegacyFile(resources, comparison.resourceId)
-          )
+          {
+            ...mapResourceBackedCanonicalComparison(
+              comparison,
+              () => resourceAsLegacyFile(resources, comparison.resourceId)
+            ),
+            // This is in-memory projection provenance, not a canonical-schema
+            // field. Direct CLI/Python comparison options have no Web pipeline
+            // marker and must survive a projection/rebuild unchanged.
+            ...(
+              !comparisonsContainGeneratedProteinPipeline
+                ? { canonicalInput: true }
+                : {}
+            )
+          }
         );
         return;
       }
@@ -2393,6 +2863,7 @@ export const projectCanonicalSessionRequest = ({
         resourceId ? resourceAsLegacyFile(resources, resourceId) : null
       ));
   }
+  Object.assign(files, applyWebFileBindings(files, webMetadata, resources));
   const explicitOverrides = Object.fromEntries(
     Object.entries(options.configOverrides || {}).filter(
       ([, value]) => value !== null && value !== undefined
@@ -2564,6 +3035,7 @@ export const projectCanonicalSessionRequest = ({
       : 'none',
     track_type: overrides.track_type || 'tuckin',
     linear_track_layout: projectedLinearTrackLayout,
+    show_scale: overrides.show_scale !== false,
     scale_style: overrides.scale_style || 'bar',
     align_center: Boolean(overrides.align_center),
     keep_definition_left_aligned: Boolean(overrides.keep_definition_left_aligned),
@@ -2600,6 +3072,12 @@ export const projectCanonicalSessionRequest = ({
   const adv = {
     features: options.selectedFeaturesSet ?? [...sparseFeatureTypes],
     feature_shapes: projectedFeatureShapes,
+    arrow_head_length_ratio: arrowHeadLengthRatioForState(
+      overrides.arrow_head_length_ratio
+    ),
+    arrow_shaft_width_ratio: normalizeArrowShaftWidthRatio(
+      overrides.arrow_shaft_width_ratio
+    ),
     nt: options.dinucleotide || 'GC',
     window_size: options.window ?? null,
     step_size: options.step ?? null,

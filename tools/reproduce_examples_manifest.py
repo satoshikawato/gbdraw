@@ -18,6 +18,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PALETTES_FILE = PROJECT_ROOT / "gbdraw" / "data" / "color_palettes.toml"
 
 MANUALLY_MANAGED_FIGURES: dict[str, str] = {
+    "examples/gbdraw_social_preview.png": (
+        "Owner-maintained README artwork; automated reproduction and replacement are prohibited."
+    ),
+    "gbdraw/web/gallery/media/lambda_basic_linear/manual-02-03-no-comparison.webp": (
+        "Browser screenshot; recapture with the Gallery tutorial screenshot tool from the "
+        "Lambda session and its declarative No comparison capture contract."
+    ),
     "docs/TUTORIALS/images/tutorial-8-interactive-feature-popup.png": (
         "Browser screenshot; recapture after loading the tutorial session and opening a feature popup."
     ),
@@ -93,6 +100,13 @@ class CliRecipe:
 
 
 @dataclass(frozen=True)
+class SessionVariantRecipe:
+    source_session_path: str
+    feature_shapes: tuple[tuple[str, str], ...] = ()
+    config_overrides: tuple[tuple[str, str | float | int | bool], ...] = ()
+
+
+@dataclass(frozen=True)
 class CompositePanel:
     figure_id: str | None = None
     recipe: CliRecipe | None = None
@@ -112,7 +126,7 @@ class CompositeRecipe:
     canvas_size: tuple[int, int] | None = None
 
 
-Recipe = CliRecipe | CompositeRecipe
+Recipe = CliRecipe | SessionVariantRecipe | CompositeRecipe
 
 
 @dataclass(frozen=True)
@@ -564,7 +578,7 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
             "MellatMJNV.gb",
             "MeenMJNV.gb",
             "MejoMJNV.gb",
-            "majani_custom_color_table.tsv",
+            "custom_color_table.tsv",
             "modified_default_colors.tsv",
         ),
         preparations=(
@@ -614,7 +628,7 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                 "MeenMJNV.MejoMJNV.tblastx.out",
             ),
             file_args=(
-                _file_arg("-t", "majani_custom_color_table.tsv"),
+                _file_arg("-t", "custom_color_table.tsv"),
                 _file_arg("-d", "modified_default_colors.tsv"),
             ),
             extra_args=(
@@ -1011,71 +1025,37 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         figure_id="track_layout_separate_strands",
         output_path="examples/track_layout_separate_strands.png",
         groups=("docs", "composites"),
-        required_inputs=("AP027280.gb",),
+        required_inputs=("NC_000913.gbk",),
         recipe=CompositeRecipe(
             kind="grid",
             columns=3,
-            tile_size=(3000, 5600),
+            tile_size=(3000, 2800),
             gap=32,
             padding=32,
-            panels=(
+            panels=tuple(
                 CompositePanel(
                     recipe=CliRecipe(
                         subcommand="circular",
-                        gbk_files=("AP027280.gb",),
-                        extra_args=(
-                            "--block_stroke_width",
-                            "1",
-                            "--block_stroke_color",
-                            "gray",
-                            "--labels",
+                        gbk_files=("NC_000913.gbk",),
+                        extra_args=(("--separate_strands",) if separate_strands else ())
+                        + (
                             "--track_type",
-                            "tuckin",
-                            "--no-gc",
-                            "--no-skew",
-                            "--separate_strands",
+                            track_type,
+                            "--plot_title",
+                            f"{track_type} · {'separate strands' if separate_strands else 'combined strands'}",
+                            "--plot_title_position",
+                            "top",
+                            "--plot_title_font_size",
+                            "36",
+                            "--keep_full_definition_with_plot_title",
                         ),
                     )
-                ),
-                CompositePanel(
-                    recipe=CliRecipe(
-                        subcommand="circular",
-                        gbk_files=("AP027280.gb",),
-                        extra_args=(
-                            "--block_stroke_width",
-                            "1",
-                            "--block_stroke_color",
-                            "gray",
-                            "--labels",
-                            "--track_type",
-                            "middle",
-                            "--no-gc",
-                            "--no-skew",
-                            "--separate_strands",
-                        ),
-                    )
-                ),
-                CompositePanel(
-                    recipe=CliRecipe(
-                        subcommand="circular",
-                        gbk_files=("AP027280.gb",),
-                        extra_args=(
-                            "--block_stroke_width",
-                            "1",
-                            "--block_stroke_color",
-                            "gray",
-                            "--labels",
-                            "--track_type",
-                            "spreadout",
-                            "--no-gc",
-                            "--no-skew",
-                            "--separate_strands",
-                        ),
-                    )
-                ),
+                )
+                for separate_strands in (True, False)
+                for track_type in ("tuckin", "middle", "spreadout")
             ),
         ),
-        description="Tutorial 1 track layout comparison montage.",
+        description="Tutorial 1 track preset and strand separation comparison montage.",
     )
     figures["definition_font_size_comparison"] = _figure(
         figure_id="definition_font_size_comparison",
@@ -1173,62 +1153,59 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         figure_id="label_font_size_comparison",
         output_path="examples/label_font_size_comparison.png",
         groups=("docs", "composites"),
-        required_inputs=("AP027280.gb",),
+        required_inputs=("HmmtDNA.gbk",),
+        support_assets=("qualifier_priority.tsv",),
         recipe=CompositeRecipe(
             kind="grid",
             columns=3,
-            tile_size=(3400, 3400),
+            tile_size=(3400, 2200),
             gap=32,
             padding=32,
-            panels=(
+            panels=tuple(
                 CompositePanel(
                     recipe=CliRecipe(
                         subcommand="circular",
-                        gbk_files=("AP027280.gb",),
+                        gbk_files=("HmmtDNA.gbk",),
+                        file_args=(_file_arg("--qualifier_priority", "qualifier_priority.tsv"),),
                         extra_args=(
-                            "--block_stroke_width",
-                            "1",
                             "--track_type",
                             "middle",
-                            "--labels",
-                            "--label_font_size",
-                            "8",
-                        ),
-                    )
-                ),
-                CompositePanel(
-                    recipe=CliRecipe(
-                        subcommand="circular",
-                        gbk_files=("AP027280.gb",),
-                        extra_args=(
+                            "--species",
+                            "<i>Homo sapiens</i>",
                             "--block_stroke_width",
+                            "2",
+                            "--line_stroke_color",
+                            "gray",
+                            "--line_stroke_width",
                             "1",
-                            "--track_type",
-                            "middle",
+                            "--axis_stroke_width",
+                            "5",
                             "--labels",
+                            "both",
+                            "--gc",
+                            "--skew",
+                            "--circular_track_order",
+                            "features,ticks,gc_content,gc_skew",
+                            "--palette",
+                            "soft_pastels",
+                            "--definition_font_size",
+                            "28",
                             "--label_font_size",
-                            "12",
+                            label_font_size,
+                            "--plot_title",
+                            f"{label_font_size} pt labels",
+                            "--plot_title_position",
+                            "top",
+                            "--plot_title_font_size",
+                            "28",
+                            "--keep_full_definition_with_plot_title",
                         ),
                     )
-                ),
-                CompositePanel(
-                    recipe=CliRecipe(
-                        subcommand="circular",
-                        gbk_files=("AP027280.gb",),
-                        extra_args=(
-                            "--block_stroke_width",
-                            "1",
-                            "--track_type",
-                            "middle",
-                            "--labels",
-                            "--label_font_size",
-                            "16",
-                        ),
-                    )
-                ),
+                )
+                for label_font_size in ("12", "18", "24")
             ),
         ),
-        description="Tutorial 3 label font size comparison montage.",
+        description="Tutorial 3 human mitochondrial label font size comparison montage.",
     )
     figures["outer_label_offset_comparison"] = _figure(
         figure_id="outer_label_offset_comparison",
@@ -1237,8 +1214,8 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         required_inputs=("AP027280.gb",),
         recipe=CompositeRecipe(
             kind="grid",
-            columns=2,
-            tile_size=(5000, 4300),
+            columns=3,
+            tile_size=(3400, 2900),
             gap=32,
             padding=32,
             panels=tuple(
@@ -1253,16 +1230,24 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                             "middle",
                             "--labels",
                             "--outer_label_x_radius_offset",
-                            value,
+                            x_offset,
                             "--outer_label_y_radius_offset",
-                            value,
+                            y_offset,
+                            "--plot_title",
+                            f"x={x_offset} · y={y_offset}",
+                            "--plot_title_position",
+                            "top",
+                            "--plot_title_font_size",
+                            "36",
+                            "--keep_full_definition_with_plot_title",
                         ),
                     )
                 )
-                for value in ("0.95", "1.00", "1.05", "1.10")
+                for y_offset in ("0.90", "1.00", "1.10")
+                for x_offset in ("0.90", "1.00", "1.10")
             ),
         ),
-        description="Tutorial 3 outer label offset comparison montage.",
+        description="Tutorial 3 independent x/y outer label offset comparison matrix.",
     )
     figures["window_step_comparison"] = _figure(
         figure_id="window_step_comparison",
@@ -1280,26 +1265,65 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                     recipe=CliRecipe(
                         subcommand="circular",
                         gbk_files=("NC_000913.gbk",),
-                        extra_args=("--separate_strands", "--window", "1000", "--step", "100"),
+                        extra_args=(
+                            "--separate_strands",
+                            "--window",
+                            "100000",
+                            "--step",
+                            "10000",
+                            "--plot_title",
+                            "window=100000 · step=10000",
+                            "--plot_title_position",
+                            "top",
+                            "--plot_title_font_size",
+                            "36",
+                            "--keep_full_definition_with_plot_title",
+                        ),
                     )
                 ),
                 CompositePanel(
                     recipe=CliRecipe(
                         subcommand="circular",
                         gbk_files=("NC_000913.gbk",),
-                        extra_args=("--separate_strands", "--window", "5000", "--step", "500"),
+                        extra_args=(
+                            "--separate_strands",
+                            "--window",
+                            "10000",
+                            "--step",
+                            "1000",
+                            "--plot_title",
+                            "window=10000 · step=1000",
+                            "--plot_title_position",
+                            "top",
+                            "--plot_title_font_size",
+                            "36",
+                            "--keep_full_definition_with_plot_title",
+                        ),
                     )
                 ),
                 CompositePanel(
                     recipe=CliRecipe(
                         subcommand="circular",
                         gbk_files=("NC_000913.gbk",),
-                        extra_args=("--separate_strands", "--window", "10000", "--step", "1000"),
+                        extra_args=(
+                            "--separate_strands",
+                            "--window",
+                            "1000",
+                            "--step",
+                            "100",
+                            "--plot_title",
+                            "window=1000 · step=100",
+                            "--plot_title_position",
+                            "top",
+                            "--plot_title_font_size",
+                            "36",
+                            "--keep_full_definition_with_plot_title",
+                        ),
                     )
                 ),
             ),
         ),
-        description="FAQ window and step comparison montage.",
+        description="FAQ coarse-to-fine window and step comparison montage.",
     )
     figures["skew_comparison"] = _figure(
         figure_id="skew_comparison",
@@ -1308,76 +1332,119 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         required_inputs=("NC_000913.gbk",),
         recipe=CompositeRecipe(
             kind="grid",
-            columns=2,
-            tile_size=(5300, 3900),
+            columns=4,
+            tile_size=(2700, 2350),
             gap=32,
             padding=32,
-            panels=(
+            panels=tuple(
                 CompositePanel(
                     recipe=CliRecipe(
                         subcommand="circular",
                         gbk_files=("NC_000913.gbk",),
-                        extra_args=("--separate_strands", "--nt", "GC"),
+                        extra_args=(
+                            "--separate_strands",
+                            "--nt",
+                            dinucleotide,
+                            "--plot_title",
+                            dinucleotide,
+                            "--plot_title_position",
+                            "top",
+                            "--plot_title_font_size",
+                            "48",
+                            "--keep_full_definition_with_plot_title",
+                        ),
                     )
-                ),
-                CompositePanel(
-                    recipe=CliRecipe(
-                        subcommand="circular",
-                        gbk_files=("NC_000913.gbk",),
-                        extra_args=("--separate_strands", "--nt", "AT"),
-                    )
-                ),
+                )
+                for dinucleotide in (
+                    "GC",
+                    "CG",
+                    "AG",
+                    "GA",
+                    "CT",
+                    "TC",
+                    "TG",
+                    "GT",
+                    "CA",
+                    "AC",
+                    "AT",
+                    "TA",
+                )
             ),
         ),
-        description="FAQ GC versus AT comparison montage.",
-    )
-    figures["gbdraw_social_preview"] = _figure(
-        figure_id="gbdraw_social_preview",
-        output_path="examples/gbdraw_social_preview.png",
-        groups=("readme", "composites"),
-        required_inputs=(),
-        recipe=CompositeRecipe(
-            kind="social_preview",
-            canvas_size=(4000, 1999),
-            background="white",
-            panels=(
-                CompositePanel(figure_id="majani", box=(40, 40, 2280, 1919)),
-                CompositePanel(figure_id="NC_010162_edelweiss", box=(2360, 40, 1600, 900)),
-                CompositePanel(figure_id="WSSV_with_labels", box=(2360, 980, 775, 979)),
-                CompositePanel(figure_id="O157_H7_stx_whitelist", box=(3185, 980, 775, 979)),
-            ),
-        ),
-        description="README social preview collage.",
+        description="FAQ twelve-dinucleotide content and skew comparison montage.",
     )
     figures["python_api_circular"] = _figure(
         figure_id="python_api_circular",
         output_path="examples/python-api-circular.png",
         groups=("docs",),
-        required_inputs=("MjeNMV.gb",),
+        required_inputs=(
+            "MjeNMV.gb",
+            "custom_color_table.tsv",
+            "modified_default_colors.tsv",
+            "python-api-label-whitelist.tsv",
+        ),
         recipe=CliRecipe(
             subcommand="circular",
             gbk_files=("MjeNMV.gb",),
+            file_args=(
+                _file_arg("-t", "custom_color_table.tsv"),
+                _file_arg("-d", "modified_default_colors.tsv"),
+                _file_arg("--label_whitelist", "python-api-label-whitelist.tsv"),
+            ),
             extra_args=(
                 "-k",
-                "CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region",
+                "CDS",
                 "--species",
-                "Example genome",
+                "<i>Marsupenaeus japonicus endogenous nimavirus</i>",
+                "--strain",
+                "Ginoza2017",
+                "--separate_strands",
+                "--track_type",
+                "middle",
+                "--labels",
+                "both",
+                "--gc",
+                "--skew",
+                "--circular_track_order",
+                "features,ticks,gc_content,gc_skew",
+                "--block_stroke_width",
+                "1",
+                "--block_stroke_color",
+                "gray",
+                "--line_stroke_width",
+                "2",
+                "--line_stroke_color",
+                "lightgray",
                 "--legend",
                 "right",
             ),
         ),
-        description="CLI-equivalent rendering of the documented circular Python API example.",
+        description="CLI-equivalent MjeNMV rendering for the documented circular Python API example.",
     )
     figures["python_api_linear"] = _figure(
         figure_id="python_api_linear",
         output_path="examples/python-api-linear.png",
         groups=("docs",),
-        required_inputs=("MjeNMV.gb", "MelaMJNV.gb", "MjeNMV.MelaMJNV.tblastx.out"),
+        required_inputs=(
+            "MjeNMV.gb",
+            "MelaMJNV.gb",
+            "MjeNMV.MelaMJNV.tblastx.out",
+            "custom_color_table.tsv",
+            "modified_default_colors.tsv",
+            "python-api-label-whitelist.tsv",
+        ),
         recipe=CliRecipe(
             subcommand="linear",
             gbk_files=("MjeNMV.gb", "MelaMJNV.gb"),
             blast_files=("MjeNMV.MelaMJNV.tblastx.out",),
+            file_args=(
+                _file_arg("-t", "custom_color_table.tsv"),
+                _file_arg("-d", "modified_default_colors.tsv"),
+                _file_arg("--label_whitelist", "python-api-label-whitelist.tsv"),
+            ),
             extra_args=(
+                "-k",
+                "CDS",
                 "--evalue",
                 "1e-5",
                 "--bitscore",
@@ -1386,9 +1453,27 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                 "0",
                 "--gc",
                 "--skew",
+                "--separate_strands",
+                "--show_labels",
+                "first",
+                "--align_center",
+                "--plot_title",
+                "Majanivirus genome comparison",
+                "--plot_title_position",
+                "top",
+                "--block_stroke_width",
+                "1",
+                "--block_stroke_color",
+                "gray",
+                "--line_stroke_width",
+                "2",
+                "--line_stroke_color",
+                "lightgray",
+                "--legend",
+                "right",
             ),
         ),
-        description="CLI-equivalent rendering of the documented linear Python API example.",
+        description="CLI-equivalent Majanivirus comparison for the documented linear Python API example.",
     )
 
     return figures
@@ -1402,7 +1487,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
     def add(
         figure_id: str,
         output_path: str,
-        recipe: CliRecipe,
+        recipe: Recipe,
         *,
         required_inputs: tuple[str, ...],
         support_assets: tuple[str, ...] = (),
@@ -1416,6 +1501,17 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             recipe=recipe,
             description=f"Documentation tutorial figure: {figure_id}.",
         )
+
+    linear_feature_style_args = (
+        "--block_stroke_color",
+        "gray",
+        "--block_stroke_width",
+        "1",
+        "--line_stroke_color",
+        "lightgray",
+        "--line_stroke_width",
+        "2",
+    )
 
     add(
         "quickstart_labeled_rna_features",
@@ -1434,7 +1530,29 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             subcommand="linear",
             gbk_files=("AP027078.gb", "AP027131.gb"),
             blast_files=("AP027078_AP027131.tblastx.out",),
-            extra_args=("--separate_strands", "--align_center"),
+            extra_args=linear_feature_style_args
+            + (
+                "--separate_strands",
+                "--align_center",
+                "--gc",
+                "--skew",
+                "--palette",
+                "ajisai",
+                "--scale_style",
+                "ruler",
+                "--pairwise_match_style",
+                "curve",
+                "--record_label",
+                "Candidatus Tyloplasma litorale",
+                "--record_label",
+                "Candidatus Hepatoplasma vulgare",
+                "--record_subtitle",
+                "Fukuoka2020",
+                "--record_subtitle",
+                "Av-JP",
+                "--plot_title",
+                "Hepatoplasmataceae pairwise TBLASTX",
+            ),
         ),
         required_inputs=("AP027078.gb", "AP027131.gb", "AP027078_AP027131.tblastx.out"),
     )
@@ -1447,11 +1565,10 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
                 _file_arg("--records_table", "linear_multi_records.tsv"),
                 _file_arg("--comparisons_table", "linear_multi_comparisons.tsv"),
             ),
-            extra_args=(
+            extra_args=linear_feature_style_args
+            + (
                 "--linear_record_gap", "28",
-                "--track_layout", "below",
                 "--scale_style", "ruler",
-                "--ruler_on_axis",
                 "--pairwise_match_style", "curve",
                 "--identity", "97",
                 "--alignment_length", "500",
@@ -1550,15 +1667,39 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         CliRecipe(
             subcommand="linear",
             gbk_files=protein_inputs[:2],
-            extra_args=(
+            file_args=(
+                _file_arg("-t", "majani_custom_color_table.tsv"),
+                _file_arg("-d", "modified_default_colors.tsv"),
+            ),
+            extra_args=linear_feature_style_args
+            + (
                 "--protein_blastp_mode",
                 "pairwise",
                 "--align_center",
                 "--pairwise_match_style",
                 "curve",
+                "--gc",
+                "--skew",
+                "--show_labels",
+                "first",
+                "--label_rendering",
+                "embedded_only",
+                "--record_label",
+                "Marsupenaeus japonicus endogenous nimavirus",
+                "--record_label",
+                "Melicertus latisulcatus majanivirus",
+                "--record_subtitle",
+                "Ginoza2017",
+                "--record_subtitle",
+                "Okinawa2016",
+                "--scale_style",
+                "ruler",
+                "--plot_title",
+                "Majanivirus pairwise protein matches",
             ),
         ),
-        required_inputs=protein_inputs[:2],
+        required_inputs=protein_inputs[:2]
+        + ("majani_custom_color_table.tsv", "modified_default_colors.tsv"),
     )
     add(
         "majani_orthogroup",
@@ -1604,9 +1745,27 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         "examples/tutorial-5-records-table.svg",
         CliRecipe(
             subcommand="linear",
-            file_args=(_file_arg("--records_table", "linear_records.tsv"),),
+            file_args=(
+                _file_arg("--records_table", "linear_records.tsv"),
+                _file_arg("-t", "majani_custom_color_table.tsv"),
+                _file_arg("-d", "modified_default_colors.tsv"),
+            ),
+            extra_args=linear_feature_style_args
+            + (
+                "--gc",
+                "--skew",
+                "--show_labels",
+                "first",
+                "--label_rendering",
+                "embedded_only",
+                "--scale_style",
+                "ruler",
+                "--plot_title",
+                "Majanivirus records table",
+            ),
         ),
-        required_inputs=protein_inputs,
+        required_inputs=protein_inputs
+        + ("majani_custom_color_table.tsv", "modified_default_colors.tsv"),
         support_assets=("linear_records.tsv",),
     )
     add(
@@ -1804,15 +1963,59 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
     )
 
     layout_inputs = ("MjeNMV.gb", "MelaMJNV.gb")
+    layout_blast_inputs = ("MjeNMV.MelaMJNV.tblastx.out",)
+    layout_file_args = (
+        _file_arg("-t", "majani_custom_color_table.tsv"),
+        _file_arg("-d", "modified_default_colors.tsv"),
+    )
+    layout_required_inputs = (
+        layout_inputs
+        + layout_blast_inputs
+        + (
+            "majani_custom_color_table.tsv",
+            "modified_default_colors.tsv",
+        )
+    )
+    layout_visual_args = linear_feature_style_args + (
+        "--gc",
+        "--skew",
+        "--pairwise_match_style",
+        "curve",
+        "--show_labels",
+        "first",
+        "--label_rendering",
+        "embedded_only",
+    )
+    layout_record_text_args = (
+        "--record_label",
+        "Marsupenaeus japonicus endogenous nimavirus",
+        "--record_label",
+        "Melicertus latisulcatus majanivirus",
+        "--record_subtitle",
+        "Ginoza2017",
+        "--record_subtitle",
+        "Okinawa2016",
+    )
     add(
         "tutorial_7_track_layout_below",
         "examples/tutorial-7-track-layout-below.svg",
         CliRecipe(
             subcommand="linear",
             gbk_files=layout_inputs,
-            extra_args=("--track_layout", "below", "--track_axis_gap", "auto", "--gc", "--skew"),
+            blast_files=layout_blast_inputs,
+            file_args=layout_file_args,
+            extra_args=(
+                layout_visual_args
+                + layout_record_text_args
+                + (
+                    "--track_layout",
+                    "below",
+                    "--track_axis_gap",
+                    "auto",
+                )
+            ),
         ),
-        required_inputs=layout_inputs,
+        required_inputs=layout_required_inputs,
     )
     add(
         "tutorial_7_linear_layout",
@@ -1820,29 +2023,22 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         CliRecipe(
             subcommand="linear",
             gbk_files=layout_inputs,
-            extra_args=(
-                "--track_layout",
-                "below",
+            blast_files=layout_blast_inputs,
+            file_args=layout_file_args,
+            extra_args=layout_visual_args
+            + layout_record_text_args
+            + (
                 "--scale_style",
                 "ruler",
-                "--ruler_on_axis",
                 "--scale_interval",
                 "50000",
-                "--record_label",
-                "Marsupenaeus japonicus endogenous nimavirus",
-                "--record_label",
-                "Melicertus latisulcatus majanivirus",
-                "--record_subtitle",
-                "Ginoza2017",
-                "--record_subtitle",
-                "Okinawa2016",
                 "--plot_title",
                 "Majanivirus comparison",
                 "--plot_title_position",
                 "top",
             ),
         ),
-        required_inputs=layout_inputs,
+        required_inputs=layout_required_inputs,
     )
     add(
         "tutorial_7_definition_lines",
@@ -1850,7 +2046,10 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         CliRecipe(
             subcommand="linear",
             gbk_files=layout_inputs,
-            extra_args=(
+            blast_files=layout_blast_inputs,
+            file_args=layout_file_args,
+            extra_args=layout_visual_args
+            + (
                 "--record_label",
                 "MjeNMV",
                 "--record_label",
@@ -1869,7 +2068,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
                 "subtitle:size=14,color=#555555",
             ),
         ),
-        required_inputs=layout_inputs,
+        required_inputs=layout_required_inputs,
     )
     add(
         "tutorial_7_linear_track_slots",
@@ -1893,6 +2092,53 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
         required_inputs=("MjeNMV.gb",),
     )
 
+    add(
+        "tutorial_9_arrow_geometry_circular",
+        "examples/tutorial-9-arrow-geometry-circular.svg",
+        SessionVariantRecipe(
+            source_session_path=(
+                "gbdraw/web/gallery/sessions/"
+                "HmmtDNA_ATskew.gbdraw-session.json"
+            ),
+            config_overrides=(
+                (
+                    "objects.features.arrow_geometry.head_length_ratio",
+                    "auto",
+                ),
+                (
+                    "objects.features.arrow_geometry.shaft_width_ratio",
+                    0.75,
+                ),
+            ),
+        ),
+        required_inputs=(
+            "gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json",
+        ),
+    )
+    add(
+        "tutorial_9_arrow_geometry_linear",
+        "examples/tutorial-9-arrow-geometry-linear.svg",
+        SessionVariantRecipe(
+            source_session_path=(
+                "gbdraw/web/gallery/sessions/"
+                "BGC0000708-BGC0000713.gbdraw-session.json"
+            ),
+            config_overrides=(
+                (
+                    "objects.features.arrow_geometry.head_length_ratio",
+                    "auto",
+                ),
+                (
+                    "objects.features.arrow_geometry.shaft_width_ratio",
+                    0.5,
+                ),
+            ),
+        ),
+        required_inputs=(
+            "gbdraw/web/gallery/sessions/"
+            "BGC0000708-BGC0000713.gbdraw-session.json",
+        ),
+    )
     add(
         "tutorial_9_feature_shapes",
         "examples/tutorial-9-feature-shapes.svg",
@@ -1948,7 +2194,6 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
 
 def _palette_figures() -> dict[str, FigureSpec]:
     figures: dict[str, FigureSpec] = {}
-    palette_names = load_palette_names()
     representative_names = ("default", "ajisai", "soft_pastels")
 
     palette_base_inputs = (

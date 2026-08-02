@@ -98,7 +98,8 @@ class LinearRecordRenderContext:
     def axis_ruler_enabled(self) -> bool:
         cfg = self.profile.config
         return (
-            bool(self.profile.ruler_on_axis)
+            bool(cfg.objects.scale.show)
+            and bool(self.profile.ruler_on_axis)
             and str(cfg.objects.scale.style).strip().lower() == "ruler"
             and self.feature_track_layout in {"above", "below"}
         )
@@ -690,4 +691,3 @@ __all__ = [
     "resolve_axis_gap",
     "union_vertical_bands",
 ]
-

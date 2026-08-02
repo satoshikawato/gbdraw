@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from numbers import Real
 from typing import Any, Literal, Mapping, Optional
 
 from gbdraw.definition_line_styles import (
@@ -18,6 +19,9 @@ PairwiseMatchStyle = Literal["ribbon", "curve"]
 _PAIRWISE_MATCH_STYLES: tuple[PairwiseMatchStyle, ...] = ("ribbon", "curve")
 GcContentMode = Literal["deviation", "percent"]
 _GC_CONTENT_MODES: tuple[GcContentMode, ...] = ("deviation", "percent")
+ScaleStyle = Literal["bar", "ruler"]
+_SCALE_STYLES: tuple[ScaleStyle, ...] = ("bar", "ruler")
+ArrowHeadLengthRatio = Literal["auto"] | float
 
 
 def _normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:
@@ -39,6 +43,45 @@ def _normalize_gc_content_mode(value: Any) -> GcContentMode:
     if normalized not in _GC_CONTENT_MODES:
         raise ValidationError("gc_content_mode must be one of: deviation, percent")
     return normalized  # type: ignore[return-value]
+
+
+def _normalize_scale_style(value: Any) -> ScaleStyle:
+    normalized = str(value if value is not None else "bar").strip().lower()
+    if normalized not in _SCALE_STYLES:
+        raise ValidationError("scale_style must be one of: bar, ruler")
+    return normalized  # type: ignore[return-value]
+
+
+def _normalize_arrow_head_length_ratio(value: Any) -> ArrowHeadLengthRatio:
+    if isinstance(value, str):
+        if value.strip().lower() == "auto":
+            return "auto"
+        raise ValidationError(
+            "arrow head_length_ratio must be 'auto' or a positive finite number"
+        )
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValidationError(
+            "arrow head_length_ratio must be 'auto' or a positive finite number"
+        )
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise ValidationError(
+            "arrow head_length_ratio must be 'auto' or a positive finite number"
+        )
+    return parsed
+
+
+def _normalize_arrow_shaft_width_ratio(value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValidationError(
+            "arrow shaft_width_ratio must be a finite number in (0, 1]"
+        )
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0 or parsed > 1:
+        raise ValidationError(
+            "arrow shaft_width_ratio must be a finite number in (0, 1]"
+        )
+    return parsed
 
 
 @dataclass(frozen=True)
@@ -284,6 +327,26 @@ class ObjectsConservationConfig:
 
 
 @dataclass(frozen=True)
+class ObjectsFeaturesArrowGeometryConfig:
+    head_length_ratio: ArrowHeadLengthRatio
+    shaft_width_ratio: float
+
+    @classmethod
+    def from_dict(
+        cls,
+        d: Mapping[str, Any],
+    ) -> "ObjectsFeaturesArrowGeometryConfig":
+        return cls(
+            head_length_ratio=_normalize_arrow_head_length_ratio(
+                d.get("head_length_ratio", "auto")
+            ),
+            shaft_width_ratio=_normalize_arrow_shaft_width_ratio(
+                d.get("shaft_width_ratio", 1.0)
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class ObjectsFeaturesConfig:
     features_drawn: list[str]
     block_stroke_color: str
@@ -291,6 +354,7 @@ class ObjectsFeaturesConfig:
     font_weight: str
     block_stroke_width: ShortLongFloatConfig
     line_stroke_width: ShortLongFloatConfig
+    arrow_geometry: ObjectsFeaturesArrowGeometryConfig
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsFeaturesConfig":
@@ -301,6 +365,9 @@ class ObjectsFeaturesConfig:
             font_weight=str(d.get("font_weight", "normal")),
             block_stroke_width=ShortLongFloatConfig.from_dict(d["block_stroke_width"]),
             line_stroke_width=ShortLongFloatConfig.from_dict(d["line_stroke_width"]),
+            arrow_geometry=ObjectsFeaturesArrowGeometryConfig.from_dict(
+                d.get("arrow_geometry", {})
+            ),
         )
 
 
@@ -507,7 +574,7 @@ class ObjectsDefinitionConfig:
 
 @dataclass(frozen=True)
 class ObjectsScaleConfig:
-    style: str
+    style: ScaleStyle
     stroke_color: str
     label_color: str
     stroke_width: float
@@ -515,13 +582,14 @@ class ObjectsScaleConfig:
     font_size: ShortLongFloatConfig
     ruler_label_font_size: ShortLongFloatConfig
     interval: Optional[int]
+    show: bool = True
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsScaleConfig":
         interval = d.get("interval")
         font_size = ShortLongFloatConfig.from_dict(d["font_size"])
         return cls(
-            style=str(d.get("style", "bar")),
+            style=_normalize_scale_style(d.get("style", "bar")),
             stroke_color=str(d["stroke_color"]),
             label_color=str(d.get("label_color", "black")),
             stroke_width=float(d["stroke_width"]),
@@ -533,6 +601,7 @@ class ObjectsScaleConfig:
                 else font_size
             ),
             interval=int(interval) if interval is not None else None,
+            show=_bool_from_config(d.get("show", True), default=True),
         )
 
 
@@ -571,4 +640,8 @@ class ObjectsConfig:
         )
 
 
-__all__ = ["ObjectsConfig"]
+__all__ = [
+    "ArrowHeadLengthRatio",
+    "ObjectsConfig",
+    "ObjectsFeaturesArrowGeometryConfig",
+]

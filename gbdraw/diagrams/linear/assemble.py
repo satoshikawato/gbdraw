@@ -1918,7 +1918,12 @@ def assemble_linear_diagram(
 
     length_bar_group: LengthBarGroup | None = None
     length_bar_offset_x = 0.0
-    if not multi_record_enabled and not canvas_config.normalize_length and not axis_ruler_enabled:
+    if (
+        cfg.objects.scale.show
+        and not multi_record_enabled
+        and not canvas_config.normalize_length
+        and not axis_ruler_enabled
+    ):
         length_bar_offset_x = alignment_extents.ruler_offset_x
         length_bar_group = LengthBarGroup(
             canvas_config.fig_width,

@@ -43,6 +43,7 @@ assert.equal(migratePersistedLinearLabelPlacement('on_feature'), 'above_feature'
 
 const persisted = {
   adv: {
+    arrow_shaft_width_ratio: 0.75,
     depth_tick_interval: 25,
     depth_tracks: [
       { tick_interval: 10 },
@@ -57,6 +58,7 @@ const persisted = {
 };
 const migrated = migratePersistedWebStateFieldNames(persisted);
 assert.equal(migrated.adv.depth_large_tick_interval, 25);
+assert.equal(migrated.adv.arrow_shaft_width_ratio, 0.75);
 assert.equal(migrated.adv.depth_tracks[0].large_tick_interval, 10);
 assert.equal(migrated.adv.depth_tracks[1].large_tick_interval, 30);
 assert.equal(migrated.losat.blastp.collinearMaxUnitGap, 4);

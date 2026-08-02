@@ -10,6 +10,24 @@ Use [https://gbdraw.app/](https://gbdraw.app/) for the hosted app, or run `gbdra
 
 Small differences in label placement and legend sizing are expected. The CLI uses kerning-aware font metrics, while the web UI uses browser text metrics.
 
+## How do I hide the coordinate scale without hiding the genome axis?
+
+Add `--hide_scale` in either Circular or Linear mode. In Linear mode, this
+removes the bottom scale bar or ruler and any coordinate ticks and labels drawn
+on record axes, while retaining each record's main axis line. In Circular
+simple layouts, it removes the primary coordinate ticks and labels while
+retaining the circular axis.
+
+An explicit Circular track list is authoritative. If it contains an enabled
+`ticks` slot, that slot remains visible even with `--hide_scale`; omit or
+disable the slot instead. In the web app, clear **Show Coordinate Scale** for a
+simple layout. While **Custom Track Slots** are active, use the **Ticks** slot
+instead.
+
+GC-content and Depth axes and ticks are separate controls. Linear definition
+text such as **Length / Coord.** is also independent; use `--hide_length` to
+remove that line.
+
 ## Can I use a GFF3 file by itself?
 
 No. `gbdraw` requires both annotation and sequence data. When using GFF3 input, provide the matching FASTA file with `--fasta`.
@@ -58,6 +76,24 @@ The most common causes are:
 3. Filtering thresholds such as `--evalue`, `--bitscore`, `--identity`, or `--alignment_length` are too strict
 
 See [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
+
+## How do I draw several Linear records without comparing them in the web app?
+
+Select **No comparison** above the Linear input rows, then click **Generate
+Diagram**. The app skips LOSAT and does not use an uploaded BLAST TSV for that
+render. Uploaded comparison files and custom raw-result filenames can remain in
+the saved session as inactive drafts; use their separate reuse actions before
+they can participate in a later comparison.
+
+See the screenshot in [Web app comparison plans](./TUTORIALS/2_Comparative_Genomics.md#web-app-comparison-plans)
+for the exact control to select.
+
+Use **Run LOSAT** or **Upload BLAST TSV** for all positional adjacent gaps. In
+upload mode, a gap without a file is deliberately skipped. Use **Selected
+pairs** when one diagram needs a mixture of LOSAT edges, uploaded edges, and
+omitted edges. Edit an entry under **Adjacent gaps**, or click **Add** under
+**Selected pairs and retained drafts**, to create that plan. An included
+uploaded edge must have an active file.
 
 ## Why did gbdraw rerun LOSATP after I loaded a session?
 
@@ -125,7 +161,9 @@ Increase the window and step sizes:
 gbdraw circular --gbk genome.gb --window 10000 --step 1000 -o output -f svg
 ```
 
-![window_step_comparison.png](../examples/window_step_comparison.png)
+The montage uses one *E. coli* record and changes only `--window`/`--step`: 100000/10000, 10000/1000, and 1000/100 from left to right. This wider range makes the smoothing tradeoff visible without removing the feature, metadata, legend, GC content, or GC skew context.
+
+![Three E. coli diagrams showing coarse, medium, and fine GC-content and GC-skew windows](../examples/window_step_comparison.png)
 
 ## Can I plot AT instead of GC?
 
@@ -135,7 +173,9 @@ Yes. Use `--nt AT`.
 gbdraw circular --gbk genome.gb --nt AT -o output -f svg
 ```
 
-![skew_comparison.png](../examples/skew_comparison.png)
+The 12-panel comparison keeps the *E. coli* record, feature tracks, metadata, and legend fixed. In reading order it shows GC, CG, AG, GA, CT, TC, TG, GT, CA, AC, AT, and TA; only `--nt` changes between panels. Reversing a pair keeps its content track unchanged while reversing the sign of its skew.
+
+![Twelve E. coli diagrams comparing dinucleotide content and skew for GC, CG, AG, GA, CT, TC, TG, GT, CA, AC, AT, and TA](../examples/skew_comparison.png)
 
 ## Why does SVG export work but PNG/PDF/EPS/PS export fail?
 

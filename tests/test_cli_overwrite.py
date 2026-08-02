@@ -680,8 +680,14 @@ def test_canonical_session_replay_uses_current_overwrite_permission(
     session = build_session_document(stored_request).to_dict()
     captured: dict[str, bool] = {}
 
-    def fake_render(request, *, session_document=None):
+    def fake_render(
+        request,
+        *,
+        session_document=None,
+        include_feature_catalog=False,
+    ):
         captured["overwrite"] = request.output.overwrite
+        captured["include_feature_catalog"] = include_feature_catalog
         assert session_document is not None
         return object()
 
@@ -697,6 +703,7 @@ def test_canonical_session_replay_uses_current_overwrite_permission(
         session_output=None,
     )
     assert captured["overwrite"] is overwrite
+    assert captured["include_feature_catalog"] is False
 
 
 def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
@@ -724,8 +731,14 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
     session["ui"] = {"mode": "linear"}
     captured: dict[str, object] = {}
 
-    def fake_render(request, *, session_document=None):
+    def fake_render(
+        request,
+        *,
+        session_document=None,
+        include_feature_catalog=False,
+    ):
         assert session_document is not None
+        assert include_feature_catalog is True
         rendered_request = replace(
             request,
             output=replace(request.output, output_prefix="adapter-owned"),
@@ -736,6 +749,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
             drawing=object(),
             output_paths=(),
             interactive_context=None,
+            losat_derived_cache_entries=({"schema": 3},),
         )
 
     def fake_save(path, request, **kwargs):
@@ -765,6 +779,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
     assert config["adv"]["depth_large_tick_interval"] == 10
     assert config["adv"]["depth_tracks"] == [{"large_tick_interval": 5}]
     assert config["losat"]["blastp"]["collinearMaxUnitGap"] == 2
+    assert adjunct["losatDerivedCache"] == {"entries": []}
     assert "depth_tick_interval" in session["config"]["adv"]
     assert "collinearMaxGeneGap" in session["config"]["losat"]["blastp"]
 

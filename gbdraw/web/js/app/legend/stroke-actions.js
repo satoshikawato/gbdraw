@@ -2,6 +2,10 @@ import { getFeatureCaption, ruleMatchesFeature } from '../feature-utils.js';
 import { FEATURE_SELECTOR, getFeatureElements } from '../feature-editor/svg-actions.js';
 import { getAllFeatureLegendGroups } from './utils.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import {
+  featureOverrideKey,
+  migrateLegacyFeatureOverrides
+} from '../../services/feature-override-identity.js';
 
 export const createLegendStrokeActions = ({ state, debugLog }) => {
   const {
@@ -64,6 +68,26 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
     legendStrokeOverrides[entry.caption].strokeWidth = widthVal;
 
     applyStrokeToFeaturesByCaption(entry.caption, null, widthVal);
+  };
+
+  const setLegendEntryStrokeColorValue = (idx, value) => {
+    const entry = legendEntries.value[idx];
+    if (!entry) return;
+    if (value !== null) {
+      updateLegendEntryStrokeColor(idx, String(value || '').trim());
+      return;
+    }
+    const override = legendStrokeOverrides[entry.caption];
+    if (override) {
+      delete override.strokeColor;
+      if (override.strokeWidth === undefined || override.strokeWidth === '') {
+        delete legendStrokeOverrides[entry.caption];
+      }
+    }
+    const inheritedColor = originalSvgStroke.value.color;
+    applyStrokeToFeaturesByCaption(entry.caption, inheritedColor, null, {
+      removeStroke: inheritedColor === null
+    });
   };
 
   const resetLegendEntryStroke = (idx) => {
@@ -232,7 +256,12 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
     return { strokeColor: '#000000', strokeWidth: 0.5 };
   };
 
-  const applyStrokeToFeaturesByCaption = (caption, strokeColor, strokeWidth) => {
+  const applyStrokeToFeaturesByCaption = (
+    caption,
+    strokeColor,
+    strokeWidth,
+    { removeStroke = false } = {}
+  ) => {
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -248,7 +277,10 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
         processedIds.add(svgId);
         const elements = getFeatureElements(svg, svgId);
         elements.forEach((el) => {
-          if (strokeColor !== null) {
+          if (removeStroke) {
+            el.removeAttribute('stroke');
+            updatedCount++;
+          } else if (strokeColor !== null) {
             el.setAttribute('stroke', strokeColor);
             updatedCount++;
           }
@@ -269,7 +301,10 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
             const pathId = path.getAttribute('id');
             if (pathId && !processedIds.has(pathId)) {
               processedIds.add(pathId);
-              if (strokeColor !== null) {
+              if (removeStroke) {
+                path.removeAttribute('stroke');
+                updatedCount++;
+              } else if (strokeColor !== null) {
                 path.setAttribute('stroke', strokeColor);
                 updatedCount++;
               }
@@ -291,7 +326,9 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
         for (const path of paths) {
           const fill = path.getAttribute('fill');
           if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-            if (strokeColor !== null) {
+            if (removeStroke) {
+              path.removeAttribute('stroke');
+            } else if (strokeColor !== null) {
               path.setAttribute('stroke', strokeColor);
             }
             if (strokeWidth !== null) {
@@ -328,6 +365,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
     debugLog(
       `Reapplying ${legendOverrideCount} legend stroke override(s) and ${featureOverrideCount} feature stroke override(s) to new SVG`
     );
+    migrateLegacyFeatureOverrides(featureStrokeOverrides, extractedFeatures.value);
 
     let totalUpdated = 0;
 
@@ -351,19 +389,12 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       }
     }
 
-    for (const [featureKey, overrides] of Object.entries(featureStrokeOverrides)) {
+    for (const feature of extractedFeatures.value) {
+      const featureKey = featureOverrideKey(feature);
+      const overrides = featureKey ? featureStrokeOverrides[featureKey] : null;
       const { strokeColor, strokeWidth } = overrides || {};
       if (!strokeColor && strokeWidth === undefined) continue;
-
-      const normalizedFeatureKey = String(featureKey || '').trim();
-      if (!normalizedFeatureKey) continue;
-      const matchingFeature = extractedFeatures.value.find(
-        (feature) =>
-          String(feature?.id || '').trim() === normalizedFeatureKey ||
-          String(feature?.svg_id || '').trim() === normalizedFeatureKey
-      );
-      const svgId = matchingFeature?.svg_id || normalizedFeatureKey;
-      const elements = getFeatureElements(svg, svgId);
+      const elements = getFeatureElements(svg, feature.svg_id);
       elements.forEach((el) => {
         if (strokeColor) {
           el.setAttribute('stroke', strokeColor);
@@ -393,6 +424,7 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
     reapplyStrokeOverrides,
     resetAllStrokes,
     resetLegendEntryStroke,
+    setLegendEntryStrokeColorValue,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth
   };

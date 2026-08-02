@@ -245,10 +245,27 @@ The linear result places the 45-degree labels above their features:
 
 Numeric and depth slots placed inside the axis auto-compress when `r` and `w` are omitted; gbdraw never moves them outside automatically. The circular axis stays fixed and cannot be moved or hidden with a circular track slot.
 
+Use `--hide_scale` to hide the primary coordinate ticks and labels while
+retaining the circular genome axis. This controls only an implicit track
+layout. If `--circular_track_order`, `--circular_track_slot`, or
+`--circular_track_table` supplies an enabled `ticks` slot, that explicit slot
+remains visible; omit or disable it to hide the scale.
+
+In the web app, **Show Coordinate Scale** controls simple Circular layouts.
+While **Custom Track Slots** are active, the checkbox is disabled and the
+enabled **Ticks** slots control visibility. Scale interval and tick-label
+styling controls are available only when the effective simple or custom layout
+contains ticks. The simple checkbox value is preserved while a custom stack is
+active. **Reset** copies the simple controls, including that checkbox value, so
+it omits ticks when the simple scale is hidden. **Reset to Tuckin**, **Reset to
+Middle**, and **Reset to Spreadout** create explicit preset stacks that retain
+their ticks slot.
+
 These options control stroke colors and widths, font sizes, and circular label offsets:
 
 - `--block_stroke_color` and `--block_stroke_width`
 - `--axis_stroke_color` and `--axis_stroke_width`
+- `--hide_scale`
 - `--line_stroke_color` and `--line_stroke_width`
 - `--definition_font_size` and `--label_font_size`
 - `--outer_label_x_radius_offset`, `--outer_label_y_radius_offset`
@@ -279,13 +296,13 @@ The first montage compares center-label text at 20, 28, and 36 pt from left to r
 
 ![Human mitochondrial diagrams comparing 20, 28, and 36 pt center-label text](../../examples/definition_font_size_comparison.png)
 
-The second montage compares circular feature labels at 8, 12, and 16 pt from left to right.
+The second montage keeps the human mitochondrial feature colors, record metadata, legend, GC content, and GC skew fixed while comparing feature labels at 12, 18, and 24 pt from left to right. Each panel title identifies the selected size.
 
-![Circular WSSV diagrams comparing 8, 12, and 16 pt feature labels](../../examples/label_font_size_comparison.png)
+![Human mitochondrial diagrams comparing 12, 18, and 24 pt feature labels](../../examples/label_font_size_comparison.png)
 
-The final montage compares paired x/y outer-label offsets of 0.95, 1.00, 1.05, and 1.10 from top left to bottom right.
+The final montage changes the outer-label x offset across columns and the y offset across rows. Each axis uses 0.90, 1.00, and 1.10, while the WSSV record, feature tracks, quantitative tracks, metadata, colors, and legend remain fixed.
 
-![Circular WSSV diagrams comparing outer-label radius offsets from 0.95 through 1.10](../../examples/outer_label_offset_comparison.png)
+![Nine WSSV diagrams comparing independent outer-label x and y radius offsets of 0.90, 1.00, and 1.10](../../examples/outer_label_offset_comparison.png)
 
 ## Linear mode input selectors
 

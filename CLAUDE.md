@@ -280,9 +280,14 @@ normal test runs do not write to `tests/reference_outputs/`.
 ## Documentation
 
 - Always read and apply `.agents/skills/avoid-ai-writing/SKILL.md` when auditing
-  or changing documentation, tutorials, CLI/UI text, release notes, reports, or
+  or changing prose intended for users or human developers, including
+  documentation, tutorials, CLI/UI text, release notes, reports, and
   handoff/commit prose, even when the user does not name the Skill. Start with a
   detect pass, make only targeted edits, and verify the final text again.
+- Do not apply `avoid-ai-writing` to internal Codex implementation plans written
+  for a later agent session, even when they are stored under `docs/`. Optimize
+  those plans for complete operational context and execution fidelity. Apply
+  the Skill only if such a plan is repurposed as human-facing prose.
 - Preserve exact technical terms, UI labels, CLI options, identifiers, and
   scientifically necessary qualifications. Do not make prose less accurate merely
   to avoid a statistical writing pattern.

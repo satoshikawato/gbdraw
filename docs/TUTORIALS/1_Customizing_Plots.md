@@ -46,9 +46,9 @@ Custom track slots can reorder tracks without replacing the preset geometry. Whe
 
 The circular axis radius is fixed at `canvas.circular.radius`; it cannot be moved or hidden with a circular track slot.
 
-The montage compares `tuckin`, `middle`, and `spreadout` from left to right. All three diagrams use `--separate_strands`.
+The montage compares `tuckin`, `middle`, and `spreadout` from left to right. The top row uses `--separate_strands`; the bottom row keeps both strands on one feature track. The *E. coli* record, feature colors, metadata, legend, GC content, and GC skew are unchanged across all six panels.
 
-![Circular WSSV diagrams comparing tuckin, middle, and spreadout presets with separate strand tracks](../../examples/track_layout_separate_strands.png)
+![Six E. coli diagrams comparing three circular track presets with separated strands in the top row and a combined feature track in the bottom row](../../examples/track_layout_separate_strands.png)
 
 ## 3. Add a center label or plot title
 
@@ -115,7 +115,32 @@ Radial placement works with `auto`, `embedded_only`, and `external_only`. Unlike
 
 ## 5. Choose arrow, rectangle, or underlay rendering
 
-Use repeatable `--feature_shape TYPE=SHAPE` options to choose how a feature type is drawn. `arrow` and `rectangle` are normal foreground glyphs. `underlay` uses the feature's resolved color to highlight the full feature-track band behind other features, without consuming an overlap lane or creating a feature label.
+Use repeatable `--feature_shape TYPE=SHAPE` options to choose how a feature type
+is drawn. `arrow` is strand-aware, `rectangle` is a nondirectional foreground
+glyph, and `underlay` uses the feature's resolved color to highlight the full
+feature-track band behind other features without consuming an overlap lane or
+creating a feature label. Arrow head length and shaft width are global geometry
+settings shared by every feature type rendered as `arrow`.
+
+For CDS arrows with a head as long as the full rendered feature thickness and a
+half-width shaft, run:
+
+```bash
+gbdraw circular \
+  --gbk AP027280.gb \
+  --feature_shape CDS=arrow \
+  --arrow_head_length_ratio 1 \
+  --arrow_shaft_width_ratio 0.5 \
+  -o WSSV_narrow_arrows \
+  -f svg
+```
+
+Use `auto` for a head that starts from the existing mode-specific length and
+grows by the thickness removed from a narrowed shaft. Numeric head ratios do
+not depend on shaft width. The shaft ratio accepts values in `(0, 1]` and
+remains centered on the feature track. Its default is `1.0`, which preserves
+the legacy full-width outline; smaller values narrow every arrow shaft in the
+diagram. Short arrows become triangles when no positive shaft length remains.
 
 `repeat_region` uses `underlay` by default in new commands. To restore the earlier foreground block style:
 

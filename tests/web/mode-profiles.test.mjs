@@ -16,6 +16,7 @@ await writeFile(join(tempDir, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
   MODE_DEFAULT_FEATURE_TYPES,
+  MODE_PROFILE_STATE_SCHEMA,
   MODE_PROFILE_VERSION,
   comparisonFiltersForMode,
   comparisonProfileDefault,
@@ -30,6 +31,9 @@ const {
   WEB_UX_PROFILE,
   WEB_UX_PROFILE_VERSION
 } = await import(pathToFileURL(join(tempDir, 'js', 'web-ux-profile.js')));
+const { resolveLinearComparisonPlan } = await import(
+  pathToFileURL(join(tempDir, 'js', 'app', 'linear-comparisons.js'))
+);
 
 const normalizedComparison = (filters) => ({
   evalue: Number(filters.evalue),
@@ -146,6 +150,68 @@ importedManager.transition(importedLinearState, 'circular', 'linear');
 assert.equal(importedLinearState.identity, 91);
 assert.equal(importedLinearState.axis_stroke_color, 'gray');
 
+{
+  const liveState = {
+    ...managedAdvStateForMode('circular'),
+    identity: 88,
+    axis_stroke_color: '#123456'
+  };
+  const profileManager = createModeProfileStateManager('circular', liveState);
+  profileManager.transition(liveState, 'circular', 'linear');
+  liveState.evalue = '1e-9';
+  liveState.identity = 77;
+
+  const exported = profileManager.exportState();
+  assert.equal(exported.schema, MODE_PROFILE_STATE_SCHEMA);
+  assert.equal(exported.activeMode, 'linear');
+  assert.deepEqual(Object.keys(exported.profiles).sort(), ['circular', 'linear']);
+  assert.equal(exported.profiles.circular.values.identity, 88);
+  assert.equal(exported.profiles.circular.values.axis_stroke_color, '#123456');
+  assert.equal(exported.profiles.circular.managed.identity, false);
+  assert.equal(exported.profiles.linear.values.evalue, '1e-9');
+  assert.equal(exported.profiles.linear.values.identity, 77);
+  assert.equal(exported.profiles.linear.managed.evalue, false);
+  assert.equal(exported.profiles.linear.managed.identity, false);
+
+  const restoredState = managedAdvStateForMode('circular');
+  const restoredManager = createModeProfileStateManager('circular', restoredState);
+  restoredManager.importState(exported, 'linear', restoredState);
+  assert.equal(restoredState.evalue, '1e-9');
+  assert.equal(restoredState.identity, 77);
+  restoredState.identity = 66;
+  restoredManager.transition(restoredState, 'linear', 'circular');
+  assert.equal(restoredState.identity, 88);
+  assert.equal(restoredState.axis_stroke_color, '#123456');
+  restoredManager.transition(restoredState, 'circular', 'linear');
+  assert.equal(restoredState.identity, 66);
+
+  const roundTrip = restoredManager.exportState();
+  assert.equal(roundTrip.profiles.linear.values.identity, 66);
+  assert.equal(roundTrip.profiles.linear.managed.identity, false);
+}
+
+{
+  const restoredState = {
+    ...managedAdvStateForMode('linear'),
+    identity: 91,
+    axis_stroke_color: 'gray'
+  };
+  const restoredManager = createModeProfileStateManager('circular', {});
+  restoredManager.importState(null, 'linear', restoredState);
+  const exported = restoredManager.exportState();
+  assert.equal(exported.activeMode, 'linear');
+  assert.equal(exported.profiles.linear.values.identity, 91);
+  assert.equal(exported.profiles.linear.managed.identity, false);
+  assert.deepEqual(
+    exported.profiles.circular.values,
+    managedAdvStateForMode('circular')
+  );
+  assert.throws(
+    () => restoredManager.importState({ schema: 999, profiles: {} }, 'linear', restoredState),
+    /mode profile state schema/
+  );
+}
+
 assert.equal(
   effectiveLinearAxisColor(),
   expectedModes.linear.linearAxisColor
@@ -181,7 +247,8 @@ globalThis.window = {
       get value() {
         return getter();
       }
-    })
+    }),
+    nextTick: async () => {}
   },
   DOMPurify: { sanitize: (value) => value }
 };
@@ -212,7 +279,8 @@ assert.deepEqual(
     suppress_gc: formDefaults.suppress_gc,
     suppress_skew: formDefaults.suppress_skew,
     show_gc: formDefaults.show_gc,
-    show_skew: formDefaults.show_skew
+    show_skew: formDefaults.show_skew,
+    show_scale: formDefaults.show_scale
   },
   {
     multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
@@ -220,7 +288,8 @@ assert.deepEqual(
     suppress_gc: false,
     suppress_skew: false,
     show_gc: false,
-    show_skew: false
+    show_skew: false,
+    show_scale: true
   }
 );
 const circularAdv = createDefaultAdv();
@@ -245,6 +314,203 @@ assert.deepEqual(
   },
   { evalue: '1e-2', identity: 0, axis_stroke_color: 'lightgray' }
 );
+
+{
+  const { resetSettings } = await import(
+    pathToFileURL(join(tempDir, 'js', 'services', 'reset.js'))
+  );
+  state.mode.value = 'circular';
+  Object.assign(state.adv, createDefaultAdv('circular'));
+  state.modeProfileStateManager.reset('circular', state.adv);
+  state.adv.identity = 88;
+  state.modeProfileStateManager.transition(state.adv, 'circular', 'linear');
+  state.mode.value = 'linear';
+  state.adv.identity = 77;
+  state.form.show_scale = false;
+  state.adv.circular_track_slots_enabled = true;
+  state.adv.circular_track_slots_axis_index = 1;
+  state.adv.circular_track_slots.splice(
+    0,
+    state.adv.circular_track_slots.length,
+    {
+      id: 'custom_annotation',
+      renderer: 'annotations',
+      enabled: false,
+      side: 'outside',
+      params: {
+        set_id: 'review',
+        style_override: {
+          stroke: '#123456',
+          hatch: { angle: 45, spacing: 4 }
+        }
+      }
+    }
+  );
+  state.adv.linear_track_slots_enabled = true;
+  state.adv.linear_track_slots_axis_index = 1;
+  state.adv.linear_track_slots.splice(
+    0,
+    state.adv.linear_track_slots.length,
+    {
+      id: 'custom_spacer',
+      renderer: 'spacer',
+      enabled: false,
+      side: 'below',
+      height: '19px',
+      spacing: '4px',
+      params: {}
+    }
+  );
+  const retainedFile = { name: 'retained.gb' };
+  state.files.c_gb = retainedFile;
+  const retainedComparisonFile = { name: 'retained-comparison.tsv' };
+  state.linearComparisonPlan.mode = 'selected';
+  state.linearComparisonPlan.defaultSource = 'upload';
+  state.linearComparisonPlan.edges.splice(
+    0,
+    state.linearComparisonPlan.edges.length,
+    {
+      id: 'generated-only',
+      queryUid: 'a',
+      subjectUid: 'b',
+      included: true,
+      fileActive: false,
+      losatFilenameActive: false,
+      source: 'losat',
+      file: null,
+      losatFilename: ''
+    },
+    {
+      id: 'retained-file',
+      queryUid: 'a',
+      subjectUid: 'b',
+      included: true,
+      fileActive: true,
+      losatFilenameActive: false,
+      source: 'upload',
+      file: retainedComparisonFile,
+      losatFilename: ''
+    },
+    {
+      id: 'retained-name',
+      queryUid: 'b',
+      subjectUid: 'c',
+      included: true,
+      fileActive: false,
+      losatFilenameActive: true,
+      source: 'losat',
+      file: null,
+      losatFilename: 'custom-subject.fna'
+    }
+  );
+
+  resetSettings(state);
+
+  const resetAdvDefaults = createDefaultAdv('linear');
+  const resetProfiles = state.modeProfileStateManager.exportState();
+  assert.deepEqual(
+    resetProfiles.profiles.circular.values,
+    managedAdvStateForMode('circular')
+  );
+  assert.deepEqual(
+    resetProfiles.profiles.linear.values,
+    managedAdvStateForMode('linear')
+  );
+  assert.ok(Object.values(resetProfiles.profiles.circular.managed).every(Boolean));
+  assert.ok(Object.values(resetProfiles.profiles.linear.managed).every(Boolean));
+  assert.equal(state.adv.circular_track_slots_enabled, false);
+  assert.equal(state.adv.linear_track_slots_enabled, false);
+  assert.equal(state.form.show_scale, true);
+  assert.deepEqual(
+    state.adv.circular_track_slots,
+    resetAdvDefaults.circular_track_slots
+  );
+  assert.deepEqual(
+    state.adv.linear_track_slots,
+    resetAdvDefaults.linear_track_slots
+  );
+  assert.equal(
+    state.adv.circular_track_slots_axis_index,
+    resetAdvDefaults.circular_track_slots_axis_index
+  );
+  assert.equal(
+    state.adv.linear_track_slots_axis_index,
+    resetAdvDefaults.linear_track_slots_axis_index
+  );
+  assert.equal(state.files.c_gb, retainedFile);
+  assert.equal(state.linearComparisonPlan.mode, 'adjacent');
+  assert.equal(state.linearComparisonPlan.defaultSource, 'losat');
+  assert.deepEqual(
+    state.linearComparisonPlan.edges.map((edge) => edge.id),
+    ['retained-file', 'retained-name']
+  );
+  assert.equal(state.linearComparisonPlan.edges[0].file, retainedComparisonFile);
+  assert.equal(state.linearComparisonPlan.edges[0].included, false);
+  assert.equal(state.linearComparisonPlan.edges[0].fileActive, false);
+  assert.equal(state.linearComparisonPlan.edges[0].losatFilenameActive, false);
+  assert.equal(state.linearComparisonPlan.edges[1].losatFilename, 'custom-subject.fna');
+  assert.equal(state.linearComparisonPlan.edges[1].included, false);
+  assert.equal(state.linearComparisonPlan.edges[1].fileActive, false);
+  assert.equal(state.linearComparisonPlan.edges[1].losatFilenameActive, false);
+}
+
+{
+  const { applyConfigData, buildConfigData } = await import(
+    pathToFileURL(join(tempDir, 'js', 'services', 'config.js'))
+  );
+  state.mode.value = 'circular';
+  Object.assign(state.adv, createDefaultAdv('circular'));
+  state.modeProfileStateManager.reset('circular', state.adv);
+  state.adv.identity = 88;
+  state.modeProfileStateManager.transition(state.adv, 'circular', 'linear');
+  state.mode.value = 'linear';
+  state.adv.identity = 77;
+  state.form.show_scale = false;
+  const savedConfig = structuredClone(buildConfigData());
+
+  assert.equal(savedConfig.form.show_scale, false);
+  assert.equal(savedConfig.modeProfiles.profiles.circular.values.identity, 88);
+  assert.equal(savedConfig.modeProfiles.profiles.circular.managed.identity, false);
+  assert.equal(savedConfig.modeProfiles.profiles.linear.values.identity, 77);
+  assert.equal(savedConfig.modeProfiles.profiles.linear.managed.identity, false);
+
+  Object.assign(state.adv, createDefaultAdv('linear'));
+  state.modeProfileStateManager.reset('linear', state.adv);
+  state.form.show_scale = true;
+  applyConfigData(savedConfig);
+  assert.equal(state.form.show_scale, false);
+  assert.equal(state.adv.identity, 77);
+  state.modeProfileStateManager.transition(state.adv, 'linear', 'circular');
+  assert.equal(state.adv.identity, 88);
+
+  const cliProjectedNumericConfig = structuredClone(savedConfig);
+  cliProjectedNumericConfig.adv.arrow_head_length_ratio = '1.25';
+  cliProjectedNumericConfig.adv.arrow_shaft_width_ratio = '0.25';
+  applyConfigData(cliProjectedNumericConfig);
+  assert.equal(state.adv.arrow_head_length_ratio, 1.25);
+  assert.equal(state.adv.arrow_shaft_width_ratio, 0.25);
+
+  const cliProjectedAutoConfig = structuredClone(savedConfig);
+  cliProjectedAutoConfig.adv.arrow_head_length_ratio = 'auto';
+  cliProjectedAutoConfig.adv.arrow_shaft_width_ratio = '1';
+  applyConfigData(cliProjectedAutoConfig);
+  assert.equal(state.adv.arrow_head_length_ratio, null);
+  assert.equal(state.adv.arrow_shaft_width_ratio, 1.0);
+
+  const version39Config = structuredClone(savedConfig);
+  delete version39Config.modeProfiles;
+  state.mode.value = 'linear';
+  Object.assign(state.adv, createDefaultAdv('linear'));
+  state.modeProfileStateManager.reset('linear', state.adv);
+  applyConfigData(version39Config);
+  const migratedProfiles = state.modeProfileStateManager.exportState();
+  assert.equal(migratedProfiles.profiles.linear.values.identity, 77);
+  assert.equal(migratedProfiles.profiles.linear.managed.identity, false);
+  assert.deepEqual(
+    migratedProfiles.profiles.circular.values,
+    managedAdvStateForMode('circular')
+  );
+}
 
 const { buildCanonicalRenderRequest } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-request.js'))
@@ -293,7 +559,20 @@ for (const modeName of ['circular', 'linear']) {
         }],
         linearComparisons: []
       };
-  const canonical = buildCanonicalRenderRequest({ state, filesData });
+  const comparisonPlanSnapshot = modeName === 'linear'
+    ? resolveLinearComparisonPlan({
+        plan: state.linearComparisonPlan,
+        sequences: filesData.linearSeqs,
+        layout: [],
+        losatProgram: state.losatProgram.value,
+        blastpMode: state.losat.blastp.mode
+      })
+    : null;
+  const canonical = buildCanonicalRenderRequest({
+    state,
+    filesData,
+    comparisonPlanSnapshot
+  });
   const options = canonical.renderRequest.diagramOptions;
   const expected = expectedModes[modeName];
   assert.equal(canonical.renderRequest.mode, modeName);
@@ -312,6 +591,7 @@ for (const modeName of ['circular', 'linear']) {
   assert.deepEqual(options.selectedFeaturesSet, semanticParity.featureTypes);
   assert.equal(options.configOverrides['canvas.show_gc'], expected.tracks.gc);
   assert.equal(options.configOverrides['canvas.show_skew'], expected.tracks.skew);
+  assert.equal(options.configOverrides['objects.scale.show'], true);
   if (modeName === 'linear') {
     assert.equal(
       options.configOverrides['objects.axis.linear.stroke_color'],
