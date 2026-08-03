@@ -43,6 +43,10 @@ MANUALLY_MANAGED_FIGURES: dict[str, str] = {
 }
 
 UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
+    "examples/majani.svg": (
+        "Linked from the Gallery but not embedded because the full-size SVG is too large "
+        "for a Markdown preview."
+    ),
     "examples/NC_000921_spring.svg": "Archived single-genome style recipe retained for reproducibility.",
     "examples/NC_000962_psyche.svg": "Archived single-genome style recipe retained for reproducibility.",
     "examples/NC_001416.svg": "Static companion to the Beginner linear interactive Gallery example.",
