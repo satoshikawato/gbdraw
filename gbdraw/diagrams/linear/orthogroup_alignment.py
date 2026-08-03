@@ -13,7 +13,14 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from ...analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
+from ...core.record_metadata import (
+    _mapped_feature_location_parts,
+    _read_coord_map,
+    _source_feature_index,
+    _source_feature_location_parts,
+)
 from ...exceptions import ValidationError
+from ...features.ids import compute_feature_hash_from_location_parts
 
 
 @dataclass(frozen=True)
@@ -23,6 +30,8 @@ class OrthogroupAlignmentMember:
     protein_id: str
     source_protein_id: str
     feature_svg_id: str
+    view_feature_svg_id: str
+    feature_index: int
     center: float
     bitscore: float
     evalue: float
@@ -47,8 +56,8 @@ class OrthogroupAlignmentCanvasExtents:
 
 
 class OrthogroupLabelEligibility(NamedTuple):
-    member_ids_by_record: dict[int, set[str]]
-    top_member_ids_by_record: dict[int, set[str]]
+    member_ids_by_record: dict[int, set[str | int]]
+    top_member_ids_by_record: dict[int, set[str | int]]
 
 
 def _row_value(row: object, column: str, default: object = "") -> object:
@@ -106,6 +115,11 @@ def _member_from_row(row: object, role: str) -> OrthogroupAlignmentMember | None
         protein_id=_row_str(row, f"{role}_protein_id"),
         source_protein_id=_row_str(row, f"{role}_source_protein_id"),
         feature_svg_id=_row_str(row, f"{role}_feature_svg_id"),
+        view_feature_svg_id=(
+            _row_str(row, f"{role}_view_feature_svg_id")
+            or _row_str(row, f"{role}_feature_svg_id")
+        ),
+        feature_index=_row_int(row, f"{role}_feature_index"),
         center=_center_from_row(row, role),
         bitscore=_row_float(row, "bitscore", 0.0),
         evalue=_row_float(row, "evalue", float("inf")),
@@ -140,7 +154,7 @@ def _is_better_member(
 def _collect_alignment_members(
     comparisons: Sequence[DataFrame],
 ) -> dict[str, list[OrthogroupAlignmentMember]]:
-    members_by_key: dict[tuple[int, str, str, str], OrthogroupAlignmentMember] = {}
+    members_by_key: dict[tuple[str, int, int | str], OrthogroupAlignmentMember] = {}
     for comparison in comparisons:
         if comparison is None or comparison.empty or "orthogroup_id" not in comparison.columns:
             continue
@@ -149,13 +163,29 @@ def _collect_alignment_members(
                 member = _member_from_row(row, role)
                 if member is None or member.record_index < 0:
                     continue
-                key = (
-                    member.record_index,
-                    member.protein_id,
-                    member.source_protein_id,
-                    member.feature_svg_id,
-                )
+                if member.feature_index >= 0:
+                    key = ("source", member.record_index, member.feature_index)
+                elif member.feature_svg_id:
+                    key = ("stable", member.record_index, member.feature_svg_id)
+                else:
+                    continue
                 existing = members_by_key.get(key)
+                if (
+                    existing is not None
+                    and existing.orthogroup_id != member.orthogroup_id
+                ):
+                    raise ValidationError(
+                        "Orthogroup alignment rows assign one feature to conflicting orthogroups."
+                    )
+                if (
+                    existing is not None
+                    and existing.feature_svg_id
+                    and member.feature_svg_id
+                    and existing.feature_svg_id != member.feature_svg_id
+                ):
+                    raise ValidationError(
+                        "Orthogroup alignment rows contain conflicting stable feature identity."
+                    )
                 if member.representative and existing is not None and not existing.representative:
                     members_by_key[key] = member
                 elif _is_better_member(member, existing):
@@ -187,6 +217,8 @@ def _collect_alignment_members_from_orthogroups(
                     protein_id=str(member.protein_id or ""),
                     source_protein_id=str(member.source_protein_id or ""),
                     feature_svg_id=str(member.feature_svg_id or ""),
+                    view_feature_svg_id="",
+                    feature_index=int(getattr(member, "feature_index", -1)),
                     center=center,
                     bitscore=0.0,
                     evalue=float("inf"),
@@ -201,9 +233,81 @@ def _collect_alignment_members_from_orthogroups(
     return members_by_orthogroup
 
 
+def _features_by_source_index(record: SeqRecord) -> dict[int, object]:
+    by_source_index: dict[int, object] = {}
+    fallback_index = 0
+
+    def walk(features: object) -> None:
+        nonlocal fallback_index
+        for feature in features or ():  # type: ignore[union-attr]
+            source_index = _source_feature_index(feature)
+            resolved_index = fallback_index if source_index is None else source_index
+            fallback_index += 1
+            existing = by_source_index.get(resolved_index)
+            if existing is not None and existing is not feature:
+                raise ValidationError(
+                    "Linear record contains duplicate source feature indexes."
+                )
+            by_source_index[resolved_index] = feature
+            walk(getattr(feature, "sub_features", None))
+
+    walk(record.features)
+    return by_source_index
+
+
+def _biological_feature_svg_id(record: SeqRecord, feature: object) -> str:
+    parts = _source_feature_location_parts(feature)
+    if parts is None:
+        coord_base, coord_step = _read_coord_map(record)
+        parts = _mapped_feature_location_parts(
+            feature,
+            coord_base=coord_base,
+            coord_step=coord_step,
+        )
+    if not parts:
+        return ""
+    return compute_feature_hash_from_location_parts(
+        str(getattr(feature, "type", "") or ""),
+        parts,
+        record_id=record.id,
+    )
+
+
+def _member_label_identity(
+    member: OrthogroupAlignmentMember,
+    *,
+    record_features: dict[int, dict[int, object]] | None,
+    records: Sequence[SeqRecord] | None,
+) -> str | int:
+    if (
+        record_features is not None
+        and records is not None
+        and member.feature_index >= 0
+        and 0 <= member.record_index < len(records)
+    ):
+        feature = record_features.get(member.record_index, {}).get(
+            member.feature_index
+        )
+        if feature is None:
+            raise ValidationError(
+                "Orthogroup member source feature index is absent from its record."
+            )
+        biological_id = _biological_feature_svg_id(
+            records[member.record_index],
+            feature,
+        )
+        if member.feature_svg_id and biological_id != member.feature_svg_id:
+            raise ValidationError(
+                "Orthogroup member source feature index conflicts with its stable feature ID."
+            )
+        return member.feature_index
+    return member.view_feature_svg_id or member.feature_svg_id
+
+
 def build_orthogroup_label_eligibility(
     orthogroups: OrthogroupResult | None = None,
     comparisons: Sequence[DataFrame] | None = None,
+    records: Sequence[SeqRecord] | None = None,
 ) -> OrthogroupLabelEligibility:
     """Return all orthogroup feature IDs and the top-record IDs eligible for labels."""
 
@@ -212,25 +316,45 @@ def build_orthogroup_label_eligibility(
         if orthogroups is not None
         else _collect_alignment_members(comparisons or [])
     )
-    member_ids_by_record: dict[int, set[str]] = {}
-    top_member_ids_by_record: dict[int, set[str]] = {}
+    member_ids_by_record: dict[int, set[str | int]] = {}
+    top_member_ids_by_record: dict[int, set[str | int]] = {}
+    record_features = (
+        {
+            record_index: _features_by_source_index(record)
+            for record_index, record in enumerate(records)
+        }
+        if records is not None
+        else None
+    )
     for members in members_by_orthogroup.values():
-        members_with_ids = [member for member in members if member.feature_svg_id]
+        members_with_ids = [
+            (member, _member_label_identity(
+                member,
+                record_features=record_features,
+                records=records,
+            ))
+            for member in members
+        ]
+        members_with_ids = [
+            item
+            for item in members_with_ids
+            if item[1] is not None and item[1] != ""
+        ]
         if not members_with_ids:
             continue
-        for member in members_with_ids:
-            member_ids_by_record.setdefault(member.record_index, set()).add(member.feature_svg_id)
-        top_record_index = min(member.record_index for member in members_with_ids)
-        for member in members_with_ids:
+        for member, identity in members_with_ids:
+            member_ids_by_record.setdefault(member.record_index, set()).add(identity)
+        top_record_index = min(member.record_index for member, _identity in members_with_ids)
+        for member, identity in members_with_ids:
             if member.record_index == top_record_index:
-                top_member_ids_by_record.setdefault(member.record_index, set()).add(member.feature_svg_id)
+                top_member_ids_by_record.setdefault(member.record_index, set()).add(identity)
     return OrthogroupLabelEligibility(member_ids_by_record, top_member_ids_by_record)
 
 
 def orthogroup_label_sets_for_record(
     eligibility: OrthogroupLabelEligibility | None,
     record_index: int,
-) -> tuple[set[str] | None, set[str] | None]:
+) -> tuple[set[str | int] | None, set[str | int] | None]:
     if eligibility is None:
         return None, None
     return (
@@ -245,6 +369,7 @@ def _target_matches(member: OrthogroupAlignmentMember, target: str) -> bool:
         member.protein_id,
         member.source_protein_id,
         member.feature_svg_id,
+        member.view_feature_svg_id,
     }
 
 
@@ -257,10 +382,19 @@ def _resolve_target_member(
         representatives = [member for member in members if member.representative]
         return target, (representatives[0] if representatives else members[0])
 
-    for orthogroup_id, members in members_by_orthogroup.items():
-        for member in members:
-            if _target_matches(member, target):
-                return orthogroup_id, member
+    matches = [
+        (orthogroup_id, member)
+        for orthogroup_id, members in members_by_orthogroup.items()
+        for member in members
+        if _target_matches(member, target)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValidationError(
+            "align_orthogroup_feature matched multiple orthogroup members; "
+            "use an unambiguous orthogroup, runtime protein, or feature ID."
+        )
     raise ValidationError(
         "align_orthogroup_feature did not match any LOSATP blastp orthogroup member."
     )

@@ -55,7 +55,10 @@ import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
-import { createOrthogroupEditor } from './orthogroups.js';
+import {
+  createOrthogroupEditor,
+  resolveUniqueOrthogroupMemberForFeature
+} from './orthogroups.js';
 import {
   createCircularTrackSlotEditor,
   estimateCircularConservationLayoutWarning
@@ -572,7 +575,7 @@ export const createAppSetup = () => {
     if (!edge) return;
     edge.losatFilename = String(value || '');
     edge.losatFilenameActive = Boolean(edge.losatFilename.trim());
-    replaceLinearComparisonPlan(next);
+    replaceLinearComparisonPlan(next, { invalidate: false });
   };
   const reuseLinearComparisonLosatFilename = (id) => {
     const next = selectedPlanForEdit();
@@ -588,7 +591,7 @@ export const createAppSetup = () => {
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
     edge.losatFilenameActive = false;
-    replaceLinearComparisonPlan(next);
+    replaceLinearComparisonPlan(next, { invalidate: false });
   };
   const updateResolvedLosatFilenameDraft = (edgeKey, updater) => {
     const resolved = linearComparisonResolution.value.edges.find((edge) => edge.edgeKey === edgeKey);
@@ -605,7 +608,7 @@ export const createAppSetup = () => {
       index = next.edges.length - 1;
     }
     updater(next.edges[index]);
-    replaceLinearComparisonPlan(next);
+    replaceLinearComparisonPlan(next, { invalidate: false });
   };
   const setResolvedLinearComparisonLosatFilename = (edgeKey, value) => {
     updateResolvedLosatFilenameDraft(edgeKey, (edge) => {
@@ -1643,6 +1646,7 @@ export const createAppSetup = () => {
     }
   );
   const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions, history });
+  legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
     cancelRunAnalysis,
@@ -1677,6 +1681,7 @@ export const createAppSetup = () => {
     state,
     getPyodide,
     ensurePyodide: pyodideManager.initPyodide,
+    writeFileToFs: pyodideManager.writeFileToFs,
     legendLayout,
     rerenderLinearDefinitions: runLabelReflow
   });
@@ -2087,34 +2092,10 @@ export const createAppSetup = () => {
     const cf = clickedFeature.value;
     const orthogroupId = String(cf?.orthogroupId || '').trim();
     if (!orthogroupId) return null;
-    const group = (Array.isArray(orthogroups.value) ? orthogroups.value : [])
-      .find((entry) => String(entry?.id || '').trim() === orthogroupId);
+    const group = orthogroupActions.getOrthogroupById(orthogroupId);
     if (!group) return null;
     const members = orthogroupActions.getEnrichedOrthogroupMembers(group);
-    const currentStableId = String(
-      cf?.feat?.stable_feature_id ||
-      cf?.feat?.stableFeatureId ||
-      cf?.feat?.stable_svg_id ||
-      cf?.feat?.stableFeatureSvgId ||
-      cf?.feat?.svg_id ||
-      ''
-    ).trim();
-    const currentRecordIndex = Number(
-      cf?.feat?.fileIdx ??
-      cf?.orthogroupMember?.recordIndex ??
-      cf?.feat?.recordIndex ??
-      cf?.feat?.record_idx
-    );
-    const currentMember = members.find((member) => (
-      String(
-        member?.stableFeatureSvgId ||
-        member?.stable_feature_svg_id ||
-        member?.featureSvgId ||
-        member?.feature_svg_id ||
-        ''
-      ).trim() === currentStableId &&
-      (!Number.isInteger(currentRecordIndex) || Number(member?.recordIndex) === currentRecordIndex)
-    )) || cf.orthogroupMember || null;
+    const currentMember = resolveUniqueOrthogroupMemberForFeature(cf?.feat, members);
     const membersByRecord = orthogroupActions.groupOrthogroupMembersByRecord(members);
     return {
       id: orthogroupId,

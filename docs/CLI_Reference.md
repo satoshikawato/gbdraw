@@ -838,6 +838,7 @@ usage: gbdraw linear [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
               [--protein_blastp_max_hits PROTEIN_BLASTP_MAX_HITS]
               [--protein_blastp_candidate_limit PROTEIN_BLASTP_CANDIDATE_LIMIT]
+              [--protein_blastp_output TSV]
               [--align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE]
               [--collinear_search_scope {adjacent,all}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
@@ -970,6 +971,11 @@ options:
   --protein_blastp_candidate_limit PROTEIN_BLASTP_CANDIDATE_LIMIT
                         Optional protein blastp candidate cap per query; use
                         'none' for no cap (default: none).
+  --protein_blastp_output TSV
+                        Write the raw protein-search evidence to one
+                        deterministic TSV. Runtime handles are replaced with
+                        user-visible protein IDs; requires
+                        --protein_blastp_mode.
   --align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE
                         Align linear records by the gbdraw similarity group
                         containing this feature SVG hash or protein ID.
@@ -1382,7 +1388,9 @@ hit set is not guaranteed to be identical to LOSAT.
 - [Quickstart](./QUICKSTART.md)
 - [Recipes](./RECIPES.md)
 - [Command-line guides](./TUTORIALS/README.md)
-- [Draw protein matches from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md)
-- [Use TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md)
+- [Run Pairwise protein searches with LOSATP](./HOW_TO/CLI/run-losatp-pairwise.md)
+- [Create protein Similarity groups with LOSATP](./HOW_TO/CLI/create-protein-similarity-groups.md)
+- [Draw Collinear protein-match blocks with LOSATP](./HOW_TO/CLI/draw-collinear-protein-blocks.md)
+- [Use record, comparison, conservation, annotation, and track tables](./HOW_TO/CLI/use-input-tables.md)
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | **CLI Reference** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

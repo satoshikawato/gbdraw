@@ -28,6 +28,7 @@ from ...render.groups.linear import (  # type: ignore[reportMissingImports]
     DepthGroup,
     GcContentGroup,
     GcSkewGroup,
+    LinearFeatureDomIndex,
     PairWiseMatchGroup,
     SeqRecordGroup,
 )
@@ -50,8 +51,8 @@ def add_record_group(
     precalculated_labels: Optional[list],
     draw_features: bool = True,
     label_font_size: float | None = None,
-    orthogroup_label_member_ids: set[str] | None = None,
-    orthogroup_label_top_member_ids: set[str] | None = None,
+    orthogroup_label_member_ids: set[str | int] | None = None,
+    orthogroup_label_top_member_ids: set[str | int] | None = None,
     record_index: int = 0,
     record_count: int = 1,
     group_id: str | None = None,
@@ -411,6 +412,7 @@ def add_explicit_comparisons_on_linear_canvas(
     blast_config,
     records: list[SeqRecord],
     placements: dict[int, LinearRecordPlacement],
+    feature_dom_index: LinearFeatureDomIndex | None = None,
 ) -> Drawing:
     """Draw comparisons using explicit endpoint placements."""
 
@@ -443,6 +445,7 @@ def add_explicit_comparisons_on_linear_canvas(
             subject_placement=subject,
             query_y=query_anchor - top_y,
             subject_y=subject_anchor - top_y,
+            feature_dom_index=feature_dom_index,
         ).get_group()
         match_group.translate(canvas_config.horizontal_offset, top_y)
         canvas.add(match_group)

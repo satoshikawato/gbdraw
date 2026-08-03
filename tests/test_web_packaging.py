@@ -13,6 +13,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tarfile
 import threading
 import zipfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -48,6 +49,7 @@ BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/web/gallery/",
     "gbdraw/web/js/",
     "gbdraw/web/presets/",
+    "gbdraw/web/tutorial-data/",
     "gbdraw/web/vendor/",
     "gbdraw/web/wasm/",
 )
@@ -105,6 +107,11 @@ def _write_pairwise_popup_test_module(tmp_path: Path) -> Path:
         (WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    feature_identity_path = tmp_path / "feature-identity.mjs"
+    feature_identity_path.write_text(
+        (WEB_ROOT / "js" / "services" / "feature-identity.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
     sequence_fasta_path.write_text(
         (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js")
@@ -144,7 +151,8 @@ def _write_pairwise_popup_test_module(tmp_path: Path) -> Path:
         .replace("./feature-utils.js", "./feature-utils.mjs")
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
         .replace("./losat-normalization.js", "./losat-normalization.mjs")
-        .replace("./match-sequences.js", "./match-sequences.mjs"),
+        .replace("./match-sequences.js", "./match-sequences.mjs")
+        .replace("../services/feature-identity.js", "./feature-identity.mjs"),
         encoding="utf-8",
     )
     return module_path
@@ -347,9 +355,18 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
 
     assert all("web/gallery" not in pattern for pattern in package_data_patterns)
     assert "web/js/services/*.js" in package_data_patterns
+    assert "web/tutorial-data/*.json" in package_data_patterns
+    assert "web/tutorial-data/*/*.gb" in package_data_patterns
+    assert "web/tutorial-data/*/*.gbk" in package_data_patterns
+    assert "web/tutorial-data/*/*.gff3" in package_data_patterns
+    assert "web/tutorial-data/*/*.tsv" in package_data_patterns
     assert (WEB_ROOT / "js" / "services" / "canonical-comparisons.js").is_file()
-    assert "gbdraw/web/gallery" not in (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    manifest_in = (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    assert "gbdraw/web/gallery" not in manifest_in
+    assert "recursive-include gbdraw/web/tutorial-data *" in manifest_in
+    assert "include tools/build_lambda_gff3_fixture.py" in manifest_in
     assert "gbdraw/web/gallery/" in build_support._BROWSER_WHEEL_FORBIDDEN_PREFIXES
+    assert "gbdraw/web/tutorial-data/" in build_support._BROWSER_WHEEL_FORBIDDEN_PREFIXES
 
 
 def test_index_links_to_open_source_notices() -> None:
@@ -570,6 +587,18 @@ def test_web_canonical_session_request_codec() -> None:
         encoding="utf-8"
     )
     assert "files: serializedFiles" not in config_source
+
+
+def test_web_session_definition_resource_rehydration() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    subprocess.run(
+        [node, "tests/web/session-definition-rehydration.test.mjs"],
+        check=True,
+        cwd=REPO_ROOT,
+    )
 
 
 def test_web_gallery_session_migration() -> None:
@@ -815,130 +844,50 @@ def test_web_collinear_blocks_use_rbh_evidence_scope_ui() -> None:
     assert "'data-collinear-group-scope'" in svg_sanitization_js
 
 
-def test_web_orthogroup_payload_serializes_record_local_scope() -> None:
+def test_web_losatp_payload_uses_only_canonical_typed_group_resources() -> None:
     helpers_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
-    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
-    namespace: dict[str, object] = {}
-    exec(helper_source, namespace)
-
-    member = SimpleNamespace(
-        orthogroup_id="og_2",
-        protein_id="a0",
-        source_protein_id=None,
-        record_index=0,
-        record_id="record_a",
-        feature_index=0,
-        label="a0",
-        feature_svg_id="feature-a0",
-        start=0,
-        end=9,
-        strand=1,
-        representative=True,
-        role="local_paralog",
-        confidence="high",
-        assignment_reason="record-local reciprocal paralog cluster",
-        supporting_edges=("a0->a1:record_local_paralog",),
-        best_core_support=10.0,
-        second_best_core_support=0.0,
-        gene=None,
-        product=None,
-        note=None,
-        locus_tag=None,
-        gene_id=None,
-        old_locus_tag=None,
-    )
-    orthogroups = SimpleNamespace(
-        orthogroups={"og_2": [member]},
-        names_by_orthogroup_id={},
-        descriptions_by_orthogroup_id={},
-        name_candidates_by_orthogroup_id={},
-        confidence_by_orthogroup_id={},
-        rbh_orthogroups={"og_2": ("a0",)},
-        ortholog_edges_by_orthogroup_id={},
-        ortholog_paths_by_orthogroup_id={},
-        related_edges_by_orthogroup_id={},
-        scope_by_orthogroup_id={"og_2": "record_local"},
-        source_record_index_by_orthogroup_id={"og_2": 0},
-    )
-
-    payload = namespace["_serialize_orthogroups_payload"](orthogroups)
-
-    assert payload[0]["scope"] == "record_local"
-    assert payload[0]["source_record_index"] == 0
-    assert "sourceRecordIndex" not in payload[0]
-    assert payload[0]["member_count"] == 1
-    assert payload[0]["record_coverage_count"] == 1
-    assert payload[0]["members"][0]["role"] == "local_paralog"
-    assert payload[0]["members"][0]["strand"] == "+"
+    assert "from gbdraw.session_request_codec import encode_canonical_typed_resource" in helpers_js
+    assert 'encode_canonical_typed_resource(\n                        "result"' in helpers_js
+    assert 'encode_canonical_typed_resource(\n                    "orthogroupResult"' in helpers_js
+    assert "_serialize_orthogroups_payload" not in helpers_js
+    assert "_web_orthogroup_member_display_metadata" not in helpers_js
+    assert "_apply_web_orthogroup_member_display_metadata" not in helpers_js
+    assert '"collinearityBlocks"' not in helpers_js
+    assert '"collinearGroups"' not in helpers_js
 
 
-def test_web_losatp_orthogroup_members_use_absolute_region_coordinates() -> None:
+def test_web_collinear_payload_keeps_presentation_out_of_biological_scope() -> None:
     helpers_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
-    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
-    namespace: dict[str, object] = {}
-    exec(helper_source, namespace)
+    collinearity_py = Path("gbdraw/analysis/collinearity.py").read_text(encoding="utf-8")
 
-    groups = [
-        {
-            "members": [
-                {
-                    "proteinId": "p1",
-                    "start": 0,
-                    "end": 457,
-                    "strand": "-",
-                }
-            ]
-        }
-    ]
-    metadata = namespace["_web_orthogroup_member_display_metadata"](
-        [
-            {
-                "protein_map": {
-                    "p1": {
-                        "protein_id": "p1",
-                        "start": 0,
-                        "end": 457,
-                        "strand": -1,
-                        "coord_base": 10000,
-                        "coord_step": 1,
-                        "coord_length": 1000,
-                    }
-                },
-                "view_transform": {"length": 1000, "reverse": False},
-            }
-        ]
-    )
-
-    namespace["_apply_web_orthogroup_member_display_metadata"](groups, metadata)
-
-    assert groups[0]["members"][0]["start"] == 9999
-    assert groups[0]["members"][0]["end"] == 10456
-    assert groups[0]["members"][0]["strand"] == "-"
-
-
-def test_web_collinear_payload_splits_local_groups_from_global_orthogroups() -> None:
-    helpers_js = (WEB_ROOT / "js" / "app" / "python-helpers.js").read_text(encoding="utf-8")
-
-    assert 'group_scope = "global_collinear" if search_scope == "all" else "adjacent_local"' in helpers_js
-    assert 'converted["group_kind"] = "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group"' in helpers_js
-    assert 'converted["collinear_group_scope"] = group_scope' in helpers_js
-    assert 'orthogroup_groups = serialized_groups if group_scope == "global_collinear" else []' in helpers_js
-    assert 'collinear_groups = serialized_groups if group_scope == "adjacent_local" else []' in helpers_js
-    assert '"orthogroups": orthogroup_groups' in helpers_js
-    assert '"collinearGroups": collinear_groups' in helpers_js
-    assert '"collinearGroupScope": group_scope' in helpers_js
+    assert 'comparison["group_kind"] = group_kind' in collinearity_py
+    assert 'comparison["collinear_group_scope"] = presentation_scope' in collinearity_py
+    assert '"collinearityResult": json.loads(' in helpers_js
+    assert 'group["scope"] = group_scope' not in helpers_js
+    assert '"orthogroups": orthogroup_groups' not in helpers_js
+    assert '"collinearGroups": collinear_groups' not in helpers_js
 
 
 def test_web_record_local_orthogroup_scope_survives_state_and_ui_layers() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     config_js = (WEB_ROOT / "js" / "services" / "config.js").read_text(encoding="utf-8")
     run_analysis_js = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(encoding="utf-8")
+    feature_metadata_js = (
+        WEB_ROOT / "js" / "services" / "orthogroup-feature-metadata.js"
+    ).read_text(encoding="utf-8")
     orthogroups_js = (WEB_ROOT / "js" / "app" / "orthogroups.js").read_text(encoding="utf-8")
     normalizer_js = (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8")
 
     assert "state.orthogroups.value = groups;" in config_js
-    assert "orthogroupScope" in config_js
-    assert "orthogroupScope" in run_analysis_js
+    assert "from './orthogroup-feature-metadata.js'" in config_js
+    assert "buildOrthogroupFeatureIndex(groups)" in config_js
+    assert "enrichFeaturesWithOrthogroups(" in config_js
+    assert "from '../services/orthogroup-feature-metadata.js'" in run_analysis_js
+    assert "buildOrthogroupFeatureIndex(groups)" in run_analysis_js
+    assert "enrichFeaturesWithOrthogroups(" in run_analysis_js
+    assert "RENDERED_FEATURE_ID_KEYS" in feature_metadata_js
+    assert "const identity = memberIdentity(member)" in feature_metadata_js
+    assert "orthogroupScope" in feature_metadata_js
     assert "Record-specific similarity group" in normalizer_js
     assert "Collinearity-backed global evidence" in normalizer_js
     assert "Local collinear group" in normalizer_js
@@ -2205,9 +2154,16 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
     source_path = WEB_ROOT / "js" / "app" / "feature-search" / "search-core.js"
     module_path = tmp_path / "search-core.mjs"
     feature_utils_path = tmp_path / "feature-utils.mjs"
+    feature_identity_path = tmp_path / "feature-identity.mjs"
     feature_utils_path.write_text((WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"), encoding="utf-8")
+    feature_identity_path.write_text(
+        (WEB_ROOT / "js" / "services" / "feature-identity.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     module_path.write_text(
-        source_path.read_text(encoding="utf-8").replace("../feature-utils.js", "./feature-utils.mjs"),
+        source_path.read_text(encoding="utf-8")
+        .replace("../feature-utils.js", "./feature-utils.mjs")
+        .replace("../../services/feature-identity.js", "./feature-identity.mjs"),
         encoding="utf-8",
     )
     check_path = tmp_path / "check-feature-search.mjs"
@@ -2314,6 +2270,8 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
           label: featureAnalysisId,
           sourceProteinId: unsupportedLongTransportId,
           proteinId: runtimeHandle,
+          stable_feature_id: 'source-internal',
+          record_idx: 0,
           qualifiers: {{
             protein_id: [runtimeHandle, featureAnalysisId, unsupportedLongTransportId],
             locus_tag: ['WP_SAFE_SEARCH.1']
@@ -2323,7 +2281,10 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
         const internalOrthogroups = [{{
           id: 'og_internal',
           members: [{{
-            featureSvgId: 'finternal',
+            recordIndex: 0,
+            featureSvgId: 'source-internal',
+            stableFeatureSvgId: 'source-internal',
+            renderedFeatureSvgId: 'finternal',
             displayProteinId: runtimeHandle,
             sourceProteinId: featureAnalysisId,
             label: unsupportedLongTransportId,
@@ -2343,6 +2304,70 @@ def test_feature_search_core_matches_labels_qualifiers_and_sequence_aliases(tmp_
         assert(
           !internalItems.some((item) => [runtimeHandle, featureAnalysisId, unsupportedLongTransportId].includes(item.value)),
           `Internal protein ID leaked into GUI search: ${{JSON.stringify(internalItems)}}`
+        );
+
+        const strictFeature = {{
+          svg_id: 'rendered-target',
+          stable_feature_id: 'source-target',
+          record_idx: 0,
+          orthogroupId: 'og_strict',
+          orthogroupMember: {{ product: 'unverified-direct-member' }}
+        }};
+        const strictGroup = {{
+          id: 'og_strict',
+          members: [
+            {{
+              recordIndex: 0,
+              featureSvgId: 'rendered-target',
+              stableFeatureSvgId: 'rendered-target',
+              renderedFeatureSvgId: 'wrong-rendered',
+              product: 'role-collision-member'
+            }},
+            {{
+              recordIndex: 0,
+              featureSvgId: 'source-target',
+              stableFeatureSvgId: 'source-target',
+              renderedFeatureSvgId: 'rendered-target',
+              product: 'strict-member'
+            }}
+          ]
+        }};
+        const strictItems = featureSearchItems(strictFeature, 'orthogroup', '', {{
+          popupMode: 'rich',
+          orthogroupsById: new Map([['og_strict', strictGroup]])
+        }});
+        assert(strictItems.some((item) => item.value === 'strict-member'), 'Strict member was not resolved');
+        assert(
+          !strictItems.some((item) => ['unverified-direct-member', 'role-collision-member'].includes(item.value)),
+          `Unverified member metadata leaked: ${{JSON.stringify(strictItems)}}`
+        );
+
+        const duplicateItems = featureSearchItems(strictFeature, 'orthogroup', '', {{
+          popupMode: 'rich',
+          orthogroupsById: new Map([['og_strict', {{
+            ...strictGroup,
+            members: [strictGroup.members[1], {{ ...strictGroup.members[1] }}]
+          }}]])
+        }});
+        assert(
+          !duplicateItems.some((item) => item.value === 'strict-member'),
+          `Duplicate member identity must fail closed: ${{JSON.stringify(duplicateItems)}}`
+        );
+
+        const duplicateGroupSearch = runFeatureSearch({{
+          features: [strictFeature],
+          renderedFeatureIds: new Set(['rendered-target']),
+          query: 'poisoned duplicate group',
+          field: 'orthogroup',
+          popupMode: 'rich',
+          orthogroups: [
+            {{ ...strictGroup, display_name: 'poisoned duplicate group' }},
+            {{ ...strictGroup, display_name: 'poisoned duplicate group' }}
+          ]
+        }});
+        assert(
+          duplicateGroupSearch.matches.length === 0,
+          `Duplicate group IDs must fail closed: ${{JSON.stringify(duplicateGroupSearch)}}`
         );
         """,
         encoding="utf-8",
@@ -2380,6 +2405,8 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
           'data-orthogroup-id': 'og_1',
           'data-query-record-id': 'record_a',
           'data-subject-record-id': 'record_b',
+          'data-query-record-index': '0',
+          'data-subject-record-index': '1',
           'data-qstart': '10',
           'data-qend': '40',
           'data-sstart': '90',
@@ -2387,6 +2414,8 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
           'data-pairwise-match-style': 'ribbon',
           'data-query-feature-svg-id': 'fq',
           'data-subject-feature-svg-id': 'fs',
+          'data-query-stable-feature-svg-id': 'fq',
+          'data-subject-stable-feature-svg-id': 'fs',
           'data-query-protein-id': 'p_internal_query',
           'data-subject-protein-id': 'p_internal_subject',
           'data-identity': '99.0'
@@ -2397,7 +2426,9 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         }};
         const featureLookup = new Map([
           ['fq', {{
+            fileIdx: 0,
             svg_id: 'fq',
+            stable_feature_id: 'fq',
             record_id: 'record_a',
             orthogroupId: 'og_1',
             orthogroupMemberCount: 2,
@@ -2408,7 +2439,9 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
             product: 'query product'
           }}],
           ['fs', {{
+            fileIdx: 1,
             svg_id: 'fs',
+            stable_feature_id: 'fs',
             record_id: 'record_b',
             orthogroupId: 'og_1',
             orthogroupMemberCount: 2,
@@ -2421,7 +2454,7 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
         const payload = buildPairwiseMatchPayload(element, {{
           featureLookup,
           orthogroups: [{{
-            id: 'legacy_og_1',
+            id: 'og_1',
             name: 'rpoB',
             member_count: 2,
             record_coverage_count: 2,
@@ -2429,6 +2462,7 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
             relatedEdgeCount: 5,
             members: [
               {{
+                recordIndex: 0,
                 recordId: 'record_a',
                 featureSvgId: 'fq',
                 start: 9,
@@ -2439,6 +2473,7 @@ def test_orthogroup_match_popup_payload_uses_orthogroup_summary(tmp_path: Path) 
                 product: 'query product'
               }},
               {{
+                recordIndex: 1,
                 recordId: 'record_b',
                 featureSvgId: 'fs',
                 start: 89,
@@ -2731,7 +2766,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
 def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path: Path) -> None:
     from gbdraw._build_support import read_project_version
 
-    ensure_prepared_browser_wheel()
+    verify_module, _ = ensure_prepared_browser_wheel()
     cloudflare_module = _load_prepare_cloudflare_pages_module()
     output_root = tmp_path / "cloudflare-pages"
     commit_sha = "abcdef1234567890abcdef1234567890abcdef12"
@@ -2743,6 +2778,13 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(tmp_path:
         output_root=output_root,
         commit_sha=commit_sha,
     )
+
+    missing_tutorial_assets = [
+        path.as_posix()
+        for path in verify_module.REQUIRED_TUTORIAL_DATA_FILES
+        if not (bundle_path / path).is_file()
+    ]
+    assert missing_tutorial_assets == []
 
     index_html = (bundle_path / "index.html").read_text(encoding="utf-8")
     assert "https://www.googletagmanager.com/gtag/js?id=G-GG6JMKM02Y" in index_html
@@ -3408,7 +3450,10 @@ def test_web_wires_circular_conservation_options() -> None:
     assert "@click=\"removeCircularConservationSource(row.index)\"" in index_html
     assert "type=\"color\" v-model=\"circularConservation.series[row.index].color\"" in index_html
     assert ":multiple=\"true\"" in index_html
-    assert "props: ['label', 'accept', 'modelValue', 'small', 'multiple']" in components_source
+    assert (
+        "props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId']"
+        in components_source
+    )
     assert "inspect.getsource" not in run_source
     assert "resolvedCircularConservation" in run_source
     assert "runCircularLosatConservation" in run_source
@@ -4704,7 +4749,7 @@ def test_conda_recipe_does_not_copy_entire_web_tree() -> None:
     assert "gbdraw/web/index.html" in build_sh
     assert "gbdraw/web/open-source-notices.html" in build_sh
     assert "gbdraw/web/gbdraw-*.whl" in build_sh
-    assert "for web_asset_dir in assets js presets vendor wasm" in build_sh
+    assert "for web_asset_dir in assets js presets tutorial-data vendor wasm" in build_sh
 
 
 def test_setup_commands_refresh_open_source_notices() -> None:
@@ -4750,6 +4795,10 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "js" / "app" / "annotations" / "validation.js",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat.wasm",
         build_root / "gbdraw" / "web" / "wasm" / "losat" / "losat-threaded.wasm",
+        *(
+            build_root / "gbdraw" / "web" / path
+            for path in verify_module.REQUIRED_TUTORIAL_DATA_FILES
+        ),
         *(build_root / "gbdraw" / "web" / path for path in verify_module.REQUIRED_UI_FONT_FILES),
         *(build_root / "gbdraw" / "web" / path for path in verify_module._parse_local_wheel_paths()),
     ]
@@ -4802,6 +4851,32 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         assert "gbdraw/web/js/app/annotations/record-catalog.js" in outer_names
         assert "gbdraw/web/js/app/annotations/record-selector.js" in outer_names
         assert "gbdraw/web/js/app/annotations/validation.js" in outer_names
+        assert {
+            f"gbdraw/web/{path.as_posix()}"
+            for path in verify_module.REQUIRED_TUTORIAL_DATA_FILES
+        } <= set(outer_names)
+
+
+@pytest.mark.slow
+def test_built_sdist_contains_tutorial_data(tmp_path: Path) -> None:
+    if importlib.util.find_spec("build") is None:
+        pytest.skip("python -m build is not available in this environment")
+
+    verify_module, _ = ensure_prepared_browser_wheel()
+    dist_dir = tmp_path / "dist"
+    subprocess.run(
+        [sys.executable, "-m", "build", "--sdist", "--no-isolation", "--outdir", str(dist_dir)],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+    sdist_path = next(dist_dir.glob("gbdraw-*.tar.gz"))
+    with tarfile.open(sdist_path, "r:gz") as sdist:
+        names = set(sdist.getnames())
+    for path in verify_module.REQUIRED_TUTORIAL_DATA_FILES:
+        suffix = f"/gbdraw/web/{path.as_posix()}"
+        assert any(name.endswith(suffix) for name in names), suffix
+    assert any(name.endswith("/tools/build_lambda_gff3_fixture.py") for name in names)
 
 
 @pytest.mark.slow
@@ -4989,13 +5064,13 @@ def test_web_session_round_trip_preserves_losat_and_source_names(tmp_path: Path)
     assert "collinearMaxGeneGap" not in historical_blastp
     custom_losat = {
         "outfmt": "6",
-        "parallelWorkers": "3",
+        "parallelWorkers": "1",
         "executionMode": "threaded",
         "totalThreadBudget": "12",
         "threadsPerJob": "4",
         "blastn": {"task": "dc-megablast"},
         "blastp": {
-            "mode": "collinear",
+            "mode": "pairwise",
             "maxHits": 17,
             "candidateLimit": None,
             "orthogroupMembershipMode": "anchor_core_v1",
@@ -5485,24 +5560,19 @@ def test_gallery_session_restore_smoke(tmp_path: Path) -> None:
                 assert options["conservationLabels"] == [
                     entry["label"] for entry in conservation_state["series"]
                 ]
-                assert round_trip["webFiles"]["conservationBlastSource"] == "losat-cache"
-                assert "conservationFastaFiles" not in options
-                fasta_resource_ids = round_trip["webFiles"][
-                    "conservationLosatFastaSources"
-                ]
-                assert len(fasta_resource_ids) == 20
-                assert all(fasta_resource_ids)
-                original_names = round_trip["webFiles"].get(
-                    "resourceOriginalNames",
-                    {},
+                assert (
+                    round_trip["webFiles"]["bindings"][
+                        "c_conservation_blasts_source"
+                    ]
+                    == "losat-cache"
                 )
-                expected_fasta_names = [
-                    original_names.get(
-                        resource_id,
-                        round_trip["resources"][resource_id]["name"],
-                    )
-                    for resource_id in fasta_resource_ids
+                assert "conservationFastaFiles" not in options
+                fasta_bindings = round_trip["webFiles"]["bindings"][
+                    "c_conservation_fastas"
                 ]
+                assert len(fasta_bindings) == 20
+                assert all(binding["resourceId"] for binding in fasta_bindings)
+                expected_fasta_names = [binding["name"] for binding in fasta_bindings]
                 assert expected_fasta_names == conservation_state["fastaNames"]
 
                 import_session_in_fresh_page(

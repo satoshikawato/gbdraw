@@ -446,6 +446,10 @@ def test_identical_semantic_features_keep_stable_hooks_and_unique_dom_ids(
     assert len(matching) == 2
     assert len({element.attrib["id"] for element in matching}) == 2
     assert all("__instance_" in element.attrib["id"] for element in matching)
+    assert {
+        element.attrib["data-gbdraw-source-feature-index"]
+        for element in matching
+    } == {"0", "1"}
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])

@@ -58,6 +58,14 @@ _VALID_PROTEIN_RE = re.compile(r"^[A-Z]+$")
 _VALID_FASTA_ID_RE = re.compile(r"^\S+$")
 _VALID_RUNTIME_HANDLE_RE = re.compile(r"^h_[a-z2-7]{26}$")
 _RUNTIME_HANDLE_SEARCH_RE = re.compile(r"(?<![a-z2-7_])h_[a-z2-7]{26}(?![a-z2-7])")
+_MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = frozenset(
+    {
+        "viewfeaturesvgid",
+        "viewfeaturehashparts",
+        "renderedfeaturesvgid",
+        "renderedsvgid",
+    }
+)
 _NUMERIC_COMPARISON_COLUMNS = COMPARISON_COLUMNS[2:]
 _INTEGER_COMPARISON_COLUMNS = frozenset(
     {
@@ -85,6 +93,8 @@ LOSATP_METADATA_COLUMNS = (
     "subject_feature_index",
     "query_feature_svg_id",
     "subject_feature_svg_id",
+    "query_view_feature_svg_id",
+    "subject_view_feature_svg_id",
     "orthogroup_id",
     "rbh_orthogroup_id",
     "ortholog_path_id",
@@ -198,6 +208,7 @@ class CdsProtein:
     protein_set_hash: str | None = None
     runtime_binding_hash: str | None = None
     display_binding_hash: str | None = None
+    view_feature_svg_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -565,6 +576,7 @@ class _CdsProteinCandidate:
     protein_length: int
     sequence: str
     feature_svg_id: str | None
+    view_feature_svg_id: str | None
     gene: str | None
     product: str | None
     note: str | None
@@ -860,6 +872,36 @@ def _expected_export_ordinals(
     return expected
 
 
+def _reject_manifest_presentation_identity(value: Mapping[str, object]) -> None:
+    """Keep protein identity manifests independent of rendered view coordinates."""
+
+    pending: list[object] = [value]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if isinstance(current, Mapping):
+            object_id = id(current)
+            if object_id in visited:
+                continue
+            visited.add(object_id)
+            for raw_key, item in current.items():
+                normalized_key = re.sub(
+                    r"[^a-z0-9]+",
+                    "",
+                    unicodedata.normalize("NFKC", str(raw_key)).casefold(),
+                )
+                if any(
+                    fragment in normalized_key
+                    for fragment in _MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS
+                ):
+                    raise ValidationError(
+                        "Protein identity manifests cannot contain rendered-view identity fields."
+                    )
+                pending.append(item)
+        elif isinstance(current, (list, tuple)):
+            pending.extend(current)
+
+
 def validate_protein_identity_manifest(
     value: Mapping[str, object],
 ) -> ProteinIdentityManifest:
@@ -867,6 +909,7 @@ def validate_protein_identity_manifest(
 
     if not isinstance(value, Mapping) or value.get("schema") != PROTEIN_IDENTITY_MANIFEST_SCHEMA:
         raise ValidationError("Protein identity manifest must use schema 2.")
+    _reject_manifest_presentation_identity(value)
     raw_sets = value.get("proteinSets")
     raw_analyses = value.get("recordAnalyses")
     raw_instances = value.get("recordInstances")
@@ -2813,6 +2856,25 @@ def _feature_hash_parts(
     return tuple(parts)
 
 
+def _view_feature_hash_parts(
+    feature: SeqFeature,
+) -> tuple[tuple[int, int, int | None], ...]:
+    """Return location parts in the currently rendered record view."""
+
+    location = feature.location
+    if location is None:
+        return ()
+    raw_parts = location.parts if hasattr(location, "parts") and location.parts else [location]
+    return tuple(
+        (
+            int(part.start),
+            int(part.end),
+            int(part.strand) if part.strand in {-1, 1} else None,
+        )
+        for part in raw_parts
+    )
+
+
 
 
 def extract_cds_proteins(
@@ -2866,6 +2928,16 @@ def extract_cds_proteins(
 
             cds_count += 1
             hash_parts = _feature_hash_parts(feature, coord_base, coord_step)
+            view_hash_parts = _view_feature_hash_parts(feature)
+            view_feature_svg_id = (
+                compute_feature_hash_from_location_parts(
+                    str(feature.type or ""),
+                    view_hash_parts,
+                    record_id=record.id,
+                )
+                if view_hash_parts
+                else None
+            )
             hash_start, hash_end, hash_strand = hash_parts[0] if hash_parts else (None, None, None)
             synthetic_protein_id = f"gbd_r{global_record_index + 1:04d}_cds{cds_count:06d}"
             source_protein_id = _first_qualifier(feature, "protein_id")
@@ -2910,6 +2982,7 @@ def extract_cds_proteins(
                         hash_parts,
                         record_id=record.id,
                     ),
+                    view_feature_svg_id=view_feature_svg_id,
                     gene=gene,
                     product=product,
                     note=note,
@@ -2959,6 +3032,7 @@ def extract_cds_proteins(
                 sequence=candidate.sequence,
                 source_protein_id=candidate.source_protein_id,
                 feature_svg_id=candidate.feature_svg_id,
+                view_feature_svg_id=candidate.view_feature_svg_id,
                 gene=candidate.gene,
                 product=candidate.product,
                 note=candidate.note,
@@ -7125,8 +7199,12 @@ def convert_protein_hits_to_genomic_links(
     )
 
 
-def _feature_svg_id(protein: CdsProtein) -> str:
-    return str(protein.feature_svg_id or "")
+def _view_feature_svg_id(protein: CdsProtein) -> str:
+    return str(
+        protein.view_feature_svg_id
+        or protein.feature_svg_id
+        or ""
+    )
 
 
 def _protein_metadata_value(value: object | None) -> object:
@@ -7260,8 +7338,18 @@ def convert_pair_protein_hits_to_genomic_links(
                 "subject_record_index": subject_protein.record_index,
                 "query_feature_index": query_protein.feature_index,
                 "subject_feature_index": subject_protein.feature_index,
-                "query_feature_svg_id": _feature_svg_id(query_protein),
-                "subject_feature_svg_id": _feature_svg_id(subject_protein),
+                "query_feature_svg_id": str(
+                    query_protein.feature_svg_id or ""
+                ),
+                "subject_feature_svg_id": str(
+                    subject_protein.feature_svg_id or ""
+                ),
+                "query_view_feature_svg_id": _view_feature_svg_id(
+                    query_protein
+                ),
+                "subject_view_feature_svg_id": _view_feature_svg_id(
+                    subject_protein
+                ),
                 "orthogroup_id": orthogroup_id,
                 "rbh_orthogroup_id": edge_metadata["rbh_orthogroup_id"],
                 "ortholog_path_id": edge_metadata["ortholog_path_id"],

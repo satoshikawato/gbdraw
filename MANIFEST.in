@@ -3,11 +3,13 @@ include gbdraw/data/config.toml
 include gbdraw/data/*.ttf
 include gbdraw/web/index.html
 include gbdraw/web/*.whl
+include tools/build_lambda_gff3_fixture.py
 include tools/generate_open_source_notices.py
 recursive-include gbdraw/bin *
 recursive-include gbdraw/web/assets *.ico *.png *.svg
 recursive-include gbdraw/web/js *.js
 recursive-include gbdraw/web/presets *.txt *.tsv
+recursive-include gbdraw/web/tutorial-data *
 recursive-include gbdraw/web/vendor *
 recursive-include gbdraw/web/wasm *
 

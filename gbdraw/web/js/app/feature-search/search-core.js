@@ -3,6 +3,7 @@ import {
   resolveDisplayProteinId,
   resolveInternalProteinId
 } from '../feature-utils.js';
+import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 
 export const RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([
   'qualifier-key',
@@ -265,35 +266,44 @@ const buildFeatureLocation = (feature) => {
   return strand ? `${range} (${strand})` : range;
 };
 
+const orthogroupIdFor = (source) => {
+  const ids = new Set([
+    source?.id,
+    source?.orthogroupId,
+    source?.orthogroup_id
+  ].map((value) => String(value || '').trim()).filter(Boolean));
+  return ids.size === 1 ? ids.values().next().value : '';
+};
+
 const buildOrthogroupMap = (orthogroups) => {
-  const groups = new Map();
+  const candidates = new Map();
   (Array.isArray(orthogroups) ? orthogroups : []).forEach((group) => {
-    const id = String(group?.id || group?.orthogroupId || group?.orthogroup_id || '').trim();
-    if (id && !groups.has(id)) groups.set(id, group);
+    const id = orthogroupIdFor(group);
+    if (!id) return;
+    const matches = candidates.get(id) || [];
+    matches.push(group);
+    candidates.set(id, matches);
+  });
+  const groups = new Map();
+  candidates.forEach((matches, id) => {
+    if (matches.length === 1) groups.set(id, matches[0]);
   });
   return groups;
 };
 
-const getOrthogroupId = (feature) => String(feature?.orthogroup_id || feature?.orthogroupId || '').trim();
+const getOrthogroupId = (feature) => orthogroupIdFor({
+  orthogroupId: feature?.orthogroupId,
+  orthogroup_id: feature?.orthogroup_id
+});
 
 const getFeatureOrthogroupMember = (feature, group) => {
-  if (feature?.orthogroup_member && typeof feature.orthogroup_member === 'object') return feature.orthogroup_member;
-  if (feature?.orthogroupMember && typeof feature.orthogroupMember === 'object') return feature.orthogroupMember;
-  const members = Array.isArray(group?.members) ? group.members : [];
-  const svgId = String(feature?.svg_id || '').trim();
-  const recordIndex = Number(feature?.record_idx ?? feature?.recordIndex ?? feature?.fileIdx);
-  return members.find((member) => {
-    const memberSvgId = String(member?.featureSvgId || member?.feature_svg_id || '').trim();
-    const stableSvgId = String(feature?.stable_svg_id || feature?.stableSvgId || '').trim();
-    if (memberSvgId !== svgId && memberSvgId !== stableSvgId) return false;
-    if (!Number.isInteger(recordIndex)) return true;
-    return Number(member?.recordIndex ?? member?.record_index) === recordIndex;
-  }) || null;
+  return resolveUniqueOrthogroupMemberForFeature(feature, group?.members);
 };
 
 const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   const orthogroupId = getOrthogroupId(feature);
-  const group = orthogroupsById.get(orthogroupId) || null;
+  const candidateGroup = orthogroupsById.get(orthogroupId) || null;
+  const group = orthogroupIdFor(candidateGroup) === orthogroupId ? candidateGroup : null;
   const member = getFeatureOrthogroupMember(feature, group);
   const proteinId = resolveDisplayProteinId(feature, member);
   const internalId = resolveInternalProteinId(feature, member);

@@ -20,6 +20,6 @@ mkdir -p $SP_DIR/gbdraw/web
 cp gbdraw/web/index.html $SP_DIR/gbdraw/web/
 cp gbdraw/web/open-source-notices.html $SP_DIR/gbdraw/web/
 cp gbdraw/web/gbdraw-*.whl $SP_DIR/gbdraw/web/
-for web_asset_dir in assets js presets vendor wasm; do
+for web_asset_dir in assets js presets tutorial-data vendor wasm; do
     cp -r gbdraw/web/$web_asset_dir $SP_DIR/gbdraw/web/
 done

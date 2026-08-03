@@ -290,6 +290,16 @@ def parse_native_collinearity_tsv(
 
         query_unit = _resolve_unit_selector(unit_index, query_record_index, row.get("query_unit"))
         subject_unit = _resolve_unit_selector(unit_index, subject_record_index, row.get("subject_unit"))
+        query_protein = extraction.protein_map.get(
+            query_unit.representative_protein_id
+        )
+        subject_protein = extraction.protein_map.get(
+            subject_unit.representative_protein_id
+        )
+        if query_protein is None or subject_protein is None:
+            raise ValidationError(
+                f"Native collinearity TSV block '{block_id}' references a missing CDS protein."
+            )
         default_qstart, default_qend = _protein_coordinates(query_unit, extraction.protein_map)
         default_sstart, default_send = _protein_coordinates(subject_unit, extraction.protein_map)
         qstart = _optional_int(row.get("query_start"), default_qstart)
@@ -316,6 +326,16 @@ def parse_native_collinearity_tsv(
             alignment_length=_optional_int(row.get("alignment_length"), 0),
             query_feature_svg_id=query_unit.representative_feature_svg_id,
             subject_feature_svg_id=subject_unit.representative_feature_svg_id,
+            query_view_feature_svg_id=str(
+                query_protein.view_feature_svg_id
+                or query_unit.representative_feature_svg_id
+            ),
+            subject_view_feature_svg_id=str(
+                subject_protein.view_feature_svg_id
+                or subject_unit.representative_feature_svg_id
+            ),
+            query_feature_index=query_protein.feature_index,
+            subject_feature_index=subject_protein.feature_index,
             source="native_tsv",
             query_unit_id=query_unit.unit_id,
             subject_unit_id=subject_unit.unit_id,

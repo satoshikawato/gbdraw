@@ -48,7 +48,8 @@ export const createFeatureColorActions = ({
     compactLegendEntries,
     recenterCurrentLegendRoot,
     extractLegendEntries,
-    getAllFeatureLegendGroups
+    getAllFeatureLegendGroups,
+    onLegendGeometryChanged
   } = legendActions;
   const { applySpecificRulesToSvg } = svgActions;
   const {
@@ -591,6 +592,7 @@ export const createFeatureColorActions = ({
 
     compactLegendEntries(svg);
     recenterCurrentLegendRoot(svg);
+    onLegendGeometryChanged();
     persistCurrentSvg(svg);
     return true;
   };

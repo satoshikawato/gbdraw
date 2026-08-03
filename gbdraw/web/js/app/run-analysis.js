@@ -40,11 +40,9 @@ import {
 } from './depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
-  collinearGroupScopeForEvidenceScope,
   normalizeCollinearAnchorMode,
   normalizeCollinearSearchScope,
-  normalizeOrthogroupMembershipMode,
-  normalizeGroupMetadataScope
+  normalizeOrthogroupMembershipMode
 } from './losat-normalization.js';
 import { buildRunInfo } from './run-info.js';
 import {
@@ -101,6 +99,10 @@ import { readFileBytes, readFileText } from '../services/file-content-cache.js';
 import {
   validateFeatureCatalog
 } from '../services/feature-catalog.js';
+import {
+  buildOrthogroupFeatureIndex,
+  enrichFeaturesWithOrthogroups
+} from '../services/orthogroup-feature-metadata.js';
 import { prepareCandidateRenderCommit } from './candidate-render.js';
 
 const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
@@ -284,6 +286,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   cacheSchema: LOSAT_DERIVED_CACHE_SCHEMA,
   idEncoding: 'runtime-handle-v1',
   converter: 'convert_losatp_blastp_pairs_to_genomic_payload',
+  featureIdentity: 'stable-source-rendered-display-v1',
   mode: String(mode || 'pairwise'),
   maxHits: Number(maxHits) || 5,
   thresholds: {
@@ -334,11 +337,33 @@ const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
   const entry = cacheMap.get(key);
   if (
     !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
-    !validateDerivedProteinReferences(entry, manifest)
+    !validateDerivedProteinReferences(entry, manifest) ||
+    !hasRequiredCanonicalAnalysisResource(entry.mode, entry.payload)
   ) return null;
   cacheMap.delete(key);
   cacheMap.set(key, entry);
   return cloneJsonData(entry.payload);
+};
+
+export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
+  const normalizedMode = String(mode || '').trim().toLowerCase();
+  if (!['orthogroup', 'collinear'].includes(normalizedMode)) return true;
+  const resource = normalizedMode === 'collinear'
+    ? payload?.collinearityResult
+    : payload?.orthogroupResult;
+  const expectedKind = normalizedMode === 'collinear' ? 'result' : 'orthogroupResult';
+  const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupResult';
+  return Boolean(
+    resource
+    && typeof resource === 'object'
+    && !Array.isArray(resource)
+    && [1, 2].includes(resource.schema)
+    && resource.kind === expectedKind
+    && resource.value?.type === expectedType
+    && resource.value.fields
+    && typeof resource.value.fields === 'object'
+    && !Array.isArray(resource.value.fields)
+  );
 };
 
 const stripRuntimeCacheStats = (payload) => {
@@ -416,7 +441,8 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) =
   };
   if (
     !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
-    !validateDerivedProteinReferences(entry, manifest)
+    !validateDerivedProteinReferences(entry, manifest) ||
+    !hasRequiredCanonicalAnalysisResource(entry.mode, entry.payload)
   ) return;
   if (cacheMap.has(key)) cacheMap.delete(key);
   cacheMap.set(key, entry);
@@ -831,6 +857,7 @@ export const createRunAnalysis = ({
     circularConservation,
     annotationSets,
     orthogroups,
+    collinearGroups,
     featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
@@ -996,8 +1023,6 @@ export const createRunAnalysis = ({
     });
   };
 
-  const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
-
   const pruneOrthogroupOverrides = (groupIds, { clearAll = false } = {}) => {
     const validIds = new Set(Array.isArray(groupIds) ? groupIds.map((id) => String(id || '').trim()).filter(Boolean) : []);
     const pruneMap = (overrideMap) => {
@@ -1011,64 +1036,19 @@ export const createRunAnalysis = ({
 
   const setOrthogroupMetadata = (orthogroupPayload) => {
     const groups = Array.isArray(orthogroupPayload) ? orthogroupPayload : [];
-    const index = new Map();
-    const indexOwners = new Map();
-    const ambiguousIndexKeys = new Set();
-    const addUniqueIndexEntry = (key, owner, entry) => {
-      if (!key || ambiguousIndexKeys.has(key)) return;
-      const existingOwner = indexOwners.get(key);
-      if (existingOwner && existingOwner !== owner) {
-        index.delete(key);
-        ambiguousIndexKeys.add(key);
-        return;
-      }
-      indexOwners.set(key, owner);
-      index.set(key, entry);
-    };
-    const groupIds = [];
-    groups.forEach((group) => {
-      const orthogroupId = String(group?.id || '').trim();
-      if (orthogroupId) groupIds.push(orthogroupId);
-      const members = Array.isArray(group?.members) ? group.members : [];
-      const memberCount = Number(group?.member_count || members.length || 0);
-      const recordCoverage = Number(group?.record_coverage_count || new Set(
-        members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
-      ).size || 0);
-      const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
-      const sourceRecordIndex = Number(group?.source_record_index);
-      members.forEach((member, memberIndex) => {
-        const featureSvgIds = Array.from(new Set([
-          member?.stableFeatureSvgId,
-          member?.stable_feature_svg_id,
-          member?.featureSvgId,
-          member?.feature_svg_id
-        ].map((value) => String(value || '').trim()).filter(Boolean)));
-        const recordIndex = Number(member?.recordIndex);
-        if (featureSvgIds.length === 0 || !Number.isInteger(recordIndex)) return;
-        const entry = {
-          orthogroupId,
-          orthogroupMemberCount: memberCount,
-          orthogroupRecordCoverage: recordCoverage,
-          proteinId: String(member?.proteinId || '').trim(),
-          sourceProteinId: String(member?.sourceProteinId || '').trim(),
-          orthogroupRepresentative: Boolean(member?.representative),
-          orthogroupScope,
-          orthogroupSourceRecordIndex: Number.isInteger(sourceRecordIndex) ? sourceRecordIndex : null,
-          orthogroupMember: member
-        };
-        const owner = `${recordIndex}\u001f${member?.featureIndex ?? memberIndex}\u001f${orthogroupId}`;
-        featureSvgIds.forEach((featureSvgId) => {
-          addUniqueIndexEntry(
-            buildOrthogroupIndexKey(recordIndex, featureSvgId),
-            owner,
-            entry
-          );
-          addUniqueIndexEntry(featureSvgId, owner, entry);
-        });
-      });
-    });
+    const index = buildOrthogroupFeatureIndex(groups);
+    const groupIds = groups
+      .map((group) => String(group?.id || '').trim())
+      .filter(Boolean);
     orthogroups.value = groups;
     featureOrthogroupIndex.value = index;
+    extractedFeatures.value = enrichFeaturesWithOrthogroups(extractedFeatures.value, index);
+    if (biologicalFeatures) {
+      biologicalFeatures.value = enrichFeaturesWithOrthogroups(
+        biologicalFeatures.value,
+        index
+      );
+    }
     pruneOrthogroupOverrides(groupIds);
     if (!selectedOrthogroupId.value || !groupIds.includes(String(selectedOrthogroupId.value || '').trim())) {
       selectedOrthogroupId.value = groupIds[0] || '';
@@ -1664,6 +1644,7 @@ export const createRunAnalysis = ({
           losatDerivedCache: Array.from(losatDerivedCache.value || new Map()),
           losatCacheInfo: losatCacheInfo.value,
           orthogroups: orthogroups.value,
+          collinearGroups: collinearGroups.value,
           featureOrthogroupIndex: featureOrthogroupIndex.value,
           selectedOrthogroupAlignmentFeature: selectedOrthogroupAlignmentFeature.value,
           selectedOrthogroupId: selectedOrthogroupId.value,
@@ -1690,6 +1671,7 @@ export const createRunAnalysis = ({
       losatDerivedCache.value = new Map(manualCancelSnapshot.losatDerivedCache);
       losatCacheInfo.value = manualCancelSnapshot.losatCacheInfo;
       orthogroups.value = manualCancelSnapshot.orthogroups;
+      collinearGroups.value = manualCancelSnapshot.collinearGroups;
       featureOrthogroupIndex.value = manualCancelSnapshot.featureOrthogroupIndex;
       extractedFeatures.value = cloneJsonValue(manualCancelSnapshot.extractedFeatures, []);
       if (biologicalFeatures) {
@@ -2825,6 +2807,7 @@ export const createRunAnalysis = ({
         let resolveLegacyProteinReferences = null;
         let convertProteinBlast = null;
         let convertNucleotideBlast = null;
+        collinearGroups.value = [];
         if (useOrthogroupBlastp) {
           clearOrthogroupMetadata();
         } else {
@@ -2951,7 +2934,7 @@ export const createRunAnalysis = ({
                 recordInstanceKey,
                 recordIndex: idx,
                 featureVisibility: featureVisibilityCacheKey,
-                proteinMapSchema: 3
+                proteinMapSchema: 4
               })
             : JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
           const usePersistentFastaCache = !useProteinBlastp;
@@ -3725,14 +3708,25 @@ export const createRunAnalysis = ({
             }
             losatDerivedCache.value = derivedCacheMap;
             if (convertedPayload.error) throw new Error(convertedPayload.error);
+            if (!hasRequiredCanonicalAnalysisResource(blastpMode, convertedPayload)) {
+              throw new Error(
+                'Protein comparison analysis did not return its canonical typed result.'
+              );
+            }
             const conversionCache = convertedPayload.cache || {};
             if (conversionCache.convertedPayloadHit) losatTiming.proteinConversionCacheHits += 1;
             losatTiming.proteinFilteredHitCacheHits += Number(conversionCache.filteredHitCacheHits || 0);
             losatTiming.proteinFilteredHitCacheMisses += Number(conversionCache.filteredHitCacheMisses || 0);
-            if (useOrthogroupBlastp || (useCollinearBlastp && collinearGroupScopeForEvidenceScope(collinearSearchScope) === 'global_collinear')) {
-              setOrthogroupMetadata(convertedPayload.orthogroups || []);
-            } else {
-              clearOrthogroupMetadata({ clearSelection: true });
+            if (useCollinearBlastp) {
+              resolvedComparisons.push({
+                kind: 'collinearityResult',
+                typedResource: convertedPayload.collinearityResult
+              });
+            } else if (useOrthogroupBlastp) {
+              resolvedComparisons.push({
+                kind: 'orthogroupResult',
+                typedResource: convertedPayload.orthogroupResult
+              });
             }
             const convertedPairs = Array.isArray(convertedPayload.pairs) ? convertedPayload.pairs : [];
             for (const converted of convertedPairs) {
@@ -3753,14 +3747,16 @@ export const createRunAnalysis = ({
                 name: blastName,
                 slot: blastSlot
               });
-              resolvedComparisons.push({
-                kind: 'precomputedProteinComparison',
-                edgeKey: sourcePair?.edgeKey || '',
-                ordinal: Number(sourcePair?.ordinal),
-                queryRecordIndex: Number(sourcePair?.queryIndex),
-                subjectRecordIndex: Number(sourcePair?.subjectIndex),
-                rows: Array.isArray(converted.rows) ? converted.rows : []
-              });
+              if (!useCollinearBlastp) {
+                resolvedComparisons.push({
+                  kind: 'precomputedProteinComparison',
+                  edgeKey: sourcePair?.edgeKey || '',
+                  ordinal: Number(sourcePair?.ordinal),
+                  queryRecordIndex: Number(sourcePair?.queryIndex),
+                  subjectRecordIndex: Number(sourcePair?.subjectIndex),
+                  rows: Array.isArray(converted.rows) ? converted.rows : []
+                });
+              }
               hasLinearComparisonData = true;
             }
           } else {
@@ -4128,6 +4124,9 @@ export const createRunAnalysis = ({
         selectedFeatureRecordIdx.value = 0;
         editableLabels.value = [];
         setOrthogroupMetadata(candidateCommit.featureState.orthogroups);
+        collinearGroups.value = Array.isArray(candidateCommit.featureState.collinearGroups)
+          ? candidateCommit.featureState.collinearGroups
+          : [];
         matchSequenceRegistry?.reset?.(candidateCommit.featureState.sequenceSources);
         featureExtractionPending.value = false;
         featureExtractionError.value = null;

@@ -19,13 +19,14 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterator
 
+from gbdraw.session_io import CURRENT_SESSION_VERSION
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NODE_SPEC = REPO_ROOT / "tests" / "web" / "losat-cache-migration.playwright.spec.js"
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "sessions"
 FIXTURE_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
 EXPECTED_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.expected.json"
-CURRENT_SESSION_VERSION = 39
 CURRENT_RENDER_REQUEST_SCHEMA = 5
 CURRENT_PROTEIN_RAW_SCHEMA = 4
 CURRENT_PROTEIN_DERIVED_SCHEMA = 3

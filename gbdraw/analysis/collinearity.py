@@ -69,6 +69,10 @@ COLLINEARITY_METADATA_COLUMNS = (
     "subject_protein_id",
     "query_feature_svg_id",
     "subject_feature_svg_id",
+    "query_view_feature_svg_id",
+    "subject_view_feature_svg_id",
+    "query_feature_index",
+    "subject_feature_index",
     "rbh_orthogroup_id",
     "ortholog_path_id",
     "edge_kind",
@@ -122,6 +126,10 @@ class CollinearityAnchor:
     subject_orthogroup_representative: bool = False
     query_orthogroup_member_count: int = 0
     subject_orthogroup_member_count: int = 0
+    query_view_feature_svg_id: str = ""
+    subject_view_feature_svg_id: str = ""
+    query_feature_index: int | None = None
+    subject_feature_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -293,6 +301,14 @@ def _normalized_strand(value: object) -> int | None:
     return strand if strand in {-1, 1} else None
 
 
+def _view_feature_svg_id(protein: CdsProtein) -> str:
+    return str(
+        protein.view_feature_svg_id
+        or protein.feature_svg_id
+        or ""
+    )
+
+
 def _anchor_strand_orientation(anchor: CollinearityAnchor) -> CollinearityOrientation | None:
     query_strand = _normalized_strand(anchor.query_strand)
     subject_strand = _normalized_strand(anchor.subject_strand)
@@ -354,8 +370,16 @@ def protein_hits_to_collinearity_anchors(
                 evalue=_float_from_row(row, "evalue"),
                 bitscore=_float_from_row(row, "bitscore"),
                 alignment_length=_int_from_row(row, "alignment_length"),
-                query_feature_svg_id=query_unit.representative_feature_svg_id,
-                subject_feature_svg_id=subject_unit.representative_feature_svg_id,
+                query_feature_svg_id=str(
+                    query_protein.feature_svg_id or ""
+                ),
+                subject_feature_svg_id=str(
+                    subject_protein.feature_svg_id or ""
+                ),
+                query_view_feature_svg_id=_view_feature_svg_id(query_protein),
+                subject_view_feature_svg_id=_view_feature_svg_id(subject_protein),
+                query_feature_index=query_protein.feature_index,
+                subject_feature_index=subject_protein.feature_index,
                 source=source,
                 query_unit_id=query_unit.unit_id,
                 subject_unit_id=subject_unit.unit_id,
@@ -733,6 +757,10 @@ def _lossless_anchor_from_edge_row(
         alignment_length=_int_from_row(row, "alignment_length", 0),
         query_feature_svg_id=str(query_protein.feature_svg_id or ""),
         subject_feature_svg_id=str(subject_protein.feature_svg_id or ""),
+        query_view_feature_svg_id=_view_feature_svg_id(query_protein),
+        subject_view_feature_svg_id=_view_feature_svg_id(subject_protein),
+        query_feature_index=query_protein.feature_index,
+        subject_feature_index=subject_protein.feature_index,
         source="orthogroup_display_edge",
         query_unit_id=query_id,
         subject_unit_id=subject_id,
@@ -1387,8 +1415,24 @@ def _make_orthogroup_anchor(
         evalue=_float_from_row(evidence, "evalue", 1.0),
         bitscore=_float_from_row(evidence, "bitscore", 0.0),
         alignment_length=_int_from_row(evidence, "alignment_length", 0),
-        query_feature_svg_id=str(query_protein.feature_svg_id or query_unit.representative_feature_svg_id),
-        subject_feature_svg_id=str(subject_protein.feature_svg_id or subject_unit.representative_feature_svg_id),
+        query_feature_svg_id=str(
+            query_protein.feature_svg_id
+            or query_unit.representative_feature_svg_id
+        ),
+        subject_feature_svg_id=str(
+            subject_protein.feature_svg_id
+            or subject_unit.representative_feature_svg_id
+        ),
+        query_view_feature_svg_id=(
+            _view_feature_svg_id(query_protein)
+            or query_unit.representative_feature_svg_id
+        ),
+        subject_view_feature_svg_id=(
+            _view_feature_svg_id(subject_protein)
+            or subject_unit.representative_feature_svg_id
+        ),
+        query_feature_index=query_protein.feature_index,
+        subject_feature_index=subject_protein.feature_index,
         source="orthogroup",
         query_unit_id=query_unit.unit_id,
         subject_unit_id=subject_unit.unit_id,
@@ -1847,12 +1891,50 @@ def _joined_anchor_values(anchors: Sequence[CollinearityAnchor], attr: str) -> s
     return ";".join(values)
 
 
+def _joined_anchor_endpoint_values(
+    anchors: Sequence[CollinearityAnchor],
+    role: Literal["query", "subject"],
+) -> tuple[str, str, str]:
+    """Return tuple-aligned stable IDs, source indexes, and view IDs."""
+
+    values: list[tuple[str, int, str]] = []
+    seen: set[tuple[str, int, str]] = set()
+    for anchor in anchors:
+        stable_id = str(
+            getattr(anchor, f"{role}_feature_svg_id", "") or ""
+        ).strip()
+        view_id = str(
+            getattr(anchor, f"{role}_view_feature_svg_id", "")
+            or stable_id
+        ).strip()
+        raw_feature_index = getattr(anchor, f"{role}_feature_index", None)
+        try:
+            feature_index = int(raw_feature_index)
+        except (TypeError, ValueError):
+            feature_index = -1
+        value = (stable_id, feature_index, view_id)
+        if value in seen:
+            continue
+        seen.add(value)
+        values.append(value)
+    return (
+        ";".join(value[0] for value in values),
+        (
+            ";".join(str(value[1]) for value in values)
+            if all(value[1] >= 0 for value in values)
+            else ""
+        ),
+        ";".join(value[2] for value in values),
+    )
+
+
 def convert_collinearity_blocks_to_pair_comparisons(
     result: CollinearityResult,
     *,
     records: Sequence[SeqRecord] | None = None,
     record_ids: Sequence[str] | None = None,
     color_mode: CollinearityColorMode | str = "orientation",
+    search_scope: CollinearitySearchScope | str | None = None,
 ) -> dict[tuple[int, int], DataFrame]:
     """Convert accepted blocks into comparison frames keyed by record endpoints.
 
@@ -1896,6 +1978,16 @@ def convert_collinearity_blocks_to_pair_comparisons(
             subject_start, subject_end = subject_max, subject_min
         else:
             subject_start, subject_end = subject_min, subject_max
+        (
+            query_feature_svg_ids,
+            query_feature_indexes,
+            query_view_feature_svg_ids,
+        ) = _joined_anchor_endpoint_values(block.anchors, "query")
+        (
+            subject_feature_svg_ids,
+            subject_feature_indexes,
+            subject_view_feature_svg_ids,
+        ) = _joined_anchor_endpoint_values(block.anchors, "subject")
         rows_by_pair.setdefault(pair, []).append(
             {
                 "query": query_name,
@@ -1929,8 +2021,12 @@ def convert_collinearity_blocks_to_pair_comparisons(
                 "subject_display_name": _joined_anchor_values(block.anchors, "subject_display_name"),
                 "query_protein_id": _joined_anchor_values(block.anchors, "query_protein_id"),
                 "subject_protein_id": _joined_anchor_values(block.anchors, "subject_protein_id"),
-                "query_feature_svg_id": _joined_anchor_values(block.anchors, "query_feature_svg_id"),
-                "subject_feature_svg_id": _joined_anchor_values(block.anchors, "subject_feature_svg_id"),
+                "query_feature_svg_id": query_feature_svg_ids,
+                "subject_feature_svg_id": subject_feature_svg_ids,
+                "query_feature_index": query_feature_indexes,
+                "subject_feature_index": subject_feature_indexes,
+                "query_view_feature_svg_id": query_view_feature_svg_ids,
+                "subject_view_feature_svg_id": subject_view_feature_svg_ids,
                 "rbh_orthogroup_id": _joined_anchor_values(block.anchors, "rbh_orthogroup_id"),
                 "ortholog_path_id": _joined_anchor_values(block.anchors, "ortholog_path_id"),
                 "edge_kind": _joined_anchor_values(block.anchors, "edge_kind") or "rbh",
@@ -1942,10 +2038,29 @@ def convert_collinearity_blocks_to_pair_comparisons(
             }
         )
 
-    return {
+    comparisons = {
         pair: pd.DataFrame.from_records(rows, columns=COLLINEARITY_COMPARISON_COLUMNS)
         for pair, rows in sorted(rows_by_pair.items())
     }
+    if search_scope is not None:
+        normalized_search_scope = normalize_collinearity_search_scope(
+            str(search_scope)
+        )
+        presentation_scope = (
+            "global_collinear"
+            if normalized_search_scope == "all"
+            else "adjacent_local"
+        )
+        group_kind = (
+            "orthogroup"
+            if presentation_scope == "global_collinear"
+            else "collinear_gene_group"
+        )
+        for comparison in comparisons.values():
+            comparison["group_kind"] = group_kind
+            comparison["group_scope"] = presentation_scope
+            comparison["collinear_group_scope"] = presentation_scope
+    return comparisons
 
 
 def convert_collinearity_blocks_to_comparisons(
@@ -1954,6 +2069,7 @@ def convert_collinearity_blocks_to_comparisons(
     records: Sequence[SeqRecord] | None = None,
     record_ids: Sequence[str] | None = None,
     color_mode: CollinearityColorMode | str = "orientation",
+    search_scope: CollinearitySearchScope | str | None = None,
 ) -> list[DataFrame]:
     """Convert accepted blocks into legacy adjacent-record comparison frames."""
 
@@ -1962,6 +2078,7 @@ def convert_collinearity_blocks_to_comparisons(
         records=records,
         record_ids=record_ids,
         color_mode=color_mode,
+        search_scope=search_scope,
     )
     record_count = len(records) if records is not None else len(_record_ids(records, record_ids))
     if records is None:

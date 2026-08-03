@@ -38,6 +38,7 @@ dev = [
     "build",
     "cairosvg",
     "Pillow",
+    "playwright==1.61.0",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-timeout>=2.0",

@@ -2196,7 +2196,12 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    assert result["collinearityBlocks"][0]["id"] == "block_0001"
+    assert result["collinearityResult"]["schema"] == 2
+    assert result["collinearityResult"]["kind"] == "result"
+    assert result["collinearityResult"]["value"]["type"] == "CollinearityResult"
+    typed_fields = result["collinearityResult"]["value"]["fields"]
+    assert typed_fields["blocks"][0]["fields"]["blockId"] == "block_0001"
+    assert len(typed_fields["orthogroups"]["fields"]["orthogroups"]) == 8
     rows = result["pairs"][0]["rows"]
     assert len(rows) == 1
     assert rows[0]["collinearity_block_id"] == "block_0001"
@@ -2207,10 +2212,15 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
     assert rows[0]["group_kind"] == "collinear_gene_group"
     assert rows[0]["group_scope"] == "adjacent_local"
     assert rows[0]["collinear_group_scope"] == "adjacent_local"
-    assert result["orthogroups"] == []
-    assert result["collinearGroupScope"] == "adjacent_local"
-    assert len(result["collinearGroups"]) == 8
-    assert {group["scope"] for group in result["collinearGroups"]} == {"adjacent_local"}
+    assert rows[0]["query_feature_index"] == ";".join(map(str, range(8)))
+    assert rows[0]["subject_feature_index"] == ";".join(map(str, range(8)))
+    assert rows[0]["query_feature_svg_id"] == ";".join(
+        f"feature_qa{index}" for index in range(8)
+    )
+    assert rows[0]["query_view_feature_svg_id"] == rows[0][
+        "query_feature_svg_id"
+    ]
+    assert set(result) == {"pairs", "collinearityResult", "cache"}
 
 
 @pytest.mark.linear
@@ -2458,24 +2468,25 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> No
 
     assert "error" not in adjacent
     assert "error" not in all_records
-    adjacent_member_sets = [
-        {member["proteinId"] for member in group["members"]}
-        for group in adjacent["collinearGroups"]
-    ]
-    all_member_sets = [
-        {member["proteinId"] for member in group["members"]}
-        for group in all_records["orthogroups"]
-    ]
-    assert adjacent["orthogroups"] == []
-    assert adjacent["collinearGroupScope"] == "adjacent_local"
-    assert all_records["collinearGroups"] == []
-    assert all_records["collinearGroupScope"] == "global_collinear"
-    assert {group["scope"] for group in all_records["orthogroups"]} == {"global_collinear"}
+    def member_sets(result: dict[str, object]) -> list[set[str]]:
+        groups = result["collinearityResult"]["value"]["fields"][
+            "orthogroups"
+        ]["fields"]["orthogroups"]
+        return [
+            {member["fields"]["proteinId"] for member in members}
+            for members in groups.values()
+        ]
+
+    adjacent_member_sets = member_sets(adjacent)
+    all_member_sets = member_sets(all_records)
+    assert set(adjacent) == {"pairs", "collinearityResult", "cache"}
+    assert set(all_records) == {"pairs", "collinearityResult", "cache"}
     assert {"a0", "b0"} in adjacent_member_sets
     assert {"a0", "b0", "c0"} in all_member_sets
     assert all(
-        block["subjectRecordIndex"] == block["queryRecordIndex"] + 1
-        for block in all_records["collinearityBlocks"]
+        block["fields"]["subjectRecordIndex"]
+        == block["fields"]["queryRecordIndex"] + 1
+        for block in all_records["collinearityResult"]["value"]["fields"]["blocks"]
     )
 
 
@@ -2508,6 +2519,7 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
         result,
         record_ids=["record_a", "record_b"],
         color_mode="orientation",
+        search_scope="adjacent",
     )
 
     rows = comparisons[0].set_index("collinearity_block_id")
@@ -2520,6 +2532,9 @@ def test_collinearity_comparison_rows_use_block_spans() -> None:
     assert rows.loc["block_minus", "sstart"] == 29
     assert rows.loc["block_minus", "send"] == 1
     assert rows.loc["block_plus", "collinearity_block_evalue"] == pytest.approx(1e-9)
+    assert set(rows["group_kind"]) == {"collinear_gene_group"}
+    assert set(rows["group_scope"]) == {"adjacent_local"}
+    assert set(rows["collinear_group_scope"]) == {"adjacent_local"}
 
 
 @pytest.mark.linear

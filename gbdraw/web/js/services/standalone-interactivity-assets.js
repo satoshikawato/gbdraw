@@ -823,29 +823,78 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     ]);
   }
 
-  function catalogRecordIndex(item, feature) {
-    var explicit = feature && (
-      feature.record_idx !== undefined ? feature.record_idx :
-      feature.recordIndex !== undefined ? feature.recordIndex :
-      feature.record_index
+  function catalogCanonicalFeatureIdentity(payload) {
+    var recordKey = consistentTextIdentity(payload, ['recordKey', 'record_key']);
+    var biologicalFeatureId = consistentTextIdentity(
+      payload,
+      ['biologicalFeatureId', 'biological_feature_id']
     );
-    if (explicit !== null && explicit !== undefined && explicit !== '') {
-      var parsed = Number(explicit);
-      if (Number.isInteger(parsed)) return parsed;
+    return {
+      valid: recordKey.valid
+        && biologicalFeatureId.valid
+        && Boolean(recordKey.value)
+        && Boolean(biologicalFeatureId.value),
+      recordKey: recordKey.value,
+      biologicalFeatureId: biologicalFeatureId.value,
+      key: catalogFeatureKey(recordKey.value, biologicalFeatureId.value)
+    };
+  }
+
+  function catalogRenderedFeatureIdentity(payload) {
+    return consistentTextIdentity(payload, [
+      'svgId', 'svg_id',
+      'renderedFeatureSvgId', 'rendered_feature_svg_id',
+      'renderedSvgId', 'rendered_svg_id'
+    ]);
+  }
+
+  function catalogStableFeatureIdentity(feature, includeSvgId) {
+    var stableKeys = [
+      'stableFeatureId', 'stable_feature_id',
+      'stableFeatureSvgId', 'stable_feature_svg_id',
+      'stableSvgId', 'stable_svg_id'
+    ];
+    if (includeSvgId) stableKeys.push('svg_id');
+    var stable = consistentTextIdentity(feature, stableKeys);
+    var legacy = consistentTextIdentity(feature, ['featureSvgId', 'feature_svg_id']);
+    var canonical = consistentTextIdentity(
+      feature,
+      ['biologicalFeatureId', 'biological_feature_id']
+    );
+    return {
+      valid: stable.valid
+        && legacy.valid
+        && canonical.valid
+        && !(stable.value && legacy.value && stable.value !== legacy.value),
+      supplied: Boolean(stable.value || legacy.value),
+      value: stable.value || legacy.value || canonical.value
+    };
+  }
+
+  function catalogRecordIndex(item, feature) {
+    var aliases = ['record_idx', 'recordIndex', 'record_index', 'fileIdx', 'file_idx'];
+    var explicitValues = [];
+    for (var aliasIndex = 0; aliasIndex < aliases.length; aliasIndex += 1) {
+      var raw = feature && feature[aliases[aliasIndex]];
+      if (raw === null || raw === undefined || String(raw).trim() === '') continue;
+      var text = String(raw).trim();
+      if (!/^\\d+$/.test(text) || typeof raw === 'boolean') return null;
+      var parsed = Number(text);
+      if (!Number.isSafeInteger(parsed)) return null;
+      if (explicitValues.indexOf(parsed) < 0) explicitValues.push(parsed);
     }
+    if (explicitValues.length > 1) return null;
     var recordKey = String(feature && (feature.recordKey || feature.record_key) || '').trim();
     var recordKeys = Array.isArray(item && item.recordKeys) ? item.recordKeys : [];
     var index = recordKeys.map(String).indexOf(recordKey);
-    return index >= 0 ? index : null;
+    var explicit = explicitValues.length === 1 ? explicitValues[0] : null;
+    if (explicit !== null && index >= 0 && explicit !== index) return null;
+    return explicit !== null ? explicit : (index >= 0 ? index : null);
   }
 
   function catalogStableFeatureId(feature) {
-    return String(feature && (
-      feature.stableFeatureId ||
-      feature.stable_feature_id ||
-      feature.biologicalFeatureId ||
-      feature.biological_feature_id
-    ) || '').trim();
+    var identity = catalogStableFeatureIdentity(feature, true);
+    return identity.valid ? identity.value : '';
   }
 
   function catalogSequenceSourceStrings(item) {
@@ -871,20 +920,33 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       feature.nucleotide_sequence || feature.nucleotideSequence
     ) || '').trim();
     if (explicit) return explicit;
-    var sourceIndex = feature && feature.sequenceSourceIndex;
+    var sourceIndexIdentity = nonnegativeIntegerIdentity(
+      feature,
+      ['sequenceSourceIndex', 'sequence_source_index']
+    );
+    var sourceIndex = sourceIndexIdentity.value;
     var sources = Array.isArray(item && item.sequenceSources)
       ? item.sequenceSources
       : [];
-    if (!Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex >= sources.length) {
+    if (
+      !sourceIndexIdentity.valid
+      || !Number.isInteger(sourceIndex)
+      || sourceIndex >= sources.length
+    ) {
       return '';
     }
     var source = sources[sourceIndex];
     var origin = String(source && source.origin || '').trim();
     var expectedRecordIndex = catalogRecordIndex(item, feature);
+    var sourceRecordIdentity = nonnegativeIntegerIdentity(
+      source,
+      ['recordIndex', 'record_index']
+    );
     if (
       ['linear-record', 'circular-reference'].indexOf(origin) < 0
-      || !Number.isInteger(source && source.recordIndex)
-      || source.recordIndex !== expectedRecordIndex
+      || !sourceRecordIdentity.valid
+      || !Number.isInteger(sourceRecordIdentity.value)
+      || sourceRecordIdentity.value !== expectedRecordIndex
     ) {
       return '';
     }
@@ -925,12 +987,26 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function expandCatalogBiologicalFeature(item, feature, sourceSequences) {
     var expanded = Object.assign({}, feature || {});
-    var recordKey = String(expanded.recordKey || expanded.record_key || '').trim();
-    var biologicalFeatureId = String(
-      expanded.biologicalFeatureId || expanded.biological_feature_id || ''
-    ).trim();
-    var stableId = catalogStableFeatureId(expanded);
+    var canonical = catalogCanonicalFeatureIdentity(expanded);
+    var stableIdentity = catalogStableFeatureIdentity(expanded, true);
+    if (!canonical.valid || !stableIdentity.valid || !stableIdentity.value) {
+      throw new Error('Invalid catalog biological feature identity.');
+    }
+    var recordKey = canonical.recordKey;
+    var biologicalFeatureId = canonical.biologicalFeatureId;
+    var stableId = stableIdentity.value;
     var recordIndex = catalogRecordIndex(item, expanded);
+    var featureIndex = nonnegativeIntegerIdentity(expanded, [
+      'featureIndex', 'feature_index', 'sourceFeatureIndex', 'source_feature_index'
+    ]);
+    var recordId = consistentTextIdentity(expanded, ['record_id', 'recordId']);
+    if (
+      !Number.isInteger(recordIndex)
+      || !featureIndex.valid
+      || !recordId.valid
+    ) {
+      throw new Error('Invalid catalog biological feature record identity.');
+    }
     expanded.recordKey = recordKey;
     expanded.record_key = recordKey;
     expanded.biologicalFeatureId = biologicalFeatureId;
@@ -939,9 +1015,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     expanded.stable_feature_id = stableId;
     expanded.stable_svg_id = stableId;
     expanded.svg_id = stableId;
-    if (Number.isInteger(recordIndex)) {
-      expanded.record_idx = recordIndex;
-      expanded.recordIndex = recordIndex;
+    expanded.record_idx = recordIndex;
+    expanded.recordIndex = recordIndex;
+    if (Number.isInteger(featureIndex.value)) {
+      expanded.sourceFeatureIndex = featureIndex.value;
+      expanded.source_feature_index = featureIndex.value;
+      expanded.featureIndex = featureIndex.value;
+      expanded.feature_index = featureIndex.value;
     }
     var qualifiers = expanded.qualifiers && typeof expanded.qualifiers === 'object'
       ? expanded.qualifiers
@@ -1047,7 +1127,206 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return qualifiers && typeof qualifiers === 'object' ? qualifiers[name] : '';
   }
 
+  function catalogSourceReferenceAgrees(item, reference, biological) {
+    var referencedStable = catalogStableFeatureIdentity(reference, false);
+    var biologicalStable = catalogStableFeatureId(biological);
+    if (
+      !referencedStable.valid
+      || (referencedStable.supplied && referencedStable.value !== biologicalStable)
+    ) return false;
+    var referencedRecord = nonnegativeIntegerIdentity(reference, [
+      'record_idx', 'recordIndex', 'record_index', 'fileIdx', 'file_idx'
+    ]);
+    var biologicalRecord = catalogRecordIndex(item, biological);
+    if (
+      !referencedRecord.valid
+      || (Number.isInteger(referencedRecord.value)
+        && referencedRecord.value !== biologicalRecord)
+    ) return false;
+    var referencedFeature = nonnegativeIntegerIdentity(reference, [
+      'featureIndex', 'feature_index', 'sourceFeatureIndex', 'source_feature_index'
+    ]);
+    var biologicalFeature = nonnegativeIntegerIdentity(biological, [
+      'featureIndex', 'feature_index', 'sourceFeatureIndex', 'source_feature_index'
+    ]);
+    if (
+      !referencedFeature.valid
+      || !biologicalFeature.valid
+      || (Number.isInteger(referencedFeature.value)
+        && referencedFeature.value !== biologicalFeature.value)
+    ) return false;
+    var referencedRecordId = consistentTextIdentity(reference, ['record_id', 'recordId']);
+    var biologicalRecordId = consistentTextIdentity(biological, ['record_id', 'recordId']);
+    return referencedRecordId.valid
+      && biologicalRecordId.valid
+      && (!referencedRecordId.value
+        || referencedRecordId.value === biologicalRecordId.value);
+  }
+
+  function catalogMatchRoleTextIdentity(match, role, suffixes) {
+    return consistentTextIdentity(match, suffixes.map(function (suffix) {
+      return role + suffix;
+    }));
+  }
+
+  function catalogMatchEndpointReference(
+    item,
+    match,
+    role,
+    reference,
+    biologicalByKey,
+    renderedByKey
+  ) {
+    var recordKey = reference
+      ? consistentTextIdentity(reference, ['recordKey', 'record_key'])
+      : catalogMatchRoleTextIdentity(
+        match,
+        role,
+        ['RecordKey', '_record_key']
+      );
+    var biologicalFeatureId = reference
+      ? consistentTextIdentity(
+        reference,
+        ['biologicalFeatureId', 'biological_feature_id']
+      )
+      : catalogMatchRoleTextIdentity(
+        match,
+        role,
+        ['BiologicalFeatureId', '_biological_feature_id']
+      );
+    if (
+      !recordKey.valid
+      || !biologicalFeatureId.valid
+      || !recordKey.value
+      || !biologicalFeatureId.value
+    ) return null;
+    var key = catalogFeatureKey(recordKey.value, biologicalFeatureId.value);
+    var biological = biologicalByKey.get(key);
+    var rendered = renderedByKey.get(key) || [];
+    if (!biological || rendered.length !== 1) return null;
+    var renderedId = String(rendered[0] && rendered[0].svg_id || '').trim();
+    var suppliedRendered = catalogMatchRoleTextIdentity(match, role, [
+      '_feature_svg_id', 'FeatureSvgId',
+      '_rendered_feature_svg_id', 'RenderedFeatureSvgId'
+    ]);
+    if (
+      !renderedId
+      || !suppliedRendered.valid
+      || (suppliedRendered.value && suppliedRendered.value !== renderedId)
+    ) return null;
+    var stableId = catalogStableFeatureId(biological);
+    var suppliedStable = catalogMatchRoleTextIdentity(match, role, [
+      '_stable_feature_svg_id', 'StableFeatureSvgId',
+      '_stable_feature_id', 'StableFeatureId'
+    ]);
+    if (
+      !stableId
+      || !suppliedStable.valid
+      || (suppliedStable.value && suppliedStable.value !== stableId)
+    ) return null;
+    var recordIndex = catalogRecordIndex(item, biological);
+    var suppliedRecordIndex = nonnegativeIntegerIdentity(match, [
+      role + '_record_index', role + 'RecordIndex'
+    ]);
+    if (
+      !Number.isInteger(recordIndex)
+      || !suppliedRecordIndex.valid
+      || (Number.isInteger(suppliedRecordIndex.value)
+        && suppliedRecordIndex.value !== recordIndex)
+    ) return null;
+    var featureIndex = nonnegativeIntegerIdentity(biological, [
+      'featureIndex', 'feature_index', 'sourceFeatureIndex', 'source_feature_index'
+    ]);
+    var suppliedFeatureIndex = nonnegativeIntegerIdentity(match, [
+      role + '_feature_index', role + 'FeatureIndex',
+      role + '_source_feature_index', role + 'SourceFeatureIndex'
+    ]);
+    if (
+      !featureIndex.valid
+      || !suppliedFeatureIndex.valid
+      || (Number.isInteger(suppliedFeatureIndex.value)
+        && (!Number.isInteger(featureIndex.value)
+          || suppliedFeatureIndex.value !== featureIndex.value))
+    ) return null;
+    var recordId = consistentTextIdentity(biological, ['record_id', 'recordId']);
+    var suppliedRecordId = catalogMatchRoleTextIdentity(
+      match,
+      role,
+      ['_record_id', 'RecordId']
+    );
+    if (
+      !recordId.valid
+      || !suppliedRecordId.valid
+      || (suppliedRecordId.value
+        && (!recordId.value || suppliedRecordId.value !== recordId.value))
+    ) return null;
+    var renderedCanonical = catalogCanonicalFeatureIdentity(rendered[0]);
+    if (!renderedCanonical.valid || renderedCanonical.key !== key) return null;
+    return {
+      biological: biological,
+      renderedId: renderedId,
+      stableId: stableId,
+      recordIndex: recordIndex,
+      recordId: recordId.value,
+      recordKey: recordKey.value,
+      biologicalFeatureId: biologicalFeatureId.value,
+      featureIndex: featureIndex.value
+    };
+  }
+
+  function catalogMatchEndpoints(item, match, role, biologicalByKey, renderedByKey) {
+    var references = match && match[role + 'FeatureReferences'];
+    if (references !== undefined) {
+      if (!Array.isArray(references) || !references.length) return [];
+      var endpoints = references.map(function (reference) {
+        return catalogMatchEndpointReference(
+          item,
+          match,
+          role,
+          reference,
+          biologicalByKey,
+          renderedByKey
+        );
+      });
+      return endpoints.every(Boolean) ? endpoints : [];
+    }
+    var endpoint = catalogMatchEndpointReference(
+      item,
+      match,
+      role,
+      null,
+      biologicalByKey,
+      renderedByKey
+    );
+    return endpoint ? [endpoint] : [];
+  }
+
+  function clearCatalogMatchEndpoint(expanded, role) {
+    [
+      '_feature_svg_id', 'FeatureSvgId',
+      '_rendered_feature_svg_id', 'RenderedFeatureSvgId',
+      '_stable_feature_svg_id', 'StableFeatureSvgId',
+      '_stable_feature_id', 'StableFeatureId',
+      '_feature_index', 'FeatureIndex',
+      '_source_feature_index', 'SourceFeatureIndex',
+      '_record_index', 'RecordIndex',
+      '_record_id', 'RecordId',
+      'FeatureReferences'
+    ].forEach(function (suffix) {
+      delete expanded[role + suffix];
+    });
+  }
+
   function expandCatalogItem(item, popupMode) {
+    var recordKeys = Array.isArray(item && item.recordKeys)
+      ? item.recordKeys.map(function (value) { return String(value || '').trim(); })
+      : [];
+    if (
+      recordKeys.some(function (value) { return !value; })
+      || new Set(recordKeys).size !== recordKeys.length
+    ) {
+      throw new Error('Invalid or duplicate catalog record identity.');
+    }
     var sourceSequences = catalogSequenceSourceStrings(item);
     var biologicalFeatures = (Array.isArray(item && item.biologicalFeatures)
       ? item.biologicalFeatures
@@ -1057,26 +1336,69 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     });
     var biologicalByKey = new Map();
     biologicalFeatures.forEach(function (feature) {
-      biologicalByKey.set(
-        catalogFeatureKey(feature.recordKey, feature.biologicalFeatureId),
-        feature
-      );
+      var canonical = catalogCanonicalFeatureIdentity(feature);
+      if (!canonical.valid || biologicalByKey.has(canonical.key)) {
+        throw new Error('Duplicate or invalid catalog biological feature identity.');
+      }
+      biologicalByKey.set(canonical.key, feature);
     });
-
+    var sourceIndexesByStableIdentity = new Map();
+    biologicalFeatures.forEach(function (feature) {
+      var canonical = catalogCanonicalFeatureIdentity(feature);
+      var stableId = catalogStableFeatureId(feature);
+      var sourceIndex = nonnegativeIntegerIdentity(feature, [
+        'featureIndex', 'feature_index', 'sourceFeatureIndex', 'source_feature_index'
+      ]);
+      if (!canonical.valid || !stableId || !sourceIndex.valid) {
+        throw new Error('Invalid catalog biological source identity.');
+      }
+      var stableKey = catalogFeatureKey(canonical.recordKey, stableId);
+      if (!sourceIndexesByStableIdentity.has(stableKey)) {
+        sourceIndexesByStableIdentity.set(stableKey, []);
+      }
+      sourceIndexesByStableIdentity.get(stableKey).push(sourceIndex.value);
+    });
+    sourceIndexesByStableIdentity.forEach(function (sourceIndexes) {
+      if (
+        sourceIndexes.length > 1
+        && (
+          sourceIndexes.some(function (sourceIndex) {
+            return !Number.isInteger(sourceIndex);
+          })
+          || new Set(sourceIndexes).size !== sourceIndexes.length
+        )
+      ) {
+        throw new Error(
+          'Duplicate catalog stable source identities require unique source feature indexes.'
+        );
+      }
+    });
     var renderedByKey = new Map();
+    var renderedIds = new Set();
     var features = (Array.isArray(item && item.features) ? item.features : []).map(function (reference) {
-      var key = catalogFeatureKey(reference && reference.recordKey, reference && reference.biologicalFeatureId);
-      var biological = biologicalByKey.get(key) || {};
-      var svgId = String(reference && reference.svgId || '').trim();
+      var canonical = catalogCanonicalFeatureIdentity(reference);
+      var renderedIdentity = catalogRenderedFeatureIdentity(reference);
+      if (!canonical.valid || !renderedIdentity.valid || !renderedIdentity.value) {
+        throw new Error('Invalid catalog rendered feature identity.');
+      }
+      var key = canonical.key;
+      var biological = biologicalByKey.get(key);
+      var svgId = renderedIdentity.value;
+      if (!biological || renderedByKey.has(key) || renderedIds.has(svgId)) {
+        throw new Error('Duplicate or unresolved catalog rendered feature reference.');
+      }
+      if (!catalogSourceReferenceAgrees(item, reference, biological)) {
+        throw new Error('Catalog rendered feature source identity does not agree.');
+      }
       var expanded = Object.assign({}, biological, {
         svg_id: svgId,
         rendered_svg_id: svgId,
         renderedSvgId: svgId,
         rendered_feature_svg_id: svgId,
-        recordKey: String(reference && reference.recordKey || '').trim(),
-        record_key: String(reference && reference.recordKey || '').trim(),
-        biologicalFeatureId: String(reference && reference.biologicalFeatureId || '').trim(),
-        biological_feature_id: String(reference && reference.biologicalFeatureId || '').trim()
+        recordKey: canonical.recordKey,
+        record_key: canonical.recordKey,
+        biologicalFeatureId: canonical.biologicalFeatureId,
+        biological_feature_id: canonical.biologicalFeatureId
       });
       if (reference && reference.fillColor) expanded.fill_color = reference.fillColor;
       if (reference && (reference.displayLabel || reference.display_label)) {
@@ -1085,28 +1407,61 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
           reference.display_label
         );
       }
-      if (!renderedByKey.has(key)) renderedByKey.set(key, []);
-      renderedByKey.get(key).push(expanded);
+      renderedByKey.set(key, [expanded]);
+      renderedIds.add(svgId);
       return expanded;
     });
 
-    var orthogroups = (Array.isArray(item && item.orthogroups) ? item.orthogroups : []).map(function (group) {
+    var catalogOrthogroups = Array.isArray(item && item.orthogroups)
+      ? item.orthogroups
+      : [];
+    var catalogOrthogroupIds = new Set();
+    var catalogOrthogroupEntries = catalogOrthogroups.map(function (group) {
+      var identity = consistentTextIdentity(
+        group,
+        ['id', 'orthogroupId', 'orthogroup_id']
+      );
+      if (!identity.valid || !identity.value || catalogOrthogroupIds.has(identity.value)) {
+        throw new Error('Invalid or duplicate catalog orthogroup identity.');
+      }
+      catalogOrthogroupIds.add(identity.value);
+      return { group: group, id: identity.value };
+    });
+    var orthogroups = catalogOrthogroupEntries.map(function (entry) {
+      var group = entry.group;
       var expandedGroup = Object.assign({}, group || {});
-      var groupId = String(
-        expandedGroup.id || expandedGroup.orthogroupId || expandedGroup.orthogroup_id || ''
-      ).trim();
+      var groupId = entry.id;
       expandedGroup.members = (Array.isArray(group && group.members) ? group.members : []).map(function (member) {
-        var key = catalogFeatureKey(member && member.recordKey, member && member.biologicalFeatureId);
-        var biological = biologicalByKey.get(key) || {};
+        var canonical = catalogCanonicalFeatureIdentity(member);
+        if (!canonical.valid) {
+          throw new Error('Invalid catalog orthogroup member identity.');
+        }
+        var key = canonical.key;
+        var biological = biologicalByKey.get(key);
+        if (!biological) {
+          throw new Error('Unresolved catalog orthogroup member identity.');
+        }
         var rendered = renderedByKey.get(key) || [];
         var stableId = catalogStableFeatureId(biological);
-        var renderedId = String(rendered[0] && rendered[0].svg_id || '').trim();
+        if (!catalogSourceReferenceAgrees(item, member, biological)) {
+          throw new Error('Catalog orthogroup member source identity does not agree.');
+        }
+        var memberRendered = catalogRenderedFeatureIdentity(member);
+        var renderedId = rendered.length === 1
+          ? String(rendered[0] && rendered[0].svg_id || '').trim()
+          : '';
+        if (
+          !memberRendered.valid
+          || (memberRendered.value && memberRendered.value !== renderedId)
+        ) {
+          throw new Error('Catalog orthogroup member rendered identity does not agree.');
+        }
         var recordIndex = catalogRecordIndex(item, biological);
         var expandedMember = Object.assign({}, member || {}, {
-          recordKey: String(member && member.recordKey || '').trim(),
-          record_key: String(member && member.recordKey || '').trim(),
-          biologicalFeatureId: String(member && member.biologicalFeatureId || '').trim(),
-          biological_feature_id: String(member && member.biologicalFeatureId || '').trim(),
+          recordKey: canonical.recordKey,
+          record_key: canonical.recordKey,
+          biologicalFeatureId: canonical.biologicalFeatureId,
+          biological_feature_id: canonical.biologicalFeatureId,
           stableFeatureSvgId: stableId,
           stable_feature_svg_id: stableId,
           featureSvgId: stableId,
@@ -1171,47 +1526,82 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       : []
     ).map(function (match) {
       var expanded = Object.assign({}, match || {});
+      expanded._gbdraw_catalog_endpoint_contract = true;
       ['query', 'subject'].forEach(function (role) {
-        var recordKey = match && match[role + 'RecordKey'];
-        var biologicalFeatureId = match && match[role + 'BiologicalFeatureId'];
-        if (!recordKey || !biologicalFeatureId) return;
-        var key = catalogFeatureKey(recordKey, biologicalFeatureId);
-        var biological = biologicalByKey.get(key) || {};
-        var rendered = renderedByKey.get(key) || [];
-        var renderedIds = rendered.map(function (feature) {
-          return String(feature.svg_id || '').trim();
-        }).filter(Boolean);
-        if (renderedIds.length) expanded[role + '_feature_svg_id'] = renderedIds.join(';');
+        var endpoints = catalogMatchEndpoints(
+          item,
+          match,
+          role,
+          biologicalByKey,
+          renderedByKey
+        );
+        expanded['_gbdraw_' + role + '_endpoint_resolved'] = Boolean(endpoints.length);
+        if (!endpoints.length) {
+          clearCatalogMatchEndpoint(expanded, role);
+          return;
+        }
+        var endpoint = endpoints[0];
+        expanded[role + 'FeatureReferences'] = endpoints.map(function (current) {
+          return {
+            recordKey: current.recordKey,
+            biologicalFeatureId: current.biologicalFeatureId
+          };
+        });
+        if (endpoints.length === 1) {
+          expanded[role + 'RecordKey'] = endpoint.recordKey;
+          expanded[role + 'BiologicalFeatureId'] = endpoint.biologicalFeatureId;
+        } else {
+          delete expanded[role + 'RecordKey'];
+          delete expanded[role + 'BiologicalFeatureId'];
+        }
+        expanded[role + '_feature_svg_id'] = endpoints.map(function (current) {
+          return current.renderedId;
+        }).join(';');
+        expanded[role + '_stable_feature_svg_id'] = endpoints.map(function (current) {
+          return current.stableId;
+        }).join(';');
         if (expanded[role + '_record_id'] === undefined) {
-          expanded[role + '_record_id'] = firstCatalogText(
-            biological.record_id,
-            biological.recordId
-          );
+          expanded[role + '_record_id'] = endpoint.recordId;
         }
         if (expanded[role + '_record_index'] === undefined) {
-          expanded[role + '_record_index'] = catalogRecordIndex(item, biological);
+          expanded[role + '_record_index'] = endpoint.recordIndex;
+        }
+        var endpointFeatureIndexes = endpoints.map(function (current) {
+          return current.featureIndex;
+        });
+        if (
+          expanded[role + '_feature_index'] === undefined
+          && endpointFeatureIndexes.every(Number.isInteger)
+        ) {
+          expanded[role + '_feature_index'] = endpointFeatureIndexes.join(';');
         }
         if (expanded[role + '_protein_id'] === undefined) {
-          expanded[role + '_protein_id'] = firstCatalogText(
-            biological.protein_id,
-            biological.proteinId,
-            catalogQualifier(biological, 'protein_id')
-          );
+          expanded[role + '_protein_id'] = endpoints.map(function (current) {
+            return firstCatalogText(
+              current.biological.protein_id,
+              current.biological.proteinId,
+              catalogQualifier(current.biological, 'protein_id')
+            );
+          }).filter(Boolean).join(';');
         }
         if (expanded[role + '_locus_id'] === undefined) {
-          expanded[role + '_locus_id'] = firstCatalogText(
-            biological.locus_tag,
-            biological.locusTag,
-            catalogQualifier(biological, 'locus_tag')
-          );
+          expanded[role + '_locus_id'] = endpoints.map(function (current) {
+            return firstCatalogText(
+              current.biological.locus_tag,
+              current.biological.locusTag,
+              catalogQualifier(current.biological, 'locus_tag')
+            );
+          }).filter(Boolean).join(';');
         }
         if (expanded[role + '_display_name'] === undefined) {
-          expanded[role + '_display_name'] = firstCatalogText(
-            biological.product,
-            catalogQualifier(biological, 'product'),
-            biological.gene,
-            catalogQualifier(biological, 'gene')
-          );
+          expanded[role + '_display_name'] = endpoints.map(function (current) {
+            return firstCatalogText(
+              current.biological.product,
+              catalogQualifier(current.biological, 'product'),
+              current.biological.gene,
+              catalogQualifier(current.biological, 'gene')
+            );
+          }).filter(Boolean).join(';');
         }
       });
       return expanded;
@@ -1232,14 +1622,24 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var items = Array.isArray(catalog && catalog.items) ? catalog.items : [];
     var resultIndexText = metadata && metadata.getAttribute('data-result-index');
     var resultName = String(metadata && metadata.getAttribute('data-result-name') || '').trim();
-    var resultIndex = String(resultIndexText || '').trim() === '' ? null : Number(resultIndexText);
-    var item = items.find(function (candidate) {
+    var resultIndexSupplied = String(resultIndexText || '').trim() !== '';
+    var resultIndexIdentity = nonnegativeIntegerIdentity(
+      { value: resultIndexText },
+      ['value']
+    );
+    if (
+      resultIndexSupplied
+      && (!resultIndexIdentity.valid || !Number.isInteger(resultIndexIdentity.value))
+    ) return {};
+    var resultIndex = resultIndexIdentity.value;
+    var itemMatches = items.filter(function (candidate) {
       if (!candidate) return false;
-      if (Number.isInteger(resultIndex) && candidate.resultIndex !== resultIndex) return false;
+      if (resultIndexSupplied && candidate.resultIndex !== resultIndex) return false;
       if (resultName && String(candidate.resultName || '').trim() !== resultName) return false;
       return true;
     });
-    if (!item && items.length === 1 && !Number.isInteger(resultIndex) && !resultName) {
+    var item = itemMatches.length === 1 ? itemMatches[0] : null;
+    if (!item && items.length === 1 && !resultIndexSupplied && !resultName) {
       item = items[0];
     }
     var popupMode = metadata && metadata.getAttribute('data-popup-mode') === 'simple'
@@ -1320,36 +1720,68 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   var featuresById = new Map();
+  var ambiguousRenderedFeatureIds = new Set();
   features.forEach(function (feature) {
     var svgId = String(feature && feature.svg_id || '').trim();
-    if (svgId && !featuresById.has(svgId)) {
-      featuresById.set(svgId, feature);
+    if (!svgId || ambiguousRenderedFeatureIds.has(svgId)) return;
+    if (featuresById.has(svgId) && featuresById.get(svgId) !== feature) {
+      featuresById.delete(svgId);
+      ambiguousRenderedFeatureIds.add(svgId);
+      return;
     }
+    featuresById.set(svgId, feature);
   });
-  function featureRecordIndex(feature) {
-    var candidates = [
-      feature && feature.record_idx,
-      feature && feature.recordIndex,
-      feature && feature.record_index,
-      feature && feature.fileIdx,
-      feature && feature.file_idx
-    ];
-    for (var index = 0; index < candidates.length; index += 1) {
-      if (candidates[index] === null || candidates[index] === undefined || candidates[index] === '') continue;
-      var recordIndex = Number(candidates[index]);
-      if (Number.isInteger(recordIndex)) return recordIndex;
+  function consistentTextIdentity(payload, keys) {
+    var values = [];
+    for (var index = 0; index < keys.length; index += 1) {
+      var raw = payload && payload[keys[index]];
+      var text = String(raw === null || raw === undefined ? '' : raw).trim();
+      if (text && values.indexOf(text) < 0) values.push(text);
     }
-    return null;
+    return { valid: values.length <= 1, value: values.length === 1 ? values[0] : '' };
+  }
+
+  function nonnegativeIntegerIdentity(payload, keys) {
+    var values = [];
+    for (var index = 0; index < keys.length; index += 1) {
+      var raw = payload && payload[keys[index]];
+      if (raw === null || raw === undefined || String(raw).trim() === '') continue;
+      var text = String(raw).trim();
+      if (!/^\\d+$/.test(text) || typeof raw === 'boolean') {
+        return { valid: false, value: null };
+      }
+      var parsed = Number(text);
+      if (!Number.isSafeInteger(parsed)) {
+        return { valid: false, value: null };
+      }
+      if (values.indexOf(parsed) < 0) values.push(parsed);
+    }
+    return { valid: values.length <= 1, value: values.length === 1 ? values[0] : null };
+  }
+
+  function featureRecordIdentity(feature) {
+    return nonnegativeIntegerIdentity(feature, [
+      'record_idx', 'recordIndex', 'record_index', 'fileIdx', 'file_idx'
+    ]);
+  }
+
+  function featureRecordIndex(feature) {
+    var identity = featureRecordIdentity(feature);
+    return identity.valid ? identity.value : null;
   }
 
   function biologicalFeatureStableSvgId(feature) {
-    return String(feature && (
-      feature.stable_svg_id ||
-      feature.stableFeatureSvgId ||
-      feature.stable_feature_svg_id ||
-      feature.stable_feature_id ||
-      feature.svg_id
-    ) || '').trim();
+    var stable = consistentTextIdentity(feature, [
+      'stable_svg_id', 'stableSvgId', 'stableFeatureSvgId',
+      'stable_feature_svg_id', 'stable_feature_id', 'stableFeatureId'
+    ]);
+    var legacy = consistentTextIdentity(feature, ['featureSvgId', 'feature_svg_id']);
+    if (
+      !stable.valid
+      || !legacy.valid
+      || (stable.value && legacy.value && stable.value !== legacy.value)
+    ) return '';
+    return stable.value || legacy.value || String(feature && feature.svg_id || '').trim();
   }
 
   function biologicalFeatureKey(recordIndex, stableSvgId) {
@@ -1357,9 +1789,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   var biologicalFeaturesByRecordAndId = new Map();
-  var biologicalFeaturesById = new Map();
+  var biologicalFeaturesByCanonicalId = new Map();
+  var biologicalFeaturesByRecordAndIndex = new Map();
   var ambiguousBiologicalRecordIds = new Set();
-  var ambiguousBiologicalIds = new Set();
+  var ambiguousBiologicalCanonicalIds = new Set();
+  var ambiguousBiologicalRecordIndexes = new Set();
   function addBiologicalFeatureLookup(map, ambiguous, key, feature) {
     if (!key || ambiguous.has(key)) return;
     var existing = map.get(key);
@@ -1371,44 +1805,95 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     map.set(key, feature);
   }
   biologicalFeatures.forEach(function (feature) {
-    var recordIndex = featureRecordIndex(feature);
-    var ids = [
-      biologicalFeatureStableSvgId(feature),
-      String(feature && feature.svg_id || '').trim()
-    ].filter(function (id, index, values) {
+    var recordIdentity = featureRecordIdentity(feature);
+    var stable = consistentTextIdentity(feature, [
+      'stable_svg_id', 'stableSvgId', 'stableFeatureSvgId',
+      'stable_feature_svg_id', 'stable_feature_id', 'stableFeatureId'
+    ]);
+    var legacy = consistentTextIdentity(feature, ['featureSvgId', 'feature_svg_id']);
+    var featureIndex = nonnegativeIntegerIdentity(feature, [
+      'featureIndex', 'feature_index', 'sourceFeatureIndex', 'source_feature_index'
+    ]);
+    var recordKey = consistentTextIdentity(feature, ['recordKey', 'record_key']);
+    var biologicalId = consistentTextIdentity(
+      feature,
+      ['biologicalFeatureId', 'biological_feature_id']
+    );
+    if (
+      !stable.valid
+      || !legacy.valid
+      || (stable.value && legacy.value && stable.value !== legacy.value)
+      || !featureIndex.valid
+      || !recordKey.valid
+      || !biologicalId.valid
+      || Boolean(recordKey.value) !== Boolean(biologicalId.value)
+    ) return;
+    var ids = [stable.value, legacy.value].filter(function (id, index, values) {
       return id && values.indexOf(id) === index;
     });
-    ids.forEach(function (id) {
-      if (Number.isInteger(recordIndex)) {
+    if (!ids.length && feature && feature.svg_id) ids.push(String(feature.svg_id).trim());
+    var hasSourceIdentity = ids.length > 0 || Number.isInteger(featureIndex.value);
+    if (
+      !recordIdentity.valid
+      || (hasSourceIdentity && !Number.isInteger(recordIdentity.value))
+      || (!hasSourceIdentity && !recordKey.value)
+    ) return;
+    if (Number.isInteger(recordIdentity.value)) {
+      var recordIndex = recordIdentity.value;
+      ids.forEach(function (id) {
         addBiologicalFeatureLookup(
           biologicalFeaturesByRecordAndId,
           ambiguousBiologicalRecordIds,
           biologicalFeatureKey(recordIndex, id),
           feature
         );
+      });
+      if (Number.isInteger(featureIndex.value)) {
+        addBiologicalFeatureLookup(
+          biologicalFeaturesByRecordAndIndex,
+          ambiguousBiologicalRecordIndexes,
+          biologicalFeatureKey(recordIndex, featureIndex.value),
+          feature
+        );
       }
-      addBiologicalFeatureLookup(biologicalFeaturesById, ambiguousBiologicalIds, id, feature);
-    });
+    }
+    if (recordKey.value) {
+      addBiologicalFeatureLookup(
+        biologicalFeaturesByCanonicalId,
+        ambiguousBiologicalCanonicalIds,
+        catalogFeatureKey(recordKey.value, biologicalId.value),
+        feature
+      );
+    }
   });
   var orthogroupsById = new Map();
+  var ambiguousOrthogroupIds = new Set();
   orthogroups.forEach(function (group) {
-    [
-      group && group.id,
-      group && group.orthogroupId,
-      group && group.orthogroup_id
-    ].forEach(function (candidate) {
-      var id = String(candidate || '').trim();
-      if (id && !orthogroupsById.has(id)) {
-        orthogroupsById.set(id, group);
-      }
-    });
+    var identity = consistentTextIdentity(
+      group,
+      ['id', 'orthogroupId', 'orthogroup_id']
+    );
+    var id = identity.valid ? identity.value : '';
+    if (!id || ambiguousOrthogroupIds.has(id)) return;
+    if (orthogroupsById.has(id) && orthogroupsById.get(id) !== group) {
+      orthogroupsById.delete(id);
+      ambiguousOrthogroupIds.add(id);
+      return;
+    }
+    orthogroupsById.set(id, group);
   });
   var matchesById = new Map();
+  var ambiguousMatchIds = new Set();
   matches.forEach(function (match) {
-    var id = String(match && match.id || '').trim();
-    if (id && !matchesById.has(id)) {
-      matchesById.set(id, match);
+    var identity = consistentTextIdentity(match, ['id', 'matchId', 'match_id']);
+    var id = identity.valid ? identity.value : '';
+    if (!id || ambiguousMatchIds.has(id)) return;
+    if (matchesById.has(id)) {
+      matchesById.delete(id);
+      ambiguousMatchIds.add(id);
+      return;
     }
+    matchesById.set(id, match);
   });
   var annotationsByDomId = new Map();
   annotations.forEach(function (annotation) {
@@ -1464,15 +1949,18 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   });
 
   var matchElementsById = new Map();
+  var ambiguousMatchElementIds = new Set();
   var selectedMatchId = '';
   var comparisonElementsByCollinearityBlockId = new Map();
   Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element) {
-    var matchId = String(element.getAttribute('data-gbdraw-match-id') || element.getAttribute('data-gbdraw-pairwise-match-id') || '').trim();
-    if (matchId) {
-      if (!matchElementsById.has(matchId)) {
-        matchElementsById.set(matchId, []);
+    var matchId = getElementMatchId(element);
+    if (matchId && !ambiguousMatchElementIds.has(matchId)) {
+      if (matchElementsById.has(matchId)) {
+        matchElementsById.delete(matchId);
+        ambiguousMatchElementIds.add(matchId);
+      } else {
+        matchElementsById.set(matchId, [element]);
       }
-      matchElementsById.get(matchId).push(element);
     }
     var blockId = String(element.getAttribute('data-collinearity-block-id') || '').trim();
     if (blockId) {
@@ -1556,7 +2044,14 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function getElementMatchId(element) {
-    return matchAttr(element, 'data-gbdraw-match-id') || matchAttr(element, 'data-gbdraw-pairwise-match-id');
+    var values = [
+      matchAttr(element, 'data-gbdraw-match-id'),
+      matchAttr(element, 'data-gbdraw-pairwise-match-id')
+    ].filter(function (value, index, entries) {
+      return value && entries.indexOf(value) === index;
+    });
+    if (values.length !== 1 || ambiguousMatchElementIds.has(values[0])) return '';
+    return values[0];
   }
 
   function getMatchHoverKey(element) {
@@ -1709,12 +2204,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function escapeRegExpClassChar(value) {
-    return String(value).replace(/[\\\]\[\^-]/g, '\\\\$&');
+    return String(value).replace(/[\\\\\\]\\[\\^-]/g, '\\\\$&');
   }
 
   function buildIupacQueryPattern(query, alphabet) {
     var map = getIupacAlphabet(alphabet);
-    var normalized = String(query || '').replace(/\s+/g, '').toUpperCase();
+    var normalized = String(query || '').replace(/\\s+/g, '').toUpperCase();
     if (!map || !normalized) return null;
     var targetChars = Object.keys(map);
     var parts = [];
@@ -1859,27 +2354,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function getFeatureOrthogroup(feature) {
-    return getOrthogroupById(feature && (feature.orthogroup_id || feature.orthogroupId));
+    var identity = consistentTextIdentity(feature, ['orthogroup_id', 'orthogroupId']);
+    return identity.valid ? getOrthogroupById(identity.value) : null;
   }
 
   function getFeatureOrthogroupMember(feature, group) {
-    if (feature && feature.orthogroup_member && typeof feature.orthogroup_member === 'object') {
-      return feature.orthogroup_member;
-    }
-    if (feature && feature.orthogroupMember && typeof feature.orthogroupMember === 'object') {
-      return feature.orthogroupMember;
-    }
     var members = group && Array.isArray(group.members) ? group.members : [];
-    var svgId = String(feature && feature.svg_id || '').trim();
-    var recordIndex = Number(feature && (feature.record_idx || feature.recordIndex || feature.fileIdx));
-    for (var i = 0; i < members.length; i += 1) {
-      var member = members[i] || {};
-      if (String(member.featureSvgId || member.feature_svg_id || '').trim() !== svgId) continue;
-      if (!Number.isInteger(recordIndex) || Number(member.recordIndex || member.record_index) === recordIndex) {
-        return member;
-      }
-    }
-    return null;
+    var targetBiological = biologicalFeatureForMember(feature);
+    if (!targetBiological) return null;
+    var matches = members.filter(function (member) {
+      var biological = biologicalFeatureForMember(member);
+      return biological && biological === targetBiological;
+    });
+    return matches.length === 1 ? matches[0] : null;
   }
 
   function firstDisplayText() {
@@ -3675,59 +4162,130 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function memberFeatureSvgId(memberOrRow) {
-    return String(memberOrRow && (
-      memberOrRow.stableFeatureSvgId ||
-      memberOrRow.stable_feature_svg_id ||
-      memberOrRow.featureSvgId ||
-      memberOrRow.feature_svg_id ||
-      memberOrRow.svgId ||
-      memberOrRow.svg_id
-    ) || '').trim();
+    var stable = consistentTextIdentity(memberOrRow, [
+      'stable_svg_id', 'stableSvgId',
+      'stableFeatureSvgId', 'stable_feature_svg_id',
+      'stableFeatureId', 'stable_feature_id'
+    ]);
+    var legacy = consistentTextIdentity(memberOrRow, [
+      'featureSvgId', 'feature_svg_id'
+    ]);
+    if (
+      !stable.valid
+      || !legacy.valid
+      || (stable.value && legacy.value && stable.value !== legacy.value)
+    ) return '';
+    return stable.value || legacy.value;
   }
 
   function memberRenderedFeatureSvgId(memberOrRow) {
-    var explicit = String(memberOrRow && (
-      memberOrRow.renderedFeatureSvgId ||
-      memberOrRow.rendered_feature_svg_id
-    ) || '').trim();
-    if (explicit) return explicit;
-    if (!hasBiologicalFeatureCatalog) return memberFeatureSvgId(memberOrRow);
+    var explicit = consistentTextIdentity(memberOrRow, [
+      'renderedFeatureSvgId', 'rendered_feature_svg_id',
+      'renderedSvgId', 'rendered_svg_id'
+    ]);
+    if (!explicit.valid) return '';
     var feature = biologicalFeatureForMember(memberOrRow);
-    return String(feature && (feature.rendered_svg_id || feature.renderedSvgId) || '').trim();
+    if (!feature) return '';
+    return explicit.value;
   }
 
   function memberRecordIndex(memberOrRow) {
-    var value = memberOrRow && (
-      memberOrRow.recordIndex !== undefined ? memberOrRow.recordIndex :
-      memberOrRow.record_index !== undefined ? memberOrRow.record_index :
-      memberOrRow.record_idx
+    var identity = nonnegativeIntegerIdentity(memberOrRow, [
+      'recordIndex', 'record_index', 'record_idx', 'fileIdx', 'file_idx'
+    ]);
+    return identity.valid ? identity.value : null;
+  }
+
+  function resolveBiologicalFeatureIdentity(memberOrRow) {
+    var record = nonnegativeIntegerIdentity(memberOrRow, [
+      'recordIndex', 'record_index', 'record_idx', 'fileIdx', 'file_idx'
+    ]);
+    var stable = consistentTextIdentity(memberOrRow, [
+      'stable_svg_id', 'stableSvgId',
+      'stableFeatureSvgId', 'stable_feature_svg_id',
+      'stableFeatureId', 'stable_feature_id'
+    ]);
+    var legacy = consistentTextIdentity(memberOrRow, ['featureSvgId', 'feature_svg_id']);
+    var sourceIndex = nonnegativeIntegerIdentity(memberOrRow, [
+      'featureIndex', 'feature_index', 'sourceFeatureIndex', 'source_feature_index'
+    ]);
+    var recordKey = consistentTextIdentity(memberOrRow, ['recordKey', 'record_key']);
+    var biologicalId = consistentTextIdentity(
+      memberOrRow,
+      ['biologicalFeatureId', 'biological_feature_id']
     );
-    if (value === null || value === undefined || value === '') return null;
-    var recordIndex = Number(value);
-    return Number.isInteger(recordIndex) ? recordIndex : null;
+    var rendered = consistentTextIdentity(memberOrRow, [
+      'renderedFeatureSvgId', 'rendered_feature_svg_id',
+      'renderedSvgId', 'rendered_svg_id'
+    ]);
+    var ids = [stable.value, legacy.value].filter(function (id, index, values) {
+      return id && values.indexOf(id) === index;
+    });
+    var hasSourceIdentity = ids.length > 0 || Number.isInteger(sourceIndex.value);
+    var hasCanonicalIdentity = Boolean(recordKey.value || biologicalId.value);
+    if (
+      !record.valid
+      || !stable.valid
+      || !legacy.valid
+      || (stable.value && legacy.value && stable.value !== legacy.value)
+      || !sourceIndex.valid
+      || !recordKey.valid
+      || !biologicalId.valid
+      || !rendered.valid
+      || Boolean(recordKey.value) !== Boolean(biologicalId.value)
+      || (hasSourceIdentity && !Number.isInteger(record.value))
+      || (!hasSourceIdentity && !hasCanonicalIdentity)
+    ) return { feature: null, renderedId: '' };
+
+    var resolved = [];
+    for (var idIndex = 0; idIndex < ids.length; idIndex += 1) {
+      var byId = biologicalFeaturesByRecordAndId.get(
+        biologicalFeatureKey(record.value, ids[idIndex])
+      );
+      if (!byId) return { feature: null, renderedId: '' };
+      if (resolved.indexOf(byId) < 0) resolved.push(byId);
+    }
+    if (Number.isInteger(sourceIndex.value)) {
+      var byIndex = biologicalFeaturesByRecordAndIndex.get(
+        biologicalFeatureKey(record.value, sourceIndex.value)
+      );
+      if (!byIndex) return { feature: null, renderedId: '' };
+      if (resolved.indexOf(byIndex) < 0) resolved.push(byIndex);
+    }
+    if (hasCanonicalIdentity) {
+      var byCanonical = biologicalFeaturesByCanonicalId.get(
+        catalogFeatureKey(recordKey.value, biologicalId.value)
+      );
+      if (!byCanonical) return { feature: null, renderedId: '' };
+      if (resolved.indexOf(byCanonical) < 0) resolved.push(byCanonical);
+    }
+    if (resolved.length !== 1) return { feature: null, renderedId: '' };
+    if (Number.isInteger(record.value)) {
+      var resolvedRecord = featureRecordIdentity(resolved[0]);
+      if (!resolvedRecord.valid || resolvedRecord.value !== record.value) {
+        return { feature: null, renderedId: '' };
+      }
+    }
+    return { feature: resolved[0], renderedId: rendered.value };
   }
 
   function biologicalFeatureForMember(memberOrRow) {
-    var stableSvgId = memberFeatureSvgId(memberOrRow);
-    var recordIndex = memberRecordIndex(memberOrRow);
-    if (stableSvgId && Number.isInteger(recordIndex)) {
-      var recordFeature = biologicalFeaturesByRecordAndId.get(
-        biologicalFeatureKey(recordIndex, stableSvgId)
-      );
-      if (recordFeature) return recordFeature;
-    }
-    if (stableSvgId) {
-      var biologicalFeature = biologicalFeaturesById.get(stableSvgId);
-      if (biologicalFeature) return biologicalFeature;
-    }
-    return null;
+    var resolution = resolveBiologicalFeatureIdentity(memberOrRow);
+    if (!resolution.feature) return null;
+    if (!resolution.renderedId) return resolution.feature;
+    var renderedFeature = featuresById.get(resolution.renderedId);
+    if (!renderedFeature) return null;
+    var renderedResolution = resolveBiologicalFeatureIdentity(renderedFeature);
+    if (renderedResolution.feature !== resolution.feature) return null;
+    if (
+      renderedResolution.renderedId
+      && renderedResolution.renderedId !== String(renderedFeature.svg_id || '').trim()
+    ) return null;
+    return resolution.feature;
   }
 
   function featureForMember(memberOrRow) {
-    var biologicalFeature = biologicalFeatureForMember(memberOrRow);
-    if (biologicalFeature) return biologicalFeature;
-    var renderedSvgId = memberRenderedFeatureSvgId(memberOrRow);
-    return renderedSvgId ? featuresById.get(renderedSvgId) || null : null;
+    return biologicalFeatureForMember(memberOrRow);
   }
 
   function featureSequenceFilename(feature, sequenceKind) {
@@ -4200,9 +4758,65 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (text) rows.push([label, text]);
   }
 
-  function materializedMatchFeatureRow(svgId, fallback) {
+  function resolvedCatalogMatchFeature(match, role) {
+    if (!match || match._gbdraw_catalog_endpoint_contract !== true) return null;
+    if (match['_gbdraw_' + role + '_endpoint_resolved'] !== true) return null;
+    var rendered = catalogMatchRoleTextIdentity(match, role, [
+      '_feature_svg_id', 'FeatureSvgId',
+      '_rendered_feature_svg_id', 'RenderedFeatureSvgId'
+    ]);
+    if (!rendered.valid || !rendered.value) return null;
+    var feature = featuresById.get(rendered.value);
+    if (!feature) return null;
+    var matchRecordKey = catalogMatchRoleTextIdentity(
+      match,
+      role,
+      ['RecordKey', '_record_key']
+    );
+    var matchBiologicalId = catalogMatchRoleTextIdentity(
+      match,
+      role,
+      ['BiologicalFeatureId', '_biological_feature_id']
+    );
+    var featureCanonical = catalogCanonicalFeatureIdentity(feature);
+    if (
+      !matchRecordKey.valid
+      || !matchBiologicalId.valid
+      || !matchRecordKey.value
+      || !matchBiologicalId.value
+      || !featureCanonical.valid
+      || featureCanonical.key !== catalogFeatureKey(
+        matchRecordKey.value,
+        matchBiologicalId.value
+      )
+    ) return null;
+    var matchRecord = nonnegativeIntegerIdentity(match, [
+      role + '_record_index', role + 'RecordIndex'
+    ]);
+    var featureRecord = featureRecordIdentity(feature);
+    if (
+      !matchRecord.valid
+      || !featureRecord.valid
+      || !Number.isInteger(matchRecord.value)
+      || matchRecord.value !== featureRecord.value
+    ) return null;
+    var matchStable = catalogMatchRoleTextIdentity(match, role, [
+      '_stable_feature_svg_id', 'StableFeatureSvgId',
+      '_stable_feature_id', 'StableFeatureId'
+    ]);
+    var featureStable = biologicalFeatureStableSvgId(feature);
+    if (
+      !matchStable.valid
+      || !matchStable.value
+      || !featureStable
+      || matchStable.value !== featureStable
+    ) return null;
+    return feature;
+  }
+
+  function materializedMatchFeatureRow(svgId, fallback, resolvedFeature) {
     var id = String(svgId || '').trim();
-    var feature = featuresById.get(id) || {};
+    var feature = resolvedFeature || featuresById.get(id) || {};
     var proteinId = firstNonInternalDisplayText(
       displayProteinId(feature, null, ''),
       fallback && fallback.proteinId
@@ -4236,7 +4850,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     };
   }
 
-  function materializedMatchFeatureRows(svgIds, fallback) {
+  function materializedMatchFeatureRows(match, role, fallback) {
+    if (match && match._gbdraw_catalog_endpoint_contract === true) {
+      var resolvedFeature = resolvedCatalogMatchFeature(match, role);
+      if (!resolvedFeature) return [materializedMatchFeatureRow('', fallback)];
+      return [materializedMatchFeatureRow(resolvedFeature.svg_id, fallback, resolvedFeature)];
+    }
+    var svgIds = match && match[role + '_feature_svg_id'];
     var ids = getOrthogroupIds(svgIds);
     if (!ids.length) return [materializedMatchFeatureRow('', fallback)];
     return ids.map(function (svgId) {
@@ -4246,14 +4866,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function materializedBlockMemberLabels(group, featureSvgIds) {
     if (!group) return '';
-    var members = Array.isArray(group.members) ? group.members : [];
     return getOrthogroupIds(featureSvgIds).map(function (svgId) {
-      var member = members.find(function (candidate) {
-        return memberRenderedFeatureSvgId(candidate) === svgId ||
-          memberFeatureSvgId(candidate) === svgId;
-      }) || null;
+      var renderedFeature = featuresById.get(svgId) || null;
+      var member = renderedFeature
+        ? getFeatureOrthogroupMember(renderedFeature, group)
+        : null;
       return firstNonInternalDisplayText(
-        displayProteinId(featureForMember(member) || featuresById.get(svgId) || null, member, ''),
+        displayProteinId(featureForMember(member) || renderedFeature, member, ''),
         member && member.label,
         svgId
       );
@@ -4274,35 +4893,81 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function matchSourceAliases(source) {
-    return [source && source.recordId].concat(Array.isArray(source && source.aliases) ? source.aliases : []).map(function (value) {
+    var recordId = consistentTextIdentity(source, ['recordId', 'record_id']);
+    if (!recordId.valid) return [];
+    return [recordId.value].concat(Array.isArray(source && source.aliases) ? source.aliases : []).map(function (value) {
       return String(value || '').trim();
     }).filter(Boolean);
   }
 
   function resolveEmbeddedMatchSource(match, role) {
+    if (
+      match
+      && match._gbdraw_catalog_endpoint_contract === true
+      && !resolvedCatalogMatchFeature(match, role)
+    ) {
+      return { source: null, reason: 'Match feature endpoint identity is invalid.' };
+    }
     var kind = String(match && match.match_kind || 'pairwise');
-    var recordId = String(match && match[role + '_record_id'] || '').trim();
-    var recordIndexText = String(match && match[role + '_record_index'] == null ? '' : match[role + '_record_index']).trim();
-    var recordIndex = recordIndexText ? Number(recordIndexText) : NaN;
+    var recordIdIdentity = consistentTextIdentity(
+      match,
+      [role + '_record_id', role + 'RecordId']
+    );
+    var recordId = recordIdIdentity.value;
+    var recordIndexIdentity = nonnegativeIntegerIdentity(
+      match,
+      [role + '_record_index', role + 'RecordIndex']
+    );
+    var recordIndex = recordIndexIdentity.value;
     var referenceSide = String(match && match.reference_side || '').trim();
-    var sourceIndexText = String(match && match.source_index == null ? '' : match.source_index).trim();
-    var sourceIndex = sourceIndexText ? Number(sourceIndexText) : NaN;
+    var sourceIndexIdentity = nonnegativeIntegerIdentity(
+      match,
+      ['source_index', 'sourceIndex']
+    );
+    var sourceIndex = sourceIndexIdentity.value;
     var expectedOrigin = kind === 'homology'
       ? (role === referenceSide ? 'circular-reference' : 'homology-comparison')
       : 'linear-record';
+    if (
+      !recordIndexIdentity.valid
+      || !sourceIndexIdentity.valid
+      || !recordIdIdentity.valid
+      || (expectedOrigin === 'linear-record' && !Number.isInteger(recordIndex))
+      || (expectedOrigin === 'homology-comparison' && !Number.isInteger(sourceIndex))
+    ) {
+      return { source: null, reason: 'Match sequence source identity is invalid.' };
+    }
     var candidates = sequenceSources.filter(function (source) {
       if (String(source && source.origin || '') !== expectedOrigin) return false;
-      if (expectedOrigin === 'linear-record' && Number.isInteger(recordIndex) && Number(source.recordIndex) !== recordIndex) return false;
-      if (expectedOrigin === 'homology-comparison' && Number.isInteger(sourceIndex) && Number(source.sourceIndex) !== sourceIndex) return false;
+      var candidateRecordId = consistentTextIdentity(source, ['recordId', 'record_id']);
+      if (!candidateRecordId.valid) return false;
+      if (expectedOrigin === 'linear-record') {
+        var candidateRecord = nonnegativeIntegerIdentity(
+          source,
+          ['recordIndex', 'record_index']
+        );
+        if (!candidateRecord.valid || candidateRecord.value !== recordIndex) return false;
+      }
+      if (expectedOrigin === 'homology-comparison') {
+        var candidateSource = nonnegativeIntegerIdentity(
+          source,
+          ['sourceIndex', 'source_index']
+        );
+        if (!candidateSource.valid || candidateSource.value !== sourceIndex) return false;
+      }
       return true;
     });
-    if (candidates.length === 1 && (expectedOrigin === 'linear-record' || !recordId)) return { source: candidates[0], reason: '' };
-    var exact = candidates.filter(function (source) { return String(source.recordId || '') === recordId; });
-    if (exact.length === 1) return { source: exact[0], reason: '' };
-    if (exact.length > 1) return { source: null, reason: 'Record ID is ambiguous in the embedded sequence sources.' };
-    var aliases = candidates.filter(function (source) { return matchSourceAliases(source).indexOf(recordId) >= 0; });
-    if (aliases.length === 1) return { source: aliases[0], reason: '' };
-    if (aliases.length > 1) return { source: null, reason: 'Record alias is ambiguous in the embedded sequence sources.' };
+    if (candidates.length === 1 && !recordId) return { source: candidates[0], reason: '' };
+    if (!recordId) {
+      return { source: null, reason: 'Record ID is required when embedded sequence sources are ambiguous.' };
+    }
+    var recordMatches = candidates.filter(function (source) {
+      return matchSourceAliases(source).indexOf(recordId) >= 0;
+    });
+    if (recordMatches.length === 1) return { source: recordMatches[0], reason: '' };
+    if (recordMatches.length > 1) {
+      return { source: null, reason: 'Record ID or alias is ambiguous in the embedded sequence sources.' };
+    }
     if (kind === 'homology' && expectedOrigin === 'homology-comparison') {
       return { source: null, reason: 'Comparison sequence was not supplied for this BLAST source.' };
     }
@@ -4465,7 +5130,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         sections.push({
           title: 'Query',
           rows: [],
-          feature_rows: materializedMatchFeatureRows(match.query_feature_svg_id, {
+          feature_rows: materializedMatchFeatureRows(match, 'query', {
             recordId: match.query_record_id,
             interval: qInterval,
             proteinId: match.query_protein_id,
@@ -4476,7 +5141,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         sections.push({
           title: 'Subject',
           rows: [],
-          feature_rows: materializedMatchFeatureRows(match.subject_feature_svg_id, {
+          feature_rows: materializedMatchFeatureRows(match, 'subject', {
             recordId: match.subject_record_id,
             interval: sInterval,
             proteinId: match.subject_protein_id,
@@ -4747,9 +5412,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       var blockOrthogroups = normalizeMatchBlockOrthogroups(section && (section.block_orthogroups || section.blockOrthogroups));
       var featureRows = normalizeMatchFeatureRows(section && (section.feature_rows || section.featureRows));
       if (!rows.length && !memberRows.length && !blockOrthogroups.length && !featureRows.length) return '';
-      var selectedBlockOrthogroup = blockOrthogroups.find(function (group) {
+      var selectedBlockOrthogroupMatches = blockOrthogroups.filter(function (group) {
         return group.id === selectedBlockOrthogroupId;
       });
+      var selectedBlockOrthogroup = selectedBlockOrthogroupMatches.length === 1
+        ? selectedBlockOrthogroupMatches[0]
+        : null;
       var selectedHtml = selectedBlockOrthogroup
         ? '<div class="gfi-block gfi-block--selected-og">' +
           '<div class="gfi-block-title">' + escapeHtml('Selected similarity group') + '</div>' +

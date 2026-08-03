@@ -765,6 +765,28 @@
         .hosted-build-label {
             white-space: nowrap;
         }
+        .right-drawer {
+            --right-drawer-width: min(100vw, 360px);
+            width: var(--right-drawer-width);
+            transform: translateX(0);
+            visibility: visible;
+            pointer-events: auto;
+        }
+        .right-drawer[aria-hidden="true"] {
+            transform: translateX(100%);
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .drawer-toggle {
+            --right-drawer-width: min(100vw, 360px);
+            transform: translateY(-50%);
+        }
+        .drawer-toggle[aria-expanded="true"] {
+            transform: translate(
+                calc(-1 * var(--right-drawer-width)),
+                -50%
+            );
+        }
         @media (max-width: 760px) {
             .feature-popup-grid {
                 grid-template-columns: minmax(0, 1fr);
@@ -958,7 +980,7 @@
             }
 
             .right-drawer {
-                width: min(100vw, 360px) !important;
+                width: var(--right-drawer-width) !important;
             }
 
             .drawer-toggle {
@@ -967,8 +989,10 @@
                 transform: none !important;
             }
 
-            .drawer-toggle.drawer-open {
-                transform: translateX(calc(-1 * min(100vw, 360px))) !important;
+            .drawer-toggle[aria-expanded="true"] {
+                transform: translateX(
+                    calc(-1 * var(--right-drawer-width))
+                ) !important;
             }
 
             footer {
@@ -1062,8 +1086,8 @@
                 </div>
 
                 <div class="mode-switch flex bg-slate-100 p-1 rounded-lg">
-                    <button @click="mode = 'circular'" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-circle"></i> Circular</button>
-                    <button @click="mode = 'linear'" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-ruler"></i> Linear</button>
+                    <button type="button" aria-label="Circular" :aria-pressed="mode === 'circular'" @click="mode = 'circular'" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-circle"></i> Circular</button>
+                    <button type="button" aria-label="Linear" :aria-pressed="mode === 'linear'" @click="mode = 'linear'" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-ruler"></i> Linear</button>
                 </div>
             </div>
         </div>
@@ -1092,7 +1116,7 @@
                             <file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <details class="rounded border border-slate-200 bg-white/70 p-2">
-                            <summary>
+                            <summary aria-label="Depth TSV tracks">
                                 <i class="ph ph-chart-bar"></i>
                                 Depth TSV tracks
                                 <span v-if="hasCircularDepthFiles" class="ml-auto text-[10px] font-semibold text-slate-400">{{ depthTrackCountLabel(files.c_depth) }}</span>
@@ -1131,13 +1155,13 @@
                                         <div>
                                             <label class="input-label text-[10px]">Depth Window <help-tip text="Window size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_window_size, 'depthWindow')" :text="autoValueText('depthWindow')">
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" aria-label="Depth Window" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Depth Step <help-tip text="Step size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_step_size, 'depthStep')" :text="autoValueText('depthStep')">
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" aria-label="Depth Step" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </div>
@@ -1145,13 +1169,13 @@
                                         <div>
                                             <label class="input-label text-[10px]">Depth Min <help-tip text="Minimum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_min, 'depthMin')" :text="autoValueText('depthMin')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" aria-label="Depth Min" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <label class="input-label text-[10px]">Depth Max <help-tip text="Maximum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_max, 'depthMax')" :text="autoValueText('depthMax')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" aria-label="Depth Max" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </div>
@@ -1177,6 +1201,7 @@
                                                 :value="getDepthTrackLabel(track.index)"
                                                 @input="setDepthTrackLabel(track.index, $event.target.value)"
                                                 class="form-input form-input-compact"
+                                                :aria-label="track.index === 0 ? 'Depth legend title' : `Depth ${track.index + 1} legend title`"
                                                 :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`"
                                             >
                                         </div>
@@ -1197,17 +1222,17 @@
                                             <div>
                                                 <label class="input-label text-[10px]">Large Tick <help-tip text="Large tick interval in x coverage units. Leave blank for min/max ticks."></help-tip></label>
                                                 <auto-value-field :visible="autoValueVisible(track.config.large_tick_interval, 'depthLargeTick')" :text="autoValueText('depthLargeTick')">
-                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" class="form-input form-input-compact auto-value-input">
+                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" :aria-label="track.index === 0 ? 'Depth large tick' : `Depth ${track.index + 1} large tick`" class="form-input form-input-compact auto-value-input">
                                                 </auto-value-field>
                                             </div>
                                             <div>
                                                 <label class="input-label text-[10px]">Small Tick <help-tip text="Small tick interval in x coverage units. Leave blank to hide small ticks."></help-tip></label>
-                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" class="form-input form-input-compact" placeholder="None">
+                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" :aria-label="track.index === 0 ? 'Depth small tick' : `Depth ${track.index + 1} small tick`" class="form-input form-input-compact" placeholder="None">
                                             </div>
                                             <div>
                                                 <label class="input-label text-[10px]">Tick Font <help-tip text="Font size for this track's depth tick labels. Leave blank for auto."></help-tip></label>
                                                 <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track.config)" :text="autoValueText('depthTickFont', track.config)">
-                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" class="form-input form-input-compact auto-value-input">
+                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" :aria-label="track.index === 0 ? 'Depth tick font size' : `Depth ${track.index + 1} tick font size`" class="form-input form-input-compact auto-value-input">
                                                 </auto-value-field>
                                             </div>
                                         </div>
@@ -1252,7 +1277,7 @@
                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-2 mb-2">
                                     <div>
                                         <label class="text-[9px] flex items-center">Execution <help-tip text="Auto uses threaded LOSAT only when the browser supports it and the workload is large enough. Serial always uses the existing browser artifact."></help-tip></label>
-                                        <select v-model="losat.executionMode" class="form-input px-1 py-0.5 text-xs">
+                                        <select v-model="losat.executionMode" aria-label="LOSAT execution" class="form-input px-1 py-0.5 text-xs">
                                             <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
                                             <option value="serial">Serial</option>
                                             <option value="threaded">Threaded</option>
@@ -1260,7 +1285,7 @@
                                     </div>
                                     <div>
                                         <label class="text-[9px] flex items-center">Total threads <help-tip text="Browser-reported logical threads available for threaded LOSAT. Safe uses up to half of the reported threads; Available uses the full reported count. N requested threads are all available to LOSAT computation."></help-tip></label>
-                                        <select v-model="losat.totalThreadBudget" class="form-input px-1 py-0.5 text-xs">
+                                        <select v-model="losat.totalThreadBudget" aria-label="LOSAT total threads" class="form-input px-1 py-0.5 text-xs">
                                             <option value="safe">Safe ({{ losatSafeThreadBudget }})</option>
                                             <option value="available">Available ({{ losatHardwareThreads }})</option>
                                             <option v-for="option in losatTotalThreadBudgetOptions" :key="`losat-budget-${option.value}`" :value="option.value">{{ option.label }}</option>
@@ -1268,14 +1293,14 @@
                                     </div>
                                     <div>
                                         <label class="text-[9px] flex items-center">Parallel runs <help-tip text="Number of genome-pair comparison runs LOSAT executes at the same time. Higher values may finish faster but can make the browser less responsive."></help-tip></label>
-                                        <select v-model="losat.parallelWorkers" class="form-input px-1 py-0.5 text-xs">
+                                        <select v-model="losat.parallelWorkers" aria-label="LOSAT parallel runs" class="form-input px-1 py-0.5 text-xs">
                                             <option :value="undefined">Auto ({{ losatAutoPairWorkers }} {{ losatAutoPairWorkers === 1 ? 'run' : 'runs' }})</option>
                                             <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
                                         </select>
                                     </div>
                                     <div>
                                         <label class="text-[9px] flex items-center">Threads per run <help-tip text="LOSATN and TLOSATX are fixed at 1 thread per run. LOSATP can pass --num-threads when the threaded LOSAT artifact is used. A value of N uses N LOSAT compute threads."></help-tip></label>
-                                        <select v-model="losat.threadsPerJob" class="form-input px-1 py-0.5 text-xs" :disabled="losatThreadsPerJobFixed">
+                                        <select v-model="losat.threadsPerJob" aria-label="LOSAT threads per run" class="form-input px-1 py-0.5 text-xs" :disabled="losatThreadsPerJobFixed">
                                             <option value="auto">Auto ({{ losatEffectiveThreadsPerJob }})</option>
                                             <option v-for="option in losatThreadOptions" :key="`losat-threads-${option.value}`" :value="option.value">{{ option.label }}</option>
                                         </select>
@@ -1289,7 +1314,7 @@
                                     <div class="grid grid-cols-1 gap-1">
                                         <div>
                                             <label class="text-[9px] flex items-center">Task <help-tip text="LOSAT blastn task preset. megablast is fastest for highly similar nucleotide sequences; blastn is more sensitive."></help-tip></label>
-                                            <select v-model="losat.blastn.task" class="form-input px-1 py-0.5 text-xs">
+                                            <select v-model="losat.blastn.task" aria-label="LOSATN task" class="form-input px-1 py-0.5 text-xs">
                                                 <option value="megablast">megablast</option>
                                                 <option value="blastn">blastn</option>
                                                 <option value="dc-megablast">dc-megablast</option>
@@ -1305,7 +1330,7 @@
                                     <div class="grid grid-cols-2 gap-1">
                                         <div class="col-span-2">
                                             <label class="text-[9px] flex items-center">blastp mode <help-tip text="Pairwise draws top protein hits, Similarity groups keeps reciprocal best-hit groups, and Collinear mode clusters selected edge links into span ribbons."></help-tip></label>
-                                            <select v-model="losat.blastp.mode" @change="losat.blastp.mode === 'collinear' && (adv.pairwise_match_style = 'curve')" class="form-input px-1 py-0.5 text-xs">
+                                            <select v-model="losat.blastp.mode" @change="losat.blastp.mode === 'collinear' && (adv.pairwise_match_style = 'curve')" aria-label="LOSATP blastp mode" class="form-input px-1 py-0.5 text-xs">
                                                 <option value="orthogroup">Similarity groups</option>
                                                 <option value="collinear">Collinear blocks</option>
                                                 <option value="pairwise">Pairwise</option>
@@ -1313,20 +1338,20 @@
                                         </div>
                                         <div v-if="losat.blastp.mode === 'pairwise'">
                                             <label class="text-[9px] flex items-center">Max hits per protein <help-tip text="Maximum distinct subject proteins drawn for each query protein in Pairwise mode. Higher values show repeats but increase clutter."></help-tip></label>
-                                            <input type="number" min="1" v-model.number="losat.blastp.maxHits" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" v-model.number="losat.blastp.maxHits" aria-label="LOSATP max hits per protein" class="form-input px-1 py-0.5 text-xs">
                                         </div>
                                         <template v-if="losat.blastp.mode === 'collinear'">
                                             <div>
                                                 <label class="text-[9px] flex items-center">Max unit gap <help-tip text="Maximum CDS-order gap between neighboring similarity-group RBH anchors that can be merged into one span ribbon."></help-tip></label>
-                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" aria-label="Collinear max unit gap" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Min block genes <help-tip text="Minimum connected genes required for a Collinear ribbon. Use 1 to include singleton links."></help-tip></label>
-                                                <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" aria-label="Collinear minimum block genes" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Color mode <help-tip text="Average identity uses one identity gradient, Orientation uses fixed plus/minus colors, and Orientation + identity uses separate plus and minus identity gradients."></help-tip></label>
-                                                <select v-model="losat.blastp.collinearColorMode" class="form-input px-1 py-0.5 text-xs">
+                                                <select v-model="losat.blastp.collinearColorMode" aria-label="Collinear color mode" class="form-input px-1 py-0.5 text-xs">
                                                     <option value="average_identity">Average identity</option>
                                                     <option value="orientation">Orientation</option>
                                                     <option value="orientation_identity">Orientation + identity</option>
@@ -1334,36 +1359,36 @@
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Evidence scope <help-tip text="Adjacent pairs uses neighboring records, or every cross-record pair between neighboring rows in a multi-record layout. All records uses every record pair as evidence for grouping and block support, but ribbons are still emitted only between adjacent display rows."></help-tip></label>
-                                                <select v-model="losat.blastp.collinearSearchScope" class="form-input px-1 py-0.5 text-xs">
+                                                <select v-model="losat.blastp.collinearSearchScope" aria-label="Collinear evidence scope" class="form-input px-1 py-0.5 text-xs">
                                                     <option value="adjacent">Adjacent pairs</option>
                                                     <option value="all">All records</option>
                                                 </select>
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Diagonal drift <help-tip text="Maximum order-space diagonal drift allowed when merging neighboring similarity-group RBH anchors."></help-tip></label>
-                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxDiagonalDrift" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxDiagonalDrift" aria-label="Collinear diagonal drift" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Merge conflicts <help-tip text="Maximum conflicting anchors tolerated while merging neighboring Collinear runs."></help-tip></label>
-                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxConflictsInMergeGap" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxConflictsInMergeGap" aria-label="Collinear merge conflicts" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                         </template>
                                         <div class="col-span-2 grid grid-cols-2 gap-1 pt-2 border-t border-slate-200">
                                             <div>
                                                 <label class="text-[9px] flex items-center">Bitscore <help-tip text="Minimum LOSATP blastp bitscore retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
-                                                <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))">
+                                                <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" aria-label="LOSATP minimum bitscore" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">E-value <help-tip text="Maximum LOSATP blastp e-value retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
-                                                <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'evalue'))">
+                                                <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()" aria-label="LOSATP maximum e-value" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'evalue'))">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Minimum Identity <help-tip text="Minimum LOSATP blastp percent identity retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
-                                                <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'identity'))">
+                                                <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" aria-label="LOSATP minimum identity" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'identity'))">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] flex items-center">Minimum Length <help-tip text="Minimum LOSATP blastp alignment length retained before Pairwise, Similarity-group, or Collinear reduction."></help-tip></label>
-                                                <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))">
+                                                <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" aria-label="LOSATP minimum alignment length" class="form-input px-1 py-0.5 text-xs" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))">
                                             </div>
                                         </div>
                                     </div>
@@ -1380,7 +1405,13 @@
                             <i class="ph ph-warning-circle text-sm mt-0.5"></i>
                             <span>{{ linearReorderNotice }}</span>
                         </div>
-                        <div v-for="(seq, idx) in linearSeqs" :key="seq.uid" class="p-3 bg-slate-50 rounded-lg border border-slate-200 group text-sm transition-all hover:border-blue-300">
+                        <div
+                            v-for="(seq, idx) in linearSeqs"
+                            :key="seq.uid"
+                            class="p-3 bg-slate-50 rounded-lg border border-slate-200 group text-sm transition-all hover:border-blue-300"
+                            role="group"
+                            :aria-label="`Linear sequence ${idx + 1}`"
+                        >
                             <div class="mb-2 flex items-center justify-between gap-2">
                                 <div class="text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
                                 <div class="flex items-center gap-1 shrink-0">
@@ -1405,6 +1436,7 @@
                             <div v-if="lInputType === 'gb'" class="space-y-2">
                                 <file-uploader
                                     label="GenBank File"
+                                    :test-id="`linear-genbank-${idx + 1}`"
                                     accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
                                     :model-value="seq.gb"
                                     @update:model-value="setLinearSeqPrimaryFile(idx, 'gb', $event)"
@@ -1569,11 +1601,11 @@
                             </details>
                             <div class="mt-2">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1">Organism / strain (optional)</div>
-                                <input type="text" v-model="seq.definition" placeholder="e.g., <i>Escherichia coli</i> O157:H7 Sakai" class="form-input px-1 py-0.5 text-xs">
+                                <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" placeholder="e.g., <i>Escherichia coli</i> O157:H7 Sakai" class="form-input px-1 py-0.5 text-xs">
                             </div>
                             <div class="mt-2">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1">Subtitle / title (optional)</div>
-                                <input type="text" v-model="seq.record_subtitle" placeholder="e.g., Neomycin biosynthetic gene cluster" class="form-input px-1 py-0.5 text-xs">
+                                <input type="text" v-model="seq.record_subtitle" :aria-label="`Subtitle / title for sequence ${idx + 1}`" placeholder="e.g., Neomycin biosynthetic gene cluster" class="form-input px-1 py-0.5 text-xs">
                             </div>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
@@ -1588,6 +1620,7 @@
                                                 v-model="seq.region_record_id"
                                                 :disabled="linearRecordSelectorDisabled(seq)"
                                                 :data-record-selector-uid="seq.uid"
+                                                :aria-label="`Record selector for sequence ${idx + 1}`"
                                                 class="form-select px-1 py-0.5 text-xs disabled:bg-slate-100 disabled:text-slate-500"
                                             >
                                                 <option
@@ -1604,49 +1637,49 @@
                                             </p>
                                         </div>
                                         <label class="flex items-center gap-2 text-[10px] text-slate-600 pb-1">
-                                            <input type="checkbox" v-model="seq.region_reverse" class="form-checkbox"> Reverse complement
+                                            <input type="checkbox" v-model="seq.region_reverse" :aria-label="`Reverse complement for sequence ${idx + 1}`" class="form-checkbox"> Reverse complement
                                         </label>
                                     </div>
                                     <div class="grid grid-cols-2 gap-2">
                                         <div>
                                             <label class="text-[9px] block">Start</label>
-                                            <input type="number" min="1" v-model.number="seq.region_start" placeholder="1028779" class="form-input px-1 py-0.5 text-xs">
+                                            <input type="number" min="1" v-model.number="seq.region_start" :aria-label="`Region start for sequence ${idx + 1}`" placeholder="1028779" class="form-input px-1 py-0.5 text-xs">
                                         </div>
                                         <div>
                                             <label class="text-[9px] block">End</label>
-                                            <input type="number" min="1" v-model.number="seq.region_end" placeholder="1035047" class="form-input px-1 py-0.5 text-xs">
+                                            <input type="number" min="1" v-model.number="seq.region_end" :aria-label="`Region end for sequence ${idx + 1}`" placeholder="1035047" class="form-input px-1 py-0.5 text-xs">
                                         </div>
                                     </div>
                                 </div>
                             </div>
                             <div v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx'" class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1">LOSAT Gencode</div>
-                                <input type="number" v-model.number="seq.losat_gencode" placeholder="Gencode (this entry)" class="form-input px-1 py-0.5 text-xs">
+                                <input type="number" v-model.number="seq.losat_gencode" :aria-label="`TLOSATX gencode for sequence ${idx + 1}`" placeholder="Gencode (this entry)" class="form-input px-1 py-0.5 text-xs">
                             </div>
                         </div>
                         <div class="flex gap-2">
-                            <button @click="addLinearSeq()" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
+                            <button type="button" aria-label="Add sequence" @click="addLinearSeq()" class="btn btn-secondary text-xs w-full"><i class="ph ph-plus"></i> Add Seq</button>
                             <button v-if="linearSeqs.length > 1" @click="removeLastLinearSeq()" class="btn btn-danger text-xs w-full"><i class="ph ph-minus"></i> Remove</button>
                         </div>
                         <div class="mt-3 rounded-lg border border-slate-200 bg-white p-2 space-y-2">
                             <div class="flex items-center justify-between gap-2">
                                 <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Record Layout</div>
                                 <label class="flex items-center gap-2 text-[10px] text-slate-600">
-                                    <input type="checkbox" :checked="linearRecordLayoutEnabled" @change="setLinearRecordLayoutEnabled($event.target.checked)" class="form-checkbox">
+                                    <input type="checkbox" :checked="linearRecordLayoutEnabled" @change="setLinearRecordLayoutEnabled($event.target.checked)" aria-label="Arrange linear records in rows" class="form-checkbox">
                                     Arrange in rows
                                 </label>
                             </div>
                             <div v-if="linearRecordLayoutEnabled" class="space-y-1.5">
                                 <div class="grid grid-cols-[minmax(0,1fr)_72px_auto] gap-1 items-center" v-for="(seq, idx) in linearSeqs" :key="`layout-${seq.uid}`">
                                     <div class="truncate text-[10px] font-semibold text-slate-600">#{{ idx + 1 }} {{ seq.definition || seq.gb?.name || seq.gff?.name || 'Record' }}</div>
-                                    <input type="number" min="1" :value="linearRecordRowFor(seq.uid, idx + 1)" @input="setLinearRecordRow(seq.uid, $event.target.value)" class="form-input form-input-compact" aria-label="Linear record row">
+                                    <input type="number" min="1" :value="linearRecordRowFor(seq.uid, idx + 1)" @input="setLinearRecordRow(seq.uid, $event.target.value)" class="form-input form-input-compact" :aria-label="`Linear record row for sequence ${idx + 1}`">
                                     <div class="flex gap-0.5">
                                         <button type="button" class="btn btn-secondary text-[9px] px-1 py-0.5" @click="moveLinearRecordWithinRow(seq.uid, -1)">Up</button>
                                         <button type="button" class="btn btn-secondary text-[9px] px-1 py-0.5" @click="moveLinearRecordWithinRow(seq.uid, 1)">Down</button>
                                     </div>
                                 </div>
                                 <label class="block text-[10px] text-slate-500">Record gap (px)
-                                    <input type="number" min="0" step="1" v-model.number="linearRecordGap" class="form-input form-input-compact mt-0.5">
+                                    <input type="number" min="0" step="1" v-model.number="linearRecordGap" aria-label="Linear record gap" class="form-input form-input-compact mt-0.5">
                                 </label>
                             </div>
                         </div>
@@ -1724,14 +1757,14 @@
                             <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Raw LOSAT results</div>
                             <div v-for="edge in linearResolvedLosatEdges" :key="`raw-${edge.edgeKey}`" class="rounded border border-slate-200 bg-slate-50 p-1.5 space-y-1">
                                 <div class="text-[10px] font-semibold text-slate-600">#{{ edge.queryIndex + 1 }} → #{{ edge.subjectIndex + 1 }}</div>
-                                <input type="text" :value="edge.losatFilename" :placeholder="getLosatPairDefaultName(edge.edgeKey)" @change="setResolvedLinearComparisonLosatFilename(edge.edgeKey, $event.target.value)" class="form-input form-input-compact">
+                                <input type="text" :value="edge.losatFilename" :placeholder="getLosatPairDefaultName(edge.edgeKey)" @change="setResolvedLinearComparisonLosatFilename(edge.edgeKey, $event.target.value)" aria-label="Raw LOSAT filename" class="form-input form-input-compact">
                                 <div class="text-[9px] text-slate-400">Default: {{ getLosatPairDefaultName(edge.edgeKey) }}</div>
                                 <div v-if="edge.losatFilename && !edge.losatFilenameActive" class="flex items-center justify-between gap-2 rounded bg-amber-50 px-1.5 py-1 text-[9px] text-amber-800">
                                     <span class="truncate">Retained, inactive filename: {{ edge.losatFilename }}</span>
                                     <button type="button" class="btn btn-secondary px-1 py-0.5 text-[9px]" @click="reuseResolvedLinearComparisonLosatFilename(edge.edgeKey)">Reuse name</button>
                                 </div>
                                 <button v-else-if="edge.losatFilenameActive" type="button" class="text-[9px] text-amber-700" @click="deactivateResolvedLinearComparisonLosatFilename(edge.edgeKey)">Use automatic filename</button>
-                                <button @click="downloadLosatPair(edge.edgeKey, edge.losatFilenameActive ? edge.losatFilename : '')" class="btn btn-secondary text-xs w-full" :disabled="!linearLosatCacheInfoByEdgeKey[edge.edgeKey]">
+                                <button type="button" aria-label="Save Raw LOSAT TSV" @click="downloadLosatPair(edge.edgeKey, edge.losatFilenameActive ? edge.losatFilename : '')" class="btn btn-secondary text-xs w-full" :disabled="!linearLosatCacheInfoByEdgeKey[edge.edgeKey]">
                                     <i class="ph ph-download-simple"></i> Save Raw LOSAT TSV
                                 </button>
                             </div>
@@ -1741,7 +1774,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-brackets-curly"></i> Region Annotations <help-tip text="Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement."></help-tip></summary>
+                        <summary aria-label="Region Annotations"><i class="ph ph-brackets-curly"></i> Region Annotations <help-tip text="Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement."></help-tip></summary>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()"><i class="ph ph-plus"></i> Add set</button>
@@ -1817,7 +1850,7 @@
 
                 <div v-if="mode === 'circular'" class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-arrows-left-right"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison FASTA. Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
+                        <summary aria-label="Pairwise Comparisons"><i class="ph ph-arrows-left-right"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison FASTA. Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600"> Run LOSAT</label>
@@ -1833,7 +1866,7 @@
                                 ></file-uploader>
                                 <div>
                                     <label class="text-[9px] flex items-center">Reference side <help-tip text="Use Auto when exactly one BLAST side matches the displayed reference record IDs; choose Query or Subject for ambiguous files."></help-tip></label>
-                                    <select v-model="circularConservation.reference" class="form-input px-1 py-0.5 text-xs">
+                                    <select v-model="circularConservation.reference" aria-label="Circular comparison reference side" class="form-input px-1 py-0.5 text-xs">
                                         <option value="auto">Auto ({{ autoValueText('conservationReference') }})</option>
                                         <option value="query">Query</option>
                                         <option value="subject">Subject</option>
@@ -1851,7 +1884,7 @@
                                 <div class="grid grid-cols-1 gap-1">
                                     <div v-if="circularConservation.losat_program === 'blastn'">
                                         <label class="text-[9px] flex items-center">Task <help-tip text="Browser LOSATN pairwise comparisons use the displayed circular sequence as the BLAST subject."></help-tip></label>
-                                        <select v-model="losat.blastn.task" class="form-input px-1 py-0.5 text-xs">
+                                        <select v-model="losat.blastn.task" aria-label="Circular LOSATN task" class="form-input px-1 py-0.5 text-xs">
                                             <option value="megablast">megablast</option>
                                             <option value="blastn">blastn</option>
                                             <option value="dc-megablast">dc-megablast</option>
@@ -1860,7 +1893,7 @@
                                     <div v-else class="grid grid-cols-1 gap-1.5">
                                         <div>
                                             <label class="text-[9px] flex items-center">Reference gencode <help-tip text="Translation table for the displayed circular sequence used by TLOSATX."></help-tip></label>
-                                            <input type="number" min="1" step="1" v-model.number="circularConservation.subject_gencode" class="form-input px-1 py-0.5 text-xs">
+                                            <input type="number" min="1" step="1" v-model.number="circularConservation.subject_gencode" aria-label="Circular reference gencode" class="form-input px-1 py-0.5 text-xs">
                                         </div>
                                     </div>
                                 </div>
@@ -1885,19 +1918,19 @@
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
                                         <label class="input-label text-[10px]">Bitscore</label>
-                                        <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('circular', 'min_bitscore') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'min_bitscore'))">
+                                        <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('circular', 'min_bitscore') : Number($event.target.value)" aria-label="Circular comparison minimum bitscore" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'min_bitscore'))">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">E-value</label>
-                                        <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('circular', 'evalue') : String($event.target.value).trim()" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'evalue'))">
+                                        <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('circular', 'evalue') : String($event.target.value).trim()" aria-label="Circular comparison maximum e-value" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'evalue'))">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Minimum Identity</label>
-                                        <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('circular', 'identity') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'identity'))">
+                                        <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('circular', 'identity') : Number($event.target.value)" aria-label="Circular comparison minimum identity" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'identity'))">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Minimum Length</label>
-                                        <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('circular', 'alignment_length') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'alignment_length'))">
+                                        <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('circular', 'alignment_length') : Number($event.target.value)" aria-label="Circular comparison minimum alignment length" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('circular', 'alignment_length'))">
                                     </div>
                                 </div>
                             </div>
@@ -1907,13 +1940,13 @@
                                     <div>
                                         <label class="input-label text-[10px]">Ring Width</label>
                                         <auto-value-field :visible="autoValueVisible(circularConservation.ring_width, 'conservationRingWidth')" :text="autoValueText('conservationRingWidth')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_width" aria-label="Circular comparison ring width" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px]">Ring Gap</label>
                                         <auto-value-field :visible="autoValueVisible(circularConservation.ring_gap, 'conservationRingGap')" :text="autoValueText('conservationRingGap')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" aria-label="Circular comparison ring gap" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -1928,7 +1961,7 @@
                                 <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
                                     <input type="color" v-model="circularConservation.series[row.index].color" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="`Color for ${row.filename}`">
                                     <div class="min-w-0 space-y-0.5">
-                                        <input type="text" v-model="circularConservation.series[row.index].label" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs">
+                                        <input type="text" v-model="circularConservation.series[row.index].label" :aria-label="`Comparison ring label ${row.index + 1}`" :placeholder="row.defaultLabel" class="form-input px-1 py-0.5 text-xs">
                                         <div class="text-[9px] text-slate-500 truncate"><span class="font-bold text-slate-600">{{ row.sourceLabel }}</span> - {{ row.filename }}</div>
                                         <label v-if="circularConservation.source === 'upload'"
                                                class="flex items-center gap-1 text-[9px] text-slate-500 cursor-pointer">
@@ -1941,7 +1974,7 @@
                                         </label>
                                         <div v-if="circularConservation.source === 'losat' && circularConservation.losat_program === 'tblastx'" class="grid grid-cols-[minmax(0,1fr)_4.8rem] gap-1 items-center">
                                             <label class="text-[9px] text-slate-500 truncate">Subject gencode</label>
-                                            <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6">
+                                            <input type="number" min="1" step="1" v-model.number="circularConservation.series[row.index].losat_gencode" :aria-label="`Comparison subject gencode ${row.index + 1}`" placeholder="1" class="form-input px-1 py-0.5 text-[10px] h-6">
                                         </div>
                                     </div>
                                     <div class="flex items-center gap-0.5">
@@ -1970,15 +2003,15 @@
                     <div class="card-header"><i class="ph ph-sliders"></i> Basic</div>
                     <div class="space-y-2">
                         <div>
-                            <label class="input-label">Output Prefix <help-tip :text="mode === 'circular' ? 'Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.' : 'Prefix for output files. Leave empty to use out.'"></help-tip></label>
-                            <input type="text" v-model="form.prefix" class="form-input" :placeholder="mode === 'circular' ? 'Optional (Default: Record ID)' : 'Optional (Default: out)'">
+                            <label for="output-prefix" class="input-label">Output Prefix <help-tip :text="mode === 'circular' ? 'Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.' : 'Prefix for output files. Leave empty to use out.'"></help-tip></label>
+                            <input id="output-prefix" type="text" v-model="form.prefix" class="form-input" :placeholder="mode === 'circular' ? 'Optional (Default: Record ID)' : 'Optional (Default: out)'">
                         </div>
 
                         <template v-if="mode === 'circular'">
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <label class="input-label">Species <help-tip text="Species name used in the circular center label when no custom plot title is set."></help-tip></label>
-                                    <input type="text" v-model="form.species" class="form-input" placeholder="e.g. <i>Escherichia coli</i>">
+                                    <label for="circular-species" class="input-label">Species <help-tip text="Species name used in the circular center label when no custom plot title is set."></help-tip></label>
+                                    <input id="circular-species" type="text" v-model="form.species" class="form-input" placeholder="e.g. <i>Escherichia coli</i>">
                                 </div>
                                 <div>
                                     <label class="input-label">Strain <help-tip text="Strain or isolate name used in the circular center label."></help-tip></label>
@@ -2000,12 +2033,12 @@
 
                 <div class="card bg-slate-50/50">
                     <details open>
-                        <summary><i class="ph ph-layout"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
+                        <summary aria-label="Layout"><i class="ph ph-layout"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <template v-if="mode === 'linear'">
                                 <div>
-                                    <label class="input-label text-[10px] mb-1">Track Layout <help-tip text="Simple mode only. Above places features above the axis, Features on axis centers them on it, and Below places them below it. Use Reset to copy this choice into the custom stack."></help-tip></label>
-                                    <select v-model="form.linear_track_layout" class="form-input text-xs py-1" :disabled="adv.linear_track_slots_enabled" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
+                                    <label for="linear-track-layout" class="input-label text-[10px] mb-1">Track Layout <help-tip text="Simple mode only. Above places features above the axis, Features on axis centers them on it, and Below places them below it. Use Reset to copy this choice into the custom stack."></help-tip></label>
+                                    <select id="linear-track-layout" v-model="form.linear_track_layout" class="form-input text-xs py-1" :disabled="adv.linear_track_slots_enabled" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
                                         <option value="above">Above</option>
                                         <option value="middle">Features on axis</option>
                                         <option value="below">Below</option>
@@ -2316,8 +2349,8 @@
 
                             <template v-else>
                                 <div v-if="!adv.circular_track_slots_enabled">
-                                    <label class="input-label text-[10px] mb-1">Track Preset <help-tip text="Applies the live circular track arrangement used while Custom Track Slots is off. Custom Track Slots inherit this preset when enabled."></help-tip></label>
-                                    <select v-model="form.track_type" class="form-input text-xs py-1">
+                                    <label for="circular-track-preset" class="input-label text-[10px] mb-1">Track Preset <help-tip text="Applies the live circular track arrangement used while Custom Track Slots is off. Custom Track Slots inherit this preset when enabled."></help-tip></label>
+                                    <select id="circular-track-preset" v-model="form.track_type" class="form-input text-xs py-1">
                                         <option value="tuckin">Tuckin</option>
                                         <option value="middle">Middle</option>
                                         <option value="spreadout">Spreadout</option>
@@ -2329,7 +2362,7 @@
                                         :class="circularSeparateStrandsOptionClass"
                                         :title="circularSeparateStrandsDisabled ? 'Turn off Resolve Overlaps to enable Separate Strands.' : ''"
                                     >
-                                        <input type="checkbox" v-model="form.separate_strands" :disabled="circularSeparateStrandsDisabled" class="form-checkbox">
+                                        <input type="checkbox" v-model="form.separate_strands" :disabled="circularSeparateStrandsDisabled" class="form-checkbox" aria-label="Separate Strands">
                                         <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction. Cannot be combined with Resolve Overlaps in circular mode."></help-tip></span>
                                     </label>
                                     <label
@@ -2345,11 +2378,11 @@
                                         <span class="inline-flex items-center gap-1">Multi-Record Canvas <help-tip text="When multiple records are loaded, place them on one shared circular canvas as an automatic grid (opt-in)."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox">
+                                        <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox" aria-label="Hide GC Content">
                                         <span class="inline-flex items-center gap-1">Hide GC Content <help-tip text="Suppress the GC content track."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" :checked="form.suppress_skew" @change="setCircularSkewSuppressed($event.target.checked, $event)" class="form-checkbox">
+                                        <input type="checkbox" :checked="form.suppress_skew" @change="setCircularSkewSuppressed($event.target.checked, $event)" class="form-checkbox" aria-label="Hide GC Skew">
                                         <span class="inline-flex items-center gap-1">Hide GC Skew <help-tip text="Suppress the GC skew track."></help-tip></span>
                                     </label>
                                     <label
@@ -2433,6 +2466,8 @@
                                                 v-for="entry in circularTrackStackEntries()"
                                                 :key="entry.kind === 'axis' ? 'circular-axis-row' : circularTrackSlotEditorKey(entry.slot)"
                                                 :data-capture="entry.kind === 'axis' ? 'circular-track-axis-row' : `circular-track-slot-${entry.slot.id}`"
+                                                role="group"
+                                                :aria-label="entry.kind === 'axis' ? 'Circular track axis' : `Circular track slot ${entry.slot.id}`"
                                             >
                                                 <div
                                                     v-if="entry.kind === 'axis'"
@@ -2463,11 +2498,13 @@
                                                             class="form-checkbox"
                                                             :disabled="circularTrackSlotHiddenBySuppress(entry.slot)"
                                                             :title="circularTrackSlotSuppressMessage(entry.slot) || (entry.slot.enabled ? 'Enabled' : 'Disabled')"
+                                                            :aria-label="`Enable circular track slot ${entry.slot.id}`"
                                                         >
-                                                        <input v-model.trim="entry.slot.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id">
+                                                        <input v-model.trim="entry.slot.id" :aria-label="`Circular track slot id ${entry.slot.id}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id">
                                                         <select
                                                             :value="entry.slot.renderer"
                                                             @change="updateCircularTrackSlotRenderer(entry.slot, $event.target.value)"
+                                                            :aria-label="`Circular track renderer ${entry.slot.id}`"
                                                             class="form-input px-1 py-0.5 text-[10px] min-w-0"
                                                         >
                                                             <option v-for="renderer in circularTrackRenderers" :key="`slot-renderer-${renderer}`" :value="renderer">
@@ -2553,11 +2590,11 @@
                                                         </select>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'annotations'" class="grid grid-cols-2 gap-1">
-                                                        <select v-model="entry.slot.params.set_id" class="form-input px-1 py-0.5 text-[10px]" title="Annotation set">
+                                                        <select v-model="entry.slot.params.set_id" aria-label="Annotation set" class="form-input px-1 py-0.5 text-[10px]" title="Annotation set">
                                                             <option value="">Select annotation set</option>
                                                             <option v-for="set in annotationSets" :key="`circular-annotation-set-${set.id}`" :value="set.id">{{ set.id }}</option>
                                                         </select>
-                                                        <select :value="entry.slot.side" @change="updateCircularTrackSlotPlacement(entry.slot, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" title="Placement"><option value="outside">Outside axis</option><option value="inside">Inside axis</option><option value="overlay">Overlay anchor</option></select>
+                                                        <select :value="entry.slot.side" @change="updateCircularTrackSlotPlacement(entry.slot, $event.target.value)" aria-label="Annotation placement" class="form-input px-1 py-0.5 text-[10px]" title="Placement"><option value="outside">Outside axis</option><option value="inside">Inside axis</option><option value="overlay">Overlay anchor</option></select>
                                                         <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor">
                                                             <option value="">Select anchor</option>
                                                             <option v-if="!circularAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">Invalid: {{ entry.slot.params.anchor_slot }}</option>
@@ -2565,7 +2602,7 @@
                                                         </select>
                                                         <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" class="form-input px-1 py-0.5 text-[10px]"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
                                                         <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
-                                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels"> Labels</label>
+                                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels" aria-label="Show annotation labels"> Labels</label>
                                                         <label v-if="entry.slot.side === 'overlay'" class="flex items-center gap-1 text-[10px]">
                                                             <input type="checkbox" :checked="circularAnnotationCoverAnchor(entry.slot)" @change="setCircularAnnotationCoverAnchor(entry.slot, $event.target.checked)">
                                                             Cover anchor
@@ -2604,11 +2641,11 @@
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
                                                             <label class="track-slot-field-label">dinucleotide <help-tip text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></label>
-                                                            <input v-model.trim="entry.slot.params.nt" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC">
+                                                            <input v-model.trim="entry.slot.params.nt" aria-label="Track dinucleotide" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC">
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <label class="track-slot-field-label">legend label <help-tip text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></label>
-                                                            <input v-model.trim="entry.slot.params.legend_label" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularTrackSlotLegendLabelPlaceholder(entry.slot)">
+                                                            <input v-model.trim="entry.slot.params.legend_label" aria-label="Track legend label" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularTrackSlotLegendLabelPlaceholder(entry.slot)">
                                                         </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
@@ -2650,7 +2687,7 @@
                                                 </div>
                                             </div>
                                             <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
-                                                <select v-model="circularTrackNewRenderer" class="form-input py-1 text-[10px] min-w-0">
+                                                <select v-model="circularTrackNewRenderer" aria-label="New circular track renderer" class="form-input py-1 text-[10px] min-w-0">
                                                     <option v-for="renderer in circularTrackRenderers" :key="`new-slot-${renderer}`" :value="renderer">
                                                         {{ circularTrackRendererLabel(renderer) }}
                                                     </option>
@@ -2676,7 +2713,7 @@
                                 <div v-if="form.multi_record_canvas" data-capture="multi-record-canvas-controls" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
                                     <div>
                                         <label class="input-label text-[10px] mb-1">Record Size Mode <help-tip text="Scale circles by record length on multi-record canvas."></help-tip></label>
-                                        <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs">
+                                        <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs" aria-label="Record Size Mode">
                                             <option value="auto">Auto (Default)</option>
                                             <option value="linear">Linear</option>
                                             <option value="equal">Equal</option>
@@ -2684,15 +2721,15 @@
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px] mb-1">Min Radius Ratio <help-tip text="Lower bound for short records (0-1)."></help-tip></label>
-                                        <input type="number" min="0.01" max="1" step="0.01" v-model.number="adv.multi_record_min_radius_ratio" class="form-input py-1 text-xs">
+                                        <input type="number" min="0.01" max="1" step="0.01" v-model.number="adv.multi_record_min_radius_ratio" class="form-input py-1 text-xs" aria-label="Min Radius Ratio">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px] mb-1">Column Gap Ratio <help-tip text="Additional horizontal gap ratio between visible content bounds in each row on multi-record canvas. 0 makes row content touch. Default: 0.10 (horizontal only)."></help-tip></label>
-                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_column_gap_ratio" class="form-input py-1 text-xs">
+                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_column_gap_ratio" class="form-input py-1 text-xs" aria-label="Column Gap Ratio">
                                     </div>
                                     <div>
                                         <label class="input-label text-[10px] mb-1">Row Gap Ratio <help-tip text="Additional visible gap ratio between row content bounds in multi-record canvas. 0 makes rows touch by content bounds. Default: 0.05 (vertical only)."></help-tip></label>
-                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_row_gap_ratio" class="form-input py-1 text-xs">
+                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_row_gap_ratio" class="form-input py-1 text-xs" aria-label="Row Gap Ratio">
                                     </div>
                                     <div class="col-span-2" data-capture="multi-record-order">
                                         <div class="flex items-center justify-between mb-1">
@@ -2718,6 +2755,7 @@
                                                 <span class="truncate text-[10px] text-slate-700">{{ getCircularRecordOrderLabel(position.selector) }}</span>
                                                 <select
                                                     class="form-input py-0.5 px-1 text-[10px]"
+                                                    :aria-label="`Row for ${getCircularRecordOrderLabel(position.selector)}`"
                                                     :value="getCircularRecordRow(position)"
                                                     @change="setCircularRecordRow(idx, $event.target.value)"
                                                 >
@@ -2745,7 +2783,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-textbox"></i> Title &amp; Legend <help-tip text="Adjust the plot title, record-label text, and legend."></help-tip></summary>
+                        <summary aria-label="Title &amp; Legend"><i class="ph ph-textbox"></i> Title &amp; Legend <help-tip text="Adjust the plot title, record-label text, and legend."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <label class="input-label text-[10px] mb-1">
@@ -2759,6 +2797,7 @@
                                         type="text"
                                         v-model="form.plot_title"
                                         class="form-input form-input-compact auto-value-input"
+                                        aria-label="Plot Title"
                                         :placeholder="mode === 'circular' ? '' : 'Optional plot title'"
                                     >
                                 </auto-value-field>
@@ -2770,7 +2809,7 @@
                                         Plot Title Position
                                         <help-tip :text="mode === 'circular' ? 'Placement of the shared circular plot title. Per-record center labels stay in place.' : 'Placement of the linear plot title.'"></help-tip>
                                     </label>
-                                    <select v-model="adv.plot_title_position" class="form-input text-xs py-1">
+                                    <select v-model="adv.plot_title_position" class="form-input text-xs py-1" aria-label="Plot Title Position">
                                         <option v-if="mode === 'circular'" value="none">None (Default)</option>
                                         <option v-if="mode === 'linear'" value="center">Center</option>
                                         <option value="top">Top</option>
@@ -2801,6 +2840,7 @@
                                             :value="optionalNumberInputValue(adv.def_font_size)"
                                             @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)"
                                             class="form-input form-input-compact auto-value-input"
+                                            aria-label="Definition Font Size"
                                         >
                                     </auto-value-field>
                                 </div>
@@ -2934,8 +2974,8 @@
                             </label>
 
                             <div>
-                                <label class="input-label text-[10px] mb-1">Legend Position <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
-                                <select v-model="form.legend" class="form-input text-xs py-1">
+                                <label for="legend-position" class="input-label text-[10px] mb-1">Legend Position <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
+                                <select id="legend-position" v-model="form.legend" class="form-input text-xs py-1">
                                     <option value="right">Right</option>
                                     <option value="left">Left</option>
                                     <option value="top">Top</option>
@@ -2968,7 +3008,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-palette"></i> Colors <help-tip text="Customize palettes, default colors, and specific color rules."></help-tip></summary>
+                        <summary aria-label="Colors"><i class="ph ph-palette"></i> Colors <help-tip text="Customize palettes, default colors, and specific color rules."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
                                 <div class="flex items-center justify-between mb-2">
@@ -3004,7 +3044,7 @@
                                         Palette <span class="font-semibold">{{ pendingPaletteName }}</span> is queued and will apply on the next Generate Diagram.
                                     </div>
                                 </div>
-                                <select v-model="selectedPalette" @change="updatePalette" class="form-input form-input-compact mb-2">
+                                <select v-model="selectedPalette" @change="updatePalette" aria-label="Palette" class="form-input form-input-compact mb-2">
                                     <option v-for="p in paletteNames" :value="p">{{ p }}</option>
                                 </select>
                                 <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
@@ -3110,7 +3150,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-shapes"></i> Features <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
+                        <summary aria-label="Features"><i class="ph ph-shapes"></i> Features <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <label class="input-label adv-section-title">Feature Types <help-tip text="Select which feature types to draw."></help-tip></label>
@@ -3187,7 +3227,7 @@
                                         >
                                             <i class="ph ph-download-simple"></i> TSV
                                         </button>
-                                        <button type="button" @click="addFeatureVisibilityRule" class="btn btn-secondary text-xs h-7 px-2">
+                                        <button type="button" @click="addFeatureVisibilityRule" aria-label="Add feature visibility rule" class="btn btn-secondary text-xs h-7 px-2">
                                             <i class="ph ph-plus"></i>
                                         </button>
                                     </div>
@@ -3221,13 +3261,13 @@
                                             <span class="col-span-3">Action</span>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
-                                            <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" placeholder="record_id" class="form-input form-input-compact col-span-3 font-mono">
-                                            <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" class="form-input form-input-compact col-span-3">
+                                            <input :value="rule.recordId" @change="setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)" :aria-label="`Visibility rule ${i + 1} record ID`" placeholder="record_id" class="form-input form-input-compact col-span-3 font-mono">
+                                            <select :value="rule.featureType" @change="setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)" :aria-label="`Visibility rule ${i + 1} feature type`" class="form-input form-input-compact col-span-3">
                                                 <option v-if="rule.featureType && !featureVisibilityFeatureSuggestions.includes(rule.featureType)" :value="rule.featureType">{{ rule.featureType }}</option>
                                                 <option v-for="value in featureVisibilityFeatureSuggestions" :key="`fv-type-${value}`" :value="value">{{ value }}</option>
                                             </select>
-                                            <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" list="feature-visibility-qualifier-options" placeholder="qualifier" class="form-input form-input-compact col-span-3">
-                                            <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" class="form-input form-input-compact col-span-3">
+                                            <input :value="rule.qualifier" @change="setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)" :aria-label="`Visibility rule ${i + 1} qualifier`" list="feature-visibility-qualifier-options" placeholder="qualifier" class="form-input form-input-compact col-span-3">
+                                            <select :value="rule.action" @change="setFeatureVisibilityRuleField(i, 'action', $event.target.value)" :aria-label="`Visibility rule ${i + 1} action`" class="form-input form-input-compact col-span-3">
                                                 <option value="show">Show</option>
                                                 <option value="off">Off</option>
                                                 <option value="exclude_matching">Exclude from matching</option>
@@ -3235,7 +3275,7 @@
                                         </div>
                                         <div>
                                             <label class="block px-1 text-[9px] font-semibold uppercase text-slate-500">Value regex</label>
-                                            <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" placeholder="value regex" class="form-input form-input-compact w-full font-mono">
+                                            <input :value="rule.value" @change="setFeatureVisibilityRuleField(i, 'value', $event.target.value)" :aria-label="`Visibility rule ${i + 1} value regex`" placeholder="value regex" class="form-input form-input-compact w-full font-mono">
                                         </div>
                                     </div>
                                     <div v-if="featureVisibilityManualRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No manual visibility rules</div>
@@ -3249,7 +3289,7 @@
                                         <div>
                                             <label class="input-label text-[10px]">Feature Height <help-tip text="Height of the feature blocks."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.feature_height, 'linearFeatureHeight')" :text="autoValueText('linearFeatureHeight')">
-                                                <input type="number" v-model.number="adv.feature_height" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" v-model.number="adv.feature_height" aria-label="Feature Height" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
@@ -3283,7 +3323,7 @@
                                         <div>
                                             <label class="input-label text-[10px]">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.block_stroke_width, 'blockStrokeWidth')" :text="autoValueText('blockStrokeWidth')">
-                                                <input type="number" v-model.number="adv.block_stroke_width" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" v-model.number="adv.block_stroke_width" aria-label="Block Stroke Width" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </div>
@@ -3299,7 +3339,7 @@
                                         <div>
                                             <label class="input-label text-[10px]">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.line_stroke_width, 'lineStrokeWidth')" :text="autoValueText('lineStrokeWidth')">
-                                                <input type="number" v-model.number="adv.line_stroke_width" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" v-model.number="adv.line_stroke_width" aria-label="Line Stroke Width" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </div>
@@ -3311,11 +3351,11 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-text-t"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
+                        <summary aria-label="Labels"><i class="ph ph-text-t"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
-                                <label class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Similarity Group Record' requires LOSATP similarity-group or collinear mode."></help-tip></label>
-                                <select v-model="form.show_labels_linear" class="form-input text-xs py-1">
+                                <label for="linear-show-labels" class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Similarity Group Record' requires LOSATP similarity-group or collinear mode."></help-tip></label>
+                                <select id="linear-show-labels" v-model="form.show_labels_linear" class="form-input text-xs py-1">
                                     <option value="none">None</option>
                                     <option value="all">All Records</option>
                                     <option value="first">First Record Only</option>
@@ -3323,8 +3363,8 @@
                                 </select>
                             </div>
                             <div v-else>
-                                <label class="input-label text-[10px] mb-1">Label Mode <help-tip text="Set circular label placement. 'Out' places labels outside; 'Both' places labels outside and inside. With horizontal inner labels, implicit GC content and GC skew tracks are hidden to avoid overlap."></help-tip></label>
-                                <select v-model="form.labels_mode" class="form-input text-xs py-1">
+                                <label for="circular-label-mode" class="input-label text-[10px] mb-1">Label Mode <help-tip text="Set circular label placement. 'Out' places labels outside; 'Both' places labels outside and inside. With horizontal inner labels, implicit GC content and GC skew tracks are hidden to avoid overlap."></help-tip></label>
+                                <select id="circular-label-mode" v-model="form.labels_mode" class="form-input text-xs py-1">
                                     <option value="none">None</option>
                                     <option value="out">Out</option>
                                     <option value="both">Both (Out + Inner)</option>
@@ -3393,7 +3433,7 @@
                                         <div>
                                             <label class="input-label text-[10px] mb-0">Label Font Size <help-tip text="Font size for feature labels."></help-tip></label>
                                             <auto-value-field :visible="autoValueVisible(adv.label_font_size, 'labelFontSize')" :text="autoValueText('labelFontSize')">
-                                                <input type="number" v-model.number="adv.label_font_size" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" v-model.number="adv.label_font_size" aria-label="Label Font Size" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div v-if="!(mode === 'linear' && adv.label_placement === 'above_feature')">
@@ -3445,6 +3485,7 @@
                                                 <select
                                                     v-model="adv.label_placement"
                                                     @change="adv.label_placement === 'above_feature' && (adv.label_rendering = 'auto')"
+                                                    aria-label="Label Placement"
                                                     class="form-input form-input-compact"
                                                 >
                                                     <option value="auto">Auto ({{ autoValueText('linearLabelPlacement') }})</option>
@@ -3460,6 +3501,7 @@
                                                     type="number"
                                                     :value="adv.label_rotation ?? ''"
                                                     @input="adv.label_rotation = $event.target.value === '' ? null : Number($event.target.value)"
+                                                    aria-label="Label Rotation"
                                                     class="form-input form-input-compact"
                                                     placeholder="0"
                                                 >
@@ -3527,7 +3569,7 @@
 
                 <div v-if="mode === 'linear'" class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-ruler"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
+                        <summary aria-label="Axis &amp; Scale"><i class="ph ph-ruler"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                 <input
@@ -3550,7 +3592,7 @@
                                 <div>
                                     <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
                                     <auto-value-field :visible="autoValueVisible(adv.axis_stroke_width, 'axisStrokeWidth')" :text="autoValueText('axisStrokeWidth')">
-                                        <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact auto-value-input">
+                                        <input type="number" v-model.number="adv.axis_stroke_width" aria-label="Axis Stroke Width" class="form-input form-input-compact auto-value-input">
                                     </auto-value-field>
                                 </div>
                             </div>
@@ -3659,7 +3701,7 @@
                                     <div>
                                         <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
                                         <auto-value-field :visible="autoValueVisible(adv.axis_stroke_width, 'axisStrokeWidth')" :text="autoValueText('axisStrokeWidth')">
-                                            <input type="number" v-model.number="adv.axis_stroke_width" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" v-model.number="adv.axis_stroke_width" aria-label="Axis Stroke Width" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -3687,7 +3729,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-dna"></i> Dinucleotide content/skew <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
+                        <summary aria-label="Dinucleotide content/skew"><i class="ph ph-dna"></i> Dinucleotide content/skew <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
                                 <div>
@@ -3799,7 +3841,7 @@
 
                 <div v-if="mode === 'linear' && hasLinearComparisonIntent" class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-arrows-left-right"></i> Pairwise Match <help-tip text="Adjust pairwise comparison height and filter BLAST or LOSAT tracks."></help-tip></summary>
+                        <summary aria-label="Pairwise Match"><i class="ph ph-arrows-left-right"></i> Pairwise Match <help-tip text="Adjust pairwise comparison height and filter BLAST or LOSAT tracks."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <p v-if="!(hasActiveLinearLosatIntent && losatProgram === 'blastp')" class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
                                 Applies to BLAST or LOSAT pairwise comparison tracks.
@@ -3809,7 +3851,7 @@
                             </p>
                             <div>
                                 <label class="input-label text-[10px]">Pairwise Match Style <help-tip text="Ribbon draws straight filled links; Curve draws curved filled links while preserving each alignment span."></help-tip></label>
-                                <select v-model="adv.pairwise_match_style" class="form-input form-input-compact">
+                                <select v-model="adv.pairwise_match_style" aria-label="Pairwise Match Style" class="form-input form-input-compact">
                                     <option value="ribbon">Ribbon</option>
                                     <option value="curve">Curve</option>
                                 </select>
@@ -3829,19 +3871,19 @@
                             <div v-if="!(hasActiveLinearLosatIntent && losatProgram === 'blastp')" class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <label class="input-label text-[10px]">Bitscore</label>
-                                    <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))">
+                                    <input type="number" min="0" v-model.number="adv.min_bitscore" @blur="adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)" aria-label="Linear comparison minimum bitscore" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'min_bitscore'))">
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">E-value</label>
-                                    <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'evalue'))">
+                                    <input type="text" v-model="adv.evalue" @blur="adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()" aria-label="Linear comparison maximum e-value" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'evalue'))">
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Minimum Identity</label>
-                                    <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'identity'))">
+                                    <input type="number" min="0" v-model.number="adv.identity" @blur="adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)" aria-label="Linear comparison minimum identity" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'identity'))">
                                 </div>
                                 <div>
                                     <label class="input-label text-[10px]">Minimum Length</label>
-                                    <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))">
+                                    <input type="number" min="0" v-model.number="adv.alignment_length" @blur="adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)" aria-label="Linear comparison minimum alignment length" class="form-input form-input-compact" :placeholder="String(comparisonProfileDefault('linear', 'alignment_length'))">
                                 </div>
                             </div>
                         </div>
@@ -3911,7 +3953,7 @@
                 <i class="ph ph-warning-circle text-sm mt-0.5"></i>
                 <span>{{ circularConservationLayoutWarning }}</span>
             </div>
-            <button @click="runAnalysis" :disabled="processing"
+            <button type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="processing"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
                 <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
@@ -3928,7 +3970,7 @@
 
         <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-hidden min-w-0">
             
-            <div v-if="errorDisplay" class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
+            <div v-if="errorDisplay" role="alert" aria-label="Generation Error" class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="text-red-700 font-bold mb-2 flex items-center gap-2"><i class="ph ph-warning-circle"></i> Error Occurred</div>
                 <div class="text-sm font-semibold text-red-800 mb-2">{{ errorDisplay.summary }}</div>
                 <details v-if="errorDisplay.details && errorDisplay.details.length" class="bg-white/40 rounded border border-red-100 p-2">
@@ -3942,7 +3984,7 @@
                 </details>
             </div>
 
-            <div v-if="results.length > 0" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden relative">
+            <div v-if="results.length > 0" role="region" aria-label="Result Preview" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden relative">
                 <div class="card-header bg-green-50/50 -m-4 mb-0 p-3 pl-5 pr-6 border-green-100 flex justify-between items-center shrink-0 flex-wrap gap-2">
                     <div class="flex items-center gap-3 flex-wrap min-w-0">
                         <span class="text-green-600 flex items-center gap-2 text-base font-bold min-w-0">
@@ -3982,7 +4024,7 @@
                     <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-2 items-center flex-wrap mr-2">
                         <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-green-200">
                             <span class="text-sm font-bold text-green-700">DPI</span>
-                            <select v-model="downloadDpi" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
+                            <select v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
                                 <option value="72">72 (Web)</option>
                                 <option value="96">96 (Screen)</option>
                                 <option value="150">150 (Draft)</option>
@@ -3990,7 +4032,7 @@
                                 <option value="600">600 (High)</option>
                             </select>
                         </div>
-                        <button @click="downloadSVG" class="btn btn-secondary text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple"></i> SVG</button>
+                        <button type="button" aria-label="SVG" @click="downloadSVG" class="btn btn-secondary text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple"></i> SVG</button>
                         <button @click="downloadInteractiveSVG" class="btn btn-secondary text-sm" title="Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded."><i class="ph ph-cursor-click"></i> Interactive SVG</button>
                         <button @click="downloadPNG" class="btn btn-primary text-sm"><i class="ph ph-download-simple"></i> PNG</button>
                         <button @click="downloadPDF" class="btn btn-secondary text-sm"><i class="ph ph-file-pdf"></i> PDF</button>
@@ -4073,7 +4115,7 @@
                                     class="gfs-button gfs-button--clear"
                                     title="Clear search"
                                     aria-label="Clear search">Clear</button>
-                            <span class="gfs-count">{{ previewFeatureSearchStatusText }}</span>
+                            <span class="gfs-count" role="status" aria-label="Feature search status">{{ previewFeatureSearchStatusText }}</span>
                         </div>
                         <div class="gfs-match-detail" :title="previewFeatureSearchActiveDetail">
                             {{ previewFeatureSearchActiveDetail }}
@@ -4105,7 +4147,7 @@
                                     aria-label="Move selected feature controls">
                                 <i class="ph ph-arrows-out-cardinal"></i>
                             </button>
-                            <span class="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700">
+                            <span class="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700" role="status" aria-label="Selected feature count">
                                 <i class="ph ph-selection"></i>
                                 {{ selectedFeatureCount }} selected
                             </span>
@@ -4295,6 +4337,8 @@
                     <div v-if="clickedFeature"
                          ref="featurePopupRef"
                          @mousedown="startFeaturePopupDrag"
+                         role="dialog"
+                         :aria-label="`Feature details: ${clickedFeature.label}`"
                          :class="[
                            'fixed z-50 feature-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4',
                            adv.rich_feature_popup ? '' : 'feature-popup--simple'
@@ -4320,7 +4364,7 @@
                                 aria-label="Feature fill color"
                                 class="w-32 shrink-0">
                             </color-value-control>
-                            <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl">
+                            <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl" aria-label="Close feature popup">
                                 <i class="ph ph-x"></i>
                             </button>
                         </div>
@@ -4565,6 +4609,7 @@
                                    @change="handleLegendNameCommit"
                                    @keydown.enter.prevent="handleLegendNameCommit"
                                    data-history-managed
+                                   aria-label="Feature legend name"
                                    :placeholder="clickedFeature.label"
                                    class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                             <datalist id="specific-rule-legend-name-options">
@@ -4595,6 +4640,7 @@
                             <select v-model="clickedFeature.featureVisibility"
                                     @change="updateClickedFeatureVisibility(clickedFeature.featureVisibility)"
                                     data-history-managed
+                                    aria-label="Feature visibility"
                                     class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                                 <option value="default">Default (follow feature filters)</option>
                                 <option value="on">On (force show)</option>
@@ -4691,6 +4737,7 @@
                                        @input="clickedFeature.strokeWidth = $event.target.value"
                                        @change="updateClickedFeatureStroke(null, $event.target.value)"
                                        data-history-managed
+                                       aria-label="Feature stroke width"
                                        class="w-20 text-sm border border-slate-200 rounded-lg px-2 py-1.5"
                                        placeholder="Width"
                                        step="0.1"
@@ -4812,6 +4859,8 @@
                     <div v-if="clickedPairwiseMatch"
                          ref="pairwiseMatchPopupRef"
                          @mousedown="startPairwiseMatchPopupDrag"
+                         role="dialog"
+                         aria-label="Pairwise match details"
                          class="fixed z-50 feature-popup pairwise-match-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
                          :style="pairwiseMatchPopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
@@ -5472,15 +5521,15 @@
                 <!-- Right-side editor drawer -->
                 <button v-if="svgContent && resultPanelTab === 'preview'"
                         @click="showRightDrawer ? closeRightDrawer() : openRightDrawerTab(rightDrawerTab || (orthogroupCount > 0 ? 'orthogroups' : 'features'))"
-                        class="drawer-toggle absolute right-0 top-1/2 -translate-y-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
-                        :class="{ '-translate-x-[360px] drawer-open': showRightDrawer }"
+                        class="drawer-toggle absolute right-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
+                        :aria-expanded="showRightDrawer"
                         :title="showRightDrawer ? 'Close editor' : 'Open editor'">
                     <i class="ph ph-sidebar-simple text-lg"></i>
                 </button>
 
                 <div v-if="svgContent && resultPanelTab === 'preview'"
-                     class="right-drawer absolute right-0 top-0 bottom-0 w-[360px] bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
-                     :class="showRightDrawer ? 'translate-x-0' : 'translate-x-full'">
+                     class="right-drawer absolute right-0 top-0 bottom-0 bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 flex flex-col"
+                     :aria-hidden="!showRightDrawer">
                     <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
                         <div class="flex items-center gap-2">
                             <i class="ph ph-sliders-horizontal text-slate-600"></i>
@@ -5950,7 +5999,7 @@
 
 <script type="text/x-template" id="help-tip-template">
     <div class="help-tip inline-block align-text-bottom">
-        <i class="ph ph-question text-slate-400 hover:text-blue-500 cursor-help"
+        <i class="ph ph-question text-slate-400 hover:text-blue-500 cursor-help" aria-hidden="true"
            @mouseenter="show" @mouseleave="hide" ref="trigger"></i>
         <Teleport to="body">
             <div v-if="visible" :style="style" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-left leading-relaxed">
@@ -5961,13 +6010,13 @@
 </script>
 
 <script type="text/x-template" id="file-uploader-template">
-    <div class="w-full">
+    <div class="w-full" role="group" :aria-label="label + ' selection'">
         <div class="flex justify-between items-end mb-1">
             <label :class="['input-label mb-0', small ? 'input-label-sm' : '']">{{ label }}</label>
             <button v-if="hasSelection" @click.stop="clearFile" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash"></i> Remove</button>
         </div>
         <div class="upload-zone cursor-pointer" :class="{'ready': hasSelection, 'py-0.5 min-h-[30px]': small}" @click="$refs.input.click()">
-            <input type="file" ref="input" :multiple="multiple" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" @change="handleFile" class="hidden">
+            <input type="file" ref="input" :multiple="multiple" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
             <div v-if="!hasSelection" class="flex items-center justify-center gap-2 text-slate-400 group-hover:text-blue-600 transition-colors">
                 <i class="ph ph-upload-simple" :class="small ? 'text-base' : 'text-xl'"></i>
                 <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">Click to Browse</span>

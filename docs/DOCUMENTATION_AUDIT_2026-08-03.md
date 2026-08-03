@@ -98,9 +98,9 @@ Linearも同じ形式にする。5件のBGC GenBank、比較方法、色/qualifi
 
 [現行手順](./TUTORIALS/5_Table_Driven_Inputs.md#L90-L133)は87 bp、CDS 1件の合成データをheredocで2組作る。ファイル形式のsmoke testとしては有効だが、公開Tutorialの完成例には情報量が足りず、結果図もない。
 
-新しいデータを増やす必要はない。[`examples/gff3_lambda`](../examples/gff3_lambda/)には、RefSeq `NC_001416.1`から抽出した[`lambda_two_contigs.gff3`](../examples/gff3_lambda/lambda_two_contigs.gff3)と[`lambda_two_contigs.fna`](../examples/gff3_lambda/lambda_two_contigs.fna)がある。[既存の検証](../tests/test_api_library_usage.py#L87-L102)で、`lambda_left`/`lambda_right`、CDS 45件、両strand、translation保持まで確認されている。
+公開fixtureは[`gbdraw/web/tutorial-data/lambda-gff3`](../gbdraw/web/tutorial-data/lambda-gff3/)に集約する。RefSeq `NC_001416.1`の全長48,502 bpをcropや分割せず、`NC_001416.gff3`と`NC_001416.fna`へ決定論的に変換する。検証ではsingle record ID、gene 92件、CDS 73件、CDS strand（+47/-26）、translation 73件、元GenBankとの全長配列一致を確認する。
 
-同じGFF3/FASTA pairをrecords tableの2行で参照し、`record_id`で`lambda_left`と`lambda_right`を選ぶ。出典accession、抽出範囲、ファイルへの直接リンク、checksum、期待record/CDS数も書く。新しい掲載図をmanifestへ登録し、toy heredocは必要なら「format-only minimal example」としてreferenceへ移す。
+同じGFF3/FASTA pairをrecords tableの1行で参照し、`record_id`に`NC_001416.1`を指定する。出典accession、全長変換、ファイルへの直接リンク、checksum、期待record/CDS数も書く。multi-recordの手順では、1本の自然配列を人工的に分割せず、別々の実在BGC recordを再利用する。新しい掲載図をmanifestへ登録し、toy heredocは削除する。
 
 完了条件は、実ファイルの取得またはcheckout内パスから、records tableと掲載図をそのまま再生成できることである。
 

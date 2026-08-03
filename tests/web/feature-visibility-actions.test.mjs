@@ -23,6 +23,11 @@ await writeFile(
   await readFile(join(sourceDir, '..', 'services', 'text-download.js'), 'utf8'),
   'utf8'
 );
+await writeFile(
+  join(tempDir, 'services', 'feature-identity.js'),
+  await readFile(join(sourceDir, '..', 'services', 'feature-identity.js'), 'utf8'),
+  'utf8'
+);
 
 const { createFeatureVisibilityActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'visibility-actions.js'))
@@ -31,6 +36,8 @@ const { createFeatureVisibilityActions } = await import(
 const ref = (value) => ({ value });
 const featureA = { svg_id: 'feature-a', type: 'CDS', label: 'A' };
 const featureB = { svg_id: 'feature-b', type: 'CDS', label: 'B' };
+const extractedFeatures = ref([featureA, featureB]);
+const orthogroups = ref([]);
 const featureVisibilityOverrides = {};
 const clickedFeature = ref({ svg_id: 'feature-a', featureVisibility: 'default' });
 const featureVisibilityScopeDialog = {};
@@ -42,8 +49,8 @@ const flushes = [];
 const actions = createFeatureVisibilityActions({
   state: {
     clickedFeature,
-    extractedFeatures: ref([featureA, featureB]),
-    orthogroups: ref([]),
+    extractedFeatures,
+    orthogroups,
     featureVisibilityManualRules: [],
     featureVisibilityRules: ref([]),
     featureVisibilityOverrides,
@@ -133,6 +140,123 @@ featureVisibilityScopeDialog.show = false;
 actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
 delete featureVisibilityOverrides[runtimeOnlyFeature.svg_id];
+
+const reversedFeature = {
+  svg_id: 'display-feature_record_3',
+  stable_feature_id: 'source-feature',
+  record_idx: 2,
+  type: 'CDS',
+  orthogroupId: 'og_reverse'
+};
+const groupedFeature = {
+  svg_id: 'grouped-feature_record_1',
+  stable_feature_id: 'grouped-source-feature',
+  record_idx: 0,
+  type: 'CDS',
+  orthogroupId: 'og_reverse'
+};
+extractedFeatures.value.push(reversedFeature, groupedFeature);
+orthogroups.value = [{
+  id: 'og_reverse',
+  members: [
+    {
+      recordIndex: 2,
+      featureSvgId: 'source-feature',
+      stableFeatureSvgId: 'source-feature',
+      renderedFeatureSvgId: 'display-feature_record_3'
+    },
+    {
+      recordIndex: 0,
+      featureSvgId: 'grouped-source-feature',
+      stableFeatureSvgId: 'grouped-source-feature',
+      renderedFeatureSvgId: 'grouped-feature_record_1'
+    }
+  ]
+}];
+clickedFeature.value = {
+  svg_id: reversedFeature.svg_id,
+  featureVisibility: 'default',
+  feat: reversedFeature
+};
+actions.updateClickedFeatureVisibility('off');
+const reversedGroupScope = featureVisibilityScopeDialog.scopes.find((scope) => scope.id === 'orthogroup');
+assert.ok(reversedGroupScope);
+assert.deepEqual(
+  reversedGroupScope.features.map((feature) => feature.svg_id),
+  ['display-feature_record_3', 'grouped-feature_record_1']
+);
+
+const strictTrigger = {
+  svg_id: 'strict-trigger-rendered',
+  stable_feature_id: 'strict-trigger-source',
+  record_idx: 2,
+  type: 'CDS',
+  orthogroupId: 'og_strict'
+};
+const wrongRecordFeature = {
+  svg_id: 'shared-rendered',
+  stable_feature_id: 'shared-source',
+  record_idx: 0,
+  type: 'CDS',
+  orthogroupId: 'og_strict'
+};
+extractedFeatures.value = [strictTrigger, wrongRecordFeature];
+orthogroups.value = [{
+  id: 'og_strict',
+  members: [
+    {
+      recordIndex: 2,
+      featureSvgId: 'strict-trigger-source',
+      stableFeatureSvgId: 'strict-trigger-source',
+      renderedFeatureSvgId: 'strict-trigger-rendered'
+    },
+    {
+      recordIndex: 1,
+      featureSvgId: 'shared-source',
+      stableFeatureSvgId: 'shared-source',
+      renderedFeatureSvgId: 'shared-rendered'
+    }
+  ]
+}];
+clickedFeature.value = {
+  svg_id: strictTrigger.svg_id,
+  featureVisibility: 'default',
+  feat: strictTrigger
+};
+featureVisibilityScopeDialog.show = false;
+featureVisibilityScopeDialog.scopes = [];
+actions.updateClickedFeatureVisibility('off');
+assert.equal(featureVisibilityScopeDialog.show, false);
+delete featureVisibilityOverrides[strictTrigger.svg_id];
+
+const duplicateA = {
+  svg_id: 'duplicate-rendered',
+  stable_feature_id: 'duplicate-source',
+  record_idx: 1,
+  type: 'CDS',
+  orthogroupId: 'og_strict'
+};
+const duplicateB = { ...duplicateA, label: 'duplicate metadata row' };
+extractedFeatures.value = [strictTrigger, duplicateA, duplicateB];
+orthogroups.value[0].members[1] = {
+  recordIndex: 1,
+  featureSvgId: 'duplicate-source',
+  stableFeatureSvgId: 'duplicate-source',
+  renderedFeatureSvgId: 'duplicate-rendered'
+};
+featureVisibilityScopeDialog.show = false;
+featureVisibilityScopeDialog.scopes = [];
+actions.updateClickedFeatureVisibility('off');
+assert.equal(featureVisibilityScopeDialog.show, false);
+delete featureVisibilityOverrides[strictTrigger.svg_id];
+
+extractedFeatures.value = [strictTrigger, duplicateA];
+orthogroups.value = [orthogroups.value[0], { ...orthogroups.value[0] }];
+featureVisibilityScopeDialog.show = false;
+featureVisibilityScopeDialog.scopes = [];
+actions.updateClickedFeatureVisibility('off');
+assert.equal(featureVisibilityScopeDialog.show, false);
+delete featureVisibilityOverrides[strictTrigger.svg_id];
 
 resultGenerationKey.value = 'generation-2';
 assert.equal(await command.apply(), false);

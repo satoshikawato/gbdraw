@@ -455,6 +455,7 @@ const proteinIdentityManifest = ref({
 const legacyProteinRawCandidates = ref({ schema: 1, entries: [] });
 const legacyProteinDerivedEvidence = ref({ schema: 1, entries: [] });
 const orthogroups = ref([]);
+const collinearGroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
 const orthogroupNameOverrides = reactive({});
@@ -1020,6 +1021,7 @@ export const state = {
   legacyProteinRawCandidates,
   legacyProteinDerivedEvidence,
   orthogroups,
+  collinearGroups,
   featureOrthogroupIndex,
   selectedOrthogroupAlignmentFeature,
   orthogroupNameOverrides,

@@ -2182,6 +2182,7 @@ def assemble_linear_diagram_from_records(
             collinearity_result,
             records=records,
             color_mode=normalized_collinearity_color_mode,
+            search_scope=normalized_collinearity_search_scope,
         )
     elif normalized_protein_blastp_mode == "pairwise":
         pair_inputs = normalized_protein_pairs
@@ -2293,6 +2294,7 @@ def assemble_linear_diagram_from_records(
                 collinearity_result,
                 records=records,
                 color_mode=normalized_collinearity_color_mode,
+                search_scope=normalized_collinearity_search_scope,
             )
             resolved_linear_comparisons.extend(
                 LinearComparison(query_index, subject_index, matches)
@@ -2303,6 +2305,7 @@ def assemble_linear_diagram_from_records(
                 collinearity_result,
                 records=records,
                 color_mode=normalized_collinearity_color_mode,
+                search_scope=normalized_collinearity_search_scope,
             )
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = _resolve_linear_plot_title_position(

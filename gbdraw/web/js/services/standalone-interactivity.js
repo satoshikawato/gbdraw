@@ -143,54 +143,159 @@ const getStandaloneFeatureLabel = (feature) => {
 
 const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
 
-const standaloneFeatureStableSvgId = (feature) => {
-  const explicit = String(
-    feature?.stable_svg_id ||
-    feature?.stableFeatureSvgId ||
-    feature?.stable_feature_svg_id ||
-    feature?.stable_feature_id ||
-    feature?.stableFeatureId ||
-    ''
-  ).trim();
-  if (explicit) return explicit;
-  return String(feature?.svg_id || '').trim().replace(FEATURE_RECORD_SUFFIX_RE, '');
+const standaloneConsistentTextAlias = (payload, keys) => {
+  const values = new Set(keys
+    .filter((key) => Object.prototype.hasOwnProperty.call(payload || {}, key))
+    .map((key) => String(payload?.[key] ?? '').trim())
+    .filter(Boolean));
+  return {
+    valid: values.size <= 1,
+    value: values.size === 1 ? values.values().next().value : ''
+  };
 };
 
-const standaloneFeatureRecordIndex = (feature) => {
-  const candidates = [
+const standaloneIntegerAlias = (candidates) => {
+  const indexes = new Set();
+  for (const candidate of candidates) {
+    if (candidate === null || candidate === undefined || candidate === '') continue;
+    const text = String(candidate).trim();
+    if (typeof candidate === 'boolean' || !/^\d+$/.test(text)) {
+      return { valid: false, value: null };
+    }
+    const recordIndex = Number(text);
+    if (!Number.isSafeInteger(recordIndex)) {
+      return { valid: false, value: null };
+    }
+    indexes.add(recordIndex);
+  }
+  return {
+    valid: indexes.size <= 1,
+    value: indexes.size === 1 ? indexes.values().next().value : null
+  };
+};
+
+const standaloneRecordIndex = (candidates) => {
+  const status = standaloneIntegerAlias(candidates);
+  return status.valid ? status.value : null;
+};
+
+const standaloneFeatureRecordIndexStatus = (feature) => (
+  standaloneIntegerAlias([
     feature?.fileIdx,
     feature?.file_idx,
     feature?.recordIndex,
     feature?.record_index,
     feature?.record_idx
-  ];
-  for (const candidate of candidates) {
-    if (candidate === null || candidate === undefined || candidate === '') continue;
-    const recordIndex = Number(candidate);
-    if (Number.isInteger(recordIndex)) return recordIndex;
-  }
-  return null;
+  ])
+);
+
+const standaloneFeatureRecordIndex = (feature) => {
+  const status = standaloneFeatureRecordIndexStatus(feature);
+  return status.valid ? status.value : null;
 };
 
-const standaloneMemberStableSvgId = (member) => String(
-  member?.stableFeatureSvgId ||
-  member?.stable_feature_svg_id ||
-  member?.featureSvgId ||
-  member?.feature_svg_id ||
-  ''
-).trim();
+const standaloneSourceIdentityStatus = (payload) => {
+  const stable = standaloneConsistentTextAlias(payload, [
+    'stable_svg_id', 'stableSvgId', 'stableFeatureSvgId',
+    'stable_feature_svg_id', 'stable_feature_id', 'stableFeatureId'
+  ]);
+  const legacy = standaloneConsistentTextAlias(payload, ['featureSvgId', 'feature_svg_id']);
+  return {
+    valid: stable.valid && legacy.valid && (
+      !stable.value || !legacy.value || stable.value === legacy.value
+    ),
+    value: stable.value || legacy.value
+  };
+};
 
-const standaloneMemberRenderedSvgId = (member) => String(
-  member?.renderedFeatureSvgId ||
-  member?.rendered_feature_svg_id ||
-  ''
-).trim();
+const standaloneRenderedIdentityStatus = (payload) => standaloneConsistentTextAlias(
+  payload,
+  [
+    'rendered_svg_id', 'renderedSvgId', 'renderedFeatureSvgId',
+    'rendered_feature_svg_id'
+  ]
+);
+
+const standaloneFeatureIdentityStatus = (feature) => {
+  const source = standaloneSourceIdentityStatus(feature);
+  const rendered = standaloneRenderedIdentityStatus(feature);
+  const svg = standaloneConsistentTextAlias(feature, ['svg_id', 'svgId']);
+  if (!source.valid || !rendered.valid || !svg.valid) {
+    return { valid: false, source, rendered };
+  }
+  if (svg.value && rendered.value && svg.value !== rendered.value) {
+    return { valid: false, source, rendered };
+  }
+  const renderedExplicit = Boolean(rendered.value);
+  if (svg.value && !rendered.value) rendered.value = svg.value;
+  if (svg.value && !source.value) {
+    source.value = svg.value.replace(FEATURE_RECORD_SUFFIX_RE, '');
+  }
+  return { valid: true, source, rendered, renderedExplicit };
+};
+
+const standaloneFeatureStableSvgId = (feature) => {
+  const status = standaloneFeatureIdentityStatus(feature);
+  return status.valid ? status.source.value : '';
+};
+
+const standaloneMemberRecordIndexStatus = (member) => (
+  standaloneIntegerAlias([
+    member?.recordIndex,
+    member?.record_index,
+    member?.record_idx,
+    member?.fileIdx,
+    member?.file_idx
+  ])
+);
 
 const standaloneMemberRecordIndex = (member) => {
-  const value = member?.recordIndex ?? member?.record_index;
-  if (value === null || value === undefined || value === '') return null;
-  const recordIndex = Number(value);
-  return Number.isInteger(recordIndex) ? recordIndex : null;
+  const status = standaloneMemberRecordIndexStatus(member);
+  return status.valid ? status.value : null;
+};
+
+const standaloneMemberStableSvgId = (member) => {
+  const stable = standaloneConsistentTextAlias(member, [
+    'stableFeatureSvgId', 'stable_feature_svg_id',
+    'stableFeatureId', 'stable_feature_id'
+  ]);
+  const legacy = standaloneConsistentTextAlias(
+    member,
+    ['featureSvgId', 'feature_svg_id']
+  );
+  if (
+    !stable.valid
+    || !legacy.valid
+    || (stable.value && legacy.value && stable.value !== legacy.value)
+  ) return '';
+  return stable.value || legacy.value;
+};
+
+const standaloneMemberRenderedSvgId = (member) => {
+  const status = standaloneConsistentTextAlias(member, [
+    'renderedFeatureSvgId', 'rendered_feature_svg_id',
+    'renderedSvgId', 'rendered_svg_id'
+  ]);
+  return status.valid ? status.value : '';
+};
+
+const standaloneFeatureIndexStatus = (payload) => standaloneIntegerAlias([
+  payload?.featureIndex,
+  payload?.feature_index,
+  payload?.sourceFeatureIndex,
+  payload?.source_feature_index
+]);
+
+const standaloneCanonicalIdentityStatus = (payload) => {
+  const record = standaloneConsistentTextAlias(payload, ['recordKey', 'record_key']);
+  const feature = standaloneConsistentTextAlias(
+    payload,
+    ['biologicalFeatureId', 'biological_feature_id']
+  );
+  return {
+    valid: record.valid && feature.valid && Boolean(record.value) === Boolean(feature.value),
+    value: record.value && feature.value ? [record.value, feature.value] : null
+  };
 };
 
 const normalizeStandaloneContext = (options = {}) => ({
@@ -199,9 +304,7 @@ const normalizeStandaloneContext = (options = {}) => ({
     options.featureCatalog && typeof options.featureCatalog === 'object'
       ? options.featureCatalog
       : null,
-  catalogResultIndex: Number.isInteger(Number(options.catalogResultIndex))
-    ? Number(options.catalogResultIndex)
-    : null,
+  catalogResultIndex: options.catalogResultIndex ?? null,
   catalogResultName: String(options.catalogResultName || '').trim(),
   requireFeatureCatalog: options.requireFeatureCatalog === true,
   features: Array.isArray(options.features) ? options.features : [],
@@ -243,16 +346,23 @@ const selectStandaloneCatalogItem = (context) => {
   ) {
     return null;
   }
-  const hasResultIndex = Number.isInteger(context.catalogResultIndex);
+  const resultIndex = standaloneIntegerAlias([context.catalogResultIndex]);
+  const hasResultIndex = context.catalogResultIndex !== null
+    && context.catalogResultIndex !== undefined
+    && String(context.catalogResultIndex).trim() !== '';
+  if (hasResultIndex && (!resultIndex.valid || resultIndex.value === null)) {
+    return null;
+  }
   const hasResultName = Boolean(context.catalogResultName);
   if (!hasResultIndex && !hasResultName) {
     return catalog.items.length === 1 ? catalog.items[0] : null;
   }
-  return catalog.items.find((item) => (
+  const matches = catalog.items.filter((item) => (
     item
-    && (!hasResultIndex || item.resultIndex === context.catalogResultIndex)
+    && (!hasResultIndex || item.resultIndex === resultIndex.value)
     && (!hasResultName || String(item.resultName || '').trim() === context.catalogResultName)
-  )) || null;
+  ));
+  return matches.length === 1 ? matches[0] : null;
 };
 
 const cloneStandaloneCatalogItem = (item) => JSON.parse(JSON.stringify(item));
@@ -335,9 +445,85 @@ const getStandaloneSearchLabels = (feature, fallbackLabel, displayLabel) => {
 
 const buildStandaloneOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
 
+const standaloneDirectOrthogroupMetadataMatches = (feature, member) => {
+  if (!member || typeof member !== 'object' || Array.isArray(member)) return false;
+  const featureRecord = standaloneFeatureRecordIndexStatus(feature);
+  const memberRecord = standaloneMemberRecordIndexStatus(member);
+  const featureIndex = standaloneFeatureIndexStatus(feature);
+  const memberIndex = standaloneFeatureIndexStatus(member);
+  const featureCanonical = standaloneCanonicalIdentityStatus(feature);
+  const memberCanonical = standaloneCanonicalIdentityStatus(member);
+  const featureIdentity = standaloneFeatureIdentityStatus(feature);
+  const memberIdentity = standaloneFeatureIdentityStatus(member);
+  if (
+    !featureRecord.valid
+    || !memberRecord.valid
+    || featureRecord.value === null
+    || featureRecord.value !== memberRecord.value
+    || !featureIndex.valid
+    || !memberIndex.valid
+    || !featureCanonical.valid
+    || !memberCanonical.valid
+    || !featureIdentity.valid
+    || !memberIdentity.valid
+  ) return false;
+  if (
+    (featureIndex.value !== null || memberIndex.value !== null)
+    && (
+      featureIndex.value === null
+      || memberIndex.value === null
+      || featureIndex.value !== memberIndex.value
+    )
+  ) return false;
+  if (
+    featureCanonical.value
+    || memberCanonical.value
+  ) {
+    if (
+      !featureCanonical.value
+      || !memberCanonical.value
+      || featureCanonical.value[0] !== memberCanonical.value[0]
+      || featureCanonical.value[1] !== memberCanonical.value[1]
+    ) return false;
+  }
+  const featureStable = standaloneFeatureStableSvgId(feature);
+  const memberStable = standaloneMemberStableSvgId(member);
+  if (!featureStable || !memberStable || featureStable !== memberStable) return false;
+  const featureRendered = featureIdentity.rendered;
+  const memberRendered = memberIdentity.rendered;
+  return (
+    (!featureRendered.value && !memberRendered.value)
+    || (
+      Boolean(featureRendered.value)
+      && Boolean(memberRendered.value)
+      && featureRendered.value === memberRendered.value
+    )
+  );
+};
+
 const getStandaloneFeatureOrthogroupEntry = (feature, context) => {
-  const directOrthogroupId = String(feature?.orthogroupId || feature?.orthogroup_id || '').trim();
+  const directIdentity = standaloneConsistentTextAlias(
+    feature,
+    ['orthogroupId', 'orthogroup_id']
+  );
+  if (!directIdentity.valid) return null;
+  const directOrthogroupId = directIdentity.value;
   if (directOrthogroupId) {
+    const matchingGroups = (Array.isArray(context?.orthogroups) ? context.orthogroups : [])
+      .filter((group) => {
+        const identity = standaloneConsistentTextAlias(
+          group,
+          ['id', 'orthogroupId', 'orthogroup_id']
+        );
+        return identity.valid && identity.value === directOrthogroupId;
+      });
+    if (matchingGroups.length !== 1) return null;
+    const members = Array.isArray(matchingGroups[0]?.members) ? matchingGroups[0].members : [];
+    const matchingMembers = members.filter((member) => (
+      standaloneDirectOrthogroupMetadataMatches(feature, member)
+    ));
+    if (matchingMembers.length !== 1) return null;
+    const member = matchingMembers[0];
     return {
       orthogroupId: directOrthogroupId,
       orthogroupMemberCount: Number(feature?.orthogroupMemberCount || feature?.orthogroup_member_count || 0),
@@ -345,55 +531,120 @@ const getStandaloneFeatureOrthogroupEntry = (feature, context) => {
       proteinId: String(feature?.proteinId || feature?.protein_id || '').trim(),
       sourceProteinId: String(feature?.sourceProteinId || feature?.source_protein_id || '').trim(),
       orthogroupRepresentative: Boolean(feature?.orthogroupRepresentative || feature?.orthogroup_representative),
-      orthogroupMember: feature?.orthogroupMember || feature?.orthogroup_member || null
+      orthogroupMember: member
     };
   }
 
   const index = context?.featureOrthogroupIndex instanceof Map ? context.featureOrthogroupIndex : new Map();
-  const svgIds = Array.from(new Set([
-    standaloneFeatureStableSvgId(feature),
-    String(feature?.svg_id || '').trim()
-  ].filter(Boolean)));
-  if (svgIds.length === 0 || index.size === 0) return null;
+  const record = standaloneFeatureRecordIndexStatus(feature);
+  const identities = standaloneFeatureIdentityStatus(feature);
+  const featureIndex = standaloneFeatureIndexStatus(feature);
+  const canonical = standaloneCanonicalIdentityStatus(feature);
+  if (
+    !record.valid
+    || !identities.valid
+    || !featureIndex.valid
+    || !canonical.valid
+    || (
+      (identities.source.value || identities.rendered.value || featureIndex.value !== null)
+      && record.value === null
+    )
+    || (
+      !identities.source.value
+      && !identities.rendered.value
+      && featureIndex.value === null
+      && !canonical.value
+    )
+    || index.size === 0
+  ) return null;
 
-  const candidateRecordIndexes = [
-    feature?.fileIdx,
-    feature?.file_idx,
-    feature?.record_idx,
-    feature?.recordIndex,
-    feature?.record_index
-  ];
-  for (const recordIndexRaw of candidateRecordIndexes) {
-    if (recordIndexRaw === null || recordIndexRaw === undefined || recordIndexRaw === '') continue;
-    const recordIndex = Number(recordIndexRaw);
-    if (!Number.isInteger(recordIndex)) continue;
-    for (const svgId of svgIds) {
-      const entry = index.get(buildStandaloneOrthogroupIndexKey(recordIndex, svgId));
-      if (entry) return entry;
-    }
+  const matches = new Set();
+  if (identities.source.value) {
+    const candidates = new Set([
+      index.get(buildStandaloneOrthogroupIndexKey(record.value, identities.source.value)),
+      index.get(`record-id:${record.value}:${identities.source.value}`)
+    ].filter(Boolean));
+    if (candidates.size !== 1) return null;
+    matches.add(candidates.values().next().value);
   }
-  for (const svgId of svgIds) {
-    const entry = index.get(svgId);
-    if (entry) return entry;
+  if (
+    identities.rendered.value
+    && (
+      identities.renderedExplicit
+      || index.recordsWithRenderedIds?.has(record.value)
+    )
+  ) {
+    const entry = index.get(
+      `record-rendered-id:${record.value}:${identities.rendered.value}`
+    );
+    if (!entry) return null;
+    matches.add(entry);
   }
-  return null;
+  if (featureIndex.value !== null) {
+    const entry = index.get(
+      `record-feature-index:${record.value}:${featureIndex.value}`
+    );
+    if (!entry) return null;
+    matches.add(entry);
+  }
+  if (canonical.value) {
+    const entry = index.get(`canonical:${canonical.value[0]}\u0000${canonical.value[1]}`);
+    if (!entry) return null;
+    matches.add(entry);
+  }
+  return matches.size === 1 ? matches.values().next().value : null;
 };
 
 const normalizeStandaloneOrthogroupMember = (member, renderedFeatureSvgId = '') => {
   if (!member || typeof member !== 'object' || Array.isArray(member)) return null;
   const start = Number(member.start);
   const end = Number(member.end);
-  const recordIndex = standaloneMemberRecordIndex(member);
+  const record = standaloneMemberRecordIndexStatus(member);
+  const recordIndex = record.valid ? record.value : null;
+  const stableIdentity = standaloneConsistentTextAlias(member, [
+    'stableFeatureSvgId', 'stable_feature_svg_id',
+    'stableFeatureId', 'stable_feature_id'
+  ]);
+  const legacyIdentity = standaloneConsistentTextAlias(
+    member,
+    ['featureSvgId', 'feature_svg_id']
+  );
+  const renderedIdentity = standaloneConsistentTextAlias(member, [
+    'renderedFeatureSvgId', 'rendered_feature_svg_id',
+    'renderedSvgId', 'rendered_svg_id'
+  ]);
   const stableFeatureSvgId = standaloneMemberStableSvgId(member);
+  const featureIndex = standaloneFeatureIndexStatus(member);
+  const canonical = standaloneCanonicalIdentityStatus(member);
+  if (
+    !record.valid
+    || !stableIdentity.valid
+    || !legacyIdentity.valid
+    || (
+      stableIdentity.value
+      && legacyIdentity.value
+      && stableIdentity.value !== legacyIdentity.value
+    )
+    || !renderedIdentity.valid
+    || !featureIndex.valid
+    || !canonical.valid
+    || (
+      (stableFeatureSvgId || featureIndex.value !== null)
+      && recordIndex === null
+    )
+    || (!stableFeatureSvgId && featureIndex.value === null && !canonical.value)
+  ) return null;
   return {
     orthogroup_id: String(member.orthogroupId || member.orthogroup_id || ''),
     protein_id: String(member.proteinId || member.protein_id || ''),
     source_protein_id: String(member.sourceProteinId || member.source_protein_id || ''),
     record_index: recordIndex,
     record_id: String(member.recordId || member.record_id || ''),
-    feature_index: Number.isFinite(Number(member.featureIndex ?? member.feature_index))
-      ? Number(member.featureIndex ?? member.feature_index)
-      : null,
+    feature_index: featureIndex.valid ? featureIndex.value : null,
+    record_key: canonical.value?.[0] || '',
+    recordKey: canonical.value?.[0] || '',
+    biological_feature_id: canonical.value?.[1] || '',
+    biologicalFeatureId: canonical.value?.[1] || '',
     label: String(member.label || ''),
     feature_svg_id: stableFeatureSvgId,
     stable_feature_svg_id: stableFeatureSvgId,
@@ -437,28 +688,32 @@ const getStandaloneOrthogroupDescription = (group, context) => {
 
 const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
   const item = cloneStandaloneCatalogItem(sourceItem);
-  const biologicalByKey = new Map(
-    (Array.isArray(item.biologicalFeatures) ? item.biologicalFeatures : [])
-      .map((feature) => [
-        standaloneCatalogFeatureKey(
-          feature?.recordKey,
-          feature?.biologicalFeatureId
-        ),
-        feature
-      ])
-  );
+  const biologicalByKey = new Map();
+  for (const feature of (Array.isArray(item.biologicalFeatures) ? item.biologicalFeatures : [])) {
+    const recordKey = String(feature?.recordKey || '').trim();
+    const biologicalFeatureId = String(feature?.biologicalFeatureId || '').trim();
+    if (!recordKey || !biologicalFeatureId) return null;
+    const key = standaloneCatalogFeatureKey(recordKey, biologicalFeatureId);
+    if (biologicalByKey.has(key)) return null;
+    biologicalByKey.set(key, feature);
+  }
+  const renderedKeys = new Set();
+  const renderedIds = new Set();
   item.features = (Array.isArray(item.features) ? item.features : []).map((reference) => {
-    const biological = biologicalByKey.get(standaloneCatalogFeatureKey(
-      reference?.recordKey,
-      reference?.biologicalFeatureId
-    )) || {};
+    const recordKey = String(reference?.recordKey || '').trim();
+    const biologicalFeatureId = String(reference?.biologicalFeatureId || '').trim();
+    if (!recordKey || !biologicalFeatureId) return null;
+    const key = standaloneCatalogFeatureKey(recordKey, biologicalFeatureId);
+    const renderedId = String(reference?.svgId || '').trim();
+    if (!key || !renderedId || renderedKeys.has(key) || renderedIds.has(renderedId)) return null;
+    const biological = biologicalByKey.get(key);
+    if (!biological) return null;
+    renderedKeys.add(key);
+    renderedIds.add(renderedId);
     const feature = {
       ...biological,
-      id: standaloneCatalogFeatureKey(
-        reference?.recordKey,
-        reference?.biologicalFeatureId
-      ),
-      svg_id: String(reference?.svgId || '').trim()
+      id: key,
+      svg_id: renderedId
     };
     const fallbackLabel = getStandaloneFeatureLabel(feature);
     const displayLabel = getStandaloneDisplayLabel(feature, fallbackLabel, context);
@@ -466,9 +721,17 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
       ? { ...reference, displayLabel }
       : reference;
   });
+  if (item.features.some((reference) => !reference)) return null;
+  const groupIds = new Set();
   item.orthogroups = (Array.isArray(item.orthogroups) ? item.orthogroups : [])
     .map((group) => {
-      const id = String(group?.id || '').trim();
+      const identity = standaloneConsistentTextAlias(
+        group,
+        ['id', 'orthogroupId', 'orthogroup_id']
+      );
+      const id = identity.valid ? identity.value : '';
+      if (!id || groupIds.has(id)) return null;
+      groupIds.add(id);
       const displayName = id
         ? String(context?.orthogroupNameOverrides?.[id] || '').trim()
         : '';
@@ -481,14 +744,13 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
         ...(description ? { description } : {})
       };
     });
+  if (item.orthogroups.some((group) => !group)) return null;
   return item;
 };
 
 const createStandaloneBiologicalFeatureResolver = (features) => {
   const byRecordAndId = new Map();
-  const byId = new Map();
   const ambiguousRecordIds = new Set();
-  const ambiguousIds = new Set();
   const addUnique = (map, ambiguous, key, feature) => {
     if (!key || ambiguous.has(key)) return;
     const existing = map.get(key);
@@ -501,58 +763,174 @@ const createStandaloneBiologicalFeatureResolver = (features) => {
   };
 
   (Array.isArray(features) ? features : []).forEach((feature) => {
-    const recordIndex = standaloneFeatureRecordIndex(feature);
-    const ids = Array.from(new Set([
-      standaloneFeatureStableSvgId(feature),
-      String(feature?.svg_id || '').trim()
-    ].filter(Boolean)));
-    ids.forEach((id) => {
-      if (Number.isInteger(recordIndex)) {
+    const record = standaloneFeatureRecordIndexStatus(feature);
+    const identities = standaloneFeatureIdentityStatus(feature);
+    const featureIndex = standaloneFeatureIndexStatus(feature);
+    const canonical = standaloneCanonicalIdentityStatus(feature);
+    if (
+      !record.valid
+      || !identities.valid
+      || !featureIndex.valid
+      || !canonical.valid
+      || (
+        (identities.source.value || identities.rendered.value || featureIndex.value !== null)
+        && record.value === null
+      )
+      || (
+        !identities.source.value
+        && featureIndex.value === null
+        && !canonical.value
+      )
+    ) return;
+    if (record.value !== null) {
+      if (identities.source.value) {
         addUnique(
           byRecordAndId,
           ambiguousRecordIds,
-          buildStandaloneOrthogroupIndexKey(recordIndex, id),
+          `record-id:${record.value}:${identities.source.value}`,
           feature
         );
       }
-      addUnique(byId, ambiguousIds, id, feature);
-    });
-  });
-
-  return ({ stableSvgId = '', renderedSvgId = '', recordIndex = null } = {}) => {
-    const ids = Array.from(new Set([
-      String(stableSvgId || '').trim(),
-      String(renderedSvgId || '').trim()
-    ].filter(Boolean)));
-    if (Number.isInteger(recordIndex)) {
-      for (const id of ids) {
-        const feature = byRecordAndId.get(buildStandaloneOrthogroupIndexKey(recordIndex, id));
-        if (feature) return feature;
+      if (identities.rendered.value) {
+        addUnique(
+          byRecordAndId,
+          ambiguousRecordIds,
+          `record-rendered-id:${record.value}:${identities.rendered.value}`,
+          feature
+        );
+      }
+      if (featureIndex.value !== null) {
+        addUnique(
+          byRecordAndId,
+          ambiguousRecordIds,
+          `record-feature-index:${record.value}:${featureIndex.value}`,
+          feature
+        );
       }
     }
-    for (const id of ids) {
-      const feature = byId.get(id);
-      if (feature) return feature;
+    if (canonical.value) {
+      addUnique(
+        byRecordAndId,
+        ambiguousRecordIds,
+        `canonical:${canonical.value[0]}\u0000${canonical.value[1]}`,
+        feature
+      );
     }
-    return null;
+  });
+
+  return ({
+    stableSvgId = '',
+    renderedSvgId = '',
+    recordIndex = null,
+    featureIndex = null,
+    recordKey = '',
+    biologicalFeatureId = ''
+  } = {}) => {
+    const record = standaloneIntegerAlias([recordIndex]);
+    const sourceIndex = standaloneIntegerAlias([featureIndex]);
+    const stableId = String(stableSvgId || '').trim();
+    const renderedId = String(renderedSvgId || '').trim();
+    const canonical = [
+      String(recordKey || '').trim(),
+      String(biologicalFeatureId || '').trim()
+    ];
+    if (
+      !record.valid
+      || !sourceIndex.valid
+      || (Boolean(canonical[0]) !== Boolean(canonical[1]))
+      || ((stableId || renderedId || sourceIndex.value !== null) && record.value === null)
+      || (!stableId && !renderedId && sourceIndex.value === null && !canonical[0])
+    ) return null;
+    const matches = new Set();
+    if (stableId) {
+      const feature = byRecordAndId.get(
+        `record-id:${record.value}:${stableId}`
+      );
+      if (!feature) return null;
+      matches.add(feature);
+    }
+    if (renderedId) {
+      const feature = byRecordAndId.get(
+        `record-rendered-id:${record.value}:${renderedId}`
+      );
+      if (!feature) return null;
+      matches.add(feature);
+    }
+    if (sourceIndex.value !== null) {
+      const feature = byRecordAndId.get(
+        `record-feature-index:${record.value}:${sourceIndex.value}`
+      );
+      if (!feature) return null;
+      matches.add(feature);
+    }
+    if (canonical[0]) {
+      const feature = byRecordAndId.get(
+        `canonical:${canonical[0]}\u0000${canonical[1]}`
+      );
+      if (!feature) return null;
+      matches.add(feature);
+    }
+    return matches.size === 1 ? matches.values().next().value : null;
   };
 };
 
 const buildStandaloneOrthogroupPayloads = (features, context) => {
   const resolveRenderedFeature = createStandaloneBiologicalFeatureResolver(features);
   const resolveMemberRenderedFeatureId = (member) => {
-    const recordIndex = standaloneMemberRecordIndex(member);
+    const record = standaloneMemberRecordIndexStatus(member);
+    const featureIndex = standaloneFeatureIndexStatus(member);
+    const canonical = standaloneCanonicalIdentityStatus(member);
+    const stable = standaloneConsistentTextAlias(member, [
+      'stableFeatureSvgId', 'stable_feature_svg_id',
+      'stableFeatureId', 'stable_feature_id'
+    ]);
+    const legacy = standaloneConsistentTextAlias(member, ['featureSvgId', 'feature_svg_id']);
+    const rendered = standaloneConsistentTextAlias(member, [
+      'renderedFeatureSvgId', 'rendered_feature_svg_id',
+      'renderedSvgId', 'rendered_svg_id'
+    ]);
+    if (
+      !record.valid
+      || !featureIndex.valid
+      || !canonical.valid
+      || !stable.valid
+      || !legacy.valid
+      || (stable.value && legacy.value && stable.value !== legacy.value)
+      || !rendered.valid
+    ) return '';
     const renderedFeature = resolveRenderedFeature({
-      stableSvgId: standaloneMemberStableSvgId(member),
-      renderedSvgId: standaloneMemberRenderedSvgId(member),
-      recordIndex
+      stableSvgId: stable.value || legacy.value,
+      renderedSvgId: rendered.value,
+      recordIndex: record.value,
+      featureIndex: featureIndex.value,
+      recordKey: canonical.value?.[0] || '',
+      biologicalFeatureId: canonical.value?.[1] || ''
     });
     return String(renderedFeature?.svg_id || '').trim();
   };
 
   const groups = Array.isArray(context?.orthogroups) ? context.orthogroups : [];
+  const groupIdCounts = new Map();
+  groups.forEach((group) => {
+    const identity = standaloneConsistentTextAlias(
+      group,
+      ['id', 'orthogroupId', 'orthogroup_id']
+    );
+    if (identity.valid && identity.value) {
+      groupIdCounts.set(identity.value, (groupIdCounts.get(identity.value) || 0) + 1);
+    }
+  });
   return groups
     .map((group) => {
+      const groupIdentity = standaloneConsistentTextAlias(
+        group,
+        ['id', 'orthogroupId', 'orthogroup_id']
+      );
+      if (
+        !groupIdentity.valid
+        || !groupIdentity.value
+        || groupIdCounts.get(groupIdentity.value) !== 1
+      ) return null;
       const members = Array.isArray(group?.members)
         ? group.members
           .map((member) => normalizeStandaloneOrthogroupMember(
@@ -569,7 +947,7 @@ const buildStandaloneOrthogroupPayloads = (features, context) => {
       ).size;
       const recordCoverageCount = Number(group?.record_coverage_count || group?.recordCoverageCount || recordCoverageFallback || 0);
       return {
-        id: String(group?.id || ''),
+        id: groupIdentity.value,
         name: String(group?.name || ''),
         display_name: getStandaloneOrthogroupDisplayName(group, context),
         description: getStandaloneOrthogroupDescription(group, context),
@@ -581,7 +959,8 @@ const buildStandaloneOrthogroupPayloads = (features, context) => {
         record_coverage_count: Number.isFinite(recordCoverageCount) ? recordCoverageCount : 0,
         members
       };
-    });
+    })
+    .filter(Boolean);
 };
 
 const collectRenderedFeatureIds = (svg) => {
@@ -596,22 +975,39 @@ const collectRenderedFeatureIds = (svg) => {
 
 const collectRenderedFeatureEntries = (svg) => {
   const entries = new Map();
+  const ambiguousIds = new Set();
   if (!svg) return entries;
   svg.querySelectorAll(FEATURE_SELECTOR).forEach((element) => {
     const id = getElementFeatureId(element);
-    if (!id) return;
+    if (!id || ambiguousIds.has(id)) return;
+    const recordIndexText = element.getAttribute('data-gbdraw-record-index');
+    const record = standaloneIntegerAlias([recordIndexText]);
+    const stableId = String(
+      element.getAttribute('data-gbdraw-stable-feature-id') || id
+    ).trim();
+    if (!record.valid) {
+      entries.delete(id);
+      ambiguousIds.add(id);
+      return;
+    }
     if (!entries.has(id)) {
-      const recordIndexText = element.getAttribute('data-gbdraw-record-index');
-      const recordIndex = recordIndexText === null || recordIndexText === ''
-        ? NaN
-        : Number(recordIndexText);
       entries.set(id, {
         id,
-        stableId: String(element.getAttribute('data-gbdraw-stable-feature-id') || id).trim(),
-        recordIndex: Number.isInteger(recordIndex) ? recordIndex : null,
+        stableId,
+        recordIndex: record.value,
         recordId: String(element.getAttribute('data-gbdraw-record-id') || '').trim(),
         elements: []
       });
+    } else {
+      const existing = entries.get(id);
+      if (
+        existing.stableId !== stableId
+        || existing.recordIndex !== record.value
+      ) {
+        entries.delete(id);
+        ambiguousIds.add(id);
+        return;
+      }
     }
     entries.get(id).elements.push(element);
   });
@@ -715,6 +1111,17 @@ const normalizeStandalonePopupMode = (popupMode) => (
 
 const normalizeStandaloneBiologicalFeature = (feature, context) => {
   if (!feature || typeof feature !== 'object' || Array.isArray(feature)) return null;
+  const record = standaloneFeatureRecordIndexStatus(feature);
+  const featureIndex = standaloneFeatureIndexStatus(feature);
+  const canonical = standaloneCanonicalIdentityStatus(feature);
+  const identity = standaloneFeatureIdentityStatus(feature);
+  if (
+    !record.valid
+    || !featureIndex.valid
+    || !canonical.valid
+    || !identity.valid
+    || ((identity.source.value || featureIndex.value !== null) && record.value === null)
+  ) return null;
   const stableSvgId = standaloneFeatureStableSvgId(feature);
   if (!stableSvgId) return null;
   const fallbackLabel = getStandaloneFeatureLabel(feature);
@@ -726,11 +1133,11 @@ const normalizeStandaloneBiologicalFeature = (feature, context) => {
     svg_id: stableSvgId,
     stable_svg_id: stableSvgId,
     stable_feature_id: stableSvgId,
-    record_idx: standaloneFeatureRecordIndex(feature),
+    record_idx: record.value,
     record_id: String(feature.record_id || feature.recordId || ''),
-    feature_index: Number.isFinite(Number(feature.feature_index ?? feature.featureIndex))
-      ? Number(feature.feature_index ?? feature.featureIndex)
-      : null,
+    feature_index: featureIndex.value,
+    record_key: canonical.value?.[0] || '',
+    biological_feature_id: canonical.value?.[1] || '',
     label: fallbackLabel,
     display_label: displayLabel,
     search_labels: getStandaloneSearchLabels(feature, fallbackLabel, displayLabel),
@@ -775,18 +1182,27 @@ const normalizeStandaloneBiologicalFeature = (feature, context) => {
 };
 
 const buildStandaloneBiologicalFeaturePayloads = (context, renderedFeatures) => {
-  const payloads = [];
-  const seenKeys = new Set();
+  const candidates = [];
+  const keyCounts = new Map();
   const resolveRenderedFeature = createStandaloneBiologicalFeatureResolver(renderedFeatures);
   (Array.isArray(context?.features) ? context.features : []).forEach((feature) => {
     const payload = normalizeStandaloneBiologicalFeature(feature, context);
     if (!payload) return;
     const recordIndex = Number(payload.record_idx);
-    const key = Number.isInteger(recordIndex)
-      ? buildStandaloneOrthogroupIndexKey(recordIndex, payload.stable_svg_id)
-      : `?:${payload.stable_svg_id}`;
-    if (seenKeys.has(key)) return;
-    seenKeys.add(key);
+    const canonicalKey = payload.record_key && payload.biological_feature_id
+      ? standaloneCatalogFeatureKey(payload.record_key, payload.biological_feature_id)
+      : '';
+    const key = canonicalKey || (
+      Number.isInteger(recordIndex)
+        ? buildStandaloneOrthogroupIndexKey(recordIndex, payload.stable_svg_id)
+        : `?:${payload.stable_svg_id}`
+    );
+    keyCounts.set(key, (keyCounts.get(key) || 0) + 1);
+    candidates.push({ feature, payload, recordIndex, key });
+  });
+  const payloads = [];
+  candidates.forEach(({ feature, payload, recordIndex, key }) => {
+    if (keyCounts.get(key) !== 1) return;
     const renderedFeature = resolveRenderedFeature({
       stableSvgId: payload.stable_svg_id,
       renderedSvgId: String(feature?.svg_id || '').trim(),
@@ -889,6 +1305,22 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
 
 const standaloneAttr = (element, name) =>
   String(element?.getAttribute?.(name) || '').trim();
+
+const standaloneElementTextAlias = (element, names) => {
+  const values = new Set(names
+    .map((name) => standaloneAttr(element, name))
+    .filter(Boolean));
+  return {
+    valid: values.size <= 1,
+    supplied: values.size > 0,
+    value: values.size === 1 ? values.values().next().value : ''
+  };
+};
+
+const standaloneElementMatchId = (element) => standaloneElementTextAlias(element, [
+  'data-gbdraw-match-id',
+  'data-gbdraw-pairwise-match-id'
+]);
 
 const firstStandaloneText = (...values) => {
   for (const value of values) {
@@ -1104,52 +1536,67 @@ const buildStandaloneMatchSection = (title, rows) => ({
   rows: rows.filter((row) => String(row?.[1] || '').trim())
 });
 
-const standaloneMemberFeatureSvgId = (member) => firstStandaloneText(
-  member?.stableFeatureSvgId,
-  member?.stable_feature_svg_id,
-  member?.featureSvgId,
-  member?.feature_svg_id
-);
+const standaloneMemberFeatureSvgId = (member) => standaloneMemberStableSvgId(member);
 
-const standaloneMemberRenderedFeatureSvgId = (member) => firstStandaloneText(
-  member?.renderedFeatureSvgId,
-  member?.rendered_feature_svg_id
-);
+const standaloneMemberRenderedFeatureSvgId = (member) => standaloneMemberRenderedSvgId(member);
+
+const standaloneOrthogroupId = (entry) => {
+  const identity = standaloneConsistentTextAlias(
+    entry,
+    ['id', 'orthogroupId', 'orthogroup_id']
+  );
+  return identity.valid ? identity.value : '';
+};
 
 const getStandaloneOrthogroupById = (orthogroups, orthogroupId) => {
   const id = firstStandaloneText(orthogroupId);
   if (!id) return null;
-  return (Array.isArray(orthogroups) ? orthogroups : [])
-    .find((entry) => firstStandaloneText(entry?.id, entry?.orthogroupId, entry?.orthogroup_id) === id) || null;
+  const matches = (Array.isArray(orthogroups) ? orthogroups : [])
+    .filter((entry) => standaloneOrthogroupId(entry) === id);
+  return matches.length === 1 ? matches[0] : null;
 };
 
-const standaloneGroupHasFeatureSvgId = (group, featureSvgId) => {
+const standaloneGroupHasFeatureSvgId = (group, featureSvgId, featuresById) => {
   const ids = splitStandaloneMetadataValues(featureSvgId);
   if (ids.length === 0) return false;
-  return (Array.isArray(group?.members) ? group.members : [])
-    .some((member) => ids.includes(standaloneMemberRenderedFeatureSvgId(member)) ||
-      ids.includes(standaloneMemberFeatureSvgId(member)));
+  return ids.some((id) => Boolean(
+    getStandaloneGroupMemberForFeatureSvgId(group, id, featuresById)
+  ));
 };
 
-const getStandaloneOrthogroupPayload = (orthogroups, orthogroupId, queryFeatureSvgId = '', subjectFeatureSvgId = '') => {
+const getStandaloneOrthogroupPayload = (
+  orthogroups,
+  orthogroupId,
+  queryFeatureSvgId = '',
+  subjectFeatureSvgId = '',
+  featuresById = new Map()
+) => {
   const id = String(orthogroupId || '').trim();
   const groups = Array.isArray(orthogroups) ? orthogroups : [];
-  const direct = getStandaloneOrthogroupById(groups, id);
-  if (direct) return direct;
-  return groups.find((entry) => (
-    standaloneGroupHasFeatureSvgId(entry, queryFeatureSvgId) ||
-    standaloneGroupHasFeatureSvgId(entry, subjectFeatureSvgId)
-  )) || null;
+  const directMatches = id
+    ? groups.filter((entry) => standaloneOrthogroupId(entry) === id)
+    : [];
+  if (directMatches.length > 0) {
+    return directMatches.length === 1 ? directMatches[0] : null;
+  }
+  const matches = groups.filter((entry) => (
+    standaloneGroupHasFeatureSvgId(entry, queryFeatureSvgId, featuresById) ||
+    standaloneGroupHasFeatureSvgId(entry, subjectFeatureSvgId, featuresById)
+  ));
+  return matches.length === 1 ? matches[0] : null;
 };
 
-const standaloneFeatureOrthogroupId = (feature) => firstStandaloneText(
-  feature?.orthogroup_id,
-  feature?.orthogroupId,
-  feature?.orthogroup_member?.orthogroupId,
-  feature?.orthogroup_member?.orthogroup_id,
-  feature?.orthogroupMember?.orthogroupId,
-  feature?.orthogroupMember?.orthogroup_id
-);
+const standaloneFeatureOrthogroupId = (feature) => {
+  const ids = new Set([
+    feature?.orthogroup_id,
+    feature?.orthogroupId,
+    feature?.orthogroup_member?.orthogroupId,
+    feature?.orthogroup_member?.orthogroup_id,
+    feature?.orthogroupMember?.orthogroupId,
+    feature?.orthogroupMember?.orthogroup_id
+  ].map((value) => String(value || '').trim()).filter(Boolean));
+  return ids.size === 1 ? ids.values().next().value : '';
+};
 
 const standaloneFeatureProduct = (feature) => firstStandaloneNonInternalDisplayText(
   feature?.product,
@@ -1222,14 +1669,15 @@ const buildStandaloneFallbackOrthogroup = ({ orthogroupId, queryFeature, subject
   };
 };
 
-const getStandaloneGroupMemberForFeatureSvgId = (group, featureSvgId) => {
+const getStandaloneGroupMemberForFeatureSvgId = (group, featureSvgId, featuresById) => {
   const id = firstStandaloneText(featureSvgId);
-  if (!id) return null;
+  const feature = id ? featuresById?.get?.(id) || null : null;
+  if (!feature) return null;
   const members = Array.isArray(group?.members) ? group.members : [];
-  return members.find((member) => (
-    standaloneMemberRenderedFeatureSvgId(member) === id ||
-    standaloneMemberFeatureSvgId(member) === id
-  )) || null;
+  const matches = members.filter((member) => (
+    standaloneDirectOrthogroupMetadataMatches(feature, member)
+  ));
+  return matches.length === 1 ? matches[0] : null;
 };
 
 const resolveStandaloneFeatureSectionProteinIds = ({
@@ -1250,11 +1698,16 @@ const resolveStandaloneFeatureSectionProteinIds = ({
   const ids = splitStandaloneMetadataValues(featureSvgIds);
   ids.forEach((featureSvgId) => {
     const candidateFeature = featuresById?.get?.(featureSvgId) || null;
-    const member = getStandaloneGroupMemberForFeatureSvgId(group, featureSvgId);
+    const member = getStandaloneGroupMemberForFeatureSvgId(group, featureSvgId, featuresById);
     addFeatureProteinId(candidateFeature, member);
   });
   if (feature) {
-    addFeatureProteinId(feature, ids.length === 1 ? getStandaloneGroupMemberForFeatureSvgId(group, ids[0]) : null);
+    addFeatureProteinId(
+      feature,
+      ids.length === 1
+        ? getStandaloneGroupMemberForFeatureSvgId(group, ids[0], featuresById)
+        : null
+    );
   }
   if (values.length === 0) {
     splitStandaloneMetadataValues(locusId).forEach((value) => addUniqueStandaloneDisplayText(values, value));
@@ -1318,7 +1771,9 @@ const buildStandaloneFeatureListRows = ({
   return Array.from({ length: count }, (_unused, index) => {
     const svgId = featureIds[index] || '';
     const feature = svgId ? featuresById?.get?.(svgId) || null : null;
-    const member = svgId ? getStandaloneGroupMemberForFeatureSvgId(group, svgId) : null;
+    const member = svgId
+      ? getStandaloneGroupMemberForFeatureSvgId(group, svgId, featuresById)
+      : null;
     const fallbackProteinId = firstStandaloneNonInternalDisplayText(
       locusIds[index],
       displayNames[index],
@@ -1395,7 +1850,9 @@ const resolveStandaloneBlockMemberLabels = ({
   const values = [];
   uniqueStandaloneMetadataValues(featureSvgIds).forEach((featureSvgId) => {
     const feature = featuresById?.get?.(featureSvgId) || null;
-    const member = group ? getStandaloneGroupMemberForFeatureSvgId(group, featureSvgId) : null;
+    const member = group
+      ? getStandaloneGroupMemberForFeatureSvgId(group, featureSvgId, featuresById)
+      : null;
     if (!member) return;
     addUniqueStandaloneDisplayText(values, resolveStandaloneDisplayProteinId(feature, member, ''));
   });
@@ -1506,12 +1963,21 @@ const buildStandaloneMatchFeatureSection = ({
 const buildStandaloneMatchPayloadsV1 = (svg, { features = [], orthogroups = [] } = {}) => {
   if (!svg) return [];
   const featuresById = new Map();
+  const ambiguousFeatureIds = new Set();
   (Array.isArray(features) ? features : []).forEach((feature) => {
     const svgId = String(feature?.svg_id || '').trim();
-    if (svgId && !featuresById.has(svgId)) featuresById.set(svgId, feature);
+    if (!svgId || ambiguousFeatureIds.has(svgId)) return;
+    if (featuresById.has(svgId) && featuresById.get(svgId) !== feature) {
+      featuresById.delete(svgId);
+      ambiguousFeatureIds.add(svgId);
+      return;
+    }
+    featuresById.set(svgId, feature);
   });
   return Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR)).map((element, index) => {
-    let id = standaloneAttr(element, 'data-gbdraw-pairwise-match-id');
+    const idStatus = standaloneElementMatchId(element);
+    if (!idStatus.valid) return null;
+    let id = idStatus.value;
     if (!id) {
       id = `pairwise_match_${index + 1}`;
       element.setAttribute('data-gbdraw-pairwise-match-id', id);
@@ -1526,7 +1992,13 @@ const buildStandaloneMatchPayloadsV1 = (svg, { features = [], orthogroups = [] }
     const subjectFeature = featuresById.get(subjectFeatureSvgId) || null;
     const orthogroup = matchKind === 'collinear'
       ? null
-      : getStandaloneOrthogroupPayload(orthogroups, orthogroupId, queryFeatureSvgId, subjectFeatureSvgId) ||
+      : getStandaloneOrthogroupPayload(
+        orthogroups,
+        orthogroupId,
+        queryFeatureSvgId,
+        subjectFeatureSvgId,
+        featuresById
+      ) ||
         buildStandaloneFallbackOrthogroup({
           orthogroupId,
           queryFeature,
@@ -1697,16 +2169,15 @@ const buildStandaloneMatchPayloadsV1 = (svg, { features = [], orthogroups = [] }
       )),
       hover_rows: hoverRows
     };
-  });
+  }).filter(Boolean);
 };
 
 const buildStandaloneMatchPayloads = (svg) => {
   if (!svg) return [];
-  return Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR)).map((element, index) => {
-    let id = firstStandaloneText(
-      standaloneAttr(element, 'data-gbdraw-match-id'),
-      standaloneAttr(element, 'data-gbdraw-pairwise-match-id')
-    );
+  const payloads = Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR)).map((element, index) => {
+    const idStatus = standaloneElementMatchId(element);
+    if (!idStatus.valid) return null;
+    let id = idStatus.value;
     if (!id) {
       id = `pairwise_match_${index + 1}`;
       element.setAttribute('data-gbdraw-match-id', id);
@@ -1757,6 +2228,16 @@ const buildStandaloneMatchPayloads = (svg) => {
       anchor_count: standaloneAttr(element, 'data-collinearity-anchor-count'),
       query_feature_svg_id: standaloneAttr(element, 'data-query-feature-svg-id'),
       subject_feature_svg_id: standaloneAttr(element, 'data-subject-feature-svg-id'),
+      query_stable_feature_svg_id: standaloneAttr(
+        element,
+        'data-query-stable-feature-svg-id'
+      ),
+      subject_stable_feature_svg_id: standaloneAttr(
+        element,
+        'data-subject-stable-feature-svg-id'
+      ),
+      query_feature_index: standaloneAttr(element, 'data-query-feature-index'),
+      subject_feature_index: standaloneAttr(element, 'data-subject-feature-index'),
       query_protein_id: standaloneAttr(element, 'data-query-protein-id'),
       subject_protein_id: standaloneAttr(element, 'data-subject-protein-id'),
       query_locus_id: standaloneAttr(element, 'data-query-locus-id'),
@@ -1764,38 +2245,87 @@ const buildStandaloneMatchPayloads = (svg) => {
       query_display_name: standaloneAttr(element, 'data-query-display-name'),
       subject_display_name: standaloneAttr(element, 'data-subject-display-name')
     });
+  }).filter(Boolean);
+  const idCounts = new Map();
+  payloads.forEach((payload) => {
+    idCounts.set(payload.id, (idCounts.get(payload.id) || 0) + 1);
   });
+  return payloads.filter((payload) => idCounts.get(payload.id) === 1);
 };
 
 const selectStandaloneSequenceSources = (matches, sources) => {
   if (!Array.isArray(matches) || matches.length === 0) return [];
-  const linearIndexes = new Set();
+  const linearReferences = [];
   const circularRecordIds = new Set();
-  const comparisonSourceIndexes = new Set();
+  const comparisonReferences = [];
   matches.forEach((match) => {
     if (match?.match_kind === 'homology') {
       const referenceSide = String(match.reference_side || '').trim();
-      const recordId = String(match[`${referenceSide}_record_id`] || '').trim();
-      if (recordId) circularRecordIds.add(recordId);
-      const sourceIndex = Number(match.source_index);
-      if (Number.isInteger(sourceIndex)) comparisonSourceIndexes.add(sourceIndex);
+      const recordId = standaloneConsistentTextAlias(match, [
+        `${referenceSide}_record_id`,
+        `${referenceSide}RecordId`
+      ]);
+      if (!recordId.valid) return;
+      if (recordId.value) circularRecordIds.add(recordId.value);
+      const sourceIndex = standaloneIntegerAlias([match.source_index]);
+      if (sourceIndex.valid && sourceIndex.value !== null) {
+        const comparisonSide = referenceSide === 'query' ? 'subject' : 'query';
+        const comparisonRecordId = standaloneConsistentTextAlias(match, [
+          `${comparisonSide}_record_id`,
+          `${comparisonSide}RecordId`
+        ]);
+        if (comparisonRecordId.valid) {
+          comparisonReferences.push({
+            sourceIndex: sourceIndex.value,
+            recordId: comparisonRecordId.value
+          });
+        }
+      }
       return;
     }
     ['query', 'subject'].forEach((role) => {
-      const recordIndex = Number(match?.[`${role}_record_index`]);
-      if (Number.isInteger(recordIndex)) linearIndexes.add(recordIndex);
+      const recordIndex = standaloneIntegerAlias([
+        match?.[`${role}_record_index`]
+      ]);
+      const recordId = standaloneConsistentTextAlias(match, [
+        `${role}_record_id`,
+        `${role}RecordId`
+      ]);
+      if (recordIndex.valid && recordIndex.value !== null && recordId.valid) {
+        linearReferences.push({ recordIndex: recordIndex.value, recordId: recordId.value });
+      }
     });
   });
   return (Array.isArray(sources) ? sources : []).filter((source) => {
     const origin = String(source?.origin || '').trim();
-    if (origin === 'linear-record') return linearIndexes.has(Number(source.recordIndex));
+    const sourceRecordId = standaloneConsistentTextAlias(source, ['recordId', 'record_id']);
+    if (!sourceRecordId.valid) return false;
+    const sourceAliases = new Set([
+      sourceRecordId.value,
+      ...(Array.isArray(source?.aliases) ? source.aliases : [])
+    ].map((value) => String(value || '').trim()).filter(Boolean));
+    if (origin === 'linear-record') {
+      const recordIndex = standaloneIntegerAlias([
+        source.recordIndex,
+        source.record_index
+      ]);
+      return recordIndex.valid && recordIndex.value !== null && linearReferences.some((reference) => (
+        reference.recordIndex === recordIndex.value
+        && (!reference.recordId || sourceAliases.has(reference.recordId))
+      ));
+    }
     if (origin === 'homology-comparison') {
-      return comparisonSourceIndexes.has(Number(source.sourceIndex));
+      const sourceIndex = standaloneIntegerAlias([
+        source.sourceIndex,
+        source.source_index
+      ]);
+      return sourceIndex.valid && sourceIndex.value !== null && comparisonReferences.some((reference) => (
+        reference.sourceIndex === sourceIndex.value
+        && (!reference.recordId || sourceAliases.has(reference.recordId))
+      ));
     }
     if (origin === 'circular-reference') {
-      const aliases = [source.recordId, ...(Array.isArray(source.aliases) ? source.aliases : [])]
-        .map((value) => String(value || '').trim());
-      return aliases.some((value) => circularRecordIds.has(value));
+      return Array.from(sourceAliases).some((value) => circularRecordIds.has(value));
     }
     return false;
   });
@@ -1981,6 +2511,7 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   const catalogItem = sourceCatalogItem
     ? catalogItemWithStandaloneOverrides(sourceCatalogItem, context)
     : null;
+  if (sourceCatalogItem && !catalogItem) return false;
   const originalGeometry = resolveStandaloneOriginalGeometry(svg);
   const normalizedPopupMode = normalizeStandalonePopupMode(context.popupMode);
   removeExistingStandaloneInteractivityAssets(svg);
@@ -2026,10 +2557,8 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   });
   const matchIds = new Set(matches.map((match) => match.id));
   svg.querySelectorAll(STANDALONE_MATCH_SELECTOR).forEach((element) => {
-    const id = firstStandaloneText(
-      standaloneAttr(element, 'data-gbdraw-match-id'),
-      standaloneAttr(element, 'data-gbdraw-pairwise-match-id')
-    );
+    const idStatus = standaloneElementMatchId(element);
+    const id = idStatus.valid ? idStatus.value : '';
     if (!matchIds.has(id)) return;
     element.setAttribute('data-gbdraw-interactive-match', 'true');
     addClassToken(element, 'gbdraw-interactive-pairwise-match');

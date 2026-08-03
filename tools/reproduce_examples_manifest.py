@@ -43,6 +43,14 @@ MANUALLY_MANAGED_FIGURES: dict[str, str] = {
 }
 
 UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
+    "examples/ecoli_k12_plot.svg": (
+        "Former Quickstart figure retained for one compatibility release after the "
+        "Quickstart moved to bundled, version-pinned tutorial fixtures."
+    ),
+    "examples/quickstart-labeled-rna-features.svg": (
+        "Former Quickstart label example retained for one compatibility release after the "
+        "runnable recipe moved to its canonical How-to chapter."
+    ),
     "examples/majani.svg": (
         "Linked from the Gallery but not embedded because the full-size SVG is too large "
         "for a Markdown preview."
@@ -1796,7 +1804,11 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
                 "--identity",
                 "95",
                 "--alignment_length",
-                "1000",
+                "750",
+                "--conservation_ring_width",
+                "12",
+                "--conservation_ring_gap",
+                "3",
             ),
         ),
         required_inputs=("MjeNMV.gb", "MjeNMV.MelaMJNV.tblastx.out"),

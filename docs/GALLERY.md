@@ -1,8 +1,8 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Reference](./REFERENCE/README.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)
 
 # Gallery
 
-These figures were generated with gbdraw. Click any figure to open the full-size output.
+This is a curated showcase of figures made with gbdraw. Click any figure to open the full-size output. A tracked image is not, by itself, a reproducible recipe: only entries linked to a version-pinned fixture and an executable Tutorial or How-to guide are described as reproducible.
 
 For zooming, feature popups, match inspection, and downloadable sessions, open the [interactive gallery](https://gbdraw.app/gallery/).
 
@@ -13,12 +13,12 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td width="50%" valign="top">
       <a href="../examples/NC_001879_regions.svg"><img src="../examples/NC_001879_regions.svg" alt="Circular Nicotiana tabacum chloroplast map with LSC, SSC, IRa, and IRb region brackets" width="100%"></a><br>
       <strong><em>Nicotiana tabacum</em> chloroplast</strong><br>
-      Feature labels, a GC-content track, and LSC, SSC, IRa, and IRb region brackets. See the <a href="./TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables">annotation-table tutorial</a> or open the <a href="https://gbdraw.app/gallery/#tobacco-chloroplast">interactive example</a>.
+      Feature labels, a GC-content track, and LSC, SSC, IRa, and IRb region brackets. See <a href="./HOW_TO/GUI/add-region-annotations-and-track-slots.md">How to add region annotations and custom track slots</a> or open the <a href="https://gbdraw.app/gallery/#tobacco-chloroplast">interactive example</a>.
     </td>
     <td width="50%" valign="top">
       <a href="../examples/HmmtDNA_qualifier_priority_soft_pastels.svg"><img src="../examples/HmmtDNA_qualifier_priority_soft_pastels.svg" alt="Circular human mitochondrial genome with labels placed inside and outside the feature ring" width="100%"></a><br>
       <strong>Human mitochondrial genome</strong><br>
-      Qualifier-based labels placed inside and outside the ring with the <code>soft_pastels</code> palette. See <a href="./TUTORIALS/3_Advanced_Customization.md">Advanced customization</a>.
+      Qualifier-based labels placed inside and outside the ring with the <code>soft_pastels</code> palette. See <a href="./HOW_TO/GUI/style-features-labels-titles-and-legends.md">How to style features, labels, titles, and legends</a>.
     </td>
   </tr>
   <tr>
@@ -42,12 +42,19 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td width="50%" valign="top">
       <a href="../examples/Escherichia_Shigella_pair.svg"><img src="../examples/Escherichia_Shigella_pair.svg" alt="Linear comparison of Escherichia coli and Shigella dysenteriae with nucleotide match ribbons" width="100%"></a><br>
       <strong><em>Escherichia coli</em> and <em>Shigella dysenteriae</em></strong><br>
-      A two-record Linear diagram with nucleotide-match ribbons and separated feature strands. See the <a href="./TUTORIALS/2_Comparative_Genomics.md">comparative-genomics tutorial</a>.
+      A two-record Linear diagram with nucleotide-match ribbons and separated feature strands. See <a href="./HOW_TO/GUI/use-uploaded-blast-results.md">How to use uploaded BLAST results</a>.
     </td>
     <td width="50%" valign="top">
       <a href="../examples/Escherichia_Shigella_multi.svg"><img src="../examples/Escherichia_Shigella_multi.svg" alt="Four-record linear comparison of Escherichia and Shigella genomes" width="100%"></a><br>
       <strong>Four-record <em>Escherichia</em>–<em>Shigella</em> comparison</strong><br>
       Adjacent nucleotide comparisons across four bacterial records on one canvas.
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <a href="https://gbdraw.app/gallery/#BGC0000708-BGC0000713">Open the interactive Gallery example</a><br>
+      <strong>Five aminoglycoside biosynthetic gene clusters</strong><br>
+      The complete BGC0000708, BGC0000709, BGC0000711, BGC0000712, and BGC0000713 records are compared with LOSATP <em>Similarity groups</em>. The ribbons show retained protein-search relationships used for visualization; they are not phylogenetic orthology calls. Open the <a href="https://gbdraw.app/gallery/#BGC0000708-BGC0000713">Gallery tutorial</a> to inspect the five-record result and its session.
     </td>
   </tr>
   <tr>
@@ -75,19 +82,19 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td width="50%" valign="top">
       <a href="../examples/O157_H7_stx_whitelist.svg"><img src="../examples/O157_H7_stx_whitelist.svg" alt="Circular Escherichia coli O157 H7 genome with selected virulence-feature labels" width="100%"></a><br>
       <strong>Selected virulence-feature labels</strong><br>
-      A label whitelist keeps attention on selected <em>E. coli</em> O157:H7 features. See <a href="./TUTORIALS/3_Advanced_Customization.md">Advanced customization</a>.
+      A label whitelist keeps attention on selected <em>E. coli</em> O157:H7 features. See <a href="./HOW_TO/GUI/style-features-labels-titles-and-legends.md">How to style features, labels, titles, and legends</a>.
     </td>
     <td width="50%" valign="top">
       <a href="../examples/tutorial-6-depth-circular.svg"><img src="../examples/tutorial-6-depth-circular.svg" alt="Circular bacterial genome with a blue read-depth track and quantitative tick labels" width="100%"></a><br>
       <strong>Read-depth track</strong><br>
-      A circular depth profile with a quantitative axis and evenly spaced tick labels. See <a href="./TUTORIALS/6_Depth_Quantitative_Tracks.md">Depth and quantitative tracks</a>.
+      A circular depth profile with a quantitative axis and evenly spaced tick labels. See <a href="./HOW_TO/GUI/add-depth-gc-and-skew-tracks.md">How to add depth, GC content, and skew tracks</a>.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <a href="../examples/tutorial-9-feature-shapes.svg"><img src="../examples/tutorial-9-feature-shapes.svg" alt="Human mitochondrial genome with rectangular CDS, rRNA, and tRNA features" width="100%"></a><br>
       <strong>Feature-shape overrides</strong><br>
-      CDS, rRNA, and tRNA features rendered as rectangles instead of directional arrows. See <a href="./TUTORIALS/9_Feature_Visibility_Shapes.md">Feature visibility and shapes</a>.
+      CDS, rRNA, and tRNA features rendered as rectangles instead of directional arrows. See <a href="./HOW_TO/GUI/control-feature-visibility-shapes-strokes-and-overlaps.md">How to control feature visibility, shapes, strokes, and overlaps</a>.
     </td>
     <td width="50%" valign="top">
       <a href="https://gbdraw.app/gallery/palettes/"><img src="../examples/AP027078_tuckin_separate_strands_default.svg" alt="Circular genome map in the default gbdraw color palette" width="100%"></a><br>
@@ -100,7 +107,8 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
 ## Reproduce or adapt a figure
 
 - Use the [web app](https://gbdraw.app/) to create a diagram in the browser.
-- Follow the [Quickstart](./QUICKSTART.md) for the shortest command-line workflow.
-- Browse the [Tutorials](./TUTORIALS/README.md) for complete workflows or [Recipes](./RECIPES.md) for short commands.
+- Follow the [Quickstart](./QUICKSTART.md) to choose a checked first workflow.
+- Browse the [Tutorials](./TUTORIALS/README.md) for complete workflows, [How-to guides](./HOW_TO/README.md) for focused tasks, or [Recipes](./RECIPES.md) for command templates.
+- Use [Tutorial fixture provenance](./REFERENCE/tutorial-fixture-provenance.md) to verify the bundled inputs and checksums used by executable documentation.
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Reference](./REFERENCE/README.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)

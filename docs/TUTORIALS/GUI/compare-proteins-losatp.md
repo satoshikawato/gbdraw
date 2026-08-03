@@ -1,0 +1,126 @@
+# Compare annotated proteins with LOSATP in the browser
+
+Use LOSATP **Similarity groups** to compare five aminoglycoside biosynthetic
+gene-cluster records. The records remain Linear. They are native BGC database
+regions, not complete chromosomes, so this Tutorial does not turn them into
+circular genomes.
+
+![Five-record BGC comparison with protein similarity groups](../../images/t-gui-04/04-comparison-result.png)
+
+## What you'll need
+
+Use the five files under
+`gbdraw/web/tutorial-data/aminoglycoside-bgc-five/` in this order:
+
+| Order | Record | Length | CDS |
+|---:|---|---:|---:|
+| 1 | `BGC0000708` | 40,579 bp | 30 |
+| 2 | `BGC0000709` | 50,466 bp | 38 |
+| 3 | `BGC0000711` | 30,837 bp | 21 |
+| 4 | `BGC0000712` | 48,169 bp | 40 |
+| 5 | `BGC0000713` | 31,892 bp | 26 |
+
+Upload every file as a whole record and leave all optional Region fields blank.
+Keep the first four records in their source orientation; turn on
+**Reverse complement** only for `BGC0000713` to reproduce the Gallery layout.
+
+## Step 1: Load the five Linear records
+
+Select **Linear**, **GenBank**, and **No comparison**. Upload `BGC0000708.gbk`,
+then use **Add Seq** four times and upload the remaining files in the table
+order.
+
+For the fifth row, `BGC0000713`, turn on **Reverse complement**. This changes
+only its display orientation; it does not crop, split, or alter the source
+record.
+
+![Five annotated BGC records selected for protein comparison](../../images/t-gui-04/01-input-ready.png)
+
+## Step 2: Draw the records before comparing them
+
+Select **Generate Diagram**. The first result contains 155 CDS features and no
+comparison ribbons.
+
+![Plain five-record BGC linear diagram](../../images/t-gui-04/02-first-diagram.png)
+
+## Step 3: Configure Similarity groups
+
+Select **Run LOSAT**, **LOSATP**, and **Similarity groups**. Use deterministic
+execution and filtering:
+
+| Control | Value |
+|---|---|
+| Execution | Serial |
+| Total threads | `1` |
+| Parallel runs | `1 run` |
+| Threads per run | `1` |
+| Bitscore | `50` |
+| E-value | `0.01` |
+| Minimum identity | `30` |
+| Minimum length | `0` |
+| Pairwise Match Style | Curve |
+| Output Prefix | `bgc_losatp_groups` |
+
+Match the Interactive SVG Gallery presentation with these display settings:
+
+| Control | Value |
+|---|---|
+| Palette | Orange |
+| Override File / Specific Table | Bundled BGC color tables |
+| Show Labels | First record |
+| Priority File (TSV) | `CDS<TAB>gene` qualifier-priority table |
+| Label Font Size | `18` |
+| Label Placement / Rotation | Above feature / `45` |
+| Feature Height | `75` |
+| Block Stroke Width / Line Stroke Width | `2` / `2` |
+| Show Coordinate Scale (Linear) | On |
+| Linear scale style | Ruler |
+| Axis Stroke Width | `5` |
+
+The first record therefore carries readable CDS `gene` labels; the remaining
+four records stay unlabeled. Fit the complete final preview at **40%** before
+capturing or exporting it.
+
+![LOSATP Similarity groups mode selected with deterministic settings](../../images/t-gui-04/03-losatp-settings.png)
+
+## Step 4: Run LOSATP and export the evidence
+
+Select **Generate Diagram** again. The qualified result contains 23 stable
+groups and 77 displayed group links. The four displayed endpoint pairs are
+`0708→0709`, `0709→0711`, `0711→0712`, and `0712→0713`.
+
+There is no direct `BGC0000708→BGC0000713` ribbon. Proteins shared by the first
+and last records are represented by the same group ID across the adjacent-link
+chain. This is the canonical Similarity-groups presentation; it is not a
+Pairwise comparison between only the first and last records.
+
+Under **Raw LOSAT results**, name the first adjacent result
+`bgc_losatp_groups.tsv` and select **Save Raw LOSAT TSV**. The qualified file
+contains 232 twelve-column rows. Select **SVG** to save
+`bgc_losatp_groups.svg`.
+
+## Step 5: Inspect a group
+
+Select a comparison ribbon. The popup reports the group ID, display name,
+member count, record coverage, RBH seeds, paths, and every member protein.
+
+![LOSATP similarity-group popup with member details](../../images/t-gui-04/05-match-popup.png)
+
+The captured example opens `og_18`, which has six proteins across all five BGC
+records.
+
+## What you built
+
+You produced a Linear, five-record LOSATP Similarity-groups comparison from the
+whole BGC records, kept the source sequence identity separate from the reversed
+display orientation, and exported both the 232-row evidence table and the
+finished SVG. The diagram uses readable first-record `gene` labels and expresses
+shared groups through the adjacent-record chain rather than inventing a direct
+first-to-last ribbon.
+
+## Next steps
+
+- [Create protein similarity groups as a focused task](../../HOW_TO/GUI/create-protein-similarity-groups.md)
+- [Draw Collinear protein-match blocks](../../HOW_TO/GUI/draw-collinear-protein-blocks.md)
+- [Choose a genome-comparison method](../../EXPLANATION/choose-a-genome-comparison-method.md)
+- [Review comparison programs and result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)

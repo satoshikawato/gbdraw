@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-import re
 from pathlib import Path
 
 import pandas as pd
@@ -10,7 +9,6 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw import CircularOptions
 import gbdraw.api.diagram as api_diagram_module
 from gbdraw.api import (
     CircularMultiRecordOptions,
@@ -51,53 +49,21 @@ SELECTED_FEATURES = [
 ]
 
 
-@pytest.mark.circular
-def test_documented_python_api_example_runs(
-    examples_dir: Path,
-    temp_output_dir: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    documentation = (Path(__file__).parents[1] / "docs" / "PYTHON_API.md").read_text(
-        encoding="utf-8"
-    )
-    blocks = re.findall(r"```python\n(.*?)\n```", documentation, re.DOTALL)
-    assert blocks
-    monkeypatch.setenv("GBDRAW_EXAMPLE_GBK", str(examples_dir / "MjeNMV.gb"))
-    monkeypatch.setenv("GBDRAW_EXAMPLES_DIR", str(examples_dir))
-    monkeypatch.setenv(
-        "GBDRAW_TEST_INPUTS_DIR",
-        str(Path(__file__).parent / "test_inputs"),
-    )
-    monkeypatch.setenv("GBDRAW_API_OUTPUT_DIR", str(temp_output_dir))
-
-    namespace: dict[str, object] = {}
-    for index, block in enumerate(blocks, start=1):
-        exec(compile(block, f"docs/PYTHON_API.md:block-{index}", "exec"), namespace)
-
-    documented_record = namespace["record"]
-    documented_options = namespace["options"]
-    assert isinstance(documented_record, SeqRecord)
-    assert isinstance(documented_options, CircularOptions)
-    assert set(documented_options.features.types) <= {
-        feature.type for feature in documented_record.features
-    }
-    assert (temp_output_dir / "api_circular.svg").exists()
-
-
 @pytest.mark.linear
 def test_documented_gff3_fasta_fixture_preserves_records_and_cds() -> None:
-    fixture_dir = Path(__file__).parents[1] / "examples" / "gff3_lambda"
+    fixture_dir = Path(__file__).parents[1] / "gbdraw" / "web" / "tutorial-data" / "lambda-gff3"
     records = load_gff_fasta(
-        [str(fixture_dir / "lambda_two_contigs.gff3")],
-        [str(fixture_dir / "lambda_two_contigs.fna")],
+        [str(fixture_dir / "NC_001416.gff3")],
+        [str(fixture_dir / "NC_001416.fna")],
         selected_features_set=["CDS", "gene"],
     )
 
-    assert [record.id for record in records] == ["lambda_left", "lambda_right"]
+    assert [record.id for record in records] == ["NC_001416.1"]
+    assert len(records[0]) == 48_502
     cds_features = [
         feature for record in records for feature in record.features if feature.type == "CDS"
     ]
-    assert len(cds_features) == 45
+    assert len(cds_features) == 73
     assert {feature.location.strand for feature in cds_features} == {1, -1}
     assert all(feature.qualifiers.get("translation") for feature in cds_features)
 

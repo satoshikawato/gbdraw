@@ -2,7 +2,16 @@
 
 # Recipes
 
-Copy-paste command examples for common tasks. For explanations and screenshots, see the [command-line guides](./TUTORIALS/README.md).
+These are command templates for common tasks. Supply the required inputs from one working directory and verify record identifiers before adapting a template. For version-pinned, clean-directory workflows, use the [CLI Tutorials](./TUTORIALS/CLI/README.md) and [CLI How-to guides](./HOW_TO/CLI/README.md).
+
+## Contents
+
+- [Circular diagrams](#circular-diagrams)
+- [Linear diagrams](#linear-diagrams)
+- [Comparative genomics](#comparative-genomics)
+- [Color and label tables](#color-and-label-tables)
+- [GFF3 input](#gff3-input)
+- [Output formats](#output-formats)
 
 ## Circular diagrams
 
@@ -132,7 +141,7 @@ rendered as `arrow`. Ratios must be positive and finite; the shaft ratio must
 not exceed `1` and defaults to `1.0`.
 
 For the exact Circular HmmtDNA and Linear BGC Gallery-session workflows, follow
-[Tutorial 9](./TUTORIALS/9_Feature_Visibility_Shapes.md#recreate-the-circular-gallery-figure).
+[How to control feature visibility, shapes, strokes, and overlaps](./HOW_TO/GUI/control-feature-visibility-shapes-strokes-and-overlaps.md).
 
 ### Place multiple records on one shared canvas
 
@@ -236,7 +245,7 @@ gbdraw linear \
   -f svg
 ```
 
-See [Use TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md) for examples covering GenBank, GFF3+FASTA, circular placement, BLAST similarity rings, and track slots.
+See [How to use record, comparison, conservation, annotation, and track tables](./HOW_TO/CLI/use-input-tables.md) for examples covering GenBank, GFF3+FASTA, circular placement, BLAST similarity rings, and track slots.
 
 ### Highlight named regions
 
@@ -317,7 +326,7 @@ gbdraw linear \
   -f svg
 ```
 
-Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. The `orthogroup` mode creates gbdraw similarity groups for visualization; it does not infer phylogeny-based orthogroups. Do not combine these modes with `-b/--blast`. See [Draw protein matches from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md) for runtime selection and collinear examples.
+Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. The `orthogroup` mode creates gbdraw similarity groups for visualization; it does not infer phylogeny-based orthogroups. Do not combine these modes with `-b/--blast`. See the focused [Pairwise](./HOW_TO/CLI/run-losatp-pairwise.md), [Similarity-group](./HOW_TO/CLI/create-protein-similarity-groups.md), and [Collinear](./HOW_TO/CLI/draw-collinear-protein-blocks.md) procedures.
 
 ### Filter BLAST ribbons
 

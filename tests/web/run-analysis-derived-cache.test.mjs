@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
-import { buildLosatDerivedPayloadCachePayload } from '../../gbdraw/web/js/app/run-analysis.js';
+import {
+  buildLosatDerivedPayloadCachePayload,
+  hasRequiredCanonicalAnalysisResource
+} from '../../gbdraw/web/js/app/run-analysis.js';
 
 const baselineInput = {
   mode: 'collinear',
@@ -56,6 +59,7 @@ const cacheKey = (identity) => createHash('sha256')
   .digest('hex');
 
 const baselineIdentity = buildIdentity();
+assert.equal(baselineIdentity.featureIdentity, 'stable-source-rendered-display-v1');
 const unchangedIdentity = buildIdentity({
   recordPayloads: baselineInput.recordPayloads.map((record) => ({
     ...record,
@@ -66,6 +70,36 @@ const unchangedIdentity = buildIdentity({
 
 assert.deepEqual(unchangedIdentity, baselineIdentity);
 assert.equal(cacheKey(unchangedIdentity), cacheKey(baselineIdentity));
+
+assert.equal(
+  hasRequiredCanonicalAnalysisResource('collinear', {
+    pairs: [],
+    orthogroups: [],
+    collinearGroups: []
+  }),
+  false,
+  'derived cache payloads from before typed CollinearityResult propagation must miss'
+);
+assert.equal(
+  hasRequiredCanonicalAnalysisResource('collinear', {
+    collinearityResult: {
+      schema: 2,
+      kind: 'result',
+      value: { type: 'CollinearityResult', fields: {} }
+    }
+  }),
+  true
+);
+assert.equal(
+  hasRequiredCanonicalAnalysisResource('orthogroup', {
+    orthogroupResult: {
+      schema: 1,
+      kind: 'orthogroupResult',
+      value: { type: 'OrthogroupResult', fields: {} }
+    }
+  }),
+  true
+);
 
 const invalidationCases = [
   ['collinearMinAnchors', 'minAnchors', 2],

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Callable, Mapping, Sequence
 
 from gbdraw.core.record_metadata import (
@@ -19,6 +20,156 @@ def _int_or_none(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+_NONNEGATIVE_INTEGER_RE = re.compile(r"\d+")
+_RECORD_INDEX_KEYS = (
+    "record_idx",
+    "record_index",
+    "recordIndex",
+    "fileIdx",
+    "file_idx",
+)
+_FEATURE_INDEX_KEYS = (
+    "feature_index",
+    "featureIndex",
+    "source_feature_index",
+    "sourceFeatureIndex",
+)
+_STABLE_ID_KEYS = (
+    "stable_feature_id",
+    "stable_svg_id",
+    "stableFeatureSvgId",
+    "stable_feature_svg_id",
+    "stableFeatureId",
+    "stableSvgId",
+)
+_RENDERED_ID_KEYS = (
+    "rendered_feature_svg_id",
+    "renderedFeatureSvgId",
+    "rendered_svg_id",
+    "renderedSvgId",
+)
+_LEGACY_ID_KEYS = ("feature_svg_id", "featureSvgId")
+_ORTHOGROUP_DERIVED_KEYS = {
+    "orthogroup_id",
+    "orthogroup_member_count",
+    "orthogroup_record_coverage",
+    "orthogroup_representative",
+    "orthogroup_scope",
+    "orthogroup_source_record_index",
+    "orthogroup_member",
+    "orthogroupId",
+    "orthogroupMemberCount",
+    "orthogroupRecordCoverage",
+    "orthogroupRepresentative",
+    "orthogroupScope",
+    "orthogroupSourceRecordIndex",
+    "orthogroupMember",
+}
+
+
+def _consistent_nonnegative_alias(
+    payload: Mapping[str, object],
+    keys: Sequence[str],
+) -> tuple[int | None, bool]:
+    values: set[int] = set()
+    for key in keys:
+        if key not in payload:
+            continue
+        raw = payload.get(key)
+        if raw is None or not str(raw).strip():
+            continue
+        text = str(raw).strip()
+        if isinstance(raw, bool) or _NONNEGATIVE_INTEGER_RE.fullmatch(text) is None:
+            return None, False
+        values.add(int(text))
+    if len(values) > 1:
+        return None, False
+    return next(iter(values), None), True
+
+
+def _consistent_text_alias(
+    payload: Mapping[str, object],
+    keys: Sequence[str],
+) -> tuple[str, bool]:
+    values = {
+        str(payload.get(key)).strip()
+        for key in keys
+        if key in payload
+        and payload.get(key) is not None
+        and str(payload.get(key)).strip()
+    }
+    if len(values) > 1:
+        return "", False
+    return next(iter(values), ""), True
+
+
+def _canonical_identity(
+    payload: Mapping[str, object],
+) -> tuple[tuple[str, str] | None, bool]:
+    record_key, record_valid = _consistent_text_alias(
+        payload,
+        ("record_key", "recordKey"),
+    )
+    biological_id, feature_valid = _consistent_text_alias(
+        payload,
+        ("biological_feature_id", "biologicalFeatureId"),
+    )
+    if not record_valid or not feature_valid:
+        return None, False
+    if bool(record_key) != bool(biological_id):
+        return None, False
+    return ((record_key, biological_id) if record_key else None), True
+
+
+def _member_identity_aliases(
+    payload: Mapping[str, object],
+) -> tuple[set[str], set[str], bool]:
+    stable_id, stable_valid = _consistent_text_alias(payload, _STABLE_ID_KEYS)
+    legacy_id, legacy_valid = _consistent_text_alias(payload, _LEGACY_ID_KEYS)
+    if (
+        not stable_valid
+        or not legacy_valid
+        or (stable_id and legacy_id and stable_id != legacy_id)
+    ):
+        return set(), set(), False
+    rendered_id, rendered_valid = _consistent_text_alias(
+        payload,
+        _RENDERED_ID_KEYS,
+    )
+    return (
+        {stable_id or legacy_id} if stable_id or legacy_id else set(),
+        {rendered_id} if rendered_id else set(),
+        rendered_valid,
+    )
+
+
+def _feature_identity_aliases(
+    payload: Mapping[str, object],
+) -> tuple[set[str], set[str], bool]:
+    stable_id, stable_valid = _consistent_text_alias(payload, _STABLE_ID_KEYS)
+    legacy_id, legacy_valid = _consistent_text_alias(payload, _LEGACY_ID_KEYS)
+    rendered_id, rendered_valid = _consistent_text_alias(
+        payload,
+        _RENDERED_ID_KEYS,
+    )
+    svg_id, svg_valid = _consistent_text_alias(payload, ("svg_id", "svgId"))
+    if (
+        not all((stable_valid, legacy_valid, rendered_valid, svg_valid))
+        or (stable_id and legacy_id and stable_id != legacy_id)
+    ):
+        return set(), set(), False
+    source_ids = {stable_id or legacy_id} if stable_id or legacy_id else set()
+    rendered_ids = {rendered_id} if rendered_id else set()
+    if svg_id:
+        if source_ids and svg_id in source_ids:
+            source_ids.add(svg_id)
+        elif rendered_id or source_ids:
+            rendered_ids.add(svg_id)
+        else:
+            source_ids.add(svg_id)
+    return source_ids, rendered_ids, True
 
 
 def _int_value(value: Any, default: int = 0) -> int:
@@ -256,74 +407,116 @@ def enrich_features_with_orthogroups(
 ) -> list[dict[str, object]]:
     """Return feature payloads with GUI-equivalent orthogroup metadata attached."""
 
-    feature_index: dict[tuple[int, str], dict[str, object]] = {}
-    feature_index_by_svg_id: dict[str, dict[str, object]] = {}
-    global_feature_owners: dict[str, tuple[int, object]] = {}
-    ambiguous_svg_ids: set[str] = set()
+    feature_index: dict[tuple[object, ...], list[dict[str, object]]] = {}
+    records_with_rendered_ids: set[int] = set()
+
+    def index_entry(
+        key: tuple[object, ...],
+        entry: dict[str, object],
+    ) -> None:
+        feature_index.setdefault(key, []).append(entry)
+
     for group in orthogroups:
         if not isinstance(group, Mapping):
             continue
         for member in group.get("members", []) or []:
             if not isinstance(member, Mapping):
                 continue
-            feature_svg_id = _text(member.get("featureSvgId")).strip()
-            stable_feature_svg_id = _text(
-                member.get("stableFeatureSvgId") or member.get("stable_feature_svg_id")
-            ).strip()
-            record_index = _int_or_none(member.get("recordIndex"))
-            member_feature_ids = {
-                feature_id
-                for feature_id in (feature_svg_id, stable_feature_svg_id)
-                if feature_id
-            }
-            if not member_feature_ids or record_index is None:
+            record_index, record_valid = _consistent_nonnegative_alias(
+                member,
+                _RECORD_INDEX_KEYS,
+            )
+            source_feature_index, feature_index_valid = (
+                _consistent_nonnegative_alias(member, _FEATURE_INDEX_KEYS)
+            )
+            member_feature_ids, member_rendered_ids, feature_ids_valid = (
+                _member_identity_aliases(member)
+            )
+            canonical, canonical_valid = _canonical_identity(member)
+            has_record_scoped_identity = bool(
+                member_feature_ids
+                or member_rendered_ids
+                or source_feature_index is not None
+            )
+            if (
+                not record_valid
+                or not feature_index_valid
+                or not feature_ids_valid
+                or not canonical_valid
+                or (has_record_scoped_identity and record_index is None)
+                or (not has_record_scoped_identity and canonical is None)
+            ):
                 continue
             entry = _build_feature_index_entry(group, member)
-            owner = (record_index, member.get("featureIndex"))
             for member_feature_id in member_feature_ids:
-                feature_index.setdefault((record_index, member_feature_id), entry)
-                if member_feature_id in ambiguous_svg_ids:
-                    continue
-                existing_owner = global_feature_owners.get(member_feature_id)
-                if existing_owner is not None and existing_owner != owner:
-                    feature_index_by_svg_id.pop(member_feature_id, None)
-                    ambiguous_svg_ids.add(member_feature_id)
-                    continue
-                global_feature_owners[member_feature_id] = owner
-                feature_index_by_svg_id[member_feature_id] = entry
+                index_entry(("record-id", record_index, member_feature_id), entry)
+            for rendered_id in member_rendered_ids:
+                index_entry(("record-rendered-id", record_index, rendered_id), entry)
+                if record_index is not None:
+                    records_with_rendered_ids.add(record_index)
+            if source_feature_index is not None:
+                index_entry(
+                    ("record-feature-index", record_index, source_feature_index),
+                    entry,
+                )
+            if canonical is not None:
+                index_entry(("canonical", *canonical), entry)
 
     enriched: list[dict[str, object]] = []
     for feature in features:
         next_feature = dict(feature)
-        svg_id = _text(next_feature.get("svg_id")).strip()
-        stable_svg_id = _text(
-            next_feature.get("stable_feature_id")
-            or next_feature.get("stable_svg_id")
-            or next_feature.get("stableFeatureSvgId")
-        ).strip()
-        record_index = next(
-            (
-                parsed
-                for value in (
-                    next_feature.get("record_idx"),
-                    next_feature.get("record_index"),
-                    next_feature.get("recordIndex"),
-                )
-                if (parsed := _int_or_none(value)) is not None
-            ),
-            None,
+        for key in _ORTHOGROUP_DERIVED_KEYS:
+            next_feature.pop(key, None)
+        record_index, record_valid = _consistent_nonnegative_alias(
+            next_feature,
+            _RECORD_INDEX_KEYS,
         )
-        entry = None
-        if svg_id and record_index is not None:
-            entry = feature_index.get((record_index, svg_id))
-        if entry is None and stable_svg_id and record_index is not None:
-            entry = feature_index.get((record_index, stable_svg_id))
-        if entry is None and svg_id:
-            entry = feature_index_by_svg_id.get(svg_id)
-        if entry is None and stable_svg_id:
-            entry = feature_index_by_svg_id.get(stable_svg_id)
-        if entry is not None:
-            next_feature.update(entry)
+        source_feature_index, source_index_valid = (
+            _consistent_nonnegative_alias(next_feature, _FEATURE_INDEX_KEYS)
+        )
+        feature_ids, rendered_ids, feature_ids_valid = _feature_identity_aliases(
+            next_feature
+        )
+        canonical, canonical_valid = _canonical_identity(next_feature)
+        has_record_scoped_identity = bool(
+            feature_ids or rendered_ids or source_feature_index is not None
+        )
+        if (
+            not record_valid
+            or not source_index_valid
+            or not feature_ids_valid
+            or not canonical_valid
+            or (has_record_scoped_identity and record_index is None)
+            or (not has_record_scoped_identity and canonical is None)
+        ):
+            enriched.append(next_feature)
+            continue
+
+        lookup_keys = [
+            ("record-id", record_index, feature_id)
+            for feature_id in feature_ids
+        ]
+        if record_index in records_with_rendered_ids:
+            lookup_keys.extend(
+                ("record-rendered-id", record_index, rendered_id)
+                for rendered_id in rendered_ids
+            )
+        if source_feature_index is not None:
+            lookup_keys.append(
+                ("record-feature-index", record_index, source_feature_index)
+            )
+        if canonical is not None:
+            lookup_keys.append(("canonical", *canonical))
+        matches: dict[int, dict[str, object]] = {}
+        complete = bool(lookup_keys)
+        for key in lookup_keys:
+            candidates = feature_index.get(key, [])
+            if len(candidates) != 1:
+                complete = False
+                break
+            matches[id(candidates[0])] = candidates[0]
+        if complete and len(matches) == 1:
+            next_feature.update(next(iter(matches.values())))
         enriched.append(next_feature)
     return enriched
 

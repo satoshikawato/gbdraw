@@ -53,6 +53,11 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    feature_identity_path = tmp_path / "feature-identity.mjs"
+    feature_identity_path.write_text(
+        (WEB_ROOT / "js" / "services" / "feature-identity.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     source_path = WEB_ROOT / "js" / "app" / "pairwise-match-popup.js"
     module_path = tmp_path / "pairwise-match-popup.mjs"
     module_path.write_text(
@@ -60,13 +65,26 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./feature-utils.js", "./feature-utils.mjs")
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
         .replace("./match-sequences.js", "./match-sequences.mjs")
-        .replace("./losat-normalization.js", "./losat-normalization.mjs"),
+        .replace("./losat-normalization.js", "./losat-normalization.mjs")
+        .replace("../services/feature-identity.js", "./feature-identity.mjs")
+        + "\nexport { buildFallbackOrthogroup, featureOrthogroupId, getFeatureForMember, getRenderedFeatureForMember, getGroupMemberForFeatureSvgId, getOrthogroupById, getOrthogroupForMatch, integerAttr };\n",
         encoding="utf-8",
     )
     check_path = tmp_path / "check-collinearity-popup.mjs"
     check_path.write_text(
         f"""
-        import {{ buildPairwiseMatchHoverRows, buildPairwiseMatchPayload }} from {module_path.as_uri()!r};
+        import {{
+          buildFallbackOrthogroup,
+          buildPairwiseMatchHoverRows,
+          buildPairwiseMatchPayload,
+          featureOrthogroupId,
+          getFeatureForMember,
+          getRenderedFeatureForMember,
+          getGroupMemberForFeatureSvgId,
+          getOrthogroupById,
+          getOrthogroupForMatch,
+          integerAttr
+        }} from {module_path.as_uri()!r};
 
         const assert = (condition, message) => {{
           if (!condition) throw new Error(message);
@@ -89,12 +107,16 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           'data-orthogroup-id': 'og_1;og_2',
           'data-query-record-id': 'record_a',
           'data-subject-record-id': 'record_b',
+          'data-query-record-index': '0',
+          'data-subject-record-index': '1',
           'data-qstart': '10',
           'data-qend': '80',
           'data-sstart': '100',
           'data-send': '180',
           'data-query-feature-svg-id': 'fq1;fq2',
           'data-subject-feature-svg-id': 'fs1;fs2',
+          'data-query-stable-feature-svg-id': 'fq1;fq2',
+          'data-subject-stable-feature-svg-id': 'fs1;fs2',
           'data-query-protein-id': 'p_record_a_10_40_1_abcdef123456;p_record_a_50_80_1_123456abcdef',
           'data-subject-protein-id': 'gbd_r0002_cds000001;gbd_r0002_cds000002',
           'data-query-unit-id': 'gbd_r0001_unit000001;gbd_r0001_unit000002',
@@ -112,7 +134,9 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         }};
         const featureLookup = new Map([
           ['fq1', {{
+            fileIdx: 0,
             svg_id: 'fq1',
+            stable_feature_id: 'fq1',
             record_id: 'record_a',
             proteinId: 'p_record_a_10_40_1_abcdef123456',
             sourceProteinId: 'WP_000001.1',
@@ -120,46 +144,444 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
             product: 'query product 1'
           }}],
           ['fq2', {{
+            fileIdx: 0,
             svg_id: 'fq2',
+            stable_feature_id: 'fq2',
             record_id: 'record_a',
             proteinId: 'p_record_a_50_80_1_123456abcdef',
             qualifiers: {{ protein_id: ['WP_000002.1'] }},
             product: 'query product 2'
           }}],
           ['fs1', {{
+            fileIdx: 1,
             svg_id: 'fs1',
+            stable_feature_id: 'fs1',
             record_id: 'record_b',
             proteinId: 'gbd_r0002_cds000001',
             locus_tag: 'SLOCUS_001',
             product: 'subject product'
           }}],
           ['fs2', {{
+            fileIdx: 1,
             svg_id: 'fs2',
+            stable_feature_id: 'fs2',
             record_id: 'record_b',
             proteinId: 'gbd_r0002_cds000002',
             locus_tag: 'SLOCUS_002',
             product: 'subject product 2'
+          }}],
+          ['display-space-rendered-id', {{
+            fileIdx: 4,
+            feature_index: 25,
+            recordKey: 'record-key-e',
+            biologicalFeatureId: 'bio-e',
+            svg_id: 'display-space-rendered-id',
+            stable_feature_id: 'source-space-stable-id',
+            record_id: 'record_e',
+            sourceProteinId: 'CAG34720.1'
           }}]
         ]);
 
-        const payload = buildPairwiseMatchPayload(element, {{
+        const popupOptions = {{
           featureLookup,
+          sourceFeatures: [{{
+            fileIdx: 4,
+            feature_index: 25,
+            recordKey: 'record-key-e',
+            biologicalFeatureId: 'bio-e',
+            record_id: 'record_e',
+            stable_feature_id: 'source-space-stable-id',
+            source_protein_id: 'CAG34720.1',
+            qualifiers: {{ protein_id: ['CAG34720.1'] }},
+            nucleotide_sequence: 'ATGGGGTAA',
+            amino_acid_sequence: 'MG'
+          }}],
           orthogroups: [{{
             id: 'og_1',
             name: 'orthogroup display',
             members: [
-              {{ recordId: 'record_a', featureSvgId: 'fq1', sourceProteinId: 'WP_000001.1' }},
-              {{ recordId: 'record_b', featureSvgId: 'fs1', proteinId: 'gbd_r0002_cds000001', locusTag: 'SLOCUS_001' }}
+              {{ recordIndex: 0, recordId: 'record_a', featureSvgId: 'fq1', sourceProteinId: 'WP_000001.1' }},
+              {{ recordIndex: 1, recordId: 'record_b', featureSvgId: 'fs1', proteinId: 'gbd_r0002_cds000001', locusTag: 'SLOCUS_001' }},
+              {{
+                recordId: 'record_e',
+                recordIndex: 4,
+                featureIndex: 25,
+                recordKey: 'record-key-e',
+                biologicalFeatureId: 'bio-e',
+                featureSvgId: 'source-space-stable-id',
+                stableFeatureSvgId: 'source-space-stable-id',
+                renderedFeatureSvgId: 'display-space-rendered-id',
+                sourceProteinId: 'CAG34720.1'
+              }}
             ]
           }}, {{
             id: 'og_2',
             name: 'orthogroup display 2',
             members: [
-              {{ recordId: 'record_a', featureSvgId: 'fq2', sourceProteinId: 'WP_000002.1' }},
-              {{ recordId: 'record_b', featureSvgId: 'fs2', proteinId: 'gbd_r0002_cds000002', locusTag: 'SLOCUS_002' }}
+              {{ recordIndex: 0, recordId: 'record_a', featureSvgId: 'fq2', sourceProteinId: 'WP_000002.1' }},
+              {{ recordIndex: 1, recordId: 'record_b', featureSvgId: 'fs2', proteinId: 'gbd_r0002_cds000002', locusTag: 'SLOCUS_002' }}
             ]
           }}]
+        }};
+        const conflictingGroupAliases = {{
+          id: 'og_conflict_a',
+          orthogroupId: 'og_conflict_b',
+          members: [{{ recordIndex: 0, stableFeatureSvgId: 'fq1' }}]
+        }};
+        assert(
+          getOrthogroupById([conflictingGroupAliases], 'og_conflict_a') === null,
+          'conflicting group aliases resolved by first value'
+        );
+        assert(
+          getOrthogroupById([
+            {{ id: 'og_duplicate' }},
+            {{ orthogroupId: 'og_duplicate' }}
+          ], 'og_duplicate') === null,
+          'duplicate group IDs resolved by first group'
+        );
+        const scopedGlobalGroup = {{ id: 'og_scoped', scope: 'global' }};
+        const scopedLocalGroup = {{
+          id: 'og_scoped',
+          scope: 'cross_record',
+          presentationScope: 'adjacent_local'
+        }};
+        assert(
+          getOrthogroupById(
+            [scopedGlobalGroup, scopedLocalGroup],
+            'og_scoped',
+            'adjacent_local'
+          ) === scopedLocalGroup,
+          'local group did not resolve inside its metadata namespace'
+        );
+        assert(
+          getOrthogroupById(
+            [scopedGlobalGroup, scopedLocalGroup],
+            'og_scoped',
+            'global'
+          ) === scopedGlobalGroup,
+          'global group did not resolve inside its metadata namespace'
+        );
+        assert(
+          getOrthogroupById(
+            [scopedLocalGroup, {{ ...scopedLocalGroup }}],
+            'og_scoped',
+            'adjacent_local'
+          ) === null,
+          'duplicate local group IDs did not fail closed'
+        );
+        assert(
+          getOrthogroupById([{{
+            ...scopedLocalGroup,
+            collinearGroupScope: 'global_collinear'
+          }}], 'og_scoped', 'adjacent_local') === null,
+          'conflicting presentation-scope aliases did not fail closed'
+        );
+        assert(
+          getOrthogroupForMatch([conflictingGroupAliases], {{
+            orthogroupId: 'og_conflict_a',
+            queryFeatureSvgId: 'fq1',
+            featureLookup
+          }}) === null,
+          'explicit conflicting group ID fell back to member lookup'
+        );
+        const conflictingFeatureGroupAliases = {{
+          ...featureLookup.get('fq1'),
+          orthogroupId: 'og_conflict_a',
+          orthogroup_id: 'og_conflict_b'
+        }};
+        assert(
+          featureOrthogroupId(conflictingFeatureGroupAliases) === '',
+          'conflicting feature group aliases resolved by first value'
+        );
+        assert(
+          buildFallbackOrthogroup({{
+            orthogroupId: 'og_conflict_a',
+            queryFeature: conflictingFeatureGroupAliases,
+            subjectFeature: null,
+            featureLookup: new Map([['fq1', conflictingFeatureGroupAliases]])
+          }}) === null,
+          'conflicting feature group aliases built a fallback group'
+        );
+        const strictIntegerElement = (value) => ({{
+          getAttribute: (name) => name === 'data-index' ? value : ''
         }});
+        assert(integerAttr(strictIntegerElement('4'), 'data-index') === 4, 'integerAttr rejected 4');
+        for (const invalidInteger of [
+          '-1',
+          '4.5',
+          '9007199254740992'
+        ]) {{
+          assert(
+            integerAttr(strictIntegerElement(invalidInteger), 'data-index') === null,
+            `integerAttr accepted ${{invalidInteger}}`
+          );
+        }}
+
+        const invalidSequenceAttrs = new Map(Object.entries({{
+          'data-gbdraw-pairwise-match-id': 'invalid-sequence-identity',
+          'data-match-kind': 'pairwise',
+          'data-query-record-id': 'recA',
+          'data-query-record-index': '-1',
+          'data-qstart': '1',
+          'data-qend': '4'
+        }}));
+        let invalidQueryResolverCalls = 0;
+        const invalidSequencePayload = buildPairwiseMatchPayload({{
+          style: {{}},
+          getAttribute: (name) => invalidSequenceAttrs.get(name) || ''
+        }}, {{
+          resolveSequenceSource: (_sourceKey, recordId) => {{
+            if (recordId !== 'recA') return null;
+            invalidQueryResolverCalls += 1;
+            return {{
+              key: 'linear:record:0',
+              recordId: 'recA',
+              sequence: 'AAAA',
+              origin: 'linear-record',
+              recordIndex: 0
+            }};
+          }}
+        }});
+        assert(
+          invalidSequencePayload.sequenceBundle.entries[0].available === false,
+          JSON.stringify(invalidSequencePayload.sequenceBundle.entries[0])
+        );
+        assert(
+          invalidQueryResolverCalls === 0,
+          'invalid record index reached the sequence resolver'
+        );
+
+        const endpointPayload = (role, overrides = {{}}) => {{
+          const roleTitle = role === 'query' ? 'Query' : 'Subject';
+          const endpointAttrs = new Map(Object.entries({{
+            'data-gbdraw-pairwise-match-id': `endpoint-${{role}}`,
+            'data-match-kind': 'pairwise',
+            [`data-${{role}}-record-id`]: 'record_e',
+            [`data-${{role}}-record-index`]: '4',
+            [`data-${{role}}-feature-svg-id`]: 'display-space-rendered-id',
+            [`data-${{role}}-stable-feature-svg-id`]: 'source-space-stable-id',
+            [`data-${{role}}-feature-index`]: '25',
+            ...(role === 'query'
+              ? {{ 'data-qstart': '1', 'data-qend': '9' }}
+              : {{ 'data-sstart': '1', 'data-send': '9' }}),
+            ...overrides
+          }}));
+          const endpointResult = buildPairwiseMatchPayload({{
+            style: {{}},
+            getAttribute: (name) => endpointAttrs.get(name) || ''
+          }}, {{ featureLookup, sourceFeatures: popupOptions.sourceFeatures }});
+          return endpointResult.sections.find((section) => section.title === roleTitle)?.featureRows?.[0];
+        }};
+        for (const role of ['query', 'subject']) {{
+          const validEndpoint = endpointPayload(role);
+          assert(validEndpoint?.canOpen, `valid ${{role}} endpoint did not open`);
+          assert(
+            validEndpoint.feature?.svg_id === 'display-space-rendered-id',
+            `valid ${{role}} endpoint resolved incorrectly`
+          );
+          const prefix = `data-${{role}}`;
+          for (const invalidAttrs of [
+            {{
+              [`${{prefix}}-record-index`]: '',
+              [`${{prefix}}-stable-feature-svg-id`]: '',
+              [`${{prefix}}-feature-index`]: ''
+            }},
+            {{
+              [`${{prefix}}-stable-feature-svg-id`]: '',
+              [`${{prefix}}-feature-index`]: ''
+            }},
+            {{ [`${{prefix}}-stable-feature-svg-id`]: 'wrong-stable-id' }},
+            {{ [`${{prefix}}-feature-index`]: '24' }},
+            {{ [`${{prefix}}-record-index`]: '3' }},
+            {{ [`${{prefix}}-record-index`]: '-1' }},
+            {{ [`${{prefix}}-record-index`]: '4.5' }},
+            {{ [`${{prefix}}-record-index`]: '9007199254740992' }},
+            {{ [`${{prefix}}-feature-index`]: '-1' }},
+            {{ [`${{prefix}}-feature-index`]: '25.5' }},
+            {{ [`${{prefix}}-feature-index`]: '9007199254740992' }}
+          ]) {{
+            const rejectedEndpoint = endpointPayload(role, invalidAttrs);
+            assert(
+              rejectedEndpoint && !rejectedEndpoint.canOpen && rejectedEndpoint.feature === null,
+              `invalid ${{role}} endpoint opened: ${{JSON.stringify(invalidAttrs)}}`
+            );
+          }}
+        }}
+        const canonicalMember = popupOptions.orthogroups[0].members[2];
+        const canonicalSource = popupOptions.sourceFeatures[0];
+        assert(
+          getFeatureForMember(canonicalMember, featureLookup, popupOptions.sourceFeatures) === canonicalSource,
+          'complete canonical/source identity did not resolve'
+        );
+        assert(
+          getFeatureForMember({{
+            recordKey: 'record-key-e',
+            biologicalFeatureId: 'bio-e'
+          }}, featureLookup, popupOptions.sourceFeatures) === canonicalSource,
+          'schema-3 canonical identity did not resolve'
+        );
+        const sourceIdentityMember = {{
+          recordIndex: 4,
+          featureIndex: 25,
+          stableFeatureSvgId: 'source-space-stable-id',
+          renderedFeatureSvgId: 'display-space-rendered-id',
+          sourceProteinId: 'CAG34720.1'
+        }};
+        assert(
+          getFeatureForMember(
+            sourceIdentityMember,
+            featureLookup,
+            popupOptions.sourceFeatures
+          ) === canonicalSource,
+          'record-scoped LOSATP source identity did not join to the compact catalog feature'
+        );
+        for (const invalidMember of [
+          {{ stableFeatureSvgId: 'source-space-stable-id' }},
+          {{ recordIndex: -1, stableFeatureSvgId: 'source-space-stable-id' }},
+          {{ recordIndex: '4.5', stableFeatureSvgId: 'source-space-stable-id' }},
+          {{ recordIndex: 4, record_index: 3, stableFeatureSvgId: 'source-space-stable-id' }},
+          {{
+            recordIndex: 4,
+            stableFeatureSvgId: 'source-space-stable-id',
+            featureSvgId: 'wrong-stable-id'
+          }},
+          {{
+            recordKey: 'record-key-e',
+            biologicalFeatureId: 'wrong-bio-id'
+          }},
+          {{
+            recordIndex: 4,
+            featureIndex: 24,
+            stableFeatureSvgId: 'source-space-stable-id'
+          }}
+        ]) {{
+          assert(
+            getFeatureForMember(invalidMember, featureLookup, popupOptions.sourceFeatures) === null,
+            `invalid member identity resolved: ${{JSON.stringify(invalidMember)}}`
+          );
+        }}
+        assert(
+          getFeatureForMember(
+            canonicalMember,
+            featureLookup,
+            [canonicalSource, {{ ...canonicalSource }}]
+          ) === null,
+          'duplicate biological candidates did not fail closed'
+        );
+        assert(
+          getFeatureForMember(
+            {{ ...canonicalMember, renderedFeatureSvgId: 'missing-rendered-id' }},
+            featureLookup,
+            popupOptions.sourceFeatures
+          ) === null,
+          'unknown rendered alias was ignored during source resolution'
+        );
+        assert(
+          getFeatureForMember(
+            {{ ...canonicalMember, renderedFeatureSvgId: '' }},
+            featureLookup,
+            [{{ ...canonicalSource, rendered_svg_id: 'missing-rendered-id' }}]
+          ) === null,
+          'unknown source rendered alias was ignored'
+        );
+        assert(
+          getRenderedFeatureForMember(canonicalMember, canonicalSource, featureLookup)?.svg_id ===
+            'display-space-rendered-id',
+          'canonical rendered endpoint did not resolve'
+        );
+        const duplicateLocationSources = [4, 7].map((sourceFeatureIndex) => ({{
+          fileIdx: 0,
+          sourceFeatureIndex,
+          stable_feature_id: 'same-location-stable-id',
+          record_id: 'same-location-record'
+        }}));
+        const duplicateLocationLookup = new Map([4, 7].map((sourceFeatureIndex) => [
+          `same-location-rendered-${{sourceFeatureIndex}}`,
+          {{
+            fileIdx: 0,
+            sourceFeatureIndex,
+            stable_feature_id: 'same-location-stable-id',
+            svg_id: `same-location-rendered-${{sourceFeatureIndex}}`,
+            record_id: 'same-location-record'
+          }}
+        ]));
+        const duplicateLocationMembers = [4, 7].map((featureIndex) => ({{
+          recordIndex: 0,
+          featureIndex,
+          stableFeatureSvgId: 'same-location-stable-id',
+          renderedFeatureSvgId: `same-location-rendered-${{featureIndex}}`
+        }}));
+        duplicateLocationMembers.forEach((member, index) => {{
+          assert(
+            getFeatureForMember(
+              member,
+              duplicateLocationLookup,
+              duplicateLocationSources
+            ) === duplicateLocationSources[index],
+            'sourceFeatureIndex did not survive duplicate-location source resolution'
+          );
+          assert(
+            getRenderedFeatureForMember(
+              member,
+              duplicateLocationSources[index],
+              duplicateLocationLookup
+            )?.svg_id === `same-location-rendered-${{member.featureIndex}}`,
+            'sourceFeatureIndex did not resolve the exact duplicate-location DOM feature'
+          );
+        }});
+        assert(
+          getFeatureForMember(
+            {{ recordIndex: 0, stableFeatureSvgId: 'same-location-stable-id' }},
+            duplicateLocationLookup,
+            duplicateLocationSources
+          ) === null,
+          'duplicate-location member without a source index did not fail closed'
+        );
+        assert(
+          getRenderedFeatureForMember(
+            {{ ...canonicalMember, renderedFeatureSvgId: 'missing-rendered-id' }},
+            canonicalSource,
+            featureLookup
+          ) === null,
+          'unknown rendered alias was ignored'
+        );
+        const duplicateRenderedLookup = new Map(featureLookup);
+        duplicateRenderedLookup.set('duplicate-rendered-object', {{
+          ...featureLookup.get('display-space-rendered-id')
+        }});
+        assert(
+          getRenderedFeatureForMember(canonicalMember, canonicalSource, duplicateRenderedLookup) === null,
+          'duplicate rendered candidates did not fail closed'
+        );
+        const incompleteRenderedLookup = new Map(featureLookup);
+        incompleteRenderedLookup.set('display-space-rendered-id', {{
+          svg_id: 'display-space-rendered-id',
+          recordKey: 'record-key-e',
+          biologicalFeatureId: 'bio-e'
+        }});
+        assert(
+          getRenderedFeatureForMember(canonicalMember, canonicalSource, incompleteRenderedLookup) === null,
+          'rendered endpoint without record/stable/source agreement resolved'
+        );
+        assert(
+          getGroupMemberForFeatureSvgId(
+            popupOptions.orthogroups[0],
+            'display-space-rendered-id',
+            featureLookup
+          ) === canonicalMember,
+          'rendered endpoint did not map to its unique member'
+        );
+        assert(
+          getGroupMemberForFeatureSvgId(
+            {{
+              members: [canonicalMember, {{ ...canonicalMember }}]
+            }},
+            'display-space-rendered-id',
+            featureLookup
+          ) === null,
+          'duplicate group members did not fail closed'
+        );
+        const payload = buildPairwiseMatchPayload(element, popupOptions);
 
         const sectionTitles = payload.sections.map((section) => section.title);
         assert(!sectionTitles.includes('Alignment'), `Alignment section leaked: ${{JSON.stringify(sectionTitles)}}`);
@@ -199,9 +621,11 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           'data-match-kind': 'collinear',
           'data-collinearity-block-id': 'block_0002',
           'data-query-record-id': 'AP027131.1',
+          'data-query-record-index': '0',
           'data-qstart': '22946',
           'data-qend': '24703',
           'data-query-feature-svg-id': 'fq_dup',
+          'data-query-stable-feature-svg-id': 'fq_dup',
           'data-query-protein-id': 'BDV02135.1',
           'data-query-locus-id': 'HPAVJP_0240',
           'data-query-display-name': 'HPAVJP_0240'
@@ -211,7 +635,9 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           getAttribute: (name) => duplicateAttrs.get(name) || ''
         }}, {{
           featureLookup: new Map([['fq_dup', {{
+            fileIdx: 0,
             svg_id: 'fq_dup',
+            stable_feature_id: 'fq_dup',
             record_id: 'AP027131.1',
             start: 22945,
             end: 24703,
@@ -258,6 +684,26 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(payload.blockOrthogroups[0].queryMember === 'WP_000001.1', JSON.stringify(payload.blockOrthogroups[0]));
         assert(payload.blockOrthogroups[0].subjectMember === 'SLOCUS_001', JSON.stringify(payload.blockOrthogroups[0]));
         assert(payload.blockOrthogroups[0].detailRows.some((row) => row.label === 'Similarity group ID' && row.value === 'og_1'), JSON.stringify(payload.blockOrthogroups[0].detailRows));
+        const reverseMember = payload.blockOrthogroups[0].memberRows.find((row) => row.proteinId === 'CAG34720.1');
+        assert(reverseMember && reverseMember.aaFasta.includes('MG'), JSON.stringify(payload.blockOrthogroups[0].memberRows));
+        assert(reverseMember.canOpen, JSON.stringify(reverseMember));
+        assert(reverseMember.feature.svg_id === 'display-space-rendered-id', JSON.stringify(reverseMember));
+        assert(payload.blockOrthogroups[0].memberAaFasta.includes('>CAG34720.1'), payload.blockOrthogroups[0].memberAaFasta);
+        featureLookup.get('display-space-rendered-id').stable_feature_id = 'wrong-source-id';
+        const mismatchedPayload = buildPairwiseMatchPayload(element, popupOptions);
+        const mismatchedReverseMember = mismatchedPayload.blockOrthogroups[0].memberRows
+          .find((row) => row.proteinId === 'CAG34720.1');
+        assert(!mismatchedReverseMember.canOpen, JSON.stringify(mismatchedReverseMember));
+        featureLookup.get('display-space-rendered-id').stable_feature_id = 'source-space-stable-id';
+        featureLookup.set('source-space-stable-id', popupOptions.sourceFeatures[0]);
+        popupOptions.orthogroups[0].members[2].recordIndex = 3;
+        const wrongRecordPayload = buildPairwiseMatchPayload(element, popupOptions);
+        const wrongRecordReverseMember = wrongRecordPayload.blockOrthogroups[0].memberRows
+          .find((row) => row.proteinId === 'CAG34720.1');
+        assert(!wrongRecordReverseMember.aaFasta, JSON.stringify(wrongRecordReverseMember));
+        assert(!wrongRecordReverseMember.canOpen, JSON.stringify(wrongRecordReverseMember));
+        popupOptions.orthogroups[0].members[2].recordIndex = 4;
+        featureLookup.delete('source-space-stable-id');
         assert(payload.blockOrthogroups[1].id === 'og_2', JSON.stringify(payload.blockOrthogroups));
         assert(payload.blockOrthogroups[1].queryMember === 'WP_000002.1', JSON.stringify(payload.blockOrthogroups[1]));
         assert(payload.blockOrthogroups[1].subjectMember === 'SLOCUS_002', JSON.stringify(payload.blockOrthogroups[1]));

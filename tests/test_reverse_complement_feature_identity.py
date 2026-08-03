@@ -6,15 +6,19 @@ from pathlib import Path
 
 from Bio import SeqIO
 from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.protein_colinearity import (
     OrthogroupMember,
     OrthogroupResult,
     extract_cds_proteins,
+    extract_protein_identity_manifest,
 )
+from gbdraw.core.record_metadata import _source_feature_index
 from gbdraw.features.ids import compute_feature_hash, make_linear_rendered_feature_id
 from gbdraw.io.record_select import reverse_records
+from gbdraw.io.regions import apply_region_specs, parse_region_specs
 from gbdraw.render.interactive_context import build_interactive_svg_context
 from gbdraw.render.interactive_svg import enrich_svg
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
@@ -26,9 +30,7 @@ BIOLOGICAL_FEATURE_ID = "feb87ab70"
 PROCESSED_FEATURE_ID = "f20e4885e"
 
 
-def _bgc_record_five_render_input():
-    """Reproduce the saved BGC record-5 source orientation and render reversal."""
-
+def _bgc_record_five_saved_source():
     downloaded = SeqIO.read(INPUTS / "BGC0000713.gbk", "genbank")
     saved_source = downloaded.reverse_complement(
         id=True,
@@ -41,7 +43,13 @@ def _bgc_record_five_render_input():
     )
     saved_source.annotations.pop("gbdraw_coord_base", None)
     saved_source.annotations.pop("gbdraw_coord_step", None)
-    return reverse_records([saved_source], True)[0]
+    return saved_source
+
+
+def _bgc_record_five_render_input():
+    """Reproduce the saved BGC record-5 source orientation and render reversal."""
+
+    return reverse_records([_bgc_record_five_saved_source()], True)[0]
 
 
 def _target_feature(record):
@@ -54,12 +62,14 @@ def _target_feature(record):
 
 def _orthogroups_for_target(record) -> OrthogroupResult:
     feature = _target_feature(record)
+    source_feature_index = _source_feature_index(feature)
+    assert source_feature_index is not None
     member = OrthogroupMember(
         orthogroup_id="og_1",
         protein_id="protein-1",
         source_protein_id=SOURCE_PROTEIN_ID,
         record_index=4,
-        feature_index=record.features.index(feature),
+        feature_index=source_feature_index,
         record_id=record.id,
         label=SOURCE_PROTEIN_ID,
         start=int(feature.location.start),
@@ -135,7 +145,222 @@ def test_reverse_complement_protein_extraction_uses_biological_hash_parts() -> N
     assert protein.feature_hash_end == 8157
     assert protein.feature_hash_strand == 1
     assert protein.feature_hash_parts == ((7134, 8157, 1),)
+    assert protein.view_feature_svg_id == PROCESSED_FEATURE_ID
     assert (protein.start, protein.end, protein.strand) == (23735, 24758, -1)
+
+
+def test_web_losatp_typed_result_separates_stable_view_and_dom_ids() -> None:
+    helpers_js = (
+        Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "app" / "python-helpers.js"
+    ).read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    saved_source = _bgc_record_five_saved_source()
+    proteins = extract_protein_identity_manifest(
+        [saved_source],
+        record_instance_keys=["record-5"],
+        record_index_offset=4,
+    )
+    protein = next(
+        item
+        for item in proteins.proteins_by_record[0]
+        if item.source_protein_id == SOURCE_PROTEIN_ID
+    )
+    raw_data = namespace["_serialize_cds_protein"](protein, saved_source)
+    view_transform = {"length": len(saved_source), "reverse": True}
+    display_start, display_end, display_strand = namespace["_web_transform_cds_span"](
+        raw_data["start"],
+        raw_data["end"],
+        raw_data["strand"],
+        view_transform,
+    )
+    display_feature_id = namespace["_display_feature_svg_id_from_data"](
+        raw_data,
+        display_start,
+        display_end,
+        display_strand,
+        view_transform,
+    )
+    assert raw_data["feature_svg_id"] == BIOLOGICAL_FEATURE_ID
+    assert display_feature_id == PROCESSED_FEATURE_ID
+
+    other_runtime_handle = "h_" + ("a" * 26)
+    target_runtime_handle = protein.protein_id
+    raw_data["source_protein_id"] = "PUBLIC_ID_MUST_NOT_JOIN"
+    other_data = {
+        **raw_data,
+        "protein_id": other_runtime_handle,
+        "runtime_handle": other_runtime_handle,
+        "record_index": 3,
+        "feature_svg_id": "other-stable-id",
+        "source_protein_id": "OTHER_PUBLIC_ID_MUST_NOT_JOIN",
+    }
+    forward_hit = (
+        f"{other_runtime_handle}\t{target_runtime_handle}"
+        "\t99\t340\t0\t0\t1\t340\t1\t340\t1e-20\t200\n"
+    )
+    reverse_hit = (
+        f"{target_runtime_handle}\t{other_runtime_handle}"
+        "\t99\t340\t0\t0\t1\t340\t1\t340\t1e-20\t200\n"
+    )
+    payload = {
+        "records": [
+            {
+                "recordIndex": 3,
+                "recordId": "other-record",
+                "proteinMap": {other_runtime_handle: other_data},
+                "proteinCacheKey": "other-record-cache",
+                "viewTransform": {"length": len(saved_source), "reverse": False},
+            },
+            {
+                "recordIndex": 4,
+                "recordId": saved_source.id,
+                "proteinMap": {target_runtime_handle: raw_data},
+                "proteinCacheKey": "target-record-cache",
+                "viewTransform": view_transform,
+            },
+        ],
+        "pairs": [
+            {
+                "pairIndex": 3,
+                "queryIndex": 3,
+                "subjectIndex": 4,
+                "cacheKey": "forward-cache",
+                "blastText": forward_hit,
+            },
+            {
+                "pairIndex": 3,
+                "queryIndex": 4,
+                "subjectIndex": 3,
+                "cacheKey": "reverse-cache",
+                "blastText": reverse_hit,
+            },
+        ],
+    }
+    result = json.loads(
+        str(
+            namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+                json.dumps(payload),
+                "orthogroup",
+                5,
+                50,
+                "1e-5",
+                0,
+                0,
+                orthogroup_membership_mode="rbh",
+            )
+        )
+    )
+
+    assert "error" not in result
+    typed_fields = result["orthogroupResult"]["value"]["fields"]
+    typed_members = next(iter(typed_fields["orthogroups"].values()))
+    target_member = next(
+        member["fields"]
+        for member in typed_members
+        if member["fields"]["proteinId"] == target_runtime_handle
+    )
+    assert target_member["featureSvgId"] == BIOLOGICAL_FEATURE_ID
+    assert target_member["sourceProteinId"] == "PUBLIC_ID_MUST_NOT_JOIN"
+    target_row = next(
+        row
+        for row in result["pairs"][0]["rows"]
+        if row["subject_protein_id"] == target_runtime_handle
+    )
+    assert target_row["subject_feature_svg_id"] == BIOLOGICAL_FEATURE_ID
+    assert target_row["subject_view_feature_svg_id"] == PROCESSED_FEATURE_ID
+    assert "orthogroups" not in result
+
+
+def test_web_helper_uses_cropped_view_parts_for_forward_and_reverse_ids() -> None:
+    helpers_js = (
+        Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "app" / "python-helpers.js"
+    ).read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    source = SeqRecord(Seq("A" * 500), id="cropped-record")
+    source.features = [
+        SeqFeature(
+            FeatureLocation(120, 180, strand=1),
+            type="CDS",
+            qualifiers={
+                "protein_id": ["CROP_001"],
+                "translation": ["M" * 20],
+            },
+        )
+    ]
+    cropped = apply_region_specs(
+        [source],
+        parse_region_specs(["101-400"]),
+    )[0]
+    extracted = extract_protein_identity_manifest(
+        [cropped],
+        record_instance_keys=["cropped-record-instance"],
+    )
+    protein = extracted.proteins_by_record[0][0]
+    view_hash_parts_index = namespace["_web_feature_view_hash_parts_index"](
+        cropped
+    )
+    namespace["_web_feature_view_hash_parts"] = lambda *_args: (_ for _ in ()).throw(
+        AssertionError("preindexed serialization rescanned the record")
+    )
+    raw_data = namespace["_serialize_cds_protein"](
+        protein,
+        cropped,
+        view_hash_parts_index,
+    )
+
+    forward_payload = extract_features_from_records_payload(
+        [cropped],
+        selected_features=["CDS"],
+        linear_rendered_feature_ids=True,
+        include_biological_features=True,
+    )
+    reversed_record = reverse_records([cropped], True)[0]
+    reverse_payload = extract_features_from_records_payload(
+        [reversed_record],
+        selected_features=["CDS"],
+        linear_rendered_feature_ids=True,
+        include_biological_features=True,
+    )
+    forward_feature = forward_payload["features"][0]
+    reverse_feature = reverse_payload["features"][0]
+
+    forward_transform = {"length": len(cropped), "reverse": False}
+    reverse_transform = {"length": len(cropped), "reverse": True}
+    forward_id = namespace["_display_feature_svg_id_from_data"](
+        raw_data,
+        raw_data["start"],
+        raw_data["end"],
+        raw_data["strand"],
+        forward_transform,
+    )
+    reverse_start, reverse_end, reverse_strand = namespace[
+        "_web_transform_cds_span"
+    ](
+        raw_data["start"],
+        raw_data["end"],
+        raw_data["strand"],
+        reverse_transform,
+    )
+    reverse_id = namespace["_display_feature_svg_id_from_data"](
+        raw_data,
+        reverse_start,
+        reverse_end,
+        reverse_strand,
+        reverse_transform,
+    )
+
+    assert raw_data["view_feature_hash_parts"] == [[20, 80, 1]]
+    assert forward_id == forward_feature["rendered_feature_svg_id"]
+    assert reverse_id == reverse_feature["rendered_feature_svg_id"]
+    assert forward_id != reverse_id
+    assert raw_data["feature_svg_id"] == forward_feature["stable_feature_id"]
+    assert raw_data["feature_svg_id"] == reverse_feature["stable_feature_id"]
 
 
 def test_interactive_svg_maps_biological_id_to_actual_reversed_dom_path() -> None:
@@ -164,6 +389,10 @@ def test_interactive_svg_maps_biological_id_to_actual_reversed_dom_path() -> Non
     assert context_feature["stable_feature_id"] == BIOLOGICAL_FEATURE_ID
     assert context_feature["rendered_feature_svg_id"] == rendered_id
     assert context.orthogroups[0]["members"][0]["featureSvgId"] == BIOLOGICAL_FEATURE_ID
+    catalog_member = context.orthogroups[0]["members"][0]
+    assert catalog_member["featureIndex"] == 25
+    catalog_member["proteinId"] = "PUBLIC_ID_MUST_NOT_JOIN"
+    catalog_member["sourceProteinId"] = "PUBLIC_ID_MUST_NOT_JOIN"
 
     source = f"""<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px"
       viewBox="0 0 100 80"><path id="{rendered_id}"

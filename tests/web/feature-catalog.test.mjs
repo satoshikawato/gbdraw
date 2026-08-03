@@ -28,7 +28,7 @@ const catalog = {
       biologicalFeatureId: 'source-feature-a',
       stableFeatureId: 'stable-source-a',
       record_idx: 0,
-      feature_index: 4,
+      sourceFeatureIndex: 4,
       record_id: 'duplicated-accession',
       type: 'CDS',
       start: 1,
@@ -78,6 +78,8 @@ test('schema-3 catalog validates and expands stable biological identities', () =
   assert.equal(state.extractedFeatures[0].svg_id, 'f0001');
   assert.equal(state.extractedFeatures[0].stable_svg_id, 'stable-source-a');
   assert.equal(state.biologicalFeatures[0].svg_id, 'stable-source-a');
+  assert.equal(state.biologicalFeatures[0].sourceFeatureIndex, 4);
+  assert.equal(state.biologicalFeatures[0].feature_index, 4);
   assert.equal(state.biologicalFeatures[0].nucleotide_sequence, 'CGGT');
   assert.equal(state.biologicalFeatures[0].protein_id, 'public-protein');
   assert.equal(state.biologicalFeatures[0].locus_tag, 'LOCUS_001');
@@ -102,6 +104,122 @@ test('schema-3 catalog validates and expands stable biological identities', () =
   assert.deepEqual(state.featureRecordIds, ['duplicated-accession']);
   assert.equal(state.orthogroups[0].members[0].renderedFeatureSvgId, 'f0001');
   assert.equal(state.orthogroups[0].members[0].proteinId, 'public-protein');
+  assert.equal(state.orthogroups[0].members[0].featureIndex, 4);
+});
+
+test('duplicate-location source indexes survive catalog validation and expansion', () => {
+  const duplicated = structuredClone(catalog);
+  const second = {
+    ...structuredClone(duplicated.items[0].biologicalFeatures[0]),
+    biologicalFeatureId: 'source-feature-b',
+    sourceFeatureIndex: 7
+  };
+  duplicated.items[0].biologicalFeatures.push(second);
+  duplicated.items[0].features.push({
+    svgId: 'f0002',
+    recordKey: 'record-instance-a',
+    biologicalFeatureId: 'source-feature-b',
+    fillColor: '#fedcba'
+  });
+  duplicated.items[0].orthogroups[0].members.push({
+    recordKey: 'record-instance-a',
+    biologicalFeatureId: 'source-feature-b'
+  });
+  duplicated.items[0].comparisonMatches.push({
+    id: 'duplicate-location-match',
+    queryFeatureReferences: [{
+      recordKey: 'record-instance-a',
+      biologicalFeatureId: 'source-feature-a'
+    }, {
+      recordKey: 'record-instance-a',
+      biologicalFeatureId: 'source-feature-b'
+    }]
+  });
+
+  const state = featureStateFromCatalog(
+    validateFeatureCatalog(duplicated, results)
+  );
+
+  assert.deepEqual(
+    state.biologicalFeatures.map((feature) => feature.sourceFeatureIndex),
+    [4, 7]
+  );
+  assert.deepEqual(
+    state.extractedFeatures.map((feature) => feature.feature_index),
+    [4, 7]
+  );
+  assert.deepEqual(
+    state.orthogroups[0].members.map((member) => member.featureIndex),
+    [4, 7]
+  );
+
+  const missingSourceIndex = structuredClone(duplicated);
+  delete missingSourceIndex.items[0].biologicalFeatures[1].sourceFeatureIndex;
+  assert.throws(
+    () => validateFeatureCatalog(missingSourceIndex, results),
+    /Reload the page and Generate again/
+  );
+});
+
+test('catalog rejects invalid or conflicting source feature indexes', () => {
+  for (const invalidValue of [-1, 0.5, '4', true]) {
+    const invalid = structuredClone(catalog);
+    invalid.items[0].biologicalFeatures[0].sourceFeatureIndex = invalidValue;
+    assert.throws(
+      () => validateFeatureCatalog(invalid, results),
+      /Reload the page and Generate again/
+    );
+  }
+  const conflicting = structuredClone(catalog);
+  conflicting.items[0].biologicalFeatures[0].feature_index = 7;
+  assert.throws(
+    () => validateFeatureCatalog(conflicting, results),
+    /Reload the page and Generate again/
+  );
+});
+
+test('orthogroup members do not select one of multiple rendered references', () => {
+  const repeatedRendering = structuredClone(catalog);
+  repeatedRendering.items[0].features.push({
+    svgId: 'f0001-alternate',
+    recordKey: 'record-instance-a',
+    biologicalFeatureId: 'source-feature-a',
+    fillColor: '#fedcba'
+  });
+
+  const state = featureStateFromCatalog(
+    validateFeatureCatalog(repeatedRendering, results)
+  );
+  const member = state.orthogroups[0].members[0];
+
+  assert.deepEqual(
+    state.extractedFeatures.map((feature) => feature.svg_id),
+    ['f0001', 'f0001-alternate']
+  );
+  assert.equal(member.recordKey, 'record-instance-a');
+  assert.equal(member.biologicalFeatureId, 'source-feature-a');
+  assert.equal(member.stableFeatureSvgId, 'stable-source-a');
+  assert.equal(member.renderedFeatureSvgId, '');
+});
+
+test('catalog presentation scope partitions local collinear groups without changing core scope', () => {
+  const localCatalog = structuredClone(catalog);
+  Object.assign(localCatalog.items[0].orthogroups[0], {
+    scope: 'cross_record',
+    presentationScope: 'adjacent_local',
+    collinearGroupScope: 'adjacent_local',
+    groupKind: 'collinear_gene_group'
+  });
+
+  const state = featureStateFromCatalog(
+    validateFeatureCatalog(localCatalog, results)
+  );
+
+  assert.deepEqual(state.orthogroups, []);
+  assert.equal(state.collinearGroups.length, 1);
+  assert.equal(state.collinearGroups[0].scope, 'cross_record');
+  assert.equal(state.collinearGroups[0].presentationScope, 'adjacent_local');
+  assert.equal(state.collinearGroups[0].members[0].proteinId, 'public-protein');
 });
 
 test('catalog result topology must match the logical Results exactly', () => {
@@ -127,6 +245,92 @@ test('catalog rejects dangling rendered and group references', () => {
   danglingMember.items[0].orthogroups[0].members[0].recordKey = 'other';
   assert.throws(
     () => validateFeatureCatalog(danglingMember, results),
+    /Reload the page and Generate again/
+  );
+
+  const danglingMatchGroup = structuredClone(catalog);
+  danglingMatchGroup.items[0].comparisonMatches.push({
+    id: 'match-with-missing-group',
+    orthogroup_ids: ['missing-group']
+  });
+  assert.throws(
+    () => validateFeatureCatalog(danglingMatchGroup, results),
+    /Reload the page and Generate again/
+  );
+});
+
+test('catalog validates ordered plural comparison endpoint references', () => {
+  const plural = structuredClone(catalog);
+  plural.items[0].features.push({
+    svgId: 'f0002',
+    recordKey: 'record-instance-a',
+    biologicalFeatureId: 'source-feature-b'
+  });
+  plural.items[0].biologicalFeatures.push({
+    recordKey: 'record-instance-a',
+    biologicalFeatureId: 'source-feature-b',
+    type: 'CDS',
+    start: 5,
+    end: 6,
+    strand: 1
+  });
+  plural.items[0].comparisonMatches.push({
+    id: 'plural-match',
+    queryFeatureReferences: [{
+      recordKey: 'record-instance-a',
+      biologicalFeatureId: 'source-feature-a'
+    }, {
+      recordKey: 'record-instance-a',
+      biologicalFeatureId: 'source-feature-b'
+    }]
+  });
+  validateFeatureCatalog(plural, results);
+
+  const duplicated = structuredClone(plural);
+  duplicated.items[0].comparisonMatches[0].queryFeatureReferences[1] = {
+    ...duplicated.items[0].comparisonMatches[0].queryFeatureReferences[0]
+  };
+  assert.throws(
+    () => validateFeatureCatalog(duplicated, results),
+    /Reload the page and Generate again/
+  );
+
+  const conflictingSingular = structuredClone(plural);
+  Object.assign(conflictingSingular.items[0].comparisonMatches[0], {
+    queryRecordKey: 'record-instance-a',
+    queryBiologicalFeatureId: 'source-feature-a'
+  });
+  assert.throws(
+    () => validateFeatureCatalog(conflictingSingular, results),
+    /Reload the page and Generate again/
+  );
+});
+
+test('catalog rejects duplicate match, member, and partial presentation metadata', () => {
+  const duplicateMember = structuredClone(catalog);
+  duplicateMember.items[0].orthogroups[0].members.push({
+    ...duplicateMember.items[0].orthogroups[0].members[0]
+  });
+  assert.throws(
+    () => validateFeatureCatalog(duplicateMember, results),
+    /Reload the page and Generate again/
+  );
+
+  const duplicateMatch = structuredClone(catalog);
+  duplicateMatch.items[0].comparisonMatches.push(
+    { id: 'duplicate' },
+    { id: 'duplicate' }
+  );
+  assert.throws(
+    () => validateFeatureCatalog(duplicateMatch, results),
+    /Reload the page and Generate again/
+  );
+
+  const partialPresentation = structuredClone(catalog);
+  partialPresentation.items[0].orthogroups[0].presentationScope = 'adjacent_local';
+  partialPresentation.items[0].orthogroups[0].groupKind = 'collinear_gene_group';
+  assert.throws(
+    () => validateFeatureCatalog(partialPresentation, results),
     /Reload the page and Generate again/
   );
 });

@@ -51,6 +51,13 @@ export const createLegendEntryActions = ({
 
   const { updatePairwiseLegendPositions, reflowDualLegendLayout, compactLegendEntries, recenterCurrentLegendRoot } =
     layoutActions;
+  let legendGeometryChangedHandler = null;
+
+  const setLegendGeometryChangedHandler = (handler) => {
+    legendGeometryChangedHandler = typeof handler === 'function' ? handler : null;
+  };
+
+  const onLegendGeometryChanged = () => legendGeometryChangedHandler?.();
 
   const addLegendEntry = async (caption, color, options = {}) => {
     const owner = String(options.owner || '').trim();
@@ -359,6 +366,7 @@ json.dumps({"width": width})
           updatePairwiseLegendPositions(svg);
         }
         recenterCurrentLegendRoot(svg);
+        onLegendGeometryChanged();
       }
 
       if (shouldCommit) {
@@ -452,6 +460,7 @@ json.dumps({"width": width})
     if (removed) {
       compactLegendEntries(svg);
       recenterCurrentLegendRoot(svg);
+      onLegendGeometryChanged();
 
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
@@ -559,6 +568,7 @@ json.dumps({"width": width})
       if (hasDualLegends) reflowDualLegendLayout(svg);
       else updatePairwiseLegendPositions(svg);
       recenterCurrentLegendRoot(svg);
+      onLegendGeometryChanged();
       skipCaptureBaseConfig.value = true;
       if (resultIndex >= 0 && results.value.length > resultIndex) {
         results.value[resultIndex] = { ...results.value[resultIndex], content: serializeCleanSvg(svg) };
@@ -798,6 +808,7 @@ json.dumps({"width": width})
       updatePairwiseLegendPositions(svg);
     }
     recenterCurrentLegendRoot(svg);
+    onLegendGeometryChanged();
 
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
@@ -843,8 +854,10 @@ json.dumps({"width": width})
     deleteLegendEntry,
     extractLegendEntries,
     legendEntryExists,
+    onLegendGeometryChanged,
     removeLegendEntry,
     restoreDeletedLegendEntries,
+    setLegendGeometryChangedHandler,
     syncFileLegendEntries,
     updateLegendEntryCaption,
     updateLegendEntryColor,

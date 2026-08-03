@@ -1,0 +1,2 @@
+set_id	id	mark	record	start	end	coordinate_space	wraps_origin	out_of_bounds	label	lane	legend_label	stroke	stroke_width	fill	fill_opacity
+regions	central-region	band	LC738868.1	100000	150000	source	false	clip	Central region	0	Tutorial region	#1d4ed8	1.5	#93c5fd	0.35

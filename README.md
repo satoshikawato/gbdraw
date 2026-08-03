@@ -32,12 +32,13 @@
 
 | Guide | Description |
 | --- | --- |
+| [Start with the web app](./docs/TUTORIALS/GUI/first-circular-genome-diagram.md) | Create and export a first circular genome diagram in the browser. |
 | [Full documentation](./docs/DOCS.md) | Main entry point for the published docs set. |
 | [Installation](./docs/INSTALL.md) | Hosted app, Bioconda, and local development installation. |
-| [Quickstart](./docs/QUICKSTART.md) | Create a circular plot from a GenBank record. |
-| [Tutorials](./docs/TUTORIALS/README.md) | Numbered command-line guides, web app tutorials, and related workflows. |
-| [Recipes](./docs/RECIPES.md) | Copy-paste command patterns for common tasks. |
-| [CLI Reference](./docs/CLI_Reference.md) | Current command help for the CLI. |
+| [Tutorials](./docs/TUTORIALS/README.md) | Complete first results for the web app, command line, and Python. |
+| [How-to guides](./docs/HOW_TO/README.md) | Focused procedures for inputs, layout, comparisons, tracks, styling, sessions, and export. |
+| [Explanation](./docs/EXPLANATION/README.md) | Choose a layout, interface, comparison method, or publication workflow. |
+| [Reference](./docs/REFERENCE/README.md) | Controls, options, schemas, APIs, compatibility, outputs, and fixture provenance. |
 | [Gallery](./docs/GALLERY.md) | Example plots and commands. |
 | [FAQ](./docs/FAQ.md) | Common questions and known limitations. |
 | [About](./docs/ABOUT.md) | Citation information and project background. |

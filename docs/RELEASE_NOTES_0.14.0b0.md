@@ -142,8 +142,8 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   session sidecars use a same-directory staged commit. Multi-format generation
   remains sequential rather than transactional, so completed formats survive a
   later conversion failure.
-- Current session version 39 uses canonical request schema 5 and persists
-  explicit `single`, `grid`, or `batch` grouping. Schema 5 stores one output
+- Canonical `renderRequest` schema 5 persists explicit `single`, `grid`, or
+  `batch` grouping. Schema 5 stores one output
   object for a single diagram or grid and an output array for Circular batch.
   Record loading is mode-neutral; planners own topology warnings and mode,
   comparison, and cardinality policy.
@@ -170,11 +170,29 @@ Phase 2 completes the internal state/planner consolidation:
   implementation bridge is removed. Builders accept only the mode-specific
   typed option contracts.
 
+## Python/Web session version 40
+
+- gbdraw 0.14.0b0 writes session version 40 and canonical `renderRequest`
+  schema 5. Readers accept session versions 27–33 and 39–40; the public typed
+  bridge accepts versions 31–33 and 39–40.
+- Version 40 stores file bytes once under `resources`, with `webFiles` binding
+  them to active and inactive inputs. Version 39 sessions with legacy embedded
+  `files` remain readable.
+- Version 40 stores one base SVG Result per logical diagram and a schema-3
+  feature catalog under `editorState.featureCatalog`. Readers collapse paired
+  base and interactive Results from supported older sessions.
+- Linear comparison draft intent lives under `config.linearComparisonPlan`
+  with mode `none`, `adjacent`, or `selected`; placement alone remains under
+  `config.linearRecordLayout`. Version 40 writers omit global `blastSource`,
+  nested layout comparisons, and per-record BLAST and LOSAT filename fields.
+  Supported pre-40 Web sessions migrate directly to the plan.
+
 ## Compact LOSATP runtime handles
 
-- Current session version 39 and canonical `renderRequest` schema 5 store
-  compact runtime handles. Public typed conversion is available for canonical
-  session versions 31–33 and 39; versions 27–30 remain CLI replay inputs.
+- Session version 39 introduced compact runtime handles with canonical
+  `renderRequest` schema 5, and version 40 retains them. Public typed
+  conversion is available for canonical session versions 31–33 and 39–40;
+  versions 27–30 remain CLI replay inputs.
 - Generated protein FASTA, raw LOSATP QUERY/SUBJECT fields, protein maps, and derived comparison references now use deterministic session-global handles with the form `h_[a-z2-7]{26}`. The handles bind a record instance to the complete CDS feature identity without repeating long feature hashes or readable aliases in every hit row. Upload filenames, modification times, session resource names, display aliases, and reopen time do not determine the handle or raw-cache identity.
 - Current protein raw cache entries use schema 4, derived comparison payloads use schema 3, and the protein identity manifest uses schema 2. The manifest remains the authority for complete feature identity and display metadata and separates runtime binding from display binding. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
 - **Save Raw LOSAT TSV** hydrates generated protein results at download time: it resolves every internal handle through the manifest and replaces only QUERY and SUBJECT with readable, percent-encoded protein or feature aliases. Duplicate aliases receive deterministic short ordinals. Row order, columns 3–12, numeric text, comments, and line endings are preserved; an unresolved or wrong-binding handle aborts the download instead of exposing an internal ID. User-uploaded comparison TSV is never rewritten.
@@ -189,9 +207,9 @@ Phase 2 completes the internal state/planner consolidation:
 - New configurations render `repeat_region` as an underlay: the interval covers the full feature band behind foreground glyphs and is excluded from overlap lanes and feature labels. Use `repeat_region=rectangle` to restore the previous appearance.
 - Underlays are generic to any feature type and retain resolved colors, feature legends, interactive metadata, search/edit behavior, and protein-comparison eligibility. Rendering assignments do not change feature visibility.
 - Automatic feature underlays are private render-time highlights, not saved region annotations. Custom track stacks require exactly one enabled feature slot when a visible underlay exists.
-- Current session version 39/schema 5 records the new default. Supported older
-  sessions and schema 1/2 requests with no repeat assignment migrate to
-  `repeat_region=rectangle` so visual replay remains stable.
+- Session version 40 and canonical request schema 5 record the new default.
+  Supported older sessions and schema 1/2 requests with no repeat assignment
+  migrate to `repeat_region=rectangle` so visual replay remains stable.
 
 ## Python/Web session version 33
 
@@ -397,16 +415,16 @@ New drawing code should prefer the top-level interface described above.
 
 ## Session API boundary
 
-The public session bridge accepts canonical documents from versions 31–33 and
-39.
+The gbdraw 0.14.0b0 public session bridge accepts canonical documents from
+versions 31–33 and 39–40.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
-Current writers emit version 39 and `renderRequest` schema 5. Version 39 stores
-Circular-single, Circular-multi, and Linear legend/title preferences in one
-canonical `ui.layoutPreferences` tree; supported older fields migrate on load.
-Schema 5 persists
+gbdraw 0.14.0b0 writes session version 40 and canonical `renderRequest` schema
+5. Version 39 introduced the canonical `ui.layoutPreferences` tree for
+Circular-single, Circular-multi, and Linear legend/title preferences; version
+40 retains it, and supported older fields migrate on load. Schema 5 persists
 explicit Circular `single`, `grid`, or `batch` grouping; batch output is an
 array with one resolved entry per record, while other requests use one output
 object. `renderRequest.output.prefix` is the sole output-prefix owner; schema 1

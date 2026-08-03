@@ -1,0 +1,987 @@
+LOCUS       NC_002333              16596 bp    DNA     circular VRT 03-APR-2023
+DEFINITION  Danio rerio mitochondrion, complete genome.
+ACCESSION   NC_002333
+VERSION     NC_002333.2
+DBLINK      BioProject: PRJNA927338
+KEYWORDS    RefSeq.
+SOURCE      mitochondrion Danio rerio (zebrafish)
+  ORGANISM  Danio rerio
+            Eukaryota; Metazoa; Chordata; Craniata; Vertebrata; Euteleostomi;
+            Actinopterygii; Neopterygii; Teleostei; Ostariophysi;
+            Cypriniformes; Danionidae; Danioninae; Danio.
+REFERENCE   1  (bases 1 to 16596)
+  AUTHORS   Broughton,R.E., Milam,J.E. and Roe,B.A.
+  TITLE     The complete sequence of the zebrafish (Danio rerio) mitochondrial
+            genome and evolutionary patterns in vertebrate mitochondrial DNA
+  JOURNAL   Genome Res. 11 (11), 1958-1967 (2001)
+   PUBMED   11691861
+REFERENCE   2  (bases 1 to 16596)
+  AUTHORS   Milam,J.E., Broughton,R.E. and Roe,B.A.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (21-JUN-2001) Department Of Chemistry And Biochemistry,
+            The University Of Oklahoma, 620 Parrington Oval, Room 208, Norman,
+            OK 73019, USA
+  REMARK    Sequence update by submitter
+REFERENCE   3  (bases 1 to 16596)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (09-JUN-2000) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+REFERENCE   4  (bases 1 to 16596)
+  AUTHORS   Milam,J.E., Broughton,R.E. and Roe,B.A.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (06-JUN-2000) Department Of Chemistry And Biochemistry,
+            The University Of Oklahoma, 620 Parrington Oval, Room 208, Norman,
+            OK 73019, USA
+REFERENCE   5  (bases 1 to 16596)
+  AUTHORS   Milam,J.E., Broughton,R.E. and Roe,B.A.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (21-APR-2000) Department Of Chemistry And Biochemistry,
+            The University Of Oklahoma, 620 Parrington Oval, Room 208, Norman,
+            OK 73019, USA
+REFERENCE   6  (bases 1 to 16596)
+  AUTHORS   Milam,J.E., Broughton,R.E. and Roe,B.A.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (28-FEB-2000) Department Of Chemistry And Biochemistry,
+            The University Of Oklahoma, 620 Parrington Oval, Room 208, Norman,
+            OK 73019, USA
+COMMENT     REVIEWED REFSEQ: This record has been curated by NCBI staff. The
+            reference sequence was derived from AC024175.
+            
+            On Aug 2, 2001 this sequence version replaced NC_002333.1.
+            COMPLETENESS: full length.
+FEATURES             Location/Qualifiers
+     source          1..16596
+                     /organism="Danio rerio"
+                     /organelle="mitochondrion"
+                     /mol_type="genomic DNA"
+                     /db_xref="taxon:7955"
+     D-loop          1..950
+                     /db_xref="ZFIN:ZDB-GENE-011205-1"
+     gene            951..1019
+                     /gene="trnF"
+                     /gene_synonym="mttf"
+                     /nomenclature="Official Symbol: mt-ti | Name: tRNA
+                     phenylalanine, mitochondrial"
+                     /note="tRNAphe"
+                     /db_xref="GeneID:140525"
+                     /db_xref="ZFIN:ZDB-GENE-011205-2"
+     tRNA            951..1019
+                     /gene="trnF"
+                     /gene_synonym="mttf"
+                     /product="tRNA-Phe"
+                     /db_xref="GeneID:140525"
+                     /db_xref="ZFIN:ZDB-GENE-011205-2"
+     gene            1020..1971
+                     /gene="mt-rnr1"
+                     /gene_synonym="mtrnr1"
+                     /nomenclature="Official Symbol: mt-rnr1 | Name: 12S RNA,
+                     mitochondrial"
+                     /db_xref="GeneID:140505"
+                     /db_xref="ZFIN:ZDB-GENE-011205-3"
+     rRNA            1020..1971
+                     /gene="mt-rnr1"
+                     /gene_synonym="mtrnr1"
+                     /product="s-rRNA"
+                     /note="12S rRNA"
+                     /db_xref="GeneID:140505"
+                     /db_xref="ZFIN:ZDB-GENE-011205-3"
+     gene            1972..2042
+                     /gene="trnV"
+                     /gene_synonym="mttv"
+                     /nomenclature="Official Symbol: mt-tv | Name: tRNA valine,
+                     mitochondrial"
+                     /note="tRNAval"
+                     /db_xref="GeneID:140507"
+                     /db_xref="ZFIN:ZDB-GENE-011205-5"
+     tRNA            1972..2042
+                     /gene="trnV"
+                     /gene_synonym="mttv"
+                     /product="tRNA-Val"
+                     /db_xref="GeneID:140507"
+                     /db_xref="ZFIN:ZDB-GENE-011205-5"
+     gene            2043..3725
+                     /gene="mt-rnr2"
+                     /gene_synonym="mtrnr2"
+                     /nomenclature="Official Symbol: mt-rnr2 | Name: 16S RNA,
+                     mitochondrial"
+                     /db_xref="GeneID:140506"
+                     /db_xref="ZFIN:ZDB-GENE-011205-4"
+     rRNA            2043..3725
+                     /gene="mt-rnr2"
+                     /gene_synonym="mtrnr2"
+                     /product="l-rRNA"
+                     /note="16S rRNA"
+                     /db_xref="GeneID:140506"
+                     /db_xref="ZFIN:ZDB-GENE-011205-4"
+     gene            3726..3802
+                     /gene="trnL1"
+                     /gene_synonym="mttl1"
+                     /nomenclature="Official Symbol: mt-tl1 | Name: tRNA
+                     leucine 1 (TAA), mitochondrial"
+                     /note="tRNAleu (TAA)"
+                     /db_xref="GeneID:140530"
+                     /db_xref="ZFIN:ZDB-GENE-011205-6"
+     tRNA            3726..3802
+                     /gene="trnL1"
+                     /gene_synonym="mttl1"
+                     /product="tRNA-Leu"
+                     /codon_recognized="UUR"
+                     /db_xref="GeneID:140530"
+                     /db_xref="ZFIN:ZDB-GENE-011205-6"
+     gene            3803..4777
+                     /gene="ND1"
+                     /gene_synonym="mtnd1"
+                     /nomenclature="Official Symbol: mt-nd1 | Name: NADH
+                     dehydrogenase 1, mitochondrial"
+                     /db_xref="GeneID:140531"
+                     /db_xref="ZFIN:ZDB-GENE-011205-7"
+     CDS             3803..4777
+                     /gene="ND1"
+                     /gene_synonym="mtnd1"
+                     /codon_start=1
+                     /transl_table=2
+                     /product="NADH dehydrogenase subunit 1"
+                     /protein_id="NP_059331.1"
+                     /db_xref="GeneID:140531"
+                     /db_xref="ZFIN:ZDB-GENE-011205-7"
+                     /translation="MLDILTSHLINPLAYAVPVLIAVAFLTLVERKVLGYMQLRKGPN
+                     VMGPRGLLQSVADGVKLFIKEPIRPSMASPILFLTAPVLALILAMMLWAPMPMPYPVL
+                     DLNLGILFIMAISSLAVYSILGSGWASNSKYALIGALRAVAQTISYEVSLGLILLSAV
+                     IFSGGYTLQTFNTTQEDTWLLLPLWPLAIMWFISTLAETNRAPFDLTEGESELVSGFN
+                     VEYAAGPFALFFLAEYSNILLMNTHSTVLFLGASFTPDAPELMTISIATKTAMLSILF
+                     LWMRASYPRFRYDQLMHLIWKNFLPITLVLVLWHIALPIALAGLPPQT"
+     gene            4781..4854
+                     /gene="trnI"
+                     /gene_synonym="mtti"
+                     /nomenclature="Official Symbol: mt-ti | Name: tRNA
+                     isoleucine, mitochondrial"
+                     /note="tRNAile"
+                     /db_xref="GeneID:140521"
+                     /db_xref="ZFIN:ZDB-GENE-011205-21"
+     tRNA            4781..4854
+                     /gene="trnI"
+                     /gene_synonym="mtti"
+                     /product="tRNA-Ile"
+                     /db_xref="GeneID:140521"
+                     /db_xref="ZFIN:ZDB-GENE-011205-21"
+     gene            complement(4852..4922)
+                     /gene="trnQ"
+                     /gene_synonym="mttq"
+                     /nomenclature="Official Symbol: mt-tq | Name: tRNA
+                     glutamine, mitochondrial"
+                     /note="tRNAgln"
+                     /db_xref="GeneID:140516"
+                     /db_xref="ZFIN:ZDB-GENE-011205-22"
+     tRNA            complement(4852..4922)
+                     /gene="trnQ"
+                     /gene_synonym="mttq"
+                     /product="tRNA-Gln"
+                     /db_xref="GeneID:140516"
+                     /db_xref="ZFIN:ZDB-GENE-011205-22"
+     gene            4924..4992
+                     /gene="trnM"
+                     /gene_synonym="mttm"
+                     /nomenclature="Official Symbol: mt-tm | Name: tRNA
+                     methionine, mitochondrial"
+                     /note="tRNAmet"
+                     /db_xref="GeneID:140522"
+                     /db_xref="ZFIN:ZDB-GENE-011205-23"
+     tRNA            4924..4992
+                     /gene="trnM"
+                     /gene_synonym="mttm"
+                     /product="tRNA-Met"
+                     /db_xref="GeneID:140522"
+                     /db_xref="ZFIN:ZDB-GENE-011205-23"
+     gene            4993..6039
+                     /gene="ND2"
+                     /gene_synonym="mtnd2"
+                     /nomenclature="Official Symbol: mt-nd2 | Name: NADH
+                     dehydrogenase 2, mitochondrial"
+                     /note="cb950; mtnd2"
+                     /db_xref="GeneID:140532"
+                     /db_xref="ZFIN:ZDB-GENE-011205-8"
+     CDS             4993..6039
+                     /gene="ND2"
+                     /gene_synonym="mtnd2"
+                     /codon_start=1
+                     /transl_table=2
+                     /product="NADH dehydrogenase subunit 2"
+                     /protein_id="NP_059332.1"
+                     /db_xref="GeneID:140532"
+                     /db_xref="ZFIN:ZDB-GENE-011205-8"
+                     /translation="MNPYVLMILMSSLGLGTTLTFSSSHWILAWMGLEINTLAIVPLM
+                     AQQHHPRAVEATTKYFLIQAAAAAMILFTSTTNAWISGQWDVTGMPGPATSTAMMFAL
+                     ALKIGLAPMHFWLPEVLQGLDLLTGLILSTWQKLAPMALIIQTTQTTDPLILTSLGIA
+                     SSLIGGWSGLNQTQLRKILAYSSIAHMGWMIIVIQYAPQLTLIALGTYIFMTSAAFLT
+                     LKVLSATKINTLTTTWPKSPILAAIATLVMLSLGGLPPLTGFMPKWLILQELTKQDLP
+                     ATATIMALTALLSLFFYLRLCHAMTLTTSPNTINSAPHWRVQTTQNSLPLTISVTVTM
+                     GLLPLTPAILMLTT"
+     gene            6038..6107
+                     /gene="trnW"
+                     /gene_synonym="mttw"
+                     /nomenclature="Official Symbol: mt-tw | Name: tRNA
+                     tryptophan, mitochondrial"
+                     /note="tRNAtrp"
+                     /db_xref="GeneID:140523"
+                     /db_xref="ZFIN:ZDB-GENE-011205-24"
+     tRNA            6038..6107
+                     /gene="trnW"
+                     /gene_synonym="mttw"
+                     /product="tRNA-Trp"
+                     /db_xref="GeneID:140523"
+                     /db_xref="ZFIN:ZDB-GENE-011205-24"
+     gene            complement(6109..6176)
+                     /gene="trnA"
+                     /gene_synonym="mtta"
+                     /nomenclature="Official Symbol: mt-ta | Name: tRNA
+                     alanine, mitochondrial"
+                     /note="tRNAala"
+                     /db_xref="GeneID:140509"
+                     /db_xref="ZFIN:ZDB-GENE-011205-25"
+     tRNA            complement(6109..6176)
+                     /gene="trnA"
+                     /gene_synonym="mtta"
+                     /product="tRNA-Ala"
+                     /db_xref="GeneID:140509"
+                     /db_xref="ZFIN:ZDB-GENE-011205-25"
+     gene            complement(6178..6250)
+                     /gene="trnN"
+                     /gene_synonym="mttn"
+                     /nomenclature="Official Symbol: mt-tn | Name: tRNA
+                     asparagine, mitochondrial"
+                     /note="tRNAasn"
+                     /db_xref="GeneID:140524"
+                     /db_xref="ZFIN:ZDB-GENE-011205-26"
+     tRNA            complement(6178..6250)
+                     /gene="trnN"
+                     /gene_synonym="mttn"
+                     /product="tRNA-Asn"
+                     /db_xref="GeneID:140524"
+                     /db_xref="ZFIN:ZDB-GENE-011205-26"
+     rep_origin      complement(6251..6282)
+                     /note="putative light strand origin of replication; mtolr"
+                     /db_xref="GeneID:140543"
+                     /db_xref="ZFIN:ZDB-GENE-011205-20"
+     gene            complement(6283..6354)
+                     /gene="trnC"
+                     /locus_tag="ZDB-GENE-011205-27"
+                     /gene_synonym="mttc"
+                     /nomenclature="Official Symbol: mt-tc | Name: tRNA
+                     cysteine, mitochondrial"
+                     /note="tRNAcys"
+                     /db_xref="GeneID:140513"
+                     /db_xref="ZFIN:ZDB-GENE-011205-27"
+     tRNA            complement(6283..6354)
+                     /gene="trnC"
+                     /locus_tag="ZDB-GENE-011205-27"
+                     /gene_synonym="mttc"
+                     /product="tRNA-Cys"
+                     /db_xref="GeneID:140513"
+                     /db_xref="ZFIN:ZDB-GENE-011205-27"
+     gene            complement(6353..6423)
+                     /gene="trnY"
+                     /gene_synonym="mtty"
+                     /nomenclature="Official Symbol: mt-ty | Name: tRNA
+                     tyrosine, mitochondrial"
+                     /note="tRNAtyr"
+                     /db_xref="GeneID:140514"
+                     /db_xref="ZFIN:ZDB-GENE-011205-28"
+     tRNA            complement(6353..6423)
+                     /gene="trnY"
+                     /gene_synonym="mtty"
+                     /product="tRNA-Tyr"
+                     /db_xref="GeneID:140514"
+                     /db_xref="ZFIN:ZDB-GENE-011205-28"
+     gene            6425..7975
+                     /gene="COX1"
+                     /gene_synonym="mtco1"
+                     /nomenclature="Official Symbol: mt-co1 | Name: cytochrome
+                     c oxidase I, mitochondrial"
+                     /note="COI; mtco1"
+                     /db_xref="GeneID:140539"
+                     /db_xref="ZFIN:ZDB-GENE-011205-14"
+     CDS             6425..7975
+                     /gene="COX1"
+                     /gene_synonym="mtco1"
+                     /codon_start=1
+                     /transl_table=2
+                     /product="cytochrome c oxidase subunit I"
+                     /protein_id="NP_059333.1"
+                     /db_xref="GeneID:140539"
+                     /db_xref="ZFIN:ZDB-GENE-011205-14"
+                     /translation="MTITRWFFSTNHKDIGTLYLVFGAWAGMVGTALSLLIRAELSQP
+                     GALLGDDQIYNVIVTAHAFVMIFFMVMPILIGGFGNWLVPLMIGAPDMAFPRMNNMSF
+                     WLLPPSFLLLLASSGVEAGAGTGWTVYPPLAGNLAHAGASVDLTIFSLHLAGVSSILG
+                     AINFITTTINMKPPTISQYQTPLFVWAVLVTAVLLLLSLPVLAAGITMLLTDRNLNTT
+                     FFDPAGGGDPILYQHLFWFFGHPEVYILILPGFGIISHVVAYYAGKKEPFGYMGMVWA
+                     MMAIGLLGFIVWAHHMFTVGMDVDTRAYFTSATMIIAIPTGVKVFSWLATLHGGAIKW
+                     ETPMLWALGFIFLFTVGGLTGIVLANSSLDIVLHDTYYVVAHFHYVLSMGAVFAIMAG
+                     FVHWFPLFTGYTLNSVWTKIHFGVMFIGVNLTFFPQHFLGLAGMPRRYSDYPDAYALW
+                     NTVSSIGSLISLVAVIMFLFILWEAFTAKREVLSVELTATNVEWLHGCPPPYHTFEEP
+                     AFVQIQSN"
+     gene            complement(7976..8046)
+                     /gene="trnS1"
+                     /gene_synonym="mtts1"
+                     /nomenclature="Official Symbol: mt-ts1 | Name: tRNA serine
+                     1 (TGA), mitochondrial"
+                     /note="tRNAser (TGA)"
+                     /db_xref="GeneID:140528"
+                     /db_xref="ZFIN:ZDB-GENE-011205-29"
+     tRNA            complement(7976..8046)
+                     /gene="trnS1"
+                     /gene_synonym="mtts1"
+                     /product="tRNA-Ser"
+                     /codon_recognized="UCN"
+                     /db_xref="GeneID:140528"
+                     /db_xref="ZFIN:ZDB-GENE-011205-29"
+     gene            8049..8117
+                     /gene="trnD"
+                     /gene_synonym="mttd"
+                     /nomenclature="Official Symbol: mt-td | Name: tRNA
+                     aspartic acid, mitochondrial"
+                     /note="tRNAasp"
+                     /db_xref="GeneID:140526"
+                     /db_xref="ZFIN:ZDB-GENE-011205-30"
+     tRNA            8049..8117
+                     /gene="trnD"
+                     /gene_synonym="mttd"
+                     /product="tRNA-Asp"
+                     /db_xref="GeneID:140526"
+                     /db_xref="ZFIN:ZDB-GENE-011205-30"
+     gene            8130..8820
+                     /gene="COX2"
+                     /gene_synonym="mtco2"
+                     /nomenclature="Official Symbol: mt-co2 | Name: cytochrome
+                     c oxidase II, mitochondrial"
+                     /note="COII"
+                     /db_xref="GeneID:140540"
+                     /db_xref="ZFIN:ZDB-GENE-011205-15"
+     CDS             8130..8820
+                     /gene="COX2"
+                     /gene_synonym="mtco2"
+                     /note="TAA stop codon is completed by the addition of 3' A
+                     residues to the mRNA"
+                     /codon_start=1
+                     /transl_except=(pos:8820,aa:TERM)
+                     /transl_table=2
+                     /product="cytochrome c oxidase subunit II"
+                     /protein_id="NP_059334.1"
+                     /db_xref="GeneID:140540"
+                     /db_xref="ZFIN:ZDB-GENE-011205-15"
+                     /translation="MAHPAQLGFQDAASPVMEELLCFHDHALMIVFLISTLVLYIIIA
+                     MVSTKLTNKFILDSQEIEIVWTVLPAIILILIALPSLRILYLMDEINDPHVTIKAVGH
+                     QWYWSYEYTDYENLEFDSYMVPTQDLTPGGFRLLETDHRMVVPKESPIRILVSAEDVL
+                     HSWAVPSLGIKMDAVPGRLNQTAFIVSRPGVFYGQCSEICGANHSFMPIVVEAVPLEF
+                     FENWSSAMLEDA"
+     gene            8821..8893
+                     /gene="trnK"
+                     /gene_synonym="mttk"
+                     /nomenclature="Official Symbol: mt-tk | Name: tRNA lysine,
+                     mitochondrial"
+                     /note="tRNAlys"
+                     /db_xref="GeneID:140508"
+                     /db_xref="ZFIN:ZDB-GENE-011205-31"
+     tRNA            8821..8893
+                     /gene="trnK"
+                     /gene_synonym="mttk"
+                     /product="tRNA-Lys"
+                     /db_xref="GeneID:140508"
+                     /db_xref="ZFIN:ZDB-GENE-011205-31"
+     gene            8894..9058
+                     /gene="ATP8"
+                     /gene_synonym="mtatp8"
+                     /nomenclature="Official Symbol: mt-atp8 | Name: ATP
+                     synthase 8, mitochondrial"
+                     /note="cb795; mtatp8"
+                     /db_xref="GeneID:140520"
+                     /db_xref="ZFIN:ZDB-GENE-011205-19"
+     CDS             8894..9058
+                     /gene="ATP8"
+                     /gene_synonym="mtatp8"
+                     /note="ATP synthase 8"
+                     /codon_start=1
+                     /transl_table=2
+                     /product="ATP synthase F0 subunit 8"
+                     /protein_id="NP_059335.1"
+                     /db_xref="GeneID:140520"
+                     /db_xref="ZFIN:ZDB-GENE-011205-19"
+                     /translation="MPQLNPKPWFMILFFSWVIFLTIIPTKIINHIQPNDPTQVDAKE
+                     HKNDTWNWPW"
+     gene            9052..9735
+                     /gene="ATP6"
+                     /gene_synonym="mtatp6"
+                     /nomenclature="Official Symbol: mt-atp6 | Name: ATP
+                     synthase 6, mitochondrial"
+                     /note="zgc:85637"
+                     /db_xref="GeneID:140519"
+                     /db_xref="ZFIN:ZDB-GENE-011205-18"
+     CDS             9052..9735
+                     /gene="ATP6"
+                     /gene_synonym="mtatp6"
+                     /note="ATP synthase 6"
+                     /codon_start=1
+                     /transl_table=2
+                     /product="ATP synthase F0 subunit 6"
+                     /protein_id="NP_059336.1"
+                     /db_xref="GeneID:140519"
+                     /db_xref="ZFIN:ZDB-GENE-011205-18"
+                     /translation="MMTSFFDQFASPYLLGIPLILVAMLLPWLLFPAPTSRWINNRLI
+                     TVQTWLTGRFTNQLMTPLNFSGHKWALLFASLMVFLITINLLGLLPYTFTPTTQLSLN
+                     MGFAVPLWLATVIIGMKNQPTIALGHLLPEGTPIPLIPALIIIETISLFIRPLALGVR
+                     LTANLTAGHLLIQLIATAVFVLLPMMPAVAILTASVLFLLTLLEVAVAMIQAYVFILL
+                     LSLYLQENI"
+     gene            9735..10520
+                     /gene="COX3"
+                     /gene_synonym="mtco3"
+                     /nomenclature="Official Symbol: mt-co3 | Name: cytochrome
+                     c oxidase III, mitochondrial"
+                     /note="COIII"
+                     /db_xref="GeneID:140541"
+                     /db_xref="ZFIN:ZDB-GENE-011205-16"
+     CDS             9735..10520
+                     /gene="COX3"
+                     /gene_synonym="mtco3"
+                     /codon_start=1
+                     /transl_table=2
+                     /product="cytochrome c oxidase subunit III"
+                     /protein_id="NP_059337.1"
+                     /db_xref="GeneID:140541"
+                     /db_xref="ZFIN:ZDB-GENE-011205-16"
+                     /translation="MAHQAHAYHMVDPSPWPLTGAVAALLMSSGLAIWFHLHSMTLIV
+                     LGMILLILTMIQWWRDIIREGTFQGHHTPPVQKGLRYGMILFITSEVFFFLGFFWAFY
+                     HSSLAPTPELGGCWPPTGLTTLDPFEVPLLNTAVLLASGVTVTWAHHSLMEGERKQAI
+                     QSLALTILLGLYFTALQAMEYYEAPFTIADGVYGSTFFVATGFHGLHVIIGSTFLAVC
+                     LLRQVLFHFTSDHHFGFEAAAWYWHFVDVVWLFLYVSIYWWGS"
+     gene            10520..10589
+                     /gene="trnG"
+                     /gene_synonym="mttg"
+                     /nomenclature="Official Symbol: mt-tg | Name: tRNA
+                     glycine, mitochondrial"
+                     /note="tRNAgly"
+                     /db_xref="GeneID:140510"
+                     /db_xref="ZFIN:ZDB-GENE-011205-32"
+     tRNA            10520..10589
+                     /gene="trnG"
+                     /gene_synonym="mttg"
+                     /product="tRNA-Gly"
+                     /db_xref="GeneID:140510"
+                     /db_xref="ZFIN:ZDB-GENE-011205-32"
+     gene            10590..10940
+                     /gene="ND3"
+                     /gene_synonym="mtnd3"
+                     /nomenclature="Official Symbol: mt-nd3 | Name: NADH
+                     dehydrogenase 3, mitochondrial"
+                     /db_xref="GeneID:140533"
+                     /db_xref="ZFIN:ZDB-GENE-011205-9"
+     CDS             10590..10940
+                     /gene="ND3"
+                     /gene_synonym="mtnd3"
+                     /codon_start=1
+                     /transl_table=2
+                     /product="NADH dehydrogenase subunit 3"
+                     /protein_id="NP_059338.1"
+                     /db_xref="GeneID:140533"
+                     /db_xref="ZFIN:ZDB-GENE-011205-9"
+                     /translation="MNLFATILIIMTTLSLVLALVSFWLPQMNSDTEKLSPYECGFDP
+                     LGSARLPFSLRFFLVAVLFPLFDLEIALLLPLPWGDQLNNPMETLFWAMTVLILLTLG
+                     LAYEWAQGGLEWAE"
+     gene            10939..11008
+                     /gene="trnR"
+                     /gene_synonym="mttr"
+                     /nomenclature="Official Symbol: mt-tr | Name: tRNA
+                     arginine, mitochondrial"
+                     /note="tRNAarg"
+                     /db_xref="GeneID:140515"
+                     /db_xref="ZFIN:ZDB-GENE-011205-33"
+     tRNA            10939..11008
+                     /gene="trnR"
+                     /gene_synonym="mttr"
+                     /product="tRNA-Arg"
+                     /db_xref="GeneID:140515"
+                     /db_xref="ZFIN:ZDB-GENE-011205-33"
+     gene            11009..11305
+                     /gene="ND4L"
+                     /gene_synonym="mtnd4l"
+                     /nomenclature="Official Symbol: mt-nd4l | Name: NADH
+                     dehydrogenase 4L, mitochondrial"
+                     /db_xref="GeneID:140538"
+                     /db_xref="ZFIN:ZDB-GENE-011205-11"
+     CDS             11009..11305
+                     /gene="ND4L"
+                     /gene_synonym="mtnd4l"
+                     /codon_start=1
+                     /transl_table=2
+                     /product="NADH dehydrogenase subunit 4L"
+                     /protein_id="NP_059339.1"
+                     /db_xref="GeneID:140538"
+                     /db_xref="ZFIN:ZDB-GENE-011205-11"
+                     /translation="MTPTHFSLNAAFMLGLAGLTFHRVHLLSALLCLEGMMLSLFISM
+                     ALWTLKTESMSLSTAPMLLLAFSACEASAGLALLVATARTHGSDHMKNLNLLQC"
+     gene            11299..12679
+                     /gene="ND4"
+                     /gene_synonym="mtnd4"
+                     /nomenclature="Official Symbol: mt-nd4 | Name: NADH
+                     dehydrogenase 4, mitochondrial"
+                     /db_xref="GeneID:140534"
+                     /db_xref="ZFIN:ZDB-GENE-011205-10"
+     CDS             11299..12679
+                     /gene="ND4"
+                     /gene_synonym="mtnd4"
+                     /note="TAA stop codon is completed by the addition of 3' A
+                     residues to the mRNA"
+                     /codon_start=1
+                     /transl_except=(pos:12679,aa:TERM)
+                     /transl_table=2
+                     /product="NADH dehydrogenase subunit 4"
+                     /protein_id="NP_059340.1"
+                     /db_xref="GeneID:140534"
+                     /db_xref="ZFIN:ZDB-GENE-011205-10"
+                     /translation="MLKVLIPTIMLFPTIWLSSSKWLWTTTTMNSFLIAFISLTWLKW
+                     TSDTGWNASNSYMAADPLSTPLLVLTCWLLPLMILASQNHINSEPVNRQRMYITLLAS
+                     LQTFMIMAFGATKIIMFYIMFEATLIPTLIIITRWGNQAERLNAGTYFLFYTLAGSLP
+                     LLVALLLLQQSTGTLSMLVLQYSDPLLLNSWGHKIWWAGCLIAFLVKMPLYGMHLWLP
+                     KAHVEAPVAGSMILAAVLLKLGGYGMMRMMVMLDPLSKQLAYPFIILALWGVIMTGLV
+                     CLRQTDLKSLIAYSSVGHMGLVAGGILIQTPWGFTGAIILMIAHGLTSSALFCLANTS
+                     YERTHSRTMILARGLQMVLPLATVWWFIANLANLALPPLPNLMGELMIITALFNWSPW
+                     TIIITGMGTLITANYSLYMFLTSQRGSIPEHITNLSPSHTREHLLMTLHLIPIILLML
+                     KPELMWGWCN"
+     gene            12681..12750
+                     /gene="trnH"
+                     /gene_synonym="mtth"
+                     /nomenclature="Official Symbol: mt-th | Name: tRNA
+                     histidine, mitochondrial"
+                     /note="tRNAhis"
+                     /db_xref="GeneID:140517"
+                     /db_xref="ZFIN:ZDB-GENE-011205-34"
+     tRNA            12681..12750
+                     /gene="trnH"
+                     /gene_synonym="mtth"
+                     /product="tRNA-His"
+                     /db_xref="GeneID:140517"
+                     /db_xref="ZFIN:ZDB-GENE-011205-34"
+     gene            12750..12819
+                     /gene="trnS2"
+                     /gene_synonym="mtts2"
+                     /nomenclature="Official Symbol: mt-ts2 | Name: tRNA serine
+                     2 (GCT), mitochondrial"
+                     /note="tRNAser (GCT)"
+                     /db_xref="GeneID:140529"
+                     /db_xref="ZFIN:ZDB-GENE-011205-35"
+     tRNA            12750..12819
+                     /gene="trnS2"
+                     /gene_synonym="mtts2"
+                     /product="tRNA-Ser"
+                     /codon_recognized="AGY"
+                     /db_xref="GeneID:140529"
+                     /db_xref="ZFIN:ZDB-GENE-011205-35"
+     gene            12823..12895
+                     /gene="trnL2"
+                     /gene_synonym="mttl2"
+                     /nomenclature="Official Symbol: mt-tl2 | Name: tRNA
+                     leucine 2 (TAG), mitochondrial"
+                     /note="tRNAleu (TAG)"
+                     /db_xref="GeneID:140537"
+                     /db_xref="ZFIN:ZDB-GENE-011205-36"
+     tRNA            12823..12895
+                     /gene="trnL2"
+                     /gene_synonym="mttl2"
+                     /product="tRNA-Leu"
+                     /codon_recognized="CUN"
+                     /db_xref="GeneID:140537"
+                     /db_xref="ZFIN:ZDB-GENE-011205-36"
+     gene            12897..14717
+                     /gene="ND5"
+                     /gene_synonym="mtnd5"
+                     /nomenclature="Official Symbol: mt-nd5 | Name: NADH
+                     dehydrogenase 5, mitochondrial"
+                     /db_xref="GeneID:140535"
+                     /db_xref="ZFIN:ZDB-GENE-011205-12"
+     CDS             12897..14717
+                     /gene="ND5"
+                     /gene_synonym="mtnd5"
+                     /codon_start=1
+                     /transl_table=2
+                     /product="NADH dehydrogenase subunit 5"
+                     /protein_id="NP_059341.1"
+                     /db_xref="GeneID:140535"
+                     /db_xref="ZFIN:ZDB-GENE-011205-12"
+                     /translation="MTDMIMPLTLILIFAVLSYPLLKPKSYSKSNNSFQAWNAVHVSF
+                     LISLIPLTMMLYKESDHVVMCWSWMNTQAFNVDLSFKFDYYSVTFTSIALFITWSILE
+                     FASWYMASYPQKELFYKYLLLFLMSMIILVTANNLFQLFIGWEGVGIMSFLLIGWWFG
+                     RTEANTASLQAVIYNRMGDIGFILTLAWMAMYLNSWDIQQIFILSKDFDMTIPQIGLI
+                     IAATGKSAQFTLHPWLPSAMEGPTPVSALLHSSTMVVAGIFLLIRLHPIMETNKLAPT
+                     ICLCLGALTTLFAATCALTQNDIKKIVAFSTSSQLGLMMVAIGLNQPHLAFFHICTHA
+                     FFKAMLFLCSGAIIHSLNNEQDIRKMGGTYHTLPMTTNYLTIGKMALMGTPFLAGFFS
+                     KDAILEAMTTSHLNAWALTLTLIATSFTAVYSFRMIYLVCLGSPRHKTYETIDENHIP
+                     TNTIQRLAWGSIIAGLIISYTMIPLKTPILTMPIYLKLAAILVTLLGIILGLEISTLA
+                     NKINKNTTPGIPFHFSISLIFFPILHRLIPMRKLFMGESAATKIEKSWSELFGPCGIA
+                     FTLMTVATFVKDHRMASIKSYLAVFLTSIILKMMMLKLYT"
+     gene            complement(14714..15232)
+                     /gene="ND6"
+                     /gene_synonym="mtnd6"
+                     /nomenclature="Official Symbol: mt-nd6 | Name: NADH
+                     dehydrogenase 6, mitochondrial"
+                     /db_xref="GeneID:140536"
+                     /db_xref="ZFIN:ZDB-GENE-011205-13"
+     CDS             complement(14714..15232)
+                     /gene="ND6"
+                     /gene_synonym="mtnd6"
+                     /codon_start=1
+                     /transl_table=2
+                     /product="NADH dehydrogenase subunit 6"
+                     /protein_id="NP_059342.1"
+                     /db_xref="GeneID:140536"
+                     /db_xref="ZFIN:ZDB-GENE-011205-13"
+                     /translation="MAFYLSFLMAALVGGMIAIASNPAPYFAAFGLVVVAGVGCGILV
+                     SYGGSFLSLILFLIYLGGMLVVFAYSAALAAEPFPEAWGDRVVFWRVMVYGLVVIVAA
+                     GFLLTGDTGLLMSVDAFKEFSVIRADVSGVAMMYSSGGKMLVICAWVLLLTLFVVLEV
+                     TRGLSYGVLRAI"
+     gene            complement(15233..15301)
+                     /gene="trnE"
+                     /gene_synonym="mtte"
+                     /nomenclature="Official Symbol: mt-te | Name: tRNA
+                     glutamic acid, mitochondrial"
+                     /db_xref="GeneID:140527"
+                     /db_xref="ZFIN:ZDB-GENE-011205-37"
+     tRNA            complement(15233..15301)
+                     /gene="trnE"
+                     /gene_synonym="mtte"
+                     /product="tRNA-Glu"
+                     /db_xref="GeneID:140527"
+                     /db_xref="ZFIN:ZDB-GENE-011205-37"
+     gene            15308..16448
+                     /gene="CYTB"
+                     /gene_synonym="mtcyb"
+                     /nomenclature="Official Symbol: mt-cyb | Name: cytochrome
+                     b, mitochondrial"
+                     /note="COB; Cytb"
+                     /db_xref="GeneID:140512"
+                     /db_xref="ZFIN:ZDB-GENE-011205-17"
+     CDS             15308..16448
+                     /gene="CYTB"
+                     /gene_synonym="mtcyb"
+                     /note="TAA stop codon is completed by the addition of 3' A
+                     residues to the mRNA"
+                     /codon_start=1
+                     /transl_except=(pos:16448,aa:TERM)
+                     /transl_table=2
+                     /product="cytochrome b"
+                     /protein_id="NP_059343.1"
+                     /db_xref="GeneID:140512"
+                     /db_xref="ZFIN:ZDB-GENE-011205-17"
+                     /translation="MTSLRKTHPVLKIANDALVDLPTPLNISAWWNFGSLLGLCLITQ
+                     ILTGLFLAMHYTSDISTAFSSVVHICRDVNFGWLIRSIHANGASFFFICLYIHIARGL
+                     YYGSYLYNETWNIGVVLFLLVMMTAFVGYVLPWGQMSFWGATVITNLLSAVPYVGDTL
+                     VQWIWGGFSVDNATLTRFFAFHFLLPFIIIAMVILHLLFLHETGSNNPLGLNPNMDKI
+                     PFHPYFSNKDLLGFVIMLFSLSLLALFSPNLLGDPENFTPANPLVTPPHIKPEWYFLF
+                     AYAILRSIPNKLGGVLALLFSILVLMVVPILHTSKQRGMAFRPVTQFLFWTLVADMLV
+                     LTWIGGMPVEHPYIIIGQMASILYFSLFLVLFPITGILENKALQWS"
+     gene            16449..16520
+                     /gene="trnT"
+                     /gene_synonym="mttt"
+                     /nomenclature="Official Symbol: mt-tt | Name: tRNA
+                     threonine, mitochondrial"
+                     /note="tRNAthr"
+                     /db_xref="GeneID:140518"
+                     /db_xref="ZFIN:ZDB-GENE-011205-39"
+     tRNA            16449..16520
+                     /gene="trnT"
+                     /gene_synonym="mttt"
+                     /product="tRNA-Thr"
+                     /db_xref="GeneID:140518"
+                     /db_xref="ZFIN:ZDB-GENE-011205-39"
+     gene            complement(16527..16596)
+                     /gene="trnP"
+                     /gene_synonym="mttp"
+                     /nomenclature="Official Symbol: mt-tp | Name: tRNA
+                     proline, mitochondrial"
+                     /note="tRNApro"
+                     /db_xref="GeneID:140511"
+                     /db_xref="ZFIN:ZDB-GENE-011205-38"
+     tRNA            complement(16527..16596)
+                     /gene="trnP"
+                     /gene_synonym="mttp"
+                     /product="tRNA-Pro"
+                     /db_xref="GeneID:140511"
+                     /db_xref="ZFIN:ZDB-GENE-011205-38"
+ORIGIN      
+        1 acggccggcg acaatttata tgtcaatgtt ttagtaattt acaattaaga cagacatgca
+       61 ctgtattgat acattaatca tacataaaat gcatgctcta atttttacat atgcatgtgc
+      121 aagcatatac atatgtgtgg atacacacgt atgtgctttg tcacatgtat gtactggtta
+      181 catattatgc atgtattagg acatactatg tattatcacc atatcattat tttaaccata
+      241 aagcaggtac ataatgttta tattattcac catatcaagt gagagaccac caataattta
+      301 tataaatgca tatcatgcat gatagaatca gggacatcaa tttaaacgtt gttaaaaaat
+      361 gaactattcc tggtatctgg ttcaaatctc acgttcatcg ctacaagacc cacccacaat
+      421 ctagtggtaa acggcatatg attagtcaga tgtgttaatc atttagtcct ttactcccca
+      481 tgccgagcgt tcttgtatat acaaggggtg atctcttatt tttttccttt cgctggcatt
+      541 tcatagtgca aatataaatg ttaaattaag gtggtactat tccttgcatg tgataatata
+      601 tattaattat ctaaagacat aatattaaga ctcactaact tttaattcaa gtgcataaag
+      661 tacttattat ttccttgata aactatatat tattatctcc cccttttggt atacgcgcga
+      721 caaaccccct taccccctta cgtccagcga ttcctgttat ccttgtcaaa cccctaaacc
+      781 aaggaaggcc cgagaacgta cagccaataa gttgaaaata aattgacatt atatatatat
+      841 atatatatac atatctacat atgtcattta attgcccgtt ttttagccta aaaaccccaa
+      901 ctaaaattta caaaaatatt tagtactaaa aatgttaata tatttttaag gctagcgtag
+      961 cttaaaataa agcacggcac tgaagctgcc aagatgggcc ctaataagct ccgcatgcac
+     1021 aaaggcatgg tcccgacctt ttgatcagct tttacctaat ttacacatgc aagtctccgc
+     1081 acccctgtga atacgccctc aatccccaaa cctggggacg aggagcaggt atcaggcaca
+     1141 aaatttttag cccaagacgc ctagccaagc cacaccccca aggggatcca gcagtgacaa
+     1201 acattaagct ataagtgaaa acttgactca gttaaggtaa agagagccgg taaaactcgt
+     1261 gccagcaacc gcggttaaac gagaggctct agttgatata ctacggcgta aagggtggtt
+     1321 aaggaacaat gtaaaataaa gccaaacggc cctttaactg ttatacgctt ttagatgcta
+     1381 gaggcccaaa cacgaaagta gctttaaatt aattacctga acccacgaaa gctaagaaac
+     1441 aaactgggat tagatacccc actatgctta gccataaaca aagacattta atcacaacaa
+     1501 tgttcgcccg gacactacaa gcataagctt aaaacccaaa ggacctgacg gtgccttaga
+     1561 tccccctaga ggagcctgtt ctagaaccga ttatccccgt taaacctcac catttctagc
+     1621 aaaatcagcc tatataccac cgtcgccagc ttaccctgtg aaggaataac agtaagcaag
+     1681 atgggcatag cccagaaagt caggtcgagg tgtagcacat gaaatgggaa gaaatgggct
+     1741 acactttcta ccccagaata tacgaaaatg taacatgaaa caatacttga aggaggattt
+     1801 agcagtaaaa gagaagcaga gtgtctcttt gaacccggct ctaaggcgcg tacacaccgc
+     1861 ccgtcactcc ctccggtcaa ttgcacaaga aataattaat acagaagcac agacaagggg
+     1921 ggaaaagtcg taacaaggta agtgtaccgg aaggtgcact tggacattat ccaagacgtg
+     1981 gctgaacagt taagcatctc acttacaccg agaaaacatc cgtgcaaatc ggatcgtcct
+     2041 gagctaaata gctagcttaa ccatcaagat caacttaaaa acatcaataa cctataatca
+     2101 acctaaaacc acaaactaaa ccattatatt atcctagtat gggagacaga aaagataaaa
+     2161 tactaagcaa tagagaaagt accgcaaggg aacgctgaaa gagaaatgaa ataacccgta
+     2221 aaagcaataa aaagcaaaga ttaaaccttg taccttttgc atcatgattt agccaacacc
+     2281 actaggcaaa gagaccttta gtttaaagcc ccgaatccag gtgagctacc ccgagacagc
+     2341 ctatttaact tagggccaac ccgtctctgt ggcaatagag tgggaagagc tccgggtaga
+     2401 agtgacagac ctatcgaacc cggcaatagc tggttgtctg ggagatgaat aaaagttcag
+     2461 cttcgtacac cccaaattaa aaaattaaat ttaatttaac acaaaattaa gagaaaaata
+     2521 cgaaagttag ttaaagaggg tacagcccct ttaacaaagg atacaacctt ttcaggagaa
+     2581 taaagatcat aatttacaaa acacgttgtc gtagtgggcc tggaagcagc cacctaaaaa
+     2641 gaaagcgtta aagctcaggt aagaagaaat tcataattct gacaataata tcttacttcc
+     2701 ctaaaaatac cagactaatc catacaaata tggaagaaat tatgctaaaa tgagtaacaa
+     2761 gaagaacctg tacttctcca agcacaagtg taagccaagt tggacaaacc attggcaatt
+     2821 aacgagccca aacaaagagg gcaatgtgag ttaaaaactg agaaaaatcc acaacagaca
+     2881 tcgttacccc cacactggag tgcatataag gaaagactaa aagaaaggga aggaactcgg
+     2941 caaacacaag cctcgcctgt ttaccaaaaa catcgcctcc tgacatccca atataggagg
+     3001 tccagcctgc ccagtgacaa tagtttaacg gccgcggtat tttgaccgtg caaaggtagc
+     3061 gcaatcactc gtcctttaaa tagggacctg tatgaatggc caaacgaggg cttaactgtc
+     3121 tcccccatca agtcagtgaa attgatctat ccgtgcagaa gcggatataa taatacaaga
+     3181 cgagaagacc ctttggagct taaggtacaa gatttaattt acatcaagca aaccaataaa
+     3241 agtgattaaa ctagtaaaag ataaacctct accttcggtt ggggcgacca cggagtaaaa
+     3301 aacaacctcc aagcggaacg ggcacagccc taaaaccaag agaaacatct ctaagcctca
+     3361 gaacacctga ccaaagacga tccggcctat aagccgatca acgaaccaag ttaccctagg
+     3421 gataacagcg caatcctctc taagagtcca tatcgacgag ggggtttacg acctcgatgt
+     3481 tggatcagga catcctaatg gtgcagccgc tattaagggt tcgtttgttc aacgattaat
+     3541 agtcctacgt gatctgagtt cagaccggag taatccaggt cagtttctat ctgtaaagct
+     3601 attttttcct agtacgaaag gatcggaaaa agggggccca tactaaaagc acgccccacc
+     3661 ctaaatttat gaataaagat aaaaaaaata aaaggagagc taaaacctct tcccgaaata
+     3721 agggttgctg ggatggcaga gctcggtaat tgcaaaaggc ctaagccctt tcacccaaag
+     3781 gttcaaatcc ttttcccagt ttatgctaga catcttaaca agccacttaa ttaaccccct
+     3841 agcctacgcc gtaccagtat taattgcagt agccttcctt accttagttg aacgaaaagt
+     3901 gttaggctat atacaactcc gaaaaggacc aaatgtaata ggcccccgag gactgttaca
+     3961 atcagtagct gatggcgtga aactttttat taaagaaccc attcgaccat ctatggcttc
+     4021 tccaatttta tttttaacag ctccagttct tgcactaatc ctagcaataa tgctatgggc
+     4081 acccataccc atgccctatc cagtactcga cctaaatctt ggaattttat ttattatagc
+     4141 catctcaagc ctagcagtat actcaatcct gggatcaggt tgagcatcaa actcaaaata
+     4201 cgcattaatt ggggccttac gagctgtagc gcaaacaatt tcatatgaag ttagcctagg
+     4261 acttattcta ttatctgccg ttattttttc tgggggatac accctacaaa catttaatac
+     4321 aactcaggaa gacacatgac ttctacttcc actatgacca ttagccatta tatgatttat
+     4381 ctcaacgctg gcagaaacaa accgagcacc gttcgatctt acagaggggg aatcagaact
+     4441 agtctcaggc ttcaatgtag agtatgcagc aggaccattt gccttattct ttttggctga
+     4501 gtactcaaat attttactaa taaacaccca ctcaacagta ctatttttag gagcatcgtt
+     4561 taccccagat gcacctgagc taataacaat cagtattgca accaaaactg caatactatc
+     4621 tattttgttt ctctgaatac gagcatcata cccacgattc cgatacgacc aacttatgca
+     4681 tcttatctgg aaaaactttc ttccaatcac attagttcta gtactatgac atatcgccct
+     4741 accaatcgca ctagctggtc tacccccaca aacataactc aagaaccgtg cccgaatgct
+     4801 aaggggtcac tttgatggag tgaaccatag gggttaaaat cccctcggtt cttagaaaga
+     4861 agggggtcga acccatgccc aagagatcaa aactcttagt gcttccacta caccactttc
+     4921 taggatgagg tcagctaatt aagctaccgg gcccataccc cgaacatgat ggttaaagtc
+     4981 cctccttcat caatgaaccc ttatgtcctt ataattttaa tatccagcct aggtctagga
+     5041 accacattaa ctttttctag ctcacactga attttagcct gaataggatt agaaattaat
+     5101 actttagcaa ttgtccctct aatagcacaa caacaccacc cacgggcagt agaagccacc
+     5161 acaaaatact tccttattca agctgctgcc gcagcaataa ttctattcac aagtacaaca
+     5221 aatgcctgaa tttcaggaca atgggatgtt acaggtatac caggcccagc caccagtaca
+     5281 gcaataatgt ttgcattggc tctcaaaatc ggtctagcac caatacattt ttgattacca
+     5341 gaagttcttc aaggattaga tctgttgaca ggactaattt tgtcaacctg acaaaaactt
+     5401 gccccaatag cattaattat ccaaacgacc caaaccactg accctcttat tcttacatca
+     5461 ctaggaattg cttcctctct cattggaggg tgaagcggac ttaaccaaac ccaactccga
+     5521 aaaattctag cttattcatc aattgcccac atagggtgaa taattattgt tatccagtac
+     5581 gctccgcaac ttactctgat tgctttagga acatatatct ttataacatc cgcggcattc
+     5641 cttactttaa aagtattatc agccacaaaa attaacaccc taacaacgac ctgaccgaaa
+     5701 agcccaatcc tggcagcaat tgctacttta gttatattat cactgggagg acttccccca
+     5761 ctgacgggat tcataccaaa atgattaatc ctacaagagt taacgaaaca agacctacca
+     5821 gccacagcta ctatcatggc gcttaccgcc ctcctaagct tattttttta cctacgtcta
+     5881 tgtcatgcaa taacattaac gacttcacca aacactatca attcagcccc tcactgacgg
+     5941 gtacaaacga cccaaaactc actaccccta acaatctctg ttactgttac tataggactt
+     6001 ttaccactga ccccagccat cttaatatta acaacataga gacttaggat aacctagacc
+     6061 aagagccttc aaagctctca gtagaagtga aaatcttcta gtctctgata ggacttacag
+     6121 acgttactcc gcatcttcta aatgcaaatc agatatttta attaaactaa agccctacta
+     6181 gatgggaagg cctcgatcct acaaaatctt agttaacagc taagcgccca agccagcgag
+     6241 catccatcta cttttcccgc cgttgaaccc ggtaaggcgg gaaaagcccc ggcaggaggt
+     6301 ttacctgcgt cttcagattt gcaatctgat atgtatcatc accacgaggc catggtagaa
+     6361 aaaggactca aacctctgtc cgcggagcta caatccgccg cctaaacact cggccaccct
+     6421 acctgtgaca atcacacgtt gatttttctc aactaatcat aaagacattg gcaccctgta
+     6481 tctagtattt ggtgcttgag ccggaatagt agggaccgca ttaagcctct taatccgagc
+     6541 tgaacttagc caaccaggag cacttcttgg tgatgatcaa atctataatg ttattgttac
+     6601 tgcccatgct tttgtaataa ttttctttat agtaataccc attcttattg ggggatttgg
+     6661 aaactgactt gtgccactaa tgattggggc ccccgatatg gcatttcccc gaataaataa
+     6721 tataagcttc tgacttcttc caccctcatt tcttcttcta ttagcttctt ctggagttga
+     6781 agcaggagct ggaacaggat gaacagttta tccacctctt gcaggcaacc ttgcccatgc
+     6841 aggagcatct gttgatctaa caattttttc actacactta gcaggtgttt catctattct
+     6901 tggagcaatt aattttatta ctactacaat taacatgaag ccaccaacta tctctcagta
+     6961 tcaaactcca ttatttgtat gagctgtctt agttacagct gtactacttc ttttatcttt
+     7021 accagtgtta gctgccggaa ttacaatact tcttacagac cgaaatctta acacaacgtt
+     7081 ctttgacccg gcaggagggg gagatccaat tctttatcaa cacttatttt gattctttgg
+     7141 ccacccagaa gtctacattc ttattttacc aggattcggc attatctccc atgttgtagc
+     7201 atactacgca gggaaaaaag aaccattcgg gtatatagga atagtatgag ctataatggc
+     7261 tattggtctc ttaggtttta ttgtatgagc ccatcacata ttcactgtag gaatggatgt
+     7321 agacacccga gcatacttca catccgccac aatgattatt gctattccaa ctggtgtaaa
+     7381 agtatttagc tgattagcca ctctccacgg aggagctatt aaatgagaaa cccctatact
+     7441 atgggcacta ggatttattt tcttatttac agtaggaggg ttaaccggaa tcgttttagc
+     7501 caactcatca ttagacatcg tactacatga cacatactac gtagtagcac actttcacta
+     7561 tgttctttca ataggagctg tattcgctat tatagcaggc tttgttcact gattcccact
+     7621 atttacaggc tacaccctaa acagtgtatg aacaaaaatc catttcgggg ttatatttat
+     7681 cggagtaaat ctcacattct tcccacaaca tttcctaggt ttagcaggaa taccacgacg
+     7741 gtactctgac tacccagacg cctatgcact ctgaaataca gtatcttcta ttgggtcact
+     7801 aatttcttta gtagcagtaa tcatgttctt atttatctta tgagaagcct ttaccgccaa
+     7861 acgagaagtt ctgtcagttg aattgaccgc aacaaatgta gaatgattac acggctgccc
+     7921 tcccccctac cacacatttg aggagccagc attcgttcaa attcaatcaa attaacgaga
+     7981 aaggagggaa ttgaaccccc gtgtgctagt ttcaagccag ccgcataacc actctgccac
+     8041 tttcttataa gacattagca aaaacattac accactttgt caaggtgaaa ttacaagtta
+     8101 aaaccttgta tgtcttaacc taaattctaa tggcacaccc tgcacaacta ggattccaag
+     8161 acgcagcatc acctgtaata gaagaacttt tatgttttca cgaccatgct ttaataattg
+     8221 tatttttaat cagcacctta gttctataca ttatcatcgc aatagtgtca accaaactaa
+     8281 cgaataaatt tattctagat tcccaagaaa tcgaaatcgt atgaacagtc cttccggcca
+     8341 tcattcttat tttgattgct ttaccatcac ttcgaatttt ataccttata gatgaaatta
+     8401 atgaccccca cgttactatt aaagccgtag gacatcaatg gtactgaagc tacgaatata
+     8461 cagactacga aaacctagaa tttgactctt atatagtacc aacccaagac ctcacaccag
+     8521 ggggctttcg gcttcttgaa acagaccatc gaatagtagt tcccaaagaa tcaccaattc
+     8581 gaattttagt ttcagctgaa gacgtactgc actcttgagc tgttccatca ttaggcatta
+     8641 aaatagacgc ggtacccgga cgattaaacc aaaccgcttt tattgtttca cgtccaggtg
+     8701 tattctacgg acaatgctct gaaatctgcg gggctaacca cagctttatg cccattgtag
+     8761 tcgaagccgt cccacttgaa ttctttgaaa actgatcttc agctatacta gaagacgcct
+     8821 cactaagatg ctaaaattgg atagcgttga ccttttaagt caaaacttgg tgcttaccga
+     8881 ccacccttag tgaatgcctc agcttaatcc aaaaccctga tttataatcc tttttttctc
+     8941 atgagtcatt ttccttacta ttattccaac caaaatcatt aatcacattc aacctaatga
+     9001 cccaactcaa gttgatgcta aagagcacaa aaatgacact tgaaactgac catgataaca
+     9061 agcttcttcg atcaattcgc gagcccctac cttttaggta tcccccttat cctcgttgcc
+     9121 atacttctac cttgacttct ttttcctgct ccaacatcac gatgaatcaa caatcgactt
+     9181 atcaccgtcc aaacatgatt gactggacga ttcacaaacc aacttatgac cccactaaac
+     9241 tttagcggcc acaaatgagc acttttattt gcctctctaa tagtattctt aatcacaatt
+     9301 aatcttttag gacttcttcc ttatactttt acaccaacaa cccaactctc tctgaatata
+     9361 ggatttgcag tacccctatg acttgccaca gtaattatcg gaataaaaaa tcaaccgact
+     9421 attgccctag gacatctttt accagaagga acccccatcc cattaattcc ggcccttatt
+     9481 attatcgaaa caattagctt atttattcga ccattagctt taggggtacg acttactgca
+     9541 aacctcacag caggccacct actaattcaa cttattgcca cagcagtatt tgttctacta
+     9601 ccaataatac cagcagtagc aattttaact gcctccgtcc ttttcttact taccctgcta
+     9661 gaagttgcag tagcaataat ccaagcctac gtctttattc ttcttttaag cctatatctg
+     9721 caagaaaaca tttaatggcc caccaagcac atgcatatca catagttgac ccaagcccat
+     9781 gaccactaac tggagctgta gccgccctat taatatcatc tggcttagca atttggtttc
+     9841 accttcactc aatgacatta attgttctag gaataattct tcttatttta actataatcc
+     9901 aatgatgacg agacattatt cgagaaggga cctttcaagg ccaccatacc ccgcccgtac
+     9961 aaaaagggtt gcggtacggt ataatcctat ttattacctc agaggtattt tttttcctag
+    10021 gatttttctg agctttttat cattcaagtt tagcccccac ccctgaacta gggggatgtt
+    10081 gaccacccac agggctaaca actcttgacc catttgaagt gccgctcctc aatacagctg
+    10141 ttttgctagc atccggagta acagtaacat gagcacatca cagcctcatg gaaggagaac
+    10201 gaaaacaagc cattcaatct cttgctctta caattctact aggattgtac ttcacagcac
+    10261 ttcaggctat agaatactat gaagccccat ttacaattgc agacggagta tatggctcaa
+    10321 cattctttgt agctacaggg tttcatggtc tacacgttat tattggatca acctttttag
+    10381 ctgtatgcct tctacgccaa gttttatttc acttcacatc agaccaccac tttggttttg
+    10441 aagctgccgc ttgatattga cacttcgtcg acgtagtctg actattcctc tacgtatcaa
+    10501 tctattgatg aggctcatag cctttctagt ataaccagta taaatgactt ccaatcattt
+    10561 ggtcttggtg aaaaatccag ggaaaggtaa tgaatttatt tgcaactatt cttattatta
+    10621 taacgacctt atcattggtc ttagctctag tatcattttg actaccacaa atgaactctg
+    10681 atacagaaaa gctatcacca tatgaatgcg gatttgatcc actagggtcc gcccgcctac
+    10741 cattttcatt acgatttttc ttagtagcag ttttattccc tttatttgac ttggaaattg
+    10801 ctctcctatt accactccca tgaggagatc aacttaataa cccaatagaa actctctttt
+    10861 gagctataac agtactgatt ttgctaacac taggactagc ctacgaatga gcccaaggcg
+    10921 gccttgaatg agcagagtag ggagctagtc caaagaaaga cccttgattt cggctcaaat
+    10981 aattgcggtg taaacccgta actcccttat gacacccacg cactttagtc ttaacgcagc
+    11041 atttatacta ggcttagcag gacttacatt tcaccgtgtt cacctcctat cagcattatt
+    11101 atgtttagaa ggcataatat tatctttatt tatttccata gccctttgaa ctttaaaaac
+    11161 agagtcaata agtttatcca cagcccctat actactacta gccttttctg cctgtgaagc
+    11221 aagtgccggc ctagcactcc tagtagccac agctcgaacc cacggatctg accacataaa
+    11281 aaaccttaat ctactacaat gctaaaagta ctgatcccca ctattatgct attccctaca
+    11341 atctgattat cttcatcaaa atgactgtga acaactacaa caataaacag ctttttaatt
+    11401 gcctttatta gcttaacatg actaaaatga acctcggata cagggtgaaa tgcttctaac
+    11461 tcgtacatag ctgcagaccc actatcaaca cctcttctag tactaacctg ttgacttctt
+    11521 ccattaatga ttctagctag ccaaaatcac atcaactcgg agcctgtaaa ccgacaacga
+    11581 atatacatta cacttcttgc ctctttacaa actttcataa ttatggcgtt tggcgctaca
+    11641 aaaatcatta tattctacat tatattcgaa gctacactta tcccaacact aatcattatt
+    11701 acccgatgag gtaatcaagc tgagcgcctt aacgcaggta cttactttct tttctataca
+    11761 ttagcaggct ctctacctct tttagtagcc ctcctattac tgcaacaatc aacaggaacc
+    11821 ctatcaatac tagtacttca gtactcagac ccacttttac ttaactcttg aggacataaa
+    11881 atctgatgag ccggctgctt aattgcattc ctagtaaaaa taccgctata tgggatacac
+    11941 ctttgattac caaaagcaca tgtagaagcc cctgtagcag gatctataat tctagcggca
+    12001 gtgctactaa aactaggagg ctacggtatg atacgaataa tagtaatatt agatccttta
+    12061 tctaagcaac tagcataccc gtttattatc cttgctctat gaggagtaat cataacagga
+    12121 ttagtttgtc tacgacaaac agacttaaaa tcgctaattg cctattcatc agtaggccat
+    12181 atgggactag ttgcaggagg aattttgatt caaaccccct gaggatttac aggagcaatt
+    12241 attttaataa tcgcccacgg actaacctca tccgccctat tttgcttagc taacacatcg
+    12301 tatgaacgaa ctcatagccg gaccataatc ctcgctcgag gactccagat agtgctaccg
+    12361 ctagcaacag tatggtgatt tattgctaat ctggccaacc tagcacttcc acctctacca
+    12421 aacttgatag gagaacttat gattatcaca gccctattta actgatctcc atgaacaatt
+    12481 attattacag gaataggaac cttaattaca gcaaattatt cactttatat atttttaaca
+    12541 tctcaacgag gctcaatccc agaacacatc accaatcttt caccatccca cacccgagaa
+    12601 catctcttaa tgactttaca cctaattcct atcatcttac ttatattaaa accagaactt
+    12661 atgtgaggtt gatgtaacta gtaagtttag tttaaagtaa aattttagat cgtgactcta
+    12721 aagatagggg ttaaagcccc ctcactcacc gaggaagagt aggaaaacag taaatgctgc
+    12781 taatatttac caaccatggt taaactccat ggcttcctta ccgcttctaa aggataatag
+    12841 tacatccatt ggtcttagga accaaaaact cttggtgcaa ctccaagtag aagtttatga
+    12901 ctgatatgat cataccttta acattaatcc taattttcgc agttttatca taccccttat
+    12961 taaaaccaaa aagctattca aaatccaaca actctttcca agcttgaaat gctgtccatg
+    13021 tatctttctt aattagtctt atcccactta caatgatgct gtacaaagaa tcagaccatg
+    13081 ttgtaatatg ctgaagctga ataaatacac aagcgtttaa cgtagaccta agttttaaat
+    13141 ttgactacta ttctgtgact tttacctcaa tcgccttatt catcacctgg tcaattttag
+    13201 aatttgcatc atgatatata gcctcttatc cacaaaaaga attattttac aaatatttac
+    13261 ttctttttct tatatcaata attatcttag ttacagccaa caatctattt caactattta
+    13321 ttggctgaga aggggtagga atcatatcat ttttactcat tggctgatga tttgggcgga
+    13381 cagaggctaa cacagcatct ctacaggccg taatctacaa ccgaatagga gacattggat
+    13441 ttatcttaac cttagcatga atagcaatat acctcaactc ctgagacatt cagcaaattt
+    13501 tcattctttc aaaagacttc gacatgacca ttccccaaat tggacttatt attgcagcca
+    13561 cagggaaatc agcccaattt acacttcacc cctgactacc atcagccata gaaggcccta
+    13621 caccagtatc tgctttactt cactctagca ctatggttgt agcagggatt ttccttttaa
+    13681 tccgtcttca cccaattata gaaactaaca agcttgcacc aacaatctgt ctatgccttg
+    13741 gagcattaac aactctattt gcagcaacct gtgctctaac ccaaaatgat atcaaaaaaa
+    13801 tcgtagcttt ctcaacatca agccaactag ggctaatgat agtagcaatt ggcctaaacc
+    13861 aaccacatct agcatttttc cacatctgca ctcacgcttt ttttaaagcc atattattct
+    13921 tatgctcagg ggcaattatt cacagtctta acaacgaaca agacatccgt aaaatagggg
+    13981 gaacttacca caccctacca ataaccacaa actatttgac catcgggaaa atagccctta
+    14041 tgggtacccc cttccttgca ggatttttct caaaagacgc tatcctagaa gcaataacca
+    14101 cctcccatct taacgcctga gccctaacac taacattaat cgccacatca tttaccgcag
+    14161 tttatagctt ccgaataatt tacttagtct gtttaggaag cccccgacac aagacctacg
+    14221 agacaattga tgaaaaccac attccaacca atactattca acggcttgcc tgaggaagca
+    14281 ttattgcagg attaatcatc tcatacacta taattcctct taaaacaccc attttaacca
+    14341 tgcctattta tctaaaattg gcagccattc tagtaactct actaggtatt atcttaggac
+    14401 tagaaattag tacgctagct aataaaatta acaaaaacac taccccagga attccattcc
+    14461 acttttcaat ttcactaatc ttctttccaa tccttcaccg actaatccct atacgaaaat
+    14521 tatttatagg ggagtcagca gccactaaaa ttgaaaaatc atgaagcgaa ctattcggac
+    14581 catgcggaat tgcatttaca ttaataacag tggccacctt tgttaaggac catcgaatag
+    14641 cgtcaatcaa gtcttaccta gccgtcttcc ttacctctat tattcttaaa ataataatac
+    14701 tgaaactata cacttaaata gcacgaagca caccataact aagacctcga gtaacctcta
+    14761 gtacaacaaa caaagtcaga agcaataccc aagcacaaat cactaatatt tttccacctg
+    14821 acgaatatat tattgcaacc ccgcttacat cagctcgaat aacagaaaac tctttaaaag
+    14881 catcaaccga tattaataaa ccagtgtcac cagttaataa aaacccagcc gccacaatta
+    14941 caaccagacc ataaaccata acacgtcaaa acaccacacg gtcaccccac gcttcaggaa
+    15001 aaggctcggc tgctagggcc gctgaataag caaacactac aagcatccca cctaaataaa
+    15061 tcaaaaaaag aattagagac aaaaatgaac ccccataact aactaaaatt ccacatccaa
+    15121 cccctgccac aactactaaa ccaaatgcag caaaataagg agccggatta gaagcaatag
+    15181 caatcatacc cccaactaga gctgccatca aaaaagacaa ataaaatgcc ataattctta
+    15241 ctcagacttt aactgagacc ggtgactcga aaaaccactg ttgtagttca actacaagaa
+    15301 ctgcttaatg acaagcctgc gaaaaacaca cccagtttta aaaatcgcta atgacgcatt
+    15361 agttgatttg ccaacgccac taaatatttc agcgtgatga aattttggat ctctccttgg
+    15421 attatgtctt attacacaaa ttttaacagg actattttta gcaatacact acacctcaga
+    15481 catctcaaca gcattttcat ctgttgtgca tatttgccga gatgtaaatt tcggctgact
+    15541 tattcggagc atccatgcca atggggcttc cttcttcttc atctgcctgt atattcacat
+    15601 cgcccgagga ctatattacg gatcttatct ttataatgaa acttgaaaca tcggagtagt
+    15661 cctgttctta cttgtaataa taacagcttt tgtgggctac gtccttccat ggggccaaat
+    15721 atcattctga ggggccacag taattactaa cctattatcg gccgttcctt acgtgggaga
+    15781 taccctagtg caatgaatct gagggggatt ctcagtagac aatgcaaccc ttacacgatt
+    15841 cttcgcattc cactttttat taccatttat tatcatcgcc atagttattc tacacttgct
+    15901 atttctccac gaaaccggat caaataaccc ccttggccta aaccccaaca tggataaaat
+    15961 cccctttcat ccttattttt caaataaaga cctccttggt tttgtaatta tattattttc
+    16021 cctctcacta ttagcactat tctcaccaaa cctcttagga gatccagaaa atttcacccc
+    16081 tgctaaccct ctagtaacac ctcctcacat taaaccagaa tgatatttcc tattcgcata
+    16141 cgccattcta cgatctatcc caaacaaact aggaggtgta ctagctctct tattttccat
+    16201 tttagtatta atagtagtac caattttaca cacttctaaa cagcgaggaa tagcattccg
+    16261 cccagttacc caatttctgt tctgaacact ggtagcagac atgcttgtac taacatgaat
+    16321 tggagggata ccagtagaac acccctacat catcattgga caaatagcat caatcttata
+    16381 tttttcacta ttcttagtct tattcccaat tacagggatt ttagagaata aggcactcca
+    16441 atgaagctgc cctagtagct tagttttaaa gcatcggtct tgtaatccga agatcggagg
+    16501 ttagacccct ccctagcgct aaattaccag aaaagagaga ttttaactca cacccctgac
+    16561 tcccaaagcc aggattctaa attaaactat tttctg
+//
+

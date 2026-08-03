@@ -46,6 +46,8 @@ from .analysis.collinearity import (
 from .analysis.protein_colinearity import (
     ORTHOGROUP_INFERENCE_VERSION,
     PROTEIN_BLASTP_MODES,
+    hydrate_protein_losat_tsv,
+    is_protein_losat_cache_entry,
 )
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .features.shapes import parse_feature_shape_overrides
@@ -94,6 +96,7 @@ from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
 )
+from .render.output_paths import commit_staged_output_file, preflight_output_paths
 from .session_io import load_session, session_to_cli_args
 
 
@@ -381,6 +384,16 @@ def _get_args(args) -> argparse.Namespace:
         dest='protein_blastp_candidate_limit',
         help="Optional protein blastp candidate cap per query; use 'none' for no cap (default: none).",
         type=_parse_optional_positive_int,
+        default=None)
+    parser.add_argument(
+        '--protein_blastp_output',
+        metavar='TSV',
+        help=(
+            'Write the raw protein-search evidence to one deterministic TSV. '
+            'Runtime handles are replaced with user-visible protein IDs; requires '
+            '--protein_blastp_mode.'
+        ),
+        type=str,
         default=None)
     parser.add_argument(
         '--align_orthogroup_feature',
@@ -832,6 +845,13 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--protein_blastp_mode cannot be used with -b/--blast")
     if args.protein_blastp_max_hits <= 0:
         parser.error("--protein_blastp_max_hits must be > 0")
+    if args.protein_blastp_output:
+        if args.protein_blastp_mode == "none":
+            parser.error(
+                "--protein_blastp_output requires --protein_blastp_mode"
+            )
+        if Path(args.protein_blastp_output).suffix.lower() != ".tsv":
+            parser.error("--protein_blastp_output must use a .tsv suffix")
     if args.losatp_threads is not None and args.losatp_threads <= 0:
         parser.error("--losatp_threads must be > 0")
     if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
@@ -1004,6 +1024,11 @@ def linear_main(cmd_args) -> None:
 
     args: argparse.Namespace = _get_args(cmd_args)
     run_result = run_linear_from_namespace(args)
+    _write_protein_blastp_output(
+        args.protein_blastp_output,
+        run_result=run_result,
+        overwrite=bool(args.overwrite),
+    )
     save_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
         session_output=args.session_output,
@@ -1012,6 +1037,86 @@ def linear_main(cmd_args) -> None:
         cmd_args=cmd_args,
         overwrite=bool(args.overwrite),
     )
+
+
+def _protein_blastp_output_text(run_result: DiagramRunResult) -> str:
+    entries = tuple(
+        entry
+        for entry in (run_result.losat_cache_entries or ())
+        if is_protein_losat_cache_entry(entry)
+    )
+    manifest = run_result.protein_identity_manifest
+    if not entries or manifest is None:
+        raise ValidationError(
+            "Protein-search output requested, but no raw protein evidence was produced."
+        )
+
+    sections = [
+        "# gbdraw raw protein-search evidence",
+        "# Non-comment lines use the 12 BLAST outfmt 6 columns.",
+    ]
+    for index, entry in enumerate(entries, start=1):
+        filename = str(entry.get("filename") or f"losat_pair_{index}.tsv")
+        if "\n" in filename or "\r" in filename:
+            raise ValidationError("Protein-search evidence filename contains a newline.")
+        hydrated = hydrate_protein_losat_tsv(entry, manifest).rstrip("\r\n")
+        sections.extend((f"# entry {index}: {filename}", hydrated))
+    return "\n".join(sections) + "\n"
+
+
+def _write_protein_blastp_output(
+    output: str | None,
+    *,
+    run_result: DiagramRunResult,
+    overwrite: bool,
+) -> Path | None:
+    if not output:
+        return None
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(
+        prefix=f".{output_path.name}.",
+        dir=output_path.parent,
+    ) as temp_name:
+        staged_path = Path(temp_name) / output_path.name
+        with staged_path.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(_protein_blastp_output_text(run_result))
+        commit_staged_output_file(
+            staged_path,
+            output_path,
+            overwrite=overwrite,
+        )
+    return output_path
+
+
+def _preflight_protein_blastp_output(
+    output: str | None,
+    *,
+    diagram_output_paths: Sequence[Path],
+    session_output_path: Path | None,
+    overwrite: bool,
+) -> None:
+    if not output:
+        return
+    output_path = Path(output)
+    preflight_output_paths((output_path,), overwrite=overwrite)
+    try:
+        output_identity = output_path.resolve(strict=False)
+        reserved_paths = tuple(diagram_output_paths) + (
+            ((session_output_path,) if session_output_path is not None else ())
+        )
+        collides = any(
+            path.resolve(strict=False) == output_identity for path in reserved_paths
+        )
+    except (OSError, ValueError) as exc:
+        raise ValidationError(
+            f"Could not resolve protein-search output path: {output_path}."
+        ) from exc
+    if collides:
+        raise ValidationError(
+            "Protein-search output path collides with a diagram or session output: "
+            f"{output_path}."
+        )
 
 
 def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
@@ -1434,11 +1539,18 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             overwrite=args.overwrite,
         ),
     )
-    preflight_session_sidecar_if_requested(
+    diagram_output_paths = diagram_request_output_paths(canonical_request)
+    session_output_path = preflight_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
         session_output=args.session_output,
         output_prefix=args.output,
-        diagram_output_paths=diagram_request_output_paths(canonical_request),
+        diagram_output_paths=diagram_output_paths,
+        overwrite=bool(args.overwrite),
+    )
+    _preflight_protein_blastp_output(
+        args.protein_blastp_output,
+        diagram_output_paths=diagram_output_paths,
+        session_output_path=session_output_path,
         overwrite=bool(args.overwrite),
     )
     legacy_protein_raw_candidates = None

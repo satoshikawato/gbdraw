@@ -1979,6 +1979,47 @@ assert.equal(
   resolvedProteinTsv
 );
 assert.deepEqual(roundTripGenerated, resolvedProteinSettings);
+const selectedComparisonPlan = structuredClone(state.linearComparisonPlan);
+state.linearComparisonPlan = createDefaultLinearComparisonPlan();
+state.losat.blastp.mode = 'collinear';
+const typedCollinearityResource = {
+  schema: 2,
+  kind: 'result',
+  value: { type: 'CollinearityResult', fields: {} }
+};
+const resolvedCollinearCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: linearFilesData,
+  resolvedComparisons: [{
+    kind: 'collinearityResult',
+    typedResource: typedCollinearityResource
+  }]
+});
+assert.deepEqual(
+  resolvedCollinearCanonical.renderRequest.comparisons.map(
+    (comparison) => comparison.kind
+  ),
+  ['collinearityResult', 'generatedProteinComparison']
+);
+const resolvedCollinearity = resolvedCollinearCanonical.renderRequest.comparisons[0];
+assert.equal(resolvedCollinearity.valueKind, 'result');
+assert.deepEqual(
+  JSON.parse(Buffer.from(
+    resolvedCollinearCanonical.resources[resolvedCollinearity.resourceId].data,
+    'base64'
+  ).toString('utf8')),
+  typedCollinearityResource
+);
+assert.equal(resolvedCollinearCanonical.renderRequest.comparisons[1].mode, 'none');
+assert.equal(
+  resolvedCollinearCanonical.renderRequest.comparisons.some(
+    (comparison) => comparison.kind === 'precomputedProteinComparison'
+  ),
+  false,
+  'Collinear rendering must use the full typed result instead of parallel pair tables'
+);
+state.losat.blastp.mode = 'pairwise';
+state.linearComparisonPlan = selectedComparisonPlan;
 const orthogroupResourceText = '{"schema":1,"valueKind":"orthogroupResult","value":{}}\n';
 const collinearityResourceText = '{"schema":1,"valueKind":"blocks","value":[]}\n';
 const resolvedWithMetadataCanonical = structuredClone(resolvedProteinCanonical);

@@ -58,6 +58,23 @@ def _local_image_references() -> set[str]:
     return references
 
 
+def _documentation_scenario_artifacts() -> set[str]:
+    manifest = json.loads(
+        (PROJECT_ROOT / "docs" / "scenarios" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    artifacts: set[str] = set()
+    for chapter in manifest["chapters"]:
+        artifacts.update(item["path"] for item in chapter["screenshots"])
+        if chapter["execution"]["kind"] not in {"cli-recipe", "python-recipe"}:
+            continue
+        for output_name in chapter["execution"]["expected_outputs"]:
+            if Path(output_name).suffix.lower() in {".png", ".svg"}:
+                artifacts.add(f"docs/images/{chapter['id'].lower()}/{output_name}")
+    return artifacts
+
+
 def test_manifest_counts_and_unique_paths() -> None:
     figures = build_figure_specs()
 
@@ -233,11 +250,16 @@ def test_public_markdown_local_targets_exist() -> None:
 def test_public_figures_have_reproduction_inventory_coverage() -> None:
     references = _local_image_references()
     manifest_paths = {spec.output_path for spec in build_figure_specs().values()}
+    scenario_paths = _documentation_scenario_artifacts()
+    existing_scenario_paths = {
+        path for path in scenario_paths if (PROJECT_ROOT / path).is_file()
+    }
     manual_paths = set(MANUALLY_MANAGED_FIGURES)
     retained_unreferenced = set(UNREFERENCED_FIGURE_RETENTION)
 
-    assert references - manifest_paths - manual_paths == set()
+    assert references - manifest_paths - scenario_paths - manual_paths == set()
     assert manifest_paths - references == retained_unreferenced
+    assert existing_scenario_paths <= references
     assert all(reason.strip() for reason in MANUALLY_MANAGED_FIGURES.values())
     assert all(reason.strip() for reason in UNREFERENCED_FIGURE_RETENTION.values())
     assert all((PROJECT_ROOT / path).exists() for path in manual_paths)

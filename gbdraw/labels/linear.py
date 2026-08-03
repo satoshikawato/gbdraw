@@ -9,6 +9,7 @@ from .filtering import get_label_text  # type: ignore[reportMissingImports]
 from ..config.models import LinearRenderProfile  # type: ignore[reportMissingImports]
 from ..features.coordinates import get_strand  # type: ignore[reportMissingImports]
 from ..features.ids import compute_feature_object_hash
+from ..core.record_metadata import _source_feature_index
 from ..core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
 from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
 from ..layout.linear_coords import normalize_position_to_linear_track  # type: ignore[reportMissingImports]
@@ -330,15 +331,29 @@ def _resolve_above_feature_label_overlaps(labels: list[dict], min_gap_px: float)
 
 def _passes_orthogroup_label_eligibility(
     feature_object,
-    member_ids: set[str] | None,
-    top_member_ids: set[str] | None,
+    member_ids: set[str | int] | None,
+    top_member_ids: set[str | int] | None,
 ) -> bool:
     if member_ids is None:
         return True
+    source_feature_index = _source_feature_index(feature_object)
+    if source_feature_index is None:
+        raw_source_feature_index = getattr(
+            feature_object,
+            "source_feature_index",
+            None,
+        )
+        try:
+            source_feature_index = int(raw_source_feature_index)
+        except (TypeError, ValueError):
+            source_feature_index = None
     feature_svg_id = compute_feature_object_hash(feature_object)
-    if feature_svg_id not in member_ids:
+    identities = {feature_svg_id}
+    if source_feature_index is not None:
+        identities.add(source_feature_index)
+    if not identities.intersection(member_ids):
         return True
-    return top_member_ids is not None and feature_svg_id in top_member_ids
+    return top_member_ids is not None and bool(identities.intersection(top_member_ids))
 
 
 def prepare_label_list_linear(
@@ -352,8 +367,8 @@ def prepare_label_list_linear(
     track_axis_gap,
     profile: LinearRenderProfile,
     label_font_size: float | None = None,
-    orthogroup_label_member_ids: set[str] | None = None,
-    orthogroup_label_top_member_ids: set[str] | None = None,
+    orthogroup_label_member_ids: set[str | int] | None = None,
+    orthogroup_label_top_member_ids: set[str | int] | None = None,
     feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
 ):
     """

@@ -204,13 +204,23 @@ export const createLegendRepositionActions = ({
     }
   };
 
-  const repositionForLegendChange = (newPosition, oldPosition) => {
+  const repositionForLegendChange = (
+    newPosition,
+    oldPosition,
+    { preserveManualOffsets = false } = {}
+  ) => {
     if (!svgContainer.value || !svgContent.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
     const legendGroup = svg.getElementById('legend');
     const isLinear = mode.value === 'linear';
+    const preservedLegendOffset = preserveManualOffsets
+      ? { x: Number(legendCurrentOffset.x) || 0, y: Number(legendCurrentOffset.y) || 0 }
+      : null;
+    const preservedDiagramOffset = preserveManualOffsets
+      ? { x: Number(diagramOffset.x) || 0, y: Number(diagramOffset.y) || 0 }
+      : null;
 
     let legendWidth = 120;
     let legendHeight = 150;
@@ -460,6 +470,31 @@ export const createLegendRepositionActions = ({
           } else {
             clearPlotTitleState();
           }
+        }
+      }
+
+      if (preserveManualOffsets) {
+        if (legendGroup && newPosition !== 'none' && preservedLegendOffset) {
+          const base = legendInitialTransform.value || { x: 0, y: 0 };
+          legendGroup.setAttribute(
+            'transform',
+            `translate(${base.x + preservedLegendOffset.x}, ${base.y + preservedLegendOffset.y})`
+          );
+          legendCurrentOffset.x = preservedLegendOffset.x;
+          legendCurrentOffset.y = preservedLegendOffset.y;
+        }
+        if (preservedDiagramOffset) {
+          diagramElements.value.forEach((el) => {
+            const current = parseTransform(el.getAttribute('transform'));
+            el.setAttribute(
+              'transform',
+              `translate(${current.x + preservedDiagramOffset.x}, ${
+                current.y + preservedDiagramOffset.y
+              })`
+            );
+          });
+          diagramOffset.x = preservedDiagramOffset.x;
+          diagramOffset.y = preservedDiagramOffset.y;
         }
       }
     } else {
@@ -961,7 +996,19 @@ export const createLegendRepositionActions = ({
     console.log(`Legend repositioned (${isLinear ? 'linear' : 'circular'}): ${oldPosition} -> ${newPosition}`);
   };
 
+  const refreshLegendGeometry = () => {
+    if (mode.value !== 'circular' || !svgContainer.value || !svgContent.value) return false;
+    const currentPosition = generatedLegendPosition.value || form.legend;
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg?.getElementById('legend') || !currentPosition || currentPosition === 'none') return false;
+    repositionForLegendChange(currentPosition, currentPosition, {
+      preserveManualOffsets: true
+    });
+    return true;
+  };
+
   return {
+    refreshLegendGeometry,
     repositionForLegendChange
   };
 };

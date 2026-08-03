@@ -76,6 +76,7 @@ export const createFeatureSvgActions = ({
     selectedResultIndex,
     isPanning,
     orthogroups,
+    collinearGroups,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     extractedFeatures,
@@ -678,7 +679,10 @@ export const createFeatureSvgActions = ({
     sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
       ? biologicalFeatures.value
       : (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []),
-    orthogroups: orthogroups?.value,
+    orthogroups: [
+      ...(Array.isArray(orthogroups?.value) ? orthogroups.value : []),
+      ...(Array.isArray(collinearGroups?.value) ? collinearGroups.value : [])
+    ],
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     resolveSequenceSource: matchSequenceRegistry?.resolve
@@ -788,8 +792,11 @@ export const createFeatureSvgActions = ({
     });
     const pairwiseMatchElements = Array.from(svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR));
     const comparisonElementsByCollinearityBlockId = new Map();
-    pairwiseMatchElements.forEach((element) => {
+    pairwiseMatchElements.forEach((element, index) => {
       if (element?.style) element.style.cursor = 'pointer';
+      element.setAttribute('role', 'button');
+      element.setAttribute('tabindex', '0');
+      element.setAttribute('aria-label', `Pairwise match ${index + 1}`);
       const blockId = String(element.getAttribute('data-collinearity-block-id') || '').trim();
       if (!blockId) return;
       if (!comparisonElementsByCollinearityBlockId.has(blockId)) {
@@ -1048,6 +1055,15 @@ export const createFeatureSvgActions = ({
         }
       };
 
+      const handleKeyDown = (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const matchEl = getPairwiseMatchTarget(e.target, svg);
+        if (!matchEl) return;
+        e.stopPropagation();
+        e.preventDefault();
+        openPairwiseMatchPopup(matchEl, e, handlerState.featureLookup);
+      };
+
       const handlePointerDown = (e) => {
         if (!featureSelection?.startMarqueePointer?.(e, svg)) return;
         e.stopPropagation();
@@ -1075,6 +1091,7 @@ export const createFeatureSvgActions = ({
       svg.addEventListener('mousemove', handleMouseMove);
       svg.addEventListener('mouseout', handleMouseOut);
       svg.addEventListener('click', handleClick);
+      svg.addEventListener('keydown', handleKeyDown);
       svg.addEventListener('pointerdown', handlePointerDown, true);
       svg.addEventListener('pointermove', handlePointerMove, true);
       svg.addEventListener('pointerup', handlePointerUp, true);
@@ -1084,6 +1101,7 @@ export const createFeatureSvgActions = ({
         svg.removeEventListener('mousemove', handleMouseMove);
         svg.removeEventListener('mouseout', handleMouseOut);
         svg.removeEventListener('click', handleClick);
+        svg.removeEventListener('keydown', handleKeyDown);
         svg.removeEventListener('pointerdown', handlePointerDown, true);
         svg.removeEventListener('pointermove', handlePointerMove, true);
         svg.removeEventListener('pointerup', handlePointerUp, true);

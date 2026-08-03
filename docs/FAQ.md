@@ -2,6 +2,15 @@
 
 # Frequently asked questions
 
+## Contents
+
+- [Web app and rendering](#is-there-a-web-gui-do-i-need-streamlit)
+- [Inputs and annotations](#can-i-use-a-gff3-file-by-itself)
+- [Labels, colors, and regions](#my-labels-overlap-what-should-i-do)
+- [Comparisons and sessions](#my-comparative-diagram-has-no-ribbons-what-is-usually-wrong)
+- [Depth, GC, and skew](#what-if-one-record-has-no-depth-tsv-for-a-sample)
+- [Output and limitations](#why-does-svg-export-work-but-pngpdfepsps-export-fail)
+
 ## Is there a web GUI? Do I need Streamlit?
 
 Use [https://gbdraw.app/](https://gbdraw.app/) for the hosted app, or run `gbdraw gui` locally after installation. Streamlit is not required. Local GUI analysis runs on your machine; the interactive gallery examples are hosted at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/).
@@ -45,13 +54,13 @@ Common fixes:
 3. Keep only important labels with `--label_whitelist` regex patterns
 4. Use the `--track_type middle` circular preset or reduce the number of displayed labels
 
-See [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md) for examples.
+See [How to style features, labels, titles, and legends](./HOW_TO/GUI/style-features-labels-titles-and-legends.md) for a web-app example.
 
 ## How do I change the color of one specific gene?
 
 Use a feature-specific color table with `-t`. This matches selected features by qualifier values and assigns a color and legend label.
 
-See [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md) and [Recipes](./RECIPES.md).
+See [How to set colors, labels, visibility, shapes, and strokes](./HOW_TO/CLI/set-colors-labels-visibility-shapes-and-strokes.md) and [Recipes](./RECIPES.md).
 
 ## Why does a web app color edit create a qualifier rule for some labels and `hash` rules for others?
 
@@ -65,7 +74,7 @@ Exact duplicate records are a special case: identical feature type, record ID, c
 
 Use `--annotation_table` and bind each `set_id` to an `annotations` custom track slot. Coordinate targets are 1-based and inclusive. Feature targets use the qualifiers already loaded from GenBank or GFF3, such as `locus_tag=ABC_001`.
 
-The same table works in Circular and Linear mode. See [Region annotation tables](./TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables).
+The same table works in Circular and Linear mode. See [How to add region annotations and custom track slots](./HOW_TO/CLI/add-region-annotations-and-track-slots.md).
 
 ## My comparative diagram has no ribbons. What is usually wrong?
 
@@ -75,7 +84,7 @@ The most common causes are:
 2. The BLAST file order does not match the genome input order
 3. Filtering thresholds such as `--evalue`, `--bitscore`, `--identity`, or `--alignment_length` are too strict
 
-See [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
+See [How to draw comparisons from precomputed BLAST results](./HOW_TO/CLI/draw-precomputed-comparisons.md) for a working example.
 
 ## How do I draw several Linear records without comparing them in the web app?
 
@@ -85,7 +94,7 @@ render. Uploaded comparison files and custom raw-result filenames can remain in
 the saved session as inactive drafts; use their separate reuse actions before
 they can participate in a later comparison.
 
-See the screenshot in [Web app comparison plans](./TUTORIALS/2_Comparative_Genomics.md#web-app-comparison-plans)
+See the screenshot in [How to use uploaded BLAST results](./HOW_TO/GUI/use-uploaded-blast-results.md)
 for the exact control to select.
 
 Use **Run LOSAT** or **Upload BLAST TSV** for all positional adjacent gaps. In
@@ -129,7 +138,7 @@ gbdraw linear \
   -f svg
 ```
 
-Use `--depth_track '' record-b.depth.tsv` when only the second record has data. The empty argument means that the logical series is missing for that record. gbdraw does not substitute another file or draw zero coverage. In Linear mode the missing cell also reserves no vertical space, while the series identity remains stable for records that do contain data. Each group must contain at least one real file. See [Plot read depth and other numeric tracks](./TUTORIALS/6_Depth_Quantitative_Tracks.md#3-compare-depth-across-records) for a runnable example.
+Use `--depth_track '' record-b.depth.tsv` when only the second record has data. The empty argument means that the logical series is missing for that record. gbdraw does not substitute another file or draw zero coverage. In Linear mode the missing cell also reserves no vertical space, while the series identity remains stable for records that do contain data. Each group must contain at least one real file. See [How to add depth, GC content, and skew tracks](./HOW_TO/CLI/add-depth-gc-and-skew-tracks.md) for a runnable example.
 
 ## Why is my circular BLAST similarity ring empty?
 

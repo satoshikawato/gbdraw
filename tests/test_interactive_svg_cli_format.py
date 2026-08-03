@@ -30,7 +30,11 @@ from gbdraw.render.formats import (
     parse_format_string,
     resolve_format_output_path,
 )
-from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+from gbdraw.render.interactive_svg import (
+    InteractiveSvgContext,
+    _feature_payloads,
+    enrich_svg,
+)
 from gbdraw.features.ids import compute_feature_hash, compute_feature_hash_from_parts
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 from gbdraw.web_support.orthogroup_metadata import enrich_features_with_orthogroups
@@ -158,6 +162,188 @@ def test_enrich_svg_embeds_selected_schema_three_catalog_item_exactly() -> None:
     assert feature.get("data-gbdraw-stable-feature-id") == "stable-feature"
 
 
+def test_enrich_svg_rejects_external_catalog_feature_with_conflicting_dom_identity() -> None:
+    item = {
+        "resultIndex": 0,
+        "resultName": "conflict.svg",
+        "recordKeys": ["record-a", "record-b"],
+        "features": [
+            {
+                "svgId": "rendered-feature",
+                "recordKey": "record-a",
+                "biologicalFeatureId": "biological-feature",
+            }
+        ],
+        "biologicalFeatures": [
+            {
+                "recordKey": "record-a",
+                "biologicalFeatureId": "biological-feature",
+                "stableFeatureId": "stable-a",
+            }
+        ],
+        "orthogroups": [],
+        "annotations": [],
+        "comparisonMatches": [],
+    }
+    svg = """<svg xmlns="http://www.w3.org/2000/svg">
+      <path id="rendered-feature" data-gbdraw-feature-id="rendered-feature"
+        data-gbdraw-stable-feature-id="stable-b"
+        data-gbdraw-record-index="1" />
+    </svg>"""
+
+    with pytest.raises(GbdrawError, match="does not agree with rendered SVG ID"):
+        enrich_svg(
+            svg,
+            result_index=0,
+            result_name="conflict.svg",
+            feature_catalog={"schema": 3, "items": [item]},
+        )
+
+    basename_item = json.loads(json.dumps(item))
+    basename_item["features"][0]["svgId"] = "stable-b"
+    basename_svg = """<svg xmlns="http://www.w3.org/2000/svg">
+      <path id="stable-b" data-gbdraw-feature-id="stable-b"
+        data-gbdraw-stable-feature-id="stable-b"
+        data-gbdraw-record-index="0" />
+    </svg>"""
+    with pytest.raises(GbdrawError, match="does not agree with rendered SVG ID"):
+        enrich_svg(
+            basename_svg,
+            result_index=0,
+            result_name="conflict.svg",
+            feature_catalog={"schema": 3, "items": [basename_item]},
+        )
+
+
+def test_enrich_svg_rejects_conflicting_duplicate_dom_feature_identity_with_catalog() -> None:
+    item = {
+        "resultIndex": 0,
+        "resultName": "duplicate.svg",
+        "recordKeys": ["record-a", "record-b"],
+        "features": [
+            {
+                "svgId": "rendered-feature",
+                "recordKey": "record-a",
+                "biologicalFeatureId": "biological-feature",
+            }
+        ],
+        "biologicalFeatures": [
+            {
+                "recordKey": "record-a",
+                "biologicalFeatureId": "biological-feature",
+                "stableFeatureId": "stable-a",
+            }
+        ],
+        "orthogroups": [],
+        "annotations": [],
+        "comparisonMatches": [],
+    }
+    svg = """<svg xmlns="http://www.w3.org/2000/svg">
+      <path id="rendered-feature__part1" data-gbdraw-feature-id="rendered-feature"
+        data-gbdraw-stable-feature-id="stable-a" data-gbdraw-record-index="0" />
+      <path id="rendered-feature__part2" data-gbdraw-feature-id="rendered-feature"
+        data-gbdraw-stable-feature-id="stable-b" data-gbdraw-record-index="1" />
+    </svg>"""
+
+    with pytest.raises(GbdrawError, match="conflicting DOM identity"):
+        enrich_svg(
+            svg,
+            result_index=0,
+            result_name="duplicate.svg",
+            feature_catalog={"schema": 3, "items": [item]},
+        )
+
+
+def test_enrich_svg_binds_external_catalog_matches_by_unique_id() -> None:
+    item = {
+        "resultIndex": 0,
+        "resultName": "matches.svg",
+        "recordKeys": [],
+        "features": [],
+        "biologicalFeatures": [],
+        "orthogroups": [],
+        "annotations": [],
+        "comparisonMatches": [
+            {"id": "M2", "match_kind": "pairwise"},
+            {"id": "M1", "match_kind": "pairwise"},
+        ],
+    }
+    svg = """<svg xmlns="http://www.w3.org/2000/svg">
+      <path id="path-1" data-gbdraw-match-id="M1" data-match-kind="pairwise" />
+      <path id="path-2" data-gbdraw-match-id="M2" data-match-kind="pairwise" />
+    </svg>"""
+
+    enriched = enrich_svg(
+        svg,
+        result_index=0,
+        result_name="matches.svg",
+        feature_catalog={"schema": 3, "items": [item]},
+    )
+    root = ET.fromstring(enriched)
+    by_element_id = {
+        element.get("id"): element
+        for element in root.iter()
+        if element.get("id") in {"path-1", "path-2"}
+    }
+
+    assert by_element_id["path-1"].get("data-gbdraw-match-id") == "M1"
+    assert by_element_id["path-1"].get("data-gbdraw-pairwise-match-id") == "M1"
+    assert by_element_id["path-2"].get("data-gbdraw-match-id") == "M2"
+    assert by_element_id["path-2"].get("data-gbdraw-pairwise-match-id") == "M2"
+
+
+def test_enrich_svg_rejects_conflicting_dom_match_id_aliases() -> None:
+    item = {
+        "resultIndex": 0,
+        "resultName": "matches.svg",
+        "recordKeys": [],
+        "features": [],
+        "biologicalFeatures": [],
+        "orthogroups": [],
+        "annotations": [],
+        "comparisonMatches": [{"id": "M1", "match_kind": "pairwise"}],
+    }
+    svg = """<svg xmlns="http://www.w3.org/2000/svg">
+      <path data-gbdraw-match-id="M1" data-gbdraw-pairwise-match-id="M2"
+        data-match-kind="pairwise" />
+    </svg>"""
+
+    with pytest.raises(GbdrawError, match="invalid or duplicate match IDs"):
+        enrich_svg(
+            svg,
+            result_index=0,
+            result_name="matches.svg",
+            feature_catalog={"schema": 3, "items": [item]},
+        )
+
+
+@pytest.mark.parametrize(
+    ("svg", "message"),
+    [
+        (
+            """<svg xmlns="http://www.w3.org/2000/svg">
+              <path data-gbdraw-match-id="M1"
+                data-gbdraw-pairwise-match-id="M2" data-match-kind="pairwise" />
+            </svg>""",
+            "conflicting match ID aliases",
+        ),
+        (
+            """<svg xmlns="http://www.w3.org/2000/svg">
+              <path data-gbdraw-match-id="M1" data-match-kind="pairwise" />
+              <path data-gbdraw-pairwise-match-id="M1" data-match-kind="pairwise" />
+            </svg>""",
+            "duplicate match IDs",
+        ),
+    ],
+)
+def test_enrich_svg_internal_catalog_rejects_invalid_match_ids(
+    svg: str,
+    message: str,
+) -> None:
+    with pytest.raises(GbdrawError, match=message):
+        enrich_svg(svg)
+
+
 def test_interactive_types_and_builder_are_public() -> None:
     feature = SeqFeature(
         SimpleLocation(0, 9, strand=1),
@@ -244,6 +430,301 @@ def test_orthogroup_enrichment_requires_record_index_for_ambiguous_stable_ids() 
     assert "orthogroup_id" not in enriched[2]
 
 
+def test_orthogroup_enrichment_requires_matching_record_scoped_identity() -> None:
+    groups = [
+        {
+            "id": "og_record_zero",
+            "members": [
+                {
+                    "recordIndex": 0,
+                    "featureSvgId": "stable-feature",
+                    "stableFeatureSvgId": "stable-feature",
+                    "renderedFeatureSvgId": "rendered-feature_record_1",
+                    "proteinId": "PUBLIC_001",
+                }
+            ],
+        }
+    ]
+    candidates = [
+        {
+            "record_idx": 0,
+            "svg_id": "rendered-feature_record_1",
+            "stable_feature_id": "stable-feature",
+        },
+        {"record_idx": 1, "stable_feature_id": "stable-feature"},
+        {"stable_feature_id": "stable-feature"},
+        {
+            "record_idx": 0,
+            "recordIndex": 1,
+            "stable_feature_id": "stable-feature",
+        },
+        {"record_idx": 0, "protein_id": "PUBLIC_001"},
+    ]
+
+    enriched = enrich_features_with_orthogroups(candidates, groups)
+
+    assert enriched[0]["orthogroup_id"] == "og_record_zero"
+    for candidate, unresolved in zip(candidates[1:], enriched[1:], strict=True):
+        assert unresolved == candidate
+
+
+def test_orthogroup_enrichment_requires_complete_unique_alias_agreement() -> None:
+    group = {
+        "id": "og_strict",
+        "members": [
+            {
+                "recordIndex": 0,
+                "featureIndex": 7,
+                "stableFeatureSvgId": "stable-feature",
+                "renderedFeatureSvgId": "rendered-feature",
+            }
+        ],
+    }
+    valid = {
+        "record_idx": 0,
+        "feature_index": 7,
+        "stable_feature_id": "stable-feature",
+        "rendered_feature_svg_id": "rendered-feature",
+    }
+    invalid = [
+        {
+            **valid,
+            "rendered_feature_svg_id": "unknown-rendered",
+        },
+        {**valid, "recordIndex": -1},
+        {**valid, "record_idx": "0.9"},
+        {**valid, "stableFeatureId": "wrong-stable"},
+        {**valid, "featureIndex": 8},
+        {
+            **valid,
+            "stable_feature_id": "not-a-member",
+            "rendered_feature_svg_id": "not-rendered",
+            "orthogroup_id": "stale",
+            "orthogroup_member": {"recordIndex": 99},
+        },
+    ]
+
+    enriched = enrich_features_with_orthogroups([valid, *invalid], [group])
+
+    assert enriched[0]["orthogroup_id"] == "og_strict"
+    for source, unresolved in zip(invalid, enriched[1:], strict=True):
+        expected = dict(source)
+        expected.pop("orthogroup_id", None)
+        expected.pop("orthogroup_member", None)
+        assert unresolved == expected
+
+
+def test_orthogroup_enrichment_rejects_duplicate_member_identity() -> None:
+    member = {
+        "recordIndex": 0,
+        "stableFeatureSvgId": "duplicate-stable",
+    }
+    feature = {"record_idx": 0, "stable_feature_id": "duplicate-stable"}
+    enriched = enrich_features_with_orthogroups(
+        [feature],
+        [
+            {"id": "og_a", "members": [member]},
+            {"id": "og_b", "members": [dict(member)]},
+        ],
+    )
+
+    assert enriched == [feature]
+
+
+def test_orthogroup_enrichment_keeps_source_and_rendered_ids_in_separate_namespaces() -> None:
+    groups = [
+        {
+            "id": "og_role_a",
+            "members": [
+                {
+                    "recordIndex": 0,
+                    "stableFeatureSvgId": "stable-a",
+                    "featureSvgId": "stable-a",
+                    "renderedFeatureSvgId": "collision",
+                }
+            ],
+        },
+        {
+            "id": "og_role_b",
+            "members": [
+                {
+                    "recordIndex": 0,
+                    "stableFeatureSvgId": "collision",
+                    "featureSvgId": "collision",
+                    "renderedFeatureSvgId": "rendered-b",
+                }
+            ],
+        },
+    ]
+
+    enriched = enrich_features_with_orthogroups(
+        [
+            {"record_idx": 0, "stable_feature_id": "collision"},
+            {
+                "record_idx": 0,
+                "stable_feature_id": "stable-a",
+                "svg_id": "collision",
+            },
+        ],
+        groups,
+    )
+
+    assert enriched[0]["orthogroup_id"] == "og_role_b"
+    assert enriched[1]["orthogroup_id"] == "og_role_a"
+
+
+def test_orthogroup_enrichment_rejects_conflicting_member_source_id_aliases() -> None:
+    feature = {"record_idx": 0, "stable_feature_id": "stable-a"}
+    enriched = enrich_features_with_orthogroups(
+        [feature],
+        [
+            {
+                "id": "og_conflicting_member_aliases",
+                "members": [
+                    {
+                        "recordIndex": 0,
+                        "stableFeatureSvgId": "stable-a",
+                        "featureSvgId": "collision",
+                    }
+                ],
+            }
+        ],
+    )
+
+    assert enriched == [feature]
+
+
+def test_feature_payloads_do_not_rebind_duplicate_explicit_rendered_handle() -> None:
+    root = ET.fromstring(
+        """<svg xmlns="http://www.w3.org/2000/svg">
+          <path id="A" data-gbdraw-feature-id="A"
+            data-gbdraw-stable-feature-id="X" data-gbdraw-record-index="0" />
+          <path id="Y" data-gbdraw-feature-id="Y"
+            data-gbdraw-stable-feature-id="Y" data-gbdraw-record-index="0" />
+        </svg>"""
+    )
+    context = InteractiveSvgContext(
+        features=[
+            {
+                "record_idx": 0,
+                "stable_feature_id": "X",
+                "rendered_feature_svg_id": "A",
+            },
+            {
+                "record_idx": 0,
+                "stable_feature_id": "X",
+                "rendered_feature_svg_id": "A",
+            },
+        ]
+    )
+
+    with pytest.raises(
+        GbdrawError,
+        match="Multiple feature metadata entries resolve to rendered SVG ID 'A'",
+    ):
+        _feature_payloads(root, context)
+
+
+def test_feature_payloads_keep_rendered_and_stable_dom_ids_in_separate_namespaces() -> None:
+    root = ET.fromstring(
+        """<svg xmlns="http://www.w3.org/2000/svg">
+          <path id="collision" data-gbdraw-feature-id="collision"
+            data-gbdraw-stable-feature-id="stable-a" data-gbdraw-record-index="0" />
+          <path id="rendered-b" data-gbdraw-feature-id="rendered-b"
+            data-gbdraw-stable-feature-id="collision" data-gbdraw-record-index="0" />
+        </svg>"""
+    )
+    payloads = _feature_payloads(
+        root,
+        InteractiveSvgContext(
+            features=[
+                {
+                    "record_idx": 0,
+                    "stable_feature_id": "stable-a",
+                    "rendered_feature_svg_id": "collision",
+                    "product": "feature A",
+                },
+                {
+                    "record_idx": 0,
+                    "stable_feature_id": "collision",
+                    "rendered_feature_svg_id": "rendered-b",
+                    "product": "feature B",
+                },
+            ]
+        ),
+    )
+
+    assert {
+        payload["svg_id"]: payload.get("label")
+        for payload in payloads
+    } == {"collision": "feature A", "rendered-b": "feature B"}
+
+
+def test_feature_payloads_reject_rendered_handle_with_conflicting_dom_identity() -> None:
+    root = ET.fromstring(
+        """<svg xmlns="http://www.w3.org/2000/svg">
+          <path id="rendered" data-gbdraw-feature-id="rendered"
+            data-gbdraw-stable-feature-id="stable-A" data-gbdraw-record-index="0" />
+        </svg>"""
+    )
+
+    with pytest.raises(GbdrawError, match="does not agree with rendered SVG ID"):
+        _feature_payloads(
+            root,
+            InteractiveSvgContext(
+                features=[
+                    {
+                        "record_idx": 0,
+                        "feature_index": 1,
+                        "stable_feature_id": "stable-B",
+                        "rendered_feature_svg_id": "rendered",
+                    }
+                ]
+            ),
+        )
+
+
+def test_feature_payloads_do_not_treat_recordless_stable_id_as_rendered_handle() -> None:
+    root = ET.fromstring(
+        """<svg xmlns="http://www.w3.org/2000/svg">
+          <path id="actual-rendered" data-gbdraw-feature-id="actual-rendered"
+            data-gbdraw-stable-feature-id="requested-rendered" />
+        </svg>"""
+    )
+    payloads = _feature_payloads(
+        root,
+        InteractiveSvgContext(
+            features=[
+                {
+                    "stable_feature_id": "requested-rendered",
+                    "rendered_feature_svg_id": "requested-rendered",
+                    "product": "must not bind",
+                }
+            ]
+        ),
+    )
+
+    assert len(payloads) == 1
+    assert payloads[0]["svg_id"] == "actual-rendered"
+    assert payloads[0].get("product", "") == ""
+
+
+def test_feature_payloads_reject_conflicting_duplicate_dom_identity() -> None:
+    root = ET.fromstring(
+        """<svg xmlns="http://www.w3.org/2000/svg">
+          <path id="R__part1" data-gbdraw-feature-id="R"
+            data-gbdraw-feature-part="block"
+            data-gbdraw-stable-feature-id="stable-A" data-gbdraw-record-index="0" />
+          <path id="R__part2" data-gbdraw-feature-id="R"
+            data-gbdraw-feature-part="block"
+            data-gbdraw-stable-feature-id="stable-B" data-gbdraw-record-index="1" />
+        </svg>"""
+    )
+
+    with pytest.raises(GbdrawError, match="conflicting DOM identity"):
+        _feature_payloads(root, InteractiveSvgContext())
+
+
 def test_parse_formats_accepts_interactive_svg_alias_and_dedupes() -> None:
     assert export_module.parse_formats("svg,interactive-svg,interactive_svg") == [
         SVG_FORMAT,
@@ -284,6 +765,7 @@ def test_enrich_svg_marks_features_matches_and_embeds_assets() -> None:
                     "label": "geneA",
                     "type": "CDS",
                     "record_id": "rec1",
+                    "record_idx": 0,
                 }
             ]
         ),
@@ -365,6 +847,7 @@ def test_enrich_svg_v3_embeds_sequences_without_precomputed_fastas() -> None:
                 {
                     "svg_id": "fseq",
                     "record_id": "rec1",
+                    "record_idx": 0,
                     "type": "CDS",
                     "start": 0,
                     "end": 9,
@@ -399,6 +882,7 @@ def test_enrich_svg_v3_deduplicates_translation_sequence() -> None:
                 features=[
                     {
                         "svg_id": "fseq",
+                        "record_idx": 0,
                         "type": "CDS",
                         "qualifiers": {"translation": ["MPEPTIDE"]},
                         "amino_acid_sequence": "MPEPTIDE",
@@ -444,7 +928,10 @@ def test_enrich_svg_matches_record_suffixed_session_feature_ids() -> None:
             features=[
                 {
                     "svg_id": "fseq_record_1",
+                    "stable_feature_id": "fseq",
+                    "rendered_feature_svg_id": "fseq",
                     "record_id": "rec1",
+                    "record_idx": 0,
                     "type": "CDS",
                     "start": 0,
                     "end": 9,
@@ -638,6 +1125,7 @@ def test_enrich_svg_uses_orthogroup_payload_for_feature_and_match_metadata() -> 
                 {
                     "svg_id": "fquery",
                     "record_id": "rec1",
+                    "record_idx": 0,
                     "type": "CDS",
                     "orthogroup_id": "og_1",
                     "orthogroup_member_count": 1,
@@ -645,6 +1133,7 @@ def test_enrich_svg_uses_orthogroup_payload_for_feature_and_match_metadata() -> 
                     "orthogroup_member": {
                         "featureSvgId": "fquery",
                         "sourceProteinId": "WP_000001.1",
+                        "recordIndex": 0,
                     },
                 }
             ],
@@ -659,6 +1148,7 @@ def test_enrich_svg_uses_orthogroup_payload_for_feature_and_match_metadata() -> 
                         {
                             "featureSvgId": "fquery",
                             "recordId": "rec1",
+                            "recordIndex": 0,
                             "sourceProteinId": "WP_000001.1",
                             "start": 0,
                             "end": 9,
@@ -694,6 +1184,7 @@ def test_enrich_svg_uses_stable_orthogroup_member_feature_ids() -> None:
         "featureSvgId": "fstable_record_1",
         "stableFeatureSvgId": "fstable",
         "recordId": "rec1",
+        "recordIndex": 0,
         "sourceProteinId": "WP_000001.1",
         "start": 0,
         "end": 9,
@@ -708,7 +1199,9 @@ def test_enrich_svg_uses_stable_orthogroup_member_feature_ids() -> None:
                     {
                         "svg_id": "fstable_record_1",
                         "stable_svg_id": "fstable",
+                        "rendered_feature_svg_id": "fstable",
                         "record_id": "rec1",
+                        "record_idx": 0,
                         "type": "CDS",
                         "start": 0,
                         "end": 9,
@@ -892,6 +1385,7 @@ def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> Non
                 {
                     "svg_id": "fquery",
                     "record_id": "rec1",
+                    "record_idx": 0,
                     "type": "CDS",
                     "start": 0,
                     "end": 9,
@@ -904,6 +1398,7 @@ def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> Non
                     "orthogroup_member": {
                         "featureSvgId": "fquery",
                         "recordId": "rec1",
+                        "recordIndex": 0,
                         "sourceProteinId": "WP_000001.1",
                         "start": 0,
                         "end": 9,
@@ -914,6 +1409,7 @@ def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> Non
                 {
                     "svg_id": "fsubject",
                     "record_id": "rec2",
+                    "record_idx": 1,
                     "type": "CDS",
                     "start": 9,
                     "end": 18,
@@ -926,6 +1422,7 @@ def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> Non
                     "orthogroup_member": {
                         "featureSvgId": "fsubject",
                         "recordId": "rec2",
+                        "recordIndex": 1,
                         "sourceProteinId": "WP_000002.1",
                         "start": 9,
                         "end": 18,
@@ -945,6 +1442,7 @@ def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> Non
                         {
                             "featureSvgId": "fquery",
                             "recordId": "rec1",
+                            "recordIndex": 0,
                             "sourceProteinId": "WP_000001.1",
                             "start": 0,
                             "end": 9,
@@ -954,6 +1452,7 @@ def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> Non
                         {
                             "featureSvgId": "fsubject",
                             "recordId": "rec2",
+                            "recordIndex": 1,
                             "sourceProteinId": "WP_000002.1",
                             "start": 9,
                             "end": 18,
@@ -1001,24 +1500,28 @@ def test_enrich_svg_match_metadata_matches_standalone_collinear_sections() -> No
             {
                 "svg_id": "fquery",
                 "record_id": "rec1",
+                "record_idx": 0,
                 "type": "CDS",
                 "orthogroup_id": "og_1",
                 "source_protein_id": "WP_000001.1",
                 "orthogroup_member": {
                     "featureSvgId": "fquery",
                     "recordId": "rec1",
+                    "recordIndex": 0,
                     "sourceProteinId": "WP_000001.1",
                 },
             },
             {
                 "svg_id": "fsubject",
                 "record_id": "rec2",
+                "record_idx": 1,
                 "type": "CDS",
                 "orthogroup_id": "og_1",
                 "source_protein_id": "WP_000002.1",
                 "orthogroup_member": {
                     "featureSvgId": "fsubject",
                     "recordId": "rec2",
+                    "recordIndex": 1,
                     "sourceProteinId": "WP_000002.1",
                 },
             },
@@ -1033,11 +1536,13 @@ def test_enrich_svg_match_metadata_matches_standalone_collinear_sections() -> No
                     {
                         "featureSvgId": "fquery",
                         "recordId": "rec1",
+                        "recordIndex": 0,
                         "sourceProteinId": "WP_000001.1",
                     },
                     {
                         "featureSvgId": "fsubject",
                         "recordId": "rec2",
+                        "recordIndex": 1,
                         "sourceProteinId": "WP_000002.1",
                     },
                 ],

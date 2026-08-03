@@ -2,7 +2,7 @@
 
 Date: 2026-08-03
 
-Status: Proposed; no tutorial capture implementation has started
+Status: Implemented and verified
 
 Primary audience for the new tutorial: biologists who want a publication-ready genome diagram without Python or command-line knowledge
 
@@ -173,13 +173,13 @@ cannot be combined safely, no later than Step 3.
 |---|---|---|---|---|---:|
 | T-GUI-01 | **Create and export your first circular genome diagram** | A non-programmer creates, labels, customizes, and exports a publication SVG. | `HmmtDNA.gbk` | Clean-context Playwright flow and parsed SVG download. | 6 |
 | T-GUI-02 | **Create and export your first linear genome diagram** | A non-programmer creates a labeled Lambda map with a ruler and exports SVG. | `NC_001416.gb` | Clean-context Playwright flow, real Linear generation, and parsed SVG download. | 4 |
-| T-GUI-03 | **Compare two genomes with LOSATN in the browser** | A biologist creates a nucleotide comparison without installing a search tool. | `BGC0000708.gbk` + `BGC0000713.gbk`, subject to the fixture-freeze check in Section 7. | Playwright runs browser LOSATN with serial/one-thread settings, verifies non-zero links, and downloads raw LOSAT TSV and SVG. | 5 |
-| T-GUI-04 | **Compare annotated proteins with LOSATP in the browser** | A biologist starts with two annotated records and finishes with Pairwise protein links. | Same two-record BGC pair. | Playwright runs LOSATP Pairwise, opens one match, verifies sequences, and downloads TSV/SVG. | 5 |
+| T-GUI-03 | **Compare two genomes with LOSATN in the browser** | A biologist creates a nucleotide comparison without installing a search tool. | Whole Lambda `NC_001416.1` and whole Enterobacteria phage DE3 `NC_042057.1`. | Playwright runs browser LOSATN with serial/one-thread settings, verifies the six frozen links, and downloads raw LOSAT TSV and SVG. | 5 |
+| T-GUI-04 | **Compare annotated proteins with LOSATP in the browser** | A biologist starts with five annotated records and finishes with protein Similarity groups. | All five whole records in `aminoglycoside-bgc-five`. | Playwright runs LOSATP Similarity groups, opens one group, verifies members, and downloads TSV/SVG. | 5 |
 | T-CLI-01 | **Create a reproducible circular diagram from the command line** | A CLI user creates the same small Circular diagram in a clean directory. | `HmmtDNA.gbk` | Subprocess contract checks exit status, filename, SVG structure, accession, features, GC/skew, and ticks. | 0 screenshots; 1 generated figure |
 | T-CLI-02 | **Create a reproducible linear diagram from the command line** | A CLI user creates a Lambda map with labels and ruler. | `NC_001416.gb` | Subprocess contract checks exit status, filename, record, axes, labels, and ruler. | 0 screenshots; 1 generated figure |
 | T-PY-01 | **Draw and save your first genome diagram from Python** | A Python user loads a record, draws one Circular diagram, and saves it. | `HmmtDNA.gbk` | The exact documented code is imported and executed by pytest; its output is the published figure. | 0 screenshots; 1 generated figure |
 
-T-GUI-03 and T-GUI-04 each teach one comparison model. Similarity groups, Collinear blocks,
+T-GUI-03 and T-GUI-04 each teach one comparison model. Pairwise links, Collinear blocks,
 TLOSATX, Circular rings, and threshold variations are linked after `What you built` rather than
 added as branches inside those Tutorials.
 
@@ -191,12 +191,12 @@ or visible verification.
 
 | ID | Proposed English chapter | Reader goal and scope | Primary fixture/scenario | Proof | Images |
 |---|---|---|---|---|---:|
-| H-GUI-01 | **How to use GenBank and GFF3 + FASTA inputs** | Load GenBank/DDBJ or a matched GFF3 + FASTA pair and diagnose record-ID errors. | Lambda GenBank and two-contig Lambda GFF3/FNA. | Upload both paths; assert record IDs, CDS count, strands, and validation messages. | 3 |
-| H-GUI-02 | **How to arrange multiple circular records** | Put several records on one Circular canvas and choose placement/size behavior. | Small canonical multi-record bundle; large Vibrio GBFF remains a Gallery case study. | Assert record count, grid rows/columns, labels, and non-overlap semantics. | 3 |
+| H-GUI-01 | **How to use GenBank and GFF3 + FASTA inputs** | Load GenBank/DDBJ or a matched GFF3 + FASTA pair and diagnose record-ID errors. | Lambda GenBank and the whole-record Lambda GFF3/FNA derivative. | Upload both paths; assert record ID, complete length, CDS count, strands, and validation messages. | 3 |
+| H-GUI-02 | **How to arrange multiple circular records** | Put several records on one Circular canvas and choose placement/size behavior. | Four complete, naturally circular mitochondrial RefSeq records: *Homo sapiens*, *Danio rerio*, *Drosophila melanogaster*, and *Caenorhabditis elegans*. Large Vibrio GBFF remains a Gallery case study. | Assert the four accessions, complete-record and circular-topology metadata, grid rows/columns, labels on every record, CDS `gene` labels with no CDS `product` labels, and non-overlap semantics. | 3 |
 | H-GUI-03 | **How to arrange linear records, regions, and orientation** | Set rows, order, crop ranges, reverse complement, record gaps, definitions, and ruler. | Lambda/multi-record fixture. | Assert record order, displayed coordinate range, orientation, row topology, and ruler. | 4 |
-| H-GUI-04 | **How to use uploaded BLAST results** | Draw selected Linear comparison edges from prepared outfmt 6/7 files, including omitted edges. | Small BGC pair plus frozen LOSATN/TLOSATX TSV. | Upload the real TSV; assert only selected endpoints and expected links are drawn. | 3 |
-| H-GUI-05 | **How to use TLOSATX for translated nucleotide comparisons** | Choose translated-nucleotide evidence when nucleotide identity is insufficient. | Frozen BGC pair after a non-zero-hit qualification run. | Run browser TLOSATX serially with one thread; validate row count, endpoints, SVG links, and TSV download. | 3 |
-| H-GUI-06 | **How to add circular sequence-similarity rings** | Run or upload comparison evidence and place one or more rings around a Circular reference. | Small reference/comparison FASTA set; WSSV remains advanced Gallery material. | Assert ring count/order, selected reference side, HSP popup, and span-FASTA download. | 4 |
+| H-GUI-04 | **How to use uploaded BLAST results** | Draw selected Linear comparison edges from prepared outfmt 6/7 files, including omitted edges. | Whole Lambda and DE3 records plus their frozen LOSATN/TLOSATX TSV. | Upload the real TSV; assert only selected endpoints and expected links are drawn. | 3 |
+| H-GUI-05 | **How to use TLOSATX for translated nucleotide comparisons** | Choose translated-nucleotide evidence when nucleotide identity is insufficient. | Whole Lambda `NC_001416.1` and whole DE3 `NC_042057.1`. | Run browser TLOSATX serially with one thread and a 1,000 bp minimum alignment length; validate 397 raw rows, seven displayed links, endpoints, SVG links, and TSV download. | 3 |
+| H-GUI-06 | **How to add circular sequence-similarity rings** | Run or upload comparison evidence and place one or more rings around a Circular reference. | Complete, naturally circular mitochondrial genomes: human `NC_012920.1` as the reference and *Danio rerio* `NC_002333.2`, *Drosophila melanogaster* `NC_024511.2`, and *Caenorhabditis elegans* `NC_001328.1` as three rings; WSSV remains advanced Gallery material. | Assert all four whole-record identities/topologies, three-ring count/order and endpoints, human CDS `gene` labels with no CDS `product` labels, selected reference side, HSP popup, and span-FASTA download. | 4 |
 | H-GUI-07 | **How to create protein similarity groups with LOSATP** | Build all-record search-derived groups, inspect a group, and optionally align by a member. | Five BGC records. | Run actual LOSATP; assert 155 features, expected non-zero matches/groups, stable group IDs, popup, and raw TSV. | 4 |
 | H-GUI-08 | **How to draw collinear protein-match blocks with LOSATP** | Build ordered blocks and choose evidence scope and orientation/identity color mode. | Five BGC records. | Run actual LOSATP; assert block and anchor metadata, orientation, popup, and member FASTA export. | 4 |
 | H-GUI-09 | **How to add depth, GC content, and skew tracks** | Add one/multiple depth series, axes, GC percentage, GC skew, or AT skew. | Reduced depth fixture plus HmmtDNA. | Assert logical series count, kind/order, axis scale/ticks, legend, and values. | 4 |
@@ -216,10 +216,10 @@ generated figure are better evidence.
 | ID | Proposed English chapter | Scope | Primary executable proof |
 |---|---|---|---|
 | H-CLI-01 | **How to use GenBank, DDBJ, GFF3, and FASTA inputs** | Input selection, GFF3/FASTA ID matching, multi-contig records, and validation. | Run both GenBank and Lambda GFF3/FNA recipes; assert records, CDS, strands, and failure messages. |
-| H-CLI-02 | **How to use record, comparison, conservation, annotation, and track tables** | TSV manifests and their path-resolution behavior. | Execute one minimal recipe per manifest; validate schemas, dependencies, and output semantics. |
-| H-CLI-03 | **How to arrange multiple circular records and tracks** | Multi-record canvas positions/size modes and Circular track order/slots. | Assert records, grid topology, axis index, and track order in generated SVG/run metadata. |
+| H-CLI-02 | **How to use record, comparison, conservation, annotation, and track tables** | TSV manifests and their path-resolution behavior. | Execute one minimal recipe per manifest; validate schemas, dependencies, and output semantics. The record-table recipe uses the four complete metazoan mitochondrial genomes; the conservation-table recipe uses three complete-mtDNA TLOSATX comparisons against human mtDNA. Both assert every CDS label comes from `gene`, not `product`. |
+| H-CLI-03 | **How to arrange multiple circular records and tracks** | Multi-record canvas positions/size modes and Circular track order/slots, using the four complete metazoan mitochondrial genomes. | Assert accessions, complete-record and circular-topology metadata, grid topology, axis index, track order, and per-record CDS `gene` labels with no CDS `product` labels in generated SVG/run metadata. |
 | H-CLI-04 | **How to arrange linear records, regions, orientation, labels, and rulers** | Rows, selectors, crop, reverse complement, track layout, definitions, and ruler. | Execute every recipe in order from one empty directory; assert row/order/range/orientation and scale. |
-| H-CLI-05 | **How to draw comparisons from precomputed BLAST results** | `--blast`, `--comparisons_table`, filtering, ribbons/curves, and Circular `--conservation_blast`. | Assert HSP filtering, query/subject mapping, Linear links, and Circular ring semantics. |
+| H-CLI-05 | **How to draw comparisons from precomputed BLAST results** | Linear `--blast` for complete Lambda/DE3 and Circular `--conservation_blast` for complete metazoan mtDNA. | Assert HSP filtering, query/subject mapping, six Linear Lambda/DE3 links, three human-reference mtDNA rings, and CDS `gene` labels without product labels. |
 | H-CLI-06 | **How to run Pairwise protein searches with LOSATP** | `--protein_blastp_mode pairwise`, runtime selection, threads, hit limits, and saved evidence. | Run pinned LOSAT with one thread; assert raw hits and Pairwise links. |
 | H-CLI-07 | **How to create protein similarity groups with LOSATP** | `orthogroup` compatibility token, group membership, labels, and alignment target. | Assert stable group membership/IDs, labels, and aligned record placement. |
 | H-CLI-08 | **How to draw collinear protein-match blocks with LOSATP** | Collinear scope, anchors, gaps, and color modes. | Assert block count, anchor/order metadata, orientation, and colors. |
@@ -238,7 +238,7 @@ TLOSATX evidence is prepared outside the CLI workflow and read through `--blast`
 
 | ID | Proposed English chapter | Scope | Proof |
 |---|---|---|---|
-| H-PY-01 | **How to draw Circular and multi-record diagrams from Python** | `read_genbank`, `draw_circular`, layout options, and save/bytes output. | Execute the exact snippets; inspect records, tracks, and output bytes. |
+| H-PY-01 | **How to draw Circular and multi-record diagrams from Python** | `read_genbank`, `draw_circular`, layout options, and save/bytes output; the four-record example uses complete *H. sapiens*, *D. rerio*, *D. melanogaster*, and *C. elegans* mitochondrial genomes. | Execute the exact snippets; assert all four accessions, complete-record and circular-topology metadata, tracks, per-record CDS `gene` labels with no CDS `product` labels, and output bytes. |
 | H-PY-02 | **How to draw Linear diagrams and comparisons from Python** | `draw_linear`, rows, prepared comparisons, and comparison options. | Execute prepared-comparison and multi-row examples; inspect topology and links. |
 | H-PY-03 | **How to add tracks, annotations, colors, and labels from Python** | Depth, similarity rings, custom slots, feature/label options. | Type validation plus SVG semantic assertions and the published figure recipe. |
 | H-PY-04 | **How to use GFF3, in-memory records, and byte output** | `read_gff`, `SeqRecord`, file-like/in-memory inputs, `to_svg`, and `to_bytes`. | Execute each boundary and validate biological records and output signatures. |
@@ -367,8 +367,8 @@ storyboard in prose. Their manifest must encode the following successful path be
 | Tutorial | Standard path and early result | Finished result and verification |
 |---|---|---|
 | T-GUI-02 Linear | Step 1 upload `NC_001416.gb` and select Linear/No comparison; Step 2 click Generate and see the first Lambda map; Step 3 add labels and a ruler. | Regenerate, inspect the labeled/ruler result, download the promised SVG, and assert record, coordinates, features, labels, axis, ruler, and legend. |
-| T-GUI-03 LOSATN | Step 1 upload the frozen two-record pair; Step 2 generate a plain two-record Linear map; Step 3 choose browser LOSATN with pinned serial/one-thread settings and generate comparison links. | Inspect one link, download raw LOSAT TSV and SVG, and assert program/settings, endpoints, rows, links, popup spans, and file contents. |
-| T-GUI-04 LOSATP | Step 1 upload two annotated BGC records; Step 2 generate the plain Linear map; Step 3 choose LOSATP Pairwise with pinned settings and generate protein links. | Inspect one protein match, export raw evidence/member sequence where exposed, export SVG, and assert CDS translations, endpoints, non-zero links, popup sequences, and files. |
+| T-GUI-03 LOSATN | Step 1 upload whole Lambda `NC_001416.1` and whole DE3 `NC_042057.1`; Step 2 generate a plain two-record Linear map; Step 3 choose browser LOSATN `megablast` with pinned serial/one-thread settings and generate comparison links. | Inspect one of the six links, download raw LOSAT TSV and SVG, and assert program/settings, both complete endpoints, six rows/links, popup spans, and file contents. |
+| T-GUI-04 LOSATP | Step 1 upload all five annotated BGC records; Step 2 generate the plain five-record Linear map; Step 3 choose LOSATP Similarity groups with pinned settings and generate protein groups. | Inspect one group, export raw evidence/member sequences where exposed, export SVG, and assert all record IDs, CDS translations, non-zero groups, popup members, and files. |
 | T-CLI-01 Circular | Step 1 enter a clean tutorial directory containing the bundled fixture; Step 2 run the fixed `gbdraw circular` command and obtain SVG. | Inspect the named file and figure; automated proof parses accession, record length, features, GC/skew, ticks, label, and legend. |
 | T-CLI-02 Linear | Step 1 enter a clean tutorial directory containing the bundled Lambda fixture; Step 2 run the fixed `gbdraw linear` command and obtain SVG. | Inspect the named file and figure; automated proof parses record, features, labels, axis, ruler, and legend. |
 | T-PY-01 Python | Step 1 create the minimal script around the bundled HmmtDNA fixture; Step 2 execute it and obtain SVG. | Inspect the figure and returned object/file; pytest executes the literal snippet and validates the same semantics as the published image. |
@@ -387,19 +387,20 @@ Gallery files, and Tutorial folders after migration.
 ### 7.1 Bundled core fixture set
 
 The first public bundle is intentionally small but covers Circular, Linear, all three browser
-LOSAT programs, CLI protein modes, and GFF3 + FASTA. The current source files total roughly
-0.8 MiB before packaging.
+LOSAT programs, CLI protein modes, and GFF3 + FASTA. The frozen source files total 981,228
+bytes before packaging, within the 1 MiB core budget.
 
 | Fixture ID | Canonical files | Primary chapter ownership | Qualification before freeze |
 |---|---|---|---|
 | `human-mitochondrion` | `HmmtDNA.gbk`, `HmmtDNA_qualifier_priority.tsv`, small style/visibility rules | Circular GUI/CLI/Python, labels, shapes, GC/skew, sessions, export | Preserve `NC_012920.1`, 16,569 bp, file checksum, expected feature types/counts, and current visual quality. |
 | `lambda` | `NC_001416.gb` | Linear GUI/CLI, ruler, regions, orientation | Preserve `NC_001416.1`, 48,502 bp, record/features, and deterministic label/ruler result. |
-| `lambda-gff3` | `lambda_two_contigs.gff3`, `lambda_two_contigs.fna` | GFF3 + FASTA GUI/CLI/API and multi-record layout | Freeze both record IDs, order, length, CDS count, and strand semantics. |
-| `aminoglycoside-bgc-five` | `BGC0000708.gbk`, `BGC0000709.gbk`, `BGC0000711.gbk`, `BGC0000712.gbk`, `BGC0000713.gbk`; color/qualifier TSVs | LOSATP Pairwise, Similarity groups, Collinear blocks, feature styling | Run pinned serial one-thread LOSATP. Record runtime version, thresholds, raw-result checksums, 155 displayed features, and qualified match/group/block counts. |
-| `aminoglycoside-bgc-pair` | Views of `BGC0000708.gbk` and `BGC0000713.gbk` from the five-record bundle | Browser LOSATN/TLOSATX, uploaded comparison TSV | Before prose is written, prove LOSATN and TLOSATX both produce biologically usable non-zero results; freeze program/task/thresholds, row counts, endpoint IDs, and raw TSV checksums. Choose a different small pair if this gate fails. |
+| `lambda-gff3` | `NC_001416.gff3`, `NC_001416.fna` | GFF3 + FASTA GUI/CLI/API | Preserve the complete natural `NC_001416.1` record without cropping or splitting; freeze 48,502 bp, gene/CDS counts, strands, translations, and checksums. |
+| `de3` | `NC_042057.1.gb` | LOSATN/TLOSATX comparison input | Preserve the complete natural `NC_042057.1` record: 42,925 bp, 57 CDS, +37/-20 CDS strands, accession/version, and checksums. Do not substitute another record or a cropped derivative. |
+| `lambda-de3-comparison` | `lambda-de3.losatn.tsv`, `lambda-de3.tlosatx.tsv` | Browser LOSATN/TLOSATX, uploaded Linear comparisons, and CLI/Python comparisons | Derive only from the two whole records with pinned browser WASM, serial scheduling, and one thread. Freeze LOSATN's six raw/default rows and TLOSATX's 397 raw rows, 266 default-displayed rows, seven tutorial-displayed rows at 1,000 bp minimum alignment length, arguments, endpoints, orientations, and checksums. |
+| `aminoglycoside-bgc-five` | `BGC0000708.gbk`, `BGC0000709.gbk`, `BGC0000711.gbk`, `BGC0000712.gbk`, `BGC0000713.gbk`; color/qualifier TSVs | LOSATP Similarity groups, Collinear blocks, feature styling | Run pinned serial one-thread LOSATP across all five whole records. Record runtime version, thresholds, raw-result checksums, 155 displayed features, and qualified group/block counts. |
 
 The BGC fixture qualification already indicates that a fixed one-thread run is practical for
-PR checks: Pairwise, Similarity groups, and Collinear modes complete on the order of seconds to
+PR checks: Similarity groups and Collinear modes complete on the order of seconds to
 tens of seconds in the inspected environment. Those observations are planning evidence, not a
 portable timeout contract; CI timeouts will be derived from repeated pinned runs.
 
@@ -407,16 +408,21 @@ portable timeout contract; CI timeouts will be derived from repeated pinned runs
 
 | Fixture ID | Canonical or derived files | Use and policy |
 |---|---|---|
-| `tobacco-plastome-regions` | `NC_001879.gbk`, `nicotiana-tabacum-regions.tsv`, color/qualifier TSVs | Region annotations and custom Circular slots. Package if the incremental size stays within the documented tutorial-data budget. |
-| `depth-1kb` | A committed 1 kb-binned derivative of `AP027133.DRR394922.depth.tsv` plus its matching record | Depth/axis chapters. Generate with a committed reducer, freeze source and derivative checksums, bin count, min/max, and aggregation rule. Do not ship the 12-14 MiB raw table in the beginner bundle. |
-| `prepared-comparison-pair` | Small frozen LOSATN and TLOSATX outfmt tables derived from the canonical BGC pair | Uploaded-comparison GUI and precomputed-comparison CLI. Record program/version/arguments, query/subject direction, row count, 12-column contract, and checksum. |
-| `multi-record-small` | Lambda two-contig data and, only if needed, a purpose-built small multi-row manifest | Circular grid, Linear rows, selectors, crop, and reverse-complement chapters. Prefer reusing biological fixtures over inventing duplicate records. |
+| `tobacco-plastome-regions` | Complete `NC_001879.2` as `NC_001879.gbk`, `nicotiana-tabacum-regions.tsv`, `modified_default_colors.tsv`, and `qualifier_priority.tsv` | Region annotations and custom Circular slots. The four-file, 332,572-byte fixture preserves the complete 155,943 bp circular plastome and four named source-coordinate regions. |
+| `depth-1kb` | Complete circular `AP027133.1` plus `AP027133.DRR394922.depth-1kb.tsv` | Depth/axis chapters. `tools/build_depth_1kb_fixture.py` reproducibly reduces the 606,194-row, 12.6 MB per-base source into 607 consecutive non-overlapping 1 kbp arithmetic means. Freeze source and derivative checksums, bin starts, min/max, and the plotting contract; do not ship the raw table in the tutorial bundle. The two packaged files total 1,361,007 bytes. |
+| `metazoan-mitochondria-four` | Existing `HmmtDNA.gbk` (`NC_012920.1`) plus `NC_002333.2.gb`, `NC_024511.2.gb`, and `NC_001328.1.gb` | Circular grid examples for *Homo sapiens*, *Danio rerio*, *Drosophila melanogaster*, and *Caenorhabditis elegans*. Every input is the complete natural RefSeq mitochondrial genome and is annotated as circular. Never render a cropped, partial, or naturally linear record as Circular merely to demonstrate layout. The three additional records form a 167,108-byte extended-tier increment. |
+| `metazoan-mitochondria-comparison` | `danio-human.tlosatx.tsv`, `drosophila-human.tlosatx.tsv`, and `caenorhabditis-human.tlosatx.tsv` | Circular conservation examples. Reproduce the three tables from the complete mtDNA records with pinned native LOSAT 0.1.0, record-specific mitochondrial genetic codes, serial one-thread execution, and two byte-identical runs. Freeze 435 raw rows, 106 displayed rows, 9,813 bp union coverage on the human subject, endpoints, orientations, and checksums. The three derived files add 30,552 bytes. |
 
 Large AP027 depth tables, full Vibrio assemblies, nine-record Majanivirus data, the WSSV
 20-series comparison, and large saved sessions remain Gallery/nightly fixtures. They are not
 downloaded by beginner chapters and do not run in every pull-request capture. A Gallery chapter
 may use them only with a committed raw-input or derivation recipe and a separate size/runtime
 budget.
+
+The committed extended tier is 1,891,239 bytes across 12 files: the three additional
+metazoan mitochondrial records, three mtDNA TLOSATX tables, the tobacco plastome fixture,
+and the AP027133 depth fixture.
+It remains below the 5 MiB extended ceiling.
 
 ### 7.3 Manifest contract
 
@@ -426,6 +432,9 @@ Add one `gbdraw/web/tutorial-data/manifest.json`. Every raw or derived file reco
 - accession and sequence version where applicable;
 - organism, record description, record IDs/order, sequence lengths, feature/CDS counts, and strands;
 - authoritative source URL, retrieval date, license/provenance note, and any filename normalization;
+  legacy files whose acquisition date cannot be recovered use `retrievedOn: null` plus
+  `retrievalDateStatus: unknown-legacy`, while retaining the repository-added date and verified
+  checksum; files added after 2026-08-04 require an ISO retrieval date;
 - derivation script, source fixture/checksum, tool version, arguments, and output statistics;
 - intended scenario IDs, package tier (`core`, `extended`, or `gallery-nightly`), and size budget;
 - expected search/result semantics when the file is comparison evidence.
@@ -490,11 +499,13 @@ gbdraw/web/tutorial-data/
     <raw-or-derived-files>
 ```
 
-`python docs/capture/run_all.py` is the one-command core regeneration path. It runs the public
-GUI capture tier and invokes the CLI/Python recipe runners for assets owned by those surfaces.
-It also supports `--scenario <id>`, `--tier core|extended|nightly`, and `--check`. Large Gallery
-case studies are nightly-only. `README.md` documents dependency installation, browser/runtime
-installation, the local server, pinned environment, artifact review, and expected runtimes.
+`python docs/capture/run_all.py` is the one-command core regeneration path. Its default/all mode
+runs the selected cumulative GUI tier and every implemented CLI and Python recipe by directly
+reusing their `run_scenario` APIs. `--scenario <id>` selects exactly one GUI, CLI, or Python
+scenario, `--tier core|extended|nightly` filters GUI captures, and `--check` propagates to the
+selected surface. Large Gallery case studies are nightly-only. `README.md` documents dependency
+installation, browser/runtime installation, the local server, pinned environment, artifact
+review, and expected runtimes.
 
 ### 8.2 Environment contract
 
@@ -616,7 +627,7 @@ Keep their paths in the first renovation release, but change the index and docum
 | `7_Linear_Layout.md` | H-GUI-03/H-CLI-04 after the P0 clean-directory repair. |
 | `8_Interactive_SVG_Sessions.md` | H-GUI-13/14/15 and H-CLI-12/13; schema history remains only in Session Reference. |
 | `9_Feature_Visibility_Shapes.md` | H-GUI-12/H-CLI-11, with raw input as the primary path and session load only as an optional shortcut. |
-| `GFF3_FASTA.md` | H-GUI-01/H-CLI-01/H-PY-04 using the fixed Lambda two-contig pair. |
+| `GFF3_FASTA.md` | H-GUI-01/H-CLI-01/H-PY-04 using the fixed whole-record Lambda pair. |
 | `EXPORT.md` | H-GUI-15/H-CLI-13, output-format Reference, and publication Explanation. |
 | `PYTHON_API.md` | T-PY-01 and H-PY-01 through H-PY-04; exact signatures/defaults stay in Python Reference. |
 | `TYPED_API.md` | H-PY-05 plus typed request Reference. |
@@ -771,7 +782,7 @@ of the implementation diff.
 | 1 | Close P0-1/P0-2; establish fixture/derivation manifests, package contracts, accessible selectors, and executable-doc test skeletons. | Session authority and clean-directory contracts pass; core fixtures are present in hosted/local packages with checksums. |
 | 2 | Build only the T-GUI-01 Step 1-2 smoke path and render `02-first-diagram.png` in Markdown. | Real upload/Generate succeeds, the image displays, and no state injection or external request occurs. |
 | 3 | P1-A onboarding: finish T-GUI-01, T-GUI-02, T-CLI-01, T-CLI-02, T-PY-01, and standard SVG export. | All five onboarding journeys pass, show an early result, publish recipe-owned figures, and validate downloads. |
-| 4 | P1-B comparisons: qualify BGC fixtures; add GUI LOSATN/LOSATP Tutorials and TLOSATX, Similarity-group, Collinear, uploaded-BLAST, Circular-ring, and CLI comparison How-tos. | All search/input modes execute on their actual supported surface; raw evidence and diagrams pass semantic checks. |
+| 4 | P1-B comparisons: qualify the complete-genome nucleotide pair and the five-record BGC LOSATP fixture; add GUI LOSATN/LOSATP Tutorials and TLOSATX, Similarity-group, Collinear, uploaded-BLAST, Circular-ring, and CLI comparison How-tos. | All search/input modes execute on their actual supported surface; raw evidence and diagrams pass semantic checks. |
 | 5 | P2-A data/layout: GFF3 + FASTA, multi-record Circular, Linear rows/regions/orientation, and all TSV manifest chapters. | Fixture identity/topology and clean-context GUI/CLI scenarios pass. |
 | 6 | P2-B tracks/presentation: depth/GC/skew, annotations, custom slots, colors, labels, visibility, shapes, strokes, titles, legends, axes, and overlap behavior. | Each chapter has one focused outcome; mechanical checks and readable final figures agree. |
 | 7 | P2-C interaction/reproducibility: preview editors/popups, sessions/history, all exports, Python/typed API, and generated-command handoff. | Fresh-context session round-trip, all file downloads, API recipes, and cross-surface handoff pass. |
@@ -811,7 +822,7 @@ only targeted edits, and run its final verification after technical correctness 
 | Moving existing guide paths breaks external links. | Keep current public paths as tested one-release compatibility landing pages with one canonical destination and no duplicated runnable blocks. |
 | Broad coverage turns individual pages into feature inventories. | Enforce one reader goal per Tutorial/How-to, split comparison modes where decisions differ, and move tokens/defaults/schemas to Reference. |
 | GUI and CLI capability claims drift, especially for LOSAT and export. | Maintain a tested surface capability matrix; require an actual owner and execution harness per surface. |
-| Tutorial fixtures inflate the browser package. | Track file and compressed package size by fixture tier; ship only the roughly 0.8 MiB core set and keep large Gallery/depth data outside the beginner bundle. |
+| Tutorial fixtures inflate the browser package. | Track file and compressed package size by fixture tier; keep the 981,228-byte core set below its 1 MiB ceiling and the 1,891,239-byte deterministic extended set below 5 MiB. Keep raw 12–14 MiB depth tables and large Gallery data outside the tutorial bundle. |
 | The tutorial accidentally depends on live NCBI or user data. | Ship the fixed public fixture, block external requests, and reject non-local capture targets by default. |
 | A click succeeds but the export is missing or malformed. | Treat the download event and parsed file contents as release-blocking assertions. |
 
@@ -846,13 +857,18 @@ The renovation is complete only when:
 ```text
 Docs Progress:
 - [x] Step 1: Frame - audience, English, browser, plain Markdown
-- [x] Step 2: Flow census - GUI, CLI, Python, LOSAT, input, layout, track,
-      interaction, export, Reference, and Explanation chapters drafted; approval gate not yet passed
-- [ ] Step 3: Demo data - core/extended fixture suites and manifest contract selected;
-      LOSATN/TLOSATX qualification and promotion/package work not implemented
-- [ ] Step 4: Smoke capture - existing runtime smoke passed; compliant Step 2 capture not created
-- [ ] Step 5: Capture harness - GUI, CLI, and Python scenario runners not implemented
-- [ ] Step 6: Capture run - no compliant chapter capture/recipe run has been generated
-- [ ] Step 7: Manual written - no new public chapter has been written
-- [ ] Step 8: Verify + report - chapter coverage, fixtures, actions, and exports not yet verified
+- [x] Step 2: Flow census - the 59-chapter GUI, CLI, Python, Reference,
+      Explanation, and auxiliary census is approved in the scenario manifest
+- [x] Step 3: Demo data - core and extended fixtures are accession-pinned,
+      checksum-bound, packaged by tier, and qualified with whole biological records
+- [x] Step 4: Smoke capture - the first Circular result is generated in Step 2
+      from a fresh browser context without external requests or state injection
+- [x] Step 5: Capture harness - committed GUI, CLI, and Python runners own the
+      documented actions, figures, downloads, and semantic assertions
+- [x] Step 6: Capture run - core, comparison/presentation, interaction, session,
+      and export captures are generated and match fresh browser runs
+- [x] Step 7: Manual written - canonical Tutorial, How-to, Reference, and
+      Explanation chapters are published; retired guide URLs are compatibility routes
+- [x] Step 8: Verify + report - browser captures, final visual/prose review,
+      relevant test sets, and the implementation handoff are complete
 ```

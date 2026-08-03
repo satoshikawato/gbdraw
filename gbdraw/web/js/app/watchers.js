@@ -73,6 +73,7 @@ export const setupWatchers = ({
     featurePanelTab,
     labelSearch,
     orthogroups,
+    collinearGroups,
     featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
@@ -134,6 +135,7 @@ export const setupWatchers = ({
     applyCanvasPadding,
     captureBaseConfig,
     captureOriginalStroke,
+    refreshLegendGeometry,
     repositionForLegendChange,
     refreshDiagramDragAffordances,
     setupDiagramDrag
@@ -408,6 +410,13 @@ export const setupWatchers = ({
         canvasPadding.left = 0;
 
         measureTiming(timingEntries, 'watch(svgContent) reapplyStrokeOverrides', reapplyStrokeOverrides);
+        if (mode.value === 'circular' && !shouldSkipPositionReapply) {
+          measureTiming(
+            timingEntries,
+            'watch(svgContent) refresh circular legend geometry',
+            refreshLegendGeometry
+          );
+        }
       } else if (savedBaseTransformsById && savedBaseTransformsById.size > 0) {
         debugLog('Incremental edit - remapping base transforms');
 
@@ -529,6 +538,7 @@ export const setupWatchers = ({
       Object.keys(labelTextFeatureOverrideSources).forEach((k) => delete labelTextFeatureOverrideSources[k]);
       Object.keys(labelVisibilityOverrides).forEach((k) => delete labelVisibilityOverrides[k]);
       orthogroups.value = [];
+      collinearGroups.value = [];
       featureOrthogroupIndex.value = new Map();
       selectedOrthogroupAlignmentFeature.value = '';
       selectedOrthogroupId.value = '';

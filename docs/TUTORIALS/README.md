@@ -1,10 +1,18 @@
-[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | **Tutorials** | [Workflow guide](../WORKFLOW_GUIDE.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md)
+[Documentation home](../DOCS.md) | [How-to guides](../HOW_TO/README.md) | [Explanation](../EXPLANATION/README.md) | [Reference](../REFERENCE/README.md)
 
-# gbdraw tutorials
+# gbdraw Tutorials
 
-The numbered tutorials are the complete set of command-line guides. Follow them in order, or open the guide for your task.
+Tutorials take you through one complete result. Choose the interface you will use:
 
-## Numbered tutorials
+- [Web app Tutorials](GUI/README.md)
+- [Command-line Tutorials](CLI/README.md)
+- [Python Tutorial](PYTHON/README.md)
+
+The first Tutorial on each surface uses the same public biological fixtures and produces a checked SVG. Comparison Tutorials follow only after the first plain diagram succeeds.
+
+## Compatibility routes for the retired numbered guides
+
+The migration to focused Tutorial, How-to, Reference, and Explanation pages is complete. The former numbered URLs remain as short compatibility routes for one renovation release:
 
 1. [Style a circular genome diagram](./1_Customizing_Plots.md)
 2. [Draw genome comparison links from precomputed BLAST results](./2_Comparative_Genomics.md)
@@ -16,19 +24,6 @@ The numbered tutorials are the complete set of command-line guides. Follow them 
 8. [Create interactive SVGs and restore saved sessions](./8_Interactive_SVG_Sessions.md)
 9. [Control feature visibility and shapes](./9_Feature_Visibility_Shapes.md)
 
-## Web app tutorials
+Each compatibility page points to the current canonical destinations and contains no duplicate runnable procedure. Complete option inventories, schemas, defaults, and compatibility history live in [Reference](../REFERENCE/README.md).
 
-- [Create a basic circular diagram](https://gbdraw.app/gallery/#HmmtDNA_basic_circular)
-- [Create a basic linear diagram](https://gbdraw.app/gallery/#lambda_basic_linear)
-- [Compare all replicons from five *Vibrio* Harveyi-group assemblies](https://gbdraw.app/gallery/#vibrio-harveyi-group-collinear)
-- [Browse all interactive Gallery examples](https://gbdraw.app/gallery/)
-
-## Related guides
-
-- [Quickstart](../QUICKSTART.md): create a circular figure from a GenBank record.
-- [Workflow guide](../WORKFLOW_GUIDE.md): choose an input, interface, and output.
-- [Python API](../PYTHON_API.md): render diagrams from Python.
-- [GFF3 + FASTA input](../GFF3_FASTA.md): prepare and validate paired annotation and sequence files.
-- [Export formats](../EXPORT.md): choose SVG, interactive SVG, PNG, PDF, EPS, or PS.
-
-[Home](../DOCS.md) | [Quickstart](../QUICKSTART.md) | **Tutorials** | [Workflow guide](../WORKFLOW_GUIDE.md) | [Python API](../PYTHON_API.md) | [Export](../EXPORT.md)
+[Documentation home](../DOCS.md) | [How-to guides](../HOW_TO/README.md) | [Explanation](../EXPLANATION/README.md) | [Reference](../REFERENCE/README.md)

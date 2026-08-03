@@ -58,10 +58,27 @@ export const findSingleRecordDefinitionGroup = (svg) => {
   );
 };
 
+export const stageCircularDefinitionSource = async ({
+  inputType,
+  inputFile,
+  writeFileToFs,
+  path = '/definition-input.gb'
+}) => {
+  if (String(inputType || '').trim().toLowerCase() !== 'gb' || !inputFile) return null;
+  if (typeof writeFileToFs !== 'function') {
+    throw new Error('Circular definition input staging is unavailable.');
+  }
+  if (!await writeFileToFs(inputFile, path)) {
+    throw new Error('Circular definition input could not be staged.');
+  }
+  return path;
+};
+
 export const createResultsManager = ({
   state,
   getPyodide,
   ensurePyodide = null,
+  writeFileToFs = null,
   legendLayout,
   rerenderLinearDefinitions = null
 }) => {
@@ -72,6 +89,7 @@ export const createResultsManager = ({
     shouldDeferCircularPreviewUpdates,
     svgContainer,
     cInputType,
+    files,
     linearSeqs,
     form,
     adv,
@@ -298,10 +316,15 @@ export const createResultsManager = ({
       const pyodide = getPyodide();
       if (!pyodide) return;
 
-      const gbPath = cInputType.value === 'gb' ? '/input.gb' : '/input.gb';
       const isMultiRecordCanvasOnSvg = isMultiRecordCanvasSvg(svg);
 
       try {
+        const gbPath = await stageCircularDefinitionSource({
+          inputType: cInputType.value,
+          inputFile: files?.c_gb,
+          writeFileToFs
+        });
+        if (!gbPath) return;
         const species = form.species || '';
         const strain = form.strain || '';
         const hasDefinitionFontSize =

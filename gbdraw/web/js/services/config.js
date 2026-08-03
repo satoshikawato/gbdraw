@@ -45,7 +45,6 @@ import {
 import {
   normalizeCollinearAnchorMode,
   normalizeCollinearSearchScope,
-  normalizeGroupMetadataScope,
   normalizeOrthogroupMembershipMode
 } from '../app/losat-normalization.js';
 import { normalizeDefinitionLineStyleState } from '../app/definition-line-style-state.js';
@@ -88,6 +87,10 @@ import {
   featureStateFromCatalog,
   validateFeatureCatalog
 } from './feature-catalog.js';
+import {
+  buildOrthogroupFeatureIndex,
+  enrichFeaturesWithOrthogroups
+} from './orthogroup-feature-metadata.js';
 import {
   isResourceBackedCanonicalComparison,
   mapResourceBackedCanonicalComparison
@@ -2295,119 +2298,26 @@ const applyProteinIdentityManifest = (manifest) => {
     : emptyProteinIdentityManifest();
 };
 
-const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
-
-const enrichExtractedFeaturesWithOrthogroups = (index) => {
-  if (!(index instanceof Map)) return;
-  const enrichFeatures = (features) => (Array.isArray(features) ? features : []).map((feature) => {
-    const ids = [
-      feature?.svg_id,
-      feature?.stable_svg_id,
-      feature?.stableFeatureSvgId,
-      feature?.stable_feature_id
-    ].map((value) => String(value || '').trim()).filter(Boolean);
-    const uniqueIds = Array.from(new Set(ids));
-    if (uniqueIds.length === 0) return feature;
-
-    const recordIndexes = [
-      feature?.fileIdx,
-      feature?.recordIndex,
-      feature?.record_index,
-      feature?.record_idx
-    ].map((value) => Number(value)).filter((value) => Number.isInteger(value));
-    let entry = null;
-    for (const recordIndex of recordIndexes) {
-      entry = uniqueIds
-        .map((id) => index.get(buildOrthogroupIndexKey(recordIndex, id)))
-        .find(Boolean);
-      if (entry) break;
-    }
-    entry = entry || uniqueIds.map((id) => index.get(id)).find(Boolean);
-    if (!entry) return feature;
-    return {
-      ...feature,
-      proteinId: entry.proteinId,
-      sourceProteinId: entry.sourceProteinId,
-      orthogroupId: entry.orthogroupId,
-      orthogroupMemberCount: entry.orthogroupMemberCount,
-      orthogroupRecordCoverage: entry.orthogroupRecordCoverage,
-      orthogroupRepresentative: entry.orthogroupRepresentative,
-      orthogroupScope: entry.orthogroupScope,
-      orthogroupSourceRecordIndex: entry.orthogroupSourceRecordIndex,
-      orthogroupMember: entry.orthogroupMember
-    };
-  });
-  state.extractedFeatures.value = enrichFeatures(state.extractedFeatures.value);
-  if (state.biologicalFeatures) {
-    state.biologicalFeatures.value = enrichFeatures(state.biologicalFeatures.value);
-  }
-};
-
 export const applyOrthogroupStateData = (orthogroupState = {}) => {
   const groups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
   const groupIds = groups
     .map((group) => String(group?.id || '').trim())
     .filter(Boolean);
   const groupIdSet = new Set(groupIds);
-  const index = new Map();
-  const indexOwners = new Map();
-  const ambiguousIndexKeys = new Set();
-  const addUniqueIndexEntry = (key, owner, entry) => {
-    if (!key || ambiguousIndexKeys.has(key)) return;
-    const existingOwner = indexOwners.get(key);
-    if (existingOwner && existingOwner !== owner) {
-      index.delete(key);
-      ambiguousIndexKeys.add(key);
-      return;
-    }
-    indexOwners.set(key, owner);
-    index.set(key, entry);
-  };
-
-  groups.forEach((group) => {
-    const orthogroupId = String(group?.id || '').trim();
-    const members = Array.isArray(group?.members) ? group.members : [];
-    const memberCount = Number(group?.member_count || members.length || 0);
-    const recordCoverage = Number(group?.record_coverage_count || new Set(
-      members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
-    ).size || 0);
-    const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
-    const sourceRecordIndex = Number(group?.source_record_index);
-    members.forEach((member, memberIndex) => {
-      const featureSvgIds = Array.from(new Set([
-        member?.stableFeatureSvgId,
-        member?.stable_feature_svg_id,
-        member?.featureSvgId,
-        member?.feature_svg_id
-      ].map((value) => String(value || '').trim()).filter(Boolean)));
-      const recordIndex = Number(member?.recordIndex);
-      if (featureSvgIds.length === 0 || !Number.isInteger(recordIndex)) return;
-      const entry = {
-        orthogroupId,
-        orthogroupMemberCount: memberCount,
-        orthogroupRecordCoverage: recordCoverage,
-        proteinId: String(member?.proteinId || '').trim(),
-        sourceProteinId: String(member?.sourceProteinId || '').trim(),
-        orthogroupRepresentative: Boolean(member?.representative),
-        orthogroupScope,
-        orthogroupSourceRecordIndex: Number.isInteger(sourceRecordIndex) ? sourceRecordIndex : null,
-        orthogroupMember: member
-      };
-      const owner = `${recordIndex}\u001f${member?.featureIndex ?? memberIndex}\u001f${orthogroupId}`;
-      featureSvgIds.forEach((featureSvgId) => {
-        addUniqueIndexEntry(
-          buildOrthogroupIndexKey(recordIndex, featureSvgId),
-          owner,
-          entry
-        );
-        addUniqueIndexEntry(featureSvgId, owner, entry);
-      });
-    });
-  });
+  const index = buildOrthogroupFeatureIndex(groups);
 
   state.orthogroups.value = groups;
   state.featureOrthogroupIndex.value = index;
-  enrichExtractedFeaturesWithOrthogroups(index);
+  state.extractedFeatures.value = enrichFeaturesWithOrthogroups(
+    state.extractedFeatures.value,
+    index
+  );
+  if (state.biologicalFeatures) {
+    state.biologicalFeatures.value = enrichFeaturesWithOrthogroups(
+      state.biologicalFeatures.value,
+      index
+    );
+  }
   const selectedId = String(orthogroupState.selectedOrthogroupId || '').trim();
   state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
   state.selectedOrthogroupAlignmentFeature.value = String(orthogroupState.selectedOrthogroupAlignmentFeature || '').trim();
@@ -2895,6 +2805,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
   state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
   committedCanonicalSession = cloneCanonicalSession(snapshot.committedCanonicalSession);
+  state.skipPositionReapply.value = true;
   applyResultsData(snapshot.results, snapshot.ui);
   applyFeatureStateData(snapshot.features);
   applyOrthogroupStateData(snapshot.orthogroupState);
@@ -3186,6 +3097,22 @@ const setFeatureEditorStatusData = (updates = {}) => {
   });
 };
 
+const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load' } = {}) => {
+  const summaryCount = Array.isArray(state.extractedFeatures.value)
+    ? state.extractedFeatures.value.length
+    : 0;
+  if (summaryCount === 0) return false;
+  state.featureExtractionPending.value = false;
+  state.featureExtractionError.value = null;
+  setFeatureEditorStatusData({
+    status: 'summary-ready',
+    generationId,
+    error: null,
+    summaryCount
+  });
+  return true;
+};
+
 const buildSessionFeatureRecoverySnapshot = () => ({
   mode: state.mode.value,
   cInputType: state.cInputType.value,
@@ -3229,15 +3156,7 @@ const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature
     return;
   }
 
-  if (state.extractedFeatures.value.length > 0) {
-    state.featureExtractionError.value = null;
-    setFeatureEditorStatusData({
-      status: 'summary-ready',
-      generationId,
-      error: null,
-      summaryCount: state.extractedFeatures.value.length
-    });
-  }
+  synchronizeRestoredFeatureSummaryStatus({ generationId });
 };
 
 const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-feature-recovery' } = {}) => {
@@ -3546,9 +3465,13 @@ export const importSession = async (e, options = {}) => {
       canonicalSession ? projectionResult.restoredFiles : data.files
     );
     reconcileDepthTrackStateAfterSessionFiles();
-    if (sourceSessionVersion !== SESSION_VERSION) {
+    const hasAuthoritativeCatalogSequenceSources =
+      sourceSessionVersion === SESSION_VERSION &&
+      data.editorState?.featureCatalog?.schema === 3;
+    let restoredFileSequenceSources = [];
+    if (!hasAuthoritativeCatalogSequenceSources) {
       try {
-        const sequenceSources = await buildRestoredMatchSequenceSources({
+        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
           mode: state.mode.value,
           cInputType: state.cInputType.value,
           lInputType: state.lInputType.value,
@@ -3556,7 +3479,6 @@ export const importSession = async (e, options = {}) => {
           linearSeqs: state.linearSeqs,
           circularConservation: state.circularConservation
         });
-        state.matchSequenceRegistry?.reset?.(sequenceSources);
       } catch (sequenceError) {
         console.warn('Session loaded, but match sequence recovery failed.', sequenceError);
       }
@@ -3644,9 +3566,16 @@ export const importSession = async (e, options = {}) => {
         }
       : (data.features || {});
     applyFeatureStateData(features);
-    if (sourceSessionVersion === SESSION_VERSION) {
-      state.matchSequenceRegistry?.reset?.(currentCatalogFeatureState?.sequenceSources || []);
+    if (sourceSessionVersion === SESSION_VERSION && currentCatalogFeatureState) {
+      synchronizeRestoredFeatureSummaryStatus({ generationId: 'session-load' });
     }
+    const catalogSequenceSources = sourceSessionVersion === SESSION_VERSION
+      ? (currentCatalogFeatureState?.sequenceSources || [])
+      : [];
+    state.matchSequenceRegistry?.reset?.([
+      ...catalogSequenceSources,
+      ...restoredFileSequenceSources
+    ]);
 
     applyOrthogroupStateData(
       canonicalSession
@@ -3676,6 +3605,7 @@ export const importSession = async (e, options = {}) => {
 
     await nextTick();
     state.semanticFileWatchersSuppressed.value = false;
+    state.skipPositionReapply.value = true;
     applyResultsData(logicalImportedResults, ui);
     await nextTick();
 

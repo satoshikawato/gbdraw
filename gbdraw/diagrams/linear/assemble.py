@@ -107,6 +107,7 @@ from ...annotations import (
 )
 from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.linear.annotations import draw_linear_annotation_track
+from ...render.groups.linear import build_linear_feature_dom_index
 
 from .builders import (
     add_explicit_comparisons_on_linear_canvas,
@@ -1322,6 +1323,7 @@ def assemble_linear_diagram(
         orthogroup_label_eligibility = build_orthogroup_label_eligibility(
             orthogroups=orthogroups,
             comparisons=comparisons,
+            records=records,
         )
     if (
         label_scope == "orthogroup_top"
@@ -1344,6 +1346,7 @@ def assemble_linear_diagram(
     record_feature_dicts = [
         result.foreground_features for result in record_feature_layers
     ]
+    feature_dom_index = build_linear_feature_dom_index(record_feature_dicts)
     (
         linear_track_slots,
         resolved_annotations,
@@ -2113,6 +2116,7 @@ def assemble_linear_diagram(
             blast_config,
             records,
             comparison_placements,
+            feature_dom_index=feature_dom_index,
         )
 
     label_font_size = _resolve_linear_diagram_label_font_size(

@@ -366,6 +366,22 @@ const createResourceBuilder = () => {
     return resourceId;
   };
 
+  const addJson = (resourceId, kind, name, value) => {
+    if (resources[resourceId]) return resourceId;
+    const normalized = JSON.stringify(value);
+    const bytes = new TextEncoder().encode(normalized);
+    resources[resourceId] = {
+      kind,
+      name: normalizeResourceName(resourceId, name),
+      type: 'application/json',
+      size: bytes.byteLength,
+      lastModified: 0,
+      encoding: 'base64',
+      data: textToBase64(normalized)
+    };
+    return resourceId;
+  };
+
   const addCanonicalTable = (resourceId, rows, columns = null) => {
     if (resources[resourceId]) return resourceId;
     const normalizedRows = Array.isArray(rows)
@@ -426,6 +442,7 @@ const createResourceBuilder = () => {
     resourceOriginalNames,
     addFile,
     addText,
+    addJson,
     addCanonicalTable
   };
 };
@@ -1266,6 +1283,28 @@ const buildComparisons = ({
     }
     resolvedByEdgeKey.set(edgeKey, comparison);
   });
+  const resolvedAnalysisArtifacts = new Map();
+  (Array.isArray(resolvedComparisons) ? resolvedComparisons : []).forEach((comparison) => {
+    if (!['orthogroupResult', 'collinearityResult'].includes(comparison?.kind)) return;
+    if (resolvedAnalysisArtifacts.has(comparison.kind)) {
+      throw new Error(`Multiple resolved ${comparison.kind} artifacts were produced.`);
+    }
+    const expectedValueKind = comparison.kind === 'collinearityResult'
+      ? 'result'
+      : 'orthogroupResult';
+    const typedResource = comparison.typedResource;
+    if (
+      !typedResource
+      || typeof typedResource !== 'object'
+      || Array.isArray(typedResource)
+      || ![1, 2].includes(typedResource.schema)
+      || typedResource.kind !== expectedValueKind
+      || !Object.prototype.hasOwnProperty.call(typedResource, 'value')
+    ) {
+      throw new Error(`Resolved ${comparison.kind} metadata is not a canonical typed resource.`);
+    }
+    resolvedAnalysisArtifacts.set(comparison.kind, typedResource);
+  });
 
   const persistedCanonicalComparisons = Array.isArray(filesData.linearCanonicalComparisons)
     ? filesData.linearCanonicalComparisons
@@ -1285,7 +1324,11 @@ const buildComparisons = ({
       comparison?.kind === 'collinearityResult'
     ) && activeProteinPipeline && comparison.canonicalInput !== true
   ));
-  [...persistedCanonicalInputs, ...persistedMetadata].forEach((comparison, index) => {
+  let hasResolvedProteinAnalysis = false;
+  [
+    ...(resolvedAnalysisArtifacts.size === 0 ? persistedCanonicalInputs : []),
+    ...(resolvedAnalysisArtifacts.size === 0 ? persistedMetadata : [])
+  ].forEach((comparison, index) => {
     if (!comparison.file) return;
     if (comparison.kind === 'orthogroupResult') {
       comparisons.push({
@@ -1297,6 +1340,7 @@ const buildComparisons = ({
         ),
         encoding: String(comparison.encoding || 'canonicalJson')
       });
+      if (comparison.canonicalInput !== true) hasResolvedProteinAnalysis = true;
       return;
     }
     if (comparison.kind === 'collinearityResult') {
@@ -1310,6 +1354,7 @@ const buildComparisons = ({
         encoding: String(comparison.encoding || 'canonicalJson'),
         valueKind: String(comparison.valueKind || 'result')
       });
+      if (comparison.canonicalInput !== true) hasResolvedProteinAnalysis = true;
       return;
     }
     if (comparison.kind !== 'precomputedProteinComparison') return;
@@ -1327,10 +1372,28 @@ const buildComparisons = ({
       resources
     }));
   });
+  resolvedAnalysisArtifacts.forEach((typedResource, kind) => {
+    const collinearity = kind === 'collinearityResult';
+    const resourceId = collinearity
+      ? 'comparison-resolved-collinearity'
+      : 'comparison-resolved-orthogroups';
+    comparisons.push({
+      kind,
+      resourceId: resources.addJson(
+        resourceId,
+        canonicalComparisonResourceKind({ kind }),
+        `${resourceId}.json`,
+        typedResource
+      ),
+      encoding: 'canonicalJson',
+      ...(collinearity ? { valueKind: 'result' } : {})
+    });
+    hasResolvedProteinAnalysis = true;
+  });
 
   const persistedProteinByEdgeKey = new Map();
   const persistedProteinByEndpoints = new Map();
-  if (activeProteinPipeline) {
+  if (activeProteinPipeline && resolvedAnalysisArtifacts.size === 0) {
     persistedCanonicalComparisons
       .filter((comparison) => (
         comparison?.kind === 'precomputedProteinComparison' &&
@@ -1415,7 +1478,7 @@ const buildComparisons = ({
   const shouldEmitResolvedProteinMarker = (
     activeProteinPipeline &&
     activeLosatEdges.length > 0 &&
-    hasPrecomputedProteinComparisons
+    (hasPrecomputedProteinComparisons || hasResolvedProteinAnalysis)
   );
   const shouldGenerateSelectedProteinPairs = (
     selectedPairwiseLosat &&
