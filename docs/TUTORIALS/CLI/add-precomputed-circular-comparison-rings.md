@@ -39,7 +39,7 @@ gbdraw circular \
   --labels out \
   --definition_font_size 18 \
   --plot_title 'Precomputed TLOSATX rings around Homo sapiens mtDNA' \
-  --plot_title_position top \
+  --plot_title_position bottom \
   --legend right \
   -o precomputed_circular_rings \
   -f svg

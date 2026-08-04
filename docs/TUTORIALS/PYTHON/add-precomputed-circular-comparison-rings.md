@@ -74,7 +74,7 @@ options = CircularOptions(
     species="<i>Homo sapiens</i>",
     title=TitleOptions(
         text="Precomputed TLOSATX rings around Homo sapiens mtDNA",
-        position="top",
+        position="bottom",
     ),
     legend="right",
     config_overrides={

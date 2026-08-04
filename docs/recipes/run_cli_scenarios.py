@@ -2345,6 +2345,12 @@ def run_scenario(
                         raise RecipeContractError(
                             "T-CLI-09 must use the Middle Circular track preset."
                         )
+                    if "--plot_title_position" not in command or command[
+                        command.index("--plot_title_position") + 1
+                    ] != "bottom":
+                        raise RecipeContractError(
+                            "T-CLI-09 must place its plot title at the bottom."
+                        )
                     _assert_complete_metazoan_mtdna_conservation(
                         generated_path,
                         title="Precomputed TLOSATX rings around Homo sapiens mtDNA",

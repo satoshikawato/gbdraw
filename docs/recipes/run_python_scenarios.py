@@ -357,9 +357,10 @@ def _validate_migrated_tutorial(
             not isinstance(options, CircularOptions)
             or dict(options.config_overrides or {}).get("canvas.circular.track_type")
             != "middle"
+            or options.title.position != "bottom"
         ):
             raise RecipeContractError(
-                "T-PY-06 must use the Middle Circular track preset."
+                "T-PY-06 must use the Middle Circular track preset and a bottom plot title."
             )
         root = ElementTree.parse(output_path).getroot()
         matches = [

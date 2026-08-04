@@ -292,7 +292,7 @@ def capture_gui_precomputed_circular_rings(
         )
         page.get_by_label("Title & Legend", exact=True).click()
         page.get_by_label("Plot Title", exact=True).fill(TITLE)
-        page.get_by_label("Plot Title Position", exact=True).select_option("top")
+        page.get_by_label("Plot Title Position", exact=True).select_option("bottom")
         page.get_by_label("Legend Position", exact=True).select_option("right")
         page.get_by_label("Definition Font Size", exact=True).fill("18")
 

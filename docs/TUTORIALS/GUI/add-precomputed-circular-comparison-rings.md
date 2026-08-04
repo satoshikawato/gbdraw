@@ -66,7 +66,7 @@ Attach the matching comparison FASTA to each table, then use:
 Keep the ring order Danio, Drosophila, and Caenorhabditis. Set **Label Mode**
 to **Out**, the title to
 `Precomputed TLOSATX rings around Homo sapiens mtDNA`, and the legend to the
-right.
+right. Set **Plot Title Position** to **Bottom**.
 
 ![Three TLOSATX tables and companion FASTA files configured as Circular rings](../../images/t-gui-06/03-ring-settings.png)
 
