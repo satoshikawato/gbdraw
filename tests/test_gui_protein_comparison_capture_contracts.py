@@ -146,14 +146,22 @@ PAGES = {
         / "GUI"
         / "draw-collinear-protein-blocks.md"
     ),
+    "T-GUI-08": (
+        REPO_ROOT
+        / "docs"
+        / "TUTORIALS"
+        / "GUI"
+        / "compare-proteins-losatp-collinear.md"
+    ),
 }
 SCREENSHOT_NAMES = {
     "T-GUI-04": (
         "01-input-ready.png",
         "02-first-diagram.png",
         "03-losatp-settings.png",
-        "04-comparison-result.png",
-        "05-match-popup.png",
+        "04-align-og1.png",
+        "05-comparison-result.png",
+        "06-match-popup.png",
     ),
     "H-GUI-07": (
         "group-settings.png",
@@ -164,6 +172,13 @@ SCREENSHOT_NAMES = {
         "collinear-settings.png",
         "collinear-result.png",
         "block-popup.png",
+    ),
+    "T-GUI-08": (
+        "01-input-ready.png",
+        "02-first-diagram.png",
+        "03-collinear-settings.png",
+        "04-collinear-result.png",
+        "05-block-popup.png",
     ),
 }
 
@@ -263,7 +278,11 @@ def test_hepatoplasmataceae_fixture_owns_both_collinear_gui_scenarios() -> None:
         HEPATOPLASMATACEAE_RECORD_IDS
     )
     assert fixture["expectedSemantics"]["recordsAreWholeCanonicalSources"] is True
-    assert fixture["expectedSemantics"]["collinearSearchScope"] == "all"
+    semantics = fixture["expectedSemantics"]
+    assert semantics["galleryCollinearSearchScope"] == "adjacent"
+    assert semantics["gallerySearchedRecordPairCount"] == 4
+    assert semantics["allRecordHowToSearchScope"] == "all"
+    assert semantics["allRecordHowToPairCount"] == 10
 
     for file_id in (*fixture["fileIds"], *fixture["fileReferences"]):
         assert {"T-GUI-08", "H-GUI-08"} <= set(
@@ -426,7 +445,9 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
     source = HEPATOPLASMA_FLOW_PATH.read_text(encoding="utf-8")
     wrapper = HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
     for fragment in (
-        'page.get_by_label("Collinear evidence scope", exact=True).select_option("all")',
+        'page.get_by_label("Collinear evidence scope", exact=True).select_option(',
+        'evidence_scope = "all" if starting_project == "all-vs-all" else "adjacent"',
+        "_assert_gallery_adjacent_search(page, session_keys=session_cache_keys)",
         'page.get_by_label("Track Layout", exact=True).select_option("middle")',
         '"Separate Strands"',
         'page.get_by_label("Collinear color mode", exact=True).select_option',
@@ -523,6 +544,16 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
     assert "separate_strands=False" in TUTORIAL_FLOW_PATH.read_text(encoding="utf-8")
     assert "separate_strands=False" in HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
     assert "23\ngroups, and 77 links" in groups
+
+    gallery_collinear = PAGES["T-GUI-08"].read_text(encoding="utf-8")
+    gallery_chapter = _chapter("T-GUI-08")
+    assert gallery_chapter["settings"]["comparison_scope"] == "adjacent"
+    assert tuple(
+        Path(screenshot["path"]).name
+        for screenshot in gallery_chapter["screenshots"]
+    ) == SCREENSHOT_NAMES["T-GUI-08"]
+    assert "no Similarity-groups result is mixed" in gallery_collinear
+    assert "adjacent-pair Collinear" in gallery_collinear
 
     collinear_path = PAGES["H-GUI-08"]
     collinear = collinear_path.read_text(encoding="utf-8")

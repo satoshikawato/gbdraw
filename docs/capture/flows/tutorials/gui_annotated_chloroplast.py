@@ -1,4 +1,4 @@
-"""Capture the annotated-chloroplast project tutorial through visible controls."""
+"""Capture the Interactive SVG Gallery chloroplast-map tutorial."""
 
 from __future__ import annotations
 
@@ -6,18 +6,14 @@ import re
 from pathlib import Path
 from typing import Any, Mapping
 
-from playwright.sync_api import BrowserType, expect
+from playwright.sync_api import BrowserType, Page, expect
 
 from flows.how_to.tracks import (
-    EXPECTED_ANNOTATION_SLOT_ORDER,
     GUI_ANNOTATION_GENBANK_PATH,
     GUI_ANNOTATION_GENBANK_SHA256,
     GUI_ANNOTATION_GENBANK_SIZE,
     GUI_ANNOTATION_TABLE_PATH,
-    _assert_annotation_svg,
     _assert_safe_svg,
-    _assert_slot_snapshot,
-    _configure_title,
     _download_svg,
     _fit_circular_preview,
     _inspect_tracks_svg,
@@ -28,6 +24,7 @@ from flows.how_to.tracks import (
     CaptureResult,
 )
 from flows.web_capture import (
+    assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
     generate_and_inspect,
@@ -46,6 +43,30 @@ SCREENSHOT_NAMES = (
     "05-finished-diagram.png",
 )
 OUTPUT_FILENAME = "annotated_chloroplast_map.svg"
+SPECIFIC_COLORS_PATH = GUI_ANNOTATION_GENBANK_PATH.with_name(
+    "chloroplast_specific_table.tsv"
+)
+SPECIFIC_COLORS_SIZE = 3_033
+SPECIFIC_COLORS_SHA256 = (
+    "406f1a042ec072c0026c014fc173950793582ffe4c8c568ec2539e2db98df0ec"
+)
+QUALIFIER_PRIORITY_PATH = GUI_ANNOTATION_GENBANK_PATH.with_name(
+    "qualifier_priority.tsv"
+)
+GALLERY_FEATURE_TYPES = (
+    "CDS",
+    "rRNA",
+    "tRNA",
+    "tmRNA",
+    "ncRNA",
+    "misc_RNA",
+    "rep_origin",
+)
+GALLERY_SLOT_ORDER = (
+    ("features", "features"),
+    ("plastome_regions", "annotations"),
+    ("gc_content", "dinucleotide_content"),
+)
 
 
 def _assert_plain_plastome(report: Mapping[str, Any]) -> None:
@@ -60,13 +81,244 @@ def _assert_plain_plastome(report: Mapping[str, Any]) -> None:
         raise AssertionError("The Step 2 diagram already contains region annotations")
 
 
+def _assert_gallery_chloroplast(report: Mapping[str, Any]) -> None:
+    _assert_safe_svg(report)
+    if "NC_001879.2" not in report["recordIds"]:
+        raise AssertionError("The Gallery-style map does not identify NC_001879.2")
+    if report["featureElementCount"] != 197:
+        raise AssertionError(
+            "Expected 197 rendered Gallery feature elements, found "
+            f"{report['featureElementCount']}"
+        )
+    if report.get("logicalFeatureCount") not in (None, 147):
+        raise AssertionError(
+            "Expected 147 logical Gallery features, found "
+            f"{report['logicalFeatureCount']}"
+        )
+    slots = tuple(
+        (slot["slotId"], slot["renderer"])
+        for slot in report["slots"]
+        if not str(slot["slotId"]).startswith("__gbdraw_auto_")
+    )
+    if slots != GALLERY_SLOT_ORDER:
+        raise AssertionError(f"Unexpected Gallery chloroplast slots: {slots!r}")
+    annotations = {
+        (
+            item["id"],
+            item["setId"],
+            item["trackId"],
+            item["recordId"],
+            item["mark"],
+            item["label"],
+        )
+        for item in report["annotations"]
+    }
+    expected_annotations = {
+        (key, "plastome_regions", "plastome_regions", "NC_001879.2", "bracket", label)
+        for key, label in (("lsc", "LSC"), ("irb", "IRb"), ("ssc", "SSC"), ("ira", "IRa"))
+    }
+    if annotations != expected_annotations:
+        raise AssertionError(f"Unexpected plastome region annotations: {annotations!r}")
+    texts = set(report["texts"])
+    required = {
+        "Nicotiana tabacum",
+        "NC_001879.2",
+        "155,943 bp",
+        "LSC",
+        "IRb",
+        "SSC",
+        "IRa",
+        "GC content",
+        "matK",
+        "psaA",
+        "photosystem I",
+        "photosystem II",
+        "RNA polymerase",
+        "rep_origin",
+    }
+    missing = required - texts
+    if missing:
+        raise AssertionError(f"Gallery chloroplast text is missing: {sorted(missing)}")
+    if {"GC skew (+)", "GC skew (-)", "AT skew (+)", "AT skew (-)"} & texts:
+        raise AssertionError("The Gallery chloroplast map must not contain a skew track")
+
+
+def _feature_details(page: Page) -> Any:
+    return page.get_by_label("Features", exact=True).locator("xpath=..")
+
+
+def _configure_feature_types(page: Page) -> None:
+    details = _feature_details(page)
+    page.get_by_label("Features", exact=True).click()
+    current = tuple(
+        page.evaluate(
+            "() => (window.__GBDRAW_APP__?.adv?.features || []).map(String)"
+        )
+    )
+    for feature_type in current:
+        if feature_type in GALLERY_FEATURE_TYPES:
+            continue
+        feature_name = details.get_by_text(feature_type, exact=True).first
+        feature_name.locator("xpath=..").get_by_role("button").click()
+    picker = details.locator('select:has(option[value="rep_origin"])')
+    expect(picker).to_have_count(1)
+    add_button = details.get_by_role("button", name=re.compile(r"Add$"))
+    for feature_type in GALLERY_FEATURE_TYPES:
+        selected = tuple(
+            page.evaluate(
+                "() => (window.__GBDRAW_APP__?.adv?.features || []).map(String)"
+            )
+        )
+        if feature_type in selected:
+            continue
+        picker.select_option(feature_type)
+        add_button.click()
+    selected = tuple(
+        page.evaluate(
+            "() => (window.__GBDRAW_APP__?.adv?.features || []).map(String)"
+        )
+    )
+    if selected != GALLERY_FEATURE_TYPES:
+        raise AssertionError(f"Unexpected chloroplast feature types: {selected!r}")
+    page.get_by_label("Block Stroke Width", exact=True).fill("1")
+    page.get_by_label("Line Stroke Width", exact=True).fill("2")
+    page.get_by_label("Features", exact=True).click()
+
+
+def _configure_gallery_presentation(page: Page) -> None:
+    page.get_by_label("Output Prefix", exact=True).fill("annotated_chloroplast_map")
+    page.get_by_label("Species", exact=True).fill("<i>Nicotiana tabacum</i>")
+    page.get_by_label("Track Preset", exact=True).select_option("tuckin")
+    page.get_by_label("Separate Strands", exact=True).check()
+    page.get_by_label("Hide GC Content", exact=True).uncheck()
+    page.get_by_label("Hide GC Skew", exact=True).check()
+
+    _configure_feature_types(page)
+
+    colors = page.get_by_label("Colors", exact=True)
+    colors.click()
+    page.get_by_label("Specific Table (-t)", exact=True).set_input_files(
+        SPECIFIC_COLORS_PATH
+    )
+    colors.click()
+
+    labels = page.get_by_label("Labels", exact=True)
+    labels.click()
+    page.get_by_label("Label Mode", exact=True).select_option("both")
+    for label, value in (
+        ("Outer X Offset", "0.9"),
+        ("Outer Y Offset", "0.9"),
+        ("Inner X Offset", "0.975"),
+        ("Inner Y Offset", "0.975"),
+    ):
+        page.get_by_text(label, exact=True).locator("xpath=..").locator(
+            'input[type="number"]'
+        ).fill(value)
+    page.get_by_text("Circular Label Placement", exact=True).locator(
+        "xpath=.."
+    ).locator("select").select_option("radial")
+    page.get_by_label("Priority File (TSV)", exact=True).set_input_files(
+        QUALIFIER_PRIORITY_PATH
+    )
+    labels.click()
+
+    axis = page.locator("summary").filter(has_text="Axis & Scale")
+    axis.click()
+    page.get_by_label("Axis Stroke Width", exact=True).fill("3")
+    axis.click()
+
+    title = page.get_by_label("Title & Legend", exact=True)
+    title.click()
+    page.get_by_label("Plot Title", exact=True).fill("")
+    page.get_by_label("Plot Title Position", exact=True).select_option("none")
+    page.get_by_label("Definition Font Size", exact=True).fill("28")
+    page.get_by_label("Legend Position", exact=True).select_option("upper_left")
+    title.click()
+
+
+def _remove_slot_if_present(page: Page, slot_id: str) -> None:
+    group = page.get_by_role(
+        "group", name=f"Circular track slot {slot_id}", exact=True
+    )
+    if group.count():
+        group.get_by_title("Remove", exact=True).click()
+
+
+def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
+    custom_slots = page.get_by_role(
+        "button", name=re.compile(r"Custom Track Slots$"), exact=False
+    )
+    custom_slots.click()
+    page.get_by_role("checkbox", name="Use custom stack", exact=True).check()
+    _remove_slot_if_present(page, "ticks")
+    _remove_slot_if_present(page, "gc_skew")
+
+    feature_slot = page.get_by_role(
+        "group", name="Circular track slot features", exact=True
+    )
+    feature_slot.locator("select").last.select_option("split")
+
+    renderer = page.get_by_label("New circular track renderer", exact=True)
+    renderer.select_option("annotations")
+    page.get_by_role("button", name=re.compile(r"Add track$"), exact=False).click()
+    annotation_slot = page.get_by_role(
+        "group", name="Circular track slot annotations", exact=True
+    )
+    annotation_slot.get_by_label("Annotation set", exact=True).select_option(
+        "plastome_regions"
+    )
+    annotation_slot.get_by_label("Annotation placement", exact=True).select_option(
+        "inside"
+    )
+    annotation_slot = page.get_by_role(
+        "group", name="Circular track slot annotations", exact=True
+    )
+    annotation_slot.get_by_label(
+        "Circular track slot id annotations", exact=True
+    ).fill("plastome_regions")
+    annotation_slot = page.get_by_role(
+        "group", name="Circular track slot plastome_regions", exact=True
+    )
+    annotation_slot.get_by_title("Move outward", exact=True).click()
+    annotation_slot = page.get_by_role(
+        "group", name="Circular track slot plastome_regions", exact=True
+    )
+    annotation_slot.get_by_title("Width", exact=True).fill("20px")
+    annotation_slot.get_by_title("Radius", exact=True).fill("0.65")
+    annotation_slot.get_by_title("Inner gap", exact=True).fill("1")
+    annotation_slot.get_by_title("Outer gap", exact=True).fill("1")
+    annotation_slot.get_by_label("Show annotation labels", exact=True).check()
+    annotation_slot.locator(
+        'select:has(option[value="compress"])'
+    ).select_option("compress")
+    annotation_numbers = annotation_slot.locator('input[type="number"]')
+    expect(annotation_numbers).to_have_count(2)
+    annotation_numbers.last.fill("1")
+
+    gc_slot = page.get_by_role(
+        "group", name="Circular track slot gc_content", exact=True
+    )
+    gc_slot.get_by_title("Width", exact=True).fill("0.08")
+    gc_slot.get_by_title("Radius", exact=True).fill("0.56")
+
+    slots = _track_slot_snapshot(page)
+    enabled = tuple(
+        (slot["id"], slot["renderer"])
+        for slot in slots
+        if slot["enabled"]
+    )
+    if enabled != GALLERY_SLOT_ORDER:
+        raise AssertionError(f"Unexpected Gallery slot state: {enabled!r}")
+    return slots
+
+
 def capture_gui_annotated_chloroplast(
     browser_type: BrowserType,
     base_url: str,
     output_paths: Mapping[str, Path],
     download_dir: Path,
 ) -> CaptureResult:
-    """Build and export the complete T-GUI-05 tobacco-plastome figure."""
+    """Build and export the Gallery-quality T-GUI-05 tobacco plastome."""
 
     genome_report = _validate_complete_record(
         GUI_ANNOTATION_GENBANK_PATH,
@@ -76,6 +328,11 @@ def capture_gui_annotated_chloroplast(
         expected_length=155_943,
     )
     annotation_report = _validate_annotation_fixture()
+    assert_fixture_identity(
+        SPECIFIC_COLORS_PATH,
+        expected_size=SPECIFIC_COLORS_SIZE,
+        expected_sha256=SPECIFIC_COLORS_SHA256,
+    )
     assert_output_paths(output_paths, SCREENSHOT_NAMES, SCENARIO_ID)
     download_dir.mkdir(parents=True, exist_ok=True)
 
@@ -113,100 +370,37 @@ def capture_gui_annotated_chloroplast(
             page, output_paths[SCREENSHOT_NAMES[1]], "Circular"
         )
 
-        annotations_section = page.get_by_label("Region Annotations", exact=True)
-        annotations_section.click()
+        _configure_gallery_presentation(page)
+        annotations = page.get_by_label("Region Annotations", exact=True)
+        annotations.click()
         page.get_by_label("Import TSV", exact=True).set_input_files(
             GUI_ANNOTATION_TABLE_PATH
         )
         expect(page.get_by_label("Annotation set id", exact=True)).to_have_value(
             "plastome_regions"
         )
-        legend_label = page.get_by_placeholder("Set legend label (optional)")
-        legend_label.fill("Plastome structural regions")
-        lane_controls = page.get_by_label("Annotation lane", exact=True)
-        expect(lane_controls).to_have_count(4)
-        for index, lane in enumerate((0, 1, 0, 1)):
-            lane_controls.nth(index).fill(str(lane))
-        rendered_lanes = tuple(
-            page.evaluate(
-                """
-                () => (window.__GBDRAW_APP__?.annotationSets?.[0]?.annotations || [])
-                  .map((item) => Number(item?.lane))
-                """
-            )
-        )
-        if rendered_lanes != (0, 1, 0, 1):
-            raise AssertionError(
-                f"Unexpected visible annotation-lane assignment: {rendered_lanes}"
-            )
-        annotations_section.scroll_into_view_if_needed()
+        expect(page.get_by_label("Annotation lane", exact=True)).to_have_count(4)
+        annotations.scroll_into_view_if_needed()
         screenshot_bytes[SCREENSHOT_NAMES[2]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[2]], "Circular"
         )
 
-        custom_slots = page.get_by_role(
-            "button", name=re.compile(r"Custom Track Slots$"), exact=False
-        )
-        custom_slots.click()
-        use_custom = page.get_by_role(
-            "checkbox", name="Use custom stack", exact=True
-        )
-        use_custom.check()
-
-        skew_slot = page.get_by_role(
-            "group", name="Circular track slot gc_skew", exact=True
-        )
-        skew_slot.get_by_label("Track dinucleotide", exact=True).fill("AT")
-        skew_slot.get_by_label("Track legend label", exact=True).fill("AT skew")
-
-        new_renderer = page.get_by_label("New circular track renderer", exact=True)
-        new_renderer.select_option("annotations")
-        page.get_by_role("button", name=re.compile(r"Add track$"), exact=False).click()
+        slots = _configure_gallery_slots(page)
         annotation_slot = page.get_by_role(
-            "group", name="Circular track slot annotations", exact=True
+            "group", name="Circular track slot plastome_regions", exact=True
         )
-        annotation_slot.get_by_label("Annotation set", exact=True).select_option(
-            "plastome_regions"
-        )
-        annotation_slot.get_by_title("Move outside Axis", exact=True).click()
-        annotation_slot = page.get_by_role(
-            "group", name="Circular track slot annotations", exact=True
-        )
-        annotation_slot.get_by_label(
-            "Show annotation labels", exact=True
-        ).check()
-
-        slots = _track_slot_snapshot(page)
-        _assert_slot_snapshot(slots, EXPECTED_ANNOTATION_SLOT_ORDER)
-        skew_snapshot = next(slot for slot in slots if slot["id"] == "gc_skew")
-        annotation_snapshot = next(
-            slot for slot in slots if slot["id"] == "annotations"
-        )
-        if skew_snapshot["params"].get("nt") != "AT":
-            raise AssertionError("The custom skew track does not use AT")
-        if annotation_snapshot["side"] != "outside":
-            raise AssertionError("The annotation track is not outside the axis")
-
-        labels = page.get_by_label("Labels", exact=True)
-        labels.click()
-        page.get_by_label("Label Mode", exact=True).select_option("none")
-        labels.click()
-        _configure_title(page, "Complete Nicotiana tabacum plastome regions")
-
         annotation_slot.scroll_into_view_if_needed()
         screenshot_bytes[SCREENSHOT_NAMES[3]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[3]], "Circular"
         )
 
         final_report = generate_and_inspect(
-            page, _inspect_tracks_svg, _assert_annotation_svg
+            page, _inspect_tracks_svg, _assert_gallery_chloroplast
         )
-        _fit_circular_preview(page, target_zoom="60%")
-        feature_popup = page.get_by_role(
-            "dialog", name=re.compile(r"^Feature details:")
-        )
-        if feature_popup.is_visible():
-            feature_popup.get_by_role(
+        _fit_circular_preview(page, target_zoom="50%")
+        popup = page.get_by_role("dialog", name=re.compile(r"^Feature details:"))
+        if popup.is_visible():
+            popup.get_by_role(
                 "button", name="Close feature popup", exact=True
             ).click()
         screenshot_bytes[SCREENSHOT_NAMES[4]] = capture_screenshot(
@@ -216,8 +410,9 @@ def capture_gui_annotated_chloroplast(
             page,
             download_dir,
             expected_filename=OUTPUT_FILENAME,
-            assert_svg=_assert_annotation_svg,
+            assert_svg=_assert_gallery_chloroplast,
         )
+        download_report["galleryFigureSemanticsParity"] = True
         capture.assert_clean()
     finally:
         capture.close()
@@ -226,10 +421,7 @@ def capture_gui_annotated_chloroplast(
         screenshot_bytes=screenshot_bytes,
         final_svg_semantics=final_report,
         download=download_report,
-        fixture_report={
-            **genome_report,
-            "annotations": {**annotation_report, "renderedLanes": rendered_lanes},
-        },
+        fixture_report={**genome_report, "annotations": annotation_report},
         track_slots=slots,
     )
 

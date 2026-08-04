@@ -50,6 +50,18 @@ ALL_VS_ALL_SESSION_SIZE = 14_927_346
 ALL_VS_ALL_SESSION_SHA256 = (
     "03c7f010ef10991bc169e4fc376d0338854aae944755725fd16aec1646582a15"
 )
+GALLERY_COLLINEAR_SESSION = (
+    Path(__file__).resolve().parents[3]
+    / "gbdraw"
+    / "web"
+    / "gallery"
+    / "sessions"
+    / "hepatoplasmataceae_collinear.gbdraw-session.json.gz"
+)
+GALLERY_COLLINEAR_SESSION_SIZE = 11_459_099
+GALLERY_COLLINEAR_SESSION_SHA256 = (
+    "3013e651f676b86cfdbcb599bb85054e4a9994431d0b22d6949d501374c37985"
+)
 
 
 @dataclass(frozen=True)
@@ -122,6 +134,41 @@ def _load_all_vs_all_session(page: Page) -> frozenset[str]:
     return session_keys
 
 
+def _load_gallery_collinear_session(page: Page) -> frozenset[str]:
+    assert_fixture_identity(
+        GALLERY_COLLINEAR_SESSION,
+        expected_size=GALLERY_COLLINEAR_SESSION_SIZE,
+        expected_sha256=GALLERY_COLLINEAR_SESSION_SHA256,
+    )
+    with gzip.open(GALLERY_COLLINEAR_SESSION, "rt", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    entries = payload.get("losatCache", {}).get("entries", [])
+    session_keys = frozenset(str(entry.get("key", "")) for entry in entries)
+    blastp = payload.get("config", {}).get("losat", {}).get("blastp", {})
+    if (
+        len(entries) != 13
+        or len(session_keys) != 13
+        or "" in session_keys
+        or blastp.get("mode") != "collinear"
+        or blastp.get("collinearSearchScope") != "adjacent"
+    ):
+        raise AssertionError("Gallery session is not the fixed adjacent Collinear project")
+    page.once("dialog", lambda dialog: dialog.accept())
+    with page.expect_event("dialog", timeout=ACTION_TIMEOUT_MS) as dialog_info:
+        with page.expect_file_chooser(timeout=ACTION_TIMEOUT_MS) as chooser_info:
+            page.get_by_role("button", name="Load Session", exact=True).click()
+        chooser_info.value.set_files(GALLERY_COLLINEAR_SESSION)
+    if dialog_info.value.message != "Session loaded successfully!":
+        raise AssertionError(f"Session load failed: {dialog_info.value.message}")
+    expect(page.get_by_role("button", name="Linear", exact=True)).to_have_attribute(
+        "aria-pressed", "true"
+    )
+    expect(
+        page.get_by_role("group", name="GenBank File selection", exact=True)
+    ).to_have_count(5)
+    return session_keys
+
+
 def _set_presentation(page: Page, *, title: str) -> None:
     page.get_by_label("Track Layout", exact=True).select_option("middle")
     for checkbox_name in (
@@ -153,27 +200,34 @@ def _set_presentation(page: Page, *, title: str) -> None:
     title_panel.click()
 
 
-def _configure_all_record_collinear(page: Page, *, output_prefix: str) -> None:
+def _configure_all_record_collinear(
+    page: Page, *, output_prefix: str, evidence_scope: str = "all"
+) -> None:
     page.get_by_role("radio", name="Run LOSAT", exact=True).first.check()
     page.get_by_role("radio", name="LOSATP", exact=True).first.check()
-    page.get_by_label("LOSAT execution", exact=True).select_option("threaded")
+    page.get_by_label("LOSAT execution", exact=True).select_option(
+        "threaded" if evidence_scope == "all" else "auto"
+    )
     total_threads = page.get_by_label("LOSAT total threads", exact=True)
-    total_threads.select_option("32")
-    expect(total_threads).to_have_value("32")
+    total_threads.select_option("32" if evidence_scope == "all" else "safe")
+    expect(total_threads).to_have_value("32" if evidence_scope == "all" else "safe")
     threads = page.get_by_label("LOSAT threads per run", exact=True)
     if threads.is_enabled():
-        expect(threads.locator('option[value="32"]')).to_have_count(1)
-        threads.select_option("32")
+        threads.select_option("32" if evidence_scope == "all" else "auto")
     parallel_runs = page.get_by_label("LOSAT parallel runs", exact=True)
-    expect(parallel_runs.locator('option[value="1"]')).to_have_count(1)
-    parallel_runs.select_option("1")
+    if evidence_scope == "all":
+        parallel_runs.select_option("1")
+    else:
+        parallel_runs.select_option(index=0)
     page.get_by_label("LOSATP blastp mode", exact=True).select_option("collinear")
     page.get_by_label("Collinear max unit gap", exact=True).fill("0")
     page.get_by_label("Collinear minimum block genes", exact=True).fill("1")
     page.get_by_label("Collinear color mode", exact=True).select_option(
         "orientation_identity"
     )
-    page.get_by_label("Collinear evidence scope", exact=True).select_option("all")
+    page.get_by_label("Collinear evidence scope", exact=True).select_option(
+        evidence_scope
+    )
     page.get_by_label("Collinear diagonal drift", exact=True).fill("0")
     page.get_by_label("Collinear merge conflicts", exact=True).fill("1")
     page.get_by_label("LOSATP minimum bitscore", exact=True).fill("50")
@@ -211,10 +265,15 @@ def _assert_all_vs_all_groups(report: dict[str, Any]) -> None:
         raise AssertionError("The starting project has no Similarity-group links")
 
 
-def _assert_collinear(report: dict[str, Any], *, title: str) -> None:
+def _assert_collinear(
+    report: dict[str, Any], *, title: str, evidence_scope: str
+) -> None:
     _assert_records(report)
     texts = set(report.get("texts", []))
-    for expected in (title, "GC content", "GC skew (+)", "GC skew (-)"):
+    expected_texts = ["GC content", "GC skew (+)", "GC skew (-)"]
+    if title:
+        expected_texts.insert(0, title)
+    for expected in expected_texts:
         if expected not in texts:
             raise AssertionError(f"Hepatoplasmataceae figure is missing {expected!r}")
     if not report.get("coordinateTicks"):
@@ -233,8 +292,16 @@ def _assert_collinear(report: dict[str, Any], *, title: str) -> None:
         "orientation_identity"
     }:
         raise AssertionError("Collinear blocks lost orientation-and-identity colors")
-    if {match.get("groupScope") for match in matches} != {"global_collinear"}:
-        raise AssertionError("Collinear blocks were not reduced from all-record evidence")
+    group_scopes = {match.get("groupScope") for match in matches}
+    if evidence_scope == "all":
+        if group_scopes != {"global_collinear"}:
+            raise AssertionError(
+                "Collinear blocks were not reduced from all-record evidence"
+            )
+    elif group_scopes - {"", "adjacent_collinear", "adjacent_local"}:
+        raise AssertionError(
+            f"Adjacent Collinear blocks have an unexpected scope: {group_scopes!r}"
+        )
 
 
 def _cache_state(page: Page) -> dict[str, Any]:
@@ -286,6 +353,26 @@ def _assert_all_record_search(
         or telemetry.get("uniqueJobs") != 0
     ):
         raise AssertionError(f"Collinear conversion reran the all-vs-all search: {state!r}")
+
+
+def _assert_gallery_adjacent_search(
+    page: Page, *, session_keys: frozenset[str]
+) -> None:
+    state = _cache_state(page)
+    cache = state.get("cache", [])
+    keys = {entry.get("key", "") for entry in cache}
+    telemetry = state.get("telemetry") or {}
+    if (
+        state.get("mode") != "collinear"
+        or state.get("scope") != "adjacent"
+        or len(cache) != 4
+        or not keys <= session_keys
+        or telemetry.get("cacheMisses") not in (None, 0)
+        or telemetry.get("uniqueJobs") not in (None, 0)
+    ):
+        raise AssertionError(
+            f"Gallery Collinear project did not reuse adjacent evidence: {state!r}"
+        )
 
 
 def _download_button(page: Page, button: Any, download_dir: Path, name: str) -> Path:
@@ -341,26 +428,50 @@ def capture_hepatoplasmataceae_collinear(
     *,
     output_prefix: str,
     screenshot_names: Mapping[str, str],
+    starting_project: str = "all-vs-all",
 ) -> HepatoplasmataceaeCollinearResult:
-    """Run one live all-record LOSATP-to-Collinear project journey."""
+    """Run one cached LOSATP-to-Collinear project journey."""
 
     source_records = _validate_fixtures()
     for path in output_paths.values():
         path.parent.mkdir(parents=True, exist_ok=True)
     download_dir.mkdir(parents=True, exist_ok=True)
 
-    title = "All-vs-all LOSATP Collinear blocks across Hepatoplasmataceae"
+    if starting_project not in {"all-vs-all", "gallery-collinear"}:
+        raise ValueError(f"Unsupported Collinear starting project: {starting_project}")
+    evidence_scope = "all" if starting_project == "all-vs-all" else "adjacent"
+    title = (
+        "All-vs-all LOSATP Collinear blocks across Hepatoplasmataceae"
+        if evidence_scope == "all"
+        else "LOSATP Collinear blocks across Hepatoplasmataceae"
+    )
     capture = open_browser_capture(browser_type, base_url)
     page = capture.page
     screenshots: dict[str, int] = {}
     try:
         page.goto(base_url, wait_until="domcontentloaded")
         wait_for_worker(page)
-        session_cache_keys = _load_all_vs_all_session(page)
+        session_cache_keys = (
+            _load_all_vs_all_session(page)
+            if starting_project == "all-vs-all"
+            else _load_gallery_collinear_session(page)
+        )
         result_region = page.get_by_role("region", name="Result Preview", exact=True)
         expect(result_region).to_be_visible(timeout=ACTION_TIMEOUT_MS)
-        _assert_all_vs_all_groups(inspect_gui_bgc_losatp_svg(result_region))
-        _assert_loaded_all_vs_all(page, session_keys=session_cache_keys)
+        restored_report = inspect_gui_bgc_losatp_svg(result_region)
+        if starting_project == "all-vs-all":
+            _assert_all_vs_all_groups(restored_report)
+            _assert_loaded_all_vs_all(page, session_keys=session_cache_keys)
+        else:
+            _assert_collinear(restored_report, title="", evidence_scope="adjacent")
+            restored_state = _cache_state(page)
+            if (
+                restored_state.get("mode") != "collinear"
+                or restored_state.get("scope") != "adjacent"
+            ):
+                raise AssertionError(
+                    f"Gallery session did not restore Collinear mode: {restored_state!r}"
+                )
         set_feature_search_visible(page, visible=False)
         if "input" in screenshot_names:
             screenshots[screenshot_names["input"]] = capture_screenshot(
@@ -374,7 +485,11 @@ def capture_hepatoplasmataceae_collinear(
             )
 
         _set_presentation(page, title=title)
-        _configure_all_record_collinear(page, output_prefix=output_prefix)
+        _configure_all_record_collinear(
+            page,
+            output_prefix=output_prefix,
+            evidence_scope=evidence_scope,
+        )
         page.get_by_label("Collinear evidence scope", exact=True).scroll_into_view_if_needed()
         screenshots[screenshot_names["settings"]] = capture_screenshot(
             page, output_paths[screenshot_names["settings"]], "Linear"
@@ -383,10 +498,15 @@ def capture_hepatoplasmataceae_collinear(
         final_report = generate_and_inspect(
             page,
             inspect_gui_bgc_losatp_svg,
-            lambda report: _assert_collinear(report, title=title),
+            lambda report: _assert_collinear(
+                report, title=title, evidence_scope=evidence_scope
+            ),
             timeout_ms=600_000,
         )
-        _assert_all_record_search(page, session_keys=session_cache_keys)
+        if evidence_scope == "all":
+            _assert_all_record_search(page, session_keys=session_cache_keys)
+        else:
+            _assert_gallery_adjacent_search(page, session_keys=session_cache_keys)
         fit_complete_linear_preview(page, target_zoom="30%")
         screenshots[screenshot_names["result"]] = capture_screenshot(
             page, output_paths[screenshot_names["result"]], "Linear"
@@ -419,7 +539,11 @@ def capture_hepatoplasmataceae_collinear(
             "bytes": svg_path.stat().st_size,
             "semantics": inspect_svg_file(svg_path),
         }
-        _assert_collinear(download_report["semantics"], title=title)
+        _assert_collinear(
+            download_report["semantics"],
+            title=title,
+            evidence_scope=evidence_scope,
+        )
         capture.assert_clean()
     finally:
         capture.close()

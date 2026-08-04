@@ -235,7 +235,7 @@ def test_bgc_comparison_and_circular_multi_record_fixtures_are_distinct() -> Non
     assert all("complete genome" in record.description for record in records)
 
 
-def test_hepatoplasmataceae_fixture_supports_all_vs_all_collinear_tutorial() -> None:
+def test_hepatoplasmataceae_fixture_supports_gallery_collinear_tutorial() -> None:
     manifest = _load_manifest()
     fixture = manifest["fixtures"]["hepatoplasmataceae-five"]
     semantics = fixture["expectedSemantics"]
@@ -260,8 +260,10 @@ def test_hepatoplasmataceae_fixture_supports_all_vs_all_collinear_tutorial() -> 
     ]
     assert semantics["recordsAreWholeCanonicalSources"] is True
     assert semantics["comparisonProgram"] == "LOSATP"
-    assert semantics["collinearSearchScope"] == "all"
-    assert semantics["searchedRecordPairCount"] == 10
+    assert semantics["galleryCollinearSearchScope"] == "adjacent"
+    assert semantics["gallerySearchedRecordPairCount"] == 4
+    assert semantics["allRecordHowToSearchScope"] == "all"
+    assert semantics["allRecordHowToPairCount"] == 10
     assert semantics["displayedRibbonScope"] == "adjacent"
     assert semantics["recordOrderMatchesGallery"] is True
     assert scenario["settings"] == {
@@ -269,11 +271,11 @@ def test_hepatoplasmataceae_fixture_supports_all_vs_all_collinear_tutorial() -> 
         "program": "losatp",
         "protein_mode": "collinear",
         "minimum_anchors": 1,
-        "comparison_scope": "all",
-        "scheduling": "threaded",
-        "total_threads": 32,
-        "parallel_runs": 1,
-        "threads_per_run": 32,
+        "comparison_scope": "adjacent",
+        "scheduling": "auto",
+        "total_threads": "safe",
+        "parallel_runs": "auto",
+        "threads_per_run": "auto",
     }
 
 

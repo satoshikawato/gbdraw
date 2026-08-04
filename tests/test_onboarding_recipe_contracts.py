@@ -97,7 +97,7 @@ def test_recipe_runners_extract_the_literal_documented_blocks() -> None:
     )
     python_recipe = extract_executable_block(python_chapter, language="python")
     compile(python_recipe, python_chapter["destination"], "exec")
-    assert "diagram = draw_circular(record)" in python_recipe
+    assert "diagram = draw_circular(record, options=options)" in python_recipe
     assert "saved_path = diagram.save(output_path)" in python_recipe
 
 

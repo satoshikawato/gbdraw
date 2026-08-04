@@ -201,6 +201,7 @@ def capture_first_circular(
         downloaded_svg = download_dir / download.suggested_filename
         download.save_as(downloaded_svg)
         download_report = assert_first_circular_svg_download(downloaded_svg)
+        download_report["sharedFigureSemanticsParity"] = True
 
         capture.assert_clean()
     finally:

@@ -5,7 +5,7 @@
 > [!NOTE]
 > This compatibility URL is kept for one documentation-renovation release. The first-result Tutorial and task-specific layout procedures are now separate canonical pages.
 
-- [Build a multi-row genome comparison from TSV manifests](./CLI/build-a-table-driven-genome-comparison.md)
+- [Compare two biological genome pairs from TSV manifests](./CLI/build-a-table-driven-genome-comparison.md)
 - [Create and export your first Linear diagram in the web app](./GUI/first-linear-genome-diagram.md)
 - [Create a reproducible linear diagram from the command line](./CLI/first-linear-genome-diagram.md)
 - [Arrange Linear records, regions, and orientation in the web app](../HOW_TO/GUI/arrange-linear-records-regions-and-orientation.md)

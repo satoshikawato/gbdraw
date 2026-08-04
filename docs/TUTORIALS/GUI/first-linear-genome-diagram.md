@@ -1,5 +1,14 @@
 # Create and export your first linear genome diagram
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| **This page** | [Command-line workflow](../CLI/first-linear-genome-diagram.md) | Not yet migrated |
+
+The implemented variants build the same complete Lambda map. A Python variant
+must reproduce that figure rather than introduce a different example.
+
 Create a labeled Linear SVG from the complete bundled Lambda phage GenBank record. You will generate a working map in Step 2, then add concise gene labels and a coordinate ruler before exporting it.
 
 ![Finished linear Lambda genome diagram with labels and ruler](../../images/t-gui-02/04-finished-diagram.png)

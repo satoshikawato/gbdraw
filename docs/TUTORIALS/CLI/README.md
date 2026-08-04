@@ -10,7 +10,8 @@
 ## Project workflows
 
 3. [Highlight mitochondrial features without editing the GenBank file](highlight-mitochondrial-features.md)
-4. [Build a multi-row genome comparison from TSV manifests](build-a-table-driven-genome-comparison.md)
+4. [Compare two biological genome pairs from TSV manifests](build-a-table-driven-genome-comparison.md)
 5. [Build a quantitative genome map with depth, GC content, and skew](build-a-quantitative-genome-map.md)
+6. [Recreate the Gallery chloroplast map from the command line](build-an-annotated-chloroplast-map.md)
 
 The documented commands run from a clean temporary directory against the public tutorial fixtures.

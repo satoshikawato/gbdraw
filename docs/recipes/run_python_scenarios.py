@@ -32,6 +32,7 @@ from gbdraw.api import (
     CircularTrackSlot,
     PreparedDiagramRequest,
     RequestRenderResult,
+    ScalarSpec,
     SessionDocument,
     load_session_document,
 )
@@ -66,6 +67,7 @@ else:
 
 IMPLEMENTED_SCENARIOS = (
     "T-PY-01",
+    "T-PY-02",
     "H-PY-01",
     "H-PY-02",
     "H-PY-03",
@@ -156,6 +158,13 @@ def _validate_scenario(
             output_path=generated_paths[0],
             used_entries=used_entries,
         )
+    elif scenario_id == "T-PY-02":
+        _validate_annotated_chloroplast_tutorial(
+            chapter,
+            namespace=namespace,
+            stdout=stdout,
+            output_path=generated_paths[0],
+        )
     elif scenario_id == "H-PY-01":
         _validate_circular_and_multi_record_howto(
             chapter,
@@ -212,6 +221,24 @@ def _validate_first_python_tutorial(
         raise RecipeContractError(
             "T-PY-01 must leave its saved Path in `saved_path`."
         )
+    options = namespace.get("options")
+    if (
+        not isinstance(options, CircularOptions)
+        or Path(str(options.labels.qualifier_priority)).name
+        != "cds_gene_qualifier_priority.tsv"
+        or options.species != "<i>Homo sapiens</i>"
+        or options.legend != "right"
+        or dict(options.config_overrides or {})
+        != {
+            "canvas.strandedness": True,
+            "canvas.circular.track_type": "middle",
+            "labels.circular.scope": "outer",
+            "labels.circular.placement": "horizontal",
+        }
+    ):
+        raise RecipeContractError(
+            "T-PY-01 no longer matches the shared first Circular figure."
+        )
     if f"Saved {output_path.name}" not in stdout:
         raise RecipeContractError("T-PY-01 did not report its visible result.")
     validate_standard_svg(
@@ -219,6 +246,201 @@ def _validate_first_python_tutorial(
         output_path=output_path,
         used_entries=used_entries,
     )
+    cli_output = (
+        Path(__file__).resolve().parents[1]
+        / "images"
+        / "t-cli-01"
+        / "human_mitochondrion.svg"
+    )
+    if ElementTree.tostring(
+        ElementTree.parse(output_path).getroot(), encoding="utf-8"
+    ) != ElementTree.tostring(
+        ElementTree.parse(cli_output).getroot(), encoding="utf-8"
+    ):
+        raise RecipeContractError(
+            "T-PY-01 and T-CLI-01 no longer render the same SVG tree."
+        )
+
+
+def _validate_annotated_chloroplast_tutorial(
+    chapter: dict[str, object],
+    *,
+    namespace: dict[str, object],
+    stdout: str,
+    output_path: Path,
+) -> None:
+    _assert_diagram_boundary(
+        chapter,
+        namespace=namespace,
+        prefix="chloroplast",
+        output_path=output_path,
+    )
+    record = namespace.get("record")
+    if not isinstance(record, SeqRecord) or (
+        record.id,
+        len(record),
+        record.annotations.get("topology"),
+    ) != ("NC_001879.2", 155_943, "circular"):
+        raise RecipeContractError(
+            "T-PY-02 must use the complete circular tobacco plastome."
+        )
+
+    options = namespace.get("options")
+    if not isinstance(options, CircularOptions):
+        raise RecipeContractError("T-PY-02 must retain its typed CircularOptions.")
+    if tuple(options.features.types or ()) != (
+        "CDS",
+        "rRNA",
+        "tRNA",
+        "tmRNA",
+        "ncRNA",
+        "misc_RNA",
+        "rep_origin",
+    ) or Path(str(options.features.color_table)).name != (
+        "chloroplast_specific_table.tsv"
+    ):
+        raise RecipeContractError(
+            "T-PY-02 lost the Gallery feature selection or functional colors."
+        )
+    if Path(str(options.labels.qualifier_priority)).name != "qualifier_priority.tsv":
+        raise RecipeContractError("T-PY-02 lost its CDS gene-label priority.")
+    if not isinstance(options.annotations, AnnotationOptions) or Path(
+        str(options.annotations.table_file)
+    ).name != "nicotiana-tabacum-regions.tsv":
+        raise RecipeContractError("T-PY-02 lost its plastome region table.")
+    if options.species != "<i>Nicotiana tabacum</i>" or options.legend != "upper_left":
+        raise RecipeContractError(
+            "T-PY-02 lost the Gallery definition or legend placement."
+        )
+
+    expected_overrides = {
+        "canvas.strandedness": True,
+        "canvas.circular.track_type": "tuckin",
+        "labels.circular.scope": "both",
+        "labels.circular.placement": "radial",
+        "labels.unified_adjustment.outer_labels.x_radius_offset": 0.9,
+        "labels.unified_adjustment.outer_labels.y_radius_offset": 0.9,
+        "labels.unified_adjustment.inner_labels.x_radius_offset": 0.975,
+        "labels.unified_adjustment.inner_labels.y_radius_offset": 0.975,
+        "objects.definition.circular.font_size": 28,
+        "objects.definition.circular.interval": 30,
+        "objects.features.block_stroke_color": "black",
+        "objects.features.block_stroke_width.long": 1,
+        "objects.features.line_stroke_width.long": 2,
+        "objects.axis.circular.stroke_width.long": 3,
+    }
+    if dict(options.config_overrides or {}) != expected_overrides:
+        raise RecipeContractError("T-PY-02 Gallery presentation settings changed.")
+
+    slots = tuple(options.tracks.slots or ())
+    if not all(isinstance(slot, CircularTrackSlot) for slot in slots) or [
+        (slot.id, slot.renderer, slot.side) for slot in slots
+    ] != [
+        ("features", "features", "overlay"),
+        ("plastome_regions", "annotations", "inside"),
+        ("gc_content", "dinucleotide_content", "inside"),
+    ]:
+        raise RecipeContractError("T-PY-02 custom Circular slot order changed.")
+    feature_slot, annotation_slot, gc_slot = slots
+    if feature_slot.params != {"lane_direction": "split"}:
+        raise RecipeContractError("T-PY-02 must split the two feature strands.")
+    if (
+        annotation_slot.radius != ScalarSpec(0.65)
+        or annotation_slot.width != ScalarSpec(20, "px")
+        or annotation_slot.inner_gap_px != 1
+        or annotation_slot.outer_gap_px != 1
+        or annotation_slot.params
+        != {
+            "set_id": "plastome_regions",
+            "show_labels": True,
+            "padding_px": 1,
+            "overflow": "compress",
+        }
+    ):
+        raise RecipeContractError("T-PY-02 plastome region geometry changed.")
+    if (
+        gc_slot.radius != ScalarSpec(0.56)
+        or gc_slot.width != ScalarSpec(0.08)
+        or gc_slot.params != {"nt": "GC", "legend_label": "GC content"}
+    ):
+        raise RecipeContractError("T-PY-02 GC-content geometry changed.")
+
+    _assert_svg_records(
+        chapter,
+        output_path=output_path,
+        records=(("NC_001879.2", 155_943),),
+        displayed_feature_count=147,
+        required_text=(
+            "Nicotiana tabacum",
+            "LSC",
+            "IRb",
+            "SSC",
+            "IRa",
+            "GC content",
+            "matK",
+            "psaA",
+            "photosystem I",
+            "photosystem II",
+            "RNA polymerase",
+            "rep_origin",
+        ),
+    )
+    evidence = inspect_standard_svg(chapter, output_path=output_path)
+    if evidence.slot_renderers != {
+        "features",
+        "annotations",
+        "dinucleotide_content",
+    }:
+        raise RecipeContractError("T-PY-02 SVG contains an unexpected track.")
+    if {"GC skew (+)", "GC skew (-)", "AT skew (+)", "AT skew (-)"} & (
+        evidence.text_nodes
+    ):
+        raise RecipeContractError("T-PY-02 must not draw a skew track.")
+
+    root = ElementTree.parse(output_path).getroot()
+    annotations = {
+        (
+            element.attrib["data-gbdraw-annotation-id"],
+            element.attrib.get("data-gbdraw-annotation-set-id"),
+            element.attrib.get("data-gbdraw-annotation-track-id"),
+            element.attrib.get("data-gbdraw-record-id"),
+            element.attrib.get("data-gbdraw-annotation-label"),
+        )
+        for element in root.iter()
+        if "data-gbdraw-annotation-id" in element.attrib
+    }
+    if annotations != {
+        (key, "plastome_regions", "plastome_regions", "NC_001879.2", label)
+        for key, label in (
+            ("lsc", "LSC"),
+            ("irb", "IRb"),
+            ("ssc", "SSC"),
+            ("ira", "IRa"),
+        )
+    }:
+        raise RecipeContractError(
+            f"T-PY-02 plastome annotation identities changed: {sorted(annotations)!r}."
+        )
+    fills = {element.attrib.get("fill") for element in root.iter()}
+    if not {"#00662c", "#328925", "#bd1220", "#e95d0f", "#ffec00"} <= fills:
+        raise RecipeContractError("T-PY-02 SVG lost functional chloroplast colors.")
+    gallery_source = (
+        Path(__file__).resolve().parents[2]
+        / "gbdraw"
+        / "web"
+        / "gallery"
+        / "sources"
+        / "tobacco-chloroplast.svg"
+    )
+    if ElementTree.tostring(root, encoding="utf-8") != ElementTree.tostring(
+        ElementTree.parse(gallery_source).getroot(),
+        encoding="utf-8",
+    ):
+        raise RecipeContractError(
+            "T-PY-02 no longer reproduces the Gallery chloroplast SVG tree."
+        )
+    if f"Saved {output_path.name}" not in stdout:
+        raise RecipeContractError("T-PY-02 did not report its saved diagram.")
 
 
 def _validate_circular_and_multi_record_howto(

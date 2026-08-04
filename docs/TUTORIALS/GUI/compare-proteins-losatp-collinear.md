@@ -1,17 +1,26 @@
-# Find conserved gene order from all-vs-all LOSATP evidence
+# Recreate the Gallery LOSATP Collinear blocks figure
 
-Start from a completed All-vs-all LOSATP Similarity-groups project and reduce
-the same protein evidence to Collinear blocks across five complete
-Hepatoplasmataceae genomes. The cached searches are reused; switching the
-presentation does not rerun LOSATP.
+## Choose how to build this figure
 
-![Hepatoplasmataceae diagram with Collinear blocks from all-record evidence](../../images/t-gui-08/04-collinear-result.png)
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| **This page** | Not yet migrated | Not yet migrated |
+
+Future variants must restore the same five records and adjacent-pair Collinear
+evidence; they must not switch to Similarity groups or all-vs-all display.
+
+Start from the Interactive SVG Gallery's completed LOSATP **Collinear blocks**
+project for five complete Hepatoplasmataceae genomes. Every screenshot in this
+tutorial remains in Collinear mode; no Similarity-groups result is mixed into
+the workflow.
+
+![Hepatoplasmataceae diagram with adjacent-pair Collinear blocks](../../images/t-gui-08/04-collinear-result.png)
 
 ## What you'll need
 
 Use the bundled Gallery session
-`gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz`.
-It contains the complete records in this order:
+`gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz`.
+It contains these complete records in display order:
 
 1. `AP027078.1`
 2. `AP027131.1`
@@ -19,41 +28,42 @@ It contains the complete records in this order:
 4. `AP027132.1`
 5. `NZ_CP006932.1`
 
-The session was created with a 32-thread LOSATP run and preserves 25 cached
-directional and self results for the five-record All-vs-all analysis.
+The session preserves 13 cached directional and self LOSATP results used by
+the adjacent-pair Collinear workflow. Loading or regenerating it does not need
+network access.
 
-## Step 1: Load the All-vs-all project
+## Step 1: Load the Collinear Gallery project
 
-Select **Load Session** and choose
-`hepatoplasmataceae_orthogroup.gbdraw-session.json.gz`. Accept the successful
-load message. Confirm that Linear mode, the five GenBank files, **Run LOSAT**,
-**LOSATP**, and **Similarity groups** are restored.
+Select **Load Session**, choose
+`hepatoplasmataceae_collinear.gbdraw-session.json.gz`, and accept the success
+message. Confirm **Linear**, five GenBank inputs, **Run LOSAT**, **LOSATP**, and
+**Collinear blocks**.
 
-![Five Hepatoplasmataceae genomes restored from an All-vs-all LOSATP session](../../images/t-gui-08/01-input-ready.png)
+![Five Hepatoplasmataceae genomes restored directly in Collinear mode](../../images/t-gui-08/01-input-ready.png)
 
-## Step 2: Inspect the Similarity-groups result
+## Step 2: Inspect the restored Collinear result
 
-The restored preview is already a visible result. Its links show group
-membership between adjacent display rows, while group construction used the
-complete All-vs-all evidence cache.
+The restored preview already contains conserved-order blocks. Blue and red
+families distinguish orientation; intensity carries average identity within
+each family. The four displayed endpoint pairs connect adjacent records.
 
-![Hepatoplasmataceae All-vs-all LOSATP Similarity-groups diagram](../../images/t-gui-08/02-first-diagram.png)
+![Restored Hepatoplasmataceae LOSATP Collinear diagram](../../images/t-gui-08/02-first-diagram.png)
 
-## Step 3: Change the reduction to Collinear blocks
+## Step 3: Verify the Gallery Collinear controls
 
-Keep **Run LOSAT** and **LOSATP**, then set:
+Keep these values:
 
 | Control | Value |
 | --- | --- |
-| Execution | Threaded |
-| Total threads | 32 |
-| Parallel runs | 1 run |
-| Threads per run | 32 |
+| Execution | Auto |
+| Total threads | Safe |
+| Parallel runs | Auto |
+| Threads per run | Auto |
 | blastp mode | Collinear blocks |
 | Max unit gap | 0 |
 | Min block genes | 1 |
 | Color mode | Orientation + identity |
-| Evidence scope | All records |
+| Evidence scope | Adjacent pairs |
 | Diagonal drift | 0 |
 | Merge conflicts | 1 |
 | Bitscore / E-value | 50 / `0.01` |
@@ -63,18 +73,13 @@ Set **Output Prefix** to `losatp_collinear`. Keep the Middle layout, centered
 records, separate strands, GC content and GC skew, ruler, ajisai palette,
 curved ribbons, top title, and right legend.
 
-![LOSATP Collinear controls using all Hepatoplasmataceae record pairs](../../images/t-gui-08/03-collinear-settings.png)
+![LOSATP Collinear controls using adjacent Hepatoplasmataceae pairs](../../images/t-gui-08/03-collinear-settings.png)
 
-## Step 4: Generate the Collinear view
+## Step 4: Regenerate without rerunning LOSATP
 
-Select **Generate Diagram**. The app requests all ten unique record pairs, but
-all 25 directional/self cache entries are hits: there are no search misses and
-no LOSATP worker calls. Collinear reduction uses evidence from every record,
-while ribbons remain between adjacent display rows so the Linear figure stays
-readable.
-
-Blue and red families distinguish orientation; intensity carries average
-identity within each family.
+Select **Generate Diagram**. The cached adjacent-pair evidence is reused with
+zero search misses and zero new LOSATP jobs. This recomputes the Collinear
+presentation while keeping the four readable adjacent ribbon layers.
 
 ## Step 5: Inspect and export a block
 
@@ -88,9 +93,9 @@ to save `losatp_collinear.svg`.
 
 ## What you built
 
-You reused one All-vs-all protein search for a different biological view:
-Similarity groups answer which proteins belong together, while Collinear
-blocks summarize where compatible groups retain order and orientation.
+You reproduced the Gallery Collinear view without passing through a different
+protein-comparison mode. Collinear blocks summarize where compatible protein
+groups retain order and orientation between adjacent displayed genomes.
 
 ## Next steps
 

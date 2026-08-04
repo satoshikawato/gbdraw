@@ -12,6 +12,83 @@
     "extended_incremental_uncompressed_bytes": 10485760,
     "gallery_nightly_bundled": false
   },
+  "tutorial_project_policy": {
+    "rule": "Define one biological figure first, then teach that same figure through GUI, CLI, and Python API variants.",
+    "required_surfaces": ["gui", "cli", "python"],
+    "variant_differences": ["interaction steps", "command syntax", "Python syntax", "surface-specific export mechanics"],
+    "shared_contract": ["fixtures", "record order", "biological comparisons", "feature selection", "labels", "colors", "track order and geometry", "finished SVG semantics"],
+    "navigation": "Every implemented variant links to the other variants through a Choose how to build this figure table.",
+    "exceptions": "A surface may be marked unavailable only when it cannot express the figure; it must name the missing capability and must not substitute a different figure.",
+    "migration": "Existing single-surface projects remain explicit backlog items; new projects must not be added as partial projects.",
+    "legacy_migration_projects": [
+      "first-linear-genome",
+      "lambda-de3-genome-comparison",
+      "aminoglycoside-similarity-groups",
+      "mitochondrial-comparison-rings",
+      "hepatoplasmataceae-collinear",
+      "interactive-session-handoff",
+      "mitochondrial-feature-presentation",
+      "majanivirus-table-comparison",
+      "quantitative-hepatoplasma-map"
+    ]
+  },
+  "tutorial_projects": {
+    "first-circular-genome": {
+      "figure": "Complete human mitochondrial circular map with gene labels, GC content, and GC skew",
+      "variants": {"gui": "T-GUI-01", "cli": "T-CLI-01", "python": "T-PY-01"},
+      "parity": "verified"
+    },
+    "first-linear-genome": {
+      "figure": "Complete Lambda linear genome map with labels and ruler",
+      "variants": {"gui": "T-GUI-02", "cli": "T-CLI-02", "python": null},
+      "parity": "migration"
+    },
+    "lambda-de3-genome-comparison": {
+      "figure": "Complete Lambda and DE3 linear comparison with six LOSATN links",
+      "variants": {"gui": "T-GUI-03", "cli": null, "python": null},
+      "parity": "migration"
+    },
+    "aminoglycoside-similarity-groups": {
+      "figure": "Five complete aminoglycoside BGC records aligned to one LOSATP Similarity group",
+      "variants": {"gui": "T-GUI-04", "cli": null, "python": null},
+      "parity": "migration"
+    },
+    "gallery-chloroplast-map": {
+      "figure": "Interactive SVG Gallery tobacco plastome with functional colors, radial labels, structural regions, and GC content",
+      "variants": {"gui": "T-GUI-05", "cli": "T-CLI-06", "python": "T-PY-02"},
+      "parity": "verified"
+    },
+    "mitochondrial-comparison-rings": {
+      "figure": "Human mitochondrial reference with three ordered precomputed comparison rings",
+      "variants": {"gui": "T-GUI-06", "cli": null, "python": null},
+      "parity": "migration"
+    },
+    "hepatoplasmataceae-collinear": {
+      "figure": "Five complete Hepatoplasmataceae genomes with adjacent LOSATP Collinear blocks",
+      "variants": {"gui": "T-GUI-08", "cli": null, "python": null},
+      "parity": "migration"
+    },
+    "interactive-session-handoff": {
+      "figure": "Interactive human mitochondrial figure reproduced from a saved session",
+      "variants": {"gui": "T-GUI-09", "cli": null, "python": null},
+      "parity": "migration"
+    },
+    "mitochondrial-feature-presentation": {
+      "figure": "Complete human mitochondrial map with functional colors and D-loop region bracket",
+      "variants": {"gui": null, "cli": "T-CLI-03", "python": null},
+      "parity": "migration"
+    },
+    "majanivirus-table-comparison": {
+      "figure": "Four Majanivirus records in two biological comparison pairs driven by TSV manifests",
+      "variants": {"gui": null, "cli": "T-CLI-04", "python": null},
+      "parity": "migration"
+    },
+    "quantitative-hepatoplasma-map": {
+      "figure": "Complete AP027133 genome with mean depth, GC content, and GC skew",
+      "variants": {"gui": null, "cli": "T-CLI-05", "python": null},
+      "parity": "migration"
+    }
+  },
   "capability_groups": {
     "entry-points": [
       "entry.hosted-gui",
@@ -121,6 +198,7 @@
   "chapters": [
     {
       "id": "T-GUI-01",
+      "project_id": "first-circular-genome",
       "title": "Create and export your first circular genome diagram",
       "role": "tutorial",
       "surface": "gui",
@@ -129,7 +207,7 @@
       "canonical_for": ["entry.hosted-gui", "layout.circular-single"],
       "fixtures": ["human-mitochondrion"],
       "settings": {"mode": "circular", "output_prefix": "human_mitochondrion", "species": "<i>Homo sapiens</i>", "track_preset": "middle", "separate_strands": true, "hide_gc_content": false, "hide_gc_skew": false, "label_mode": "out", "cds_label_qualifier": "gene", "legend_position": "right"},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_first_circular.py", "tier": "core", "expected_outputs": ["human_mitochondrion.svg"], "assertions": ["first_result_step=2", "svg.accession=NC_012920.1", "svg.sequence_length=16569", "cds_labels_use_gene=true", "cds_product_labels_absent=true", "svg.safe_static_export=true"]},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_first_circular.py", "tier": "core", "expected_outputs": ["human_mitochondrion.svg"], "assertions": ["first_result_step=2", "svg.accession=NC_012920.1", "svg.sequence_length=16569", "cds_labels_use_gene=true", "cds_product_labels_absent=true", "svg.safe_static_export=true", "parity=T-CLI-01"]},
       "screenshots": [
         {"path": "docs/images/t-gui-01/01-input-ready.png", "reason": "Confirm the selected tutorial file before generation.", "alt": "Circular GenBank input showing HmmtDNA.gbk selected"},
         {"path": "docs/images/t-gui-01/02-first-diagram.png", "reason": "Show the first successful diagram in Step 2.", "alt": "First circular human mitochondrial genome diagram"},
@@ -144,6 +222,7 @@
     },
     {
       "id": "T-GUI-02",
+      "project_id": "first-linear-genome",
       "title": "Create and export your first linear genome diagram",
       "role": "tutorial",
       "surface": "gui",
@@ -165,6 +244,7 @@
     },
     {
       "id": "T-GUI-03",
+      "project_id": "lambda-de3-genome-comparison",
       "title": "Compare two genomes with LOSATN in the browser",
       "role": "tutorial",
       "surface": "gui",
@@ -187,6 +267,7 @@
     },
     {
       "id": "T-GUI-04",
+      "project_id": "aminoglycoside-similarity-groups",
       "title": "Create protein Similarity groups with LOSATP in the browser",
       "role": "tutorial",
       "surface": "gui",
@@ -194,14 +275,15 @@
       "capabilities": ["comparison.losatp-groups", "interactive.group-popup", "output.comparison-data", "output.fasta-data"],
       "canonical_for": ["comparison.losatp-groups"],
       "fixtures": ["aminoglycoside-bgc-five"],
-      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "similarity-groups", "scheduling": "serial", "threads": 1, "separate_strands": false},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_groups.py", "tier": "extended", "expected_outputs": ["bgc_losatp_groups.tsv", "bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "whole_linear_record_count=5", "displayed_features=155", "feature_height=75", "feature_stroke_width=2", "labels=first_record_gene", "separate_strands=false", "group_count=23", "svg.group_links=77", "adjacent_endpoints_only=true", "direct_0708_0713_edge=false", "raw_rows=232", "popup.has_group_members=true"]},
+      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "similarity-groups", "alignment_group": "og_1", "scheduling": "serial", "threads": 1, "separate_strands": false},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_groups.py", "tier": "extended", "expected_outputs": ["bgc_losatp_groups.tsv", "bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "whole_linear_record_count=5", "displayed_features=155", "feature_height=75", "feature_stroke_width=2", "labels=first_record_gene", "separate_strands=false", "group_count=23", "alignment_group=og_1", "svg.group_links=77", "adjacent_endpoints_only=true", "direct_0708_0713_edge=false", "raw_rows=232", "popup.has_group_members=true"]},
       "screenshots": [
         {"path": "docs/images/t-gui-04/01-input-ready.png", "reason": "Confirm all five annotated BGC inputs and their order.", "alt": "Five annotated BGC records selected for protein comparison"},
         {"path": "docs/images/t-gui-04/02-first-diagram.png", "reason": "Show the plain five-record map before protein search.", "alt": "Plain five-record BGC linear diagram"},
         {"path": "docs/images/t-gui-04/03-losatp-settings.png", "reason": "Record Similarity groups LOSATP settings.", "alt": "LOSATP Similarity groups mode selected with deterministic settings"},
-        {"path": "docs/images/t-gui-04/04-comparison-result.png", "reason": "Verify protein groups in the finished diagram.", "alt": "Five-record BGC comparison with protein similarity groups"},
-        {"path": "docs/images/t-gui-04/05-match-popup.png", "reason": "Show the evidence available for one protein group.", "alt": "LOSATP similarity-group popup with member details"}
+        {"path": "docs/images/t-gui-04/04-align-og1.png", "reason": "Show the feature action that aligns all records to og_1.", "alt": "og_1 feature popup with the Align action"},
+        {"path": "docs/images/t-gui-04/05-comparison-result.png", "reason": "Verify the og_1-aligned protein groups in the finished diagram.", "alt": "Five-record BGC comparison aligned to similarity group og_1"},
+        {"path": "docs/images/t-gui-04/06-match-popup.png", "reason": "Show the evidence available for one protein group.", "alt": "LOSATP similarity-group popup with member details"}
       ],
       "sources": ["docs/TUTORIALS/4_Protein_Comparisons.md"],
       "destination": "docs/TUTORIALS/GUI/compare-proteins-losatp.md",
@@ -209,28 +291,30 @@
     },
     {
       "id": "T-GUI-05",
-      "title": "Build an annotated chloroplast map with custom tracks",
+      "project_id": "gallery-chloroplast-map",
+      "title": "Recreate the Interactive SVG Gallery chloroplast map",
       "role": "tutorial",
       "surface": "gui",
       "priority": "P1",
-      "capabilities": ["track.region-annotations", "track.gc-content", "track.at-skew", "track.custom-circular-slots", "layout.titles", "layout.legends", "output.static-svg"],
+      "capabilities": ["presentation.feature-colors", "presentation.qualifier-priority", "track.region-annotations", "track.gc-content", "track.custom-circular-slots", "layout.legends", "output.static-svg"],
       "canonical_for": [],
       "fixtures": ["tobacco-plastome-regions"],
-      "settings": {"mode": "circular", "record_id": "NC_001879.2", "annotation_set": "plastome_regions", "track_order": ["annotations", "features", "ticks", "gc_content", "at_skew"]},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_annotated_chloroplast.py", "tier": "extended", "expected_outputs": ["annotated_chloroplast_map.svg"], "assertions": ["first_result_step=2", "record_length=155943", "annotation_labels=LSC,SSC,IRa,IRb", "track_types=annotations,gc_content,at_skew", "title_and_legend_visible=true"]},
+      "settings": {"mode": "circular", "record_id": "NC_001879.2", "feature_types": ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "rep_origin"], "annotation_set": "plastome_regions", "track_order": ["features", "plastome_regions", "gc_content"], "labels": "both-radial", "label_offsets": {"outer_x": 0.9, "outer_y": 0.9, "inner_x": 0.975, "inner_y": 0.975}, "legend": "upper_left"},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_annotated_chloroplast.py", "tier": "extended", "expected_outputs": ["annotated_chloroplast_map.svg"], "assertions": ["first_result_step=2", "record_length=155943", "logical_features=147", "rendered_feature_elements=197", "annotation_labels=LSC,IRb,SSC,IRa", "track_types=features,annotations,gc_content", "gc_skew=false", "coordinate_ticks=false", "radial_labels=both", "functional_color_rules=70", "legend=upper_left", "parity=gbdraw/web/gallery/sources/tobacco-chloroplast.svg"]},
       "screenshots": [
         {"path": "docs/images/t-gui-05/01-input-ready.png", "reason": "Confirm the complete tobacco plastome input.", "alt": "Tobacco plastome GenBank file ready in Circular mode"},
         {"path": "docs/images/t-gui-05/02-first-diagram.png", "reason": "Show the plain plastome before custom tracks.", "alt": "First circular tobacco plastome diagram"},
         {"path": "docs/images/t-gui-05/03-annotation-table.png", "reason": "Record the four imported structural regions.", "alt": "Annotation table containing LSC, SSC, IRa, and IRb regions"},
-        {"path": "docs/images/t-gui-05/04-track-settings.png", "reason": "Record custom annotation and quantitative track placement.", "alt": "Circular custom-track controls for annotations, GC content, and AT skew"},
-        {"path": "docs/images/t-gui-05/05-finished-diagram.png", "reason": "Show the finished publication figure.", "alt": "Annotated tobacco plastome with structural regions, GC content, AT skew, title, and legend"}
+        {"path": "docs/images/t-gui-05/04-track-settings.png", "reason": "Record the Gallery three-slot stack.", "alt": "Circular custom-track controls for features, one plastome-region lane, and GC content"},
+        {"path": "docs/images/t-gui-05/05-finished-diagram.png", "reason": "Show the Gallery-equivalent finished figure.", "alt": "Gallery-style tobacco plastome with functional colors, radial labels, structural regions, GC content, and upper-left legend"}
       ],
-      "sources": ["docs/TUTORIALS/1_Customizing_Plots.md", "docs/TUTORIALS/6_Depth_Quantitative_Tracks.md"],
+      "sources": ["gbdraw/web/gallery/examples.json", "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json", "docs/TUTORIALS/1_Customizing_Plots.md"],
       "destination": "docs/TUTORIALS/GUI/build-an-annotated-chloroplast-map.md",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
       "id": "T-GUI-06",
+      "project_id": "mitochondrial-comparison-rings",
       "title": "Add circular comparison rings from precomputed results",
       "role": "tutorial",
       "surface": "gui",
@@ -253,19 +337,20 @@
     },
     {
       "id": "T-GUI-08",
-      "title": "Find conserved gene order from all-vs-all LOSATP evidence",
+      "project_id": "hepatoplasmataceae-collinear",
+      "title": "Recreate the Gallery LOSATP Collinear blocks figure",
       "role": "tutorial",
       "surface": "gui",
       "priority": "P1",
       "capabilities": ["comparison.losatp-collinear", "interactive.match-popup", "output.fasta-data", "output.static-svg"],
       "canonical_for": [],
       "fixtures": ["hepatoplasmataceae-five"],
-      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "collinear", "minimum_anchors": 1, "comparison_scope": "all", "scheduling": "threaded", "total_threads": 32, "parallel_runs": 1, "threads_per_run": 32},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_collinear.py", "tier": "extended", "expected_outputs": ["losatp_collinear.svg", "collinear_members.fasta"], "assertions": ["first_result_step=2", "starting_all_vs_all_cache_entries=25", "all_record_pair_count=10", "raw_search_reused=true", "block_count_positive=true", "orientations_verified=true", "identity_color_mode=orientation_identity", "popup.has_block_coordinates=true", "fasta.envelope_sequences=true"]},
+      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "collinear", "minimum_anchors": 1, "comparison_scope": "adjacent", "scheduling": "auto", "total_threads": "safe", "parallel_runs": "auto", "threads_per_run": "auto"},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_collinear.py", "tier": "extended", "expected_outputs": ["losatp_collinear.svg", "collinear_members.fasta"], "assertions": ["first_result_step=2", "starting_mode=collinear", "starting_adjacent_cache_entries=13", "visible_pair_count=4", "raw_search_reused=true", "block_count_positive=true", "orientations_verified=true", "identity_color_mode=orientation_identity", "popup.has_block_coordinates=true", "fasta.envelope_sequences=true"]},
       "screenshots": [
-        {"path": "docs/images/t-gui-08/01-input-ready.png", "reason": "Confirm the five records restored from the all-vs-all starting project.", "alt": "Five annotated Hepatoplasmataceae genomes restored from an all-vs-all LOSATP session"},
-        {"path": "docs/images/t-gui-08/02-first-diagram.png", "reason": "Show the existing all-vs-all Similarity groups before Collinear reduction.", "alt": "Hepatoplasmataceae all-vs-all LOSATP Similarity-group diagram"},
-        {"path": "docs/images/t-gui-08/03-collinear-settings.png", "reason": "Record the all-record evidence, anchor, and presentation settings.", "alt": "LOSATP Collinear settings using all Hepatoplasmataceae record pairs"},
+        {"path": "docs/images/t-gui-08/01-input-ready.png", "reason": "Confirm the five records restored from the Gallery Collinear project.", "alt": "Five annotated Hepatoplasmataceae genomes restored in LOSATP Collinear mode"},
+        {"path": "docs/images/t-gui-08/02-first-diagram.png", "reason": "Show the restored Collinear result before adjusting presentation settings.", "alt": "Restored Hepatoplasmataceae LOSATP Collinear diagram"},
+        {"path": "docs/images/t-gui-08/03-collinear-settings.png", "reason": "Record the adjacent evidence, anchor, and presentation settings.", "alt": "LOSATP Collinear settings using adjacent Hepatoplasmataceae record pairs"},
         {"path": "docs/images/t-gui-08/04-collinear-result.png", "reason": "Verify conserved-order blocks and orientation colors.", "alt": "Hepatoplasmataceae diagram with LOSATP Collinear blocks"},
         {"path": "docs/images/t-gui-08/05-block-popup.png", "reason": "Show block coordinates and envelope export.", "alt": "LOSATP Collinear block popup with anchors and envelope FASTA export"}
       ],
@@ -275,6 +360,7 @@
     },
     {
       "id": "T-GUI-09",
+      "project_id": "interactive-session-handoff",
       "title": "Create an interactive figure and reproduce it from a saved session",
       "role": "tutorial",
       "surface": "gui",
@@ -298,6 +384,7 @@
     },
     {
       "id": "T-CLI-01",
+      "project_id": "first-circular-genome",
       "title": "Create a reproducible circular diagram from the command line",
       "role": "tutorial",
       "surface": "cli",
@@ -306,7 +393,7 @@
       "canonical_for": ["entry.circular-cli", "output.reproducible-handoff"],
       "fixtures": ["human-mitochondrion"],
       "settings": {"mode": "circular", "working_directory": "empty", "format": "svg", "track_preset": "middle", "separate_strands": true, "label_mode": "out", "cds_label_qualifier": "gene", "species": "<i>Homo sapiens</i>", "legend_position": "right"},
-      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["human_mitochondrion.svg"], "assertions": ["first_result_step=2", "exit_code=0", "svg.accession=NC_012920.1", "svg.gc_tracks=2", "svg.cds_gene_labels=13", "svg.cds_product_labels=0"]},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["human_mitochondrion.svg"], "assertions": ["first_result_step=2", "exit_code=0", "svg.accession=NC_012920.1", "svg.gc_tracks=2", "svg.cds_gene_labels=13", "svg.cds_product_labels=0", "parity=T-PY-01"]},
       "screenshots": [],
       "sources": ["docs/QUICKSTART.md"],
       "destination": "docs/TUTORIALS/CLI/first-circular-genome-diagram.md",
@@ -314,6 +401,7 @@
     },
     {
       "id": "T-CLI-02",
+      "project_id": "first-linear-genome",
       "title": "Create a reproducible linear diagram from the command line",
       "role": "tutorial",
       "surface": "cli",
@@ -330,15 +418,16 @@
     },
     {
       "id": "T-CLI-03",
+      "project_id": "mitochondrial-feature-presentation",
       "title": "Highlight mitochondrial features without editing the GenBank file",
       "role": "tutorial",
       "surface": "cli",
       "priority": "P1",
-      "capabilities": ["entry.circular-cli", "presentation.feature-colors", "presentation.qualifier-priority", "presentation.label-filters", "presentation.label-overrides", "presentation.visibility", "presentation.shapes", "presentation.strokes", "output.static-svg"],
+      "capabilities": ["entry.circular-cli", "presentation.feature-colors", "presentation.qualifier-priority", "presentation.label-filters", "presentation.label-overrides", "presentation.shapes", "presentation.strokes", "track.region-annotations", "output.static-svg"],
       "canonical_for": [],
       "fixtures": ["human-mitochondrion"],
       "settings": {"mode": "circular", "working_directory": "empty", "format": "svg", "baseline_output": "mitochondrial_features_baseline.svg", "finished_output": "mitochondrial_features_highlighted.svg"},
-      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["mitochondrial_features_baseline.svg", "mitochondrial_features_highlighted.svg"], "assertions": ["first_result_step=2", "labels_and_colors_match=true", "visibility_actions=show,off,exclude_matching", "shapes=arrow,rectangle,underlay", "broken_references=0", "unexpected_empty_layers=0"]},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["mitochondrial_features_baseline.svg", "mitochondrial_features_highlighted.svg"], "assertions": ["first_result_step=2", "all_13_cds_visible=true", "labels_and_colors_match=true", "shapes=arrow,rectangle", "d_loop_annotation=origin_spanning_bracket", "broken_references=0", "unexpected_empty_layers=0"]},
       "screenshots": [],
       "sources": ["docs/TUTORIALS/1_Customizing_Plots.md", "docs/TUTORIALS/3_Advanced_Customization.md", "docs/TUTORIALS/9_Feature_Visibility_Shapes.md"],
       "destination": "docs/TUTORIALS/CLI/highlight-mitochondrial-features.md",
@@ -346,14 +435,15 @@
     },
     {
       "id": "T-CLI-04",
-      "title": "Build a multi-row genome comparison from TSV manifests",
+      "project_id": "majanivirus-table-comparison",
+      "title": "Compare two biological genome pairs from TSV manifests",
       "role": "tutorial",
       "surface": "cli",
       "priority": "P1",
       "capabilities": ["entry.linear-cli", "input.tsv-manifests", "layout.linear-multi-row", "layout.rulers", "comparison.uploaded-tables", "output.static-svg"],
       "canonical_for": [],
       "fixtures": ["majanivirus-table-comparison"],
-      "settings": {"mode": "linear", "working_directory": "empty", "record_count": 4, "grid": "2x2", "baseline_output": "table_driven_comparison_baseline.svg", "finished_output": "table_driven_comparison.svg"},
+      "settings": {"mode": "linear", "working_directory": "empty", "record_count": 4, "layout": "single-column biological pairs", "baseline_output": "table_driven_comparison_baseline.svg", "finished_output": "table_driven_comparison.svg"},
       "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["table_driven_comparison_baseline.svg", "table_driven_comparison.svg"], "assertions": ["first_result_step=2", "records_table.valid=true", "comparisons_table.referential_integrity=true", "record_cells_and_orientations_match=true", "comparison_endpoint_pairs=2", "rulers_and_shared_scale=true"]},
       "screenshots": [],
       "sources": ["docs/TUTORIALS/2_Comparative_Genomics.md", "docs/TUTORIALS/5_Table_Driven_Inputs.md", "docs/TUTORIALS/7_Linear_Layout.md"],
@@ -362,6 +452,7 @@
     },
     {
       "id": "T-CLI-05",
+      "project_id": "quantitative-hepatoplasma-map",
       "title": "Build a quantitative genome map with depth, GC content, and skew",
       "role": "tutorial",
       "surface": "cli",
@@ -377,7 +468,25 @@
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
+      "id": "T-CLI-06",
+      "project_id": "gallery-chloroplast-map",
+      "title": "Recreate the Gallery chloroplast map from the command line",
+      "role": "tutorial",
+      "surface": "cli",
+      "priority": "P1",
+      "capabilities": ["entry.circular-cli", "presentation.feature-colors", "presentation.qualifier-priority", "track.region-annotations", "track.gc-content", "track.custom-circular-slots", "layout.legends", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["tobacco-plastome-regions"],
+      "settings": {"mode": "circular", "working_directory": "empty", "record_id": "NC_001879.2", "feature_types": ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "rep_origin"], "annotation_set": "plastome_regions", "track_order": ["features", "plastome_regions", "gc_content"], "labels": "both-radial", "label_offsets": {"outer_x": 0.9, "outer_y": 0.9, "inner_x": 0.975, "inner_y": 0.975}, "legend": "upper_left"},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["cli_annotated_chloroplast.svg"], "assertions": ["first_result_step=2", "exit_code=0", "svg.accession=NC_001879.2", "svg.logical_features=147", "svg.annotation_ids=lsc,irb,ssc,ira", "svg.track_types=features,annotations,gc_content", "svg.gc_skew=false", "svg.radial_labels=both", "svg.functional_colors=true", "parity=T-PY-02"]},
+      "screenshots": [],
+      "sources": ["gbdraw/web/gallery/examples.json", "docs/TUTORIALS/GUI/build-an-annotated-chloroplast-map.md", "docs/REFERENCE/command-line.md"],
+      "destination": "docs/TUTORIALS/CLI/build-an-annotated-chloroplast-map.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
       "id": "T-PY-01",
+      "project_id": "first-circular-genome",
       "title": "Draw and save your first genome diagram from Python",
       "role": "tutorial",
       "surface": "python",
@@ -385,11 +494,28 @@
       "capabilities": ["entry.simple-python", "program.simple-drawing", "output.static-svg"],
       "canonical_for": ["entry.simple-python"],
       "fixtures": ["human-mitochondrion"],
-      "settings": {"mode": "circular", "working_directory": "empty", "format": "svg"},
-      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["python_human_mitochondrion.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.accession=NC_012920.1"]},
+      "settings": {"mode": "circular", "working_directory": "empty", "format": "svg", "track_preset": "middle", "separate_strands": true, "label_mode": "out", "cds_label_qualifier": "gene", "species": "<i>Homo sapiens</i>", "legend_position": "right"},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["python_human_mitochondrion.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.accession=NC_012920.1", "parity=T-CLI-01"]},
       "screenshots": [],
       "sources": ["docs/PYTHON_API.md"],
       "destination": "docs/TUTORIALS/PYTHON/first-genome-diagram.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-PY-02",
+      "project_id": "gallery-chloroplast-map",
+      "title": "Recreate the Gallery chloroplast map from Python",
+      "role": "tutorial",
+      "surface": "python",
+      "priority": "P1",
+      "capabilities": ["entry.simple-python", "program.simple-drawing", "presentation.feature-colors", "presentation.qualifier-priority", "track.region-annotations", "track.gc-content", "track.custom-circular-slots", "layout.legends", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["tobacco-plastome-regions"],
+      "settings": {"mode": "circular", "working_directory": "empty", "record_id": "NC_001879.2", "feature_types": ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "rep_origin"], "annotation_set": "plastome_regions", "track_order": ["features", "plastome_regions", "gc_content"], "labels": "both-radial", "label_offsets": {"outer_x": 0.9, "outer_y": 0.9, "inner_x": 0.975, "inner_y": 0.975}, "legend": "upper_left"},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_annotated_chloroplast.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.accession=NC_001879.2", "svg.logical_features=147", "svg.annotation_ids=lsc,irb,ssc,ira", "svg.track_types=features,annotations,gc_content", "svg.gc_skew=false", "svg.radial_labels=both", "svg.functional_colors=true", "parity=gbdraw/web/gallery/sources/tobacco-chloroplast.svg"]},
+      "screenshots": [],
+      "sources": ["gbdraw/web/gallery/examples.json", "docs/TUTORIALS/GUI/build-an-annotated-chloroplast-map.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/PYTHON/build-an-annotated-chloroplast-map.md",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {

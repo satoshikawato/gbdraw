@@ -1,11 +1,20 @@
 # Create protein Similarity groups with LOSATP in the browser
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| **This page** | Not yet migrated | Not yet migrated |
+
+Future variants must reproduce this five-record BGC figure aligned to the same
+Similarity group.
+
 Use LOSATP **Similarity groups** to compare five aminoglycoside biosynthetic
 gene-cluster records. The records remain Linear. They are native BGC database
 regions, not complete chromosomes, so this Tutorial does not turn them into
 circular genomes.
 
-![Five-record BGC comparison with protein similarity groups](../../images/t-gui-04/04-comparison-result.png)
+![Five-record BGC comparison aligned to similarity group og_1](../../images/t-gui-04/05-comparison-result.png)
 
 ## What you'll need
 
@@ -84,7 +93,7 @@ capturing or exporting it.
 
 ![LOSATP Similarity groups mode selected with deterministic settings](../../images/t-gui-04/03-losatp-settings.png)
 
-## Step 4: Run LOSATP and export the evidence
+## Step 4: Run LOSATP
 
 Select **Generate Diagram** again. The qualified result contains 23 stable
 groups and 77 displayed group links. The four displayed endpoint pairs are
@@ -95,29 +104,39 @@ and last records are represented by the same group ID across the adjacent-link
 chain. This is the canonical Similarity-groups presentation; it is not a
 Pairwise comparison between only the first and last records.
 
+## Step 5: Align every record to `og_1`
+
+Select the `livE` CDS in `og_1` on the first record. Its feature popup includes
+an **Align** action because the current result is in Similarity-groups mode.
+
+![og_1 feature popup with the Align action](../../images/t-gui-04/04-align-og1.png)
+
+Select **Align**. gbdraw regenerates the same 23-group comparison without
+rerunning LOSATP and shifts each record so its `og_1` member shares one
+x-coordinate. This is the alignment used by the Interactive SVG Gallery.
+
+![Five whole BGC records aligned to similarity group og_1](../../images/t-gui-04/05-comparison-result.png)
+
 Under **Raw LOSAT results**, name the first adjacent result
 `bgc_losatp_groups.tsv` and select **Save Raw LOSAT TSV**. The qualified file
-contains 232 twelve-column rows. Select **SVG** to save
+contains 232 twelve-column rows. Select **SVG** after alignment to save
 `bgc_losatp_groups.svg`.
 
-## Step 5: Inspect a group
+## Step 6: Inspect a group
 
 Select a comparison ribbon. The popup reports the group ID, display name,
 member count, record coverage, RBH seeds, paths, and every member protein.
 
-![LOSATP similarity-group popup with member details](../../images/t-gui-04/05-match-popup.png)
-
-The captured example opens `og_18`, which has six proteins across all five BGC
-records.
+![LOSATP similarity-group popup with member details](../../images/t-gui-04/06-match-popup.png)
 
 ## What you built
 
 You produced a Linear, five-record LOSATP Similarity-groups comparison from the
 whole BGC records, kept the source sequence identity separate from the reversed
 display orientation, and exported both the 232-row evidence table and the
-finished SVG. The diagram uses readable first-record `gene` labels and expresses
-shared groups through the adjacent-record chain rather than inventing a direct
-first-to-last ribbon.
+finished SVG. The diagram uses readable first-record `gene` labels, aligns all
+five records to `og_1`, and expresses shared groups through the adjacent-record
+chain rather than inventing a direct first-to-last ribbon.
 
 ## Next steps
 

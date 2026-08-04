@@ -111,7 +111,7 @@ def copy_declared_inputs(
     }
     mentioned_inputs = set(
         re.findall(
-            r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]+\.(?:gbk|gb|tsv|out|gff3|fna|fasta))",
+            r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]+\.(?:gbk|gb|tsv|out|gff3|fna|fasta))(?![A-Za-z0-9_.-])",
             recipe_source,
         )
     )

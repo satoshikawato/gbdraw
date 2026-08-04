@@ -1,5 +1,14 @@
 # Compare two genomes with LOSATN in the browser
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| **This page** | Not yet migrated | Not yet migrated |
+
+Future variants must reproduce this complete Lambda–DE3 comparison and its six
+LOSATN links; they must not substitute another record pair.
+
 Compare the complete Lambda and DE3 phage genomes with browser LOSATN. You will first draw both records without a comparison, then run a serial, one-thread `megablast` search and export its evidence with the finished SVG.
 
 ![Linear genome comparison with nucleotide similarity links](../../images/t-gui-03/04-comparison-result.png)

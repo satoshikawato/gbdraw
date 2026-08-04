@@ -1,5 +1,14 @@
 # Create an interactive figure and reproduce it from a saved session
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| **This page** | Not yet migrated | Not yet migrated |
+
+Future variants must reproduce the same human mitochondrial interactive figure
+and session round trip.
+
 Create a finished human mitochondrial map, export an offline Interactive SVG,
 inspect `COX1`, save the project, and reproduce the same figure in a fresh
 browser context.

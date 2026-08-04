@@ -13,9 +13,9 @@ Start with one complete path and its bundled biological input.
 
 3. [Compare two genomes with LOSATN in the browser](compare-genomes-losatn.md)
 4. [Create protein Similarity groups with LOSATP in the browser](compare-proteins-losatp.md)
-5. [Build an annotated chloroplast map with custom tracks](build-an-annotated-chloroplast-map.md)
+5. [Recreate the Interactive SVG Gallery chloroplast map](build-an-annotated-chloroplast-map.md)
 6. [Add circular comparison rings from precomputed results](add-precomputed-circular-comparison-rings.md)
-7. [Find conserved gene order from all-vs-all LOSATP evidence](compare-proteins-losatp-collinear.md)
+7. [Recreate the Gallery LOSATP Collinear blocks figure](compare-proteins-losatp-collinear.md)
 8. [Create an interactive figure and reproduce it from a saved session](create-and-resume-an-interactive-figure.md)
 
 Each Tutorial is captured from a fresh browser context through the visible interface. Task-specific alternatives follow in the [Web app how-to guides](../../HOW_TO/GUI/README.md).

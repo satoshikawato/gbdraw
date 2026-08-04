@@ -1,5 +1,5 @@
 gbk	record_label	record_id	reverse_complement	order	row	column
 MjeNMV.gb	MjeNMV	LC738868.1	false	1	1	1
-PemoMJNVA.gb	PemoMJNVA	LC738870.1	true	2	1	2
-MelaMJNV.gb	MelaMJNV	LC738874.1	false	3	2	1
-PeseMJNV.gb	PeseMJNV	LC738873.1	true	4	2	2
+MelaMJNV.gb	MelaMJNV	LC738874.1	false	2	2	1
+PemoMJNVA.gb	PemoMJNVA	LC738870.1	true	3	3	1
+PeseMJNV.gb	PeseMJNV	LC738873.1	true	4	4	1

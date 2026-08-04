@@ -1,10 +1,20 @@
 [Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [CLI tutorials](README.md) | [TSV schemas](../../REFERENCE/input-formats-and-tsv-schemas.md)
 
-# Build a multi-row genome comparison from TSV manifests
+# Compare two biological genome pairs from TSV manifests
+
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| Not yet migrated | **This page** | Not yet migrated |
+
+Future variants must preserve the same four Majanivirus records, biological
+pair endpoints, orientations, and comparison evidence.
 
 This project treats record placement and comparison endpoints as reviewable
-data. Four complete majanivirus genomes form a two-by-two layout, while two
-precomputed TBLASTX files connect only the declared vertical pairs.
+data. Four complete majanivirus genomes form a single comparison stack. Each
+record is placed beside its biologically corresponding comparison partner,
+and two precomputed TBLASTX files connect only those adjacent pairs.
 
 ## What you will build
 
@@ -21,8 +31,8 @@ each row.
   fixture into one empty working directory: four `.gb` records, two
   `.tblastx.out` files, `records.tsv`, and `comparisons.tsv`.
 
-The records are complete accessions `LC738868.1`, `LC738870.1`, `LC738874.1`,
-and `LC738873.1` with lengths 306,008, 294,144, 287,061, and 291,934 bp.
+The records are complete accessions `LC738868.1`, `LC738874.1`, `LC738870.1`,
+and `LC738873.1` with lengths 306,008, 287,061, 294,144, and 291,934 bp.
 
 ## Step 1: Render the table-defined records
 
@@ -31,11 +41,11 @@ The first command below reads `records.tsv` but deliberately omits
 
 ## Step 2: Open the first result
 
-Open `table_driven_comparison_baseline.svg`. Verify that MjeNMV and PemoMJNVA
-occupy the first row and MelaMJNV and PeseMJNV occupy the second. There should
-be no colored comparison layer.
+Open `table_driven_comparison_baseline.svg`. Verify that MjeNMV is followed by
+MelaMJNV, then PemoMJNVA is followed by PeseMJNV. There should be no colored
+comparison layer.
 
-![Four complete majanivirus records in a two-by-two table-defined layout](../../images/t-cli-04/table_driven_comparison_baseline.svg)
+![Four complete majanivirus records in a biologically paired table-defined stack](../../images/t-cli-04/table_driven_comparison_baseline.svg)
 
 ## Step 3: Read the record manifest
 
@@ -44,14 +54,15 @@ The tracked `records.tsv` is:
 ```tsv
 gbk	record_label	record_id	reverse_complement	order	row	column
 MjeNMV.gb	MjeNMV	LC738868.1	false	1	1	1
-PemoMJNVA.gb	PemoMJNVA	LC738870.1	true	2	1	2
-MelaMJNV.gb	MelaMJNV	LC738874.1	false	3	2	1
-PeseMJNV.gb	PeseMJNV	LC738873.1	true	4	2	2
+MelaMJNV.gb	MelaMJNV	LC738874.1	false	2	2	1
+PemoMJNVA.gb	PemoMJNVA	LC738870.1	true	3	3	1
+PeseMJNV.gb	PeseMJNV	LC738873.1	true	4	4	1
 ```
 
-`order` gives stable input identity. `row` and `column` place records, while
-`reverse_complement` changes display orientation without rewriting a source
-file.
+`order` gives stable input identity. `row` and `column` place records. Here a
+single column makes each evidence pair visually adjacent instead of grouping
+unrelated hosts on the same row. `reverse_complement` changes display
+orientation without rewriting a source file.
 
 ## Step 4: Add explicit comparison endpoints
 
@@ -63,13 +74,13 @@ MjeNMV.MelaMJNV.tblastx.out	LC738868.1	LC738874.1
 PemoMJNVA.PeseMJNV.tblastx.out	LC738870.1	LC738873.1
 ```
 
-The endpoint IDs, not proximity in the grid, determine which records each
-evidence table connects.
+The endpoint IDs still determine which records each evidence table connects;
+adjacency is a readable biological presentation, not an implicit link.
 
 ## Step 5: Run the baseline and finished recipes
 
 The finished command keeps matches with at least 97% identity, alignment
-length 500, and E-value at most `1e-5`. It uses curves so links crossing rows
+length 500, and E-value at most `1e-5`. It uses curves so the dense links
 remain legible.
 
 <!-- executable:T-CLI-04:start -->
@@ -111,15 +122,16 @@ gbdraw linear \
 
 Open `table_driven_comparison.svg`. The first evidence layer should connect
 `LC738868.1` to `LC738874.1` with 80 retained HSPs; the second connects
-`LC738870.1` to `LC738873.1` with 2 retained HSPs. No horizontal or diagonal
-record pair should be linked. All four rulers put the 100 kbp and 200 kbp
-marks at identical local x-coordinates, demonstrating the shared scale.
+`LC738870.1` to `LC738873.1` with 2 retained HSPs. No undeclared record pair
+should be linked. The distance between the 100 kbp and 200 kbp marks is the
+same on all four rulers, demonstrating the shared scale; the two
+reverse-complemented records correctly run in the opposite direction.
 
 ![Table-driven majanivirus comparison with two explicit TBLASTX endpoint pairs](../../images/t-cli-04/table_driven_comparison.svg)
 
 ## What changed
 
-The records, grid, and orientations stayed fixed. Adding `comparisons.tsv` and
+The records, stack, and orientations stayed fixed. Adding `comparisons.tsv` and
 the three thresholds created the comparison layers; it did not imply links
 between undeclared records.
 

@@ -6,7 +6,10 @@ gbdraw creates publication-quality Circular and Linear genome diagrams in a host
 
 ## Tutorials
 
-Start here if you have not completed a diagram on your chosen interface.
+Start with a finished figure, then choose its GUI, CLI, or Python API workflow.
+Tutorial variants for one project build the same biological diagram; the
+[Tutorial project matrix](./TUTORIALS/README.md#one-figure-three-ways-to-build-it)
+shows implemented variants and migration gaps.
 
 - [Create and export your first Circular genome diagram](./TUTORIALS/GUI/first-circular-genome-diagram.md)
 - [Web app Tutorials](./TUTORIALS/GUI/README.md)

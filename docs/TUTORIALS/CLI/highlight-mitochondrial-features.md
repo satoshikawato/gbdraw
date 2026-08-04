@@ -2,6 +2,15 @@
 
 # Highlight mitochondrial features without editing the GenBank file
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| Not yet migrated | **This page** | Not yet migrated |
+
+Future variants must retain the same complete human mitochondrial feature set,
+functional presentation rules, and D-loop region bracket.
+
 This project starts with the complete 16,569 bp human mitochondrial reference
 and turns it into a focused presentation without changing its GenBank
 annotations.
@@ -9,17 +18,17 @@ annotations.
 ## What you will build
 
 You will make a baseline map, then a second SVG in which selected CDS and rRNA
-features have deliberate colors and labels. A visibility table hides COX1,
-keeps ATP6 visible but out of protein searches, and adds the D-loop as an
-underlay. Feature shapes and strokes are presentation settings, not edits to
-the biological record.
+features have deliberate colors and labels. All 13 mitochondrial CDS remain
+visible. The D-loop is added as a named, origin-spanning region annotation,
+using the same bracket semantics as the chloroplast Gallery example. Feature
+shapes and strokes are presentation settings, not edits to the biological
+record.
 
 ## Prerequisites and inputs
 
 - Install gbdraw so that `gbdraw circular -h` succeeds.
 - Start in an empty working directory and create a `tables` directory.
-- Copy [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk),
-  [`HmmtDNA_feature_visibility.tsv`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA_feature_visibility.tsv),
+- Copy [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
   and [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
   into the working directory.
 
@@ -72,17 +81,23 @@ The qualifier-priority file first selects `gene` for CDS labels. The whitelist
 then limits which labels appear, and the override table renames selected
 resolved labels.
 
-## Step 5: Apply visibility and shapes
+## Step 5: Add the D-loop as a region annotation
 
-The tracked visibility table demonstrates all three actions: `show` can reveal
-a feature outside the baseline type list, `off` removes a feature from the
-diagram, and `exclude_matching` keeps a visible CDS out of protein-search
-inputs. The finished command draws CDS and tRNA as arrows, rRNA as rectangles,
-and the D-loop as an underlay.
+Save this as `tables/mitochondrial_regions.tsv`:
+
+```tsv
+set_id	id	mark	record	start	end	coordinate_space	wraps_origin	label	lane	stroke	stroke_width	line_cap	label_color	label_font_size	label_orientation	label_offset
+mitochondrial_regions	d_loop	bracket	NC_012920.1	16024	576	source	true	D-loop	0	#202020	3	tick	#202020	14	tangent	7
+```
+
+The source D-loop joins bases 16,024–16,569 and 1–576. One row with
+`wraps_origin=true` preserves that biology and draws a single named bracket.
+The finished command draws every CDS and tRNA as an arrow and rRNA as a
+rectangle.
 
 ## Step 6: Run both reproducible commands
 
-Run the block from the directory containing the three inputs and the `tables`
+Run the block from the directory containing the two inputs and the `tables`
 directory.
 
 <!-- executable:T-CLI-03:start -->
@@ -102,16 +117,18 @@ gbdraw circular \
   --qualifier_priority cds_gene_qualifier_priority.tsv \
   --label_whitelist tables/presentation_labels.tsv \
   --label_table tables/presentation_label_overrides.tsv \
-  --feature_visibility_table HmmtDNA_feature_visibility.tsv \
+  --annotation_table tables/mitochondrial_regions.tsv \
   --feature_shape CDS=arrow \
   --feature_shape rRNA=rectangle \
   --feature_shape tRNA=arrow \
-  --feature_shape D-loop=underlay \
   --arrow_head_length_ratio auto \
   --arrow_shaft_width_ratio 0.72 \
   --resolve_overlaps \
   --separate_strands \
   --track_type spreadout \
+  --circular_track_slot 'ticks:ticks@side=outside,tick_label_layout=label_out_tick_in' \
+  --circular_track_slot 'features:features@side=overlay,lane_direction=split' \
+  --circular_track_slot 'mitochondrial_regions:annotations@set_id=mitochondrial_regions,side=inside,w=24px,show_labels=true,padding_px=1,overflow=compress' \
   --labels both \
   --label_rendering auto \
   --block_stroke_color '#1F2937' \
@@ -132,12 +149,13 @@ gbdraw circular \
 ## Step 7: Verify what changed
 
 Open `mitochondrial_features_highlighted.svg`. Check for `Complex I (ND1)`,
-`Oxidase II`, `12S rRNA`, and `16S rRNA`; COX1 must be absent. The blue,
+`Oxidase II`, `12S rRNA`, and `16S rRNA`; COX1 and the other 12 CDS must remain
+present. The blue,
 red, amber, violet, and green rules should appear in the legend. rRNA blocks
-are rectangular, directional features remain arrows, and the D-loop occupies
-a full-band underlay.
+are rectangular, directional features remain arrows, and the D-loop appears
+as one origin-spanning inner bracket.
 
-![Human mitochondrial map with explicit feature colors, labels, visibility, shapes, and strokes](../../images/t-cli-03/mitochondrial_features_highlighted.svg)
+![Human mitochondrial map with all CDS, explicit feature colors, and a D-loop region bracket](../../images/t-cli-03/mitochondrial_features_highlighted.svg)
 
 ## What changed
 

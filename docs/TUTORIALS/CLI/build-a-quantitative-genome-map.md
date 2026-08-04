@@ -2,6 +2,15 @@
 
 # Build a quantitative genome map with depth, GC content, and skew
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| Not yet migrated | **This page** | Not yet migrated |
+
+Future variants must reproduce the same complete AP027133 map, depth data, GC
+tracks, and default-width feature ring.
+
 This project combines measured sequencing depth with two sequence-derived
 tracks on the complete 606,194 bp circular `AP027133.1` record.
 
@@ -50,8 +59,9 @@ are meaningful even without a separate tick axis.
 ## Step 5: Place the track stack explicitly
 
 The slot declarations establish one owner for the feature axis, then put depth,
-GC content, and GC skew inside it in that order. Fixed pixel widths keep the
-three series distinct on this dense bacterial record.
+GC content, and GC skew inside it in that order. The feature slot deliberately
+keeps gbdraw's default width; only the three quantitative series need explicit
+widths.
 
 ## Step 6: Run both reproducible commands
 
@@ -90,7 +100,7 @@ gbdraw circular \
   --gc_content_large_tick_interval 10 \
   --gc_content_small_tick_interval 5 \
   --circular_track_slot 'ticks:ticks@side=outside,tick_label_layout=label_out_tick_in' \
-  --circular_track_slot 'features:features@side=overlay,lane_direction=split,w=48px' \
+  --circular_track_slot 'features:features@side=overlay,lane_direction=split' \
   --circular_track_slot 'depth_1:depth@track_index=0,side=inside,w=52px,legend_label=DRR394922 mean depth' \
   --circular_track_slot 'gc_content:dinucleotide_content@side=inside,w=42px,nt=GC,legend_label=GC content (%)' \
   --circular_track_slot 'gc_skew:dinucleotide_skew@side=inside,w=34px,nt=GC,legend_label=GC skew' \

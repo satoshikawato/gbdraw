@@ -144,8 +144,9 @@ GUI_LOSATP_GROUPS_SCREENSHOT_NAMES = (
     "01-input-ready.png",
     "02-first-diagram.png",
     "03-losatp-settings.png",
-    "04-comparison-result.png",
-    "05-match-popup.png",
+    "04-align-og1.png",
+    "05-comparison-result.png",
+    "06-match-popup.png",
 )
 GUI_ANNOTATED_CHLOROPLAST_SCREENSHOT_NAMES = (
     "01-input-ready.png",

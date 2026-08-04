@@ -13,8 +13,8 @@
     },
     "extended": {
       "maxUncompressedBytes": 16777216,
-      "actualUncompressedBytes": 14141569,
-      "fileCount": 27
+      "actualUncompressedBytes": 14144602,
+      "fileCount": 28
     }
   },
   "fixtures": {
@@ -323,12 +323,12 @@
       "scenarioIds": ["T-CLI-04"],
       "expectedSemantics": {
         "recordCount": 4,
-        "recordIds": ["LC738868.1", "LC738870.1", "LC738874.1", "LC738873.1"],
-        "recordLengths": [306008, 294144, 287061, 291934],
+        "recordIds": ["LC738868.1", "LC738874.1", "LC738870.1", "LC738873.1"],
+        "recordLengths": [306008, 287061, 294144, 291934],
         "recordsAreWholeCanonicalSources": true,
-        "rows": [1, 1, 2, 2],
-        "columns": [1, 2, 1, 2],
-        "reverseComplement": [false, true, false, true],
+        "rows": [1, 2, 3, 4],
+        "columns": [1, 1, 1, 1],
+        "reverseComplement": [false, false, true, true],
         "comparisonEndpoints": [
           ["LC738868.1", "LC738874.1"],
           ["LC738870.1", "LC738873.1"]
@@ -355,8 +355,10 @@
         "recordTopologies": ["circular", "circular", "circular", "circular", "circular"],
         "recordsAreWholeCanonicalSources": true,
         "comparisonProgram": "LOSATP",
-        "collinearSearchScope": "all",
-        "searchedRecordPairCount": 10,
+        "galleryCollinearSearchScope": "adjacent",
+        "gallerySearchedRecordPairCount": 4,
+        "allRecordHowToSearchScope": "all",
+        "allRecordHowToPairCount": 10,
         "displayedRibbonScope": "adjacent",
         "recordOrderMatchesGallery": true
       }
@@ -369,11 +371,14 @@
         "tobacco-plastome-genbank",
         "tobacco-plastome-regions-table",
         "tobacco-plastome-default-colors",
+        "tobacco-plastome-specific-colors",
         "tobacco-plastome-qualifier-priority"
       ],
       "fileReferences": [],
       "scenarioIds": [
         "T-GUI-05",
+        "T-CLI-06",
+        "T-PY-02",
         "H-GUI-10",
         "H-CLI-02",
         "H-CLI-10",
@@ -911,7 +916,7 @@
         "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the public tutorial fixture set."
       },
       "derivation": null,
-      "scenarioIds": ["T-GUI-05", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"]
+      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"]
     },
     "tobacco-plastome-regions-table": {
       "fixtureId": "tobacco-plastome-regions",
@@ -940,7 +945,7 @@
         "filenameNormalization": "Copied byte-for-byte from gbdraw/web/gallery/files/nicotiana-tabacum-regions.tsv."
       },
       "derivation": null,
-      "scenarioIds": ["T-GUI-05", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
+      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
       "replaces": ["gbdraw/web/gallery/files/nicotiana-tabacum-regions.tsv"]
     },
     "tobacco-plastome-default-colors": {
@@ -968,6 +973,36 @@
       "scenarioIds": ["T-GUI-05", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
       "replaces": ["gbdraw/web/gallery/files/modified_default_colors.tsv"]
     },
+    "tobacco-plastome-specific-colors": {
+      "fixtureId": "tobacco-plastome-regions",
+      "relativePath": "tobacco-plastome-regions/chloroplast_specific_table.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "feature-specific-color-table",
+      "sizeBytes": 3033,
+      "sha256": "406f1a042ec072c0026c014fc173950793582ffe4c8c568ec2539e2db98df0ec",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {
+        "ruleCount": 70,
+        "featureType": "CDS",
+        "qualifier": "gene",
+        "legendGroups": 11
+      },
+      "provenance": {
+        "sourceName": "gbdraw Gallery chloroplast feature color table",
+        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-07-17",
+        "repositoryAddedCommit": "386ff9cf",
+        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
+        "filenameNormalization": "Copied from gbdraw/web/gallery/files/chloroplast_specific_table.tsv with one trailing newline added."
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02"],
+      "replaces": ["gbdraw/web/gallery/files/chloroplast_specific_table.tsv"]
+    },
     "tobacco-plastome-qualifier-priority": {
       "fixtureId": "tobacco-plastome-regions",
       "relativePath": "tobacco-plastome-regions/qualifier_priority.tsv",
@@ -990,7 +1025,7 @@
         "filenameNormalization": "Copied byte-for-byte from gbdraw/web/gallery/files/qualifier_priority.tsv."
       },
       "derivation": null,
-      "scenarioIds": ["T-GUI-05", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
+      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
       "replaces": ["gbdraw/web/gallery/files/qualifier_priority.tsv"]
     },
     "ap027133-genbank": {
@@ -1977,7 +2012,7 @@
       "mediaType": "text/tab-separated-values",
       "inputType": "records-table",
       "sizeBytes": 235,
-      "sha256": "11448f24506203831abdea7ae11a46581cff89cc6ec0da6087032c2d743fdcb6",
+      "sha256": "2eeabbde5392188faddedd35731bfc0de9901252548feaac1c080babf9c38c58",
       "packageTier": "extended",
       "records": [],
       "provenance": {"sourceName": "gbdraw tutorial records manifest", "sourceUrl": "https://github.com/satoshikawato/gbdraw", "retrievedOn": "2026-08-04", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "Repository-maintained tutorial table distributed under the gbdraw repository license.", "filenameNormalization": null},

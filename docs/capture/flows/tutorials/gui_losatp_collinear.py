@@ -41,6 +41,7 @@ def capture_gui_losatp_tutorial_collinear(
             "result": "04-collinear-result.png",
             "popup": "05-block-popup.png",
         },
+        starting_project="gallery-collinear",
     )
 
 

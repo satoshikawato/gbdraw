@@ -2,6 +2,15 @@
 
 # Create a reproducible circular diagram from the command line
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| [Web-app workflow](../GUI/first-circular-genome-diagram.md) | **This page** | [Python workflow](../PYTHON/first-genome-diagram.md) |
+
+All three workflows build the same labeled human mitochondrial figure. Only
+the interface changes.
+
 You will draw the 16,569 bp human mitochondrial reference genome as a standard
 SVG. The finished figure includes 37 displayed features, coordinate ticks, GC
 content, GC skew, and concise feature labels. CDS labels come from the `gene`

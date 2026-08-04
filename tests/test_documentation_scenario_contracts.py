@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "docs/scenarios/manifest.json"
 SCENARIO_ID_RE = re.compile(r"^(?:T|H|R|E|A)-[A-Z]+-\d{2}$")
 ROLE_COUNTS = {
-    "tutorial": 14,
+    "tutorial": 16,
     "how-to": 33,
     "reference": 10,
     "explanation": 6,
@@ -30,7 +31,7 @@ SCREENSHOT_BUDGETS = {
     "T-GUI-01": 6,
     "T-GUI-02": 4,
     "T-GUI-03": 5,
-    "T-GUI-04": 5,
+    "T-GUI-04": 6,
     "T-GUI-05": 5,
     "T-GUI-06": 5,
     "T-GUI-08": 5,
@@ -63,6 +64,10 @@ def _repo_path(relative_path: str) -> Path:
     return path
 
 
+def _svg_tree(path: Path) -> bytes:
+    return ET.tostring(ET.parse(path).getroot())
+
+
 def test_chapter_plan_gate_is_approved_with_a_bounded_fixture_budget() -> None:
     manifest = _manifest()
 
@@ -81,7 +86,7 @@ def test_chapter_plan_gate_is_approved_with_a_bounded_fixture_budget() -> None:
 def test_chapter_census_matches_the_reviewed_plan() -> None:
     chapters = _manifest()["chapters"]
 
-    assert len(chapters) == 65
+    assert len(chapters) == 67
     assert Counter(chapter["role"] for chapter in chapters) == ROLE_COUNTS
 
     ids = [chapter["id"] for chapter in chapters]
@@ -89,7 +94,7 @@ def test_chapter_census_matches_the_reviewed_plan() -> None:
     assert len(ids) == len(set(ids))
     assert len(destinations) == len(set(destinations))
 
-    assert [chapter["id"] for chapter in chapters[:14]] == [
+    assert [chapter["id"] for chapter in chapters[:16]] == [
         "T-GUI-01",
         "T-GUI-02",
         "T-GUI-03",
@@ -103,7 +108,9 @@ def test_chapter_census_matches_the_reviewed_plan() -> None:
         "T-CLI-03",
         "T-CLI-04",
         "T-CLI-05",
+        "T-CLI-06",
         "T-PY-01",
+        "T-PY-02",
     ]
 
 
@@ -249,9 +256,94 @@ def test_tutorials_declare_an_early_visible_result_on_their_real_surface() -> No
             "T-CLI-03",
             "T-CLI-04",
             "T-CLI-05",
+            "T-CLI-06",
+            "T-PY-02",
         }:
             assert step == 2
         assert chapter["execution"]["kind"] == expected_kind[chapter["surface"]]
+
+
+def test_tutorial_projects_define_one_figure_with_three_surface_variants() -> None:
+    manifest = _manifest()
+    policy = manifest["tutorial_project_policy"]
+    projects = manifest["tutorial_projects"]
+    tutorials = {
+        chapter["id"]: chapter
+        for chapter in manifest["chapters"]
+        if chapter["role"] == "tutorial"
+    }
+
+    assert policy["required_surfaces"] == ["gui", "cli", "python"]
+    assert "same figure" in policy["rule"]
+    assert "must not substitute a different figure" in policy["exceptions"]
+    assert {
+        project_id
+        for project_id, project in projects.items()
+        if project["parity"] == "migration"
+    } == set(policy["legacy_migration_projects"])
+
+    owned_variants: dict[str, str] = {}
+    for project_id, project in projects.items():
+        assert project["figure"].strip(), project_id
+        assert project["parity"] in {"migration", "verified"}
+        variants = project["variants"]
+        assert list(variants) == policy["required_surfaces"]
+        implemented = {
+            surface: scenario_id
+            for surface, scenario_id in variants.items()
+            if scenario_id is not None
+        }
+        assert implemented, project_id
+        if project["parity"] == "verified":
+            assert set(implemented) == set(policy["required_surfaces"])
+
+        for surface, scenario_id in implemented.items():
+            chapter = tutorials[scenario_id]
+            assert chapter["surface"] == surface
+            assert chapter["project_id"] == project_id
+            assert scenario_id not in owned_variants
+            owned_variants[scenario_id] = project_id
+            source = _repo_path(chapter["destination"]).read_text(encoding="utf-8")
+            assert "## Choose how to build this figure" in source
+
+    assert set(owned_variants) == set(tutorials)
+
+    chloroplast = projects["gallery-chloroplast-map"]
+    assert chloroplast["parity"] == "verified"
+    shared_keys = {
+        "mode",
+        "record_id",
+        "feature_types",
+        "annotation_set",
+        "track_order",
+        "labels",
+        "label_offsets",
+        "legend",
+    }
+    shared_settings = [
+        {
+            key: tutorials[scenario_id]["settings"][key]
+            for key in shared_keys
+        }
+        for scenario_id in chloroplast["variants"].values()
+    ]
+    assert shared_settings[0] == shared_settings[1] == shared_settings[2]
+
+
+def test_verified_tutorial_non_browser_renderers_publish_the_same_svg_tree() -> None:
+    first_circular = [
+        REPO_ROOT / "docs/images/t-cli-01/human_mitochondrion.svg",
+        REPO_ROOT / "docs/images/t-py-01/python_human_mitochondrion.svg",
+    ]
+    chloroplast = [
+        REPO_ROOT / "gbdraw/web/gallery/sources/tobacco-chloroplast.svg",
+        REPO_ROOT / "docs/images/t-cli-06/cli_annotated_chloroplast.svg",
+        REPO_ROOT / "docs/images/t-py-02/python_annotated_chloroplast.svg",
+    ]
+
+    for project in (first_circular, chloroplast):
+        trees = [_svg_tree(path) for path in project]
+        assert all(tree == trees[0] for tree in trees[1:])
 
 
 def test_first_gui_tutorial_keeps_the_fixed_accepted_path() -> None:

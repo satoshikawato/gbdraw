@@ -2,6 +2,15 @@
 
 # Create a reproducible linear diagram from the command line
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| [Web-app workflow](../GUI/first-linear-genome-diagram.md) | **This page** | Not yet migrated |
+
+The implemented variants build the same complete Lambda map. A Python variant
+must reproduce that figure rather than introduce a different example.
+
 You will draw the complete 48,502 bp Lambda reference genome with concise gene
 labels and a ruler on the record axis. The result is one standard SVG containing
 all 73 displayed CDS features.

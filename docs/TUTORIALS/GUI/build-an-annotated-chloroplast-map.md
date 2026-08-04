@@ -1,81 +1,125 @@
-# Build an annotated chloroplast map with custom tracks
+# Recreate the Interactive SVG Gallery chloroplast map
 
-Build a Circular map of the complete tobacco plastome, mark its LSC, IRb, SSC,
-and IRa regions, and replace the default GC-skew track with AT skew. You will
-make a working diagram in Step 2 before arranging the final track stack.
+## Choose how to build this figure
 
-![Finished tobacco plastome map with structural regions and custom tracks](../../images/t-gui-05/05-finished-diagram.png)
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| **This page** | [Command-line workflow](../CLI/build-an-annotated-chloroplast-map.md) | [Python workflow](../PYTHON/build-an-annotated-chloroplast-map.md) |
+
+All three workflows use the same complete tobacco plastome, tables, visual
+settings, and track geometry. Only the interface changes.
+
+Build the complete tobacco plastome figure shown in the Interactive SVG
+Gallery: functional gene colors, radial labels on both sides of the feature
+ring, one inner LSC/IRb/SSC/IRa bracket lane, GC content, and an upper-left
+legend. The tutorial keeps the raw GenBank record separate from every
+presentation table.
+
+![Gallery-quality tobacco plastome map](../../images/t-gui-05/05-finished-diagram.png)
 
 ## What you'll need
 
-- `gbdraw/web/tutorial-data/tobacco-plastome-regions/NC_001879.gbk`
-- `gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv`
+Use these files from
+`gbdraw/web/tutorial-data/tobacco-plastome-regions/`:
 
-The GenBank file is the complete 155,943 bp `NC_001879.2` record. The TSV
-contains four source-coordinate annotations; it does not modify the sequence.
+- `NC_001879.gbk`
+- `nicotiana-tabacum-regions.tsv`
+- `chloroplast_specific_table.tsv`
+- `qualifier_priority.tsv`
 
-## Step 1: Load the plastome
+The GenBank file is the complete 155,943 bp `NC_001879.2` record. The other
+files define structural regions, chloroplast gene-family colors, and CDS label
+priority; none edits the sequence or feature coordinates.
 
-Select **Circular** and **GenBank**, then choose `NC_001879.gbk` in
-**GenBank/DDBJ File**. Set **Output Prefix** to
+## Step 1: Load the complete plastome
+
+Select **Circular** and **GenBank**, choose `NC_001879.gbk` in
+**GenBank/DDBJ File**, and set **Output Prefix** to
 `annotated_chloroplast_map`.
 
 ![Complete tobacco plastome selected as the Circular input](../../images/t-gui-05/01-input-ready.png)
 
-## Step 2: Generate the first diagram
+## Step 2: Generate the visible baseline
 
-Select **Generate Diagram**. Confirm that the first map identifies
-`NC_001879.2` and contains its complete feature set. This is the visible
-baseline; the four structural regions have not been added yet.
+Select **Generate Diagram**. Confirm `NC_001879.2` and `155,943 bp`. This first
+map proves that the complete record renders before custom tables or slots are
+added.
 
-![First complete tobacco plastome diagram before region annotations](../../images/t-gui-05/02-first-diagram.png)
+![First complete tobacco plastome before Gallery presentation settings](../../images/t-gui-05/02-first-diagram.png)
 
-## Step 3: Import the structural regions
+## Step 3: Match the Gallery layout, labels, and colors
 
-Open **Region Annotations** and use **Import TSV** to choose
-`nicotiana-tabacum-regions.tsv`. Set the legend label to
-`Plastome structural regions` and use these lanes:
+Set the main controls as follows:
 
-| Region | Range | Lane |
+| Control | Value |
+| --- | --- |
+| Species | `<i>Nicotiana tabacum</i>` |
+| Track Preset | Tuckin |
+| Separate Strands | On |
+| Hide GC Content | Off |
+| Hide GC Skew | On |
+| Label Mode | Both (Out + Inner) |
+| Outer X / Y label offset | `0.9` / `0.9` |
+| Inner X / Y label offset | `0.975` / `0.975` |
+| Circular Label Placement | Radial |
+| Legend Position | Upper Left |
+| Definition Font Size | `28` |
+| Block / Line / Axis Stroke Width | `1` / `2` / `3` |
+| Plot Title | None |
+
+Set the four label offsets while **Circular Label Placement** is Horizontal,
+then change it to Radial. Under **Features**, keep `CDS`, `rRNA`, and `tRNA`; add `tmRNA`, `ncRNA`,
+`misc_RNA`, and `rep_origin`; remove `repeat_region`. Under **Colors**, upload
+`chloroplast_specific_table.tsv` as **Specific Table (-t)**. Under **Labels**,
+upload `qualifier_priority.tsv` as **Priority File (TSV)**. These settings
+produce one legend entry per functional group and readable radial gene labels.
+
+## Step 4: Import all four plastome regions
+
+Open **Region Annotations** and import
+`nicotiana-tabacum-regions.tsv`. Keep every row in lane `0`:
+
+| Region | Inclusive range | Lane |
 | --- | ---: | ---: |
 | LSC | 1–86,686 | 0 |
-| IRb | 86,687–112,029 | 1 |
+| IRb | 86,687–112,029 | 0 |
 | SSC | 112,030–130,600 | 0 |
-| IRa | 130,601–155,943 | 1 |
+| IRa | 130,601–155,943 | 0 |
 
-![Four tobacco plastome regions imported from the annotation table](../../images/t-gui-05/03-annotation-table.png)
+![The four Gallery plastome regions in one annotation set](../../images/t-gui-05/03-annotation-table.png)
 
-## Step 4: Build the custom track stack
+## Step 5: Build the three-slot Gallery stack
 
-Open **Custom Track Slots** and turn on **Use custom stack**. In the existing
-skew slot, change **Dinucleotide** to `AT` and the legend label to `AT skew`.
-Add an **Annotations** renderer, select `plastome_regions`, move it outside the
-axis, and turn on its labels.
+Open **Custom Track Slots**, turn on **Use custom stack**, and remove the
+**Ticks** and **GC skew** rows. Configure this exact outside-to-inside order:
 
-Set **Label Mode** to **None** so the four structural labels remain readable
-instead of competing with every feature label. Under **Title & Legend**, use
-the title `Complete Nicotiana tabacum plastome regions` and place the legend on
-the right.
+| Slot | Renderer | Position | Radius | Width | Other settings |
+| --- | --- | --- | ---: | ---: | --- |
+| `features` | Features | On axis | Auto | Auto | Feature on axis / split |
+| `plastome_regions` | Annotations | Inside | `0.65` | `20px` | Set `plastome_regions`; labels on; compress; inner/outer gap `1`; padding `1` |
+| `gc_content` | Dinucleotide content | Inside | `0.56` | `0.08` | GC |
 
-![Custom Circular track stack with the structural annotation slot outside the axis](../../images/t-gui-05/04-track-settings.png)
+The region annotations belong between the feature ring and GC content. They
+are not alternating outer decoration and do not need a separate legend item.
 
-## Step 5: Generate and export the finished map
+![Gallery circular stack with one inner region lane and GC content](../../images/t-gui-05/04-track-settings.png)
 
-Select **Generate Diagram** again. The finished figure contains the four
-bracketed regions, GC content, positive and negative AT skew, the complete
-feature map, title, and legend. Select **SVG** to save
-`annotated_chloroplast_map.svg`.
+## Step 6: Generate and export the finished map
+
+Select **Generate Diagram**. Verify the four structural labels, radial gene
+labels inside and outside the feature ring, functional colors, inner GC-content
+profile, and upper-left legend. There should be no coordinate-tick or skew
+track. Select **SVG** to save `annotated_chloroplast_map.svg`.
 
 ## What you built
 
-You produced a complete plastome figure without editing the GenBank record.
-The biological sequence remains the source of features, while the annotation
-table and custom track stack own the structural-region and quantitative
-presentation.
+You reproduced the Interactive SVG Gallery chloroplast presentation from the
+complete source record and three auditable TSV inputs. The same figure can be
+built from the [command line](../CLI/build-an-annotated-chloroplast-map.md) or
+the [Python API](../PYTHON/build-an-annotated-chloroplast-map.md).
 
 ## Next steps
 
 - [Add region annotations and custom track slots](../../HOW_TO/GUI/add-region-annotations-and-track-slots.md)
-- [Add depth, GC content, and skew tracks](../../HOW_TO/GUI/add-depth-gc-and-skew-tracks.md)
 - [Understand tracks, axes, and layout](../../EXPLANATION/understand-tracks-axes-and-layout.md)
 - [Review track and annotation schemas](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)

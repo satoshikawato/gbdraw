@@ -1,5 +1,14 @@
 # Add circular comparison rings from precomputed results
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| **This page** | Not yet migrated | Not yet migrated |
+
+Future variants must reproduce the same mitochondrial reference, comparison
+ring order, evidence, labels, and colors.
+
 Add three translated-nucleotide comparison rings around the complete human
 mitochondrial genome. The searches are already frozen as TLOSATX outfmt 6
 tables, so this project focuses on reference direction, ring order, filtering,

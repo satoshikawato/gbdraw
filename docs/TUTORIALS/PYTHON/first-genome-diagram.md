@@ -2,6 +2,15 @@
 
 # Draw and save your first genome diagram from Python
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| [Web-app workflow](../GUI/first-circular-genome-diagram.md) | [Command-line workflow](../CLI/first-circular-genome-diagram.md) | **This page** |
+
+All three workflows build the same labeled human mitochondrial figure. Only
+the interface changes.
+
 You will load the human mitochondrial reference genome, draw one Circular
 diagram, and save it as a standard SVG with the beginner-facing Python API.
 
@@ -10,6 +19,8 @@ diagram, and save it as a standard SVG with the beginner-facing Python API.
 - gbdraw installed in the active Python environment;
 - the packaged [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
   fixture, saved with that filename;
+- the packaged [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
+  label rule, saved with that filename;
 - an empty working directory.
 
 ## Step 1: Save the Python program
@@ -21,14 +32,33 @@ Place `HmmtDNA.gbk` in the working directory. Save the following program as
 ```python
 from pathlib import Path
 
-from gbdraw import Diagram, draw_circular, read_genbank
+from gbdraw import (
+    CircularOptions,
+    Diagram,
+    LabelOptions,
+    draw_circular,
+    read_genbank,
+)
 
 
 input_path = Path("HmmtDNA.gbk")
 output_path = Path("python_human_mitochondrion.svg")
 
 record = read_genbank(input_path)[0]
-diagram = draw_circular(record)
+options = CircularOptions(
+    labels=LabelOptions(
+        qualifier_priority=Path("cds_gene_qualifier_priority.tsv"),
+    ),
+    species="<i>Homo sapiens</i>",
+    legend="right",
+    config_overrides={
+        "canvas.strandedness": True,
+        "canvas.circular.track_type": "middle",
+        "labels.circular.scope": "outer",
+        "labels.circular.placement": "horizontal",
+    },
+)
+diagram = draw_circular(record, options=options)
 saved_path = diagram.save(output_path)
 
 assert isinstance(diagram, Diagram)
@@ -38,7 +68,9 @@ print(f"Saved {saved_path}")
 <!-- executable:T-PY-01:end -->
 
 `read_genbank()` returns a list because one GenBank file can contain more than
-one record. This tutorial selects the only record in the fixture.
+one record. This tutorial selects the only record in the fixture. The options
+match the GUI and CLI variants: separate strands, Middle layout, outer labels,
+gene-first CDS label priority, and a right legend.
 
 ## Step 2: Run the program
 
@@ -70,8 +102,8 @@ same SVG semantics as the CLI tutorial.
 
 ## What you built
 
-You used three public names: `read_genbank`, `draw_circular`, and
-`Diagram.save`. Run
+You used the beginner-facing drawing API and typed presentation options to
+reproduce the shared first Circular figure. Run
 `python docs/recipes/run_python_scenarios.py --scenario T-PY-01` from a
 repository checkout to regenerate the published figure. Continue with the
 [Python API reference](../../REFERENCE/python-api.md) for options, Linear

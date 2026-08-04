@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -309,6 +310,76 @@ def _inspect_popup(page: Page, *, mode: str) -> dict[str, Any]:
     return {"text": text, "mode": mode}
 
 
+def _open_orthogroup_alignment_target(page: Page, orthogroup_id: str) -> Any:
+    target = page.evaluate(
+        """
+        (orthogroupId) => {
+          const app = window.__GBDRAW_APP__;
+          const svg = document.querySelector('[data-gbdraw-feature-id]')?.ownerSVGElement
+            || document.querySelector('svg');
+          const features = Array.isArray(app?.extractedFeatures)
+            ? app.extractedFeatures
+            : [];
+          const feature = features.find(
+            (item) => String(item?.orthogroupId || '').trim() === orthogroupId
+          );
+          const featureId = String(feature?.svg_id || '').trim();
+          const element = Array.from(
+            svg?.querySelectorAll('[data-gbdraw-feature-id]') || []
+          ).find(
+            (candidate) => String(
+              candidate.getAttribute('data-gbdraw-feature-id') || ''
+            ).trim() === featureId
+          );
+          if (!element) throw new Error(`Rendered ${orthogroupId} feature was not found`);
+          element.scrollIntoView({ block: 'center', inline: 'center' });
+          const rect = element.getBoundingClientRect();
+          return {
+            featureId,
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+          };
+        }
+        """,
+        orthogroup_id,
+    )
+    page.mouse.click(target["x"], target["y"])
+    page.wait_for_function(
+        """
+        ({ featureId, orthogroupId }) => {
+          const feature = window.__GBDRAW_APP__?.clickedFeature;
+          return feature?.svg_id === featureId
+            && feature?.orthogroupId === orthogroupId;
+        }
+        """,
+        arg={"featureId": target["featureId"], "orthogroupId": orthogroup_id},
+    )
+    popup = page.locator(".feature-popup")
+    expect(popup).to_be_visible()
+    expect(popup).to_contain_text(orthogroup_id)
+    expect(popup.get_by_role("button", name=re.compile(r"Align"))).to_be_visible()
+    return popup
+
+
+def _align_to_orthogroup(page: Page, popup: Any, orthogroup_id: str) -> None:
+    previous_run = page.evaluate(
+        "() => String(window.__GBDRAW_APP__?.lastRunInfo?.startedAtIso || '')"
+    )
+    popup.get_by_role("button", name=re.compile(r"Align")).click()
+    page.wait_for_function(
+        """
+        ({ orthogroupId, previousRun }) => {
+          const app = window.__GBDRAW_APP__;
+          return !app?.processing
+            && app?.selectedOrthogroupAlignmentFeature === orthogroupId
+            && String(app?.lastRunInfo?.startedAtIso || '') !== previousRun;
+        }
+        """,
+        arg={"orthogroupId": orthogroup_id, "previousRun": previous_run},
+        timeout=ACTION_TIMEOUT_MS,
+    )
+
+
 def _download_text_button(
     page: Page,
     *,
@@ -423,6 +494,7 @@ def capture_bgc_losatp(
     download_member_fasta: bool,
     separate_strands: bool | None = None,
     assert_final: Callable[[dict[str, Any]], None] | None = None,
+    align_orthogroup_id: str | None = None,
 ) -> BgcLosatpResult:
     """Run one real serial LOSATP journey from five complete source files."""
 
@@ -534,6 +606,28 @@ def capture_bgc_losatp(
             )
 
         fit_complete_linear_preview(page, target_zoom="40%")
+        if align_orthogroup_id is not None:
+            alignment_popup = _open_orthogroup_alignment_target(
+                page, align_orthogroup_id
+            )
+            alignment_name = screenshot_names["align"]
+            screenshot_bytes[alignment_name] = capture_screenshot(
+                page, output_paths[alignment_name], "Linear"
+            )
+            _align_to_orthogroup(page, alignment_popup, align_orthogroup_id)
+            result_region = page.get_by_role(
+                "region", name="Result Preview", exact=True
+            )
+            final_report = inspect_gui_bgc_losatp_svg(result_region)
+            validator(final_report)
+            aligned_state = page.evaluate(
+                "() => window.__GBDRAW_APP__?.selectedOrthogroupAlignmentFeature"
+            )
+            if aligned_state != align_orthogroup_id:
+                raise AssertionError(
+                    f"Expected alignment to {align_orthogroup_id}, found {aligned_state!r}"
+                )
+            fit_complete_linear_preview(page, target_zoom="40%")
         name = screenshot_names["settings"]
         page.get_by_label("LOSATP blastp mode", exact=True).scroll_into_view_if_needed()
         screenshot_bytes[name] = capture_screenshot(

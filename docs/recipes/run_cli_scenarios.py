@@ -51,6 +51,7 @@ IMPLEMENTED_SCENARIOS = (
     "T-CLI-03",
     "T-CLI-04",
     "T-CLI-05",
+    "T-CLI-06",
     "H-CLI-01",
     "H-CLI-02",
     "H-CLI-03",
@@ -158,6 +159,14 @@ _FEATURE_PRESENTATION_TABLES = {
     ),
 }
 
+_TUTORIAL_FEATURE_PRESENTATION_TABLES = {
+    **_FEATURE_PRESENTATION_TABLES,
+    "tables/mitochondrial_regions.tsv": (
+        "set_id\tid\tmark\trecord\tstart\tend\tcoordinate_space\twraps_origin\tlabel\tlane\tstroke\tstroke_width\tline_cap\tlabel_color\tlabel_font_size\tlabel_orientation\tlabel_offset\n"
+        "mitochondrial_regions\td_loop\tbracket\tNC_012920.1\t16024\t576\tsource\ttrue\tD-loop\t0\t#202020\t3\ttick\t#202020\t14\ttangent\t7\n"
+    ),
+}
+
 _GENERATED_TABLES = {
     "H-CLI-02": {
         "tables/records.tsv": (
@@ -187,7 +196,7 @@ _GENERATED_TABLES = {
         ),
     },
     "H-CLI-11": _FEATURE_PRESENTATION_TABLES,
-    "T-CLI-03": _FEATURE_PRESENTATION_TABLES,
+    "T-CLI-03": _TUTORIAL_FEATURE_PRESENTATION_TABLES,
 }
 
 _SCENARIO_REQUIRED_FIXTURE_FILES = {
@@ -219,7 +228,6 @@ _OUTPUT_INPUT_FILES = {
     },
     ("T-CLI-03", "mitochondrial_features_highlighted.svg"): {
         "HmmtDNA.gbk",
-        "HmmtDNA_feature_visibility.tsv",
         "cds_gene_qualifier_priority.tsv",
     },
     ("T-CLI-04", "table_driven_comparison_baseline.svg"): {
@@ -1213,12 +1221,12 @@ def _assert_tcli04_tables(workdir: Path) -> None:
 
     records = read_records_table(str(workdir / "records.tsv"))
     comparisons = read_comparisons_table(str(workdir / "comparisons.tsv"))
-    expected_ids = ["LC738868.1", "LC738870.1", "LC738874.1", "LC738873.1"]
+    expected_ids = ["LC738868.1", "LC738874.1", "LC738870.1", "LC738873.1"]
     if (
         records.record_ids != expected_ids
-        or records.reverse_flags != [False, True, False, True]
-        or records.multi_record_positions() != ["#1@1", "#2@1", "#3@2", "#4@2"]
-        or [row.column for row in records.rows] != [1, 2, 1, 2]
+        or records.reverse_flags != [False, False, True, True]
+        or records.multi_record_positions() != ["#1@1", "#2@2", "#3@3", "#4@4"]
+        or [row.column for row in records.rows] != [1, 1, 1, 1]
     ):
         raise RecipeContractError("T-CLI-04 records table semantics changed.")
     endpoint_pairs = [(row.query, row.subject) for row in comparisons.rows]
@@ -1236,7 +1244,7 @@ def _assert_tcli04_output(
     command: list[str],
 ) -> None:
     evidence = inspect_standard_svg(chapter, output_path=output_path)
-    expected_ids = ["LC738868.1", "LC738870.1", "LC738874.1", "LC738873.1"]
+    expected_ids = ["LC738868.1", "LC738874.1", "LC738870.1", "LC738873.1"]
     if evidence.record_ids != set(expected_ids) or len(evidence.feature_ids) != 440:
         raise RecipeContractError("T-CLI-04 rendered the wrong complete records.")
 
@@ -1257,13 +1265,12 @@ def _assert_tcli04_output(
             raise RecipeContractError("T-CLI-04 record placement metadata is missing.")
         positions.append((float(match.group("x")), float(match.group("y"))))
     if not (
-        positions[0][1] == positions[1][1]
-        and positions[2][1] == positions[3][1]
-        and positions[0][1] < positions[2][1]
-        and positions[0][0] < positions[1][0]
-        and positions[2][0] < positions[3][0]
+        len({position[0] for position in positions}) == 1
+        and all(first[1] < second[1] for first, second in zip(positions, positions[1:]))
     ):
-        raise RecipeContractError("T-CLI-04 records do not form the declared 2x2 grid.")
+        raise RecipeContractError(
+            "T-CLI-04 records do not form the declared biological comparison stack."
+        )
 
     matches = _match_elements(root)
     if output_path.name == "table_driven_comparison_baseline.svg":
@@ -1300,28 +1307,27 @@ def _assert_tcli04_output(
         for option, value in required_options.items()
     ):
         raise RecipeContractError("T-CLI-04 ruler or shared-scale settings changed.")
-    ruler_ticks = [
-        element
-        for element in root.iter()
-        if element.tag.rsplit("}", 1)[-1] == "text"
-        and "".join(element.itertext()).strip() in {"100 kbp", "200 kbp"}
-    ]
-    positions_by_label = {
-        label: {
-            round(float(element.attrib["x"]), 6)
-            for element in ruler_ticks
-            if "".join(element.itertext()).strip() == label
+    ruler_positions = []
+    for group in groups:
+        values = {
+            "".join(element.itertext()).strip(): float(element.attrib["x"])
+            for element in group.iter()
+            if element.tag.rsplit("}", 1)[-1] == "text"
+            and "".join(element.itertext()).strip() in {"100 kbp", "200 kbp"}
         }
-        for label in ("100 kbp", "200 kbp")
-    }
+        ruler_positions.append(values)
+    ruler_spacings = [
+        abs(values["200 kbp"] - values["100 kbp"])
+        for values in ruler_positions
+        if values.keys() == {"100 kbp", "200 kbp"}
+    ]
     if (
-        len(ruler_ticks) != 8
-        or any(len(values) != 1 for values in positions_by_label.values())
-        or abs(
-            next(iter(positions_by_label["200 kbp"]))
-            - 2 * next(iter(positions_by_label["100 kbp"]))
+        len(ruler_spacings) != 4
+        or max(ruler_spacings) - min(ruler_spacings) > 1e-3
+        or any(
+            (values["100 kbp"] < values["200 kbp"]) != (index < 2)
+            for index, values in enumerate(ruler_positions)
         )
-        > 1e-5
     ):
         raise RecipeContractError("T-CLI-04 shared rulers are incomplete.")
 
@@ -1648,6 +1654,150 @@ def _assert_annotation_slots(
         raise RecipeContractError("H-CLI-10 annotation lanes or ranges changed.")
 
 
+def _assert_gallery_chloroplast(
+    chapter: dict[str, object],
+    output_path: Path,
+    *,
+    command: list[str],
+) -> None:
+    def option_value(option: str) -> str:
+        try:
+            return command[command.index(option) + 1]
+        except (ValueError, IndexError) as exc:
+            raise RecipeContractError(
+                f"T-CLI-06 is missing the documented {option} value."
+            ) from exc
+
+    expected_values = {
+        "--gbk": "NC_001879.gbk",
+        "-t": "chloroplast_specific_table.tsv",
+        "-k": "CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin",
+        "--species": "<i>Nicotiana tabacum</i>",
+        "--track_type": "tuckin",
+        "--labels": "both",
+        "--label_placement": "radial",
+        "--outer_label_x_radius_offset": "0.9",
+        "--outer_label_y_radius_offset": "0.9",
+        "--inner_label_x_radius_offset": "0.975",
+        "--inner_label_y_radius_offset": "0.975",
+        "--qualifier_priority": "qualifier_priority.tsv",
+        "--annotation_table": "nicotiana-tabacum-regions.tsv",
+        "--block_stroke_color": "black",
+        "--block_stroke_width": "1",
+        "--line_stroke_width": "2",
+        "--axis_stroke_width": "3",
+        "--definition_font_size": "28",
+        "--legend": "upper_left",
+    }
+    if any(option_value(option) != value for option, value in expected_values.items()):
+        raise RecipeContractError("T-CLI-06 Gallery presentation options changed.")
+    if not {"--separate_strands", "--gc", "--no-skew"} <= set(command):
+        raise RecipeContractError("T-CLI-06 strand, GC, or skew settings changed.")
+    slot_specs = [
+        command[index + 1]
+        for index, token in enumerate(command)
+        if token == "--circular_track_slot"
+    ]
+    if slot_specs != [
+        "features:features@side=overlay,lane_direction=split",
+        "plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,inner_gap_px=1,outer_gap_px=1,show_labels=true,padding_px=1,overflow=compress",
+        "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,nt=GC,legend_label=GC content",
+    ]:
+        raise RecipeContractError("T-CLI-06 custom Circular slot contract changed.")
+
+    evidence = inspect_standard_svg(chapter, output_path=output_path)
+    if evidence.record_ids != {"NC_001879.2"} or len(evidence.feature_ids) != 147:
+        raise RecipeContractError(
+            "T-CLI-06 must render the complete Gallery feature selection."
+        )
+    if evidence.slot_renderers != {
+        "features",
+        "annotations",
+        "dinucleotide_content",
+    }:
+        raise RecipeContractError("T-CLI-06 SVG contains an unexpected track.")
+    required_text = {
+        "Nicotiana tabacum",
+        "NC_001879.2",
+        "155,943 bp",
+        "LSC",
+        "IRb",
+        "SSC",
+        "IRa",
+        "GC content",
+        "matK",
+        "psaA",
+        "photosystem I",
+        "photosystem II",
+        "RNA polymerase",
+        "rep_origin",
+    }
+    if not required_text <= evidence.text_nodes:
+        raise RecipeContractError("T-CLI-06 SVG is missing Gallery labels.")
+    if {"GC skew (+)", "GC skew (-)", "AT skew (+)", "AT skew (-)"} & (
+        evidence.text_nodes
+    ):
+        raise RecipeContractError("T-CLI-06 must not draw a skew track.")
+
+    root = ElementTree.parse(output_path).getroot()
+    slots = [
+        (
+            element.attrib["data-gbdraw-slot-id"],
+            element.attrib["data-gbdraw-slot-renderer"],
+        )
+        for element in root.iter()
+        if "data-gbdraw-slot-id" in element.attrib
+    ]
+    if slots != [
+        ("features", "features"),
+        ("plastome_regions", "annotations"),
+        ("gc_content", "dinucleotide_content"),
+    ]:
+        raise RecipeContractError("T-CLI-06 SVG slot order changed.")
+    annotations = {
+        (
+            element.attrib["data-gbdraw-annotation-id"],
+            element.attrib.get("data-gbdraw-annotation-set-id"),
+            element.attrib.get("data-gbdraw-annotation-track-id"),
+            element.attrib.get("data-gbdraw-record-id"),
+            element.attrib.get("data-gbdraw-annotation-label"),
+        )
+        for element in root.iter()
+        if "data-gbdraw-annotation-id" in element.attrib
+    }
+    if annotations != {
+        (key, "plastome_regions", "plastome_regions", "NC_001879.2", label)
+        for key, label in (
+            ("lsc", "LSC"),
+            ("irb", "IRb"),
+            ("ssc", "SSC"),
+            ("ira", "IRa"),
+        )
+    }:
+        raise RecipeContractError("T-CLI-06 annotation identities changed.")
+    fills = {element.attrib.get("fill") for element in root.iter()}
+    if not {"#00662c", "#328925", "#bd1220", "#e95d0f", "#ffec00"} <= fills:
+        raise RecipeContractError("T-CLI-06 lost functional chloroplast colors.")
+
+    python_output = (
+        Path(__file__).resolve().parents[1]
+        / "images"
+        / "t-py-02"
+        / "python_annotated_chloroplast.svg"
+    )
+    if not python_output.is_file():
+        raise RecipeContractError("T-CLI-06 parity target T-PY-02 is missing.")
+    cli_xml = ElementTree.tostring(root, encoding="utf-8")
+    python_xml = ElementTree.tostring(
+        ElementTree.parse(python_output).getroot(),
+        encoding="utf-8",
+    )
+    if cli_xml != python_xml:
+        raise RecipeContractError(
+            "T-CLI-06 and T-PY-02 no longer render the same SVG tree."
+        )
+
+
 def _assert_feature_presentation(
     output_path: Path,
     *,
@@ -1685,7 +1835,31 @@ def _assert_feature_presentation(
     rnr1_id = compute_feature_hash(source_by_gene["RNR1"], record_id=record.id)
     first_trna = next(feature for feature in record.features if feature.type == "tRNA")
     trna_id = compute_feature_hash(first_trna, record_id=record.id)
-    if (
+    if scenario_id == "T-CLI-03":
+        annotation_elements = [
+            element
+            for element in root.iter()
+            if element.attrib.get("data-gbdraw-annotation-id") == "d_loop"
+        ]
+        if (
+            len(rendered) != 37
+            or cox1_id not in rendered
+            or nd1_id not in rendered
+            or atp6_id not in rendered
+            or underlays
+            or not annotation_elements
+            or any(
+                element.attrib.get("data-gbdraw-annotation-set-id")
+                != "mitochondrial_regions"
+                or element.attrib.get("data-gbdraw-annotation-mark") != "bracket"
+                or element.attrib.get("data-gbdraw-annotation-label") != "D-loop"
+                for element in annotation_elements
+            )
+        ):
+            raise RecipeContractError(
+                "T-CLI-03 must retain every CDS and render D-loop as a region bracket."
+            )
+    elif (
         len({*rendered, *(element.attrib["data-gbdraw-feature-id"] for element in underlays)})
         != 37
         or cox1_id in rendered
@@ -2035,6 +2209,8 @@ def run_scenario(
                     continue
                 if scenario_id == "H-CLI-04":
                     _assert_linear_regions_orientation_layout(chapter, generated_path)
+                elif scenario_id == "T-CLI-06":
+                    inspect_standard_svg(chapter, output_path=generated_path)
                 else:
                     validate_standard_svg(
                         chapter,
@@ -2092,6 +2268,12 @@ def run_scenario(
                             workdir=workdir,
                             scenario_id=scenario_id,
                         )
+                elif scenario_id == "T-CLI-06":
+                    _assert_gallery_chloroplast(
+                        chapter,
+                        generated_path,
+                        command=command,
+                    )
                 elif scenario_id == "H-CLI-05":
                     _assert_precomputed_comparison(chapter, generated_path)
                 elif scenario_id == "H-CLI-02":

@@ -1,5 +1,14 @@
 # Create and export your first circular genome diagram
 
+## Choose how to build this figure
+
+| GUI | CLI | Python API |
+| --- | --- | --- |
+| **This page** | [Command-line workflow](../CLI/first-circular-genome-diagram.md) | [Python workflow](../PYTHON/first-genome-diagram.md) |
+
+All three workflows build the same labeled human mitochondrial figure. Only
+the interface changes.
+
 Create a labeled Circular SVG from the bundled human mitochondrial GenBank record. You will generate a working diagram in Step 2, then add the publication label and external feature labels before exporting it.
 
 ![Finished circular human mitochondrial genome diagram with external labels and a right legend](../../images/t-gui-01/04-finished-diagram.png)
