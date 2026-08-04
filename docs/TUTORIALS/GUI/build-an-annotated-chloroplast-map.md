@@ -111,13 +111,6 @@ labels inside and outside the feature ring, functional colors, inner GC-content
 profile, and upper-left legend. There should be no coordinate-tick or skew
 track. Select **SVG** to save `annotated_chloroplast_map.svg`.
 
-## What you built
-
-You reproduced the Interactive SVG Gallery chloroplast presentation from the
-complete source record and three auditable TSV inputs. The same figure can be
-built from the [command line](../CLI/build-an-annotated-chloroplast-map.md) or
-the [Python API](../PYTHON/build-an-annotated-chloroplast-map.md).
-
 ## Next steps
 
 - [Add region annotations and custom track slots](../../HOW_TO/GUI/add-region-annotations-and-track-slots.md)

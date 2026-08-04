@@ -49,9 +49,3 @@ lengths, the 120 px comparison geometry, and standard-SVG safety:
 ```bash
 python docs/recipes/run_cli_scenarios.py --scenario T-CLI-07 --check
 ```
-
-## What you built
-
-You reproduced the browser LOSATN result without rerunning a search. The TSV is
-the fixed comparison evidence; the two GenBank files remain the source of
-features and record lengths.

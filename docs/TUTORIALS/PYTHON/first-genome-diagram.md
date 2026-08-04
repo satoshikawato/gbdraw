@@ -99,13 +99,3 @@ same SVG semantics as the CLI tutorial.
   where gbdraw is installed.
 - `Output file already exists`: use a new empty directory or change
   `output_path`. `Diagram.save()` does not overwrite by default.
-
-## What you built
-
-You used the beginner-facing drawing API and typed presentation options to
-reproduce the shared first Circular figure. Run
-`python docs/recipes/run_python_scenarios.py --scenario T-PY-01` from a
-repository checkout to regenerate the published figure. Continue with the
-[Python API reference](../../REFERENCE/python-api.md) for options, Linear
-diagrams, and byte output. See [Choose GUI, CLI, or Python](../../EXPLANATION/choose-gui-cli-or-python.md)
-when planning a different workflow.

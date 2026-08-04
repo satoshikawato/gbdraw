@@ -51,18 +51,3 @@ gbdraw linear \
 <!-- executable:T-CLI-10:end -->
 
 ![Five Hepatoplasmataceae genomes with adjacent Collinear blocks](../../images/t-cli-10/losatp_collinear.svg)
-
-## Step 3: Verify the replay
-
-```bash
-python docs/recipes/run_cli_scenarios.py --scenario T-CLI-10 --check
-```
-
-The validator checks all five record IDs and lengths, the adjacent four-pair
-scope, 500 displayed Collinear matches, curved ribbons,
-orientation-and-identity colors, GC content, GC skew, ruler, title, and legend.
-
-## What you built
-
-You reproduced the Gallery's adjacent Collinear project from the five source
-records with the Gallery project's fixed 32-thread search setting.

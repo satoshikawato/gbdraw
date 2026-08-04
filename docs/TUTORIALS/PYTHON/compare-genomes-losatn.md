@@ -70,8 +70,3 @@ python docs/recipes/run_python_scenarios.py --scenario T-PY-04 --check
 
 The validator checks the record order, source lengths, six retained matches,
 comparison height, and standard-SVG safety.
-
-## What you built
-
-You attached fixed whole-genome comparison evidence to two in-memory records.
-No external search runs during this Python recipe.

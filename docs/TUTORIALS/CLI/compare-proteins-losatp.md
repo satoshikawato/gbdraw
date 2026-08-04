@@ -88,9 +88,3 @@ presentation:
 ```bash
 python docs/recipes/run_cli_scenarios.py --scenario T-CLI-08 --check
 ```
-
-## What you built
-
-You built the same `og_1`-aligned five-record comparison as the browser
-Tutorial. The Similarity groups describe graph components in this dataset; they
-are not a phylogenetic orthology claim.

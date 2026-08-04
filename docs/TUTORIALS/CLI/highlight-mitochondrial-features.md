@@ -157,12 +157,3 @@ as one origin-spanning inner bracket.
 
 Only presentation inputs changed. `HmmtDNA.gbk` stayed byte-for-byte identical;
 the SVG still contains the same complete `NC_012920.1` sequence context.
-
-## What you built
-
-You built a baseline and a semantically checked feature-highlighted map. Run
-`python docs/recipes/run_cli_scenarios.py --scenario T-CLI-03` from a source
-checkout to reproduce both SVGs. Continue with the focused guide to
-[colors, labels, visibility, shapes, and strokes](../../HOW_TO/CLI/set-colors-labels-visibility-shapes-and-strokes.md),
-the [presentation-table reference](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md),
-or the complete [CLI option reference](../../REFERENCE/command-line.md).

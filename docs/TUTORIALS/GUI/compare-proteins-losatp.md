@@ -132,15 +132,6 @@ member count, record coverage, RBH seeds, paths, and every member protein.
 
 ![LOSATP similarity-group popup with member details](../../images/t-gui-04/06-match-popup.png)
 
-## What you built
-
-You produced a Linear, five-record LOSATP Similarity-groups comparison from the
-whole BGC records, kept the source sequence identity separate from the reversed
-display orientation, and exported both the 232-row evidence table and the
-finished SVG. The diagram uses readable first-record `gene` labels, aligns all
-five records to `og_1`, and expresses shared groups through the adjacent-record
-chain rather than inventing a direct first-to-last ribbon.
-
 ## Next steps
 
 - [Create protein similarity groups as a focused task](../../HOW_TO/GUI/create-protein-similarity-groups.md)

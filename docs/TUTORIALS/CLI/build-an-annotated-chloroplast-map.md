@@ -76,12 +76,3 @@ the functional-color legend.
 The recipe runner executes the literal command above in a clean directory and
 checks the complete record, feature count, annotation identities, three-slot
 order, labels, colors, and parity with the Python API rendering.
-
-## What you built
-
-You reproduced the shared Gallery chloroplast figure with one auditable CLI
-command. Run
-`python docs/recipes/run_cli_scenarios.py --scenario T-CLI-06` from a
-repository checkout to regenerate it. See the
-[track-slot and annotation how-to](../../HOW_TO/CLI/add-region-annotations-and-track-slots.md)
-for schema details.

@@ -60,13 +60,6 @@ and byte-identical static SVGs before and after replay.
 
 ![Human mitochondrial map restored from the CLI session](../../images/t-cli-11/restored_interactive_figure.svg)
 
-## What you built
-
-`interactive_human_mitochondrion.interactive.svg` is the reader-facing file.
-`interactive_handoff.gbdraw-session.json.gz` is the editable handoff, and
-`restored_interactive_figure.svg` proves that another CLI run can reproduce
-the figure without the original input beside it.
-
 ## Next steps
 
 - [Save and regenerate CLI sessions](../../HOW_TO/CLI/save-and-regenerate-sessions.md)

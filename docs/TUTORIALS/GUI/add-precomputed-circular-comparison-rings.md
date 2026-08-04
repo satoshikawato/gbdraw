@@ -86,12 +86,6 @@ reference and comparison intervals as `circular_hsp_spans.fasta`.
 
 Select **SVG** to save `precomputed_circular_rings.svg`.
 
-## What you built
-
-You combined one complete reference with three fixed evidence tables, kept the
-query/subject direction explicit, and exported both a publication SVG and the
-two sequences behind an inspected match.
-
 ## Next steps
 
 - [Add Circular similarity rings as a focused task](../../HOW_TO/GUI/add-circular-similarity-rings.md)

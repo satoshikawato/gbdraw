@@ -82,10 +82,6 @@ Select the longest comparison ribbon in the preview. The **Pairwise match** popu
 
 *The first match connects Lambda 1..21231 to DE3 20081..41311 and reports 99.981% identity.*
 
-## What you built
-
-You now have `lambda-de3.losatn.tsv` and `lambda-de3-losatn.svg`, both produced from the complete Lambda and DE3 records. The TSV has six qualified `megablast` rows, and the SVG draws the same six endpoint pairs as inspectable links.
-
 ## Next steps
 
 - [Use uploaded comparison results](../../HOW_TO/GUI/use-uploaded-blast-results.md)

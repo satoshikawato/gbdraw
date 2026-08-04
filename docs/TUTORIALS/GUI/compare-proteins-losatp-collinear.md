@@ -88,12 +88,6 @@ orientation, covered Similarity groups, anchors, and envelope sequences.
 Use **Both spans FASTA** to save `collinear_members.fasta`, then select **SVG**
 to save `losatp_collinear.svg`.
 
-## What you built
-
-You reproduced the Gallery Collinear view without passing through a different
-protein-comparison mode. Collinear blocks summarize where compatible protein
-groups retain order and orientation between adjacent displayed genomes.
-
 ## Next steps
 
 - [Draw Collinear blocks as a focused task](../../HOW_TO/GUI/draw-collinear-protein-blocks.md)

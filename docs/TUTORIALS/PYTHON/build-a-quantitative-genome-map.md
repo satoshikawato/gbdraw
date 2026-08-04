@@ -123,8 +123,3 @@ The validator checks 607 depth values, the 0x–80x and 10%–55% axes, the sign
 GC-skew fills, the five-slot order, and exact parity with the CLI output.
 
 ![AP027133.1 depth, GC content, and GC skew from Python](../../images/t-py-11/quantitative_genome_map.svg)
-
-## What you built
-
-One measured table and two sequence-derived series now share explicit radial
-ownership without changing the annotated feature ring.

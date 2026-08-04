@@ -86,10 +86,6 @@ In the **Result Preview** toolbar, select **SVG**.
 
 *Use SVG for the static publication figure. The browser saves `human_mitochondrion.svg`.*
 
-## What you built
-
-You now have a static Circular SVG named `human_mitochondrion.svg`. It contains the `NC_012920.1` record, an italicized *Homo sapiens* label, 37 rendered features, all 13 CDS labels from `gene`, coordinate ticks, GC content and skew tracks, and a right-side legend.
-
 ## Next steps
 
 - [Create a Linear layout](first-linear-genome-diagram.md)

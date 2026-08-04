@@ -175,16 +175,3 @@ There should be no coordinate-tick or GC-skew track.
 The documentation runner executes the literal program above in a clean
 directory and checks the typed options, slot geometry, feature and annotation
 identities, visible labels, and equality of the file, text, and byte outputs.
-
-## What you built
-
-You expressed the Gallery presentation as a reproducible `CircularOptions`
-value. The [GUI version](../GUI/build-an-annotated-chloroplast-map.md) produces
-the same biological map through visible controls; this version is suited to
-scripts, notebooks, and pipelines.
-
-Run
-`python docs/recipes/run_python_scenarios.py --scenario T-PY-02` from a
-repository checkout to regenerate the published SVG. Continue with the
-[tracks, annotations, colors, and labels how-to](../../HOW_TO/PYTHON/add-tracks-annotations-colors-and-labels.md)
-for multi-record and quantitative-track variations.

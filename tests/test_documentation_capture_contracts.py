@@ -989,7 +989,6 @@ def test_circular_tutorial_follows_steps_and_defers_related_links() -> None:
         "## Step 3: Add a publication label",
         "## Step 4: Make the feature map easier to read",
         "## Step 5: Export the SVG",
-        "## What you built",
         "## Next steps",
     ]
 
@@ -1011,18 +1010,17 @@ def test_circular_tutorial_follows_steps_and_defers_related_links() -> None:
         "| Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |",
         "| Legend Position | Right |",
         "`human_mitochondrion.svg`",
-        "all 13 CDS labels from `gene`",
     ):
         assert value in tutorial
 
-    what_you_built = tutorial.index("## What you built")
+    next_steps = tutorial.index("## Next steps")
     for related_target in (
         "first-linear-genome-diagram.md",
         "../../HOW_TO/GUI/style-features-labels-titles-and-legends.md",
         "compare-genomes-losatn.md",
         "../../HOW_TO/GUI/save-restore-undo-and-reproduce-work.md",
     ):
-        assert tutorial.index(related_target) > what_you_built
+        assert tutorial.index(related_target) > next_steps
 
 
 def test_linear_tutorial_shows_the_step_two_result_and_defers_related_links() -> None:
@@ -1033,7 +1031,6 @@ def test_linear_tutorial_shows_the_step_two_result_and_defers_related_links() ->
         "## Step 2: Generate the first diagram",
         "## Step 3: Add concise labels and a ruler",
         "## Step 4: Regenerate and export the SVG",
-        "## What you built",
         "## Next steps",
     ]
 
@@ -1057,18 +1054,17 @@ def test_linear_tutorial_shows_the_step_two_result_and_defers_related_links() ->
         "| Scale Style | Ruler (Ticks) |",
         "| Legend Position | Left |",
         "`lambda_linear.svg`",
-        "all 73 displayed CDS features",
     ):
         assert value in tutorial
 
-    what_you_built = tutorial.index("## What you built")
+    next_steps = tutorial.index("## Next steps")
     for related_target in (
         "../../HOW_TO/GUI/arrange-linear-records-regions-and-orientation.md",
         "../../HOW_TO/GUI/style-features-labels-titles-and-legends.md",
         "compare-genomes-losatn.md",
         "../../REFERENCE/output-formats-and-export.md",
     ):
-        assert tutorial.index(related_target) > what_you_built
+        assert tutorial.index(related_target) > next_steps
         assert (LINEAR_TUTORIAL_PATH.parent / related_target).resolve().is_file()
 
 
@@ -1182,7 +1178,6 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
         "## Step 3: Configure LOSATN",
         "## Step 4: Run LOSATN and download the evidence",
         "## Step 5: Inspect one nucleotide match",
-        "## What you built",
         "## Next steps",
     ]
     positions = [tutorial.index(heading) for heading in headings]
@@ -1203,19 +1198,18 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
         "| Pairwise Match Height | `120` |",
         "`lambda-de3.losatn.tsv`",
         "`lambda-de3-losatn.svg`",
-        "six qualified `megablast` rows",
         "Lambda 1..21231 to DE3 20081..41311",
     ):
         assert value in tutorial
 
-    what_you_built = tutorial.index("## What you built")
+    next_steps = tutorial.index("## Next steps")
     for related_target in (
         "../../HOW_TO/GUI/use-uploaded-blast-results.md",
         "../../HOW_TO/GUI/arrange-linear-records-regions-and-orientation.md",
         "../../REFERENCE/output-formats-and-export.md",
         "../../REFERENCE/input-formats-and-tsv-schemas.md",
     ):
-        assert tutorial.index(related_target) > what_you_built
+        assert tutorial.index(related_target) > next_steps
         assert (GUI_LOSATN_TUTORIAL_PATH.parent / related_target).resolve().is_file()
 
     assert "tlosatx" not in tutorial.lower()

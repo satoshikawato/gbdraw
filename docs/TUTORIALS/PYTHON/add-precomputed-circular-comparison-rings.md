@@ -100,8 +100,3 @@ python docs/recipes/run_python_scenarios.py --scenario T-PY-06 --check
 
 The runner verifies the ordered labels, subject-reference mapping, 106 retained
 HSPs, companion sequence identities, and the standard SVG.
-
-## What you built
-
-You expressed the browser ring stack as three typed inputs with one shared
-filter and geometry policy.

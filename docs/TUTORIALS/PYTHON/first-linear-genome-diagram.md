@@ -60,9 +60,3 @@ safety. Run it from a repository checkout with:
 ```bash
 python docs/recipes/run_python_scenarios.py --scenario T-PY-03 --check
 ```
-
-## What you built
-
-You built the same Lambda map as the GUI and CLI variants through the public
-Python API. Change one option at a time when adapting the recipe so the record
-identity and ruler remain easy to verify.

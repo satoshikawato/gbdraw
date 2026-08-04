@@ -74,12 +74,3 @@ active or external content in this standard SVG.
   in the same command.
 - `Output file already exists`: use a new empty directory or a new output
   prefix. gbdraw refuses to replace the existing SVG by default.
-
-## What you built
-
-You created a whole-record Lambda map with compact biological labels and an
-centered ruler. Run `python docs/recipes/run_cli_scenarios.py --scenario T-CLI-02`
-from a repository checkout to regenerate the published figure and repeat its
-semantic checks. Use the [CLI reference](../../REFERENCE/command-line.md) for
-other Linear layout options. See [Choose circular or linear](../../EXPLANATION/choose-circular-or-linear.md)
-when deciding which layout suits another record.

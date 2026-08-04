@@ -81,14 +81,3 @@ that the longer CDS product descriptions are absent from label text.
 - `gbdraw: command not found`: activate the environment where gbdraw is installed.
 - `Output file already exists`: return to a new empty directory or choose a new
   output prefix. gbdraw does not overwrite an existing file by default.
-
-## What you built
-
-You created a labeled, editable standard SVG from a fixed public GenBank record.
-Its qualifier-priority rule makes the label source explicit and reproducible. Run
-`python docs/recipes/run_cli_scenarios.py --scenario T-CLI-01` from a repository
-checkout to regenerate the published figure and repeat its semantic checks.
-Use the [CLI reference](../../REFERENCE/command-line.md) for other Circular
-options and the [export guide](../../REFERENCE/output-formats-and-export.md)
-when a journal requires another format. For figure-review and regeneration
-guidance, see [Prepare publication and reproducible figures](../../EXPLANATION/prepare-publication-and-reproducible-figures.md).

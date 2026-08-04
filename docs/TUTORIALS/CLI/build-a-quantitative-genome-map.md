@@ -123,12 +123,3 @@ GC-skew fills.
 The baseline and final figure use the same complete record. The second command
 adds one measured table and two derived tracks; it does not change feature
 coordinates or treat missing depth as zero.
-
-## What you built
-
-You built a reproducible three-track quantitative genome map. Run
-`python docs/recipes/run_cli_scenarios.py --scenario T-CLI-05` to regenerate
-and semantically check both SVGs. Continue with the [quantitative-track guide](../../HOW_TO/CLI/add-depth-gc-and-skew-tracks.md),
-the [track and slot explanation](../../EXPLANATION/understand-tracks-axes-and-layout.md),
-the [input schema reference](../../REFERENCE/input-formats-and-tsv-schemas.md),
-or the [CLI option reference](../../REFERENCE/command-line.md).

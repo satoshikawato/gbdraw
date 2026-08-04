@@ -106,12 +106,6 @@ controls and feature metadata, and exact static-SVG reproduction.
 
 ![Human mitochondrial map restored from Python](../../images/t-py-08/restored_interactive_figure.svg)
 
-## What you built
-
-The request owns the figure settings, the Interactive SVG owns browser-side
-inspection, and the compressed session owns the portable replay state. The
-session is materialized only while its embedded resources are in use.
-
 ## Next steps
 
 - [Build typed requests and round-trip sessions](../../HOW_TO/PYTHON/build-typed-requests-and-round-trip-sessions.md)

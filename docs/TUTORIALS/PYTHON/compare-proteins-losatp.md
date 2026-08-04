@@ -134,8 +134,3 @@ python docs/recipes/run_python_scenarios.py --scenario T-PY-05 --check
 
 The runner checks the fixed record order, reversed fifth record, pinned LOSAT
 runtime, 23 groups, 77 adjacent links, and the `og_1` alignment.
-
-## What you built
-
-You reproduced the same five-record Similarity-group figure through the public
-Python API while keeping the comparison thresholds and presentation explicit.

@@ -56,8 +56,3 @@ python docs/recipes/run_cli_scenarios.py --scenario T-CLI-09 --check
 
 The validator checks the subject-reference direction, ring order, labels,
 comparison FASTA identities, 106 retained HSPs, and standard-SVG safety.
-
-## What you built
-
-You reproduced the browser ring map from fixed evidence without rerunning a
-sequence search. Every ring position is a coordinate on `NC_012920.1`.

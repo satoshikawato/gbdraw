@@ -67,10 +67,6 @@ Select **Generate Diagram** again. The completed map should include short labels
 
 In the **Result Preview** toolbar, select **SVG**. The browser saves `lambda_linear.svg`.
 
-## What you built
-
-You now have a static Linear SVG named `lambda_linear.svg`. It contains the whole `NC_001416.1` record, all 73 displayed CDS features, concise gene labels, a coordinate ruler, separate strand lanes, and a left-side CDS legend.
-
 ## Next steps
 
 - [Arrange multiple Linear records and regions](../../HOW_TO/GUI/arrange-linear-records-regions-and-orientation.md)

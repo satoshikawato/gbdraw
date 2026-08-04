@@ -77,12 +77,6 @@ The saved file is `restored_interactive_figure.svg`. Its record, feature IDs,
 texts, labels, track groups, and placement match the original figure; only
 subpixel browser font measurement may vary by less than one pixel.
 
-## What you built
-
-You now have three complementary artifacts: an offline Interactive SVG for
-exploration, a compressed session for reproducible continuation, and a static
-SVG regenerated from that session in a fresh browser context.
-
 ## Next steps
 
 - [Inspect and edit a diagram](../../HOW_TO/GUI/inspect-and-edit-a-diagram.md)

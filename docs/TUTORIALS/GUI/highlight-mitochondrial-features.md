@@ -105,13 +105,6 @@ the CLI and Python figures.
 
 Select **SVG** to save `mitochondrial_features_highlighted.svg`.
 
-## What you built
-
-You changed the presentation layer while keeping the complete
-`NC_012920.1` record intact. The GUI capture validator checks all 37 features,
-the five rule colors, four replacement labels, explicit track order, and the
-D-loop annotation.
-
 ## Next steps
 
 - [Style features, labels, titles, and legends](../../HOW_TO/GUI/style-features-labels-titles-and-legends.md)

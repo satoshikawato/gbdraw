@@ -46,12 +46,20 @@ def test_onboarding_pages_match_their_approved_manifest_entries() -> None:
         assert f"# {chapter['title']}" in source
         assert "## What you'll need" in source
         assert "## Step 2:" in source
-        assert "## What you built" in source
+        assert "## What you built" not in source
         assert output_name in _section(source, "Step 2")
         assert "tests/test_inputs" not in source
         assert "http://" not in source
         assert "https://" not in source
         assert (PUBLISHED_IMAGE_ROOT / scenario_id.lower() / output_name).is_file()
+
+
+def test_tutorials_omit_replay_verification_and_summary_sections() -> None:
+    tutorial_root = REPO_ROOT / "docs" / "TUTORIALS"
+    for path in sorted(tutorial_root.rglob("*.md")):
+        source = path.read_text(encoding="utf-8")
+        assert "## Step 3: Verify the replay" not in source, path
+        assert "## What you built" not in source, path
 
 
 def test_each_documented_recipe_has_one_marked_owner() -> None:

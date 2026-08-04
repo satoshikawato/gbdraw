@@ -158,8 +158,3 @@ renamed labels, arrow and rectangle shapes, stroke geometry, and the one
 origin-spanning D-loop bracket.
 
 ![Highlighted human mitochondrial features from Python](../../images/t-py-09/mitochondrial_features_highlighted.svg)
-
-## What you built
-
-The code changes only presentation objects. The complete `NC_012920.1` record
-and every CDS remain intact.

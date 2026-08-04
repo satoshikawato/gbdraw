@@ -85,17 +85,3 @@ print(f"Saved {saved_path}")
 <!-- executable:T-PY-07:end -->
 
 ![Five Hepatoplasmataceae genomes with Collinear blocks from Python](../../images/t-py-07/losatp_collinear.svg)
-
-## Step 3: Verify the replay
-
-```bash
-python docs/recipes/run_python_scenarios.py --scenario T-PY-07 --check
-```
-
-The runner checks the five-record order, adjacent comparison pairs, 500
-displayed matches, track stack, title, and standard-SVG safety.
-
-## What you built
-
-You reproduced the Gallery Collinear result from source records with explicit
-search, grouping, color, and track settings.

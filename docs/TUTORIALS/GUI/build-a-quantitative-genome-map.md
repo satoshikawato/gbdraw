@@ -74,13 +74,6 @@ upper bound.
 
 Select **SVG** to save `quantitative_genome_map.svg`.
 
-## What you built
-
-The web app uses the same complete record, 607 measured depth values, derived
-GC series, axes, legends, and explicit track geometry as the CLI and Python
-variants. The capture validator checks all five semantic slots and 576 feature
-elements.
-
 ## Next steps
 
 - [Add depth, GC, and skew tracks](../../HOW_TO/GUI/add-depth-gc-and-skew-tracks.md)
