@@ -79,6 +79,7 @@ options = CircularOptions(
     legend="right",
     config_overrides={
         "canvas.strandedness": False,
+        "canvas.circular.track_type": "middle",
         "labels.circular.scope": "outer",
         "objects.definition.circular.font_size": 18,
     },

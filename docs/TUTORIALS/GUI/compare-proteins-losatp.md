@@ -83,10 +83,16 @@ Match the Interactive SVG Gallery presentation with these display settings:
 | Show Coordinate Scale (Linear) | On |
 | Linear scale style | Ruler |
 | Axis Stroke Width | `5` |
+| Lock Definition Column | On |
+| Definition name | `20` px, Bold |
+| Definition subtitle | `20` px, Normal |
+| Definition accession / length | `20` px, Normal |
 
 The first record therefore carries readable CDS `gene` labels; the remaining
-four records stay unlabeled. Fit the complete final preview at **40%** before
-capturing or exporting it.
+four records stay unlabeled. Under **Title & Legend**, set the four visible
+Definition line sizes to `20`, choose **Bold** only for **Name / Species**, and
+leave the other lines at **Normal**. Fit the complete final preview at **40%**
+before capturing or exporting it.
 
 ![LOSATP Similarity groups mode selected with deterministic settings](../../images/t-gui-04/03-losatp-settings.png)
 

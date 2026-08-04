@@ -2,74 +2,24 @@
 
 # gbdraw Tutorials
 
-Tutorials take you through one complete result. Choose a learning goal; each
-project links to focused How-to and Reference material for optional variations.
+Choose what you want to learn, then open the workflow for the interface you use.
+Each row builds the same biological figure in the web app, from the command
+line, or from Python.
 
-## One figure, three ways to build it
+## Choose a tutorial
 
-A Tutorial project is defined by its finished biological figure, not by its
-interface. Each project should have GUI, CLI, and Python API variants that use
-the same fixtures, record order, comparisons, feature selection, labels,
-colors, track geometry, and finished SVG semantics. The variants may differ
-only in the steps and syntax used to produce that figure. Surface-specific SVG
-wrappers, such as browser-added outer canvas padding and serialization
-metadata, are allowed when they do not change the finished diagram.
-
-Every complete project starts with a **Choose how to build this figure** table.
-GitHub Markdown cannot provide portable interactive tabs, so these tables are
-the source-compatible interface switch. A future documentation site can render
-the same project metadata as tabs without changing the tutorial content.
-
-Do not fill an interface with a different or biologically weaker example. If a
-future project cannot be expressed on one surface, record the missing
-capability explicitly instead.
-
-| Finished figure | GUI | CLI | Python API | Parity |
+| What you'll learn | What you'll draw | Web app | Command line | Python API |
 | --- | --- | --- | --- | --- |
-| Human mitochondrial first circular map | [GUI](GUI/first-circular-genome-diagram.md) | [CLI](CLI/first-circular-genome-diagram.md) | [Python](PYTHON/first-genome-diagram.md) | Verified |
-| Lambda first linear map | [GUI](GUI/first-linear-genome-diagram.md) | [CLI](CLI/first-linear-genome-diagram.md) | [Python](PYTHON/first-linear-genome-diagram.md) | Verified |
-| Lambda–DE3 LOSATN comparison | [GUI](GUI/compare-genomes-losatn.md) | [CLI](CLI/compare-genomes-losatn.md) | [Python](PYTHON/compare-genomes-losatn.md) | Verified |
-| Aminoglycoside BGC Similarity groups | [GUI](GUI/compare-proteins-losatp.md) | [CLI](CLI/compare-proteins-losatp.md) | [Python](PYTHON/compare-proteins-losatp.md) | Verified |
-| Gallery tobacco chloroplast map | [GUI](GUI/build-an-annotated-chloroplast-map.md) | [CLI](CLI/build-an-annotated-chloroplast-map.md) | [Python](PYTHON/build-an-annotated-chloroplast-map.md) | Verified |
-| Human mitochondrial comparison rings | [GUI](GUI/add-precomputed-circular-comparison-rings.md) | [CLI](CLI/add-precomputed-circular-comparison-rings.md) | [Python](PYTHON/add-precomputed-circular-comparison-rings.md) | Verified |
-| Hepatoplasmataceae Collinear map | [GUI](GUI/compare-proteins-losatp-collinear.md) | [CLI](CLI/compare-proteins-losatp-collinear.md) | [Python](PYTHON/compare-proteins-losatp-collinear.md) | Verified |
-| Interactive session handoff | [GUI](GUI/create-and-resume-an-interactive-figure.md) | [CLI](CLI/create-and-resume-an-interactive-figure.md) | [Python](PYTHON/create-and-resume-an-interactive-figure.md) | Verified |
-| Human mitochondrial feature presentation | [GUI](GUI/highlight-mitochondrial-features.md) | [CLI](CLI/highlight-mitochondrial-features.md) | [Python](PYTHON/highlight-mitochondrial-features.md) | Verified |
-| Majanivirus table-driven comparison | [GUI](GUI/build-a-table-driven-genome-comparison.md) | [CLI](CLI/build-a-table-driven-genome-comparison.md) | [Python](PYTHON/build-a-table-driven-genome-comparison.md) | Verified |
-| Quantitative Hepatoplasma map | [GUI](GUI/build-a-quantitative-genome-map.md) | [CLI](CLI/build-a-quantitative-genome-map.md) | [Python](PYTHON/build-a-quantitative-genome-map.md) | Verified |
-
-## Start with one genome
-
-- [Create and export your first circular genome diagram](GUI/first-circular-genome-diagram.md) — web app
-- [Create and export your first linear genome diagram](GUI/first-linear-genome-diagram.md) — web app
-- [Create a reproducible circular diagram from the command line](CLI/first-circular-genome-diagram.md)
-- [Create a reproducible linear diagram from the command line](CLI/first-linear-genome-diagram.md)
-- [Draw and save your first genome diagram from Python](PYTHON/first-genome-diagram.md)
-
-## Customize a complete biological map
-
-- [Recreate the Interactive SVG Gallery chloroplast map](GUI/build-an-annotated-chloroplast-map.md) — web app
-- [Recreate the Gallery chloroplast map from the command line](CLI/build-an-annotated-chloroplast-map.md) — CLI
-- [Recreate the Gallery chloroplast map from Python](PYTHON/build-an-annotated-chloroplast-map.md) — Python API
-- [Highlight mitochondrial features without editing the GenBank file](CLI/highlight-mitochondrial-features.md)
-- [Build a quantitative genome map with depth, GC content, and skew](CLI/build-a-quantitative-genome-map.md)
-- [Highlight mitochondrial features in the web app](GUI/highlight-mitochondrial-features.md)
-- [Build a quantitative genome map in the web app](GUI/build-a-quantitative-genome-map.md)
-
-## Compare genomes and proteins
-
-- [Compare two genomes with LOSATN in the browser](GUI/compare-genomes-losatn.md)
-- [Create protein Similarity groups with LOSATP in the browser](GUI/compare-proteins-losatp.md)
-- [Add circular comparison rings from precomputed results](GUI/add-precomputed-circular-comparison-rings.md)
-- [Find conserved gene order from the Gallery LOSATP Collinear project](GUI/compare-proteins-losatp-collinear.md)
-- [Build a biological-pair genome comparison from TSV manifests](CLI/build-a-table-driven-genome-comparison.md)
-- [Build the biological-pair comparison in the web app](GUI/build-a-table-driven-genome-comparison.md)
-
-## Hand off reproducible work
-
-- [Create an interactive figure and reproduce it from a saved session](GUI/create-and-resume-an-interactive-figure.md)
-- [Create and replay the same session from the command line](CLI/create-and-resume-an-interactive-figure.md)
-- [Create and replay the same session from Python](PYTHON/create-and-resume-an-interactive-figure.md)
+| Create and export a first Circular diagram | A labeled human mitochondrial genome with GC content and GC skew. | [Open](GUI/first-circular-genome-diagram.md) | [Open](CLI/first-circular-genome-diagram.md) | [Open](PYTHON/first-genome-diagram.md) |
+| Create and export a first Linear diagram | The complete Lambda genome with annotated features and a coordinate scale. | [Open](GUI/first-linear-genome-diagram.md) | [Open](CLI/first-linear-genome-diagram.md) | [Open](PYTHON/first-linear-genome-diagram.md) |
+| Compare nucleotide sequences with LOSATN | Complete Lambda and DE3 genomes connected by their qualified nucleotide matches. | [Open](GUI/compare-genomes-losatn.md) | [Open](CLI/compare-genomes-losatn.md) | [Open](PYTHON/compare-genomes-losatn.md) |
+| Group homologous proteins with LOSATP | Five aminoglycoside biosynthetic gene clusters aligned to `og_1` and connected by Similarity-group links. | [Open](GUI/compare-proteins-losatp.md) | [Open](CLI/compare-proteins-losatp.md) | [Open](PYTHON/compare-proteins-losatp.md) |
+| Reproduce a polished Gallery map | The tobacco chloroplast genome with functional colors, feature labels, plastome-region annotations, and GC content. | [Open](GUI/build-an-annotated-chloroplast-map.md) | [Open](CLI/build-an-annotated-chloroplast-map.md) | [Open](PYTHON/build-an-annotated-chloroplast-map.md) |
+| Add comparison rings from precomputed evidence | The human mitochondrial genome surrounded by three filtered TLOSATX comparison rings. | [Open](GUI/add-precomputed-circular-comparison-rings.md) | [Open](CLI/add-precomputed-circular-comparison-rings.md) | [Open](PYTHON/add-precomputed-circular-comparison-rings.md) |
+| Find conserved gene order with LOSATP | Five Hepatoplasmataceae genomes connected by Collinear protein-match blocks. | [Open](GUI/compare-proteins-losatp-collinear.md) | [Open](CLI/compare-proteins-losatp-collinear.md) | [Open](PYTHON/compare-proteins-losatp-collinear.md) |
+| Save and replay an interactive session | An interactive human mitochondrial diagram that can be restored with its inputs and settings. | [Open](GUI/create-and-resume-an-interactive-figure.md) | [Open](CLI/create-and-resume-an-interactive-figure.md) | [Open](PYTHON/create-and-resume-an-interactive-figure.md) |
+| Control feature visibility, labels, shapes, and colors | A human mitochondrial map that emphasizes selected biological features without editing the GenBank file. | [Open](GUI/highlight-mitochondrial-features.md) | [Open](CLI/highlight-mitochondrial-features.md) | [Open](PYTHON/highlight-mitochondrial-features.md) |
+| Add quantitative tracks | A Hepatoplasma genome map with read depth, GC content, and GC skew. | [Open](GUI/build-a-quantitative-genome-map.md) | [Open](CLI/build-a-quantitative-genome-map.md) | [Open](PYTHON/build-a-quantitative-genome-map.md) |
 
 Browse the same projects by interface in the [web app](GUI/README.md),
 [command-line](CLI/README.md), and [Python](PYTHON/README.md) indexes.

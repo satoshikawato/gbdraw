@@ -13,7 +13,6 @@
 7. [Reproduce the Hepatoplasmataceae Collinear map from Python](compare-proteins-losatp-collinear.md)
 8. [Create an interactive figure and reproduce it from Python](create-and-resume-an-interactive-figure.md)
 9. [Highlight mitochondrial features from Python](highlight-mitochondrial-features.md)
-10. [Compare two Majanivirus genome pairs from Python](build-a-table-driven-genome-comparison.md)
-11. [Build a quantitative genome map from Python](build-a-quantitative-genome-map.md)
+10. [Build a quantitative genome map from Python](build-a-quantitative-genome-map.md)
 
 The literal code in each Tutorial is executed by the documentation recipe runner and tests.

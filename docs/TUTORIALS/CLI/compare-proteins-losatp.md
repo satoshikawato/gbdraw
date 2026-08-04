@@ -60,6 +60,11 @@ gbdraw linear \
   --axis_stroke_width 5 \
   --scale_style ruler \
   --track_layout middle \
+  --keep_definition_left_aligned \
+  --definition_line_style 'name:size=20,weight=bold' \
+  --definition_line_style 'subtitle:size=20' \
+  --definition_line_style 'accession:size=20,color=#7b7c7d' \
+  --definition_line_style 'length:size=20,color=#7b7c7d' \
   --pairwise_match_style curve \
   --plot_title 'LOSATP Similarity groups across five whole BGC records' \
   --plot_title_position bottom \

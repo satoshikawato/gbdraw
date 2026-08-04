@@ -108,6 +108,22 @@ root => {
         labelTexts: labelTextsWithin(element),
       };
     });
+  const definitionBlocks = elements
+    .filter((element) => (
+      String(element.getAttribute('data-gbdraw-role') || '') === 'record-definition'
+    ))
+    .map((element) => ({
+      recordId: String(element.getAttribute('data-gbdraw-record-id') || ''),
+      translate: parseTranslate(element),
+      lines: Array.from(element.querySelectorAll('text[data-definition-line-kind]'))
+        .map((line) => ({
+          kind: String(line.getAttribute('data-definition-line-kind') || ''),
+          fontSize: Number(line.getAttribute('font-size')),
+          fontWeight: String(line.getAttribute('font-weight') || ''),
+          fill: String(line.getAttribute('fill') || ''),
+          textAnchor: String(line.getAttribute('text-anchor') || ''),
+        })),
+    }));
   const recordGroup = elements.find((element) => (
     String(element.tagName || '').toLowerCase() === 'g' &&
     element.getAttribute('data-gbdraw-record-id') === 'NC_012920.1'
@@ -186,6 +202,7 @@ root => {
     recordTranslate: parseTranslate(recordGroup),
     linearRecordTranslate: parseTranslate(linearRecordGroup),
     recordPlacements,
+    definitionBlocks,
     legendTranslate: parseTranslate(elementById('legend')),
     rootTag: String(svg.localName || svg.tagName || '').toLowerCase(),
     interactiveSvg: svg.getAttribute('data-gbdraw-interactive-svg') === 'true',
@@ -730,6 +747,45 @@ def assert_gui_bgc_similarity_groups_svg(report: dict[str, Any]) -> None:
             "Similarity-group IDs changed: "
             f"expected {sorted(expected_group_ids)}, found {sorted(linked_group_ids)}"
         )
+
+
+def assert_gui_bgc_gallery_definition_presentation(report: dict[str, Any]) -> None:
+    """Require the BGC Gallery's locked, left-aligned definition typography."""
+
+    blocks = report.get("definitionBlocks", [])
+    if len(blocks) != 5:
+        raise AssertionError(f"Expected five BGC definition blocks, found {blocks!r}")
+    x_positions = [
+        float(block["translate"][0])
+        for block in blocks
+        if isinstance(block.get("translate"), list)
+    ]
+    if len(x_positions) != 5 or max(x_positions) - min(x_positions) > 1e-6:
+        raise AssertionError(f"BGC definitions are not locked to one column: {blocks!r}")
+
+    expected = {
+        "name": (20.0, "bold", "black"),
+        "subtitle": (20.0, "normal", "black"),
+        "accession": (20.0, "normal", "#7b7c7d"),
+        "length": (20.0, "normal", "#7b7c7d"),
+    }
+    for block in blocks:
+        lines = {
+            str(line.get("kind") or ""): (
+                float(line.get("fontSize") or 0),
+                str(line.get("fontWeight") or ""),
+                str(line.get("fill") or "").lower(),
+            )
+            for line in block.get("lines", [])
+        }
+        anchors = {
+            str(line.get("textAnchor") or "") for line in block.get("lines", [])
+        }
+        if lines != expected or anchors != {"start"}:
+            raise AssertionError(
+                "BGC definition typography differs from the Interactive SVG Gallery: "
+                f"{block!r}"
+            )
 
 
 def assert_gui_bgc_collinear_svg(report: dict[str, Any]) -> None:

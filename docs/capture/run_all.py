@@ -47,7 +47,6 @@ from config import (  # noqa: E402
     gui_precomputed_circular_rings_screenshot_paths,
     gui_session_reproduction_screenshot_paths,
     gui_styling_screenshot_paths,
-    gui_table_comparison_screenshot_paths,
     gui_tlosatx_screenshot_paths,
     gui_uploaded_comparison_screenshot_paths,
 )
@@ -107,9 +106,6 @@ from flows.tutorials.gui_precomputed_circular_rings import (  # noqa: E402
 )
 from flows.tutorials.gui_quantitative_map import (  # noqa: E402
     capture_gui_quantitative_map,
-)
-from flows.tutorials.gui_table_comparison import (  # noqa: E402
-    capture_gui_table_comparison,
 )
 from web_server import CaptureWebServer  # noqa: E402
 
@@ -201,11 +197,6 @@ SCENARIOS = {
     "T-GUI-10": ScenarioCapture(
         screenshot_paths=gui_feature_highlight_screenshot_paths,
         capture=capture_gui_feature_highlight,
-        tier="extended",
-    ),
-    "T-GUI-11": ScenarioCapture(
-        screenshot_paths=gui_table_comparison_screenshot_paths,
-        capture=capture_gui_table_comparison,
         tier="extended",
     ),
     "T-GUI-12": ScenarioCapture(

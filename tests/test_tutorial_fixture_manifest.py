@@ -11,9 +11,6 @@ from urllib.parse import unquote
 
 from Bio import SeqIO
 
-from gbdraw.io.cli_tables import read_comparisons_table, read_records_table
-
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"
 MANIFEST_PATH = FIXTURE_ROOT / "manifest.json"
@@ -406,68 +403,6 @@ def test_metazoan_mtdna_fastas_match_complete_genbank_sources() -> None:
         assert fasta.id == source.id == fasta_metadata["records"][0]["id"]
         assert str(fasta.seq) == str(source.seq).upper()
         assert len(fasta) == fasta_metadata["records"][0]["length"]
-
-
-def test_majanivirus_tables_resolve_complete_records_and_comparison_endpoints() -> None:
-    manifest = _load_manifest()
-    files = manifest["files"]
-    fixture = manifest["fixtures"]["majanivirus-table-comparison"]
-    semantics = fixture["expectedSemantics"]
-    root = FIXTURE_ROOT / "majanivirus-table-comparison"
-
-    records_table = read_records_table(str(root / "records.tsv"))
-    assert records_table.input_kind == "gbk"
-    assert records_table.record_ids == semantics["recordIds"]
-    assert records_table.reverse_flags == semantics["reverseComplement"]
-    assert [row.order for row in records_table.rows] == [1, 2, 3, 4]
-    assert [row.row for row in records_table.rows] == semantics["rows"]
-    assert [row.column for row in records_table.rows] == semantics["columns"]
-    assert len(set(records_table.record_ids)) == len(records_table.rows)
-
-    source_records = [SeqIO.read(path, "genbank") for path in records_table.gbk_files]
-    assert [record.id for record in source_records] == semantics["recordIds"]
-    assert [len(record) for record in source_records] == semantics["recordLengths"]
-    assert [record.annotations.get("topology") for record in source_records] == ["linear"] * 4
-    assert all("complete genome" in record.description for record in source_records)
-
-    comparisons = read_comparisons_table(str(root / "comparisons.tsv"))
-    endpoints = [[row.query, row.subject] for row in comparisons.rows]
-    assert endpoints == semantics["comparisonEndpoints"]
-    assert all(endpoint in set(records_table.record_ids) for pair in endpoints for endpoint in pair)
-    assert [Path(row.blast).name for row in comparisons.rows] == [
-        "MjeNMV.MelaMJNV.tblastx.out",
-        "PemoMJNVA.PeseMJNV.tblastx.out",
-    ]
-
-    record_lengths = dict(zip(semantics["recordIds"], semantics["recordLengths"], strict=True))
-    evidence_ids = (
-        "majanivirus-mjenmv-melamjnv-tblastx",
-        "majanivirus-pemomjnva-pesemjnv-tblastx",
-    )
-    for row, evidence_id in zip(comparisons.rows, evidence_ids, strict=True):
-        expected = files[evidence_id]["expectedSemantics"]
-        data_rows = [
-            line.split("\t")
-            for line in Path(row.blast).read_text(encoding="utf-8").splitlines()
-            if line and not line.startswith("#")
-        ]
-        assert len(data_rows) == expected["rawRowCount"]
-        assert {len(cells) for cells in data_rows} == {expected["columnCount"]}
-        assert {(cells[0], cells[1]) for cells in data_rows} == {(row.query, row.subject)}
-        assert all(
-            1 <= int(cells[6]) <= record_lengths[row.query]
-            and 1 <= int(cells[7]) <= record_lengths[row.query]
-            and 1 <= int(cells[8]) <= record_lengths[row.subject]
-            and 1 <= int(cells[9]) <= record_lengths[row.subject]
-            for cells in data_rows
-        )
-        retained = [
-            cells
-            for cells in data_rows
-            if float(cells[2]) >= expected["identityMinimum"]
-            and int(cells[3]) >= expected["alignmentLengthMinimum"]
-        ]
-        assert len(retained) == expected["tutorialRetainedRowCount"]
 
 
 def test_metazoan_mtdna_comparison_builder_is_byte_reproducible() -> None:

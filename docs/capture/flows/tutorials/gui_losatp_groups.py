@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 from playwright.sync_api import BrowserType
 
+from assertions.svg_semantics import (
+    assert_gui_bgc_gallery_definition_presentation,
+    assert_gui_bgc_similarity_groups_svg,
+)
 from config import GUI_LOSATP_GROUPS_SCREENSHOT_NAMES
 from flows.bgc_losatp import BgcLosatpResult, capture_bgc_losatp
 from flows.web_capture import assert_output_paths
@@ -25,6 +29,10 @@ def capture_gui_losatp_groups(
         GUI_LOSATP_GROUPS_SCREENSHOT_NAMES,
         "T-GUI-04",
     )
+    def assert_final(report: dict[str, Any]) -> None:
+        assert_gui_bgc_similarity_groups_svg(report)
+        assert_gui_bgc_gallery_definition_presentation(report)
+
     return capture_bgc_losatp(
         browser_type,
         base_url,
@@ -46,4 +54,6 @@ def capture_gui_losatp_groups(
         download_member_fasta=False,
         separate_strands=False,
         align_orthogroup_id="og_1",
+        match_gallery_definitions=True,
+        assert_final=assert_final,
     )

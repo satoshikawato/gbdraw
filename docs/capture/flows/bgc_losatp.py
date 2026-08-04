@@ -160,7 +160,12 @@ def _set_bgc_inputs(page: Page) -> None:
             expect(reverse_control).not_to_be_checked()
 
 
-def _set_gallery_quality_presentation(page: Page, *, title: str) -> None:
+def _set_gallery_quality_presentation(
+    page: Page,
+    *,
+    title: str,
+    match_gallery_definitions: bool,
+) -> None:
     colors = page.get_by_label("Colors", exact=True)
     colors.click()
     palette = page.get_by_label("Palette", exact=True)
@@ -229,10 +234,46 @@ def _set_gallery_quality_presentation(page: Page, *, title: str) -> None:
     page.get_by_label("Plot Title", exact=True).fill(title)
     page.get_by_label("Plot Title Position", exact=True).select_option("bottom")
     page.get_by_label("Legend Position", exact=True).select_option("bottom")
+
+    if match_gallery_definitions:
+        definition_styles = page.get_by_text(
+            "Definition Line Styles", exact=True
+        ).locator("xpath=../following-sibling::div[1]")
+
+        def set_definition_line(
+            label: str,
+            *,
+            size: str,
+            bold: bool = False,
+            color: str | None = None,
+        ) -> None:
+            line_label = definition_styles.get_by_text(label, exact=True)
+            size_input = line_label.locator("xpath=following-sibling::input[1]")
+            size_input.fill(size)
+            expect(size_input).to_have_value(size)
+            weight_controls = size_input.locator("xpath=following-sibling::div[1]")
+            weight_controls.get_by_role(
+                "button", name="Bold" if bold else "Normal", exact=True
+            ).click()
+            if color is not None:
+                fill_input = page.get_by_label(
+                    f"{label} definition line fill value", exact=True
+                )
+                fill_input.fill(color)
+                expect(fill_input).to_have_value(color)
+
+        set_definition_line("Name / Species", size="20", bold=True)
+        set_definition_line("Subtitle", size="20")
+        set_definition_line("Accession", size="20", color="#7b7c7d")
+        set_definition_line("Length / Coord.", size="20", color="#7b7c7d")
     title_and_legend.click()
 
     track_layout = page.get_by_label("Track Layout", exact=True)
     track_layout.select_option("middle")
+    if match_gallery_definitions:
+        lock_definition = page.get_by_label("Lock Definition Column", exact=True)
+        lock_definition.check()
+        expect(lock_definition).to_be_checked()
 
 
 def _configure_losatp(page: Page, *, mode: str, output_prefix: str) -> None:
@@ -343,7 +384,30 @@ def _open_orthogroup_alignment_target(page: Page, orthogroup_id: str) -> Any:
         """,
         orthogroup_id,
     )
-    page.mouse.click(target["x"], target["y"])
+    page.evaluate(
+        """
+        ({ featureId, x, y }) => {
+          const svg = document.querySelector('[data-gbdraw-feature-id]')?.ownerSVGElement
+            || document.querySelector('svg');
+          const element = Array.from(
+            svg?.querySelectorAll('path[data-gbdraw-feature-id], polygon[data-gbdraw-feature-id], rect[data-gbdraw-feature-id]') || []
+          ).find(
+            (candidate) => String(
+              candidate.getAttribute('data-gbdraw-feature-id') || ''
+            ).trim() === featureId
+          );
+          if (!element) throw new Error(`Rendered feature ${featureId} was not found`);
+          element.dispatchEvent(new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            clientX: x,
+            clientY: y,
+            view: window
+          }));
+        }
+        """,
+        target,
+    )
     page.wait_for_function(
         """
         ({ featureId, orthogroupId }) => {
@@ -495,6 +559,7 @@ def capture_bgc_losatp(
     separate_strands: bool | None = None,
     assert_final: Callable[[dict[str, Any]], None] | None = None,
     align_orthogroup_id: str | None = None,
+    match_gallery_definitions: bool = False,
 ) -> BgcLosatpResult:
     """Run one real serial LOSATP journey from five complete source files."""
 
@@ -546,7 +611,11 @@ def capture_bgc_losatp(
             if mode == "orthogroup"
             else "LOSATP Collinear blocks across five whole BGC records"
         )
-        _set_gallery_quality_presentation(page, title=title)
+        _set_gallery_quality_presentation(
+            page,
+            title=title,
+            match_gallery_definitions=match_gallery_definitions,
+        )
         _configure_losatp(
             page,
             mode=mode,

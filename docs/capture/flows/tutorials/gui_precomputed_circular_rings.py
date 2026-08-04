@@ -219,6 +219,9 @@ def capture_gui_precomputed_circular_rings(
             "precomputed_circular_rings"
         )
         page.get_by_label("Species", exact=True).fill("<i>Homo sapiens</i>")
+        track_preset = page.get_by_label("Track Preset", exact=True)
+        track_preset.select_option("middle")
+        expect(track_preset).to_have_value("middle")
         page.get_by_label("Separate Strands", exact=True).uncheck()
         screenshot_bytes[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[0]] = (
             capture_screenshot(

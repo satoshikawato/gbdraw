@@ -13,8 +13,8 @@
     },
     "extended": {
       "maxUncompressedBytes": 16777216,
-      "actualUncompressedBytes": 14144602,
-      "fileCount": 28
+      "actualUncompressedBytes": 7848360,
+      "fileCount": 20
     }
   },
   "fixtures": {
@@ -320,37 +320,6 @@
           "alignmentLengthMinimum": 50
         },
         "note": "Three byte-stable TLOSATX tables compare complete zebrafish, fruit-fly, and nematode mitochondrial genomes with the complete human mitochondrial subject."
-      }
-    },
-    "majanivirus-table-comparison": {
-      "title": "Four complete majanivirus genomes with two precomputed comparisons",
-      "packageTier": "extended",
-      "sizeBudgetBytes": 6300000,
-      "fileIds": [
-        "majanivirus-mjenmv-genbank",
-        "majanivirus-pemomjnva-genbank",
-        "majanivirus-melamjnv-genbank",
-        "majanivirus-pesemjnv-genbank",
-        "majanivirus-mjenmv-melamjnv-tblastx",
-        "majanivirus-pemomjnva-pesemjnv-tblastx",
-        "majanivirus-records-table",
-        "majanivirus-comparisons-table"
-      ],
-      "fileReferences": [],
-      "scenarioIds": ["T-GUI-11", "T-CLI-04", "T-PY-10"],
-      "expectedSemantics": {
-        "recordCount": 4,
-        "recordIds": ["LC738868.1", "LC738874.1", "LC738870.1", "LC738873.1"],
-        "recordLengths": [306008, 287061, 294144, 291934],
-        "recordsAreWholeCanonicalSources": true,
-        "rows": [1, 2, 3, 4],
-        "columns": [1, 1, 1, 1],
-        "reverseComplement": [false, false, true, true],
-        "comparisonEndpoints": [
-          ["LC738868.1", "LC738874.1"],
-          ["LC738870.1", "LC738873.1"]
-        ],
-        "comparisonPrograms": ["TBLASTX", "TBLASTX"]
       }
     },
     "hepatoplasmataceae-five": {
@@ -1973,120 +1942,6 @@
         "outputStatistics": {"recordCount": 1, "sequenceLength": 13794}
       },
       "scenarioIds": ["T-GUI-06", "T-CLI-09", "T-PY-06"]
-    },
-    "majanivirus-mjenmv-genbank": {
-      "fixtureId": "majanivirus-table-comparison",
-      "relativePath": "majanivirus-table-comparison/MjeNMV.gb",
-      "role": "raw",
-      "mediaType": "text/plain",
-      "inputType": "genbank",
-      "sizeBytes": 527653,
-      "sha256": "20b7af3666c66be83002c4f8417b2b07664e7d7d2e8ea6a6c7c589bd5157c0ba",
-      "packageTier": "extended",
-      "records": [{"id": "LC738868.1", "accession": "LC738868", "sequenceVersion": 1, "organism": "Marsupenaeus japonicus endogenous nimavirus", "description": "MAG: Marsupenaeus japonicus endogenous nimavirus Ginoza2017 DNA, complete genome", "topology": "linear", "length": 306008, "sequenceSha256": "bf065087be9f68b2b342cb1f3551d390de6245f9c6047120c31fa8a97564c84e", "featureCount": 112, "displayedFeatureCount": 111, "cdsCount": 111, "cdsStrandCounts": {"positive": 47, "negative": 64, "unknown": 0}}],
-      "provenance": {"sourceName": "NCBI Nucleotide (DDBJ/ENA/GenBank)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/LC738868.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
-      "derivation": null,
-      "scenarioIds": ["T-GUI-11", "T-CLI-04", "T-PY-10"]
-    },
-    "majanivirus-pemomjnva-genbank": {
-      "fixtureId": "majanivirus-table-comparison",
-      "relativePath": "majanivirus-table-comparison/PemoMJNVA.gb",
-      "role": "raw",
-      "mediaType": "text/plain",
-      "inputType": "genbank",
-      "sizeBytes": 505839,
-      "sha256": "1f662eb6ba001a6c396adfe48e67119ecb0ba034b3164df17eae844e13df0374",
-      "packageTier": "extended",
-      "records": [{"id": "LC738870.1", "accession": "LC738870", "sequenceVersion": 1, "organism": "Penaeus monodon majanivirus A", "description": "MAG: Penaeus monodon majanivirus A Mikawa2016 DNA, complete genome", "topology": "linear", "length": 294144, "sequenceSha256": "824d0e670eb540f0eb91991745d3a5d0f4a30965e861ea5a5030109997b5442d", "featureCount": 116, "displayedFeatureCount": 115, "cdsCount": 115, "cdsStrandCounts": {"positive": 50, "negative": 65, "unknown": 0}}],
-      "provenance": {"sourceName": "NCBI Nucleotide (DDBJ/ENA/GenBank)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/LC738870.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
-      "derivation": null,
-      "scenarioIds": ["T-GUI-11", "T-CLI-04", "T-PY-10"]
-    },
-    "majanivirus-melamjnv-genbank": {
-      "fixtureId": "majanivirus-table-comparison",
-      "relativePath": "majanivirus-table-comparison/MelaMJNV.gb",
-      "role": "raw",
-      "mediaType": "text/plain",
-      "inputType": "genbank",
-      "sizeBytes": 497312,
-      "sha256": "e226b4b6651a5e70a5a402c7553a231a082f2714bee92623d78040ba119649a0",
-      "packageTier": "extended",
-      "records": [{"id": "LC738874.1", "accession": "LC738874", "sequenceVersion": 1, "organism": "Melicertus latisulcatus majanivirus", "description": "MAG: Melicertus latisulcatus majanivirus Okinawa2016 DNA, complete genome", "topology": "linear", "length": 287061, "sequenceSha256": "4028b4979b4cc5f07483fb4da3b08d12d4737142663108f011b9ee548e6fe0e3", "featureCount": 105, "displayedFeatureCount": 104, "cdsCount": 104, "cdsStrandCounts": {"positive": 43, "negative": 61, "unknown": 0}}],
-      "provenance": {"sourceName": "NCBI Nucleotide (DDBJ/ENA/GenBank)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/LC738874.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
-      "derivation": null,
-      "scenarioIds": ["T-GUI-11", "T-CLI-04", "T-PY-10"]
-    },
-    "majanivirus-pesemjnv-genbank": {
-      "fixtureId": "majanivirus-table-comparison",
-      "relativePath": "majanivirus-table-comparison/PeseMJNV.gb",
-      "role": "raw",
-      "mediaType": "text/plain",
-      "inputType": "genbank",
-      "sizeBytes": 500530,
-      "sha256": "8de24deafddc6275cc39556818606e17ae7fff582e697257f9814fe191d6dadb",
-      "packageTier": "extended",
-      "records": [{"id": "LC738873.1", "accession": "LC738873", "sequenceVersion": 1, "organism": "Penaeus semisulcatus majanivirus", "description": "MAG: Penaeus semisulcatus majanivirus Kagawa2020 DNA, complete genome", "topology": "linear", "length": 291934, "sequenceSha256": "27253dc61da2adf3811192f7439aac0a8caea73a4990ac7796b6ed99197617e1", "featureCount": 111, "displayedFeatureCount": 110, "cdsCount": 110, "cdsStrandCounts": {"positive": 50, "negative": 60, "unknown": 0}}],
-      "provenance": {"sourceName": "NCBI Nucleotide (DDBJ/ENA/GenBank)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/LC738873.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
-      "derivation": null,
-      "scenarioIds": ["T-GUI-11", "T-CLI-04", "T-PY-10"]
-    },
-    "majanivirus-mjenmv-melamjnv-tblastx": {
-      "fixtureId": "majanivirus-table-comparison",
-      "relativePath": "majanivirus-table-comparison/MjeNMV.MelaMJNV.tblastx.out",
-      "role": "raw",
-      "mediaType": "text/tab-separated-values",
-      "inputType": "blast-outfmt6",
-      "sizeBytes": 1752746,
-      "sha256": "7d464249ef018f632ab891dd34fe3e3bc0c8420216e5a7062508d6ddd7be0502",
-      "packageTier": "extended",
-      "records": [],
-      "expectedSemantics": {"program": "TBLASTX", "queryRecordId": "LC738868.1", "subjectRecordId": "LC738874.1", "columnCount": 12, "rawRowCount": 23709, "tutorialRetainedRowCount": 80, "identityMinimum": 97, "alignmentLengthMinimum": 500},
-      "provenance": {"sourceName": "gbdraw retained Majanivirus TBLASTX example", "sourceUrl": "https://github.com/satoshikawato/gbdraw/tree/main/examples", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "Repository-retained comparison evidence distributed under the gbdraw repository license; source sequences retain their GenBank data-usage notes.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
-      "derivation": null,
-      "scenarioIds": ["T-GUI-11", "T-CLI-04", "T-PY-10"]
-    },
-    "majanivirus-pemomjnva-pesemjnv-tblastx": {
-      "fixtureId": "majanivirus-table-comparison",
-      "relativePath": "majanivirus-table-comparison/PemoMJNVA.PeseMJNV.tblastx.out",
-      "role": "raw",
-      "mediaType": "text/tab-separated-values",
-      "inputType": "blast-outfmt6",
-      "sizeBytes": 2511804,
-      "sha256": "fa2c9ed87ed04de0c03295c2aaafbf90b6cec979ec846bc53eb1250296e5a6a4",
-      "packageTier": "extended",
-      "records": [],
-      "expectedSemantics": {"program": "TBLASTX", "queryRecordId": "LC738870.1", "subjectRecordId": "LC738873.1", "columnCount": 12, "rawRowCount": 34062, "tutorialRetainedRowCount": 2, "identityMinimum": 97, "alignmentLengthMinimum": 500},
-      "provenance": {"sourceName": "gbdraw retained Majanivirus TBLASTX example", "sourceUrl": "https://github.com/satoshikawato/gbdraw/tree/main/examples", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "Repository-retained comparison evidence distributed under the gbdraw repository license; source sequences retain their GenBank data-usage notes.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
-      "derivation": null,
-      "scenarioIds": ["T-GUI-11", "T-CLI-04", "T-PY-10"]
-    },
-    "majanivirus-records-table": {
-      "fixtureId": "majanivirus-table-comparison",
-      "relativePath": "majanivirus-table-comparison/records.tsv",
-      "role": "rule",
-      "mediaType": "text/tab-separated-values",
-      "inputType": "records-table",
-      "sizeBytes": 235,
-      "sha256": "2eeabbde5392188faddedd35731bfc0de9901252548feaac1c080babf9c38c58",
-      "packageTier": "extended",
-      "records": [],
-      "provenance": {"sourceName": "gbdraw tutorial records manifest", "sourceUrl": "https://github.com/satoshikawato/gbdraw", "retrievedOn": "2026-08-04", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "Repository-maintained tutorial table distributed under the gbdraw repository license.", "filenameNormalization": null},
-      "derivation": null,
-      "scenarioIds": ["T-GUI-11", "T-CLI-04", "T-PY-10"]
-    },
-    "majanivirus-comparisons-table": {
-      "fixtureId": "majanivirus-table-comparison",
-      "relativePath": "majanivirus-table-comparison/comparisons.tsv",
-      "role": "rule",
-      "mediaType": "text/tab-separated-values",
-      "inputType": "comparisons-table",
-      "sizeBytes": 123,
-      "sha256": "faaf1c29181e762d68c989b58cd225db5e01ce79bade321d161a2e0434c0c224",
-      "packageTier": "extended",
-      "records": [],
-      "provenance": {"sourceName": "gbdraw tutorial comparison manifest", "sourceUrl": "https://github.com/satoshikawato/gbdraw", "retrievedOn": "2026-08-04", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "Repository-maintained tutorial table distributed under the gbdraw repository license.", "filenameNormalization": null},
-      "derivation": null,
-      "scenarioIds": ["T-GUI-11", "T-CLI-04", "T-PY-10"]
     },
     "hepatoplasmataceae-ap027078-genbank": {
       "fixtureId": "hepatoplasmataceae-five",

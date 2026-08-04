@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "docs/scenarios/manifest.json"
 SCENARIO_ID_RE = re.compile(r"^(?:T|H|R|E|A)-[A-Z]+-\d{2}$")
 ROLE_COUNTS = {
-    "tutorial": 33,
+    "tutorial": 30,
     "how-to": 33,
     "reference": 10,
     "explanation": 6,
@@ -37,7 +37,6 @@ SCREENSHOT_BUDGETS = {
     "T-GUI-08": 5,
     "T-GUI-09": 6,
     "T-GUI-10": 2,
-    "T-GUI-11": 2,
     "T-GUI-12": 2,
     "H-GUI-01": 3,
     "H-GUI-02": 3,
@@ -89,7 +88,7 @@ def test_chapter_plan_gate_is_approved_with_a_bounded_fixture_budget() -> None:
 def test_chapter_census_matches_the_reviewed_plan() -> None:
     chapters = _manifest()["chapters"]
 
-    assert len(chapters) == 84
+    assert len(chapters) == 81
     assert Counter(chapter["role"] for chapter in chapters) == ROLE_COUNTS
 
     ids = [chapter["id"] for chapter in chapters]
@@ -97,7 +96,7 @@ def test_chapter_census_matches_the_reviewed_plan() -> None:
     assert len(ids) == len(set(ids))
     assert len(destinations) == len(set(destinations))
 
-    assert [chapter["id"] for chapter in chapters[:33]] == [
+    assert [chapter["id"] for chapter in chapters[:30]] == [
         "T-GUI-01",
         "T-GUI-02",
         "T-GUI-03",
@@ -107,12 +106,10 @@ def test_chapter_census_matches_the_reviewed_plan() -> None:
         "T-GUI-08",
         "T-GUI-09",
         "T-GUI-10",
-        "T-GUI-11",
         "T-GUI-12",
         "T-CLI-01",
         "T-CLI-02",
         "T-CLI-03",
-        "T-CLI-04",
         "T-CLI-05",
         "T-CLI-06",
         "T-CLI-07",
@@ -129,7 +126,6 @@ def test_chapter_census_matches_the_reviewed_plan() -> None:
         "T-PY-07",
         "T-PY-08",
         "T-PY-09",
-        "T-PY-10",
         "T-PY-11",
     ]
 
@@ -274,7 +270,6 @@ def test_tutorials_declare_an_early_visible_result_on_their_real_surface() -> No
             "T-GUI-08",
             "T-GUI-09",
             "T-CLI-03",
-            "T-CLI-04",
             "T-CLI-05",
             "T-CLI-06",
             "T-PY-02",

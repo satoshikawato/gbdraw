@@ -5,7 +5,6 @@
 > [!NOTE]
 > This compatibility URL is kept for one documentation-renovation release. Table procedures and column contracts now have separate canonical pages.
 
-- [Compare two biological genome pairs from TSV manifests](./CLI/build-a-table-driven-genome-comparison.md)
 - [Use record, comparison, conservation, annotation, and track tables](../HOW_TO/CLI/use-input-tables.md)
 - [How to arrange multiple circular records and tracks](../HOW_TO/CLI/arrange-multiple-circular-records-and-tracks.md)
 - [How to add region annotations and custom track slots](../HOW_TO/CLI/add-region-annotations-and-track-slots.md)

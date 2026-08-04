@@ -68,11 +68,6 @@
       "variants": {"gui": "T-GUI-10", "cli": "T-CLI-03", "python": "T-PY-09"},
       "parity": "verified"
     },
-    "majanivirus-table-comparison": {
-      "figure": "Four Majanivirus records in two biological comparison pairs driven by TSV manifests",
-      "variants": {"gui": "T-GUI-11", "cli": "T-CLI-04", "python": "T-PY-10"},
-      "parity": "verified"
-    },
     "quantitative-hepatoplasma-map": {
       "figure": "Complete AP027133 genome with mean depth, GC content, and GC skew",
       "variants": {"gui": "T-GUI-12", "cli": "T-CLI-05", "python": "T-PY-11"},
@@ -182,8 +177,7 @@
     "tobacco-plastome-regions": {"tier": "extended"},
     "depth-1kb": {"tier": "extended"},
     "metazoan-mitochondria-four": {"tier": "extended"},
-    "metazoan-mitochondria-comparison": {"tier": "extended"},
-    "majanivirus-table-comparison": {"tier": "extended"}
+    "metazoan-mitochondria-comparison": {"tier": "extended"}
   },
   "chapters": [
     {
@@ -265,8 +259,8 @@
       "capabilities": ["comparison.losatp-groups", "interactive.group-popup", "output.comparison-data", "output.fasta-data"],
       "canonical_for": ["comparison.losatp-groups"],
       "fixtures": ["aminoglycoside-bgc-five"],
-      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "similarity-groups", "alignment_group": "og_1", "scheduling": "serial", "threads": 1, "separate_strands": false},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_groups.py", "tier": "extended", "expected_outputs": ["bgc_losatp_groups.tsv", "bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "whole_linear_record_count=5", "displayed_features=155", "feature_height=75", "feature_stroke_width=2", "labels=first_record_gene", "separate_strands=false", "group_count=23", "alignment_group=og_1", "svg.group_links=77", "adjacent_endpoints_only=true", "direct_0708_0713_edge=false", "raw_rows=232", "popup.has_group_members=true"]},
+      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "similarity-groups", "alignment_group": "og_1", "scheduling": "serial", "threads": 1, "separate_strands": false, "lock_definition_column": true, "definition_name": {"font_size": 20, "font_weight": "bold"}, "definition_other_lines": {"font_size": 20, "font_weight": "normal"}},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_groups.py", "tier": "extended", "expected_outputs": ["bgc_losatp_groups.tsv", "bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "whole_linear_record_count=5", "displayed_features=155", "feature_height=75", "feature_stroke_width=2", "labels=first_record_gene", "separate_strands=false", "definition_column=left", "definition_font_size=20", "definition_name_weight=bold", "group_count=23", "alignment_group=og_1", "svg.group_links=77", "adjacent_endpoints_only=true", "direct_0708_0713_edge=false", "raw_rows=232", "popup.has_group_members=true"]},
       "screenshots": [
         {"path": "docs/images/t-gui-04/01-input-ready.png", "reason": "Confirm all five annotated BGC inputs and their order.", "alt": "Five annotated BGC records selected for protein comparison"},
         {"path": "docs/images/t-gui-04/02-first-diagram.png", "reason": "Show the plain five-record map before protein search.", "alt": "Plain five-record BGC linear diagram"},
@@ -312,8 +306,8 @@
       "capabilities": ["comparison.uploaded-tables", "comparison.circular-rings", "interactive.match-popup", "output.fasta-data", "output.static-svg"],
       "canonical_for": [],
       "fixtures": ["human-mitochondrion", "metazoan-mitochondria-comparison"],
-      "settings": {"mode": "circular", "reference_record": "NC_012920.1", "reference_side": "subject", "ring_count": 3},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_precomputed_circular_rings.py", "tier": "extended", "expected_outputs": ["precomputed_circular_rings.svg", "circular_hsp_spans.fasta"], "assertions": ["first_result_step=2", "ring_count=3", "ring_order=danio,drosophila,caenorhabditis", "reference_side=subject", "popup.has_hsp_metadata=true", "fasta.both_spans=true"]},
+      "settings": {"mode": "circular", "reference_record": "NC_012920.1", "reference_side": "subject", "ring_count": 3, "track_preset": "middle"},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_precomputed_circular_rings.py", "tier": "extended", "expected_outputs": ["precomputed_circular_rings.svg", "circular_hsp_spans.fasta"], "assertions": ["first_result_step=2", "track_preset=middle", "ring_count=3", "ring_order=danio,drosophila,caenorhabditis", "reference_side=subject", "popup.has_hsp_metadata=true", "fasta.both_spans=true"]},
       "screenshots": [
         {"path": "docs/images/t-gui-06/01-input-ready.png", "reason": "Confirm the complete human mitochondrial reference.", "alt": "Human mitochondrial GenBank input ready for Circular comparison"},
         {"path": "docs/images/t-gui-06/02-first-diagram.png", "reason": "Show the reference before comparison rings are added.", "alt": "First circular human mitochondrial diagram without similarity rings"},
@@ -393,26 +387,6 @@
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
-      "id": "T-GUI-11",
-      "project_id": "majanivirus-table-comparison",
-      "title": "Compare two Majanivirus genome pairs in the web app",
-      "role": "tutorial",
-      "surface": "gui",
-      "priority": "P1",
-      "capabilities": ["entry.hosted-gui", "input.multi-record", "input.reverse-complement", "layout.linear-multi-row", "layout.rulers", "comparison.uploaded-tables", "output.static-svg"],
-      "canonical_for": [],
-      "fixtures": ["majanivirus-table-comparison"],
-      "settings": {"mode": "linear", "record_count": 4, "rows": [1, 2, 3, 4], "reverse_complement": [false, false, true, true], "comparison_pairs": [["LC738868.1", "LC738874.1"], ["LC738870.1", "LC738873.1"]]},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_table_comparison.py", "tier": "extended", "expected_outputs": ["table_driven_comparison.svg"], "assertions": ["first_result_step=3", "record_cells_and_orientations_match=true", "comparison_endpoint_pairs=2", "retained_matches=82", "pairwise_match_style=curve", "rulers_and_shared_scale=true", "parity=T-CLI-04,T-PY-10"]},
-      "screenshots": [
-        {"path": "docs/images/t-gui-11/comparison-settings.png", "reason": "Record the four-row layout and two explicit uploaded comparison pairs.", "alt": "Web-app record layout and uploaded comparison settings for four Majanivirus genomes"},
-        {"path": "docs/images/t-gui-11/comparison-result.png", "reason": "Verify both filtered comparison layers and record-local rulers.", "alt": "Four Majanivirus genomes joined by two filtered TBLASTX comparison layers"}
-      ],
-      "sources": ["docs/TUTORIALS/CLI/build-a-table-driven-genome-comparison.md", "docs/HOW_TO/GUI/use-uploaded-blast-results.md"],
-      "destination": "docs/TUTORIALS/GUI/build-a-table-driven-genome-comparison.md",
-      "status": {"implementation": "verified", "review": "approved"}
-    },
-    {
       "id": "T-GUI-12",
       "project_id": "quantitative-hepatoplasma-map",
       "title": "Build a quantitative genome map in the web app",
@@ -484,23 +458,6 @@
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
-      "id": "T-CLI-04",
-      "project_id": "majanivirus-table-comparison",
-      "title": "Compare two biological genome pairs from TSV manifests",
-      "role": "tutorial",
-      "surface": "cli",
-      "priority": "P1",
-      "capabilities": ["entry.linear-cli", "input.tsv-manifests", "layout.linear-multi-row", "layout.rulers", "comparison.uploaded-tables", "output.static-svg"],
-      "canonical_for": [],
-      "fixtures": ["majanivirus-table-comparison"],
-      "settings": {"mode": "linear", "working_directory": "empty", "record_count": 4, "layout": "single-column biological pairs", "baseline_output": "table_driven_comparison_baseline.svg", "finished_output": "table_driven_comparison.svg"},
-      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["table_driven_comparison_baseline.svg", "table_driven_comparison.svg"], "assertions": ["first_result_step=2", "records_table.valid=true", "comparisons_table.referential_integrity=true", "record_cells_and_orientations_match=true", "comparison_endpoint_pairs=2", "rulers_and_shared_scale=true"]},
-      "screenshots": [],
-      "sources": ["docs/TUTORIALS/2_Comparative_Genomics.md", "docs/TUTORIALS/5_Table_Driven_Inputs.md", "docs/TUTORIALS/7_Linear_Layout.md"],
-      "destination": "docs/TUTORIALS/CLI/build-a-table-driven-genome-comparison.md",
-      "status": {"implementation": "verified", "review": "approved"}
-    },
-    {
       "id": "T-CLI-05",
       "project_id": "quantitative-hepatoplasma-map",
       "title": "Build a quantitative genome map with depth, GC content, and skew",
@@ -561,8 +518,8 @@
       "capabilities": ["entry.linear-cli", "comparison.losatp-groups", "output.static-svg"],
       "canonical_for": [],
       "fixtures": ["aminoglycoside-bgc-five"],
-      "settings": {"mode": "linear", "working_directory": "empty", "protein_mode": "orthogroup", "threads": 1, "alignment_group": "og_1", "separate_strands": false},
-      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "exit_code=0", "group_count=23", "svg.group_links=77", "alignment_group=og_1", "parity=T-GUI-04,T-PY-05"]},
+      "settings": {"mode": "linear", "working_directory": "empty", "protein_mode": "orthogroup", "threads": 1, "alignment_group": "og_1", "separate_strands": false, "lock_definition_column": true, "definition_name": {"font_size": 20, "font_weight": "bold"}, "definition_other_lines": {"font_size": 20, "font_weight": "normal"}},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "exit_code=0", "definition_column=left", "definition_font_size=20", "definition_name_weight=bold", "group_count=23", "svg.group_links=77", "alignment_group=og_1", "parity=T-GUI-04,T-PY-05"]},
       "screenshots": [],
       "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp.md"],
       "destination": "docs/TUTORIALS/CLI/compare-proteins-losatp.md",
@@ -578,8 +535,8 @@
       "capabilities": ["entry.circular-cli", "comparison.uploaded-tables", "comparison.circular-rings", "output.static-svg"],
       "canonical_for": [],
       "fixtures": ["human-mitochondrion", "metazoan-mitochondria-comparison"],
-      "settings": {"mode": "circular", "working_directory": "empty", "reference": "subject", "ring_order": ["NC_002333.2", "NC_024511.2", "NC_001328.1"], "ring_width": 18, "ring_gap": 4},
-      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["precomputed_circular_rings.svg"], "assertions": ["first_result_step=2", "exit_code=0", "svg.accession=NC_012920.1", "svg.rings=3", "svg.hits=106", "parity=T-GUI-06,T-PY-06"]},
+      "settings": {"mode": "circular", "working_directory": "empty", "reference": "subject", "ring_order": ["NC_002333.2", "NC_024511.2", "NC_001328.1"], "ring_width": 18, "ring_gap": 4, "track_preset": "middle"},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["precomputed_circular_rings.svg"], "assertions": ["first_result_step=2", "exit_code=0", "track_preset=middle", "svg.accession=NC_012920.1", "svg.rings=3", "svg.hits=106", "parity=T-GUI-06,T-PY-06"]},
       "screenshots": [],
       "sources": ["docs/TUTORIALS/GUI/add-precomputed-circular-comparison-rings.md"],
       "destination": "docs/TUTORIALS/CLI/add-precomputed-circular-comparison-rings.md",
@@ -697,8 +654,8 @@
       "capabilities": ["entry.simple-python", "program.comparisons-tracks", "comparison.losatp-groups", "output.static-svg"],
       "canonical_for": [],
       "fixtures": ["aminoglycoside-bgc-five"],
-      "settings": {"mode": "linear", "working_directory": "empty", "protein_mode": "orthogroup", "threads": 1, "alignment_group": "og_1", "separate_strands": false},
-      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "group_count=23", "svg.group_links=77", "parity=T-GUI-04,T-CLI-08"]},
+      "settings": {"mode": "linear", "working_directory": "empty", "protein_mode": "orthogroup", "threads": 1, "alignment_group": "og_1", "separate_strands": false, "lock_definition_column": true, "definition_name": {"font_size": 20, "font_weight": "bold"}, "definition_other_lines": {"font_size": 20, "font_weight": "normal"}},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "definition_column=left", "definition_font_size=20", "definition_name_weight=bold", "group_count=23", "svg.group_links=77", "parity=T-GUI-04,T-CLI-08"]},
       "screenshots": [],
       "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp.md", "docs/REFERENCE/python-api.md"],
       "destination": "docs/TUTORIALS/PYTHON/compare-proteins-losatp.md",
@@ -714,8 +671,8 @@
       "capabilities": ["entry.simple-python", "program.comparisons-tracks", "comparison.circular-rings", "output.static-svg"],
       "canonical_for": [],
       "fixtures": ["human-mitochondrion", "metazoan-mitochondria-comparison"],
-      "settings": {"mode": "circular", "working_directory": "empty", "reference": "subject", "ring_order": ["NC_002333.2", "NC_024511.2", "NC_001328.1"], "ring_width": 18, "ring_gap": 4},
-      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_precomputed_circular_rings.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.accession=NC_012920.1", "svg.rings=3", "svg.hits=106", "parity=T-GUI-06,T-CLI-09"]},
+      "settings": {"mode": "circular", "working_directory": "empty", "reference": "subject", "ring_order": ["NC_002333.2", "NC_024511.2", "NC_001328.1"], "ring_width": 18, "ring_gap": 4, "track_preset": "middle"},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_precomputed_circular_rings.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "track_preset=middle", "svg.accession=NC_012920.1", "svg.rings=3", "svg.hits=106", "parity=T-GUI-06,T-CLI-09"]},
       "screenshots": [],
       "sources": ["docs/TUTORIALS/GUI/add-precomputed-circular-comparison-rings.md", "docs/REFERENCE/python-api.md"],
       "destination": "docs/TUTORIALS/PYTHON/add-precomputed-circular-comparison-rings.md",
@@ -770,23 +727,6 @@
       "screenshots": [],
       "sources": ["docs/TUTORIALS/CLI/highlight-mitochondrial-features.md", "docs/REFERENCE/python-api.md"],
       "destination": "docs/TUTORIALS/PYTHON/highlight-mitochondrial-features.md",
-      "status": {"implementation": "verified", "review": "approved"}
-    },
-    {
-      "id": "T-PY-10",
-      "project_id": "majanivirus-table-comparison",
-      "title": "Compare two Majanivirus genome pairs from Python",
-      "role": "tutorial",
-      "surface": "python",
-      "priority": "P1",
-      "capabilities": ["entry.typed-python", "input.tsv-manifests", "layout.linear-multi-row", "layout.rulers", "comparison.uploaded-tables", "output.static-svg"],
-      "canonical_for": [],
-      "fixtures": ["majanivirus-table-comparison"],
-      "settings": {"mode": "linear", "working_directory": "empty", "record_count": 4, "layout": "single-column biological pairs", "finished_output": "table_driven_comparison.svg"},
-      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["table_driven_comparison.svg"], "assertions": ["first_result_step=1", "snippet_executes=true", "return_type=RequestRenderResult", "record_cells_and_orientations_match=true", "comparison_endpoint_pairs=2", "rulers_and_shared_scale=true", "parity=T-GUI-11,T-CLI-04"]},
-      "screenshots": [],
-      "sources": ["docs/TUTORIALS/CLI/build-a-table-driven-genome-comparison.md", "docs/REFERENCE/typed-requests.md"],
-      "destination": "docs/TUTORIALS/PYTHON/build-a-table-driven-genome-comparison.md",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {

@@ -76,7 +76,6 @@ IMPLEMENTED_SCENARIOS = (
     "T-PY-07",
     "T-PY-08",
     "T-PY-09",
-    "T-PY-10",
     "T-PY-11",
     "H-PY-01",
     "H-PY-02",
@@ -85,6 +84,9 @@ IMPLEMENTED_SCENARIOS = (
     "H-PY-05",
 )
 RUNNER_PATH = "docs/recipes/run_python_scenarios.py"
+_TRANSLATE_RE = re.compile(
+    r"translate\((?P<x>-?[0-9.]+),(?P<y>-?[0-9.]+)\)"
+)
 
 
 def run_scenario(
@@ -191,7 +193,7 @@ def _validate_scenario(
             outputs=outputs,
             used_entries=used_entries,
         )
-    elif scenario_id in {"T-PY-09", "T-PY-10", "T-PY-11"}:
+    elif scenario_id in {"T-PY-09", "T-PY-11"}:
         _validate_cli_origin_tutorial(
             chapter,
             namespace=namespace,
@@ -237,6 +239,53 @@ def _validate_scenario(
         )
     else:  # pragma: no cover - IMPLEMENTED_SCENARIOS owns this dispatch.
         raise RecipeContractError(f"No Python validator for {scenario_id}.")
+
+
+def _assert_gallery_bgc_definitions(
+    root: ElementTree.Element, *, scenario_id: str
+) -> None:
+    definition_groups = [
+        element
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-role") == "record-definition"
+    ]
+    translations = [
+        _TRANSLATE_RE.fullmatch(group.attrib.get("transform", ""))
+        for group in definition_groups
+    ]
+    if len(definition_groups) != 5 or any(match is None for match in translations):
+        raise RecipeContractError(f"{scenario_id} definition groups are incomplete.")
+    x_positions = [float(match.group("x")) for match in translations if match]
+    if max(x_positions) - min(x_positions) > 1e-6:
+        raise RecipeContractError(
+            f"{scenario_id} definitions are not locked to one left column."
+        )
+
+    expected = {
+        "name": (20.0, "bold", "black"),
+        "subtitle": (20.0, "normal", "black"),
+        "accession": (20.0, "normal", "#7b7c7d"),
+        "length": (20.0, "normal", "#7b7c7d"),
+    }
+    for group in definition_groups:
+        lines = {
+            element.attrib.get("data-definition-line-kind", ""): (
+                float(element.attrib.get("font-size", "0")),
+                element.attrib.get("font-weight", ""),
+                element.attrib.get("fill", "").lower(),
+            )
+            for element in group.iter()
+            if element.attrib.get("data-definition-line-kind")
+        }
+        anchors = {
+            element.attrib.get("text-anchor", "")
+            for element in group.iter()
+            if element.attrib.get("data-definition-line-kind")
+        }
+        if lines != expected or anchors != {"start"}:
+            raise RecipeContractError(
+                f"{scenario_id} definition typography differs from the Gallery."
+            )
 
 
 def _validate_migrated_tutorial(
@@ -289,6 +338,7 @@ def _validate_migrated_tutorial(
         _assert_losatn_matches(chapter, output_path=output_path)
     elif scenario_id == "T-PY-05":
         root = ElementTree.parse(output_path).getroot()
+        _assert_gallery_bgc_definitions(root, scenario_id="T-PY-05")
         matches = [
             element
             for element in root.iter()
@@ -302,6 +352,15 @@ def _validate_migrated_tutorial(
                 "T-PY-05 changed the Similarity-group link set."
             )
     elif scenario_id == "T-PY-06":
+        options = namespace.get("options")
+        if (
+            not isinstance(options, CircularOptions)
+            or dict(options.config_overrides or {}).get("canvas.circular.track_type")
+            != "middle"
+        ):
+            raise RecipeContractError(
+                "T-PY-06 must use the Middle Circular track preset."
+            )
         root = ElementTree.parse(output_path).getroot()
         matches = [
             element
@@ -425,8 +484,7 @@ def _validate_cli_origin_tutorial(
     used_entries: list[dict[str, object]],
 ) -> None:
     scenario_id = str(chapter["id"])
-    expected_type = RequestRenderResult if scenario_id == "T-PY-10" else Diagram
-    if not isinstance(namespace.get("diagram"), expected_type):
+    if not isinstance(namespace.get("diagram"), Diagram):
         raise RecipeContractError(
             f"{scenario_id} retained the wrong public render result."
         )
@@ -444,9 +502,6 @@ def _validate_cli_origin_tutorial(
         "T-PY-09": PUBLISHED_IMAGE_ROOT
         / "t-cli-03"
         / "mitochondrial_features_highlighted.svg",
-        "T-PY-10": PUBLISHED_IMAGE_ROOT
-        / "t-cli-04"
-        / "table_driven_comparison.svg",
         "T-PY-11": PUBLISHED_IMAGE_ROOT
         / "t-cli-05"
         / "quantitative_genome_map.svg",
@@ -457,27 +512,6 @@ def _validate_cli_origin_tutorial(
         raise RecipeContractError(
             f"{scenario_id} SVG differs from its CLI project figure."
         )
-
-    if scenario_id == "T-PY-10":
-        root = ElementTree.parse(output_path).getroot()
-        matches = [
-            element
-            for element in root.iter()
-            if element.attrib.get("data-match-kind") == "pairwise"
-        ]
-        pairs = {
-            (
-                element.attrib.get("data-query-record-id"),
-                element.attrib.get("data-subject-record-id"),
-            )
-            for element in matches
-        }
-        if len(matches) != 82 or pairs != {
-            ("LC738868.1", "LC738874.1"),
-            ("LC738870.1", "LC738873.1"),
-        }:
-            raise RecipeContractError("T-PY-10 changed its two comparison pairs.")
-
 
 def _validate_first_python_tutorial(
     chapter: dict[str, object],

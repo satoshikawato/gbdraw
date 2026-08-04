@@ -35,6 +35,7 @@ gbdraw circular \
   --conservation_ring_gap 4 \
   --species '<i>Homo sapiens</i>' \
   --qualifier_priority cds_gene_qualifier_priority.tsv \
+  --track_type middle \
   --labels out \
   --definition_font_size 18 \
   --plot_title 'Precomputed TLOSATX rings around Homo sapiens mtDNA' \

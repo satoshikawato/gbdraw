@@ -49,7 +49,6 @@ IMPLEMENTED_SCENARIOS = (
     "T-CLI-01",
     "T-CLI-02",
     "T-CLI-03",
-    "T-CLI-04",
     "T-CLI-05",
     "T-CLI-06",
     "T-CLI-07",
@@ -215,16 +214,6 @@ _SCENARIO_REQUIRED_FIXTURE_FILES = {
         "drosophila-human.tlosatx.tsv",
         "caenorhabditis-human.tlosatx.tsv",
     ),
-    "T-CLI-04": (
-        "MjeNMV.gb",
-        "PemoMJNVA.gb",
-        "MelaMJNV.gb",
-        "PeseMJNV.gb",
-        "MjeNMV.MelaMJNV.tblastx.out",
-        "PemoMJNVA.PeseMJNV.tblastx.out",
-        "records.tsv",
-        "comparisons.tsv",
-    ),
 }
 
 _OUTPUT_INPUT_FILES = {
@@ -238,23 +227,6 @@ _OUTPUT_INPUT_FILES = {
     ("T-CLI-03", "mitochondrial_features_highlighted.svg"): {
         "HmmtDNA.gbk",
         "cds_gene_qualifier_priority.tsv",
-    },
-    ("T-CLI-04", "table_driven_comparison_baseline.svg"): {
-        "MjeNMV.gb",
-        "PemoMJNVA.gb",
-        "MelaMJNV.gb",
-        "PeseMJNV.gb",
-        "records.tsv",
-    },
-    ("T-CLI-04", "table_driven_comparison.svg"): {
-        "MjeNMV.gb",
-        "PemoMJNVA.gb",
-        "MelaMJNV.gb",
-        "PeseMJNV.gb",
-        "MjeNMV.MelaMJNV.tblastx.out",
-        "PemoMJNVA.PeseMJNV.tblastx.out",
-        "records.tsv",
-        "comparisons.tsv",
     },
     ("T-CLI-05", "quantitative_genome_baseline.svg"): {
         "AP027133.gb",
@@ -1098,6 +1070,8 @@ def _assert_similarity_groups(
     chapter: dict[str, object], output_path: Path
 ) -> None:
     root, matches = _assert_bgc_svg(chapter, output_path)
+    if chapter["id"] == "T-CLI-08":
+        _assert_gallery_bgc_definitions(root, scenario_id="T-CLI-08")
     expected_group_counts = Counter(
         {
             "og_1": 4,
@@ -1227,6 +1201,53 @@ def _assert_similarity_groups(
         raise RecipeContractError("H-CLI-07 CAG38695.1 group is not aligned.")
 
 
+def _assert_gallery_bgc_definitions(
+    root: ElementTree.Element, *, scenario_id: str
+) -> None:
+    definition_groups = [
+        element
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-role") == "record-definition"
+    ]
+    translations = [
+        _TRANSLATE_RE.fullmatch(group.attrib.get("transform", ""))
+        for group in definition_groups
+    ]
+    if len(definition_groups) != 5 or any(match is None for match in translations):
+        raise RecipeContractError(f"{scenario_id} definition groups are incomplete.")
+    x_positions = [float(match.group("x")) for match in translations if match]
+    if max(x_positions) - min(x_positions) > 1e-6:
+        raise RecipeContractError(
+            f"{scenario_id} definitions are not locked to one left column."
+        )
+
+    expected = {
+        "name": (20.0, "bold", "black"),
+        "subtitle": (20.0, "normal", "black"),
+        "accession": (20.0, "normal", "#7b7c7d"),
+        "length": (20.0, "normal", "#7b7c7d"),
+    }
+    for group in definition_groups:
+        lines = {
+            element.attrib.get("data-definition-line-kind", ""): (
+                float(element.attrib.get("font-size", "0")),
+                element.attrib.get("font-weight", ""),
+                element.attrib.get("fill", "").lower(),
+            )
+            for element in group.iter()
+            if element.attrib.get("data-definition-line-kind")
+        }
+        anchors = {
+            element.attrib.get("text-anchor", "")
+            for element in group.iter()
+            if element.attrib.get("data-definition-line-kind")
+        }
+        if lines != expected or anchors != {"start"}:
+            raise RecipeContractError(
+                f"{scenario_id} definition typography differs from the Gallery."
+            )
+
+
 def _assert_collinear_blocks(
     chapter: dict[str, object], output_path: Path
 ) -> None:
@@ -1303,122 +1324,6 @@ def _assert_baseline_svg(
         )
     if _match_elements(ElementTree.parse(output_path).getroot()):
         raise RecipeContractError(f"{chapter['id']} baseline unexpectedly contains matches.")
-
-
-def _assert_tcli04_tables(workdir: Path) -> None:
-    from gbdraw.io.cli_tables import read_comparisons_table, read_records_table
-
-    records = read_records_table(str(workdir / "records.tsv"))
-    comparisons = read_comparisons_table(str(workdir / "comparisons.tsv"))
-    expected_ids = ["LC738868.1", "LC738874.1", "LC738870.1", "LC738873.1"]
-    if (
-        records.record_ids != expected_ids
-        or records.reverse_flags != [False, False, True, True]
-        or records.multi_record_positions() != ["#1@1", "#2@2", "#3@3", "#4@4"]
-        or [row.column for row in records.rows] != [1, 1, 1, 1]
-    ):
-        raise RecipeContractError("T-CLI-04 records table semantics changed.")
-    endpoint_pairs = [(row.query, row.subject) for row in comparisons.rows]
-    if endpoint_pairs != [
-        ("LC738868.1", "LC738874.1"),
-        ("LC738870.1", "LC738873.1"),
-    ] or any(endpoint not in expected_ids for pair in endpoint_pairs for endpoint in pair):
-        raise RecipeContractError("T-CLI-04 comparison endpoints changed.")
-
-
-def _assert_tcli04_output(
-    chapter: dict[str, object],
-    output_path: Path,
-    *,
-    command: list[str],
-) -> None:
-    evidence = inspect_standard_svg(chapter, output_path=output_path)
-    expected_ids = ["LC738868.1", "LC738874.1", "LC738870.1", "LC738873.1"]
-    if evidence.record_ids != set(expected_ids) or len(evidence.feature_ids) != 440:
-        raise RecipeContractError("T-CLI-04 rendered the wrong complete records.")
-
-    root = ElementTree.parse(output_path).getroot()
-    groups = [
-        element
-        for element in root
-        if element.attrib.get("id", "").startswith("record_group_")
-        and "data-gbdraw-record-id" in element.attrib
-    ]
-    groups.sort(key=lambda element: int(element.attrib["data-gbdraw-record-index"]))
-    if [group.attrib["data-gbdraw-record-id"] for group in groups] != expected_ids:
-        raise RecipeContractError("T-CLI-04 record order changed.")
-    positions = []
-    for group in groups:
-        match = _TRANSLATE_RE.fullmatch(group.attrib.get("transform", ""))
-        if match is None:
-            raise RecipeContractError("T-CLI-04 record placement metadata is missing.")
-        positions.append((float(match.group("x")), float(match.group("y"))))
-    if not (
-        len({position[0] for position in positions}) == 1
-        and all(first[1] < second[1] for first, second in zip(positions, positions[1:]))
-    ):
-        raise RecipeContractError(
-            "T-CLI-04 records do not form the declared biological comparison stack."
-        )
-
-    matches = _match_elements(root)
-    if output_path.name == "table_driven_comparison_baseline.svg":
-        if matches:
-            raise RecipeContractError("T-CLI-04 baseline unexpectedly contains links.")
-        return
-    if output_path.name != "table_driven_comparison.svg":
-        raise RecipeContractError(f"Unexpected T-CLI-04 output: {output_path.name}")
-    pair_counts = Counter(
-        (
-            element.attrib.get("data-query-record-id"),
-            element.attrib.get("data-subject-record-id"),
-        )
-        for element in matches
-    )
-    if pair_counts != Counter(
-        {
-            ("LC738868.1", "LC738874.1"): 80,
-            ("LC738870.1", "LC738873.1"): 2,
-        }
-    ) or any(
-        element.attrib.get("data-match-kind") != "pairwise"
-        or element.attrib.get("data-pairwise-match-style") != "curve"
-        for element in matches
-    ):
-        raise RecipeContractError("T-CLI-04 retained the wrong comparison links.")
-    required_options = {
-        "--scale_style": "ruler",
-        "--linear_record_gap": "28",
-        "--comparison_height": "100",
-    }
-    if "--ruler_on_axis" not in command or any(
-        command[command.index(option) + 1] != value
-        for option, value in required_options.items()
-    ):
-        raise RecipeContractError("T-CLI-04 ruler or shared-scale settings changed.")
-    ruler_positions = []
-    for group in groups:
-        values = {
-            "".join(element.itertext()).strip(): float(element.attrib["x"])
-            for element in group.iter()
-            if element.tag.rsplit("}", 1)[-1] == "text"
-            and "".join(element.itertext()).strip() in {"100 kbp", "200 kbp"}
-        }
-        ruler_positions.append(values)
-    ruler_spacings = [
-        abs(values["200 kbp"] - values["100 kbp"])
-        for values in ruler_positions
-        if values.keys() == {"100 kbp", "200 kbp"}
-    ]
-    if (
-        len(ruler_spacings) != 4
-        or max(ruler_spacings) - min(ruler_spacings) > 1e-3
-        or any(
-            (values["100 kbp"] < values["200 kbp"]) != (index < 2)
-            for index, values in enumerate(ruler_positions)
-        )
-    ):
-        raise RecipeContractError("T-CLI-04 shared rulers are incomplete.")
 
 
 def _assert_generated_tables_are_documented(
@@ -2410,12 +2315,6 @@ def run_scenario(
                             workdir=workdir,
                             scenario_id=scenario_id,
                         )
-                elif scenario_id == "T-CLI-04":
-                    _assert_tcli04_output(
-                        chapter,
-                        generated_path,
-                        command=command,
-                    )
                 elif scenario_id == "T-CLI-05":
                     if output_name == "quantitative_genome_baseline.svg":
                         _assert_baseline_svg(
@@ -2440,6 +2339,12 @@ def run_scenario(
                 elif scenario_id == "T-CLI-07":
                     _assert_tutorial_losatn_comparison(chapter, generated_path)
                 elif scenario_id == "T-CLI-09":
+                    if "--track_type" not in command or command[
+                        command.index("--track_type") + 1
+                    ] != "middle":
+                        raise RecipeContractError(
+                            "T-CLI-09 must use the Middle Circular track preset."
+                        )
                     _assert_complete_metazoan_mtdna_conservation(
                         generated_path,
                         title="Precomputed TLOSATX rings around Homo sapiens mtDNA",
@@ -2494,8 +2399,6 @@ def run_scenario(
                 _assert_collinear_blocks(chapter, workdir / output_names[0])
         if scenario_id == "H-CLI-02":
             _assert_table_inputs(workdir)
-        elif scenario_id == "T-CLI-04":
-            _assert_tcli04_tables(workdir)
         elif scenario_id == "H-CLI-12":
             if session_first_svg is None:
                 raise RecipeContractError("H-CLI-12 did not run its replay probe.")

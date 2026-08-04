@@ -217,7 +217,6 @@ def test_capture_environment_is_pinned_and_loopback_only() -> None:
         "T-GUI-08",
         "T-GUI-09",
         "T-GUI-10",
-        "T-GUI-11",
         "T-GUI-12",
         "H-GUI-07",
         "H-GUI-08",
@@ -256,10 +255,6 @@ def test_capture_environment_is_pinned_and_loopback_only() -> None:
     assert config["GUI_FEATURE_HIGHLIGHT_SCREENSHOT_NAMES"] == (
         "presentation-settings.png",
         "presentation-result.png",
-    )
-    assert config["GUI_TABLE_COMPARISON_SCREENSHOT_NAMES"] == (
-        "comparison-settings.png",
-        "comparison-result.png",
     )
     assert config["GUI_QUANTITATIVE_MAP_SCREENSHOT_NAMES"] == (
         "track-settings.png",

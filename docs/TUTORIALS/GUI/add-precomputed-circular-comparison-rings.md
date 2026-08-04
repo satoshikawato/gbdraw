@@ -33,6 +33,7 @@ Select **Circular** and **GenBank**, choose `HmmtDNA.gbk`, and set:
 | --- | --- |
 | Output Prefix | `precomputed_circular_rings` |
 | Species | `<i>Homo sapiens</i>` |
+| Track Preset | Middle |
 | Separate Strands | Off |
 
 ![Complete human mitochondrial reference ready for Circular comparison](../../images/t-gui-06/01-input-ready.png)
