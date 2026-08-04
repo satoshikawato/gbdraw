@@ -83,4 +83,3 @@ Select **SVG** to save `bgc_collinear_blocks.svg`.
 - [Create protein similarity groups](./create-protein-similarity-groups.md)
 - [Compare annotated proteins Tutorial](../../TUTORIALS/GUI/compare-proteins-losatp.md)
 - [Comparison programs, thresholds, and result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)
-- [Tutorial fixture provenance](../../REFERENCE/tutorial-fixture-provenance.md)

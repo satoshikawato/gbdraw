@@ -107,4 +107,3 @@ the exact title, and the legend order.
 
 - [Control feature visibility, shapes, strokes, and overlaps](control-feature-visibility-shapes-strokes-and-overlaps.md)
 - [Palettes, feature rules, labels, shapes, and track renderers](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)
-- [Tutorial fixture provenance](../../REFERENCE/tutorial-fixture-provenance.md)

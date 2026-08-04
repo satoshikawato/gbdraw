@@ -14,4 +14,3 @@ Reference pages describe supported inputs, controls, options, schemas, APIs, com
 - [Session and request compatibility](session-and-request-compatibility.md)
 - [Output format and export reference](output-formats-and-export.md)
 - [Interactive SVG and semantic-hook reference](interactive-svg-and-semantic-hooks.md)
-- [Tutorial fixture provenance](tutorial-fixture-provenance.md)

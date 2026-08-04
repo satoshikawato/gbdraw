@@ -1041,7 +1041,12 @@ def _assert_semantically_equivalent(
         )
 
 
-def _validate_current_session(path: Path) -> dict[str, Any]:
+def _validate_current_session(
+    path: Path,
+    *,
+    expected_title: str = SESSION_TITLE,
+    expected_output_prefix: str | None = None,
+) -> dict[str, Any]:
     contents = path.read_bytes()
     if contents[:2] != b"\x1f\x8b":
         raise AssertionError("Saved session is not gzip-compressed")
@@ -1058,10 +1063,11 @@ def _validate_current_session(path: Path) -> dict[str, Any]:
     if (
         render_request.get("schema") != CURRENT_RENDER_REQUEST_SCHEMA
         or render_request.get("mode") != "circular"
-        or render_request.get("output", {}).get("prefix") != SESSION_TITLE
+        or render_request.get("output", {}).get("prefix")
+        != (expected_output_prefix or expected_title)
     ):
         raise AssertionError("Saved session does not contain the current Circular request")
-    if payload.get("title") != SESSION_TITLE:
+    if payload.get("title") != expected_title:
         raise AssertionError("Saved session title does not match its handoff filename")
     if not payload.get("results") or not payload.get("editorState"):
         raise AssertionError("Saved session is missing the committed result or editor state")
@@ -1086,8 +1092,13 @@ def _validate_current_session(path: Path) -> dict[str, Any]:
     }
 
 
-def _save_current_session(page: Page, download_dir: Path) -> Path:
-    page.once("dialog", lambda dialog: dialog.accept(SESSION_TITLE))
+def _save_current_session(
+    page: Page,
+    download_dir: Path,
+    *,
+    title: str = SESSION_TITLE,
+) -> Path:
+    page.once("dialog", lambda dialog: dialog.accept(title))
     with page.expect_download(timeout=ACTION_TIMEOUT_MS) as download_info:
         with page.expect_event("dialog", timeout=ACTION_TIMEOUT_MS) as dialog_info:
             page.get_by_role(
@@ -1099,11 +1110,12 @@ def _save_current_session(page: Page, download_dir: Path) -> Path:
     download = download_info.value
     if download.failure() is not None:
         raise AssertionError(f"Session download failed: {download.failure()}")
-    if download.suggested_filename != SESSION_FILENAME:
+    expected_filename = f"{title}.gbdraw-session.json.gz"
+    if download.suggested_filename != expected_filename:
         raise AssertionError(
-            f"Expected {SESSION_FILENAME}, downloaded {download.suggested_filename}"
+            f"Expected {expected_filename}, downloaded {download.suggested_filename}"
         )
-    path = download_dir / SESSION_FILENAME
+    path = download_dir / expected_filename
     download.save_as(path)
     return path
 

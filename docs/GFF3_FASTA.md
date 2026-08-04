@@ -9,4 +9,3 @@
 - [How to use GenBank, DDBJ, GFF3, and FASTA inputs on the command line](./HOW_TO/CLI/use-genbank-ddbj-gff3-and-fasta.md)
 - [How to use GFF3, in-memory records, and byte output from Python](./HOW_TO/PYTHON/use-gff3-in-memory-records-and-bytes.md)
 - [Look up input formats and TSV schemas](./REFERENCE/input-formats-and-tsv-schemas.md)
-- [Check tutorial fixture provenance](./REFERENCE/tutorial-fixture-provenance.md)

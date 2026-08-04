@@ -26,6 +26,7 @@ from config import (  # noqa: E402
     SUPPORTED_TIERS,
     first_circular_screenshot_paths,
     first_linear_screenshot_paths,
+    gui_annotated_chloroplast_screenshot_paths,
     gui_annotation_tracks_screenshot_paths,
     gui_circular_layout_screenshot_paths,
     gui_circular_rings_screenshot_paths,
@@ -33,12 +34,15 @@ from config import (  # noqa: E402
     gui_exports_screenshot_paths,
     gui_inputs_screenshot_paths,
     gui_interactive_editing_screenshot_paths,
+    gui_interactive_handoff_screenshot_paths,
     gui_linear_layout_screenshot_paths,
     gui_losatn_screenshot_paths,
     gui_losatp_collinear_screenshot_paths,
+    gui_losatp_tutorial_collinear_screenshot_paths,
     gui_losatp_groups_how_to_screenshot_paths,
     gui_losatp_groups_screenshot_paths,
     gui_quantitative_tracks_screenshot_paths,
+    gui_precomputed_circular_rings_screenshot_paths,
     gui_session_reproduction_screenshot_paths,
     gui_styling_screenshot_paths,
     gui_tlosatx_screenshot_paths,
@@ -79,9 +83,21 @@ from flows.how_to.tracks import (  # noqa: E402
 )
 from flows.tutorials.gui_first_circular import capture_first_circular  # noqa: E402
 from flows.tutorials.gui_first_linear import capture_first_linear  # noqa: E402
+from flows.tutorials.gui_annotated_chloroplast import (  # noqa: E402
+    capture_gui_annotated_chloroplast,
+)
+from flows.tutorials.gui_interactive_handoff import (  # noqa: E402
+    capture_gui_interactive_handoff,
+)
 from flows.tutorials.gui_losatn import capture_gui_losatn  # noqa: E402
 from flows.tutorials.gui_losatp_groups import (  # noqa: E402
     capture_gui_losatp_groups,
+)
+from flows.tutorials.gui_losatp_collinear import (  # noqa: E402
+    capture_gui_losatp_tutorial_collinear,
+)
+from flows.tutorials.gui_precomputed_circular_rings import (  # noqa: E402
+    capture_gui_precomputed_circular_rings,
 )
 from web_server import CaptureWebServer  # noqa: E402
 
@@ -148,6 +164,26 @@ SCENARIOS = {
     "T-GUI-04": ScenarioCapture(
         screenshot_paths=gui_losatp_groups_screenshot_paths,
         capture=capture_gui_losatp_groups,
+        tier="extended",
+    ),
+    "T-GUI-05": ScenarioCapture(
+        screenshot_paths=gui_annotated_chloroplast_screenshot_paths,
+        capture=capture_gui_annotated_chloroplast,
+        tier="extended",
+    ),
+    "T-GUI-06": ScenarioCapture(
+        screenshot_paths=gui_precomputed_circular_rings_screenshot_paths,
+        capture=capture_gui_precomputed_circular_rings,
+        tier="extended",
+    ),
+    "T-GUI-08": ScenarioCapture(
+        screenshot_paths=gui_losatp_tutorial_collinear_screenshot_paths,
+        capture=capture_gui_losatp_tutorial_collinear,
+        tier="extended",
+    ),
+    "T-GUI-09": ScenarioCapture(
+        screenshot_paths=gui_interactive_handoff_screenshot_paths,
+        capture=capture_gui_interactive_handoff,
         tier="extended",
     ),
     "H-GUI-07": ScenarioCapture(

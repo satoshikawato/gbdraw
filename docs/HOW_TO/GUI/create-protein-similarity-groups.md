@@ -60,4 +60,3 @@ has 232 twelve-column LOSATP rows and the SVG retains the same 77 group links.
 - [Compare annotated proteins Tutorial](../../TUTORIALS/GUI/compare-proteins-losatp.md)
 - [Draw Collinear protein-match blocks](./draw-collinear-protein-blocks.md)
 - [Comparison programs, thresholds, and result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)
-- [Tutorial fixture provenance](../../REFERENCE/tutorial-fixture-provenance.md)

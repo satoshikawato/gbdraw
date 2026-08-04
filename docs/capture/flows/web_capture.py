@@ -208,6 +208,8 @@ def generate_and_inspect(
     page: Page,
     inspect_svg: Callable[[Any], dict[str, Any]],
     assert_svg: Callable[[dict[str, Any]], None],
+    *,
+    timeout_ms: int = GENERATION_TIMEOUT_MS,
 ) -> dict[str, Any]:
     """Click the public Generate action and inspect the resulting SVG."""
 
@@ -226,12 +228,12 @@ def generate_and_inspect(
         }
         """,
         arg=previous_run_marker,
-        timeout=GENERATION_TIMEOUT_MS,
+        timeout=timeout_ms,
     )
-    expect(generate).to_be_enabled(timeout=GENERATION_TIMEOUT_MS)
+    expect(generate).to_be_enabled(timeout=timeout_ms)
 
     result_region = page.get_by_role("region", name="Result Preview", exact=True)
-    expect(result_region).to_be_visible(timeout=GENERATION_TIMEOUT_MS)
+    expect(result_region).to_be_visible(timeout=timeout_ms)
     report = inspect_svg(result_region)
     assert_svg(report)
     return report
@@ -264,6 +266,28 @@ def fit_complete_linear_preview(page: Page, target_zoom: str = "40%") -> None:
         box["x"] + (box["width"] * 0.50),
         box["y"] + (box["height"] * 0.90),
     )
+
+
+def set_feature_search_visible(page: Page, *, visible: bool) -> None:
+    """Keep the floating search palette from covering a tutorial figure."""
+
+    palette = page.query_selector(".preview-feature-search")
+    if palette is None:
+        raise AssertionError("Could not resolve the preview feature-search palette")
+    palette.evaluate(
+        """
+        (element, shouldShow) => {
+          if (shouldShow) element.style.removeProperty('display');
+          else element.style.setProperty('display', 'none', 'important');
+        }
+        """,
+        visible,
+    )
+    display = palette.evaluate("element => getComputedStyle(element).display")
+    if (display != "none") != visible:
+        raise AssertionError(
+            f"Feature-search palette visibility did not change: {display!r}"
+        )
 
 
 def capture_screenshot(page: Page, path: Path, mode_name: str) -> int:

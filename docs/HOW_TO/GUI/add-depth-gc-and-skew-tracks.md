@@ -90,4 +90,3 @@ legend text, and all 607 frozen input values.
 
 - [Understand tracks, axes, and layout ownership](../../EXPLANATION/understand-tracks-axes-and-layout.md)
 - [Input formats and TSV schemas](../../REFERENCE/input-formats-and-tsv-schemas.md)
-- [Tutorial fixture provenance](../../REFERENCE/tutorial-fixture-provenance.md)

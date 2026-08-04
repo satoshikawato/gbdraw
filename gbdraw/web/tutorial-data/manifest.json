@@ -12,9 +12,9 @@
       "fileCount": 16
     },
     "extended": {
-      "maxUncompressedBytes": 5242880,
-      "actualUncompressedBytes": 1891239,
-      "fileCount": 12
+      "maxUncompressedBytes": 16777216,
+      "actualUncompressedBytes": 14141569,
+      "fileCount": 27
     }
   },
   "fixtures": {
@@ -31,7 +31,10 @@
       ],
       "scenarioIds": [
         "T-GUI-01",
+        "T-GUI-06",
+        "T-GUI-09",
         "T-CLI-01",
+        "T-CLI-03",
         "T-PY-01",
         "H-GUI-09",
         "H-GUI-11",
@@ -235,6 +238,7 @@
       ],
       "scenarioIds": [
         "H-GUI-02",
+        "T-GUI-06",
         "H-GUI-06",
         "H-CLI-02",
         "H-CLI-03",
@@ -259,11 +263,14 @@
     "metazoan-mitochondria-comparison": {
       "title": "Complete metazoan mitochondrial TLOSATX evidence",
       "packageTier": "extended",
-      "sizeBudgetBytes": 40000,
+      "sizeBudgetBytes": 100000,
       "fileIds": [
         "danio-human-tlosatx",
         "drosophila-human-tlosatx",
-        "caenorhabditis-human-tlosatx"
+        "caenorhabditis-human-tlosatx",
+        "danio-mitochondrion-fasta",
+        "drosophila-mitochondrion-fasta",
+        "caenorhabditis-mitochondrion-fasta"
       ],
       "fileReferences": [
         "human-mitochondrion-genbank",
@@ -271,7 +278,7 @@
         "drosophila-mitochondrion-genbank",
         "caenorhabditis-mitochondrion-genbank"
       ],
-      "scenarioIds": ["H-CLI-02", "H-CLI-05"],
+      "scenarioIds": ["T-GUI-06", "H-CLI-02", "H-CLI-05"],
       "expectedSemantics": {
         "referenceRecordId": "NC_012920.1",
         "referenceSide": "subject",
@@ -299,6 +306,62 @@
         "note": "Three byte-stable TLOSATX tables compare complete zebrafish, fruit-fly, and nematode mitochondrial genomes with the complete human mitochondrial subject."
       }
     },
+    "majanivirus-table-comparison": {
+      "title": "Four complete majanivirus genomes with two precomputed comparisons",
+      "packageTier": "extended",
+      "sizeBudgetBytes": 6300000,
+      "fileIds": [
+        "majanivirus-mjenmv-genbank",
+        "majanivirus-pemomjnva-genbank",
+        "majanivirus-melamjnv-genbank",
+        "majanivirus-pesemjnv-genbank",
+        "majanivirus-mjenmv-melamjnv-tblastx",
+        "majanivirus-pemomjnva-pesemjnv-tblastx",
+        "majanivirus-records-table",
+        "majanivirus-comparisons-table"
+      ],
+      "fileReferences": [],
+      "scenarioIds": ["T-CLI-04"],
+      "expectedSemantics": {
+        "recordCount": 4,
+        "recordIds": ["LC738868.1", "LC738870.1", "LC738874.1", "LC738873.1"],
+        "recordLengths": [306008, 294144, 287061, 291934],
+        "recordsAreWholeCanonicalSources": true,
+        "rows": [1, 1, 2, 2],
+        "columns": [1, 2, 1, 2],
+        "reverseComplement": [false, true, false, true],
+        "comparisonEndpoints": [
+          ["LC738868.1", "LC738874.1"],
+          ["LC738870.1", "LC738873.1"]
+        ],
+        "comparisonPrograms": ["TBLASTX", "TBLASTX"]
+      }
+    },
+    "hepatoplasmataceae-five": {
+      "title": "Five complete Hepatoplasmataceae genomes for protein comparison",
+      "packageTier": "extended",
+      "sizeBudgetBytes": 7300000,
+      "fileIds": [
+        "hepatoplasmataceae-ap027078-genbank",
+        "hepatoplasmataceae-ap027131-genbank",
+        "hepatoplasmataceae-ap027132-genbank",
+        "hepatoplasmataceae-nz-cp006932-genbank"
+      ],
+      "fileReferences": ["ap027133-genbank"],
+      "scenarioIds": ["T-GUI-08"],
+      "expectedSemantics": {
+        "recordCount": 5,
+        "recordIds": ["AP027078.1", "AP027131.1", "AP027133.1", "AP027132.1", "NZ_CP006932.1"],
+        "recordLengths": [615622, 662108, 606194, 643039, 657101],
+        "recordTopologies": ["circular", "circular", "circular", "circular", "circular"],
+        "recordsAreWholeCanonicalSources": true,
+        "comparisonProgram": "LOSATP",
+        "collinearSearchScope": "all",
+        "searchedRecordPairCount": 10,
+        "displayedRibbonScope": "adjacent",
+        "recordOrderMatchesGallery": true
+      }
+    },
     "tobacco-plastome-regions": {
       "title": "Complete tobacco plastome with named structural regions",
       "packageTier": "extended",
@@ -311,6 +374,7 @@
       ],
       "fileReferences": [],
       "scenarioIds": [
+        "T-GUI-05",
         "H-GUI-10",
         "H-CLI-02",
         "H-CLI-10",
@@ -337,6 +401,8 @@
       ],
       "fileReferences": [],
       "scenarioIds": [
+        "T-CLI-05",
+        "T-GUI-08",
         "H-GUI-09",
         "H-CLI-02",
         "H-CLI-09",
@@ -430,7 +496,10 @@
       "derivation": null,
       "scenarioIds": [
         "T-GUI-01",
+        "T-GUI-06",
+        "T-GUI-09",
         "T-CLI-01",
+        "T-CLI-03",
         "T-PY-01",
         "H-GUI-09",
         "H-GUI-11",
@@ -474,7 +543,8 @@
       "derivation": null,
       "scenarioIds": [
         "H-GUI-12",
-        "H-CLI-11"
+        "H-CLI-11",
+        "T-CLI-03"
       ],
       "replaces": [
         "tools/reproduce_examples_manifest.py:feature_visibility.tsv"
@@ -523,7 +593,7 @@
         "filenameNormalization": "The versioned RefSeq accession is retained in the filename."
       },
       "derivation": null,
-      "scenarioIds": ["H-GUI-02", "H-GUI-06", "H-CLI-02", "H-CLI-05", "H-CLI-03", "H-PY-01"]
+      "scenarioIds": ["H-GUI-02", "T-GUI-06", "H-GUI-06", "H-CLI-02", "H-CLI-05", "H-CLI-03", "H-PY-01"]
     },
     "drosophila-mitochondrion-genbank": {
       "fixtureId": "metazoan-mitochondria-four",
@@ -567,7 +637,7 @@
         "filenameNormalization": "The versioned RefSeq accession is retained in the filename."
       },
       "derivation": null,
-      "scenarioIds": ["H-GUI-02", "H-GUI-06", "H-CLI-02", "H-CLI-05", "H-CLI-03", "H-PY-01"]
+      "scenarioIds": ["H-GUI-02", "T-GUI-06", "H-GUI-06", "H-CLI-02", "H-CLI-05", "H-CLI-03", "H-PY-01"]
     },
     "caenorhabditis-mitochondrion-genbank": {
       "fixtureId": "metazoan-mitochondria-four",
@@ -611,7 +681,7 @@
         "filenameNormalization": "The versioned RefSeq accession is retained in the filename."
       },
       "derivation": null,
-      "scenarioIds": ["H-GUI-02", "H-GUI-06", "H-CLI-02", "H-CLI-05", "H-CLI-03", "H-PY-01"]
+      "scenarioIds": ["H-GUI-02", "T-GUI-06", "H-GUI-06", "H-CLI-02", "H-CLI-05", "H-CLI-03", "H-PY-01"]
     },
     "danio-human-tlosatx": {
       "fixtureId": "metazoan-mitochondria-comparison",
@@ -671,7 +741,7 @@
           "byteIdenticalRuns": true
         }
       },
-      "scenarioIds": ["H-CLI-02", "H-CLI-05"]
+      "scenarioIds": ["T-GUI-06", "H-CLI-02", "H-CLI-05"]
     },
     "drosophila-human-tlosatx": {
       "fixtureId": "metazoan-mitochondria-comparison",
@@ -731,7 +801,7 @@
           "byteIdenticalRuns": true
         }
       },
-      "scenarioIds": ["H-CLI-02", "H-CLI-05"]
+      "scenarioIds": ["T-GUI-06", "H-CLI-02", "H-CLI-05"]
     },
     "caenorhabditis-human-tlosatx": {
       "fixtureId": "metazoan-mitochondria-comparison",
@@ -791,7 +861,7 @@
           "byteIdenticalRuns": true
         }
       },
-      "scenarioIds": ["H-CLI-02", "H-CLI-05"]
+      "scenarioIds": ["T-GUI-06", "H-CLI-02", "H-CLI-05"]
     },
     "tobacco-plastome-genbank": {
       "fixtureId": "tobacco-plastome-regions",
@@ -842,7 +912,7 @@
         "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the public tutorial fixture set."
       },
       "derivation": null,
-      "scenarioIds": ["H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"]
+      "scenarioIds": ["T-GUI-05", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"]
     },
     "tobacco-plastome-regions-table": {
       "fixtureId": "tobacco-plastome-regions",
@@ -871,7 +941,7 @@
         "filenameNormalization": "Copied byte-for-byte from gbdraw/web/gallery/files/nicotiana-tabacum-regions.tsv."
       },
       "derivation": null,
-      "scenarioIds": ["H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
+      "scenarioIds": ["T-GUI-05", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
       "replaces": ["gbdraw/web/gallery/files/nicotiana-tabacum-regions.tsv"]
     },
     "tobacco-plastome-default-colors": {
@@ -896,7 +966,7 @@
         "filenameNormalization": "Copied byte-for-byte from gbdraw/web/gallery/files/modified_default_colors.tsv."
       },
       "derivation": null,
-      "scenarioIds": ["H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
+      "scenarioIds": ["T-GUI-05", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
       "replaces": ["gbdraw/web/gallery/files/modified_default_colors.tsv"]
     },
     "tobacco-plastome-qualifier-priority": {
@@ -921,7 +991,7 @@
         "filenameNormalization": "Copied byte-for-byte from gbdraw/web/gallery/files/qualifier_priority.tsv."
       },
       "derivation": null,
-      "scenarioIds": ["H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
+      "scenarioIds": ["T-GUI-05", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
       "replaces": ["gbdraw/web/gallery/files/qualifier_priority.tsv"]
     },
     "ap027133-genbank": {
@@ -970,7 +1040,7 @@
         "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the public tutorial fixture set."
       },
       "derivation": null,
-      "scenarioIds": ["H-GUI-09", "H-CLI-02", "H-CLI-09", "H-PY-03"]
+      "scenarioIds": ["T-CLI-05", "T-GUI-08", "H-GUI-09", "H-CLI-02", "H-CLI-09", "H-PY-03"]
     },
     "ap027133-drr394922-depth-1kb": {
       "fixtureId": "depth-1kb",
@@ -1033,7 +1103,7 @@
           "maximumMeanDepth": 74.546
         }
       },
-      "scenarioIds": ["H-GUI-09", "H-CLI-02", "H-CLI-09", "H-PY-03"]
+      "scenarioIds": ["T-CLI-05", "H-GUI-09", "H-CLI-02", "H-CLI-09", "H-PY-03"]
     },
     "lambda-genbank": {
       "fixtureId": "lambda",
@@ -1727,6 +1797,269 @@
         "gbdraw/web/gallery/files/BGC0000708-BGC0000713_specific_colors.tsv"
       ]
     },
+    "danio-mitochondrion-fasta": {
+      "fixtureId": "metazoan-mitochondria-comparison",
+      "relativePath": "metazoan-mitochondria-comparison/NC_002333.2.fna",
+      "role": "derived",
+      "mediaType": "text/plain",
+      "inputType": "fasta",
+      "sizeBytes": 16886,
+      "sha256": "2fc1138b90e4ae0e38f7ca9d8e0dfa944842ea1c175670dccfe0c292d873ed93",
+      "packageTier": "extended",
+      "records": [{"id": "NC_002333.2", "length": 16596, "sequenceSha256": "2c964a8176d913570e466187c9620b20742c3c8898e8a0a9edd7a8b28afcd4f9"}],
+      "provenance": {
+        "sourceName": "Derived from the packaged complete zebrafish mitochondrial RefSeq record",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_002333.2",
+        "retrievedOn": "2026-08-03",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Sequence derivative; retain the NCBI source-record data-usage note.",
+        "filenameNormalization": "The versioned source accession is retained and the sequence is wrapped at 60 columns."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_metazoan_mitochondria_comparison_fixture.py",
+        "sourceFileIds": ["danio-mitochondrion-genbank"],
+        "sourceChecksums": ["94ab35da6f81abc2595fcd425c23585ed78d9396b5143918d9d1025d8a4d2140"],
+        "tool": "Biopython SeqIO",
+        "toolVersion": "1.85",
+        "arguments": {"recordId": "NC_002333.2", "lineWidth": 60, "alphabet": "uppercase"},
+        "outputStatistics": {"recordCount": 1, "sequenceLength": 16596}
+      },
+      "scenarioIds": ["T-GUI-06"]
+    },
+    "drosophila-mitochondrion-fasta": {
+      "fixtureId": "metazoan-mitochondria-comparison",
+      "relativePath": "metazoan-mitochondria-comparison/NC_024511.2.fna",
+      "role": "derived",
+      "mediaType": "text/plain",
+      "inputType": "fasta",
+      "sizeBytes": 19863,
+      "sha256": "cf44d9db8d78344182e49e12e43593f03bd009c2d4bfb1ba0a37d463cf44731e",
+      "packageTier": "extended",
+      "records": [{"id": "NC_024511.2", "length": 19524, "sequenceSha256": "75139da63aab46c9ca4a378687489407e31650c3abf0a089e4c967393b17f4bc"}],
+      "provenance": {
+        "sourceName": "Derived from the packaged complete fruit-fly mitochondrial RefSeq record",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_024511.2",
+        "retrievedOn": "2026-08-03",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Sequence derivative; retain the NCBI source-record data-usage note.",
+        "filenameNormalization": "The versioned source accession is retained and the sequence is wrapped at 60 columns."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_metazoan_mitochondria_comparison_fixture.py",
+        "sourceFileIds": ["drosophila-mitochondrion-genbank"],
+        "sourceChecksums": ["79fa36199682961919c4a11f3a8fc50c9e598e68b867eb25e847bce1aa1c4229"],
+        "tool": "Biopython SeqIO",
+        "toolVersion": "1.85",
+        "arguments": {"recordId": "NC_024511.2", "lineWidth": 60, "alphabet": "uppercase"},
+        "outputStatistics": {"recordCount": 1, "sequenceLength": 19524}
+      },
+      "scenarioIds": ["T-GUI-06"]
+    },
+    "caenorhabditis-mitochondrion-fasta": {
+      "fixtureId": "metazoan-mitochondria-comparison",
+      "relativePath": "metazoan-mitochondria-comparison/NC_001328.1.fna",
+      "role": "derived",
+      "mediaType": "text/plain",
+      "inputType": "fasta",
+      "sizeBytes": 14037,
+      "sha256": "6d3258a80aa12f399f801e3eb1296821b1eebb40c7ca41342b4aec2b765133ee",
+      "packageTier": "extended",
+      "records": [{"id": "NC_001328.1", "length": 13794, "sequenceSha256": "3cbb1d2f1925ee7eacae394dd7fa867c225bcf3cb4701b3dd07ecad7b904446e"}],
+      "provenance": {
+        "sourceName": "Derived from the packaged complete nematode mitochondrial RefSeq record",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_001328.1",
+        "retrievedOn": "2026-08-03",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Sequence derivative; retain the NCBI source-record data-usage note.",
+        "filenameNormalization": "The versioned source accession is retained and the sequence is wrapped at 60 columns."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_metazoan_mitochondria_comparison_fixture.py",
+        "sourceFileIds": ["caenorhabditis-mitochondrion-genbank"],
+        "sourceChecksums": ["8de5f7cf3686f493ee5b8068dba39b31c5d02e70d997063f65ed19d0fa859a59"],
+        "tool": "Biopython SeqIO",
+        "toolVersion": "1.85",
+        "arguments": {"recordId": "NC_001328.1", "lineWidth": 60, "alphabet": "uppercase"},
+        "outputStatistics": {"recordCount": 1, "sequenceLength": 13794}
+      },
+      "scenarioIds": ["T-GUI-06"]
+    },
+    "majanivirus-mjenmv-genbank": {
+      "fixtureId": "majanivirus-table-comparison",
+      "relativePath": "majanivirus-table-comparison/MjeNMV.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 527653,
+      "sha256": "20b7af3666c66be83002c4f8417b2b07664e7d7d2e8ea6a6c7c589bd5157c0ba",
+      "packageTier": "extended",
+      "records": [{"id": "LC738868.1", "accession": "LC738868", "sequenceVersion": 1, "organism": "Marsupenaeus japonicus endogenous nimavirus", "description": "MAG: Marsupenaeus japonicus endogenous nimavirus Ginoza2017 DNA, complete genome", "topology": "linear", "length": 306008, "sequenceSha256": "bf065087be9f68b2b342cb1f3551d390de6245f9c6047120c31fa8a97564c84e", "featureCount": 112, "displayedFeatureCount": 111, "cdsCount": 111, "cdsStrandCounts": {"positive": 47, "negative": 64, "unknown": 0}}],
+      "provenance": {"sourceName": "NCBI Nucleotide (DDBJ/ENA/GenBank)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/LC738868.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
+      "derivation": null,
+      "scenarioIds": ["T-CLI-04"]
+    },
+    "majanivirus-pemomjnva-genbank": {
+      "fixtureId": "majanivirus-table-comparison",
+      "relativePath": "majanivirus-table-comparison/PemoMJNVA.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 505839,
+      "sha256": "1f662eb6ba001a6c396adfe48e67119ecb0ba034b3164df17eae844e13df0374",
+      "packageTier": "extended",
+      "records": [{"id": "LC738870.1", "accession": "LC738870", "sequenceVersion": 1, "organism": "Penaeus monodon majanivirus A", "description": "MAG: Penaeus monodon majanivirus A Mikawa2016 DNA, complete genome", "topology": "linear", "length": 294144, "sequenceSha256": "824d0e670eb540f0eb91991745d3a5d0f4a30965e861ea5a5030109997b5442d", "featureCount": 116, "displayedFeatureCount": 115, "cdsCount": 115, "cdsStrandCounts": {"positive": 50, "negative": 65, "unknown": 0}}],
+      "provenance": {"sourceName": "NCBI Nucleotide (DDBJ/ENA/GenBank)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/LC738870.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
+      "derivation": null,
+      "scenarioIds": ["T-CLI-04"]
+    },
+    "majanivirus-melamjnv-genbank": {
+      "fixtureId": "majanivirus-table-comparison",
+      "relativePath": "majanivirus-table-comparison/MelaMJNV.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 497312,
+      "sha256": "e226b4b6651a5e70a5a402c7553a231a082f2714bee92623d78040ba119649a0",
+      "packageTier": "extended",
+      "records": [{"id": "LC738874.1", "accession": "LC738874", "sequenceVersion": 1, "organism": "Melicertus latisulcatus majanivirus", "description": "MAG: Melicertus latisulcatus majanivirus Okinawa2016 DNA, complete genome", "topology": "linear", "length": 287061, "sequenceSha256": "4028b4979b4cc5f07483fb4da3b08d12d4737142663108f011b9ee548e6fe0e3", "featureCount": 105, "displayedFeatureCount": 104, "cdsCount": 104, "cdsStrandCounts": {"positive": 43, "negative": 61, "unknown": 0}}],
+      "provenance": {"sourceName": "NCBI Nucleotide (DDBJ/ENA/GenBank)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/LC738874.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
+      "derivation": null,
+      "scenarioIds": ["T-CLI-04"]
+    },
+    "majanivirus-pesemjnv-genbank": {
+      "fixtureId": "majanivirus-table-comparison",
+      "relativePath": "majanivirus-table-comparison/PeseMJNV.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 500530,
+      "sha256": "8de24deafddc6275cc39556818606e17ae7fff582e697257f9814fe191d6dadb",
+      "packageTier": "extended",
+      "records": [{"id": "LC738873.1", "accession": "LC738873", "sequenceVersion": 1, "organism": "Penaeus semisulcatus majanivirus", "description": "MAG: Penaeus semisulcatus majanivirus Kagawa2020 DNA, complete genome", "topology": "linear", "length": 291934, "sequenceSha256": "27253dc61da2adf3811192f7439aac0a8caea73a4990ac7796b6ed99197617e1", "featureCount": 111, "displayedFeatureCount": 110, "cdsCount": 110, "cdsStrandCounts": {"positive": 50, "negative": 60, "unknown": 0}}],
+      "provenance": {"sourceName": "NCBI Nucleotide (DDBJ/ENA/GenBank)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/LC738873.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
+      "derivation": null,
+      "scenarioIds": ["T-CLI-04"]
+    },
+    "majanivirus-mjenmv-melamjnv-tblastx": {
+      "fixtureId": "majanivirus-table-comparison",
+      "relativePath": "majanivirus-table-comparison/MjeNMV.MelaMJNV.tblastx.out",
+      "role": "raw",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "blast-outfmt6",
+      "sizeBytes": 1752746,
+      "sha256": "7d464249ef018f632ab891dd34fe3e3bc0c8420216e5a7062508d6ddd7be0502",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {"program": "TBLASTX", "queryRecordId": "LC738868.1", "subjectRecordId": "LC738874.1", "columnCount": 12, "rawRowCount": 23709, "tutorialRetainedRowCount": 80, "identityMinimum": 97, "alignmentLengthMinimum": 500},
+      "provenance": {"sourceName": "gbdraw retained Majanivirus TBLASTX example", "sourceUrl": "https://github.com/satoshikawato/gbdraw/tree/main/examples", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "Repository-retained comparison evidence distributed under the gbdraw repository license; source sequences retain their GenBank data-usage notes.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
+      "derivation": null,
+      "scenarioIds": ["T-CLI-04"]
+    },
+    "majanivirus-pemomjnva-pesemjnv-tblastx": {
+      "fixtureId": "majanivirus-table-comparison",
+      "relativePath": "majanivirus-table-comparison/PemoMJNVA.PeseMJNV.tblastx.out",
+      "role": "raw",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "blast-outfmt6",
+      "sizeBytes": 2511804,
+      "sha256": "fa2c9ed87ed04de0c03295c2aaafbf90b6cec979ec846bc53eb1250296e5a6a4",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {"program": "TBLASTX", "queryRecordId": "LC738870.1", "subjectRecordId": "LC738873.1", "columnCount": 12, "rawRowCount": 34062, "tutorialRetainedRowCount": 2, "identityMinimum": 97, "alignmentLengthMinimum": 500},
+      "provenance": {"sourceName": "gbdraw retained Majanivirus TBLASTX example", "sourceUrl": "https://github.com/satoshikawato/gbdraw/tree/main/examples", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "Repository-retained comparison evidence distributed under the gbdraw repository license; source sequences retain their GenBank data-usage notes.", "filenameNormalization": "Promoted from the repository example with unchanged bytes."},
+      "derivation": null,
+      "scenarioIds": ["T-CLI-04"]
+    },
+    "majanivirus-records-table": {
+      "fixtureId": "majanivirus-table-comparison",
+      "relativePath": "majanivirus-table-comparison/records.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "records-table",
+      "sizeBytes": 235,
+      "sha256": "11448f24506203831abdea7ae11a46581cff89cc6ec0da6087032c2d743fdcb6",
+      "packageTier": "extended",
+      "records": [],
+      "provenance": {"sourceName": "gbdraw tutorial records manifest", "sourceUrl": "https://github.com/satoshikawato/gbdraw", "retrievedOn": "2026-08-04", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "Repository-maintained tutorial table distributed under the gbdraw repository license.", "filenameNormalization": null},
+      "derivation": null,
+      "scenarioIds": ["T-CLI-04"]
+    },
+    "majanivirus-comparisons-table": {
+      "fixtureId": "majanivirus-table-comparison",
+      "relativePath": "majanivirus-table-comparison/comparisons.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "comparisons-table",
+      "sizeBytes": 123,
+      "sha256": "faaf1c29181e762d68c989b58cd225db5e01ce79bade321d161a2e0434c0c224",
+      "packageTier": "extended",
+      "records": [],
+      "provenance": {"sourceName": "gbdraw tutorial comparison manifest", "sourceUrl": "https://github.com/satoshikawato/gbdraw", "retrievedOn": "2026-08-04", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "Repository-maintained tutorial table distributed under the gbdraw repository license.", "filenameNormalization": null},
+      "derivation": null,
+      "scenarioIds": ["T-CLI-04"]
+    },
+    "hepatoplasmataceae-ap027078-genbank": {
+      "fixtureId": "hepatoplasmataceae-five",
+      "relativePath": "hepatoplasmataceae-five/AP027078.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 1344275,
+      "sha256": "2b7f3fe01757416ed09a34c95c5d326269519f7323ff272e2950e8d6617a87c7",
+      "packageTier": "extended",
+      "records": [{"id": "AP027078.1", "accession": "AP027078", "sequenceVersion": 1, "organism": "Candidatus Tyloplasma litorale", "description": "MAG: Candidatus Tyloplasma litorale Fukuoka2020 DNA, complete genome", "topology": "circular", "length": 615622, "sequenceSha256": "5f479286e8965f7d6c3b957e83b7abbf0cab5a0e073dc39a5f888fc193d7a7b9", "featureCount": 1127, "displayedFeatureCount": 530, "cdsCount": 530, "cdsStrandCounts": {"positive": 259, "negative": 271, "unknown": 0}}],
+      "provenance": {"sourceName": "DDBJ/NCBI Nucleotide", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027078.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
+      "derivation": null,
+      "scenarioIds": ["T-GUI-08"]
+    },
+    "hepatoplasmataceae-ap027131-genbank": {
+      "fixtureId": "hepatoplasmataceae-five",
+      "relativePath": "hepatoplasmataceae-five/AP027131.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 1455315,
+      "sha256": "4281dfd61d963e1264823ef8edef97f6072f567e443f650a97629bd683fba6da",
+      "packageTier": "extended",
+      "records": [{"id": "AP027131.1", "accession": "AP027131", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma vulgare", "description": "MAG: Candidatus Hepatoplasma vulgare Av-JP DNA, complete genome", "topology": "circular", "length": 662108, "sequenceSha256": "96d069bd35c78c09d06cf16663f91ff6da91fcccc538420b2cdbccfbd58fef9e", "featureCount": 1252, "displayedFeatureCount": 595, "cdsCount": 595, "cdsStrandCounts": {"positive": 335, "negative": 260, "unknown": 0}}],
+      "provenance": {"sourceName": "DDBJ/NCBI Nucleotide", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027131.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
+      "derivation": null,
+      "scenarioIds": ["T-GUI-08"]
+    },
+    "hepatoplasmataceae-ap027132-genbank": {
+      "fixtureId": "hepatoplasmataceae-five",
+      "relativePath": "hepatoplasmataceae-five/AP027132.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 1419813,
+      "sha256": "b251675fb9dc1853851204da0dff8b3dc7b46110292798e9a5792582383e3903",
+      "packageTier": "extended",
+      "records": [{"id": "AP027132.1", "accession": "AP027132", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma crinochetorum", "description": "MAG: Candidatus Hepatoplasma crinochetorum Tokyo2021 DNA, complete genome", "topology": "circular", "length": 643039, "sequenceSha256": "4eb16c23b766cc0ffa6e6dab0c0c96f5a22d0e074db61c735af4761fafad3c8b", "featureCount": 1210, "displayedFeatureCount": 573, "cdsCount": 573, "cdsStrandCounts": {"positive": 274, "negative": 299, "unknown": 0}}],
+      "provenance": {"sourceName": "DDBJ/NCBI Nucleotide", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027132.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
+      "derivation": null,
+      "scenarioIds": ["T-GUI-08"]
+    },
+    "hepatoplasmataceae-nz-cp006932-genbank": {
+      "fixtureId": "hepatoplasmataceae-five",
+      "relativePath": "hepatoplasmataceae-five/NZ_CP006932.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 1683899,
+      "sha256": "eb5fb6a24771a4b28cede43fcca0cf6c9029bb1106fb0ddfd835cc501e016f5a",
+      "packageTier": "extended",
+      "records": [{"id": "NZ_CP006932.1", "accession": "NZ_CP006932", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma crinochetorum Av", "description": "Candidatus Hepatoplasma crinochetorum Av chromosome, complete genome", "topology": "circular", "length": 657101, "sequenceSha256": "785e6afc80d9b3a316f20e7d60706cd610d6158be68934420598cbda203571b1", "featureCount": 1246, "displayedFeatureCount": 588, "cdsCount": 588, "cdsStrandCounts": {"positive": 281, "negative": 307, "unknown": 0}}],
+      "provenance": {"sourceName": "NCBI Nucleotide (RefSeq)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NZ_CP006932.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
+      "derivation": null,
+      "scenarioIds": ["T-GUI-08"]
+    },
     "shared-cds-gene-qualifier-priority": {
       "fixtureId": "shared-label-rules",
       "relativePath": "shared/cds_gene_qualifier_priority.tsv",
@@ -1753,6 +2086,7 @@
         "T-CLI-01",
         "T-CLI-02",
         "T-GUI-04",
+        "T-GUI-08",
         "H-GUI-06",
         "H-GUI-11",
         "H-CLI-02",

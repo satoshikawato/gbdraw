@@ -11,9 +11,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "docs/scenarios/manifest.json"
 SCENARIO_ID_RE = re.compile(r"^(?:T|H|R|E|A)-[A-Z]+-\d{2}$")
 ROLE_COUNTS = {
-    "tutorial": 7,
+    "tutorial": 14,
     "how-to": 33,
-    "reference": 11,
+    "reference": 10,
     "explanation": 6,
     "auxiliary": 2,
 }
@@ -31,6 +31,10 @@ SCREENSHOT_BUDGETS = {
     "T-GUI-02": 4,
     "T-GUI-03": 5,
     "T-GUI-04": 5,
+    "T-GUI-05": 5,
+    "T-GUI-06": 5,
+    "T-GUI-08": 5,
+    "T-GUI-09": 6,
     "H-GUI-01": 3,
     "H-GUI-02": 3,
     "H-GUI-03": 4,
@@ -69,7 +73,7 @@ def test_chapter_plan_gate_is_approved_with_a_bounded_fixture_budget() -> None:
     budgets = manifest["package_budgets"]
     assert budgets == {
         "core_uncompressed_bytes": 1_048_576,
-        "extended_incremental_uncompressed_bytes": 5_242_880,
+        "extended_incremental_uncompressed_bytes": 10_485_760,
         "gallery_nightly_bundled": False,
     }
 
@@ -77,7 +81,7 @@ def test_chapter_plan_gate_is_approved_with_a_bounded_fixture_budget() -> None:
 def test_chapter_census_matches_the_reviewed_plan() -> None:
     chapters = _manifest()["chapters"]
 
-    assert len(chapters) == 59
+    assert len(chapters) == 65
     assert Counter(chapter["role"] for chapter in chapters) == ROLE_COUNTS
 
     ids = [chapter["id"] for chapter in chapters]
@@ -85,13 +89,20 @@ def test_chapter_census_matches_the_reviewed_plan() -> None:
     assert len(ids) == len(set(ids))
     assert len(destinations) == len(set(destinations))
 
-    assert [chapter["id"] for chapter in chapters[:7]] == [
+    assert [chapter["id"] for chapter in chapters[:14]] == [
         "T-GUI-01",
         "T-GUI-02",
         "T-GUI-03",
         "T-GUI-04",
+        "T-GUI-05",
+        "T-GUI-06",
+        "T-GUI-08",
+        "T-GUI-09",
         "T-CLI-01",
         "T-CLI-02",
+        "T-CLI-03",
+        "T-CLI-04",
+        "T-CLI-05",
         "T-PY-01",
     ]
 
@@ -228,7 +239,18 @@ def test_tutorials_declare_an_early_visible_result_on_their_real_surface() -> No
             for value in chapter["execution"]["assertions"]
             if value.startswith("first_result_step=")
         )
-        assert int(assertion.rsplit("=", 1)[1]) <= 3
+        step = int(assertion.rsplit("=", 1)[1])
+        assert step <= 3
+        if chapter["id"] in {
+            "T-GUI-05",
+            "T-GUI-06",
+            "T-GUI-08",
+            "T-GUI-09",
+            "T-CLI-03",
+            "T-CLI-04",
+            "T-CLI-05",
+        }:
+            assert step == 2
         assert chapter["execution"]["kind"] == expected_kind[chapter["surface"]]
 
 

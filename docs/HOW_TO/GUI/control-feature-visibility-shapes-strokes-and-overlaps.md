@@ -124,4 +124,3 @@ multiple overlap lanes.
 
 - [Style features, labels, titles, and legends](style-features-labels-titles-and-legends.md)
 - [Palettes, feature rules, labels, shapes, and track renderers](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)
-- [Tutorial fixture provenance](../../REFERENCE/tutorial-fixture-provenance.md)

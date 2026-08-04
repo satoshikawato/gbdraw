@@ -5,6 +5,7 @@
 > [!NOTE]
 > This compatibility URL is kept for one documentation-renovation release. Inspection, session history, and export now have separate canonical procedures; persisted-format details remain in one compatibility reference.
 
+- [Create an interactive figure and reproduce it from a saved session](./GUI/create-and-resume-an-interactive-figure.md)
 - [Inspect and edit a finished diagram in the web app](../HOW_TO/GUI/inspect-and-edit-a-diagram.md)
 - [Save, restore, undo, and reproduce web-app work](../HOW_TO/GUI/save-restore-undo-and-reproduce-work.md)
 - [Export publication and interactive figures from the web app](../HOW_TO/GUI/export-publication-and-interactive-figures.md)

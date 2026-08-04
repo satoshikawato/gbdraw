@@ -73,4 +73,3 @@ Select **SVG** to save `linear_regions_orientation.svg`.
 
 - [Create a first Linear diagram](../../TUTORIALS/GUI/first-linear-genome-diagram.md)
 - [Use uploaded BLAST results](./use-uploaded-blast-results.md)
-- [Tutorial fixture provenance](../../REFERENCE/tutorial-fixture-provenance.md)

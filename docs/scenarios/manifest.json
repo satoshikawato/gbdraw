@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "plan_source": "docs/internal/DOCUMENTATION_RENOVATION_PLAN_2026-08-03.md",
+  "plan_source": "docs/internal/TUTORIAL_COVERAGE_EXPANSION_IMPLEMENTATION_PLAN_2026-08-04.md",
   "approval": {
     "status": "approved",
-    "date": "2026-08-03",
-    "basis": "Implementation requested from the reviewed renovation plan",
-    "notes": "The chapter census is fixed for implementation. Later changes require updating this manifest before capture or prose."
+    "date": "2026-08-04",
+    "basis": "Implementation requested from the approved tutorial-coverage expansion plan",
+    "notes": "This expansion supersedes docs/internal/DOCUMENTATION_RENOVATION_PLAN_2026-08-03.md for the chapter census while retaining that plan as the original documentation-renovation approval record."
   },
   "package_budgets": {
     "core_uncompressed_bytes": 1048576,
-    "extended_incremental_uncompressed_bytes": 5242880,
+    "extended_incremental_uncompressed_bytes": 10485760,
     "gallery_nightly_bundled": false
   },
   "capability_groups": {
@@ -111,10 +111,12 @@
     "de3": {"tier": "core"},
     "lambda-de3-comparison": {"tier": "core"},
     "aminoglycoside-bgc-five": {"tier": "core"},
+    "hepatoplasmataceae-five": {"tier": "extended"},
     "tobacco-plastome-regions": {"tier": "extended"},
     "depth-1kb": {"tier": "extended"},
     "metazoan-mitochondria-four": {"tier": "extended"},
-    "metazoan-mitochondria-comparison": {"tier": "extended"}
+    "metazoan-mitochondria-comparison": {"tier": "extended"},
+    "majanivirus-table-comparison": {"tier": "extended"}
   },
   "chapters": [
     {
@@ -185,7 +187,7 @@
     },
     {
       "id": "T-GUI-04",
-      "title": "Compare annotated proteins with LOSATP in the browser",
+      "title": "Create protein Similarity groups with LOSATP in the browser",
       "role": "tutorial",
       "surface": "gui",
       "priority": "P1",
@@ -203,6 +205,95 @@
       ],
       "sources": ["docs/TUTORIALS/4_Protein_Comparisons.md"],
       "destination": "docs/TUTORIALS/GUI/compare-proteins-losatp.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-GUI-05",
+      "title": "Build an annotated chloroplast map with custom tracks",
+      "role": "tutorial",
+      "surface": "gui",
+      "priority": "P1",
+      "capabilities": ["track.region-annotations", "track.gc-content", "track.at-skew", "track.custom-circular-slots", "layout.titles", "layout.legends", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["tobacco-plastome-regions"],
+      "settings": {"mode": "circular", "record_id": "NC_001879.2", "annotation_set": "plastome_regions", "track_order": ["annotations", "features", "ticks", "gc_content", "at_skew"]},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_annotated_chloroplast.py", "tier": "extended", "expected_outputs": ["annotated_chloroplast_map.svg"], "assertions": ["first_result_step=2", "record_length=155943", "annotation_labels=LSC,SSC,IRa,IRb", "track_types=annotations,gc_content,at_skew", "title_and_legend_visible=true"]},
+      "screenshots": [
+        {"path": "docs/images/t-gui-05/01-input-ready.png", "reason": "Confirm the complete tobacco plastome input.", "alt": "Tobacco plastome GenBank file ready in Circular mode"},
+        {"path": "docs/images/t-gui-05/02-first-diagram.png", "reason": "Show the plain plastome before custom tracks.", "alt": "First circular tobacco plastome diagram"},
+        {"path": "docs/images/t-gui-05/03-annotation-table.png", "reason": "Record the four imported structural regions.", "alt": "Annotation table containing LSC, SSC, IRa, and IRb regions"},
+        {"path": "docs/images/t-gui-05/04-track-settings.png", "reason": "Record custom annotation and quantitative track placement.", "alt": "Circular custom-track controls for annotations, GC content, and AT skew"},
+        {"path": "docs/images/t-gui-05/05-finished-diagram.png", "reason": "Show the finished publication figure.", "alt": "Annotated tobacco plastome with structural regions, GC content, AT skew, title, and legend"}
+      ],
+      "sources": ["docs/TUTORIALS/1_Customizing_Plots.md", "docs/TUTORIALS/6_Depth_Quantitative_Tracks.md"],
+      "destination": "docs/TUTORIALS/GUI/build-an-annotated-chloroplast-map.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-GUI-06",
+      "title": "Add circular comparison rings from precomputed results",
+      "role": "tutorial",
+      "surface": "gui",
+      "priority": "P1",
+      "capabilities": ["comparison.uploaded-tables", "comparison.circular-rings", "interactive.match-popup", "output.fasta-data", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["human-mitochondrion", "metazoan-mitochondria-comparison"],
+      "settings": {"mode": "circular", "reference_record": "NC_012920.1", "reference_side": "subject", "ring_count": 3},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_precomputed_circular_rings.py", "tier": "extended", "expected_outputs": ["precomputed_circular_rings.svg", "circular_hsp_spans.fasta"], "assertions": ["first_result_step=2", "ring_count=3", "ring_order=danio,drosophila,caenorhabditis", "reference_side=subject", "popup.has_hsp_metadata=true", "fasta.both_spans=true"]},
+      "screenshots": [
+        {"path": "docs/images/t-gui-06/01-input-ready.png", "reason": "Confirm the complete human mitochondrial reference.", "alt": "Human mitochondrial GenBank input ready for Circular comparison"},
+        {"path": "docs/images/t-gui-06/02-first-diagram.png", "reason": "Show the reference before comparison rings are added.", "alt": "First circular human mitochondrial diagram without similarity rings"},
+        {"path": "docs/images/t-gui-06/03-ring-settings.png", "reason": "Record the three uploaded tables and ring settings.", "alt": "Three precomputed TLOSATX tables configured as Circular rings"},
+        {"path": "docs/images/t-gui-06/04-ring-result.png", "reason": "Verify the ordered three-ring result.", "alt": "Human mitochondrial diagram with three similarity rings"},
+        {"path": "docs/images/t-gui-06/05-hsp-popup.png", "reason": "Show one HSP and its span-export actions.", "alt": "Circular comparison HSP popup with reference and comparison span exports"}
+      ],
+      "sources": ["docs/TUTORIALS/2_Comparative_Genomics.md"],
+      "destination": "docs/TUTORIALS/GUI/add-precomputed-circular-comparison-rings.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-GUI-08",
+      "title": "Find conserved gene order from all-vs-all LOSATP evidence",
+      "role": "tutorial",
+      "surface": "gui",
+      "priority": "P1",
+      "capabilities": ["comparison.losatp-collinear", "interactive.match-popup", "output.fasta-data", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["hepatoplasmataceae-five"],
+      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "collinear", "minimum_anchors": 1, "comparison_scope": "all", "scheduling": "threaded", "total_threads": 32, "parallel_runs": 1, "threads_per_run": 32},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_collinear.py", "tier": "extended", "expected_outputs": ["losatp_collinear.svg", "collinear_members.fasta"], "assertions": ["first_result_step=2", "starting_all_vs_all_cache_entries=25", "all_record_pair_count=10", "raw_search_reused=true", "block_count_positive=true", "orientations_verified=true", "identity_color_mode=orientation_identity", "popup.has_block_coordinates=true", "fasta.envelope_sequences=true"]},
+      "screenshots": [
+        {"path": "docs/images/t-gui-08/01-input-ready.png", "reason": "Confirm the five records restored from the all-vs-all starting project.", "alt": "Five annotated Hepatoplasmataceae genomes restored from an all-vs-all LOSATP session"},
+        {"path": "docs/images/t-gui-08/02-first-diagram.png", "reason": "Show the existing all-vs-all Similarity groups before Collinear reduction.", "alt": "Hepatoplasmataceae all-vs-all LOSATP Similarity-group diagram"},
+        {"path": "docs/images/t-gui-08/03-collinear-settings.png", "reason": "Record the all-record evidence, anchor, and presentation settings.", "alt": "LOSATP Collinear settings using all Hepatoplasmataceae record pairs"},
+        {"path": "docs/images/t-gui-08/04-collinear-result.png", "reason": "Verify conserved-order blocks and orientation colors.", "alt": "Hepatoplasmataceae diagram with LOSATP Collinear blocks"},
+        {"path": "docs/images/t-gui-08/05-block-popup.png", "reason": "Show block coordinates and envelope export.", "alt": "LOSATP Collinear block popup with anchors and envelope FASTA export"}
+      ],
+      "sources": ["docs/TUTORIALS/4_Protein_Comparisons.md"],
+      "destination": "docs/TUTORIALS/GUI/compare-proteins-losatp-collinear.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-GUI-09",
+      "title": "Create an interactive figure and reproduce it from a saved session",
+      "role": "tutorial",
+      "surface": "gui",
+      "priority": "P1",
+      "capabilities": ["interactive.preview-search", "interactive.feature-popup", "interactive.session-save-load", "output.interactive-svg", "output.reproducible-handoff", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["human-mitochondrion"],
+      "settings": {"mode": "circular", "record_id": "NC_012920.1", "fresh_context_restore": true},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_interactive_handoff.py", "tier": "extended", "expected_outputs": ["interactive_human_mitochondrion.interactive.svg", "interactive_handoff.gbdraw-session.json.gz", "restored_interactive_figure.svg"], "assertions": ["first_result_step=2", "feature_search=COX1", "interactive_svg.offline_controls=true", "session.gzip=true", "fresh_context_restore=true", "restored_semantics_equal=true"]},
+      "screenshots": [
+        {"path": "docs/images/t-gui-09/01-input-ready.png", "reason": "Confirm the raw GenBank input.", "alt": "Human mitochondrial GenBank file ready for an interactive figure"},
+        {"path": "docs/images/t-gui-09/02-first-diagram.png", "reason": "Show the first generated diagram.", "alt": "First circular diagram before interactive inspection"},
+        {"path": "docs/images/t-gui-09/03-interactive-export.png", "reason": "Locate and verify the interactive SVG export.", "alt": "Interactive SVG export control for the generated figure"},
+        {"path": "docs/images/t-gui-09/04-feature-search.png", "reason": "Show a found feature and its popup.", "alt": "COX1 feature search result and feature details popup"},
+        {"path": "docs/images/t-gui-09/05-session-download.png", "reason": "Record the complete session download action.", "alt": "Saved-session download after generating the interactive figure"},
+        {"path": "docs/images/t-gui-09/06-reloaded-result.png", "reason": "Verify the regenerated result in a fresh context.", "alt": "Restored session regenerated as an equivalent circular diagram"}
+      ],
+      "sources": ["docs/TUTORIALS/8_Interactive_SVG_Sessions.md"],
+      "destination": "docs/TUTORIALS/GUI/create-and-resume-an-interactive-figure.md",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -235,6 +326,54 @@
       "screenshots": [],
       "sources": ["docs/TUTORIALS/7_Linear_Layout.md"],
       "destination": "docs/TUTORIALS/CLI/first-linear-genome-diagram.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-CLI-03",
+      "title": "Highlight mitochondrial features without editing the GenBank file",
+      "role": "tutorial",
+      "surface": "cli",
+      "priority": "P1",
+      "capabilities": ["entry.circular-cli", "presentation.feature-colors", "presentation.qualifier-priority", "presentation.label-filters", "presentation.label-overrides", "presentation.visibility", "presentation.shapes", "presentation.strokes", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["human-mitochondrion"],
+      "settings": {"mode": "circular", "working_directory": "empty", "format": "svg", "baseline_output": "mitochondrial_features_baseline.svg", "finished_output": "mitochondrial_features_highlighted.svg"},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["mitochondrial_features_baseline.svg", "mitochondrial_features_highlighted.svg"], "assertions": ["first_result_step=2", "labels_and_colors_match=true", "visibility_actions=show,off,exclude_matching", "shapes=arrow,rectangle,underlay", "broken_references=0", "unexpected_empty_layers=0"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/1_Customizing_Plots.md", "docs/TUTORIALS/3_Advanced_Customization.md", "docs/TUTORIALS/9_Feature_Visibility_Shapes.md"],
+      "destination": "docs/TUTORIALS/CLI/highlight-mitochondrial-features.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-CLI-04",
+      "title": "Build a multi-row genome comparison from TSV manifests",
+      "role": "tutorial",
+      "surface": "cli",
+      "priority": "P1",
+      "capabilities": ["entry.linear-cli", "input.tsv-manifests", "layout.linear-multi-row", "layout.rulers", "comparison.uploaded-tables", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["majanivirus-table-comparison"],
+      "settings": {"mode": "linear", "working_directory": "empty", "record_count": 4, "grid": "2x2", "baseline_output": "table_driven_comparison_baseline.svg", "finished_output": "table_driven_comparison.svg"},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["table_driven_comparison_baseline.svg", "table_driven_comparison.svg"], "assertions": ["first_result_step=2", "records_table.valid=true", "comparisons_table.referential_integrity=true", "record_cells_and_orientations_match=true", "comparison_endpoint_pairs=2", "rulers_and_shared_scale=true"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/2_Comparative_Genomics.md", "docs/TUTORIALS/5_Table_Driven_Inputs.md", "docs/TUTORIALS/7_Linear_Layout.md"],
+      "destination": "docs/TUTORIALS/CLI/build-a-table-driven-genome-comparison.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-CLI-05",
+      "title": "Build a quantitative genome map with depth, GC content, and skew",
+      "role": "tutorial",
+      "surface": "cli",
+      "priority": "P1",
+      "capabilities": ["entry.circular-cli", "track.depth-numeric", "track.gc-content", "track.dinucleotide-skew", "track.custom-circular-slots", "layout.axes", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["depth-1kb"],
+      "settings": {"mode": "circular", "working_directory": "empty", "record_id": "AP027133.1", "window": 1000, "step": 1000, "baseline_output": "quantitative_genome_baseline.svg", "finished_output": "quantitative_genome_map.svg"},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["quantitative_genome_baseline.svg", "quantitative_genome_map.svg"], "assertions": ["first_result_step=2", "depth_rows=607", "depth_coordinate_coverage=true", "window=1000", "step=1000", "track_slots=depth,gc_content,gc_skew", "axes_and_ticks=true"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/6_Depth_Quantitative_Tracks.md"],
+      "destination": "docs/TUTORIALS/CLI/build-a-quantitative-genome-map.md",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
@@ -574,7 +713,6 @@
     {"id": "R-SESSION-01", "title": "Session and request compatibility", "role": "reference", "surface": "cross-surface", "priority": "P0", "capabilities": ["interactive.session-save-load", "program.session-round-trip"], "canonical_for": [], "fixtures": ["human-mitochondrion"], "settings": {"source": "implementation-version-constants"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["release_notes_version_match=true", "compatibility_reference_match=true", "browser_acceptance_fixture_match=true"]}, "screenshots": [], "sources": ["docs/SESSION_COMPATIBILITY.md", "docs/RELEASE_NOTES_0.14.0b0.md"], "destination": "docs/REFERENCE/session-and-request-compatibility.md", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "R-OUTPUT-01", "title": "Output format and export reference", "role": "reference", "surface": "cross-surface", "priority": "P1", "capabilities": ["output.static-svg", "output.interactive-svg", "output.png", "output.pdf", "output.eps", "output.ps"], "canonical_for": [], "fixtures": [], "settings": {"source": "export-capability-matrix"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["surface_formats_match=true", "optional_dependencies_match=true", "naming_and_overwrite_match=true"]}, "screenshots": [], "sources": ["docs/EXPORT.md", "docs/CLI_Reference.md"], "destination": "docs/REFERENCE/output-formats-and-export.md", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "R-SVG-01", "title": "Interactive SVG and semantic-hook reference", "role": "reference", "surface": "cross-surface", "priority": "P2", "capabilities": ["interactive.preview-search", "interactive.feature-popup", "interactive.match-popup", "interactive.group-popup", "output.interactive-svg"], "canonical_for": [], "fixtures": [], "settings": {"source": "semantic-hooks"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "extended", "expected_outputs": [], "assertions": ["stable_ids_match=true", "embedded_controls_match=true", "sanitization_contract_match=true"]}, "screenshots": [], "sources": ["docs/SVG_SEMANTIC_HOOKS.md"], "destination": "docs/REFERENCE/interactive-svg-and-semantic-hooks.md", "status": {"implementation": "verified", "review": "approved"}},
-    {"id": "R-FIXTURE-01", "title": "Tutorial fixture provenance", "role": "reference", "surface": "cross-surface", "priority": "P1", "capabilities": ["input.genbank-embl-ddbj", "input.gff3-fasta", "input.multi-record"], "canonical_for": [], "fixtures": ["human-mitochondrion", "metazoan-mitochondria-four", "metazoan-mitochondria-comparison", "lambda", "lambda-gff3", "de3", "lambda-de3-comparison", "aminoglycoside-bgc-five", "tobacco-plastome-regions", "depth-1kb"], "settings": {"source": "fixture-manifest"}, "execution": {"kind": "contract", "path": "tests/test_documentation_reference_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["checksums_match=true", "biological_metadata_match=true", "derivations_match=true", "package_tiers_match=true"]}, "screenshots": [], "sources": [], "destination": "docs/REFERENCE/tutorial-fixture-provenance.md", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "E-LAYOUT-01", "title": "Choose Circular or Linear", "role": "explanation", "surface": "cross-surface", "priority": "P1", "capabilities": ["layout.circular-single", "layout.circular-multi", "layout.linear-single-row", "layout.linear-multi-row"], "canonical_for": [], "fixtures": [], "settings": {"source": "tested-layout-semantics"}, "execution": {"kind": "contract", "path": "tests/test_documentation_scenario_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["layout_claims_have_scenario_owner=true"]}, "screenshots": [], "sources": ["docs/WORKFLOW_GUIDE.md"], "destination": "docs/EXPLANATION/choose-circular-or-linear.md", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "E-INTERFACE-01", "title": "Choose the GUI, CLI, or Python interface", "role": "explanation", "surface": "cross-surface", "priority": "P1", "capabilities": ["entry.hosted-gui", "entry.local-gui", "entry.circular-cli", "entry.linear-cli", "entry.simple-python", "entry.typed-python"], "canonical_for": [], "fixtures": [], "settings": {"source": "surface-capability-matrix"}, "execution": {"kind": "contract", "path": "tests/test_documentation_scenario_contracts.py", "tier": "core", "expected_outputs": [], "assertions": ["surface_claims_have_executable_owner=true", "internal_profile_term_absent=true"]}, "screenshots": [], "sources": ["docs/WORKFLOW_GUIDE.md"], "destination": "docs/EXPLANATION/choose-gui-cli-or-python.md", "status": {"implementation": "verified", "review": "approved"}},
     {"id": "E-COMPARISON-01", "title": "Choose a genome-comparison method", "role": "explanation", "surface": "cross-surface", "priority": "P1", "capabilities": ["comparison.uploaded-tables", "comparison.browser-losatn", "comparison.browser-tlosatx", "comparison.losatp-pairwise", "comparison.losatp-groups", "comparison.losatp-collinear", "comparison.circular-rings"], "canonical_for": [], "fixtures": [], "settings": {"source": "surface-capability-matrix"}, "execution": {"kind": "contract", "path": "tests/test_documentation_scenario_contracts.py", "tier": "extended", "expected_outputs": [], "assertions": ["method_claims_match_supported_surface=true", "limitations_link_to_reference=true"]}, "screenshots": [], "sources": ["docs/WORKFLOW_GUIDE.md", "docs/TUTORIALS/2_Comparative_Genomics.md", "docs/TUTORIALS/4_Protein_Comparisons.md"], "destination": "docs/EXPLANATION/choose-a-genome-comparison-method.md", "status": {"implementation": "verified", "review": "approved"}},

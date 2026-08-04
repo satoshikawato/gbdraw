@@ -1,4 +1,4 @@
-# Compare annotated proteins with LOSATP in the browser
+# Create protein Similarity groups with LOSATP in the browser
 
 Use LOSATP **Similarity groups** to compare five aminoglycoside biosynthetic
 gene-cluster records. The records remain Linear. They are native BGC database

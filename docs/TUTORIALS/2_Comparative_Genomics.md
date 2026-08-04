@@ -5,6 +5,8 @@
 > [!NOTE]
 > This compatibility URL is kept for one documentation-renovation release. The runnable material has moved to separate pages for uploaded evidence, browser searches, and comparison interpretation.
 
+- [Build a multi-row genome comparison from TSV manifests](./CLI/build-a-table-driven-genome-comparison.md)
+- [Add circular comparison rings from precomputed results](./GUI/add-precomputed-circular-comparison-rings.md)
 - [Compare two complete genomes with LOSATN in the web app](./GUI/compare-genomes-losatn.md)
 - [Use TLOSATX for translated nucleotide comparisons in the web app](../HOW_TO/GUI/use-tlosatx.md)
 - [Use uploaded BLAST results in the web app](../HOW_TO/GUI/use-uploaded-blast-results.md)

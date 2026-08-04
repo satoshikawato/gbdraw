@@ -99,6 +99,11 @@ COMPARISONS = (
         14,
     ),
 )
+COMPARISON_FASTA_FILENAMES = {
+    "NC_002333.2": "NC_002333.2.fna",
+    "NC_024511.2": "NC_024511.2.fna",
+    "NC_001328.1": "NC_001328.1.fna",
+}
 
 
 def _sha256(data: bytes) -> str:
@@ -119,12 +124,16 @@ def _load_record(spec: RecordSpec):
     return record
 
 
-def _write_fasta(spec: RecordSpec, path: Path) -> None:
+def _render_fasta(spec: RecordSpec) -> bytes:
     record = _load_record(spec)
     sequence = str(record.seq).upper()
     lines = [f">{record.id}"]
     lines.extend(sequence[index : index + 60] for index in range(0, len(sequence), 60))
-    path.write_text("\n".join(lines) + "\n", encoding="ascii")
+    return ("\n".join(lines) + "\n").encode("ascii")
+
+
+def _write_fasta(spec: RecordSpec, path: Path) -> None:
+    path.write_bytes(_render_fasta(spec))
 
 
 def _retained(row: tuple[str, ...]) -> bool:
@@ -232,6 +241,21 @@ def build(*, write: bool) -> dict[str, dict[str, Any]]:
                 destination.write_bytes(first)
             elif destination.read_bytes() != first:
                 raise ValueError(f"frozen output differs: {spec.filename}")
+    for spec in COMPARISONS:
+        filename = COMPARISON_FASTA_FILENAMES[spec.query.record_id]
+        payload = _render_fasta(spec.query)
+        destination = OUTPUT_ROOT / filename
+        if write:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(payload)
+        elif destination.read_bytes() != payload:
+            raise ValueError(f"frozen FASTA differs: {filename}")
+        summaries[filename] = {
+            "sizeBytes": len(payload),
+            "sha256": _sha256(payload),
+            "recordId": spec.query.record_id,
+            "sequenceLength": spec.query.length,
+        }
     return summaries
 
 

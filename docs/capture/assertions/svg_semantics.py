@@ -166,6 +166,7 @@ root => {
       anchorCount: String(element.getAttribute('data-collinearity-anchor-count') || ''),
       orientation: String(element.getAttribute('data-collinearity-orientation') || ''),
       colorMode: String(element.getAttribute('data-collinearity-color-mode') || ''),
+      groupScope: String(element.getAttribute('data-collinear-group-scope') || ''),
     })),
     texts,
     labelTexts,
@@ -399,6 +400,7 @@ def inspect_svg_file(path: Path) -> dict[str, Any]:
                 "colorMode": element.attrib.get(
                     "data-collinearity-color-mode", ""
                 ),
+                "groupScope": element.attrib.get("data-collinear-group-scope", ""),
             }
             for element in comparison_elements
         ],

@@ -5,6 +5,7 @@
 > [!NOTE]
 > This compatibility URL is kept for one documentation-renovation release. Styling procedures and exact rule precedence now have separate canonical pages.
 
+- [Highlight mitochondrial features without editing the GenBank file](./CLI/highlight-mitochondrial-features.md)
 - [Style features, labels, titles, and legends in the web app](../HOW_TO/GUI/style-features-labels-titles-and-legends.md)
 - [Control feature visibility, shapes, strokes, and overlaps in the web app](../HOW_TO/GUI/control-feature-visibility-shapes-strokes-and-overlaps.md)
 - [Set colors, labels, visibility, shapes, and strokes on the command line](../HOW_TO/CLI/set-colors-labels-visibility-shapes-and-strokes.md)

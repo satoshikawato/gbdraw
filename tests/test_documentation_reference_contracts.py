@@ -35,7 +35,6 @@ REFERENCE_FILES = {
     "session-and-request-compatibility.md",
     "output-formats-and-export.md",
     "interactive-svg-and-semantic-hooks.md",
-    "tutorial-fixture-provenance.md",
 }
 DOCUMENTATION_PAGES = (
     *(REFERENCE_ROOT / name for name in REFERENCE_FILES),

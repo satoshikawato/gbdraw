@@ -163,3 +163,15 @@ def test_public_docs_do_not_expose_the_example_maintenance_script() -> None:
         if "tools/reproduce_examples.py" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
+
+
+def test_public_docs_do_not_expose_fixture_provenance_maintenance_details() -> None:
+    forbidden = ("tutorial-fixture-provenance.md", "R-FIXTURE-01")
+    offenders = [
+        f"{path.relative_to(REPO_ROOT).as_posix()}: {token}"
+        for path in _public_docs()
+        for token in forbidden
+        if token in path.read_text(encoding="utf-8")
+    ]
+
+    assert offenders == []

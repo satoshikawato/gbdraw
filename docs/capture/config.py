@@ -55,6 +55,10 @@ GUI_UPLOADED_COMPARISON_SCENARIO_ID = "H-GUI-04"
 GUI_TLOSATX_SCENARIO_ID = "H-GUI-05"
 GUI_CIRCULAR_RINGS_SCENARIO_ID = "H-GUI-06"
 GUI_LOSATP_GROUPS_SCENARIO_ID = "T-GUI-04"
+GUI_ANNOTATED_CHLOROPLAST_SCENARIO_ID = "T-GUI-05"
+GUI_PRECOMPUTED_CIRCULAR_RINGS_SCENARIO_ID = "T-GUI-06"
+GUI_LOSATP_TUTORIAL_COLLINEAR_SCENARIO_ID = "T-GUI-08"
+GUI_INTERACTIVE_HANDOFF_SCENARIO_ID = "T-GUI-09"
 GUI_LOSATP_GROUPS_HOW_TO_SCENARIO_ID = "H-GUI-07"
 GUI_LOSATP_COLLINEAR_SCENARIO_ID = "H-GUI-08"
 GUI_QUANTITATIVE_TRACKS_SCENARIO_ID = "H-GUI-09"
@@ -75,6 +79,10 @@ IMPLEMENTED_SCENARIO_IDS = (
     GUI_TLOSATX_SCENARIO_ID,
     GUI_CIRCULAR_RINGS_SCENARIO_ID,
     GUI_LOSATP_GROUPS_SCENARIO_ID,
+    GUI_ANNOTATED_CHLOROPLAST_SCENARIO_ID,
+    GUI_PRECOMPUTED_CIRCULAR_RINGS_SCENARIO_ID,
+    GUI_LOSATP_TUTORIAL_COLLINEAR_SCENARIO_ID,
+    GUI_INTERACTIVE_HANDOFF_SCENARIO_ID,
     GUI_LOSATP_GROUPS_HOW_TO_SCENARIO_ID,
     GUI_LOSATP_COLLINEAR_SCENARIO_ID,
     GUI_QUANTITATIVE_TRACKS_SCENARIO_ID,
@@ -139,6 +147,35 @@ GUI_LOSATP_GROUPS_SCREENSHOT_NAMES = (
     "04-comparison-result.png",
     "05-match-popup.png",
 )
+GUI_ANNOTATED_CHLOROPLAST_SCREENSHOT_NAMES = (
+    "01-input-ready.png",
+    "02-first-diagram.png",
+    "03-annotation-table.png",
+    "04-track-settings.png",
+    "05-finished-diagram.png",
+)
+GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES = (
+    "01-input-ready.png",
+    "02-first-diagram.png",
+    "03-ring-settings.png",
+    "04-ring-result.png",
+    "05-hsp-popup.png",
+)
+GUI_LOSATP_TUTORIAL_COLLINEAR_SCREENSHOT_NAMES = (
+    "01-input-ready.png",
+    "02-first-diagram.png",
+    "03-collinear-settings.png",
+    "04-collinear-result.png",
+    "05-block-popup.png",
+)
+GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES = (
+    "01-input-ready.png",
+    "02-first-diagram.png",
+    "03-interactive-export.png",
+    "04-feature-search.png",
+    "05-session-download.png",
+    "06-reloaded-result.png",
+)
 GUI_LOSATP_GROUPS_HOW_TO_SCREENSHOT_NAMES = (
     "group-settings.png",
     "group-result.png",
@@ -194,6 +231,16 @@ SCREENSHOT_NAMES_BY_SCENARIO = {
     GUI_TLOSATX_SCENARIO_ID: GUI_TLOSATX_SCREENSHOT_NAMES,
     GUI_CIRCULAR_RINGS_SCENARIO_ID: GUI_CIRCULAR_RINGS_SCREENSHOT_NAMES,
     GUI_LOSATP_GROUPS_SCENARIO_ID: GUI_LOSATP_GROUPS_SCREENSHOT_NAMES,
+    GUI_ANNOTATED_CHLOROPLAST_SCENARIO_ID: (
+        GUI_ANNOTATED_CHLOROPLAST_SCREENSHOT_NAMES
+    ),
+    GUI_PRECOMPUTED_CIRCULAR_RINGS_SCENARIO_ID: (
+        GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES
+    ),
+    GUI_LOSATP_TUTORIAL_COLLINEAR_SCENARIO_ID: (
+        GUI_LOSATP_TUTORIAL_COLLINEAR_SCREENSHOT_NAMES
+    ),
+    GUI_INTERACTIVE_HANDOFF_SCENARIO_ID: GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES,
     GUI_LOSATP_GROUPS_HOW_TO_SCENARIO_ID: (
         GUI_LOSATP_GROUPS_HOW_TO_SCREENSHOT_NAMES
     ),
@@ -342,6 +389,51 @@ GUI_BGC_FIXTURES = (
         31_892,
     ),
 )
+GUI_HEPATOPLASMATACEAE_FIXTURES = (
+    (
+        WEB_ROOT / "tutorial-data" / "hepatoplasmataceae-five" / "AP027078.gb",
+        1_344_275,
+        "2b7f3fe01757416ed09a34c95c5d326269519f7323ff272e2950e8d6617a87c7",
+        "AP027078.1",
+        615_622,
+        "Candidatus Tyloplasma litorale",
+    ),
+    (
+        WEB_ROOT / "tutorial-data" / "hepatoplasmataceae-five" / "AP027131.gb",
+        1_455_315,
+        "4281dfd61d963e1264823ef8edef97f6072f567e443f650a97629bd683fba6da",
+        "AP027131.1",
+        662_108,
+        "Candidatus Hepatoplasma vulgare",
+    ),
+    (
+        WEB_ROOT / "tutorial-data" / "depth-1kb" / "AP027133.gb",
+        1_344_094,
+        "913af50dd9d37cc2107be5e46484b885c5d586fb414b4b501380fc8f17a659d6",
+        "AP027133.1",
+        606_194,
+        "Candidatus Hepatoplasma scabrum",
+    ),
+    (
+        WEB_ROOT / "tutorial-data" / "hepatoplasmataceae-five" / "AP027132.gb",
+        1_419_813,
+        "b251675fb9dc1853851204da0dff8b3dc7b46110292798e9a5792582383e3903",
+        "AP027132.1",
+        643_039,
+        "Candidatus Hepatoplasma crinochetorum",
+    ),
+    (
+        WEB_ROOT
+        / "tutorial-data"
+        / "hepatoplasmataceae-five"
+        / "NZ_CP006932.gb",
+        1_683_899,
+        "eb5fb6a24771a4b28cede43fcca0cf6c9029bb1106fb0ddfd835cc501e016f5a",
+        "NZ_CP006932.1",
+        657_101,
+        "Candidatus Hepatoplasma crinochetorum Av",
+    ),
+)
 
 
 def load_manifest() -> dict[str, Any]:
@@ -478,6 +570,30 @@ def gui_losatp_groups_screenshot_paths() -> dict[str, Path]:
     """Resolve all T-GUI-04 images from the approved manifest."""
 
     return screenshot_paths_for(GUI_LOSATP_GROUPS_SCENARIO_ID)
+
+
+def gui_annotated_chloroplast_screenshot_paths() -> dict[str, Path]:
+    """Resolve all T-GUI-05 images from the approved manifest."""
+
+    return screenshot_paths_for(GUI_ANNOTATED_CHLOROPLAST_SCENARIO_ID)
+
+
+def gui_precomputed_circular_rings_screenshot_paths() -> dict[str, Path]:
+    """Resolve all T-GUI-06 images from the approved manifest."""
+
+    return screenshot_paths_for(GUI_PRECOMPUTED_CIRCULAR_RINGS_SCENARIO_ID)
+
+
+def gui_losatp_tutorial_collinear_screenshot_paths() -> dict[str, Path]:
+    """Resolve all T-GUI-08 images from the approved manifest."""
+
+    return screenshot_paths_for(GUI_LOSATP_TUTORIAL_COLLINEAR_SCENARIO_ID)
+
+
+def gui_interactive_handoff_screenshot_paths() -> dict[str, Path]:
+    """Resolve all T-GUI-09 images from the approved manifest."""
+
+    return screenshot_paths_for(GUI_INTERACTIVE_HANDOFF_SCENARIO_ID)
 
 
 def gui_losatp_groups_how_to_screenshot_paths() -> dict[str, Path]:

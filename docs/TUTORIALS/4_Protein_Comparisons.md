@@ -5,7 +5,8 @@
 > [!NOTE]
 > This compatibility URL is kept for one documentation-renovation release. Pairwise matches, Similarity groups, and Collinear blocks now have separate canonical procedures because they answer different biological and display questions.
 
-- [Compare annotated proteins with LOSATP in the web app](./GUI/compare-proteins-losatp.md)
+- [Create protein Similarity groups with LOSATP in the web app](./GUI/compare-proteins-losatp.md)
+- [Find conserved gene order from All-vs-all LOSATP evidence](./GUI/compare-proteins-losatp-collinear.md)
 - [Create protein Similarity groups in the web app](../HOW_TO/GUI/create-protein-similarity-groups.md)
 - [Draw Collinear protein-match blocks in the web app](../HOW_TO/GUI/draw-collinear-protein-blocks.md)
 - [Run Pairwise LOSATP on the command line](../HOW_TO/CLI/run-losatp-pairwise.md)

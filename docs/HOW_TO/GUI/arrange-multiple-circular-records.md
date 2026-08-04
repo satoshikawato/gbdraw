@@ -106,4 +106,3 @@ come from `gene`; CDS `product` descriptions are not used as label text.
 
 - [Draw a first Circular diagram](../../TUTORIALS/GUI/first-circular-genome-diagram.md)
 - [Web app control reference](../../REFERENCE/web-app.md)
-- [Tutorial fixture provenance](../../REFERENCE/tutorial-fixture-provenance.md)

@@ -48,6 +48,9 @@ else:
 IMPLEMENTED_SCENARIOS = (
     "T-CLI-01",
     "T-CLI-02",
+    "T-CLI-03",
+    "T-CLI-04",
+    "T-CLI-05",
     "H-CLI-01",
     "H-CLI-02",
     "H-CLI-03",
@@ -134,6 +137,27 @@ _HUMAN_MT_CDS_PRODUCTS = {
     "cytochrome b",
 }
 
+_FEATURE_PRESENTATION_TABLES = {
+    "tables/presentation_colors.tsv": (
+        "CDS\tgene\t^ND[1-6]$\t#3B82F6\tNADH dehydrogenase\n"
+        "CDS\tgene\t^COX[1-3]$\t#EF4444\tCytochrome c oxidase\n"
+        "CDS\tgene\t^ATP[68]$\t#F59E0B\tATP synthase\n"
+        "CDS\tgene\t^CYTB$\t#8B5CF6\tCytochrome b\n"
+        "rRNA\tgene\t^RNR[12]$\t#10B981\tRibosomal RNA\n"
+    ),
+    "tables/presentation_labels.tsv": (
+        "CDS\tgene\t^(ND1|COX2|ATP8|ATP6|COX3|CYTB)$\n"
+        "rRNA\tgene\t^RNR[12]$\n"
+    ),
+    "tables/presentation_label_overrides.tsv": (
+        "record_id\tfeature_type\tqualifier\tvalue\tlabel_text\n"
+        "NC_012920.1\tCDS\tlabel\t^ND1$\tComplex I (ND1)\n"
+        "NC_012920.1\tCDS\tlabel\t^COX2$\tOxidase II\n"
+        "NC_012920.1\trRNA\tlabel\t^s-rRNA$\t12S rRNA\n"
+        "NC_012920.1\trRNA\tlabel\t^l-rRNA$\t16S rRNA\n"
+    ),
+}
+
 _GENERATED_TABLES = {
     "H-CLI-02": {
         "tables/records.tsv": (
@@ -162,26 +186,8 @@ _GENERATED_TABLES = {
             "at_skew\tdinucleotide_skew\tinside\t\t0.10\t3\t3\t\tnt=AT,positive_color=#deaf6e,negative_color=#7294e3,legend_label=AT skew\n"
         ),
     },
-    "H-CLI-11": {
-        "tables/presentation_colors.tsv": (
-            "CDS\tgene\t^ND[1-6]$\t#3B82F6\tNADH dehydrogenase\n"
-            "CDS\tgene\t^COX[1-3]$\t#EF4444\tCytochrome c oxidase\n"
-            "CDS\tgene\t^ATP[68]$\t#F59E0B\tATP synthase\n"
-            "CDS\tgene\t^CYTB$\t#8B5CF6\tCytochrome b\n"
-            "rRNA\tgene\t^RNR[12]$\t#10B981\tRibosomal RNA\n"
-        ),
-        "tables/presentation_labels.tsv": (
-            "CDS\tgene\t^(ND1|COX2|ATP8|ATP6|COX3|CYTB)$\n"
-            "rRNA\tgene\t^RNR[12]$\n"
-        ),
-        "tables/presentation_label_overrides.tsv": (
-            "record_id\tfeature_type\tqualifier\tvalue\tlabel_text\n"
-            "NC_012920.1\tCDS\tlabel\t^ND1$\tComplex I (ND1)\n"
-            "NC_012920.1\tCDS\tlabel\t^COX2$\tOxidase II\n"
-            "NC_012920.1\trRNA\tlabel\t^s-rRNA$\t12S rRNA\n"
-            "NC_012920.1\trRNA\tlabel\t^l-rRNA$\t16S rRNA\n"
-        ),
-    },
+    "H-CLI-11": _FEATURE_PRESENTATION_TABLES,
+    "T-CLI-03": _FEATURE_PRESENTATION_TABLES,
 }
 
 _SCENARIO_REQUIRED_FIXTURE_FILES = {
@@ -195,9 +201,51 @@ _SCENARIO_REQUIRED_FIXTURE_FILES = {
         "drosophila-human.tlosatx.tsv",
         "caenorhabditis-human.tlosatx.tsv",
     ),
+    "T-CLI-04": (
+        "MjeNMV.gb",
+        "PemoMJNVA.gb",
+        "MelaMJNV.gb",
+        "PeseMJNV.gb",
+        "MjeNMV.MelaMJNV.tblastx.out",
+        "PemoMJNVA.PeseMJNV.tblastx.out",
+        "records.tsv",
+        "comparisons.tsv",
+    ),
 }
 
 _OUTPUT_INPUT_FILES = {
+    ("T-CLI-03", "mitochondrial_features_baseline.svg"): {
+        "HmmtDNA.gbk",
+    },
+    ("T-CLI-03", "mitochondrial_features_highlighted.svg"): {
+        "HmmtDNA.gbk",
+        "HmmtDNA_feature_visibility.tsv",
+        "cds_gene_qualifier_priority.tsv",
+    },
+    ("T-CLI-04", "table_driven_comparison_baseline.svg"): {
+        "MjeNMV.gb",
+        "PemoMJNVA.gb",
+        "MelaMJNV.gb",
+        "PeseMJNV.gb",
+        "records.tsv",
+    },
+    ("T-CLI-04", "table_driven_comparison.svg"): {
+        "MjeNMV.gb",
+        "PemoMJNVA.gb",
+        "MelaMJNV.gb",
+        "PeseMJNV.gb",
+        "MjeNMV.MelaMJNV.tblastx.out",
+        "PemoMJNVA.PeseMJNV.tblastx.out",
+        "records.tsv",
+        "comparisons.tsv",
+    },
+    ("T-CLI-05", "quantitative_genome_baseline.svg"): {
+        "AP027133.gb",
+    },
+    ("T-CLI-05", "quantitative_genome_map.svg"): {
+        "AP027133.gb",
+        "AP027133.DRR394922.depth-1kb.tsv",
+    },
     ("H-CLI-02", "record_table.svg"): {
         "HmmtDNA.gbk",
         "NC_002333.2.gb",
@@ -1144,6 +1192,140 @@ def _text_nodes(root: ElementTree.Element) -> set[str]:
     }
 
 
+def _assert_baseline_svg(
+    chapter: dict[str, object],
+    output_path: Path,
+    *,
+    record_id: str,
+    feature_count: int,
+) -> None:
+    evidence = inspect_standard_svg(chapter, output_path=output_path)
+    if evidence.record_ids != {record_id} or len(evidence.feature_ids) != feature_count:
+        raise RecipeContractError(
+            f"{chapter['id']} baseline does not contain the complete expected record."
+        )
+    if _match_elements(ElementTree.parse(output_path).getroot()):
+        raise RecipeContractError(f"{chapter['id']} baseline unexpectedly contains matches.")
+
+
+def _assert_tcli04_tables(workdir: Path) -> None:
+    from gbdraw.io.cli_tables import read_comparisons_table, read_records_table
+
+    records = read_records_table(str(workdir / "records.tsv"))
+    comparisons = read_comparisons_table(str(workdir / "comparisons.tsv"))
+    expected_ids = ["LC738868.1", "LC738870.1", "LC738874.1", "LC738873.1"]
+    if (
+        records.record_ids != expected_ids
+        or records.reverse_flags != [False, True, False, True]
+        or records.multi_record_positions() != ["#1@1", "#2@1", "#3@2", "#4@2"]
+        or [row.column for row in records.rows] != [1, 2, 1, 2]
+    ):
+        raise RecipeContractError("T-CLI-04 records table semantics changed.")
+    endpoint_pairs = [(row.query, row.subject) for row in comparisons.rows]
+    if endpoint_pairs != [
+        ("LC738868.1", "LC738874.1"),
+        ("LC738870.1", "LC738873.1"),
+    ] or any(endpoint not in expected_ids for pair in endpoint_pairs for endpoint in pair):
+        raise RecipeContractError("T-CLI-04 comparison endpoints changed.")
+
+
+def _assert_tcli04_output(
+    chapter: dict[str, object],
+    output_path: Path,
+    *,
+    command: list[str],
+) -> None:
+    evidence = inspect_standard_svg(chapter, output_path=output_path)
+    expected_ids = ["LC738868.1", "LC738870.1", "LC738874.1", "LC738873.1"]
+    if evidence.record_ids != set(expected_ids) or len(evidence.feature_ids) != 440:
+        raise RecipeContractError("T-CLI-04 rendered the wrong complete records.")
+
+    root = ElementTree.parse(output_path).getroot()
+    groups = [
+        element
+        for element in root
+        if element.attrib.get("id", "").startswith("record_group_")
+        and "data-gbdraw-record-id" in element.attrib
+    ]
+    groups.sort(key=lambda element: int(element.attrib["data-gbdraw-record-index"]))
+    if [group.attrib["data-gbdraw-record-id"] for group in groups] != expected_ids:
+        raise RecipeContractError("T-CLI-04 record order changed.")
+    positions = []
+    for group in groups:
+        match = _TRANSLATE_RE.fullmatch(group.attrib.get("transform", ""))
+        if match is None:
+            raise RecipeContractError("T-CLI-04 record placement metadata is missing.")
+        positions.append((float(match.group("x")), float(match.group("y"))))
+    if not (
+        positions[0][1] == positions[1][1]
+        and positions[2][1] == positions[3][1]
+        and positions[0][1] < positions[2][1]
+        and positions[0][0] < positions[1][0]
+        and positions[2][0] < positions[3][0]
+    ):
+        raise RecipeContractError("T-CLI-04 records do not form the declared 2x2 grid.")
+
+    matches = _match_elements(root)
+    if output_path.name == "table_driven_comparison_baseline.svg":
+        if matches:
+            raise RecipeContractError("T-CLI-04 baseline unexpectedly contains links.")
+        return
+    if output_path.name != "table_driven_comparison.svg":
+        raise RecipeContractError(f"Unexpected T-CLI-04 output: {output_path.name}")
+    pair_counts = Counter(
+        (
+            element.attrib.get("data-query-record-id"),
+            element.attrib.get("data-subject-record-id"),
+        )
+        for element in matches
+    )
+    if pair_counts != Counter(
+        {
+            ("LC738868.1", "LC738874.1"): 80,
+            ("LC738870.1", "LC738873.1"): 2,
+        }
+    ) or any(
+        element.attrib.get("data-match-kind") != "pairwise"
+        or element.attrib.get("data-pairwise-match-style") != "curve"
+        for element in matches
+    ):
+        raise RecipeContractError("T-CLI-04 retained the wrong comparison links.")
+    required_options = {
+        "--scale_style": "ruler",
+        "--linear_record_gap": "28",
+        "--comparison_height": "100",
+    }
+    if "--ruler_on_axis" not in command or any(
+        command[command.index(option) + 1] != value
+        for option, value in required_options.items()
+    ):
+        raise RecipeContractError("T-CLI-04 ruler or shared-scale settings changed.")
+    ruler_ticks = [
+        element
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "text"
+        and "".join(element.itertext()).strip() in {"100 kbp", "200 kbp"}
+    ]
+    positions_by_label = {
+        label: {
+            round(float(element.attrib["x"]), 6)
+            for element in ruler_ticks
+            if "".join(element.itertext()).strip() == label
+        }
+        for label in ("100 kbp", "200 kbp")
+    }
+    if (
+        len(ruler_ticks) != 8
+        or any(len(values) != 1 for values in positions_by_label.values())
+        or abs(
+            next(iter(positions_by_label["200 kbp"]))
+            - 2 * next(iter(positions_by_label["100 kbp"]))
+        )
+        > 1e-5
+    ):
+        raise RecipeContractError("T-CLI-04 shared rulers are incomplete.")
+
+
 def _assert_generated_tables_are_documented(
     chapter: dict[str, object], scenario_id: str
 ) -> None:
@@ -1288,7 +1470,11 @@ def _slot_specs_from_command(command: list[str]) -> list[str]:
 
 
 def _assert_quantitative_tracks(
-    output_path: Path, *, command: list[str], workdir: Path
+    output_path: Path,
+    *,
+    command: list[str],
+    workdir: Path,
+    scenario_id: str = "H-CLI-09",
 ) -> None:
     from gbdraw.tracks.circular import parse_circular_track_slots
 
@@ -1299,20 +1485,23 @@ def _assert_quantitative_tracks(
         ("depth_1", "depth"),
         ("gc_content", "dinucleotide_content"),
         ("gc_skew", "dinucleotide_skew"),
-        ("at_skew", "dinucleotide_skew"),
     ]
+    include_at_skew = any(spec.startswith("at_skew:") for spec in _slot_specs_from_command(command))
+    if include_at_skew:
+        expected_slots.append(("at_skew", "dinucleotide_skew"))
     if _semantic_slots(root) != expected_slots:
-        raise RecipeContractError("H-CLI-09 quantitative track order changed.")
+        raise RecipeContractError(f"{scenario_id} quantitative track order changed.")
     slots = parse_circular_track_slots(_slot_specs_from_command(command))
     if (
         [slot.id for slot in slots] != [item[0] for item in expected_slots]
         or [slot.side for slot in slots]
-        != ["outside", "overlay", "inside", "inside", "inside", "inside"]
+        != ["outside", "overlay", "inside", "inside", "inside"]
+        + (["inside"] if include_at_skew else [])
         or slots[2].params.get("track_index") != "0"
         or slots[4].params.get("nt") != "GC"
-        or slots[5].params.get("nt") != "AT"
+        or (include_at_skew and slots[5].params.get("nt") != "AT")
     ):
-        raise RecipeContractError("H-CLI-09 slot ownership changed.")
+        raise RecipeContractError(f"{scenario_id} slot ownership changed.")
 
     rows = [
         line.split("\t")
@@ -1330,7 +1519,7 @@ def _assert_quantitative_tracks(
         or min(values) != 12.446
         or max(values) != 74.546
     ):
-        raise RecipeContractError("H-CLI-09 depth fixture semantics changed.")
+        raise RecipeContractError(f"{scenario_id} depth fixture semantics changed.")
 
     paths_by_slot: dict[str, list[ElementTree.Element]] = {}
     for slot in root.iter():
@@ -1347,11 +1536,11 @@ def _assert_quantitative_tracks(
         or depth_paths[0].attrib.get("fill") != "#2563EB"
         or depth_paths[0].attrib.get("d", "").count("L") != 1214
     ):
-        raise RecipeContractError("H-CLI-09 depth series geometry changed.")
+        raise RecipeContractError(f"{scenario_id} depth series geometry changed.")
     if [path.attrib.get("d", "").count("L") for path in paths_by_slot.get("gc_skew", [])[1:]] != [607, 607]:
-        raise RecipeContractError("H-CLI-09 GC-skew series changed.")
-    if [path.attrib.get("d", "").count("L") for path in paths_by_slot.get("at_skew", [])[1:]] != [607, 607]:
-        raise RecipeContractError("H-CLI-09 AT-skew series changed.")
+        raise RecipeContractError(f"{scenario_id} GC-skew series changed.")
+    if include_at_skew and [path.attrib.get("d", "").count("L") for path in paths_by_slot.get("at_skew", [])[1:]] != [607, 607]:
+        raise RecipeContractError(f"{scenario_id} AT-skew series changed.")
     required_text = {
         "0x",
         "20x",
@@ -1368,11 +1557,11 @@ def _assert_quantitative_tracks(
         "GC content (%)",
         "GC skew (+)",
         "GC skew (-)",
-        "AT skew (+)",
-        "AT skew (-)",
     }
+    if include_at_skew:
+        required_text.update({"AT skew (+)", "AT skew (-)"})
     if not required_text <= _text_nodes(root):
-        raise RecipeContractError("H-CLI-09 quantitative axes or legend changed.")
+        raise RecipeContractError(f"{scenario_id} quantitative axes or legend changed.")
     required_args = {
         "--depth_window": "1",
         "--depth_step": "1000",
@@ -1385,7 +1574,7 @@ def _assert_quantitative_tracks(
         command[command.index(option) + 1] != value
         for option, value in required_args.items()
     ):
-        raise RecipeContractError("H-CLI-09 numeric scale options changed.")
+        raise RecipeContractError(f"{scenario_id} numeric scale options changed.")
 
 
 def _assert_annotation_slots(
@@ -1460,7 +1649,11 @@ def _assert_annotation_slots(
 
 
 def _assert_feature_presentation(
-    output_path: Path, *, command: list[str], workdir: Path
+    output_path: Path,
+    *,
+    command: list[str],
+    workdir: Path,
+    scenario_id: str = "H-CLI-11",
 ) -> None:
     import math
 
@@ -1502,16 +1695,16 @@ def _assert_feature_presentation(
         or {element.attrib["data-gbdraw-feature-id"] for element in underlays}
         != {compute_feature_hash(next(feature for feature in record.features if feature.type == "D-loop"), record_id=record.id)}
     ):
-        raise RecipeContractError("H-CLI-11 visibility or underlay semantics changed.")
+        raise RecipeContractError(f"{scenario_id} visibility or underlay semantics changed.")
     if (
         rendered[nd1_id].attrib.get("d", "").count("L") != 4
         or rendered[rnr1_id].attrib.get("d", "").count("L") != 1
         or rendered[trna_id].attrib.get("d", "").count("L") != 2
     ):
-        raise RecipeContractError("H-CLI-11 arrow or rectangle shapes changed.")
+        raise RecipeContractError(f"{scenario_id} arrow or rectangle shapes changed.")
     fills = {element.attrib.get("fill") for element in rendered.values()}
     if not {"#3B82F6", "#EF4444", "#F59E0B", "#8B5CF6", "#10B981"} <= fills:
-        raise RecipeContractError("H-CLI-11 specific feature colors changed.")
+        raise RecipeContractError(f"{scenario_id} specific feature colors changed.")
     required_text = {
         "Complex I (ND1)",
         "Oxidase II",
@@ -1529,14 +1722,14 @@ def _assert_feature_presentation(
     }
     text_nodes = _text_nodes(root)
     if not required_text <= text_nodes or {"s-rRNA", "l-rRNA", "COX1"} & text_nodes:
-        raise RecipeContractError("H-CLI-11 label filtering or overrides changed.")
+        raise RecipeContractError(f"{scenario_id} label filtering or overrides changed.")
     foreground = list(rendered.values())
     if any(
         element.attrib.get("stroke") != "#1F2937"
         or element.attrib.get("stroke-width") != "1.5"
         for element in foreground
     ):
-        raise RecipeContractError("H-CLI-11 feature block strokes changed.")
+        raise RecipeContractError(f"{scenario_id} feature block strokes changed.")
     axes = [element for element in root.iter() if element.attrib.get("id") == "Axis"]
     axis_shapes = [
         element
@@ -1546,7 +1739,7 @@ def _assert_feature_presentation(
     if len(axes) != 1 or not axis_shapes or (
         axis_shapes[0].attrib.get("stroke"), axis_shapes[0].attrib.get("stroke-width")
     ) != ("#374151", "4.0"):
-        raise RecipeContractError("H-CLI-11 axis stroke changed.")
+        raise RecipeContractError(f"{scenario_id} axis stroke changed.")
     radii = set()
     for element in foreground:
         match = re.search(
@@ -1557,7 +1750,7 @@ def _assert_feature_presentation(
                 round(math.hypot(float(match.group(1)), float(match.group(2))))
             )
     if "--resolve_overlaps" not in command or len(radii) < 4:
-        raise RecipeContractError("H-CLI-11 overlap lanes changed.")
+        raise RecipeContractError(f"{scenario_id} overlap lanes changed.")
 
 
 def _assert_session_overwrite_refused(
@@ -1863,6 +2056,42 @@ def run_scenario(
                             used_entries=used_entries,
                         ),
                     )
+                elif scenario_id == "T-CLI-03":
+                    if output_name == "mitochondrial_features_baseline.svg":
+                        _assert_baseline_svg(
+                            chapter,
+                            generated_path,
+                            record_id="NC_012920.1",
+                            feature_count=37,
+                        )
+                    else:
+                        _assert_feature_presentation(
+                            generated_path,
+                            command=command,
+                            workdir=workdir,
+                            scenario_id=scenario_id,
+                        )
+                elif scenario_id == "T-CLI-04":
+                    _assert_tcli04_output(
+                        chapter,
+                        generated_path,
+                        command=command,
+                    )
+                elif scenario_id == "T-CLI-05":
+                    if output_name == "quantitative_genome_baseline.svg":
+                        _assert_baseline_svg(
+                            chapter,
+                            generated_path,
+                            record_id="AP027133.1",
+                            feature_count=576,
+                        )
+                    else:
+                        _assert_quantitative_tracks(
+                            generated_path,
+                            command=command,
+                            workdir=workdir,
+                            scenario_id=scenario_id,
+                        )
                 elif scenario_id == "H-CLI-05":
                     _assert_precomputed_comparison(chapter, generated_path)
                 elif scenario_id == "H-CLI-02":
@@ -1880,6 +2109,7 @@ def run_scenario(
                         generated_path,
                         command=command,
                         workdir=workdir,
+                        scenario_id=scenario_id,
                     )
                 elif scenario_id == "H-CLI-10":
                     _assert_annotation_slots(
@@ -1892,6 +2122,7 @@ def run_scenario(
                         generated_path,
                         command=command,
                         workdir=workdir,
+                        scenario_id=scenario_id,
                     )
             if scenario_id in {"H-CLI-06", "H-CLI-07", "H-CLI-08"}:
                 _assert_pinned_losat(command, scenario_id=scenario_id)
@@ -1907,6 +2138,8 @@ def run_scenario(
                 _assert_collinear_blocks(chapter, workdir / output_names[0])
         if scenario_id == "H-CLI-02":
             _assert_table_inputs(workdir)
+        elif scenario_id == "T-CLI-04":
+            _assert_tcli04_tables(workdir)
         elif scenario_id == "H-CLI-12":
             if session_first_svg is None:
                 raise RecipeContractError("H-CLI-12 did not run its replay probe.")

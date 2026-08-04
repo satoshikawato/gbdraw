@@ -109,6 +109,5 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
 - Use the [web app](https://gbdraw.app/) to create a diagram in the browser.
 - Follow the [Quickstart](./QUICKSTART.md) to choose a checked first workflow.
 - Browse the [Tutorials](./TUTORIALS/README.md) for complete workflows, [How-to guides](./HOW_TO/README.md) for focused tasks, or [Recipes](./RECIPES.md) for command templates.
-- Use [Tutorial fixture provenance](./REFERENCE/tutorial-fixture-provenance.md) to verify the bundled inputs and checksums used by executable documentation.
 
 [Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Reference](./REFERENCE/README.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)

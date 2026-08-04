@@ -116,4 +116,3 @@ all four accessions and species labels, 13 CDS `gene` labels, and zero CDS
 
 - [Arrange multiple complete Circular records](./arrange-multiple-circular-records.md)
 - [Use TLOSATX for translated nucleotide comparisons](./use-tlosatx.md)
-- [Tutorial fixture provenance](../../REFERENCE/tutorial-fixture-provenance.md)

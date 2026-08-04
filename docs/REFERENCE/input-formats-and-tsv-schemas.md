@@ -1,4 +1,4 @@
-[Documentation home](../DOCS.md) | [Input how-to](../HOW_TO/GUI/use-genbank-and-gff3-fasta-inputs.md) | [Fixture provenance](tutorial-fixture-provenance.md)
+[Documentation home](../DOCS.md) | [Input how-to](../HOW_TO/GUI/use-genbank-and-gff3-fasta-inputs.md)
 
 # Input formats and TSV schemas
 
@@ -8,7 +8,7 @@ GenBank, GBFF, EMBL, and DDBJ flat files may contain one or more complete biolog
 
 GFF3 must be paired with the FASTA sequence from the same biological source. GFF3 column 1 and the first token of the matching FASTA header must agree exactly. Coordinates are 1-based and inclusive; strand is `+` or `-`; CDS phase is `0`, `1`, or `2`. `ID` values should be unique, and `Parent` should preserve the source annotation model. A `translation` attribute is used when present; otherwise a valid CDS may be translated from sequence, strand, phase/codon start, and genetic code.
 
-Tutorial fixtures do not manufacture contigs by cutting a complete sequence. The Lambda GFF3 + FASTA fixture represents the whole `NC_001416.1` record. Multi-record examples use genuine biological records or replicons.
+Tutorial fixtures do not manufacture contigs by cutting a complete sequence: a naturally single sequence is never divided into artificial tutorial contigs. The Lambda GFF3 + FASTA fixture represents the whole `NC_001416.1` record. Multi-record examples use genuine biological records or replicons.
 
 ## Comparison and numeric tables
 
