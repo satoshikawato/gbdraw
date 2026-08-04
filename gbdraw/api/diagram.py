@@ -1531,22 +1531,35 @@ def _add_single_record_plot_title_group(
         float(plot_title_max_y) - float(plot_title_min_y),
     )
 
-    if (
-        plot_title_position == "top"
-        and str(canvas_config.legend_position).strip().lower() == "top"
-        and float(legend_measurement.legend_height) > 0.0
-    ):
-        legend_top = (
-            float(canvas_config.legend_offset_y)
-            - (0.5 * float(legend_measurement.color_rect_size))
-        )
-        required_legend_top = (
+    parsed_canvas_bounds = _estimate_subcanvas_content_bounds(canvas)
+    content_bounds = (
+        parsed_canvas_bounds[1] if parsed_canvas_bounds is not None else None
+    )
+    content_top = float(content_bounds[2]) if content_bounds is not None else None
+    content_bottom = float(content_bounds[3]) if content_bounds is not None else None
+
+    if plot_title_position == "top":
+        anchor_top = content_top
+        if (
+            str(canvas_config.legend_position).strip().lower() == "top"
+            and float(legend_measurement.legend_height) > 0.0
+        ):
+            legend_top = (
+                float(canvas_config.legend_offset_y)
+                - (0.5 * float(legend_measurement.color_rect_size))
+            )
+            anchor_top = (
+                legend_top
+                if anchor_top is None
+                else min(float(anchor_top), float(legend_top))
+            )
+        required_anchor_top = (
             _MULTI_RECORD_PLOT_TITLE_BOTTOM_MARGIN_PX
             + plot_title_height
             + _MULTI_RECORD_LEGEND_PLOT_TITLE_GAP_PX
         )
-        if legend_top < required_legend_top:
-            shift_y = required_legend_top - legend_top
+        if anchor_top is not None and anchor_top < required_anchor_top:
+            shift_y = required_anchor_top - anchor_top
             _translate_canvas_top_level_groups(canvas, dy=shift_y)
             canvas_config.offset_y = float(canvas_config.offset_y) + float(shift_y)
             canvas_config.total_height = float(canvas_config.total_height) + float(shift_y)
@@ -1557,12 +1570,15 @@ def _add_single_record_plot_title_group(
             )
 
     if plot_title_position == "bottom":
-        anchor_bottom = 0.0
+        anchor_bottom = float(content_bottom) if content_bottom is not None else 0.0
         if str(canvas_config.legend_position).strip().lower() == "bottom":
-            anchor_bottom = (
-                float(canvas_config.legend_offset_y)
-                - (0.5 * float(legend_measurement.color_rect_size))
-                + float(legend_measurement.legend_height)
+            anchor_bottom = max(
+                anchor_bottom,
+                (
+                    float(canvas_config.legend_offset_y)
+                    - (0.5 * float(legend_measurement.color_rect_size))
+                    + float(legend_measurement.legend_height)
+                ),
             )
         required_height = (
             anchor_bottom

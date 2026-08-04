@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -491,13 +492,16 @@ def _extract_horizontal_legend_row_centers(root: ET.Element) -> list[tuple[float
 
 
 def _parse_translate(transform: str) -> tuple[float, float]:
-    match = re.search(
+    matches = re.findall(
         r"translate\(\s*([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)",
         transform or "",
     )
-    if not match:
+    if not matches:
         return 0.0, 0.0
-    return float(match.group(1)), float(match.group(2))
+    return (
+        sum(float(x_value) for x_value, _y_value in matches),
+        sum(float(y_value) for _x_value, y_value in matches),
+    )
 
 
 def _extract_legend_vertical_bounds(root: ET.Element) -> tuple[float, float]:
@@ -3165,6 +3169,40 @@ def test_single_record_bottom_plot_title_uses_summary_center_definition() -> Non
         record_id=record.id,
     )
     assert definition_center_y == pytest.approx(axis_center_y, abs=1e-6)
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("plot_title_position", ["top", "bottom"])
+def test_single_record_plot_title_clears_external_labels(
+    plot_title_position: str,
+) -> None:
+    record = next(SeqIO.parse(Path("tests/test_inputs/HmmtDNA.gbk"), "genbank"))
+    canvas = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "canvas.strandedness": False,
+                "canvas.circular.track_type": "middle",
+                "labels.circular.scope": "outer",
+                "objects.definition.circular.font_size": 18,
+            },
+        ),
+        selected_features_set=["CDS", "tRNA", "rRNA"],
+        legend="right",
+        plot_title="Precomputed TLOSATX rings around Homo sapiens mtDNA",
+        plot_title_position=plot_title_position,
+    )
+    root = ET.fromstring(canvas.tostring())
+
+    if plot_title_position == "top":
+        title_bottom = _extract_definition_bottom_y(root, "plot_title")
+        label_top = _extract_definition_top_y(root, "label_text")
+        assert label_top >= title_bottom + 20.0 - 1e-6
+    else:
+        label_bottom = _extract_definition_bottom_y(root, "label_text")
+        title_top = _extract_definition_top_y(root, "plot_title")
+        assert title_top >= label_bottom + 20.0 - 1e-6
 
 
 @pytest.mark.circular
