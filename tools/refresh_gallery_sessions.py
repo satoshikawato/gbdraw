@@ -37,6 +37,7 @@ from gbdraw.session_io import (  # noqa: E402
     validate_session,
     write_session_json,
 )
+from gbdraw.exceptions import ValidationError  # noqa: E402
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
 from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT  # noqa: E402
 from gbdraw.tracks.circular import (  # noqa: E402
@@ -345,6 +346,21 @@ def _with_interactive_svg_format(args: list[Any]) -> list[str]:
     return updated
 
 
+def _enable_gallery_interactive_metadata(session: dict[str, Any]) -> bool:
+    """Keep a Gallery render's metadata policy aligned with its forced format."""
+
+    render_request = session.get("renderRequest")
+    output = (
+        render_request.get("output")
+        if isinstance(render_request, Mapping)
+        else None
+    )
+    if not isinstance(output, dict) or output.get("interactiveMetadataPolicy") != "omit":
+        return False
+    output["interactiveMetadataPolicy"] = "auto"
+    return True
+
+
 def _preserve_gallery_cli_invocation(
     source_session: Mapping[str, Any],
     refreshed_session: dict[str, Any],
@@ -405,16 +421,57 @@ def _promote_gallery_session(
     load_session(output_path)
 
 
-def _referenced_resource_ids(value: object):
+def _load_gallery_refresh_source(session_path: Path) -> dict[str, Any]:
+    """Load a Gallery source after discarding an invalid derived result catalog."""
+
+    try:
+        return load_session(session_path)
+    except ValidationError as original_error:
+        with session_path.open("rb") as session_file:
+            is_gzip = session_file.read(2) == b"\x1f\x8b"
+        opener = gzip.open if is_gzip else Path.open
+        try:
+            with opener(session_path, mode="rt", encoding="utf-8") as session_file:
+                payload = json.load(session_file)
+        except (OSError, json.JSONDecodeError, TypeError) as exc:
+            raise original_error from exc
+
+        render_request = payload.get("renderRequest") if isinstance(payload, dict) else None
+        editor_state = payload.get("editorState") if isinstance(payload, dict) else None
+        if (
+            not isinstance(payload, dict)
+            or payload.get("version") != CURRENT_SESSION_VERSION
+            or not isinstance(render_request, Mapping)
+            or render_request.get("schema") != CANONICAL_REQUEST_SCHEMA
+            or not isinstance(editor_state, dict)
+        ):
+            raise original_error
+
+        payload["results"] = []
+        editor_state["featureCatalog"] = {"schema": 3, "items": []}
+        payload.pop("runMetadata", None)
+        try:
+            validate_session(payload)
+        except ValidationError as exc:
+            raise original_error from exc
+        return payload
+
+
+def _referenced_resource_ids(
+    value: object,
+    known_resource_ids: frozenset[str] = frozenset(),
+):
     if isinstance(value, Mapping):
         resource_id = value.get("resourceId")
         if isinstance(resource_id, str) and resource_id:
             yield resource_id
         for nested in value.values():
-            yield from _referenced_resource_ids(nested)
+            yield from _referenced_resource_ids(nested, known_resource_ids)
     elif isinstance(value, list):
         for nested in value:
-            yield from _referenced_resource_ids(nested)
+            yield from _referenced_resource_ids(nested, known_resource_ids)
+    elif isinstance(value, str) and value in known_resource_ids:
+        yield value
 
 
 def _resource_color_rows(resource: object) -> dict[str, str]:
@@ -518,7 +575,8 @@ def _drop_unreferenced_duplicate_resources(session: dict[str, Any]) -> None:
         return
     referenced = set(
         _referenced_resource_ids(
-            {key: value for key, value in session.items() if key != "resources"}
+            {key: value for key, value in session.items() if key != "resources"},
+            frozenset(str(resource_id) for resource_id in resources),
         )
     )
     duplicates: dict[tuple[object, ...], list[str]] = {}
@@ -528,17 +586,13 @@ def _drop_unreferenced_duplicate_resources(session: dict[str, Any]) -> None:
         data = resource.get("data")
         if not isinstance(data, str) or not data:
             continue
+        encoding = str(resource.get("encoding") or "text")
         hasher = hashlib.sha256()
+        hasher.update(encoding.encode("utf-8"))
+        hasher.update(b"\0")
         for offset in range(0, len(data), 1024 * 1024):
             hasher.update(data[offset : offset + 1024 * 1024].encode("utf-8"))
-        signature = (
-            resource.get("kind"),
-            resource.get("type"),
-            resource.get("size"),
-            resource.get("lastModified"),
-            resource.get("encoding"),
-            hasher.hexdigest(),
-        )
+        signature = (hasher.hexdigest(),)
         duplicates.setdefault(signature, []).append(str(resource_id))
 
     removed: set[str] = set()
@@ -1298,7 +1352,7 @@ def _refresh_one_session(
     *,
     destination_path: Path | None = None,
 ) -> None:
-    session = load_session(session_path)
+    session = _load_gallery_refresh_source(session_path)
     if session.get("version") == CURRENT_SESSION_VERSION:
         normalize_current_session_artifacts(session)
     _sync_legacy_legend_control_with_render_request(session)
@@ -1338,6 +1392,8 @@ def _refresh_one_session(
             gc.collect()
             _promote_gallery_session(source_session, render_session, env=env)
             promoted_payload = load_session(render_session)
+        if _enable_gallery_interactive_metadata(promoted_payload):
+            write_session_json(render_session, promoted_payload)
         for key in REFRESHED_GALLERY_ARTIFACT_KEYS:
             promoted_payload.pop(key, None)
         if is_canonical:

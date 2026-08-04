@@ -339,24 +339,46 @@ def _svg_group_translate_y(svg: str, group_id: str) -> float:
     if semantic_groups:
         assert len(semantic_groups) == 1
         transform = semantic_groups[0].get("transform", "")
-        match = re.fullmatch(r"translate\([^,]+,([^)]+)\)", transform)
-        assert match is not None
-        return float(match.group(1))
-    match = re.search(rf'<g id="{re.escape(group_id)}" transform="translate\([^,]+,([^)]+)\)"', svg)
-    assert match is not None
-    return float(match.group(1))
+        return _transform_translate_y(transform)
+    root = ET.fromstring(svg)
+    group = next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and element.get("id") == group_id
+        ),
+        None,
+    )
+    assert group is not None
+    return _transform_translate_y(group.get("transform", ""))
 
 
 def _svg_group(svg: str, group_id: str) -> str:
-    match = re.search(
-        rf'<g data-gbdraw-slot-id="{re.escape(group_id)}".*?</g>',
-        svg,
-        flags=re.DOTALL,
+    root = ET.fromstring(svg)
+    group = next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and (
+                element.get("data-gbdraw-slot-id") == group_id
+                or element.get("id") == group_id
+            )
+        ),
+        None,
     )
-    if match is None:
-        match = re.search(rf'<g id="{re.escape(group_id)}".*?</g>', svg, flags=re.DOTALL)
-    assert match is not None
-    return match.group(0)
+    assert group is not None
+    return ET.tostring(group, encoding="unicode")
+
+
+def _transform_translate_y(transform: str) -> float:
+    translations = re.findall(
+        r"translate\(\s*[-+0-9.eE]+(?:px)?[\s,]+([-+0-9.eE]+)(?:px)?\s*\)",
+        transform,
+    )
+    assert translations
+    return sum(float(value) for value in translations)
 
 
 def _semantic_slot_groups(
@@ -397,9 +419,7 @@ def _semantic_slot_translate_y(svg: str, slot_id: str) -> float:
     groups = _semantic_slot_groups(svg, slot_id)
     assert len(groups) == 1
     transform = groups[0].get("transform", "")
-    match = re.fullmatch(r"translate\([^,]+,([^)]+)\)", transform)
-    assert match is not None
-    return float(match.group(1))
+    return _transform_translate_y(transform)
 
 
 def _circular_semantic_slot_record_indices(svg: str, slot_id: str) -> list[int]:

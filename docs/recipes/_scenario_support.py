@@ -16,10 +16,33 @@ SCENARIO_MANIFEST_PATH = REPO_ROOT / "docs" / "scenarios" / "manifest.json"
 FIXTURE_ROOT = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"
 FIXTURE_MANIFEST_PATH = FIXTURE_ROOT / "manifest.json"
 PUBLISHED_IMAGE_ROOT = REPO_ROOT / "docs" / "images"
+_TRANSLATE_COMPONENT_RE = re.compile(
+    r"translate\(\s*(?P<x>-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))"
+    r"(?:[\s,]+(?P<y>-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)))?\s*\)"
+)
 
 
 class RecipeContractError(RuntimeError):
     """A documented recipe no longer satisfies its manifest contract."""
+
+
+def parse_translate_chain(value: str) -> tuple[float, float] | None:
+    """Return the net offset for an SVG chain containing translations only."""
+
+    offset_x = 0.0
+    offset_y = 0.0
+    end = 0
+    found = False
+    for match in _TRANSLATE_COMPONENT_RE.finditer(value):
+        if value[end : match.start()].strip():
+            return None
+        offset_x += float(match.group("x"))
+        offset_y += float(match.group("y") or 0.0)
+        end = match.end()
+        found = True
+    if not found or value[end:].strip():
+        return None
+    return offset_x, offset_y
 
 
 def load_chapter(

@@ -44,11 +44,11 @@ Open **Layout** and choose **Above** for **Track Layout**. Open
 **Axis & Scale**, turn on **Show Coordinate Scale**, choose **Ruler (Ticks)**,
 and turn on **Ruler on Axis**.
 
-![Linear record rows with complete coordinate ranges](../../images/h-gui-03/record-layout.png)
+![Linear record rows with selected coordinate regions](../../images/h-gui-03/record-layout.png)
 
 Select **Generate Diagram**. Zoom to 30% to inspect both complete rows.
 
-![Linear diagram with complete DE3 reverse complemented](../../images/h-gui-03/orientation-result.png)
+![Linear diagram with one reversed record and a coordinate ruler](../../images/h-gui-03/orientation-result.png)
 
 The result shows `1-48502` for `NC_001416.1` and `42925-1` for
 `NC_042057.1`. The descending DE3 range records the reverse orientation. The

@@ -327,6 +327,7 @@
       "body": "Click Generate Diagram. The first LOSATP search is the expensive step; the bundled Gallery session already contains the completed result for immediate inspection. The preview should show five species rows, 11 record-local rulers, rectangular features, and orientation-and-identity collinear blocks at the four adjacent species boundaries. Each left-aligned two-line definition remains centered on the feature record rather than the ruler. A narrow white gap separates each record from the adjacent blocks, including when feature labels are hidden. The Gallery preview uses an interactive SVG with internally compressed metadata, so you can click a feature or collinear block to inspect its embedded metadata.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp",
             "alt": "Generated five-row Vibrio Harveyi-group diagram with bold species names, 11 replicons, and orientation-and-identity collinear blocks.",
@@ -349,7 +350,43 @@
               }
             ],
             "selector": "svg[data-capture-vibrio-overview='true']",
-            "cropPadding": 12
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 11,
+              "linearRecordLayoutEnabled": true,
+              "linearRecordGap": 48,
+              "adv.multi_record_positions": [
+                {"selector": "#1", "row": 1},
+                {"selector": "#2", "row": 1},
+                {"selector": "#3", "row": 1},
+                {"selector": "#4", "row": 2},
+                {"selector": "#5", "row": 2},
+                {"selector": "#6", "row": 3},
+                {"selector": "#7", "row": 3},
+                {"selector": "#8", "row": 4},
+                {"selector": "#9", "row": 4},
+                {"selector": "#10", "row": 5},
+                {"selector": "#11", "row": 5}
+              ],
+              "form.legend": "bottom",
+              "form.plot_title": "",
+              "form.linear_track_layout": "above",
+              "form.scale_style": "ruler",
+              "form.show_labels_linear": "none",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear",
+              "losat.blastp.collinearColorMode": "orientation_identity"
+            },
+            "visibleText": [
+              "Vibrio harveyi",
+              "Vibrio owensii",
+              "Vibrio campbellii",
+              "Vibrio parahaemolyticus",
+              "Vibrio alginolyticus",
+              "Collinear",
+              "Inverted"
+            ]
           }
         }
       ]

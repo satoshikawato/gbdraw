@@ -20,6 +20,7 @@ await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join
 await writeFile(join(tempDir, 'app', 'color-utils.js'), await readFile(join(sourceDir, 'app', 'color-utils.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'svg-serialization.js'), await readFile(join(sourceDir, 'services', 'svg-serialization.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'feature-catalog.js'), await readFile(join(sourceDir, 'services', 'feature-catalog.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'services', 'feature-identity.js'), await readFile(join(sourceDir, 'services', 'feature-identity.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'feature-override-identity.js'), await readFile(join(sourceDir, 'services', 'feature-override-identity.js'), 'utf8'), 'utf8');
 
 const { createFeatureColorActions } = await import(
@@ -133,7 +134,6 @@ const actions = createFeatureColorActions({
       if (entry) entry.color = color;
     },
     compactLegendEntries: () => {},
-    recenterCurrentLegendRoot: () => {},
     onLegendGeometryChanged: () => {
       legendGeometryChangedCount += 1;
     },

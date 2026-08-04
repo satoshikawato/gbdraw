@@ -39,9 +39,12 @@ def _extract_group_translate_y(root: ET.Element, group_id: str) -> float:
     group = root.find(f".//svg:g[@id='{group_id}']", SVG_NS)
     assert group is not None
     transform = group.attrib.get("transform", "")
-    match = re.search(r"translate\(\s*[-0-9.]+(?:px)?[\s,]+([-0-9.]+)", transform)
-    assert match is not None
-    return float(match.group(1))
+    translations = re.findall(
+        r"translate\(\s*[-+0-9.eE]+(?:px)?[\s,]+([-+0-9.eE]+)(?:px)?\s*\)",
+        transform,
+    )
+    assert translations
+    return sum(float(value) for value in translations)
 
 
 def _extract_group_font_sizes(root: ET.Element, group_id: str) -> list[float]:

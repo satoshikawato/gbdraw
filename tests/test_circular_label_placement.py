@@ -25,6 +25,7 @@ from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.layout.common import calculate_cds_ratio
+from gbdraw.layout.spatial import Aabb
 from gbdraw.labels.circular import (
     angle_from_middle,
     improved_label_placement_fc,
@@ -819,7 +820,7 @@ def _make_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, 
         }
     ]
     canvas_config = SimpleNamespace(
-        legend_position="right",
+        legend_position="upper_right",
         legend_offset_x=760.0,
         legend_offset_y=460.0,
         total_width=1000.0,
@@ -831,6 +832,7 @@ def _make_legend_collision_fixture() -> tuple[list[dict], int, SimpleNamespace, 
         legend_width=120.0,
         legend_height=120.0,
         color_rect_size=20.0,
+        local_bounds=Aabb(0.0, 0.0, 120.0, 120.0),
     )
     return labels, total_length, canvas_config, legend_config
 
@@ -867,7 +869,7 @@ def _make_order_sensitive_legend_collision_fixture() -> tuple[list[dict], int, S
         },
     ]
     canvas_config = SimpleNamespace(
-        legend_position="right",
+        legend_position="upper_right",
         legend_offset_x=730.0,
         legend_offset_y=520.0,
         total_width=1000.0,
@@ -879,8 +881,19 @@ def _make_order_sensitive_legend_collision_fixture() -> tuple[list[dict], int, S
         legend_width=120.0,
         legend_height=60.0,
         color_rect_size=20.0,
+        local_bounds=Aabb(0.0, 0.0, 120.0, 60.0),
     )
     return labels, total_length, canvas_config, legend_config
+
+
+def _fixture_legend_bounds(
+    canvas_config: SimpleNamespace,
+    legend_config: SimpleNamespace,
+) -> Aabb:
+    return legend_config.local_bounds.translated(
+        canvas_config.legend_offset_x,
+        canvas_config.legend_offset_y,
+    )
 
 
 def _make_label_leader_collision_fixture() -> tuple[list[dict], int]:
@@ -3193,15 +3206,40 @@ def test_circular_assembly_reuses_precalculated_labels_once() -> None:
     assert counts["seq_record_group"] == 0
 
 
+@pytest.mark.parametrize(
+    ("placement", "expected"),
+    (
+        ("upper_left", Aabb(100.0, 200.0, 220.0, 260.0)),
+        ("upper_right", Aabb(380.0, 200.0, 500.0, 260.0)),
+        ("lower_left", Aabb(100.0, 540.0, 220.0, 600.0)),
+        ("lower_right", Aabb(380.0, 540.0, 500.0, 600.0)),
+    ),
+)
+def test_overlay_collision_bounds_come_from_composition_plan(
+    placement: str,
+    expected: Aabb,
+) -> None:
+    bounds = circular_assemble_module._overlay_legend_bounds_for_collision(
+        legend_measurement=SimpleNamespace(
+            local_bounds=Aabb(-10.0, -5.0, 110.0, 55.0)
+        ),
+        primary_bounds=Aabb(100.0, 200.0, 500.0, 600.0),
+        placement=circular_assemble_module.LegendPlacement(placement),
+    )
+
+    assert bounds == expected
+
+
 def test_label_legend_collision_prefers_label_shift() -> None:
     labels, total_length, canvas_config, legend_config = _make_legend_collision_fixture()
+    legend_bounds = _fixture_legend_bounds(canvas_config, legend_config)
     original_legend_x = canvas_config.legend_offset_x
     original_legend_y = canvas_config.legend_offset_y
     original_radius = math.hypot(labels[0]["start_x"], labels[0]["start_y"])
 
-    circular_assemble_module._resolve_label_legend_collisions(labels, total_length, canvas_config, legend_config)
+    circular_assemble_module._resolve_label_legend_collisions(labels, total_length, canvas_config, legend_bounds)
 
-    assert not circular_assemble_module._labels_collide_with_legend(labels, total_length, canvas_config, legend_config)
+    assert not circular_assemble_module._labels_collide_with_legend(labels, total_length, canvas_config, legend_bounds)
     assert canvas_config.legend_offset_x == original_legend_x
     assert canvas_config.legend_offset_y == original_legend_y
     shifted_radius = math.hypot(labels[0]["start_x"], labels[0]["start_y"])
@@ -3209,35 +3247,41 @@ def test_label_legend_collision_prefers_label_shift() -> None:
     assert abs(labels[0]["start_y"]) > 0.1
 
 
-def test_label_legend_collision_expands_canvas_when_fallback_needed() -> None:
+def test_docked_legend_collision_does_not_mutate_labels_or_canvas() -> None:
     labels, total_length, canvas_config, legend_config = _make_legend_collision_fixture()
-    original_width = canvas_config.total_width
-    original_height = canvas_config.total_height
+    legend_bounds = _fixture_legend_bounds(canvas_config, legend_config)
+    canvas_config.legend_position = "right"
+    original_labels = copy.deepcopy(labels)
+    original_canvas = vars(canvas_config).copy()
 
-    original_shift = circular_assemble_module._try_shift_labels_away_from_legend
-    original_move = circular_assemble_module._try_move_legend_away_from_labels
-    circular_assemble_module._try_shift_labels_away_from_legend = lambda *args, **kwargs: False
-    circular_assemble_module._try_move_legend_away_from_labels = lambda *args, **kwargs: False
-    try:
-        circular_assemble_module._resolve_label_legend_collisions(labels, total_length, canvas_config, legend_config)
-    finally:
-        circular_assemble_module._try_shift_labels_away_from_legend = original_shift
-        circular_assemble_module._try_move_legend_away_from_labels = original_move
+    circular_assemble_module._resolve_label_legend_collisions(
+        labels,
+        total_length,
+        canvas_config,
+        legend_bounds,
+    )
 
-    assert canvas_config.total_width > original_width or canvas_config.total_height > original_height
-    assert not circular_assemble_module._labels_collide_with_legend(labels, total_length, canvas_config, legend_config)
+    assert labels == original_labels
+    assert vars(canvas_config) == original_canvas
+    assert circular_assemble_module._labels_collide_with_legend(
+        labels,
+        total_length,
+        canvas_config,
+        legend_bounds,
+    )
 
 
 def test_label_legend_collision_keeps_feature_order_by_moving_neighbor_block() -> None:
     labels, total_length, canvas_config, legend_config = _make_order_sensitive_legend_collision_fixture()
+    legend_bounds = _fixture_legend_bounds(canvas_config, legend_config)
     initial_low_y = labels[0]["start_y"]
     initial_high_y = labels[1]["start_y"]
 
-    assert circular_assemble_module._legend_collision_indices(labels, total_length, canvas_config, legend_config) == [1]
+    assert circular_assemble_module._legend_collision_indices(labels, total_length, canvas_config, legend_bounds) == [1]
 
-    circular_assemble_module._resolve_label_legend_collisions(labels, total_length, canvas_config, legend_config)
+    circular_assemble_module._resolve_label_legend_collisions(labels, total_length, canvas_config, legend_bounds)
 
-    assert not circular_assemble_module._labels_collide_with_legend(labels, total_length, canvas_config, legend_config)
+    assert not circular_assemble_module._labels_collide_with_legend(labels, total_length, canvas_config, legend_bounds)
 
     low_unwrapped = _label_unwrapped_angle_for_order_test(labels[0], total_length)
     high_unwrapped = _label_unwrapped_angle_for_order_test(labels[1], total_length)
@@ -3248,13 +3292,19 @@ def test_label_legend_collision_keeps_feature_order_by_moving_neighbor_block() -
     assert abs(labels[1]["start_y"] - initial_high_y) > 0.1
 
 
-def test_expand_canvas_to_fit_external_labels_keeps_all_labels_inside() -> None:
+def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -> None:
     total_length = 4000
     labels = [
         {
             "middle": 1000,
             "start_x": 470.0,
             "start_y": 0.0,
+            "middle_x": 460.0,
+            "middle_y": 0.0,
+            "leader_start_x": 470.0,
+            "leader_start_y": 0.0,
+            "feature_anchor_x": 390.0,
+            "feature_anchor_y": 0.0,
             "width_px": 120.0,
             "height_px": 20.0,
             "is_inner": False,
@@ -3268,18 +3318,32 @@ def test_expand_canvas_to_fit_external_labels_keeps_all_labels_inside() -> None:
         offset_y=500.0,
         legend_offset_x=0.0,
         legend_offset_y=0.0,
+        length_param="short",
+        profile=SimpleNamespace(
+            config=SimpleNamespace(
+                labels=SimpleNamespace(
+                    stroke_width=SimpleNamespace(
+                        for_length_param=lambda _length_param: 2.0,
+                    )
+                )
+            )
+        ),
+    )
+    original_canvas = vars(canvas_config).copy()
+    original_labels = copy.deepcopy(labels)
+
+    obstacles = circular_assemble_module._external_label_obstacles_on_canvas(
+        labels,
+        total_length,
+        canvas_config,
     )
 
-    expanded = circular_assemble_module._expand_canvas_to_fit_external_labels(labels, total_length, canvas_config)
-    assert expanded is True
-
-    bounds = circular_assemble_module._external_label_bounds_on_canvas(labels, total_length, canvas_config)
-    assert bounds is not None
-    pad = circular_assemble_module.LABEL_CANVAS_PADDING_PX
-    assert bounds[0] >= pad - 1e-6
-    assert bounds[1] >= pad - 1e-6
-    assert bounds[2] <= float(canvas_config.total_width) - pad + 1e-6
-    assert bounds[3] <= float(canvas_config.total_height) - pad + 1e-6
+    assert len(obstacles) == 1
+    assert obstacles[0].max_x == pytest.approx(1090.0)
+    assert obstacles[0].min_x == pytest.approx(889.0)
+    assert obstacles[0].max_x > canvas_config.total_width
+    assert vars(canvas_config) == original_canvas
+    assert labels == original_labels
 
 
 def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:

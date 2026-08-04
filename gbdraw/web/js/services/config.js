@@ -1568,18 +1568,48 @@ const preflightSessionImport = (rawData) => {
   };
 };
 
+const LEGACY_LAYOUT_PREFERENCE_FIELDS = Object.freeze([
+  'legend',
+  'circularLegendPosition',
+  'linearLegendPosition',
+  'circularPlotTitlePosition',
+  'linearPlotTitlePosition',
+  'circularSingleRecordLegendPosition',
+  'circularSingleRecordPlotTitlePosition',
+  'circularMultiRecordLegendPosition',
+  'circularMultiRecordPlotTitlePosition'
+]);
+
+// Partial objects remain authoritative for session compatibility; normalization
+// supplies the current defaults for omitted branches.
+const hasStoredLayoutPreferences = (ui) => (
+  isPlainObject(ui?.layoutPreferences) ||
+  LEGACY_LAYOUT_PREFERENCE_FIELDS.some((field) => hasStoredLayoutValue(ui?.[field]))
+);
+
 const restoreLayoutPreferences = (ui = {}, { preserveActive = false } = {}) => {
   const activeBeforeRestore = {
     legend: state.form.legend,
     plotTitlePosition: state.adv.plot_title_position
   };
-  const migrated = migrateLegacyLayoutPreferences(ui, {
+  const migrationUi = (
+    !isPlainObject(ui.layoutPreferences) &&
+    state.mode.value === 'linear' &&
+    !hasStoredLayoutValue(ui.linearLegendPosition) &&
+    hasStoredLayoutValue(ui.legend)
+  )
+    ? { ...ui, linearLegendPosition: ui.legend }
+    : ui;
+  const migrated = migrateLegacyLayoutPreferences(migrationUi, {
     mode: state.mode.value,
     multiRecord: Boolean(state.form.multi_record_canvas),
     activeLegend: activeBeforeRestore.legend,
     activePlotTitlePosition: activeBeforeRestore.plotTitlePosition
   });
-  if (preserveActive) {
+  // Current-session render requests describe the last generated artifact, while
+  // stored layout preferences own the editor's active semantic position. Use the
+  // projected request only when neither the current nor legacy owner is present.
+  if (preserveActive && !hasStoredLayoutPreferences(ui)) {
     if (state.mode.value === 'linear') {
       migrated.linear = {
         legend: normalizeLegendPosition(activeBeforeRestore.legend, 'bottom'),
@@ -2770,6 +2800,144 @@ const restoreLiveFileState = (snapshot) => {
   replaceLinearComparisonPlan(state.linearComparisonPlan, snapshot.linearComparisonPlan);
 };
 
+const captureSessionImportTransientState = () => ({
+  semanticFileWatchersSuppressed: Boolean(
+    state.semanticFileWatchersSuppressed.value
+  ),
+  skipCaptureBaseConfig: Boolean(state.skipCaptureBaseConfig.value),
+  skipPositionReapply: Boolean(state.skipPositionReapply.value),
+  suppressCircularMultiRecordDefaults: Boolean(
+    state.suppressCircularMultiRecordDefaults.value
+  ),
+  linearReorderNotice: state.linearReorderNotice.value,
+  showFeaturePanel: Boolean(state.showFeaturePanel.value),
+  showLegendPanel: Boolean(state.showLegendPanel.value),
+  showCanvasControls: Boolean(state.showCanvasControls.value),
+  isPanning: Boolean(state.isPanning.value),
+  panStart: cloneJsonData(state.panStart),
+  selectedAnnotation: state.selectedAnnotation.value,
+  selectedSpecificPreset: state.selectedSpecificPreset.value,
+  specificRulePresetLoading: Boolean(state.specificRulePresetLoading.value),
+  newSpecRule: cloneJsonData(state.newSpecRule),
+  newPriorityRule: cloneJsonData(state.newPriorityRule),
+  newColorFeat: state.newColorFeat.value,
+  newColorVal: state.newColorVal.value,
+  newFeatureToAdd: state.newFeatureToAdd.value,
+  newLegendCaption: state.newLegendCaption.value,
+  newLegendColor: state.newLegendColor.value,
+  fileLegendCaptions: Array.from(state.fileLegendCaptions.value || []),
+  featureSearch: state.featureSearch.value,
+  labelSearch: state.labelSearch.value,
+  featureVisibilitySelectorCache: cloneJsonData(state.featureVisibilitySelectorCache),
+  selectedFeatureIds: Array.from(state.selectedFeatureIds.value || []),
+  selectedFeatureAnchorId: state.selectedFeatureAnchorId.value,
+  featureSelectionStatus: state.featureSelectionStatus.value,
+  featureSelectionSuppressNextClick: Boolean(
+    state.featureSelectionSuppressNextClick.value
+  ),
+  featureSelectionDrag: cloneJsonData(state.featureSelectionDrag),
+  labelReflowLastError: state.labelReflowLastError.value,
+  labelOverrideBuildWarning: state.labelOverrideBuildWarning.value,
+  labelLayoutDirtyReason: state.labelLayoutDirtyReason.value,
+  clickedFeature: state.clickedFeature.value,
+  clickedPairwiseMatch: state.clickedPairwiseMatch.value,
+  clickedLabel: state.clickedLabel.value,
+  featureExtractionPending: Boolean(state.featureExtractionPending.value),
+  featureExtractionError: state.featureExtractionError.value,
+  featureEditorStatus: cloneJsonData(state.featureEditorStatus),
+  matchSequenceSources: cloneJsonData(state.matchSequenceRegistry?.values?.() || []),
+  diagramElements: [...state.diagramElements.value],
+  diagramElementIds: [...state.diagramElementIds.value],
+  diagramElementOriginalTransforms: new Map(
+    [...state.diagramElementOriginalTransforms.value].map(([element, transform]) => [
+      element,
+      cloneJsonData(transform)
+    ])
+  ),
+  legendDragging: Boolean(state.legendDragging.value),
+  legendDragStart: cloneJsonData(state.legendDragStart),
+  legendOriginalTransform: cloneJsonData(state.legendOriginalTransform.value),
+  legendInitialTransform: cloneJsonData(state.legendInitialTransform.value),
+  diagramDragging: Boolean(state.diagramDragging.value),
+  diagramDragStart: cloneJsonData(state.diagramDragStart),
+  lengthBarElement: state.lengthBarElement.value,
+  lengthBarOriginalTransform: cloneJsonData(state.lengthBarOriginalTransform.value),
+  plotTitleElement: state.plotTitleElement.value,
+  plotTitleDragging: Boolean(state.plotTitleDragging.value),
+  plotTitleDragStart: cloneJsonData(state.plotTitleDragStart),
+  plotTitleAutoTransform: cloneJsonData(state.plotTitleAutoTransform.value)
+});
+
+const restoreSessionImportTransientState = (snapshot) => {
+  state.suppressCircularMultiRecordDefaults.value =
+    snapshot.suppressCircularMultiRecordDefaults;
+  state.linearReorderNotice.value = snapshot.linearReorderNotice;
+  state.showFeaturePanel.value = snapshot.showFeaturePanel;
+  state.showLegendPanel.value = snapshot.showLegendPanel;
+  state.showCanvasControls.value = snapshot.showCanvasControls;
+  state.isPanning.value = snapshot.isPanning;
+  Object.assign(state.panStart, cloneJsonData(snapshot.panStart));
+  state.selectedAnnotation.value = snapshot.selectedAnnotation;
+  state.selectedSpecificPreset.value = snapshot.selectedSpecificPreset;
+  state.specificRulePresetLoading.value = snapshot.specificRulePresetLoading;
+  replacePlainObject(state.newSpecRule, cloneJsonData(snapshot.newSpecRule));
+  replacePlainObject(state.newPriorityRule, cloneJsonData(snapshot.newPriorityRule));
+  state.newColorFeat.value = snapshot.newColorFeat;
+  state.newColorVal.value = snapshot.newColorVal;
+  state.newFeatureToAdd.value = snapshot.newFeatureToAdd;
+  state.newLegendCaption.value = snapshot.newLegendCaption;
+  state.newLegendColor.value = snapshot.newLegendColor;
+  state.fileLegendCaptions.value = new Set(snapshot.fileLegendCaptions);
+  state.featureSearch.value = snapshot.featureSearch;
+  state.labelSearch.value = snapshot.labelSearch;
+  replacePlainObject(
+    state.featureVisibilitySelectorCache,
+    cloneJsonData(snapshot.featureVisibilitySelectorCache)
+  );
+  state.selectedFeatureIds.value = new Set(snapshot.selectedFeatureIds);
+  state.selectedFeatureAnchorId.value = snapshot.selectedFeatureAnchorId;
+  state.featureSelectionStatus.value = snapshot.featureSelectionStatus;
+  state.featureSelectionSuppressNextClick.value =
+    snapshot.featureSelectionSuppressNextClick;
+  Object.assign(
+    state.featureSelectionDrag,
+    cloneJsonData(snapshot.featureSelectionDrag)
+  );
+  state.labelReflowLastError.value = snapshot.labelReflowLastError;
+  state.labelOverrideBuildWarning.value = snapshot.labelOverrideBuildWarning;
+  state.labelLayoutDirtyReason.value = snapshot.labelLayoutDirtyReason;
+  state.clickedFeature.value = snapshot.clickedFeature;
+  state.clickedPairwiseMatch.value = snapshot.clickedPairwiseMatch;
+  state.clickedLabel.value = snapshot.clickedLabel;
+  state.featureExtractionPending.value = snapshot.featureExtractionPending;
+  state.featureExtractionError.value = snapshot.featureExtractionError;
+  Object.assign(state.featureEditorStatus, cloneJsonData(snapshot.featureEditorStatus));
+  state.matchSequenceRegistry?.reset?.(cloneJsonData(snapshot.matchSequenceSources));
+  state.diagramElements.value = [...snapshot.diagramElements];
+  state.diagramElementIds.value = [...snapshot.diagramElementIds];
+  state.diagramElementOriginalTransforms.value = new Map(
+    snapshot.diagramElementOriginalTransforms
+  );
+  state.legendDragging.value = snapshot.legendDragging;
+  Object.assign(state.legendDragStart, cloneJsonData(snapshot.legendDragStart));
+  state.legendOriginalTransform.value = cloneJsonData(snapshot.legendOriginalTransform);
+  state.legendInitialTransform.value = cloneJsonData(snapshot.legendInitialTransform);
+  state.diagramDragging.value = snapshot.diagramDragging;
+  Object.assign(state.diagramDragStart, cloneJsonData(snapshot.diagramDragStart));
+  state.lengthBarElement.value = snapshot.lengthBarElement;
+  state.lengthBarOriginalTransform.value = cloneJsonData(
+    snapshot.lengthBarOriginalTransform
+  );
+  state.plotTitleElement.value = snapshot.plotTitleElement;
+  state.plotTitleDragging.value = snapshot.plotTitleDragging;
+  Object.assign(state.plotTitleDragStart, cloneJsonData(snapshot.plotTitleDragStart));
+  state.plotTitleAutoTransform.value = cloneJsonData(snapshot.plotTitleAutoTransform);
+  state.semanticFileWatchersSuppressed.value =
+    snapshot.semanticFileWatchersSuppressed;
+  state.skipCaptureBaseConfig.value = snapshot.skipCaptureBaseConfig;
+  state.skipPositionReapply.value = snapshot.skipPositionReapply;
+};
+
 const captureSessionImportSnapshot = () => ({
   config: cloneJsonData(buildConfigData()),
   ui: cloneJsonData(buildUiStateData()),
@@ -2787,33 +2955,42 @@ const captureSessionImportSnapshot = () => ({
   losatCacheInfo: cloneJsonData(state.losatCacheInfo.value),
   committedCanonicalSession: cloneCanonicalSession(committedCanonicalSession),
   errorLog: state.errorLog.value,
-  resultPanelTab: state.resultPanelTab.value
+  resultPanelTab: state.resultPanelTab.value,
+  transients: captureSessionImportTransientState()
 });
 
 const restoreSessionImportSnapshot = async (snapshot) => {
-  state.semanticFileWatchersSuppressed.value = true;
-  resetSessionBaseline();
-  state.mode.value = snapshot.ui.mode === 'linear' ? 'linear' : 'circular';
-  await nextTick();
-  applyConfigData(snapshot.config);
-  applyUiStateData(snapshot.ui);
-  restoreLiveFileState(snapshot.files);
-  state.losatCache.value = new Map(snapshot.losatCache);
-  state.losatDerivedCache.value = new Map(snapshot.losatDerivedCache);
-  state.proteinIdentityManifest.value = cloneJsonData(snapshot.proteinIdentityManifest);
-  state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
-  state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
-  state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
-  committedCanonicalSession = cloneCanonicalSession(snapshot.committedCanonicalSession);
-  state.skipPositionReapply.value = true;
-  applyResultsData(snapshot.results, snapshot.ui);
-  applyFeatureStateData(snapshot.features);
-  applyOrthogroupStateData(snapshot.orthogroupState);
-  applyEditorStateData(snapshot.editorState);
-  applyRunStateData(snapshot.runState);
-  state.errorLog.value = snapshot.errorLog;
-  state.resultPanelTab.value = snapshot.resultPanelTab;
-  await nextTick();
+  state.sessionImportRollbackInProgress.value = true;
+  try {
+    state.semanticFileWatchersSuppressed.value = true;
+    resetSessionBaseline();
+    state.mode.value = snapshot.ui.mode === 'linear' ? 'linear' : 'circular';
+    await nextTick();
+    applyConfigData(snapshot.config);
+    applyUiStateData(snapshot.ui);
+    restoreLiveFileState(snapshot.files);
+    state.losatCache.value = new Map(snapshot.losatCache);
+    state.losatDerivedCache.value = new Map(snapshot.losatDerivedCache);
+    state.proteinIdentityManifest.value = cloneJsonData(snapshot.proteinIdentityManifest);
+    state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
+    state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
+    state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
+    committedCanonicalSession = cloneCanonicalSession(snapshot.committedCanonicalSession);
+    state.skipCaptureBaseConfig.value = true;
+    state.skipPositionReapply.value = true;
+    applyResultsData(snapshot.results, snapshot.ui);
+    applyFeatureStateData(snapshot.features);
+    applyOrthogroupStateData(snapshot.orthogroupState);
+    applyEditorStateData(snapshot.editorState);
+    applyRunStateData(snapshot.runState);
+    state.errorLog.value = snapshot.errorLog;
+    state.resultPanelTab.value = snapshot.resultPanelTab;
+    await nextTick();
+    restoreSessionImportTransientState(snapshot.transients);
+    await nextTick();
+  } finally {
+    state.sessionImportRollbackInProgress.value = false;
+  }
 };
 
 const clearObject = (target) => {
@@ -2900,11 +3077,6 @@ export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
     appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
     pendingPaletteName: state.pendingPaletteName.value,
     pendingPaletteColors: cloneColors(state.pendingPaletteColors.value),
-    circularBaseConfig: cloneJsonData(state.circularBaseConfig.value),
-    linearBaseConfig: {
-      ...cloneJsonData(state.linearBaseConfig.value),
-      diagramBaseTransforms: []
-    },
     legendCurrentOffset: { ...state.legendCurrentOffset },
     diagramOffset: { ...state.diagramOffset },
     lengthBarUserOffset: { ...state.lengthBarUserOffset },
@@ -2954,15 +3126,6 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
   restorePaletteStateFromSession(ui);
   restoreLayoutPreferences(ui);
 
-  if (ui.circularBaseConfig && typeof ui.circularBaseConfig === 'object') {
-    state.circularBaseConfig.value = cloneJsonData(ui.circularBaseConfig);
-  }
-  if (ui.linearBaseConfig && typeof ui.linearBaseConfig === 'object') {
-    state.linearBaseConfig.value = {
-      ...cloneJsonData(ui.linearBaseConfig),
-      diagramBaseTransforms: new Map()
-    };
-  }
   if (ui.legendCurrentOffset) {
     state.legendCurrentOffset.x = Number(ui.legendCurrentOffset.x) || 0;
     state.legendCurrentOffset.y = Number(ui.legendCurrentOffset.y) || 0;
@@ -3376,7 +3539,12 @@ export const importSession = async (e, options = {}) => {
   const file = e.target.files[0];
   if (!file) return { status: 'skipped' };
 
+  const semanticFileWatchersSuppressedBeforeImport = Boolean(
+    state.semanticFileWatchersSuppressed.value
+  );
+  const rollbackStateExtension = options?.rollbackState;
   let rollbackSnapshot = null;
+  let rollbackExtensionSnapshot;
   let commitStarted = false;
 
   try {
@@ -3403,6 +3571,9 @@ export const importSession = async (e, options = {}) => {
     } = preflight;
     const canonicalSession = Boolean(projectionResult);
     rollbackSnapshot = captureSessionImportSnapshot();
+    if (typeof rollbackStateExtension?.capture === 'function') {
+      rollbackExtensionSnapshot = rollbackStateExtension.capture();
+    }
     commitStarted = true;
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
@@ -3604,10 +3775,14 @@ export const importSession = async (e, options = {}) => {
     applyEditorStateData(restoredEditorState);
 
     await nextTick();
-    state.semanticFileWatchersSuppressed.value = false;
+    state.skipCaptureBaseConfig.value = true;
     state.skipPositionReapply.value = true;
     applyResultsData(logicalImportedResults, ui);
     await nextTick();
+
+    if (typeof options?.afterLoad === 'function') {
+      await options.afterLoad({ data, ui });
+    }
 
     if (ui.canvasPadding) {
       state.canvasPadding.top = ui.canvasPadding.top || 0;
@@ -3631,14 +3806,9 @@ export const importSession = async (e, options = {}) => {
       }
     }
 
-    if (typeof options?.afterLoad === 'function') {
-      try {
-        await options.afterLoad({ data, ui });
-      } catch (callbackError) {
-        console.warn('Session loaded, but post-load refresh failed.', callbackError);
-      }
-    }
-
+    state.semanticFileWatchersSuppressed.value =
+      semanticFileWatchersSuppressedBeforeImport;
+    await nextTick();
     committedCanonicalSession = cloneCanonicalSession(data);
     alert('Session loaded successfully!');
     return { status: 'ok', data };
@@ -3647,6 +3817,9 @@ export const importSession = async (e, options = {}) => {
     if (commitStarted && rollbackSnapshot) {
       try {
         await restoreSessionImportSnapshot(rollbackSnapshot);
+        if (typeof rollbackStateExtension?.restore === 'function') {
+          await rollbackStateExtension.restore(rollbackExtensionSnapshot);
+        }
       } catch (rollbackError) {
         console.error('Failed to roll back the interrupted session import.', rollbackError);
       }
@@ -3655,7 +3828,8 @@ export const importSession = async (e, options = {}) => {
     alert(`Failed to load session: ${message}`);
     return { status: 'error', error: err };
   } finally {
-    state.semanticFileWatchersSuppressed.value = false;
+    state.semanticFileWatchersSuppressed.value =
+      semanticFileWatchersSuppressedBeforeImport;
     e.target.value = '';
   }
 };

@@ -14,7 +14,6 @@ import copy
 import logging
 import math
 import re
-import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass, replace
 from typing import Any, Optional, Sequence, Mapping, Literal, cast
@@ -89,7 +88,6 @@ from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
-from gbdraw.canvas.circular import resolve_circular_side_legend_geometry  # type: ignore[reportMissingImports]
 from gbdraw.config.models import (  # type: ignore[reportMissingImports]
     CircularRenderProfile,
     GbdrawConfig,
@@ -110,13 +108,22 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     GcContentConfigurator,
     GcSkewConfigurator,
     LegendDrawingConfigurator,
-    LegendMeasurement,
 )
 from gbdraw.core.sequence import create_dict_for_sequence_lengths, check_feature_presence  # type: ignore[reportMissingImports]
-from gbdraw.diagrams.circular import assemble_circular_diagram  # type: ignore[reportMissingImports]
-from gbdraw.diagrams.circular.positioning import place_definition_group_on_size  # type: ignore[reportMissingImports]
+from gbdraw.diagrams.circular.assemble import (  # type: ignore[reportMissingImports]
+    CircularAssemblyResult,
+    _assemble_circular_diagram_result,
+)
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.layout.composition import (
+    CompositionItem,
+    CompositionRequest,
+    LegendPlacement,
+    TitlePlacement,
+    plan_composition,
+)
+from gbdraw.layout.spatial import Aabb
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
     ComparisonThresholds,
@@ -130,6 +137,10 @@ from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
     prepare_legend_table,
 )
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
+from gbdraw.render.composition import (
+    COMPOSITION_ROLE_ATTRIBUTE,
+    apply_composition_plan,
+)
 from gbdraw.svg.ids import definition_group_svg_id
 from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
@@ -169,6 +180,14 @@ class LinearDiagramBuildResult:
     metadata: LinearDiagramMetadata
 
 
+@dataclass(frozen=True, slots=True)
+class _CircularGridLayout:
+    """Visible-bounds packing result for Circular record wrappers."""
+
+    bounds: Aabb
+    translations: tuple[tuple[float, float], ...]
+
+
 _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS = {
     "Axis",
     "tick",
@@ -185,16 +204,7 @@ _CIRCULAR_PLOT_TITLE_POSITIONS = {"none", "top", "bottom"}
 _MULTI_RECORD_GRID_GAP_PX = 16.0
 _MULTI_RECORD_COLUMN_GAP_RATIO = 0.10
 _MULTI_RECORD_ROW_GAP_RATIO = 0.05
-_MULTI_RECORD_LEGEND_EDGE_PADDING_PX = 20.0
-_MULTI_RECORD_LEGEND_GRID_GAP_PX = 20.0
-_MULTI_RECORD_LEGEND_TOP_EDGE_PADDING_PX = 32.0
-_MULTI_RECORD_LEGEND_PLOT_TITLE_GAP_PX = 20.0
-_MULTI_RECORD_PLOT_TITLE_BOTTOM_MARGIN_PX = 24.0
 _PLOT_TITLE_DEFAULT_FONT_SIZE = 32.0
-_SVG_NUMBER_PATTERN = re.compile(r"[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?")
-_SVG_TRANSLATE_PATTERN = re.compile(
-    r"translate\(\s*([-+0-9.eE]+)(?:[\s,]+([-+0-9.eE]+))?\s*\)"
-)
 
 def _resolve_single_circular_depth_options(
     options: CircularDiagramOptions,
@@ -845,249 +855,6 @@ def _validate_depth_track_indices(
             )
 
 
-def _parse_svg_length_px(value: object, *, default: float = 0.0) -> float:
-    """Parse SVG length values like '1000px' into float pixels."""
-    if value is None:
-        return float(default)
-    raw = str(value).strip()
-    if raw.endswith("px"):
-        raw = raw[:-2]
-    try:
-        return float(raw)
-    except (TypeError, ValueError):
-        return float(default)
-
-
-def _svg_local_name(tag: str) -> str:
-    if "}" in tag:
-        return tag.rsplit("}", maxsplit=1)[1]
-    return tag
-
-
-def _parse_translate_xy(value: object) -> tuple[float, float]:
-    text = str(value or "")
-    match = _SVG_TRANSLATE_PATTERN.search(text)
-    if match is None:
-        return 0.0, 0.0
-    x = _parse_svg_length_px(match.group(1), default=0.0)
-    y = _parse_svg_length_px(match.group(2), default=0.0) if match.group(2) is not None else 0.0
-    return float(x), float(y)
-
-
-def _parse_svg_numbers(value: object) -> list[float]:
-    text = str(value or "")
-    values: list[float] = []
-    for raw_value in _SVG_NUMBER_PATTERN.findall(text):
-        try:
-            values.append(float(raw_value))
-        except (TypeError, ValueError):
-            continue
-    return values
-
-
-def _estimate_element_local_x_bounds(element: ET.Element) -> tuple[float, float] | None:
-    """Estimate an element local x-range from geometry attributes."""
-    tag = _svg_local_name(str(element.tag)).lower()
-    attribs = element.attrib
-
-    if tag == "circle":
-        cx = _parse_svg_length_px(attribs.get("cx"), default=0.0)
-        radius = abs(_parse_svg_length_px(attribs.get("r"), default=0.0))
-        return float(cx - radius), float(cx + radius)
-
-    if tag == "ellipse":
-        cx = _parse_svg_length_px(attribs.get("cx"), default=0.0)
-        radius_x = abs(_parse_svg_length_px(attribs.get("rx"), default=0.0))
-        return float(cx - radius_x), float(cx + radius_x)
-
-    if tag == "line":
-        x1 = _parse_svg_length_px(attribs.get("x1"), default=0.0)
-        x2 = _parse_svg_length_px(attribs.get("x2"), default=0.0)
-        return float(min(x1, x2)), float(max(x1, x2))
-
-    if tag in {"rect", "image"}:
-        x = _parse_svg_length_px(attribs.get("x"), default=0.0)
-        width = _parse_svg_length_px(attribs.get("width"), default=0.0)
-        return float(min(x, x + width)), float(max(x, x + width))
-
-    if tag in {"polygon", "polyline"}:
-        points = _parse_svg_numbers(attribs.get("points"))
-        if len(points) >= 2:
-            xs = points[0::2]
-            return float(min(xs)), float(max(xs))
-
-    if tag == "text":
-        text_x = _parse_svg_numbers(attribs.get("x"))
-        if text_x:
-            return float(min(text_x)), float(max(text_x))
-
-    if tag == "path":
-        path_numbers = _parse_svg_numbers(attribs.get("d"))
-        if path_numbers:
-            max_abs = max(abs(value) for value in path_numbers)
-            return -float(max_abs), float(max_abs)
-
-    generic_numbers: list[float] = []
-    for key in ("x", "x1", "x2", "cx", "points", "d"):
-        generic_numbers.extend(_parse_svg_numbers(attribs.get(key)))
-    if generic_numbers:
-        max_abs = max(abs(value) for value in generic_numbers)
-        return -float(max_abs), float(max_abs)
-    return None
-
-
-def _estimate_element_local_y_bounds(element: ET.Element) -> tuple[float, float] | None:
-    """Estimate an element local y-range from geometry attributes."""
-    tag = _svg_local_name(str(element.tag)).lower()
-    attribs = element.attrib
-
-    if tag == "circle":
-        cy = _parse_svg_length_px(attribs.get("cy"), default=0.0)
-        radius = abs(_parse_svg_length_px(attribs.get("r"), default=0.0))
-        return float(cy - radius), float(cy + radius)
-
-    if tag == "ellipse":
-        cy = _parse_svg_length_px(attribs.get("cy"), default=0.0)
-        radius_y = abs(_parse_svg_length_px(attribs.get("ry"), default=0.0))
-        return float(cy - radius_y), float(cy + radius_y)
-
-    if tag == "line":
-        y1 = _parse_svg_length_px(attribs.get("y1"), default=0.0)
-        y2 = _parse_svg_length_px(attribs.get("y2"), default=0.0)
-        return float(min(y1, y2)), float(max(y1, y2))
-
-    if tag in {"rect", "image"}:
-        y = _parse_svg_length_px(attribs.get("y"), default=0.0)
-        height = _parse_svg_length_px(attribs.get("height"), default=0.0)
-        return float(min(y, y + height)), float(max(y, y + height))
-
-    if tag in {"polygon", "polyline"}:
-        points = _parse_svg_numbers(attribs.get("points"))
-        if len(points) >= 2:
-            ys = points[1::2]
-            return float(min(ys)), float(max(ys))
-
-    if tag == "text":
-        text_y = _parse_svg_numbers(attribs.get("y"))
-        if text_y:
-            font_size = _parse_svg_length_px(attribs.get("font-size"), default=0.0)
-            half_height = 0.5 * font_size if font_size > 0.0 else 0.0
-            return float(min(text_y) - half_height), float(max(text_y) + half_height)
-
-    if tag == "path":
-        path_numbers = _parse_svg_numbers(attribs.get("d"))
-        if path_numbers:
-            max_abs = max(abs(value) for value in path_numbers)
-            return -float(max_abs), float(max_abs)
-
-    generic_numbers: list[float] = []
-    for key in ("y", "y1", "y2", "cy", "points", "d"):
-        generic_numbers.extend(_parse_svg_numbers(attribs.get(key)))
-    if generic_numbers:
-        max_abs = max(abs(value) for value in generic_numbers)
-        return -float(max_abs), float(max_abs)
-    return None
-
-
-def _estimate_subcanvas_content_bounds(
-    sub_canvas: Drawing,
-) -> tuple[tuple[float, float, float, float], tuple[float, float, float, float] | None] | None:
-    """Estimate content bounds within a sub-canvas viewBox, excluding defs and legend."""
-    try:
-        root = ET.fromstring(sub_canvas.tostring())
-    except ET.ParseError:
-        return None
-
-    view_box = str(root.attrib.get("viewBox", "")).strip()
-    view_box_parts = [part for part in view_box.split() if part]
-    if len(view_box_parts) == 4:
-        vb_x = _parse_svg_length_px(view_box_parts[0], default=0.0)
-        vb_y = _parse_svg_length_px(view_box_parts[1], default=0.0)
-        vb_w = _parse_svg_length_px(view_box_parts[2], default=0.0)
-        vb_h = _parse_svg_length_px(view_box_parts[3], default=0.0)
-    else:
-        vb_x = 0.0
-        vb_y = 0.0
-        vb_w = _parse_svg_length_px(root.attrib.get("width"), default=0.0)
-        vb_h = _parse_svg_length_px(root.attrib.get("height"), default=0.0)
-
-    if vb_w <= 0.0 and vb_h <= 0.0:
-        return None
-
-    min_x: float | None = None
-    max_x: float | None = None
-    min_y: float | None = None
-    max_y: float | None = None
-
-    def _walk(node: ET.Element, inherited_tx: float, inherited_ty: float) -> None:
-        nonlocal min_x, max_x, min_y, max_y
-        tag = _svg_local_name(str(node.tag)).lower()
-        if tag == "defs":
-            return
-        if tag == "g" and str(node.attrib.get("id", "")) == "legend":
-            return
-
-        local_tx, local_ty = _parse_translate_xy(node.attrib.get("transform"))
-        total_tx = inherited_tx + float(local_tx)
-        total_ty = inherited_ty + float(local_ty)
-
-        bounds_x = _estimate_element_local_x_bounds(node)
-        if bounds_x is not None:
-            candidate_min_x = total_tx + float(bounds_x[0])
-            candidate_max_x = total_tx + float(bounds_x[1])
-            min_x = candidate_min_x if min_x is None else min(min_x, candidate_min_x)
-            max_x = candidate_max_x if max_x is None else max(max_x, candidate_max_x)
-
-        bounds_y = _estimate_element_local_y_bounds(node)
-        if bounds_y is not None:
-            candidate_min_y = total_ty + float(bounds_y[0])
-            candidate_max_y = total_ty + float(bounds_y[1])
-            min_y = candidate_min_y if min_y is None else min(min_y, candidate_min_y)
-            max_y = candidate_max_y if max_y is None else max(max_y, candidate_max_y)
-
-        for child in list(node):
-            _walk(child, total_tx, total_ty)
-
-    _walk(root, 0.0, 0.0)
-
-    content_bounds: tuple[float, float, float, float] | None = None
-    if min_x is not None and max_x is not None and min_y is not None and max_y is not None:
-        content_bounds = (float(min_x), float(max_x), float(min_y), float(max_y))
-
-    return (
-        (float(vb_x), float(vb_x) + float(vb_w), float(vb_y), float(vb_y) + float(vb_h)),
-        content_bounds,
-    )
-
-
-def _estimate_subcanvas_horizontal_insets(sub_canvas: Drawing) -> tuple[float, float]:
-    """Estimate left/right insets between viewBox edges and diagram geometry."""
-    parsed = _estimate_subcanvas_content_bounds(sub_canvas)
-    if parsed is None:
-        return 0.0, 0.0
-    (view_min_x, view_max_x, _view_min_y, _view_max_y), content_bounds = parsed
-    if content_bounds is None:
-        return 0.0, 0.0
-    content_min_x, content_max_x, _content_min_y, _content_max_y = content_bounds
-    left_inset = max(0.0, float(content_min_x) - float(view_min_x))
-    right_inset = max(0.0, float(view_max_x) - float(content_max_x))
-    return float(left_inset), float(right_inset)
-
-
-def _estimate_subcanvas_vertical_insets(sub_canvas: Drawing) -> tuple[float, float]:
-    """Estimate top/bottom insets between viewBox edges and diagram geometry."""
-    parsed = _estimate_subcanvas_content_bounds(sub_canvas)
-    if parsed is None:
-        return 0.0, 0.0
-    (_view_min_x, _view_max_x, view_min_y, view_max_y), content_bounds = parsed
-    if content_bounds is None:
-        return 0.0, 0.0
-    _content_min_x, _content_max_x, content_min_y, content_max_y = content_bounds
-    top_inset = max(0.0, float(content_min_y) - float(view_min_y))
-    bottom_inset = max(0.0, float(view_max_y) - float(content_max_y))
-    return float(top_inset), float(bottom_inset)
-
-
 def _estimate_square_grid(record_count: int) -> tuple[int, int]:
     """Return grid dimensions (cols, rows) close to square."""
     if record_count <= 0:
@@ -1111,169 +878,91 @@ def _resolve_multi_record_default_row_counts(record_count: int) -> list[int]:
     return counts
 
 
-def _group_local_vertical_bounds(group: Group) -> tuple[float, float]:
-    """Return local vertical bounds for text elements in a group."""
-    min_y: float | None = None
-    max_y: float | None = None
-
-    for element in getattr(group, "elements", []):
-        attribs = getattr(element, "attribs", None)
-        if not isinstance(attribs, dict):
-            continue
-        if "y" not in attribs:
-            continue
-        y_value = _parse_svg_length_px(attribs.get("y"), default=0.0)
-        font_size = _parse_svg_length_px(attribs.get("font-size"), default=0.0)
-        half_height = 0.5 * font_size if font_size > 0 else 0.0
-        top = y_value - half_height
-        bottom = y_value + half_height
-        min_y = top if min_y is None else min(min_y, top)
-        max_y = bottom if max_y is None else max(max_y, bottom)
-
-    if min_y is None or max_y is None:
-        return 0.0, 0.0
-    return float(min_y), float(max_y)
-
-
-def _set_group_translate(group: Group, *, x: float, y: float) -> None:
-    """Set a group transform to a simple translate(x, y)."""
-    attribs = getattr(group, "attribs", None)
-    if not isinstance(attribs, dict):
-        return
-    attribs["transform"] = f"translate({float(x)}, {float(y)})"
-
-
-def _is_record_definition_group(
-    element: object,
+def _pack_circular_record_bounds(
+    record_bounds: Sequence[Aabb],
+    row_counts: Sequence[int],
     *,
-    record_index: int,
-    record_id: str,
-) -> bool:
-    """Return whether an SVG element is the semantic definition for a record."""
-    attribs = getattr(element, "attribs", None)
-    if not isinstance(attribs, dict):
-        return False
-    if str(attribs.get("data-gbdraw-role", "")) != "record-definition":
-        return False
+    column_gap_px: float,
+    row_gap_px: float,
+) -> _CircularGridLayout:
+    """Pack record content by authoritative visible bounds."""
+    if not record_bounds:
+        raise ValueError("record_bounds is empty")
+    if (
+        not math.isfinite(float(column_gap_px))
+        or not math.isfinite(float(row_gap_px))
+        or column_gap_px < 0.0
+        or row_gap_px < 0.0
+    ):
+        raise ValueError("record grid gaps must be finite and non-negative")
 
-    semantic_index = attribs.get("data-gbdraw-record-index")
-    if semantic_index is not None and str(semantic_index) != str(int(record_index)):
-        return False
-    semantic_record_id = attribs.get("data-gbdraw-record-id")
-    if semantic_record_id is not None and str(semantic_record_id) != str(record_id):
-        return False
-    return True
+    rows: list[tuple[int, ...]] = []
+    cursor = 0
+    for raw_count in row_counts:
+        count = max(0, int(raw_count))
+        row = tuple(range(cursor, min(cursor + count, len(record_bounds))))
+        if row:
+            rows.append(row)
+            cursor += len(row)
+        if cursor >= len(record_bounds):
+            break
+    if cursor < len(record_bounds):
+        rows.append(tuple(range(cursor, len(record_bounds))))
 
+    row_widths = tuple(
+        sum(record_bounds[index].width for index in row)
+        + max(0, len(row) - 1) * float(column_gap_px)
+        for row in rows
+    )
+    row_heights = tuple(
+        max(record_bounds[index].height for index in row)
+        for row in rows
+    )
+    grid_width = max(row_widths)
+    grid_height = sum(row_heights) + max(0, len(rows) - 1) * float(row_gap_px)
 
-def _center_record_definition_group_on_record_axis(
-    record_group: Group,
-    *,
-    record_index: int,
-    record_id: str,
-    record_count: int = 1,
-) -> None:
-    """Center one per-record definition group vertically on its record axis."""
-    axis_group_id = f"Axis_{record_index}"
-    definition_group_ids = {
-        definition_group_svg_id(
-            record_id,
-            mode="circular",
-            record_index=record_index,
-            record_count=record_count,
-        ),
-        definition_group_svg_id(record_id, mode="circular"),
-        f"{str(record_id).replace(' ', '_')}_definition",
-    }
-    axis_group: Group | None = None
-    definition_group: Group | None = None
+    translations: list[tuple[float, float] | None] = [None] * len(record_bounds)
+    row_top = 0.0
+    for row, row_width, row_height in zip(rows, row_widths, row_heights):
+        content_left = 0.5 * (grid_width - row_width)
+        for position, record_index in enumerate(row):
+            bounds = record_bounds[record_index]
+            translations[record_index] = (
+                content_left - bounds.min_x,
+                row_top + (0.5 * (row_height - bounds.height)) - bounds.min_y,
+            )
+            content_left += bounds.width
+            if position < len(row) - 1:
+                content_left += float(column_gap_px)
+        row_top += row_height + float(row_gap_px)
 
-    for child in getattr(record_group, "elements", []):
-        attribs = getattr(child, "attribs", None)
-        if not isinstance(attribs, dict):
-            continue
-        child_id = str(attribs.get("id", ""))
-        if child_id == axis_group_id:
-            axis_group = child
-        elif _is_record_definition_group(
-            child,
-            record_index=record_index,
-            record_id=record_id,
-        ):
-            definition_group = child
-        elif definition_group is None and child_id in definition_group_ids:
-            definition_group = child
-
-    if axis_group is None or definition_group is None:
-        return
-
-    _axis_x, axis_center_y = _parse_translate_xy(axis_group.attribs.get("transform"))
-    definition_x, definition_y = _parse_translate_xy(definition_group.attribs.get("transform"))
-    definition_min_y, definition_max_y = _group_local_vertical_bounds(definition_group)
-    definition_local_center_y = (float(definition_min_y) + float(definition_max_y)) * 0.5
-    definition_text_center_y = float(definition_y) + float(definition_local_center_y)
-    delta_y = float(axis_center_y) - float(definition_text_center_y)
-
-    if math.isclose(delta_y, 0.0, rel_tol=1e-9, abs_tol=1e-9):
-        return
-    _set_group_translate(
-        definition_group,
-        x=float(definition_x),
-        y=float(definition_y) + float(delta_y),
+    if any(translation is None for translation in translations):
+        raise RuntimeError("circular record grid left a record unplaced")
+    resolved_translations = tuple(
+        translation for translation in translations if translation is not None
+    )
+    return _CircularGridLayout(
+        bounds=Aabb(0.0, 0.0, grid_width, grid_height),
+        translations=resolved_translations,
     )
 
 
-def _center_single_record_definition_group_on_axis(
-    canvas: Drawing,
-    *,
-    record_id: str,
-    record_index: int = 0,
-) -> None:
-    """Center a top-level single-record definition group vertically on its axis."""
-    axis_group: Group | None = None
-    definition_group: Group | None = None
-    definition_group_ids = {
-        definition_group_svg_id(
-            record_id,
-            mode="circular",
-            record_index=record_index,
-            record_count=1,
-        ),
-        f"{str(record_id).replace(' ', '_')}_definition",
-    }
-
-    for child in getattr(canvas, "elements", []):
+def _strip_nested_composition_roles(element: object) -> None:
+    """Remove single-record role markers before nesting them in a grid."""
+    for child in _walk_svgwrite_elements(element):
         attribs = getattr(child, "attribs", None)
-        if not isinstance(attribs, dict):
-            continue
-        child_id = str(attribs.get("id", ""))
-        if child_id == "Axis":
-            axis_group = child
-        elif _is_record_definition_group(
-            child,
-            record_index=record_index,
-            record_id=record_id,
-        ):
-            definition_group = child
-        elif definition_group is None and child_id in definition_group_ids:
-            definition_group = child
+        if isinstance(attribs, dict):
+            attribs.pop(COMPOSITION_ROLE_ATTRIBUTE, None)
 
-    if axis_group is None or definition_group is None:
-        return
 
-    _axis_x, axis_center_y = _parse_translate_xy(axis_group.attribs.get("transform"))
-    definition_x, definition_y = _parse_translate_xy(definition_group.attribs.get("transform"))
-    definition_min_y, definition_max_y = _group_local_vertical_bounds(definition_group)
-    definition_local_center_y = (float(definition_min_y) + float(definition_max_y)) * 0.5
-    definition_text_center_y = float(definition_y) + float(definition_local_center_y)
-    delta_y = float(axis_center_y) - float(definition_text_center_y)
-
-    if math.isclose(delta_y, 0.0, rel_tol=1e-9, abs_tol=1e-9):
-        return
-    _set_group_translate(
-        definition_group,
-        x=float(definition_x),
-        y=float(definition_y) + float(delta_y),
-    )
+def _require_circular_assembly_result(drawing: Drawing) -> CircularAssemblyResult:
+    """Return the authoritative record result or fail at the assembly boundary."""
+    result = getattr(drawing, "_gbdraw_circular_assembly_result", None)
+    if not isinstance(result, CircularAssemblyResult):
+        raise RuntimeError(
+            "Circular record assembly did not expose authoritative layout bounds."
+        )
+    return result
 
 
 def _suffix_fixed_top_level_group_id(element: object, record_index: int) -> None:
@@ -1451,28 +1140,6 @@ def _apply_circular_plot_title_font_size_override(
     )
 
 
-def _sync_drawing_canvas_size(
-    canvas: Drawing,
-    *,
-    width: float,
-    height: float,
-) -> None:
-    canvas.attribs["width"] = f"{float(width)}px"
-    canvas.attribs["height"] = f"{float(height)}px"
-    canvas.attribs["viewBox"] = f"0 0 {float(width)} {float(height)}"
-
-
-def _translate_canvas_top_level_groups(canvas: Drawing, *, dy: float) -> None:
-    if abs(float(dy)) <= 1e-6:
-        return
-    for element in getattr(canvas, "elements", []):
-        if _is_defs_element(element):
-            continue
-        translate = getattr(element, "translate", None)
-        if callable(translate):
-            translate(0, float(dy))
-
-
 def _build_circular_plot_title_group(
     *,
     gb_record: SeqRecord,
@@ -1482,14 +1149,14 @@ def _build_circular_plot_title_group(
     species: str | None,
     strain: str | None,
     plot_title: str | None,
-) -> tuple[Group, tuple[float, float]]:
+) -> tuple[Group, Aabb]:
     plot_title_canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix,
         profile=profile,
         legend="none",
         gb_record=gb_record,
     )
-    plot_title_group = DefinitionGroup(
+    definition = DefinitionGroup(
         gb_record=gb_record,
         canvas_config=plot_title_canvas_config,
         species=species,
@@ -1498,109 +1165,8 @@ def _build_circular_plot_title_group(
         definition_profile="shared_common",
         definition_group_id="plot_title",
         cfg=cfg,
-    ).get_group()
-    return plot_title_group, _group_local_vertical_bounds(plot_title_group)
-
-
-def _add_single_record_plot_title_group(
-    *,
-    canvas: Drawing,
-    canvas_config: CircularCanvasConfigurator,
-    legend_measurement: LegendMeasurement,
-    gb_record: SeqRecord,
-    output_prefix: str,
-    cfg: GbdrawConfig,
-    profile: CircularRenderProfile,
-    species: str | None,
-    strain: str | None,
-    plot_title: str | None,
-    plot_title_position: Literal["none", "top", "bottom"],
-) -> None:
-    plot_title_group, plot_title_local_bounds = _build_circular_plot_title_group(
-        gb_record=gb_record,
-        output_prefix=output_prefix,
-        cfg=cfg,
-        profile=profile,
-        species=species,
-        strain=strain,
-        plot_title=plot_title,
     )
-    plot_title_min_y, plot_title_max_y = plot_title_local_bounds
-    plot_title_height = max(
-        0.0,
-        float(plot_title_max_y) - float(plot_title_min_y),
-    )
-
-    parsed_canvas_bounds = _estimate_subcanvas_content_bounds(canvas)
-    content_bounds = (
-        parsed_canvas_bounds[1] if parsed_canvas_bounds is not None else None
-    )
-    content_top = float(content_bounds[2]) if content_bounds is not None else None
-    content_bottom = float(content_bounds[3]) if content_bounds is not None else None
-
-    if plot_title_position == "top":
-        anchor_top = content_top
-        if (
-            str(canvas_config.legend_position).strip().lower() == "top"
-            and float(legend_measurement.legend_height) > 0.0
-        ):
-            legend_top = (
-                float(canvas_config.legend_offset_y)
-                - (0.5 * float(legend_measurement.color_rect_size))
-            )
-            anchor_top = (
-                legend_top
-                if anchor_top is None
-                else min(float(anchor_top), float(legend_top))
-            )
-        required_anchor_top = (
-            _MULTI_RECORD_PLOT_TITLE_BOTTOM_MARGIN_PX
-            + plot_title_height
-            + _MULTI_RECORD_LEGEND_PLOT_TITLE_GAP_PX
-        )
-        if anchor_top is not None and anchor_top < required_anchor_top:
-            shift_y = required_anchor_top - anchor_top
-            _translate_canvas_top_level_groups(canvas, dy=shift_y)
-            canvas_config.offset_y = float(canvas_config.offset_y) + float(shift_y)
-            canvas_config.total_height = float(canvas_config.total_height) + float(shift_y)
-            _sync_drawing_canvas_size(
-                canvas,
-                width=float(canvas_config.total_width),
-                height=float(canvas_config.total_height),
-            )
-
-    if plot_title_position == "bottom":
-        anchor_bottom = float(content_bottom) if content_bottom is not None else 0.0
-        if str(canvas_config.legend_position).strip().lower() == "bottom":
-            anchor_bottom = max(
-                anchor_bottom,
-                (
-                    float(canvas_config.legend_offset_y)
-                    - (0.5 * float(legend_measurement.color_rect_size))
-                    + float(legend_measurement.legend_height)
-                ),
-            )
-        required_height = (
-            anchor_bottom
-            + _MULTI_RECORD_LEGEND_PLOT_TITLE_GAP_PX
-            + plot_title_height
-            + _MULTI_RECORD_PLOT_TITLE_BOTTOM_MARGIN_PX
-        )
-        if required_height > float(canvas_config.total_height):
-            canvas_config.total_height = float(required_height)
-            _sync_drawing_canvas_size(
-                canvas,
-                width=float(canvas_config.total_width),
-                height=float(canvas_config.total_height),
-            )
-
-    plot_title_group = place_definition_group_on_size(
-        plot_title_group,
-        canvas_width=float(canvas_config.total_width),
-        canvas_height=float(canvas_config.total_height),
-        position=plot_title_position,
-    )
-    canvas.add(plot_title_group)
+    return definition.get_group(), definition.local_bounds
 
 
 def _validate_multi_record_min_radius_ratio(value: float) -> float:
@@ -2872,7 +2438,22 @@ def assemble_circular_diagram_from_record(
         canvas_config=canvas_config,
     )
 
-    canvas, legend_measurement = assemble_circular_diagram(
+    title_target: Group | None = None
+    title_bounds: Aabb | None = None
+    title_placement = TitlePlacement.NONE
+    if show_plot_title:
+        title_target, title_bounds = _build_circular_plot_title_group(
+            gb_record=gb_record,
+            output_prefix=output_prefix,
+            cfg=cfg,
+            profile=profile,
+            species=species,
+            strain=strain,
+            plot_title=normalized_plot_title or None,
+        )
+        title_placement = TitlePlacement(normalized_plot_title_position)
+
+    result = _assemble_circular_diagram_result(
         gb_record=gb_record,
         canvas_config=canvas_config,
         gc_df=gc_df,
@@ -2904,27 +2485,11 @@ def assemble_circular_diagram_from_record(
         definition_group_id=_definition_group_id,
         center_reserved_radius=center_reserved_radius,
         _tick_track_channel_override=_tick_track_channel_override,
+        title_target=title_target,
+        title_bounds=title_bounds,
+        title_placement=title_placement,
     )
-    if show_plot_title:
-        _center_single_record_definition_group_on_axis(
-            canvas,
-            record_id=str(gb_record.id),
-            record_index=_annotation_record_index,
-        )
-        _add_single_record_plot_title_group(
-            canvas=canvas,
-            canvas_config=canvas_config,
-            legend_measurement=legend_measurement,
-            gb_record=gb_record,
-            output_prefix=output_prefix,
-            cfg=cfg,
-            profile=profile,
-            species=species,
-            strain=strain,
-            plot_title=normalized_plot_title or None,
-            plot_title_position=normalized_plot_title_position,
-        )
-    return canvas
+    return result.drawing
 
 
 def assemble_circular_diagram_from_records(
@@ -3040,75 +2605,6 @@ def assemble_circular_diagram_from_records(
     default_colors = resolved_feature_inputs.default_colors
     feature_table = resolved_feature_inputs.feature_visibility_table
 
-    if len(records) == 1:
-        if (depth_table is not None or depth_file is not None) and (
-            depth_tables is not None or depth_files is not None
-        ):
-            raise ValidationError("Use depth_table/depth_file or depth_tables/depth_files, not both.")
-        single_depth_table = depth_table
-        single_depth_file = depth_file
-        if depth_tables is not None:
-            if len(depth_tables) != 1:
-                raise ValidationError("Expected one depth table for one circular record.")
-            single_depth_table = depth_tables[0]
-        if depth_files is not None:
-            if len(depth_files) != 1:
-                raise ValidationError("Expected one depth file for one circular record.")
-            single_depth_file = depth_files[0]
-        return assemble_circular_diagram_from_record(
-            records[0],
-            cfg=cfg,
-            conservation_blast_files=conservation_blast_files,
-            conservation_dataframes=conservation_dataframes,
-            conservation_reference=conservation_reference,
-            conservation_labels=conservation_labels,
-            conservation_colors=conservation_colors,
-            conservation_ring_width=conservation_ring_width,
-            conservation_ring_gap=conservation_ring_gap,
-            color_table=color_table,
-            color_table_file=color_table_file,
-            default_colors=default_colors,
-            default_colors_palette=default_colors_palette,
-            default_colors_file=default_colors_file,
-            selected_features_set=selected_features_set,
-            feature_visibility_table=feature_table,
-            feature_visibility_table_file=feature_visibility_table_file,
-            feature_shapes=feature_shapes,
-            output_prefix=output_prefix,
-            legend=legend,
-            dinucleotide=dinucleotide,
-            window=window,
-            step=step,
-            depth_window=depth_window,
-            depth_step=depth_step,
-            depth_tracks=depth_tracks,
-            depth_table=single_depth_table,
-            depth_file=single_depth_file,
-            depth_track_tables=depth_track_tables,
-            depth_track_files=depth_track_files,
-            depth_track_labels=depth_track_labels,
-            depth_track_colors=depth_track_colors,
-            depth_track_large_tick_intervals=depth_track_large_tick_intervals,
-            depth_track_small_tick_intervals=depth_track_small_tick_intervals,
-            depth_track_tick_font_sizes=depth_track_tick_font_sizes,
-            species=species,
-            strain=strain,
-            plot_title=normalized_plot_title or None,
-            plot_title_position=normalized_plot_title_position,
-            plot_title_font_size=plot_title_font_size,
-            keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
-            center_reserved_radius=center_reserved_radius,
-            circular_track_slots=circular_track_slots,
-            circular_track_axis_index=circular_track_axis_index,
-            _resolved_annotations=resolved_annotations,
-            _annotation_record_index=0,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-            _resolved_feature_inputs=resolved_feature_inputs,
-        )
-
     cfg = _apply_circular_plot_title_font_size_override(
         cfg=cfg,
         plot_title_font_size=plot_title_font_size,
@@ -3213,7 +2709,9 @@ def assemble_circular_diagram_from_records(
     cfg = replace(cfg, canvas=canvas_cfg)
     show_plot_title = normalized_plot_title_position != "none"
     record_definition_profile: Literal["full", "record_summary"] = "record_summary"
-    if show_plot_title and keep_full_definition_with_plot_title:
+    if len(records) == 1 and not show_plot_title:
+        record_definition_profile = "full"
+    elif show_plot_title and keep_full_definition_with_plot_title:
         record_definition_profile = "full"
     record_lengths = [len(record.seq) for record in records]
     cfg = _harmonize_multi_record_circular_style_cfg(
@@ -3321,9 +2819,7 @@ def assemble_circular_diagram_from_records(
             available_indices=depth_track_indices(record_depth_track_data),
         )
 
-    canvases: list[Drawing] = []
-    widths: list[float] = []
-    heights: list[float] = []
+    record_results: list[CircularAssemblyResult] = []
     record_radii_px: list[float] = []
     track_slot_geometry_records: list[dict[str, Any]] = []
     record_id_counts = Counter(str(record.id) for record in records)
@@ -3389,10 +2885,9 @@ def assemble_circular_diagram_from_records(
             _precomputed_conservation_tracks=record_conservation_tracks,
             _resolved_feature_inputs=resolved_feature_inputs,
         )
-        canvases.append(sub_canvas)
-        widths.append(_parse_svg_length_px(sub_canvas.attribs.get("width"), default=0.0))
-        heights.append(_parse_svg_length_px(sub_canvas.attribs.get("height"), default=0.0))
-        sub_geometry = getattr(sub_canvas, "_gbdraw_track_slot_geometry", None)
+        result = _require_circular_assembly_result(sub_canvas)
+        record_results.append(result)
+        sub_geometry = result.track_slot_geometry
         if isinstance(sub_geometry, Mapping):
             for record_payload in sub_geometry.get("records", []) or []:
                 if not isinstance(record_payload, Mapping):
@@ -3415,194 +2910,30 @@ def assemble_circular_diagram_from_records(
     )
 
     if not row_counts:
-        row_counts = _resolve_multi_record_default_row_counts(len(canvases))
-    row_record_indices: list[list[int]] = []
-    record_row_by_index: dict[int, int] = {}
-    cursor = 0
-    for row_count in row_counts:
-        if cursor >= len(canvases):
-            break
-        row_indices: list[int] = []
-        for _ in range(max(0, int(row_count))):
-            if cursor >= len(canvases):
-                break
-            row_indices.append(cursor)
-            record_row_by_index[cursor] = len(row_record_indices)
-            cursor += 1
-        if row_indices:
-            row_record_indices.append(row_indices)
-    rows = len(row_record_indices)
-    row_heights: list[float] = [0.0] * rows
-    record_sizes: list[tuple[float, float]] = [
-        (float(width_px), float(height_px))
-        for width_px, height_px in zip(widths, heights)
-    ]
-    for row, row_indices in enumerate(row_record_indices):
-        for record_index in row_indices:
-            if record_index >= len(record_sizes):
-                continue
-            _record_width, record_height = record_sizes[record_index]
-            row_heights[row] = max(row_heights[row], float(record_height))
-
-    record_vertical_insets: list[tuple[float, float]] = [
-        _estimate_subcanvas_vertical_insets(sub_canvas) for sub_canvas in canvases
-    ]
-    row_content_tops: list[float] = [0.0] * rows
-    row_content_bottoms: list[float] = [0.0] * rows
-    for row, row_indices in enumerate(row_record_indices):
-        if not row_indices:
-            continue
-        cell_height = float(row_heights[row]) if row < len(row_heights) else 0.0
-        row_content_top: float | None = None
-        row_content_bottom: float | None = None
-        for record_index in row_indices:
-            sub_height = float(record_sizes[record_index][1])
-            top_inset = max(0.0, float(record_vertical_insets[record_index][0]))
-            bottom_inset = max(0.0, float(record_vertical_insets[record_index][1]))
-            if sub_height > 0.0:
-                if top_inset > sub_height:
-                    top_inset = sub_height
-                if top_inset + bottom_inset > sub_height:
-                    bottom_inset = max(0.0, sub_height - top_inset)
-            content_height = max(0.0, sub_height - top_inset - bottom_inset)
-            cell_offset_y = (cell_height - sub_height) * 0.5
-            content_top = cell_offset_y + top_inset
-            content_bottom = content_top + content_height
-            row_content_top = content_top if row_content_top is None else min(row_content_top, content_top)
-            row_content_bottom = content_bottom if row_content_bottom is None else max(row_content_bottom, content_bottom)
-        row_content_tops[row] = float(row_content_top) if row_content_top is not None else 0.0
-        row_content_bottoms[row] = float(row_content_bottom) if row_content_bottom is not None else 0.0
-
-    row_offsets: list[float] = [0.0] * rows
-    for row in range(1, rows):
-        previous_row = row - 1
-        required_shift = (
-            row_content_bottoms[previous_row]
-            + float(row_gap_px)
-            - row_content_tops[row]
-        )
-        row_offsets[row] = float(row_offsets[previous_row]) + max(0.0, float(required_shift))
-    row_physical_widths: list[float] = []
-    row_total_widths: list[float] = []
-    row_outer_left_paddings: list[float] = []
-    row_outer_right_paddings: list[float] = []
-    record_horizontal_insets: list[tuple[float, float]] = [
-        _estimate_subcanvas_horizontal_insets(sub_canvas) for sub_canvas in canvases
-    ]
-    record_content_widths: list[float] = []
-    for record_index, (sub_width, _sub_height) in enumerate(record_sizes):
-        left_inset = max(0.0, float(record_horizontal_insets[record_index][0]))
-        right_inset = max(0.0, float(record_horizontal_insets[record_index][1]))
-        if sub_width > 0.0:
-            if left_inset > sub_width:
-                left_inset = sub_width
-            if left_inset + right_inset > sub_width:
-                right_inset = max(0.0, sub_width - left_inset)
-        record_horizontal_insets[record_index] = (float(left_inset), float(right_inset))
-        record_content_widths.append(
-            max(0.0, float(sub_width) - float(left_inset) - float(right_inset))
-        )
-    apply_row_margin_symmetry = (
-        str(legend_effective).strip().lower() in {"none", "top", "bottom"}
+        row_counts = _resolve_multi_record_default_row_counts(len(record_results))
+    grid_layout = _pack_circular_record_bounds(
+        [result.content_bounds for result in record_results],
+        row_counts,
+        column_gap_px=column_gap_px,
+        row_gap_px=row_gap_px,
     )
-    for row_indices in row_record_indices:
-        if not row_indices:
-            row_physical_widths.append(0.0)
-            row_total_widths.append(0.0)
-            row_outer_left_paddings.append(0.0)
-            row_outer_right_paddings.append(0.0)
-            continue
-        row_content_width = sum(
-            float(record_content_widths[index]) for index in row_indices
-        )
-        row_content_width += max(0, len(row_indices) - 1) * column_gap_px
 
-        first_index = row_indices[0]
-        last_index = row_indices[-1]
-        row_left = max(0.0, float(record_horizontal_insets[first_index][0]))
-        row_right = max(0.0, float(record_horizontal_insets[last_index][1]))
-        row_physical_width = float(row_left) + float(row_content_width) + float(row_right)
-        row_physical_widths.append(float(row_physical_width))
-
-        extra_left = 0.0
-        extra_right = 0.0
-        if apply_row_margin_symmetry:
-            target_margin = max(row_left, row_right)
-            extra_left = max(0.0, target_margin - row_left)
-            extra_right = max(0.0, target_margin - row_right)
-
-        row_outer_left_paddings.append(float(extra_left))
-        row_outer_right_paddings.append(float(extra_right))
-        row_total_widths.append(float(row_physical_width + extra_left + extra_right))
-
-    grid_width = max(row_total_widths, default=0.0)
-    grid_height = max(
-        (
-            float(row_offsets[row]) + float(row_heights[row])
-            for row in range(rows)
-        ),
-        default=0.0,
-    )
-    record_offsets_x: dict[int, float] = {}
-    for row, row_indices in enumerate(row_record_indices):
-        if not row_indices:
-            continue
-        row_physical_width = (
-            row_physical_widths[row] if row < len(row_physical_widths) else 0.0
-        )
-        row_total_width = (
-            row_total_widths[row] if row < len(row_total_widths) else row_physical_width
-        )
-        row_outer_left_padding = (
-            row_outer_left_paddings[row] if row < len(row_outer_left_paddings) else 0.0
-        )
-        first_index = row_indices[0]
-        content_cursor_x = (
-            max(0.0, (grid_width - row_total_width) * 0.5)
-            + row_outer_left_padding
-            + float(record_horizontal_insets[first_index][0])
-        )
-        for position, record_index in enumerate(row_indices):
-            left_inset = float(record_horizontal_insets[record_index][0])
-            content_width = float(record_content_widths[record_index])
-            record_offsets_x[record_index] = content_cursor_x - left_inset
-            content_cursor_x += content_width
-            if position < len(row_indices) - 1:
-                content_cursor_x += column_gap_px
-
-    total_width = grid_width
-    total_height = grid_height
-    grid_origin_x = 0.0
-    grid_origin_y = 0.0
-    legend_offset_x = 0.0
-    legend_offset_y = 0.0
-    legend_config: LegendDrawingConfigurator | None = None
-    legend_measurement: LegendMeasurement | None = None
-    legend_canvas_config: CircularCanvasConfigurator | None = None
     legend_table: dict = {}
-    legend_local_top = 0.0
-    legend_local_bottom = 0.0
+    legend_target: Group | None = None
+    legend_bounds: Aabb | None = None
     plot_title_group: Group | None = None
-    plot_title_local_bounds = (0.0, 0.0)
+    plot_title_bounds: Aabb | None = None
 
     if show_plot_title:
-        shared_canvas_config = CircularCanvasConfigurator(
+        plot_title_group, plot_title_bounds = _build_circular_plot_title_group(
+            gb_record=records[0],
             output_prefix=output_prefix,
+            cfg=cfg,
             profile=profile,
-            legend="none",
-            gb_record=records[0],
-        )
-        plot_title_group = DefinitionGroup(
-            gb_record=records[0],
-            canvas_config=shared_canvas_config,
             species=species,
             strain=strain,
             plot_title=normalized_plot_title or None,
-            definition_profile="shared_common",
-            definition_group_id="plot_title",
-            cfg=cfg,
-        ).get_group()
-        plot_title_local_bounds = _group_local_vertical_bounds(plot_title_group)
+        )
 
     if legend_effective != "none":
         legend_canvas_config = CircularCanvasConfigurator(
@@ -3724,127 +3055,52 @@ def assemble_circular_diagram_from_records(
                 canvas_config=legend_canvas_config,
             )
             legend_measurement = legend_config.measure_legend(
-                legend_table, legend_canvas_config
+                legend_table,
+                placement=legend_canvas_config.legend_position,
+                wrap_width=grid_layout.bounds.width,
             )
-            legend_local_top = -0.5 * float(
-                legend_measurement.color_rect_size
-            )
-            legend_local_bottom = (
-                legend_local_top + float(legend_measurement.legend_height)
-            )
-            side_inner_gap = 0.0
-            side_edge_margin = 0.0
-            side_reserved_width = 0.0
-            if legend_effective in {"left", "right"}:
-                side_inner_gap, side_edge_margin, side_reserved_width = (
-                    resolve_circular_side_legend_geometry(
-                        canvas_height=float(total_height),
-                        legend_width=float(legend_measurement.legend_width),
-                        color_rect_size=float(legend_measurement.color_rect_size),
-                    )
-                )
-
-            if legend_effective == "right":
-                total_width = grid_width + side_reserved_width
-                legend_offset_x = grid_width + side_inner_gap
-                legend_offset_y = (
-                    total_height - legend_measurement.legend_height
-                ) / 2.0
-            elif legend_effective == "left":
-                total_width = grid_width + side_reserved_width
-                grid_origin_x = side_reserved_width
-                legend_offset_x = side_edge_margin
-                legend_offset_y = (
-                    total_height - legend_measurement.legend_height
-                ) / 2.0
-            elif legend_effective == "top":
-                legend_offset_y = _MULTI_RECORD_LEGEND_TOP_EDGE_PADDING_PX - legend_local_top
-                legend_bottom = legend_offset_y + legend_local_bottom
-                grid_origin_y = legend_bottom + _MULTI_RECORD_LEGEND_GRID_GAP_PX
-                total_height = grid_origin_y + grid_height
-                legend_offset_x = (
-                    total_width - legend_measurement.legend_width
-                ) / 2.0
-            elif legend_effective == "bottom":
-                legend_offset_x = (
-                    total_width - legend_measurement.legend_width
-                ) / 2.0
-                legend_offset_y = grid_height + _MULTI_RECORD_LEGEND_GRID_GAP_PX - legend_local_top
-                legend_bottom = legend_offset_y + legend_local_bottom
-                total_height = max(
-                    total_height,
-                    legend_bottom + _MULTI_RECORD_LEGEND_EDGE_PADDING_PX,
-                )
-            elif legend_effective == "upper_left":
-                legend_offset_x = 0.025 * total_width
-                legend_offset_y = 0.05 * total_height
-            elif legend_effective == "upper_right":
-                legend_offset_x = 0.85 * total_width
-                legend_offset_y = 0.05 * total_height
-            elif legend_effective == "lower_left":
-                legend_offset_x = 0.025 * total_width
-                legend_offset_y = 0.78 * total_height
-            elif legend_effective == "lower_right":
-                legend_offset_x = 0.875 * total_width
-                legend_offset_y = 0.75 * total_height
-
-    if (
-        show_plot_title
-        and plot_title_group is not None
-        and normalized_plot_title_position == "bottom"
-    ):
-        plot_title_min_y, plot_title_max_y = plot_title_local_bounds
-        plot_title_height = max(0.0, float(plot_title_max_y) - float(plot_title_min_y))
-
-        records_bottom = float(grid_origin_y) + float(grid_height)
-        anchor_bottom = records_bottom
-        if legend_effective == "bottom" and legend_measurement is not None:
-            legend_bottom = legend_offset_y + legend_local_bottom
-            anchor_bottom = max(anchor_bottom, float(legend_bottom))
-
-        required_height = (
-            anchor_bottom
-            + _MULTI_RECORD_LEGEND_PLOT_TITLE_GAP_PX
-            + plot_title_height
-            + _MULTI_RECORD_PLOT_TITLE_BOTTOM_MARGIN_PX
-        )
-        total_height = max(total_height, required_height)
+            legend_bounds = legend_measurement.local_bounds
+            legend_target = LegendGroup(
+                legend_canvas_config,
+                legend_measurement,
+                legend_table,
+            ).get_group()
 
     merged_canvas = Drawing(
         filename=f"{output_prefix}.svg",
-        size=(f"{total_width}px", f"{total_height}px"),
-        viewBox=f"0 0 {total_width} {total_height}",
+        size=(f"{grid_layout.bounds.width}px", f"{grid_layout.bounds.height}px"),
+        viewBox=(
+            f"0 0 {grid_layout.bounds.width} {grid_layout.bounds.height}"
+        ),
         debug=False,
     )
     used_ids: set[str] = set()
+    record_targets: list[Group] = []
+    grid_overlay_obstacles: list[Aabb] = []
 
-    for record_index, sub_canvas in enumerate(canvases):
-        row = int(record_row_by_index.get(record_index, 0))
-        default_size = record_sizes[record_index] if record_index < len(record_sizes) else (0.0, 0.0)
-        sub_width = _parse_svg_length_px(sub_canvas.attribs.get("width"), default=default_size[0])
-        sub_height = _parse_svg_length_px(sub_canvas.attribs.get("height"), default=default_size[1])
-        cell_height = row_heights[row] if row < len(row_heights) else sub_height
-        cell_origin_x = grid_origin_x + record_offsets_x.get(record_index, 0.0)
-        cell_origin_y = grid_origin_y + (row_offsets[row] if row < len(row_offsets) else 0.0)
-        cell_offset_x = cell_origin_x
-        cell_offset_y = cell_origin_y + (cell_height - sub_height) * 0.5
+    for record_index, result in enumerate(record_results):
         record_group = Group(id=f"record_{record_index}", debug=False)
         record_group.attribs["data-gbdraw-record-id"] = str(records[record_index].id)
         record_group.attribs["data-gbdraw-record-index"] = str(record_index)
-        record_group.translate(cell_offset_x, cell_offset_y)
+        record_dx, record_dy = grid_layout.translations[record_index]
+        record_group.translate(record_dx, record_dy)
         used_ids.add(f"record_{record_index}")
 
         copied_definitions: list[object] = []
         copied_elements: list[object] = []
-        for element in sub_canvas.elements:
+        for element in result.drawing.elements:
             copied = copy.deepcopy(element)
             if _is_defs_element(element):
                 copied_definitions.extend(
                     list(getattr(copied, "elements", ()) or ())
                 )
                 continue
+            _strip_nested_composition_roles(copied)
             _suffix_fixed_top_level_group_id(copied, record_index)
             copied_elements.append(copied)
+
+        for definition in copied_definitions:
+            _strip_nested_composition_roles(definition)
 
         _uniquify_copied_subtrees_ids(
             (*copied_definitions, *copied_elements),
@@ -3855,36 +3111,56 @@ def assemble_circular_diagram_from_records(
             merged_canvas.defs.add(definition)
         for copied in copied_elements:
             record_group.add(copied)
-        _center_record_definition_group_on_record_axis(
-            record_group,
-            record_index=record_index,
-            record_id=str(records[record_index].id),
-            record_count=len(records),
-        )
         merged_canvas.add(record_group)
+        record_targets.append(record_group)
+        grid_overlay_obstacles.extend(
+            obstacle.translated(record_dx, record_dy)
+            for obstacle in result.overlay_obstacles
+        )
 
     if plot_title_group is not None:
-        plot_title_group = place_definition_group_on_size(
-            plot_title_group,
-            canvas_width=float(total_width),
-            canvas_height=float(total_height),
-            position=normalized_plot_title_position,
-        )
         merged_canvas.add(plot_title_group)
+    if legend_target is not None:
+        merged_canvas.add(legend_target)
 
-    if (
-        legend_effective != "none"
-        and legend_table
-        and legend_measurement is not None
-        and legend_canvas_config is not None
-    ):
-        legend_group = LegendGroup(
-            legend_canvas_config,
-            legend_measurement,
-            legend_table,
-        ).get_group()
-        legend_group.translate(legend_offset_x, legend_offset_y)
-        merged_canvas.add(legend_group)
+    legend_placement = LegendPlacement(str(legend_effective))
+    title_placement = (
+        TitlePlacement(normalized_plot_title_position)
+        if plot_title_group is not None
+        else TitlePlacement.NONE
+    )
+    composition_plan = plan_composition(
+        CompositionRequest(
+            primary=CompositionItem("primary", grid_layout.bounds),
+            legend=(
+                CompositionItem("legend", legend_bounds)
+                if legend_target is not None and legend_bounds is not None
+                else None
+            ),
+            title=(
+                CompositionItem("title", plot_title_bounds)
+                if plot_title_group is not None and plot_title_bounds is not None
+                else None
+            ),
+            legend_placement=legend_placement,
+            title_placement=title_placement,
+            overlay_obstacles=tuple(grid_overlay_obstacles),
+        )
+    )
+    apply_composition_plan(
+        merged_canvas,
+        composition_plan,
+        primary_targets=record_targets,
+        legend_target=legend_target,
+        legend_side=legend_placement,
+        legend_reflow_metrics=(
+            legend_measurement.reflow_metrics
+            if legend_target is not None
+            else None
+        ),
+        title_target=plot_title_group,
+        title_side=title_placement,
+    )
 
     if track_slot_geometry_records:
         setattr(

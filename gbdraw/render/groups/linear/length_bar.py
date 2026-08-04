@@ -9,6 +9,7 @@ from svgwrite.text import Text
 
 from ....core.text import calculate_bbox_dimensions
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....layout.spatial import Aabb
 
 RULER_TICK_LENGTH = 10.0 * (2.0 / 3.0)
 RULER_LABEL_OFFSET = 15.0
@@ -126,6 +127,7 @@ class LengthBarGroup:
         self.manual_interval = scale_config.interval
         self.scale_group_width: float = 0
         self.scale_group_height: float = 0
+        self.local_bounds = Aabb(0.0, 0.0, 0.0, 0.0)
         self.dpi = cfg.canvas.dpi
         # --- 2. Set other properties ---
         self.longest_genome: int = longest_genome
@@ -257,6 +259,24 @@ class LengthBarGroup:
             (0.5 * first_tick_bbox_width) + scale_ruler_length + (0.5 * last_tick_bbox_width)
         )
         self.scale_group_height = (0.5 * self.stroke_width) + RULER_LABEL_OFFSET + max_tick_bbox_height
+        half_stroke = 0.5 * max(0.0, float(self.stroke_width))
+        min_x = min(
+            -half_stroke,
+            *(bounds[0] for bounds in label_bounds),
+        )
+        max_x = max(
+            float(self.ruler_width) + half_stroke,
+            *(bounds[1] for bounds in label_bounds),
+        )
+        self.local_bounds = Aabb(
+            min_x,
+            -max(0.0, float(self.stroke_width)),
+            max_x,
+            max(
+                RULER_TICK_LENGTH + half_stroke,
+                RULER_LABEL_OFFSET + float(max_tick_bbox_height),
+            ),
+        )
 
     def _ruler_length_bp(self) -> int:
         if self.alignment_width <= 0 or self.longest_genome <= 0:
@@ -307,6 +327,13 @@ class LengthBarGroup:
         )
         self.scale_group_width = self.tick_bbox_width + 10 + self.bar_length
         self.scale_group_height = self.tick_bbox_height
+        half_stroke = 0.5 * max(0.0, float(self.stroke_width))
+        self.local_bounds = Aabb(
+            float(self.start_x) - 10.0 - float(self.tick_bbox_width) - half_stroke,
+            -max(half_stroke, 0.5 * float(self.tick_bbox_height)),
+            float(self.end_x) + half_stroke,
+            max(half_stroke, 0.5 * float(self.tick_bbox_height)),
+        )
         return Text(
             self.label_text,
             insert=(self.start_x - 10, self.start_y),

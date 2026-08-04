@@ -269,10 +269,59 @@
       "body": "Click Generate Diagram. The preview should show chromosome 1 and chromosome 2 above plasmids pVNTG1 through pVNTG4, with GC content and GC skew rings inside each record.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp",
             "alt": "Generated Vibrio multi-record preview with two chromosomes and four plasmids.",
             "caption": "The generated preview uses automatic radius scaling for two chromosomes and four plasmids."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); const positions = (Array.isArray(app?.adv?.multi_record_positions) ? app.adv.multi_record_positions : []).map((entry) => `${entry.selector}@${entry.row}`).join(','); if (!svg || positions !== '#1@1,#2@1,#3@2,#4@2,#5@2,#6@2' || !content.includes('Vibrio nigripulchritudo') || !content.includes('pVNTG1') || !content.includes('pVNTG4') || app?.form?.legend !== 'left') throw new Error('Restored Vibrio multi-record SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-vnig-multirecord-final', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-vnig-multirecord-final='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.multi_record_canvas": true,
+              "form.legend": "left",
+              "adv.multi_record_size_mode": "auto",
+              "adv.multi_record_min_radius_ratio": 0.55,
+              "adv.multi_record_column_gap_ratio": 0.1,
+              "adv.multi_record_row_gap_ratio": 0.05,
+              "adv.multi_record_positions": [
+                {"selector": "#1", "row": 1},
+                {"selector": "#2", "row": 1},
+                {"selector": "#3", "row": 2},
+                {"selector": "#4", "row": 2},
+                {"selector": "#5", "row": 2},
+                {"selector": "#6", "row": 2}
+              ],
+              "form.plot_title": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome",
+              "adv.plot_title_position": "bottom"
+            },
+            "visibleText": [
+              "Vibrio nigripulchritudo",
+              "AP024087.1",
+              "AP024088.1",
+              "pVNTG1",
+              "pVNTG4",
+              "GC content",
+              "GC skew (+)"
+            ]
           }
         }
       ]

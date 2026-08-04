@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -52,6 +53,85 @@ class Aabb:
         object.__setattr__(self, "min_y", min_y)
         object.__setattr__(self, "max_x", max_x)
         object.__setattr__(self, "max_y", max_y)
+
+    @property
+    def width(self) -> float:
+        """Horizontal extent of the box."""
+        return self.max_x - self.min_x
+
+    @property
+    def height(self) -> float:
+        """Vertical extent of the box."""
+        return self.max_y - self.min_y
+
+    def translated(self, dx: float, dy: float) -> Aabb:
+        """Return a copy translated by ``dx`` and ``dy``."""
+        dx = _validate_finite_value(dx, name="bbox translation")
+        dy = _validate_finite_value(dy, name="bbox translation")
+        return Aabb(
+            self.min_x + dx,
+            self.min_y + dy,
+            self.max_x + dx,
+            self.max_y + dy,
+        )
+
+    def expanded(self, x: float, y: float | None = None) -> Aabb:
+        """Return a copy expanded equally on both sides of each axis."""
+        x = _validate_padding(x)
+        y = x if y is None else _validate_padding(y)
+        return Aabb(
+            self.min_x - x,
+            self.min_y - y,
+            self.max_x + x,
+            self.max_y + y,
+        )
+
+    def intersects(self, other: Aabb, clearance: float = 0.0) -> bool:
+        """Return whether the boxes overlap with less than ``clearance`` between them.
+
+        Edge contact is not an intersection. Consequently, two boxes separated
+        by exactly ``clearance`` satisfy that clearance.
+        """
+        if not isinstance(other, Aabb):
+            raise TypeError("other must be an Aabb")
+        clearance = _validate_padding(clearance)
+        return (
+            self.min_x < other.max_x + clearance
+            and self.max_x > other.min_x - clearance
+            and self.min_y < other.max_y + clearance
+            and self.max_y > other.min_y - clearance
+        )
+
+
+def _validate_finite_value(value: float, *, name: str) -> float:
+    value = float(value)
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be finite")
+    return value
+
+
+def union_aabbs(bboxes: Iterable[Aabb]) -> Aabb | None:
+    """Return the union of ``bboxes``, or ``None`` for an empty iterable."""
+    iterator = iter(bboxes)
+    try:
+        first = next(iterator)
+    except StopIteration:
+        return None
+    if not isinstance(first, Aabb):
+        raise TypeError("all bboxes must be Aabb instances")
+
+    min_x = first.min_x
+    min_y = first.min_y
+    max_x = first.max_x
+    max_y = first.max_y
+    for bbox in iterator:
+        if not isinstance(bbox, Aabb):
+            raise TypeError("all bboxes must be Aabb instances")
+        min_x = min(min_x, bbox.min_x)
+        min_y = min(min_y, bbox.min_y)
+        max_x = max(max_x, bbox.max_x)
+        max_y = max(max_y, bbox.max_y)
+    return Aabb(min_x, min_y, max_x, max_y)
 
 
 def _validate_bucket_size(bucket_size: float) -> float:
@@ -175,4 +255,5 @@ __all__ = [
     "IntervalIndex",
     "candidate_aabb_pairs",
     "split_circular_interval",
+    "union_aabbs",
 ]

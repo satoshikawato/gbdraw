@@ -18,6 +18,11 @@ EXPECTED_GUI_LOSATN_MATCHES = (
     ("NC_001416.1", "NC_042057.1", "100.000", "254", "0", "0", "27724", "27977", "1", "254", "6.07e-133", "470"),
 )
 
+_TRANSLATE_COMPONENT_RE = re.compile(
+    r"translate\(\s*(?P<x>[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?)(?:[,\s]+"
+    r"(?P<y>[-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?))?\s*\)"
+)
+
 
 _SVG_INSPECTION_SCRIPT = r"""
 root => {
@@ -71,9 +76,20 @@ root => {
     .filter(Boolean);
   const labelTexts = labelTextsWithin(svg);
   const parseTranslate = (element) => {
-    const match = String(element?.getAttribute('transform') || '')
-      .match(/translate\(\s*([-+\d.eE]+)[,\s]+([-+\d.eE]+)\s*\)/);
-    return match ? [Number(match[1]), Number(match[2])] : null;
+    const value = String(element?.getAttribute('transform') || '');
+    const pattern = /translate\(\s*([-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?)(?:[,\s]+([-+]?(?:\d*\.?\d+)(?:[eE][-+]?\d+)?))?\s*\)/g;
+    let offsetX = 0;
+    let offsetY = 0;
+    let end = 0;
+    let found = false;
+    for (const match of value.matchAll(pattern)) {
+      if (value.slice(end, match.index).trim()) return null;
+      offsetX += Number(match[1]);
+      offsetY += Number(match[2] || 0);
+      end = match.index + match[0].length;
+      found = true;
+    }
+    return found && !value.slice(end).trim() ? [offsetX, offsetY] : null;
   };
   const recordPlacementCandidates = elements
     .filter((element) => (
@@ -238,14 +254,29 @@ def _normalized_text(element: ET.Element) -> str:
     return " ".join("".join(element.itertext()).split())
 
 
+def parse_translate_chain(value: str) -> list[float] | None:
+    """Return the net offset for a transform containing translations only."""
+
+    offset_x = 0.0
+    offset_y = 0.0
+    end = 0
+    found = False
+    for match in _TRANSLATE_COMPONENT_RE.finditer(value):
+        if value[end : match.start()].strip():
+            return None
+        offset_x += float(match.group("x"))
+        offset_y += float(match.group("y") or 0.0)
+        end = match.end()
+        found = True
+    if not found or value[end:].strip():
+        return None
+    return [offset_x, offset_y]
+
+
 def _translate(element: ET.Element | None) -> list[float] | None:
     if element is None:
         return None
-    match = re.search(
-        r"translate\(\s*([-+\d.eE]+)[,\s]+([-+\d.eE]+)\s*\)",
-        element.attrib.get("transform", ""),
-    )
-    return [float(match.group(1)), float(match.group(2))] if match else None
+    return parse_translate_chain(element.attrib.get("transform", ""))
 
 
 def _label_texts_within(element: ET.Element) -> list[str]:
@@ -924,18 +955,22 @@ def assert_gui_circular_layout_svg(report: dict[str, Any]) -> None:
                 f"{record_id} uses CDS product text instead of gene labels: "
                 f"{sorted(products)!r}"
             )
-    x_coordinates = sorted(float(translate[0]) for translate in translations)
-    y_coordinates = sorted(float(translate[1]) for translate in translations)
-    if (
-        len(x_coordinates) != 4
-        or abs(x_coordinates[0] - x_coordinates[1]) > 25
-        or abs(x_coordinates[2] - x_coordinates[3]) > 25
-        or abs(x_coordinates[1] - x_coordinates[2]) < 100
-        or len(y_coordinates) != 4
-        or abs(y_coordinates[0] - y_coordinates[1]) > 1
-        or abs(y_coordinates[2] - y_coordinates[3]) > 1
-        or abs(y_coordinates[1] - y_coordinates[2]) < 100
-    ):
+    ordered_translations = sorted(
+        ([float(value) for value in translate] for translate in translations),
+        key=lambda value: value[1],
+    )
+    rows = (ordered_translations[:2], ordered_translations[2:])
+    same_row_tolerance = 25.0
+    rows_are_distinct = (
+        len(ordered_translations) == 4
+        and abs(rows[0][0][1] - rows[0][1][1]) <= same_row_tolerance
+        and abs(rows[1][0][1] - rows[1][1][1]) <= same_row_tolerance
+        and rows[1][0][1] - rows[0][1][1] >= 100.0
+    )
+    rows_have_two_columns = all(
+        abs(row[0][0] - row[1][0]) >= 100.0 for row in rows
+    )
+    if not rows_are_distinct or not rows_have_two_columns:
         raise AssertionError(
             "Expected a 2 by 2 Circular grid; found translations "
             f"{translations!r}"

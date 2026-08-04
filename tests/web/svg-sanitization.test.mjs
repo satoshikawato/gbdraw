@@ -10,10 +10,12 @@ const trustedRendererSemanticAttributes = [
   'data-edge-kind',
   'data-gbdraw-annotation-clipped',
   'data-gbdraw-definition-part',
+  'data-gbdraw-composition',
+  'data-gbdraw-composition-role',
+  'data-gbdraw-composition-schema',
   'data-gbdraw-feature-offset-y',
   'data-gbdraw-slot-id',
   'data-gbdraw-slot-renderer',
-  'data-horizontal-viewbox',
   'data-ortholog-path-id',
   'data-query-orthogroup-assignment-reason',
   'data-query-orthogroup-confidence',
@@ -34,8 +36,7 @@ const trustedRendererSemanticAttributes = [
   'data-subject-orthogroup-representative',
   'data-subject-orthogroup-role',
   'data-subject-row',
-  'data-subject-stable-feature-svg-id',
-  'data-vertical-viewbox'
+  'data-subject-stable-feature-svg-id'
 ];
 
 test('trusted renderer semantic hooks survive the SVG sanitizer contract', () => {
@@ -75,6 +76,28 @@ test('standalone-only metadata is not admitted to plain preview sanitization', (
     'data-result-index',
     'data-result-name',
     'data-schema'
+  ].forEach((attribute) => {
+    assert.equal(SVG_SANITIZE_OPTIONS.ADD_ATTR.includes(attribute), false);
+  });
+});
+
+test('only the three schema 1 composition attributes are allowlisted', () => {
+  assert.deepEqual(
+    SVG_SANITIZE_OPTIONS.ADD_ATTR
+      .filter((attribute) => attribute.startsWith('data-gbdraw-composition'))
+      .sort(),
+    [
+      'data-gbdraw-composition',
+      'data-gbdraw-composition-role',
+      'data-gbdraw-composition-schema'
+    ]
+  );
+});
+
+test('retired alternate viewBox metadata is not allowlisted', () => {
+  [
+    'data-horizontal-viewbox',
+    'data-vertical-viewbox'
   ].forEach((attribute) => {
     assert.equal(SVG_SANITIZE_OPTIONS.ADD_ATTR.includes(attribute), false);
   });

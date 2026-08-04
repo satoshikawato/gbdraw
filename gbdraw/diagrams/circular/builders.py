@@ -37,7 +37,6 @@ from ...render.groups.circular import (  # type: ignore[reportMissingImports]
 from .positioning import (
     center_group_on_canvas,
     place_definition_group_on_canvas,
-    place_legend_on_canvas,
 )
 
 
@@ -226,7 +225,7 @@ def add_record_definition_group_on_canvas(
     Drawing: The updated SVG drawing with the record definition group added.
     """
     cfg = canvas_config.profile.config
-    definition_group: Group = DefinitionGroup(
+    definition_builder = DefinitionGroup(
         gb_record,
         canvas_config,
         cfg=cfg,
@@ -237,7 +236,9 @@ def add_record_definition_group_on_canvas(
         definition_group_id=definition_group_id,
         record_index=record_index,
         record_count=record_count,
-    ).get_group()
+    )
+    definition_group: Group = definition_builder.get_group()
+    setattr(definition_group, "_gbdraw_local_bounds", definition_builder.local_bounds)
     definition_group = place_definition_group_on_canvas(
         definition_group,
         canvas_config,
@@ -428,7 +429,7 @@ def add_legend_group_on_canvas(
         legend_measurement,
         legend_table,
     ).get_group()
-    legend_group = place_legend_on_canvas(legend_group, canvas_config)
+    setattr(legend_group, "_gbdraw_local_bounds", legend_measurement.local_bounds)
     canvas.add(legend_group)
 
     return canvas

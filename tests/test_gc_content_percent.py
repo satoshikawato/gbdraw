@@ -67,12 +67,12 @@ def _svg_slot_translate_y(svg: str, renderer: str) -> float:
         for element in root.iter()
         if element.get("data-gbdraw-slot-renderer") == renderer
     )
-    match = re.fullmatch(
-        r"translate\([^,]+,([^)]+)\)",
+    translations = re.findall(
+        r"translate\(\s*[-+0-9.eE]+(?:px)?[\s,]+([-+0-9.eE]+)(?:px)?\s*\)",
         group.get("transform", ""),
     )
-    assert match is not None
-    return float(match.group(1))
+    assert translations
+    return sum(float(value) for value in translations)
 
 
 def test_gc_content_config_defaults_preserve_deviation_mode() -> None:

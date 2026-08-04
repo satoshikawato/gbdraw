@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +19,7 @@ from assertions.svg_semantics import (
     assert_static_svg_safety,
     inspect_first_circular_svg,
     inspect_first_linear_svg,
+    parse_translate_chain,
 )
 from config import (
     ACTION_TIMEOUT_MS,
@@ -45,6 +45,7 @@ from flows.web_capture import (
     fit_complete_linear_preview,
     generate_and_inspect,
     open_browser_capture,
+    set_feature_search_visible,
     wait_for_worker,
 )
 
@@ -294,6 +295,7 @@ def capture_gui_circular_layout(
             inspect_first_circular_svg,
             assert_gui_circular_layout_svg,
         )
+        set_feature_search_visible(page, visible=False)
         _fit_complete_grid_preview(page)
         screenshot_bytes["grid-result.png"] = capture_screenshot(
             page,
@@ -445,13 +447,9 @@ def _assert_linear_layout_download(path: Path) -> dict[str, Any]:
     }
     translations = {}
     for record_id, group in record_groups.items():
-        transform = group.attrib.get("transform", "")
-        match = re.search(
-            r"translate\(\s*([-+\d.eE]+)[,\s]+([-+\d.eE]+)\s*\)",
-            transform,
-        )
-        if match:
-            translations[record_id] = [float(match.group(1)), float(match.group(2))]
+        translation = parse_translate_chain(group.attrib.get("transform", ""))
+        if translation is not None:
+            translations[record_id] = translation
     if set(translations) != {"NC_001416.1", "NC_042057.1"}:
         raise AssertionError(f"Downloaded SVG record groups changed: {translations!r}")
     if translations["NC_001416.1"][1] >= translations["NC_042057.1"][1]:
@@ -631,7 +629,7 @@ def capture_gui_linear_layout(
         ):
             raise AssertionError(f"The documented ruler is not active: {rendered_state!r}")
 
-        fit_complete_linear_preview(page, target_zoom="30%")
+        fit_complete_linear_preview(page, target_zoom="30%", pan_left=True)
         screenshot_bytes["orientation-result.png"] = capture_screenshot(
             page, output_paths["orientation-result.png"], "Linear"
         )

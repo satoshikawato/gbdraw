@@ -125,12 +125,12 @@ def test_comparison_ribbons_keep_four_pixel_clearance_from_painted_occupancy() -
     }
 
     def translate_y(group: ET.Element) -> float:
-        match = re.fullmatch(
-            r"translate\(([-+0-9.eE]+),([-+0-9.eE]+)\)",
+        translations = re.findall(
+            r"translate\(\s*([-+0-9.eE]+)[,\s]+([-+0-9.eE]+)\s*\)",
             group.attrib["transform"],
         )
-        assert match is not None
-        return float(match.group(2))
+        assert translations
+        return sum(float(y_value) for _x_value, y_value in translations)
 
     def path_y_values(group: ET.Element) -> list[float]:
         return [

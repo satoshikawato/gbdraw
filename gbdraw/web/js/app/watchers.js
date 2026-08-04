@@ -18,6 +18,22 @@ import {
 import { resolveCircularLayoutPreference } from './layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { circularInputNeedsRecordDiscovery } from './record-discovery.js';
+import {
+  COMPOSITION_METADATA_ATTRIBUTE,
+  COMPOSITION_SCHEMA_ATTRIBUTE
+} from './legend-layout/composition-actions.js';
+
+export const runRecordDiscoveryWatcher = async ({
+  rollbackInProgress,
+  semanticWatchersSuppressed,
+  refresh
+}) => {
+  const suppress = Boolean(
+    rollbackInProgress?.value || semanticWatchersSuppressed?.value
+  );
+  await refresh({ suppress });
+  return !suppress;
+};
 
 export const setupWatchers = ({
   state,
@@ -59,10 +75,7 @@ export const setupWatchers = ({
     skipCaptureBaseConfig,
     skipPositionReapply,
     skipExtractOnSvgChange,
-    diagramElementBaseTransforms,
     svgContainer,
-    diagramElements,
-    linearBaseConfig,
     layoutPreferences,
     suppressCircularMultiRecordDefaults,
     featureRecordIds,
@@ -101,6 +114,7 @@ export const setupWatchers = ({
     pendingPaletteName,
     fileLegendCaptions,
     semanticFileWatchersSuppressed,
+    sessionImportRollbackInProgress,
     manualPriorityRules,
     manualWhitelist,
     manualBlacklist,
@@ -111,7 +125,8 @@ export const setupWatchers = ({
     labelReflowRequestReason,
     labelReflowForceRequestSeq,
     labelReflowForceRequestReason,
-    labelLayoutDirtyReason
+    labelLayoutDirtyReason,
+    errorLog
   } = state;
 
   const {
@@ -135,7 +150,6 @@ export const setupWatchers = ({
     applyCanvasPadding,
     captureBaseConfig,
     captureOriginalStroke,
-    refreshLegendGeometry,
     repositionForLegendChange,
     refreshDiagramDragAffordances,
     setupDiagramDrag
@@ -333,24 +347,8 @@ export const setupWatchers = ({
 
   watch(svgContent, () => {
     const isIncrementalEdit = Boolean(skipCaptureBaseConfig.value);
-    const shouldSkipPositionReapply = Boolean(skipPositionReapply.value);
     skipCaptureBaseConfig.value = false;
     skipPositionReapply.value = false;
-
-    let savedBaseTransformsById = null;
-    if (isIncrementalEdit && diagramElementBaseTransforms.value.size > 0) {
-      savedBaseTransformsById = new Map();
-      for (const [el, transform] of diagramElementBaseTransforms.value) {
-        const id = el.id || '';
-        if (id) {
-          if (!savedBaseTransformsById.has(id)) {
-            savedBaseTransformsById.set(id, []);
-          }
-          savedBaseTransformsById.get(id).push(transform);
-        }
-      }
-      debugLog('Saved', savedBaseTransformsById.size, 'base transform IDs before DOM update');
-    }
 
     nextTick(() => {
       const timingEntries = [];
@@ -392,6 +390,25 @@ export const setupWatchers = ({
       if (!skipExtractOnSvgChange.value) {
         measureTiming(timingEntries, 'watch(svgContent) extractLegendEntries', extractLegendEntries);
       }
+      const shouldBindComposition = Boolean(
+        svg && (
+          !isIncrementalEdit ||
+          svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null ||
+          svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
+        )
+      );
+      if (shouldBindComposition) {
+        try {
+          measureTiming(timingEntries, 'watch(svgContent) bind composition metadata', captureBaseConfig);
+        } catch (error) {
+          errorLog.value = {
+            summary: error?.message || 'The SVG composition metadata is invalid.',
+            details: []
+          };
+          console.error('Could not bind SVG composition metadata.', error);
+          return;
+        }
+      }
       measureTiming(timingEntries, 'watch(svgContent) setupLegendDrag', setupLegendDrag);
       measureTiming(timingEntries, 'watch(svgContent) setupDiagramDrag', () => setupDiagramDrag(isIncrementalEdit));
       measureTiming(timingEntries, 'watch(svgContent) attachSvgFeatureHandlers', attachSvgFeatureHandlers);
@@ -400,7 +417,6 @@ export const setupWatchers = ({
       }
 
       if (!isIncrementalEdit) {
-        measureTiming(timingEntries, 'watch(svgContent) captureBaseConfig', captureBaseConfig);
         measureTiming(timingEntries, 'watch(svgContent) captureOriginalStroke', captureOriginalStroke);
         debugLog('Full base config capture (fresh generation)');
 
@@ -410,58 +426,6 @@ export const setupWatchers = ({
         canvasPadding.left = 0;
 
         measureTiming(timingEntries, 'watch(svgContent) reapplyStrokeOverrides', reapplyStrokeOverrides);
-        if (mode.value === 'circular' && !shouldSkipPositionReapply) {
-          measureTiming(
-            timingEntries,
-            'watch(svgContent) refresh circular legend geometry',
-            refreshLegendGeometry
-          );
-        }
-      } else if (savedBaseTransformsById && savedBaseTransformsById.size > 0) {
-        debugLog('Incremental edit - remapping base transforms');
-
-        const newBaseTransforms = new Map();
-        const idCounters = new Map();
-
-        diagramElements.value.forEach((newEl) => {
-          const id = newEl.id || '';
-          const transforms = savedBaseTransformsById.get(id);
-          if (transforms && transforms.length > 0) {
-            const idx = idCounters.get(id) || 0;
-            if (idx < transforms.length) {
-              newBaseTransforms.set(newEl, transforms[idx]);
-              idCounters.set(id, idx + 1);
-            }
-          }
-        });
-
-        diagramElementBaseTransforms.value = newBaseTransforms;
-        debugLog('Remapped', newBaseTransforms.size, 'base transforms to new elements');
-
-        if (!shouldSkipPositionReapply) {
-          const isLinear = mode.value === 'linear';
-          const currentLegendPos = form.legend;
-          const currentDiagramPos = generatedLegendPosition.value;
-
-          debugLog('Checking position after incremental edit:', {
-            currentLegendPos,
-            currentDiagramPos,
-            isLinear,
-            shouldSkipPositionReapply
-          });
-
-          if (isLinear && currentLegendPos && currentDiagramPos && currentLegendPos !== currentDiagramPos) {
-            debugLog('Position differs from current - reapplying position shift');
-            skipCaptureBaseConfig.value = true;
-            const originalGeneratedPos = linearBaseConfig.value.generatedPosition;
-            repositionForLegendChange(currentLegendPos, originalGeneratedPos);
-            return;
-          }
-        } else {
-          debugLog('Skipping position reapply (triggered by repositionForLegendChange)');
-        }
-      } else {
-        debugLog('Incremental edit but no base transforms to remap');
       }
 
       logPostGbdrawTimings(timingEntries);
@@ -690,6 +654,7 @@ export const setupWatchers = ({
   watch(() => state.adv.keep_full_definition_with_plot_title, scheduleCircularDefinitionUpdate);
   watch(
     () => [
+      semanticFileWatchersSuppressed.value,
       mode.value,
       cInputType.value,
       files.c_gb,
@@ -705,13 +670,21 @@ export const setupWatchers = ({
         })
       )
     ],
-    async ([, , , , , discoverRecords]) => {
+    async ([, , , , , , discoverRecords]) => {
       if (typeof refreshCircularRecordOrder !== 'function') return;
-      await refreshCircularRecordOrder({ discoverRecords });
+      await runRecordDiscoveryWatcher({
+        rollbackInProgress: sessionImportRollbackInProgress,
+        semanticWatchersSuppressed: semanticFileWatchersSuppressed,
+        refresh: ({ suppress }) => refreshCircularRecordOrder({
+          discoverRecords,
+          suppress
+        })
+      });
     }
   );
   watch(
     () => [
+      semanticFileWatchersSuppressed.value,
       mode.value,
       lInputType.value,
       ...linearSeqs.flatMap((seq) => [
@@ -722,7 +695,11 @@ export const setupWatchers = ({
     ],
     async () => {
       if (typeof refreshLinearRecordSelectors !== 'function') return;
-      await refreshLinearRecordSelectors();
+      await runRecordDiscoveryWatcher({
+        rollbackInProgress: sessionImportRollbackInProgress,
+        semanticWatchersSuppressed: semanticFileWatchersSuppressed,
+        refresh: refreshLinearRecordSelectors
+      });
     },
     { immediate: true }
   );

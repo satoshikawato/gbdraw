@@ -67,7 +67,7 @@ Open **Title & Legend**, set **Plot Title** to
 **Legend Position** to **Right**, and turn on
 **Keep Full Definition with Plot Title**.
 
-![CDS gene-label whitelist and qualifier-priority controls](../../images/h-gui-11/style-settings.png)
+![Feature color, label, title, and legend controls](../../images/h-gui-11/style-settings.png)
 
 ## Generate and verify the result
 

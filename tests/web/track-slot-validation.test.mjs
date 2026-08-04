@@ -342,6 +342,22 @@ test('derives an omitted Linear side from the emitted Axis', () => {
   assert.equal(buildLinearTrackSlotPayload(plan.enabledSlots[0]).side, 'above');
 });
 
+test('derives an omitted Circular feature side from lane_direction', () => {
+  const plan = validate({
+    mode: 'circular',
+    slots: [feature('features', {
+      side: null,
+      params: { lane_direction: 'split' }
+    })],
+    axisIndex: 0,
+    visibleFeatureUnderlays: false
+  });
+
+  assert.equal(plan.rowIssues.size, 0);
+  assert.deepEqual(plan.globalIssues, []);
+  assert.equal(plan.enabledSlots[0].side, 'overlay');
+});
+
 test('validates enabled Circular sides against the emitted Axis and keeps overlay exceptions', () => {
   const circularFeature = feature('features', {
     side: 'overlay',

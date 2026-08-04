@@ -199,8 +199,8 @@ class Reproducer:
         if dry_run:
             return target_path
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        if not target_path.exists():
-            content = asset.content.replace("{PROJECT_ROOT}", str(self.project_root))
+        content = asset.content.replace("{PROJECT_ROOT}", str(self.project_root))
+        if not target_path.exists() or target_path.read_text(encoding="utf-8") != content:
             target_path.write_text(content, encoding="utf-8")
         return target_path
 
@@ -237,6 +237,10 @@ class Reproducer:
         if cached_path and cached_path.exists():
             return cached_path
 
+        asset_path = self._materialize_support_asset(filename, dry_run)
+        if asset_path:
+            return asset_path
+
         existing = self._existing_input_path(filename)
         if existing:
             return existing
@@ -244,10 +248,6 @@ class Reproducer:
         alias = self._alias_input_path(filename, figure_id)
         if alias:
             return alias
-
-        asset_path = self._materialize_support_asset(filename, dry_run)
-        if asset_path:
-            return asset_path
 
         if filename in preparation_map:
             return self.ensure_preparation(

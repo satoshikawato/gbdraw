@@ -8,10 +8,9 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from ..core.text import calculate_bbox_dimensions
+from .metrics import legend_line_height, legend_text_x_offset
 
 
-LINE_MARGIN_RATIO = 24 / 14
-X_MARGIN_RATIO = 22 / 14
 GRADIENT_BAR_WIDTH_RATIO = 10
 SINGLE_GRADIENT_TRAILING_GAP_RATIO = 0.35
 
@@ -155,7 +154,7 @@ def _build_gradient_layout(
 
     color_rect_size = float(color_rect_size)
     bar_width = GRADIENT_BAR_WIDTH_RATIO * color_rect_size
-    row_height = LINE_MARGIN_RATIO * color_rect_size
+    row_height = legend_line_height(color_rect_size)
     first_min_label = min_gradient_label_text(gradient_entries[0].properties.get("min_value", 0))
 
     if len(gradient_entries) > 1:
@@ -379,8 +378,8 @@ def build_circular_legend_layout(
     legend_width: float | None = None,
     pairwise_legend_width: float | None = None,
 ) -> CircularLegendLayout:
-    line_margin = LINE_MARGIN_RATIO * float(color_rect_size)
-    x_margin = X_MARGIN_RATIO * float(color_rect_size)
+    line_margin = legend_line_height(color_rect_size)
+    x_margin = legend_text_x_offset(color_rect_size)
     solid_entries, gradient_entries = _measure_entries(
         legend_table,
         font_family=font_family,

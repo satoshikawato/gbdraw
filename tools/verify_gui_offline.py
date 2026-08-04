@@ -339,7 +339,10 @@ def smoke_test() -> None:
                   if (!app) return false;
                   const loadingStatus = String(app.loadingStatus || '');
                   return (
-                    (app.pyodideReady === true && app.diagramGenerationWorkerReady === true) ||
+                    (
+                      app.diagramGenerationWorkerReady === true &&
+                      Object.keys(app.paletteDefinitions || {}).length > 0
+                    ) ||
                     loadingStatus.startsWith('Startup Error:') ||
                     Boolean(app.diagramGenerationWorkerError)
                   );
@@ -356,6 +359,7 @@ def smoke_test() -> None:
                   return {
                     appMounted: true,
                     pyodideReady: app.pyodideReady,
+                    paletteDefinitionCount: Object.keys(app.paletteDefinitions || {}).length,
                     loadingStatus: app.loadingStatus,
                     diagramGenerationWorkerReady: app.diagramGenerationWorkerReady,
                     diagramGenerationWorkerStatus: app.diagramGenerationWorkerStatus,
@@ -369,6 +373,7 @@ def smoke_test() -> None:
             """
             () => ({
               pyodideReady: window.__GBDRAW_APP__.pyodideReady,
+              paletteDefinitionCount: Object.keys(window.__GBDRAW_APP__.paletteDefinitions || {}).length,
               loadingStatus: window.__GBDRAW_APP__.loadingStatus,
               diagramGenerationWorkerReady: window.__GBDRAW_APP__.diagramGenerationWorkerReady,
               diagramGenerationWorkerStatus: window.__GBDRAW_APP__.diagramGenerationWorkerStatus,
@@ -376,13 +381,16 @@ def smoke_test() -> None:
             })
             """
         )
-        if not startup_state["pyodideReady"]:
-            raise RuntimeError(f"GUI startup failed offline: {startup_state['loadingStatus']}")
         if not startup_state["diagramGenerationWorkerReady"]:
             raise RuntimeError(
                 "GUI diagram engine failed offline: "
                 f"{startup_state['diagramGenerationWorkerStatus']} "
                 f"(error: {startup_state['diagramGenerationWorkerError']})"
+            )
+        if startup_state["paletteDefinitionCount"] == 0:
+            raise RuntimeError(
+                "GUI palettes failed to load offline: "
+                f"{startup_state['loadingStatus']}"
             )
 
         page.evaluate(

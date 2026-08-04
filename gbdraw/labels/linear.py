@@ -20,6 +20,7 @@ from ..layout.linear import (  # type: ignore[reportMissingImports]
 from ..layout.spatial import Aabb, AabbIndex, Interval, IntervalIndex
 from ..layout.text_geometry import (
     aabb_from_points,
+    anchor_x_bounds,
     convex_polygons_intersect,
     text_box_corner_offsets,
     translate_points,
@@ -157,14 +158,27 @@ def _rotated_extreme_y_point_from_anchor(
 
 def calculate_label_bounds(label: dict) -> tuple[float, float, float, float]:
     """Return absolute left/right/top/bottom coordinates for a label after rotation."""
-    x_min_offset, x_max_offset, y_min_offset, y_max_offset = _rotated_bounds_from_anchor(
-        float(label["width_px"]),
-        float(label["height_px"]),
-        float(label.get("rotation_deg", 0.0)),
-        str(label.get("text_anchor", "middle")),
-    )
+    width_px = float(label["width_px"])
+    height_px = float(label["height_px"])
+    rotation_deg = float(label.get("rotation_deg", 0.0))
+    text_anchor = str(label.get("text_anchor", "middle"))
     middle_x = float(label["middle_x"])
     middle_y = float(label["middle_y"])
+    if rotation_deg == 0.0:
+        x_min_offset, x_max_offset = anchor_x_bounds(width_px, text_anchor)
+        half_height = 0.5 * max(0.0, height_px)
+        return (
+            middle_x + x_min_offset,
+            middle_x + x_max_offset,
+            middle_y - half_height,
+            middle_y + half_height,
+        )
+    x_min_offset, x_max_offset, y_min_offset, y_max_offset = _rotated_bounds_from_anchor(
+        width_px,
+        height_px,
+        rotation_deg,
+        text_anchor,
+    )
     return (
         middle_x + x_min_offset,
         middle_x + x_max_offset,

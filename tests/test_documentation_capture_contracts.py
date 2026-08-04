@@ -3,10 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import runpy
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from Bio import SeqIO
 from PIL import Image
+
+from docs.capture.assertions.svg_semantics import parse_translate_chain
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -182,6 +185,20 @@ def _chapter(scenario_id: str) -> dict[str, object]:
     return next(
         chapter for chapter in manifest["chapters"] if chapter["id"] == scenario_id
     )
+
+
+def test_capture_semantics_parse_translation_only_chains() -> None:
+    assert parse_translate_chain("translate(16,68) translate(104.5,-2e1)") == [
+        120.5,
+        48.0,
+    ]
+    assert parse_translate_chain("translate(4 5) translate(-1)") == [3.0, 5.0]
+    assert parse_translate_chain("translate(1,2) scale(2)") is None
+
+    element = ET.Element(
+        "g", {"transform": "translate(16,68) translate(104.5,-20)"}
+    )
+    assert parse_translate_chain(element.attrib["transform"]) == [120.5, 48.0]
 
 
 def test_capture_environment_is_pinned_and_loopback_only() -> None:

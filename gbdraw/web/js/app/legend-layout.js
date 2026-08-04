@@ -1,6 +1,7 @@
 import { createLegendCanvasActions } from './legend-layout/canvas-actions.js';
 import { createDiagramDragActions } from './legend-layout/diagram-drag.js';
 import { createLegendRepositionActions } from './legend-layout/reposition-actions.js';
+import { resetCompositionUserDeltas } from './legend-layout/composition-actions.js';
 
 export const createLegendLayout = ({ state, debugLog, legendActions, svgActions, history = null }) => {
   const diagramActions = createDiagramDragActions({ state, debugLog, history });
@@ -14,19 +15,19 @@ export const createLegendLayout = ({ state, debugLog, legendActions, svgActions,
   });
 
   const resetAllPositions = () => {
-    diagramActions.resetDiagramPosition();
-    diagramActions.resetPlotTitlePosition();
-    legendActions.resetLegendPositionOnly();
+    const svg = state.svgContainer.value?.querySelector?.('svg') || null;
+    if (!svg) return;
+    const binding = resetCompositionUserDeltas(svg);
+    repositionActions.syncStateFromComposition(svg, binding);
+    diagramActions.resetLengthBarPosition();
+    canvasActions.persistCurrentSvg(svg);
   };
 
   return {
     ...canvasActions,
     ...repositionActions,
-    clearPlotTitleState: diagramActions.clearPlotTitleState,
     refreshDiagramDragAffordances: diagramActions.refreshDiagramDragAffordances,
     resetAllPositions,
-    resetPlotTitlePosition: diagramActions.resetPlotTitlePosition,
-    setPlotTitleAutoTransform: diagramActions.setPlotTitleAutoTransform,
     setupDiagramDrag: diagramActions.setupDiagramDrag
   };
 };

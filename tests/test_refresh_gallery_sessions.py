@@ -18,9 +18,11 @@ from gbdraw.api import (
     CircularDiagramRequest,
     InMemoryRecordSource,
     RecordInput,
+    RenderOutputRequest,
     save_session_document,
 )
 from gbdraw.features.ids import compute_feature_hash_from_parts
+from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
@@ -56,8 +58,10 @@ from tools.refresh_gallery_sessions import (
     VIBRIO_GZIP_HARD_LIMIT,
     VIBRIO_GZIP_REGRESSION_CEILING,
     VIBRIO_RAW_ENTRY_COUNT,
+    _enable_gallery_interactive_metadata,
     _drop_unreferenced_duplicate_resources,
     _gallery_file_transaction,
+    _load_gallery_refresh_source,
     _merge_refreshed_gallery_artifacts,
     _omit_regenerable_gallery_derived_cache,
     _preserve_gallery_cli_invocation,
@@ -256,6 +260,38 @@ def test_duplicate_resource_cleanup_keeps_the_referenced_copy_only() -> None:
     }
 
 
+def test_duplicate_resource_cleanup_ignores_stale_resource_metadata() -> None:
+    session = {
+        "webFiles": {
+            "conservationLosatFastaSources": ["canonical"]
+        },
+        "resources": {
+            "canonical": {
+                "kind": "conservation-fasta-file",
+                "name": "canonical.fasta",
+                "type": "application/octet-stream",
+                "size": 3,
+                "lastModified": 0,
+                "encoding": "base64",
+                "data": "QUJD",
+            },
+            "stale": {
+                "kind": "web-file",
+                "name": "stale.fasta",
+                "type": "text/plain",
+                "size": 999,
+                "lastModified": 17,
+                "encoding": "base64",
+                "data": "QUJD",
+            },
+        },
+    }
+
+    _drop_unreferenced_duplicate_resources(session)
+
+    assert list(session["resources"]) == ["canonical"]
+
+
 def test_duplicate_resource_cleanup_preserves_two_referenced_copies() -> None:
     payload = {
         "kind": "canonical-tsv",
@@ -339,6 +375,56 @@ def test_with_interactive_svg_format_replaces_existing_format() -> None:
         "-f",
         "interactive_svg",
     ]
+
+
+def test_gallery_refresh_enables_metadata_for_forced_interactive_output() -> None:
+    session = {
+        "renderRequest": {
+            "output": {
+                "formats": ["interactive_svg"],
+                "interactiveMetadataPolicy": "omit",
+            }
+        }
+    }
+
+    assert _enable_gallery_interactive_metadata(session) is True
+    assert session["renderRequest"]["output"]["interactiveMetadataPolicy"] == "auto"
+    assert _enable_gallery_interactive_metadata(session) is False
+
+
+def test_gallery_refresh_discards_only_an_invalid_derived_result_catalog(
+    tmp_path: Path,
+) -> None:
+    record = SeqRecord(
+        Seq("ATGCGCAT"),
+        id="record",
+        annotations={"molecule_type": "DNA"},
+    )
+    source = tmp_path / "stale.gbdraw-session.json"
+    save_session_document(
+        source,
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+        ),
+    )
+    payload = load_session(source)
+    payload["results"] = [{"name": "out", "content": "<svg/>"}]
+    payload["editorState"]["featureCatalog"] = {"schema": 3, "items": []}
+    payload["runMetadata"] = {"stale": True}
+    source.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="one schema-3 item per Result"):
+        load_session(source)
+
+    recovered = _load_gallery_refresh_source(source)
+    assert recovered["results"] == []
+    assert recovered["editorState"]["featureCatalog"] == {
+        "schema": 3,
+        "items": [],
+    }
+    assert "runMetadata" not in recovered
+    assert recovered["renderRequest"] == payload["renderRequest"]
+    assert recovered["resources"] == payload["resources"]
 
 
 def test_gallery_session_promoter_runs_mjs_without_obsolete_esm_flag(
@@ -1199,6 +1285,10 @@ def test_refresh_records_resolved_track_geometry(
         source,
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
+            output=RenderOutputRequest(
+                formats=("interactive_svg",),
+                interactive_metadata_policy="omit",
+            ),
         ),
     )
 
@@ -1207,6 +1297,7 @@ def test_refresh_records_resolved_track_geometry(
     refreshed = load_session(destination)
     assert refreshed["version"] == CURRENT_SESSION_VERSION
     assert refreshed["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert refreshed["renderRequest"]["output"]["interactiveMetadataPolicy"] == "auto"
     assert (
         "outputPrefix"
         not in refreshed["renderRequest"]["diagramOptions"].get("output", {})
@@ -1510,11 +1601,13 @@ def test_gallery_validators_materialize_catalog_sequence_references() -> None:
         "comparisonMatches": [],
         "sequenceSources": [
             {
+                "key": "linear:record:0:reference",
                 "origin": "linear-record",
                 "recordIndex": 0,
                 "sequence": "AAGCTTTTTTTTTTT",
             },
             {
+                "key": "linear:record:0:iupac",
                 "origin": "linear-record",
                 "recordIndex": 0,
                 "sequence": "ACGTRYSWKMBDHVN",
@@ -1589,6 +1682,7 @@ def test_gallery_validators_materialize_catalog_sequence_references() -> None:
     unreferenced_invalid_item = json.loads(json.dumps(item))
     unreferenced_invalid_item["sequenceSources"].append(
         {
+            "key": "linear:record:invalid",
             "origin": "linear-record",
             "recordIndex": 0,
             "sequence": "ACGT RYSW",
@@ -1671,6 +1765,7 @@ def test_gallery_sequence_source_validation_is_bounded_by_source_count(
         "comparisonMatches": [],
         "sequenceSources": [
             {
+                "key": "linear:record:0",
                 "origin": "linear-record",
                 "recordIndex": 0,
                 "sequence": source_sequence,

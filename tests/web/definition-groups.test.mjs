@@ -9,6 +9,7 @@ const files = [
   'app/results.js',
   'app/record-groups.js',
   'app/legend/utils.js',
+  'app/legend-layout/composition-actions.js',
   'app/legend-layout/transform-utils.js',
   'services/svg-serialization.js'
 ];
@@ -121,6 +122,17 @@ const imported = group({
 preserveDefinitionGroupDomIdentity(secondDuplicate, imported);
 assert.equal(imported.id, 'same_definition_record_2__record_2');
 assert.equal(imported.getAttribute('transform'), 'translate(25, 40)');
+
+const composedExisting = group({
+  id: 'plot_title',
+  role: null,
+  transform: 'translate(10, 20) scale(2)'
+});
+composedExisting.setAttribute('data-gbdraw-composition-role', 'title');
+const composedImported = group({ id: 'plot_title', role: null });
+preserveDefinitionGroupDomIdentity(composedExisting, composedImported);
+assert.equal(composedImported.getAttribute('data-gbdraw-composition-role'), 'title');
+assert.equal(composedImported.getAttribute('transform'), 'translate(10, 20) scale(2)');
 
 const semanticSingle = group({
   id: 'opaque-generated-id',

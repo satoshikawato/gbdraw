@@ -712,7 +712,7 @@ const assertSvgGeometryParity = async (page, exportedPath) => {
       return { error: 'The preview or exported SVG could not be parsed.' };
     }
     const geometryAttributes = [
-      'viewBox', 'width', 'height', 'data-horizontal-viewbox', 'data-vertical-viewbox',
+      'viewBox', 'width', 'height',
       'transform', 'd', 'points', 'x', 'y', 'x1', 'x2', 'y1', 'y2',
       'cx', 'cy', 'r', 'rx', 'ry', 'dx', 'dy', 'font-family', 'font-size',
       'font-weight', 'font-style', 'text-anchor', 'dominant-baseline',

@@ -1081,7 +1081,7 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
             tile_size=(3400, 3400),
             gap=32,
             padding=32,
-            panels=(
+            panels=tuple(
                 CompositePanel(
                     recipe=CliRecipe(
                         subcommand="circular",
@@ -1103,60 +1103,18 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                             "--label_font_size",
                             "18",
                             "--definition_font_size",
-                            "20",
-                        ),
-                    )
-                ),
-                CompositePanel(
-                    recipe=CliRecipe(
-                        subcommand="circular",
-                        gbk_files=("HmmtDNA.gbk",),
-                        file_args=(_file_arg("--qualifier_priority", "qualifier_priority.tsv"),),
-                        extra_args=(
-                            "--track_type",
-                            "middle",
-                            "--species",
-                            "<i>Homo sapiens</i>",
-                            "--block_stroke_width",
-                            "2",
-                            "--axis_stroke_width",
-                            "5",
-                            "--labels",
-                            "both",
-                            "--palette",
-                            "soft_pastels",
-                            "--label_font_size",
-                            "18",
-                            "--definition_font_size",
+                            definition_font_size,
+                            "--plot_title",
+                            f"--definition_font_size {definition_font_size}",
+                            "--plot_title_position",
+                            "top",
+                            "--plot_title_font_size",
                             "28",
+                            "--keep_full_definition_with_plot_title",
                         ),
                     )
-                ),
-                CompositePanel(
-                    recipe=CliRecipe(
-                        subcommand="circular",
-                        gbk_files=("HmmtDNA.gbk",),
-                        file_args=(_file_arg("--qualifier_priority", "qualifier_priority.tsv"),),
-                        extra_args=(
-                            "--track_type",
-                            "middle",
-                            "--species",
-                            "<i>Homo sapiens</i>",
-                            "--block_stroke_width",
-                            "2",
-                            "--axis_stroke_width",
-                            "5",
-                            "--labels",
-                            "both",
-                            "--palette",
-                            "soft_pastels",
-                            "--label_font_size",
-                            "18",
-                            "--definition_font_size",
-                            "36",
-                        ),
-                    )
-                ),
+                )
+                for definition_font_size in ("20", "28", "36")
             ),
         ),
         description="Tutorial 3 definition font size comparison montage.",

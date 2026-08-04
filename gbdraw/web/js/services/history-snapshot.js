@@ -153,11 +153,6 @@ const buildFallbackUiStateData = (state) => ({
   appliedPaletteColors: clonePlainObject(getRef(state.appliedPaletteColors, {})),
   pendingPaletteName: getRef(state.pendingPaletteName, ''),
   pendingPaletteColors: clonePlainObject(getRef(state.pendingPaletteColors, {})),
-  circularBaseConfig: clonePlainObject(getRef(state.circularBaseConfig, {})),
-  linearBaseConfig: {
-    ...clonePlainObject(getRef(state.linearBaseConfig, {})),
-    diagramBaseTransforms: []
-  },
   legendCurrentOffset: { ...(state.legendCurrentOffset || {}) },
   diagramOffset: { ...(state.diagramOffset || {}) },
   lengthBarUserOffset: { ...(state.lengthBarUserOffset || {}) },
@@ -192,13 +187,6 @@ const applyFallbackUiStateData = (state, ui = {}) => {
   if (ui.appliedPaletteColors) setRef(state.appliedPaletteColors, clonePlainObject(ui.appliedPaletteColors));
   if (ui.pendingPaletteName !== undefined) setRef(state.pendingPaletteName, String(ui.pendingPaletteName || ''));
   if (ui.pendingPaletteColors) setRef(state.pendingPaletteColors, clonePlainObject(ui.pendingPaletteColors));
-  if (ui.circularBaseConfig) setRef(state.circularBaseConfig, clonePlainObject(ui.circularBaseConfig));
-  if (ui.linearBaseConfig) {
-    setRef(state.linearBaseConfig, {
-      ...clonePlainObject(ui.linearBaseConfig),
-      diagramBaseTransforms: new Map()
-    });
-  }
   if (state.legendCurrentOffset && ui.legendCurrentOffset) {
     state.legendCurrentOffset.x = Number(ui.legendCurrentOffset.x) || 0;
     state.legendCurrentOffset.y = Number(ui.legendCurrentOffset.y) || 0;

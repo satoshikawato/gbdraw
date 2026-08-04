@@ -15,7 +15,7 @@ ring, one inner LSC/IRb/SSC/IRa bracket lane, GC content, and an upper-left
 legend. The tutorial keeps the raw GenBank record separate from every
 presentation table.
 
-![Gallery-quality tobacco plastome map](../../images/t-gui-05/05-finished-diagram.png)
+![Gallery-style tobacco plastome with functional colors, radial labels, structural regions, GC content, and upper-left legend](../../images/t-gui-05/05-finished-diagram.png)
 
 ## What you'll need
 
@@ -37,7 +37,7 @@ Select **Circular** and **GenBank**, choose `NC_001879.gbk` in
 **GenBank/DDBJ File**, and set **Output Prefix** to
 `annotated_chloroplast_map`.
 
-![Complete tobacco plastome selected as the Circular input](../../images/t-gui-05/01-input-ready.png)
+![Tobacco plastome GenBank file ready in Circular mode](../../images/t-gui-05/01-input-ready.png)
 
 ## Step 2: Generate the visible baseline
 
@@ -45,7 +45,7 @@ Select **Generate Diagram**. Confirm `NC_001879.2` and `155,943 bp`. This first
 map proves that the complete record renders before custom tables or slots are
 added.
 
-![First complete tobacco plastome before Gallery presentation settings](../../images/t-gui-05/02-first-diagram.png)
+![First circular tobacco plastome diagram](../../images/t-gui-05/02-first-diagram.png)
 
 ## Step 3: Match the Gallery layout, labels, and colors
 
@@ -86,7 +86,7 @@ Open **Region Annotations** and import
 | SSC | 112,030–130,600 | 0 |
 | IRa | 130,601–155,943 | 0 |
 
-![The four Gallery plastome regions in one annotation set](../../images/t-gui-05/03-annotation-table.png)
+![Annotation table containing LSC, SSC, IRa, and IRb regions](../../images/t-gui-05/03-annotation-table.png)
 
 ## Step 5: Build the three-slot Gallery stack
 
@@ -102,7 +102,7 @@ Open **Custom Track Slots**, turn on **Use custom stack**, and remove the
 The region annotations belong between the feature ring and GC content. They
 are not alternating outer decoration and do not need a separate legend item.
 
-![Gallery circular stack with one inner region lane and GC content](../../images/t-gui-05/04-track-settings.png)
+![Circular custom-track controls for features, one plastome-region lane, and GC content](../../images/t-gui-05/04-track-settings.png)
 
 ## Step 6: Generate and export the finished map
 

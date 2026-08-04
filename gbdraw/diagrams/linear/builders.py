@@ -456,7 +456,6 @@ def add_length_bar_on_linear_canvas(
     canvas: Drawing,
     canvas_config: LinearCanvasConfigurator,
     scale_group,
-    legend_group,
     offset_x: float = 0.0,
 ) -> Drawing:
     """Adds a length bar to the linear canvas."""
@@ -470,20 +469,6 @@ def add_length_bar_on_linear_canvas(
     return canvas
 
 
-def add_legends_on_linear_canvas(
-    canvas: Drawing,
-    canvas_config: LinearCanvasConfigurator,
-    legend_group,
-    legend_table,
-):
-    legend_group = legend_group.get_group()
-    offset_x = canvas_config.legend_offset_x
-    offset_y = canvas_config.legend_offset_y
-    legend_group.translate(offset_x, offset_y)
-    canvas.add(legend_group)
-    return canvas
-
-
 __all__ = [
     "add_record_group",
     "add_depth_group",
@@ -493,5 +478,4 @@ __all__ = [
     "add_comparison_on_linear_canvas",
     "add_explicit_comparisons_on_linear_canvas",
     "add_length_bar_on_linear_canvas",
-    "add_legends_on_linear_canvas",
 ]

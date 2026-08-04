@@ -248,10 +248,6 @@ export const validateTrackSlotBindingInvariants = (
         }
       }
     } else if (enabled && layoutKind === 'circular') {
-      side = side ?? (renderer === 'annotations' ? 'outside' : 'inside');
-      if (renderer === 'sequence_conservation' && side === 'overlay') {
-        throw new Error(`Circular sequence_conservation slot '${id}' cannot use side=overlay.`);
-      }
       if (renderer === 'features') {
         const lane = normalizedOptionalString(params.lane_direction ?? params.lanes);
         if (lane !== null && !['inside', 'outside', 'split'].includes(lane)) {
@@ -259,6 +255,7 @@ export const validateTrackSlotBindingInvariants = (
             `Circular features slot '${id}' has unsupported lane_direction=${JSON.stringify(lane)}.`
           );
         }
+        side = side ?? (lane === 'split' ? 'overlay' : (lane ?? 'inside'));
         if (lane !== null) {
           const expectedSide = lane === 'split' ? 'overlay' : lane;
           if (side !== expectedSide) {
@@ -267,6 +264,11 @@ export const validateTrackSlotBindingInvariants = (
             );
           }
         }
+      } else {
+        side = side ?? (renderer === 'annotations' ? 'outside' : 'inside');
+      }
+      if (renderer === 'sequence_conservation' && side === 'overlay') {
+        throw new Error(`Circular sequence_conservation slot '${id}' cannot use side=overlay.`);
       }
       if (renderer === 'ticks') {
         const obsoleteTickKey = ['axis', 'label_side', 'tick_side']

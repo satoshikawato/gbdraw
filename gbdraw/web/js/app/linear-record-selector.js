@@ -56,6 +56,10 @@ export const createLinearRecordSelector = ({
 }) => {
   const selectorStateByUid = reactive({});
   let refreshGeneration = 0;
+  const recordDiscoverySuppressed = () => Boolean(
+    state.semanticFileWatchersSuppressed?.value ||
+    state.sessionImportRollbackInProgress?.value
+  );
 
   const uidFor = (seq) => String(seq?.uid ?? '').trim();
   const sourceFilesFor = (seq, inputType = state.lInputType.value) => (
@@ -105,6 +109,7 @@ export const createLinearRecordSelector = ({
 
   const isCurrentRequest = ({ generation, uid, primaryFile, pairedFile, inputType }) => {
     if (generation !== refreshGeneration) return false;
+    if (recordDiscoverySuppressed()) return false;
     if (state.mode.value !== 'linear' || state.lInputType.value !== inputType) return false;
     const currentSeq = state.linearSeqs.find((seq) => uidFor(seq) === uid);
     if (!currentSeq) return false;
@@ -112,8 +117,9 @@ export const createLinearRecordSelector = ({
     return currentFiles.primaryFile === primaryFile && currentFiles.pairedFile === pairedFile;
   };
 
-  const refresh = async () => {
+  const refresh = async ({ suppress = false } = {}) => {
     const generation = ++refreshGeneration;
+    if (suppress || recordDiscoverySuppressed()) return;
     purgeInactiveState();
 
     if (state.mode.value !== 'linear') {
@@ -143,7 +149,7 @@ export const createLinearRecordSelector = ({
     );
     if (attemptedRuntimeStart) {
       await ensureRuntime();
-      if (generation !== refreshGeneration) return;
+      if (generation !== refreshGeneration || recordDiscoverySuppressed()) return;
     }
     if (!state.pyodideReady.value) {
       if (attemptedRuntimeStart) {

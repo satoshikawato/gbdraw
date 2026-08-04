@@ -65,6 +65,18 @@ def _record_group(
     )
 
 
+def _translate(group: ET.Element) -> tuple[float, float]:
+    translations = re.findall(
+        r"translate\(\s*([-+0-9.eE]+)[,\s]+([-+0-9.eE]+)\s*\)",
+        group.attrib.get("transform", ""),
+    )
+    assert translations
+    return (
+        sum(float(x_value) for x_value, _y_value in translations),
+        sum(float(y_value) for _x_value, y_value in translations),
+    )
+
+
 def test_shared_scale_and_fixed_gap_for_two_by_two_layout() -> None:
     measurements = tuple(
         LinearRecordMeasurement(index, RecordKey(f"key-{index}"), length)
@@ -335,6 +347,9 @@ def test_api_renders_record_local_widths_and_grid_metadata() -> None:
 
 def test_bottom_legend_follows_last_resolved_row() -> None:
     records = _records(*(1000 for _index in range(10)))
+    records[0].features.append(
+        SeqFeature(FeatureLocation(100, 300, strand=1), type="CDS")
+    )
     svg = assemble_linear_diagram_from_records(
         records,
         cfg=apply_config_overrides(
@@ -363,16 +378,8 @@ def test_bottom_legend_follows_last_resolved_row() -> None:
         if "id" in group.attrib
     }
 
-    def translate_y(group: ET.Element) -> float:
-        match = re.fullmatch(
-            r"translate\(([-+0-9.eE]+),([-+0-9.eE]+)\)",
-            group.attrib["transform"],
-        )
-        assert match is not None
-        return float(match.group(2))
-
-    last_row_axis = translate_y(_record_group(root, "record_10", 9))
-    legend_top = translate_y(groups["legend"])
+    last_row_axis = _translate(_record_group(root, "record_10", 9))[1]
+    legend_top = _translate(groups["legend"])[1]
     assert 0 < legend_top - last_row_axis < 120
 
 
@@ -433,18 +440,10 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
             for text in group.findall(".//svg:text", namespace)
         ]
 
-    def translate(group: ET.Element) -> tuple[float, float]:
-        match = re.fullmatch(
-            r"translate\(([-+0-9.eE]+),([-+0-9.eE]+)\)",
-            group.attrib["transform"],
-        )
-        assert match is not None
-        return float(match.group(1)), float(match.group(2))
-
     assert text_values(first_row_definition) == ["TUMSAT-TG-2018", "chromosome 1"]
     assert text_values(first_local_definition) == []
     assert text_values(second_local_definition) == ["chromosome 2"]
-    assert 0 <= translate(first_row_definition)[0] < translate(first_record)[0]
+    assert 0 <= _translate(first_row_definition)[0] < _translate(first_record)[0]
 
     first_feature_y_values = [
         float(y_value)
@@ -455,10 +454,10 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
         )
     ]
     assert first_feature_y_values
-    expected_definition_center_y = translate(first_record)[1] + 0.5 * (
+    expected_definition_center_y = _translate(first_record)[1] + 0.5 * (
         min(first_feature_y_values) + max(first_feature_y_values)
     )
-    assert translate(first_row_definition)[1] == pytest.approx(
+    assert _translate(first_row_definition)[1] == pytest.approx(
         expected_definition_center_y
     )
 
@@ -471,11 +470,11 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
         )
     ]
     assert feature_y_values
-    feature_top = translate(second_record)[1] + min(feature_y_values)
+    feature_top = _translate(second_record)[1] + min(feature_y_values)
     local_text = second_local_definition.find(".//svg:text", namespace)
     assert local_text is not None
     local_font_size = float(local_text.attrib["font-size"])
-    local_bottom = translate(second_local_definition)[1] + (0.5 * local_font_size)
+    local_bottom = _translate(second_local_definition)[1] + (0.5 * local_font_size)
     assert local_bottom <= feature_top
     assert feature_top - local_bottom >= (
         float(config_dict["canvas"]["linear"]["vertical_padding"]) - 0.5

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from functools import lru_cache
+import json
 import re
 import subprocess
 import sys
@@ -26,7 +27,7 @@ from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
-from gbdraw.configurators import FeatureDrawingConfigurator, LegendMeasurement
+from gbdraw.configurators import FeatureDrawingConfigurator
 from gbdraw.diagrams.linear.precalc import _precalculate_label_dimensions
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import load_default_colors
@@ -81,6 +82,35 @@ def _run_linear(tmp_path: Path, extra_args: list[str]) -> tuple[int, str, str, P
     return _run_linear_with_gbks(tmp_path, [INPUT_GBK], extra_args)
 
 
+def _transform_translate_y(transform: str) -> float:
+    number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+    return sum(
+        float(match.group(1))
+        for match in re.finditer(
+            rf"translate\(\s*{number}(?:\s*,\s*|\s+)({number})\s*\)",
+            str(transform or ""),
+        )
+    )
+
+
+def _find_group(root: ET.Element, group_id: str) -> ET.Element | None:
+    return next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and element.attrib.get("id") == group_id
+        ),
+        None,
+    )
+
+
+def _extract_group_xml(svg_content: str, group_id: str) -> str:
+    group = _find_group(ET.fromstring(svg_content), group_id)
+    assert group is not None
+    return ET.tostring(group, encoding="unicode")
+
+
 def _extract_axis_group_y(svg_content: str, record_id: str) -> float:
     root = ET.fromstring(svg_content)
     namespace = {"svg": "http://www.w3.org/2000/svg"}
@@ -94,21 +124,13 @@ def _extract_axis_group_y(svg_content: str, record_id: str) -> float:
         None,
     )
     assert group is not None
-    match = re.search(
-        r"translate\([^,]+,([-+0-9.eE]+)\)",
-        group.attrib.get("transform", ""),
-    )
-    assert match is not None
-    return float(match.group(1))
+    return _transform_translate_y(group.attrib.get("transform", ""))
 
 
 def _extract_comparison_group_y(svg_content: str) -> float:
-    match = re.search(
-        r'<g\b(?=[^>]*\bid="comparison1")[^>]*\btransform="translate\([^,]+,([0-9.]+)\)"[^>]*>',
-        svg_content,
-    )
-    assert match is not None
-    return float(match.group(1))
+    group = _find_group(ET.fromstring(svg_content), "comparison1")
+    assert group is not None
+    return _transform_translate_y(group.attrib.get("transform", ""))
 
 
 def _extract_group_translate_y(svg_content: str, group_id: str) -> float:
@@ -123,27 +145,39 @@ def _extract_group_translate_y(svg_content: str, group_id: str) -> float:
         None,
     )
     if semantic_group is not None:
-        match = re.search(
-            r"translate\([^,]+,([\-+0-9.eE]+)\)",
-            semantic_group.attrib.get("transform", ""),
-        )
-        assert match is not None
-        return float(match.group(1))
-    match = re.search(
-        rf'<g id="{re.escape(group_id)}(?:_record_\d+)?" transform="translate\([^,]+,([\-0-9.]+)\)">',
-        svg_content,
+        return _transform_translate_y(semantic_group.attrib.get("transform", ""))
+    group = next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and re.fullmatch(
+                rf"{re.escape(group_id)}(?:_record_\d+)?",
+                element.attrib.get("id", ""),
+            )
+        ),
+        None,
     )
-    assert match is not None
-    return float(match.group(1))
+    assert group is not None
+    return _transform_translate_y(group.attrib.get("transform", ""))
 
 
 def _extract_first_comparison_path_ys(svg_content: str) -> tuple[float, float, float, float]:
-    match = re.search(
-        r'<g\b(?=[^>]*\bid="comparison1")[^>]*><path d="([^"]+)"',
-        svg_content,
+    group = _find_group(ET.fromstring(svg_content), "comparison1")
+    assert group is not None
+    path = next(
+        (
+            element
+            for element in group.iter()
+            if element.tag.rsplit("}", 1)[-1] == "path"
+        ),
+        None,
     )
-    assert match is not None
-    coords = [float(value) for value in re.findall(r"-?\d+(?:\.\d+)?", match.group(1))]
+    assert path is not None
+    coords = [
+        float(value)
+        for value in re.findall(r"-?\d+(?:\.\d+)?", path.attrib.get("d", ""))
+    ]
     assert len(coords) >= 8
     return coords[1], coords[3], coords[5], coords[7]
 
@@ -161,7 +195,10 @@ def _count_ruler_ticks(svg_fragment: str) -> int:
 
 
 def _extract_ruler_text_tags(svg_fragment: str) -> list[str]:
-    return re.findall(r'<text[^>]*>[^<]*(?:bp|kbp|Mbp)</text>', svg_fragment)
+    return re.findall(
+        r'<(?:\w+:)?text[^>]*>[^<]*(?:bp|kbp|Mbp)</(?:\w+:)?text>',
+        svg_fragment,
+    )
 
 
 def _build_bottom_ruler_fragment(
@@ -195,40 +232,25 @@ def _build_bottom_ruler_fragment(
 
 
 @pytest.mark.linear
-def test_linear_side_legend_expands_canvas_with_vertical_padding() -> None:
+def test_linear_plot_origin_is_independent_of_legend_side() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     cfg = GbdrawConfig.from_dict(config_dict)
-    canvas_config = LinearCanvasConfigurator(
-        num_of_entries=1,
-        longest_genome=1200,
-        profile=LinearRenderProfile(cfg),
-        legend="right",
-    )
-    legend_height = float(canvas_config.total_height) + 100.0
-    legend_measurement = LegendMeasurement(
-        font_family="sans-serif",
-        font_weight="normal",
-        font_size=10.0,
-        color_rect_size=12.0,
-        dpi=96,
-        legend_height=legend_height,
-        legend_width=120.0,
-        total_feature_legend_width=0.0,
-        pairwise_legend_width=0.0,
-        num_of_lines=0,
-        num_of_columns=0,
-        num_of_items_per_line=0,
-        has_gradient=False,
-    )
+    configs = [
+        LinearCanvasConfigurator(
+            num_of_entries=1,
+            longest_genome=1200,
+            profile=LinearRenderProfile(cfg),
+            legend=legend,
+        )
+        for legend in ("none", "left", "right", "top", "bottom")
+    ]
+    for canvas_config in configs:
+        canvas_config.configure_plot_width(80.0)
 
-    canvas_config.recalculate_canvas_dimensions(legend_measurement, 0.0)
-
-    assert canvas_config.total_height >= legend_height + 2.0 * canvas_config.vertical_padding
-    assert canvas_config.legend_offset_y >= canvas_config.vertical_padding
-    assert (
-        canvas_config.legend_offset_y + legend_height
-        <= canvas_config.total_height - canvas_config.vertical_padding
-    )
+    assert {canvas.horizontal_offset for canvas in configs} == {
+        80.0 + configs[0].definition_gap
+    }
+    assert len({canvas.total_width for canvas in configs}) == 1
 
 
 def _extract_min_absolute_feature_y(svg_content: str) -> float:
@@ -243,11 +265,7 @@ def _extract_min_absolute_feature_y(svg_content: str) -> float:
         axis_line = group.find('svg:line[@y1="0"][@y2="0"]', namespace)
         if axis_line is None:
             continue
-        transform = group.attrib.get("transform", "")
-        transform_match = re.search(r'translate\([^,]+,([\-0-9.]+)\)', transform)
-        if transform_match is None:
-            continue
-        axis_y = float(transform_match.group(1))
+        axis_y = _transform_translate_y(group.attrib.get("transform", ""))
         for path in group.findall("svg:path", namespace):
             coords = [float(value) for value in re.findall(r"-?\d+(?:\.\d+)?", path.attrib.get("d", ""))]
             y_values = coords[1::2]
@@ -272,11 +290,7 @@ def _extract_first_record_axis(svg_content: str) -> tuple[str, float]:
         axis_line = group.find('svg:line[@y1="0"][@y2="0"]', namespace)
         if axis_line is None:
             continue
-        transform = group.attrib.get("transform", "")
-        transform_match = re.search(r'translate\([^,]+,([\-0-9.]+)\)', transform)
-        if transform_match is None:
-            continue
-        return group_id, float(transform_match.group(1))
+        return group_id, _transform_translate_y(group.attrib.get("transform", ""))
 
     raise AssertionError("No record axis group found in SVG")
 
@@ -286,10 +300,7 @@ def _extract_legend_translate_y(svg_content: str) -> float:
     namespace = {"svg": "http://www.w3.org/2000/svg"}
     legend_group = root.find("svg:g[@id='legend']", namespace)
     assert legend_group is not None
-    transform = legend_group.attrib.get("transform", "")
-    transform_match = re.search(r'translate\([^,]+,([\-0-9.]+)\)', transform)
-    assert transform_match is not None
-    return float(transform_match.group(1))
+    return _transform_translate_y(legend_group.attrib.get("transform", ""))
 
 
 def _extract_viewbox_bottom(svg_content: str) -> float:
@@ -300,17 +311,18 @@ def _extract_viewbox_bottom(svg_content: str) -> float:
     return parts[1] + parts[3]
 
 
+def _composition_metadata(svg_content: str) -> dict:
+    root = ET.fromstring(svg_content)
+    return json.loads(root.attrib["data-gbdraw-composition"])
+
+
 def _extract_group_path_absolute_y_bounds(svg_content: str, group_id: str) -> tuple[float, float]:
     root = ET.fromstring(svg_content)
     y_values: list[float] = []
     number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 
     def translate_y(element: ET.Element) -> float:
-        match = re.search(
-            rf"translate\(\s*{number}(?:\s*,\s*|\s+)({number})\s*\)",
-            element.attrib.get("transform", ""),
-        )
-        return 0.0 if match is None else float(match.group(1))
+        return _transform_translate_y(element.attrib.get("transform", ""))
 
     def walk(element: ET.Element, parent_y: float, inside_target: bool) -> None:
         absolute_y = parent_y + translate_y(element)
@@ -1357,9 +1369,9 @@ def test_linear_ruler_bottom_defaults_label_font_size_to_long_ruler_value(tmp_pa
     )
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     svg_content = output_svg.read_text(encoding="utf-8")
-    length_bar_match = re.search(r'<g id="length_bar"[^>]*>(.*?)</g>', svg_content)
-    assert length_bar_match is not None
-    ruler_text_tags = _extract_ruler_text_tags(length_bar_match.group(1))
+    ruler_text_tags = _extract_ruler_text_tags(
+        _extract_group_xml(svg_content, "length_bar")
+    )
     assert any('font-size="12.0"' in tag for tag in ruler_text_tags)
 
 
@@ -1410,7 +1422,7 @@ def test_linear_bottom_ruler_can_extend_beyond_alignment_width() -> None:
 
 
 @pytest.mark.linear
-def test_linear_bottom_ruler_legend_title_spacing_is_even() -> None:
+def test_linear_bottom_ruler_uses_shared_legend_and_title_gaps() -> None:
     record = SeqRecord(Seq("A" * 60_000), id="rec1", name="rec1", description="rec1")
     record.features = [SeqFeature(FeatureLocation(100, 900, strand=1), type="CDS")]
     config_dict = modify_config_dict(
@@ -1428,35 +1440,24 @@ def test_linear_bottom_ruler_legend_title_spacing_is_even() -> None:
         legend="bottom",
         plot_title="Synthetic title",
     ).tostring()
-    canvas_config = LinearCanvasConfigurator(
-        num_of_entries=1,
-        longest_genome=len(record.seq),
-        profile=LinearRenderProfile(cfg),
-        legend="bottom",
-    )
-    length_bar_height = LengthBarGroup(
-        canvas_config.fig_width,
-        canvas_config.alignment_width,
-        len(record.seq),
-        canvas_config,
-        cfg=cfg,
-    ).scale_group_height
-    legend_height = (24 / 14) * cfg.objects.legends.color_rect_size.for_length_param(canvas_config.length_param)
-    title_y = _extract_group_translate_y(svg_content, "plot_title")
-    title_bottom = _extract_viewbox_bottom(svg_content) - 24.0
-    title_top = (2 * title_y) - title_bottom
+    metadata = _composition_metadata(svg_content)
+    primary = metadata["primary"]["finalBounds"]
+    legend = metadata["legend"]
+    title = metadata["title"]
+    legend_top = legend["automaticTranslation"][1] + legend["localBounds"]["y"]
+    legend_bottom = legend_top + legend["localBounds"]["height"]
+    title_top = title["automaticTranslation"][1] + title["localBounds"]["y"]
 
-    ruler_legend_gap = _extract_legend_translate_y(svg_content) - (
-        _extract_group_translate_y(svg_content, "length_bar") + length_bar_height
+    assert legend_top - (primary["y"] + primary["height"]) == pytest.approx(
+        metadata["spacing"]["dockGapPx"]
     )
-    legend_title_gap = title_top - (_extract_legend_translate_y(svg_content) + legend_height)
-
-    assert ruler_legend_gap == pytest.approx(cfg.canvas.linear.vertical_padding)
-    assert legend_title_gap == pytest.approx(cfg.canvas.linear.vertical_padding)
+    assert title_top - legend_bottom == pytest.approx(
+        metadata["spacing"]["stackGapPx"]
+    )
 
 
 @pytest.mark.linear
-def test_linear_multi_record_bottom_legend_title_spacing_is_even() -> None:
+def test_linear_multi_record_bottom_uses_shared_title_stack_gap() -> None:
     records = [
         SeqRecord(Seq("A" * 60_000), id=f"rec{index}", description=f"rec{index}")
         for index in (1, 2)
@@ -1473,21 +1474,18 @@ def test_linear_multi_record_bottom_legend_title_spacing_is_even() -> None:
         legend="bottom",
         plot_title="Synthetic title",
     ).tostring()
-    canvas_config = LinearCanvasConfigurator(
-        num_of_entries=len(records),
-        longest_genome=len(records[0].seq),
-        profile=LinearRenderProfile(cfg),
-        legend="bottom",
+    metadata = _composition_metadata(svg_content)
+    legend = metadata["legend"]
+    title = metadata["title"]
+    legend_bottom = (
+        legend["automaticTranslation"][1]
+        + legend["localBounds"]["y"]
+        + legend["localBounds"]["height"]
     )
-    legend_height = (24 / 14) * cfg.objects.legends.color_rect_size.for_length_param(
-        canvas_config.length_param
+    title_top = title["automaticTranslation"][1] + title["localBounds"]["y"]
+    assert title_top - legend_bottom == pytest.approx(
+        metadata["spacing"]["stackGapPx"]
     )
-    title_y = _extract_group_translate_y(svg_content, "plot_title")
-    title_bottom = _extract_viewbox_bottom(svg_content) - 24.0
-    title_top = (2 * title_y) - title_bottom
-    legend_title_gap = title_top - (_extract_legend_translate_y(svg_content) + legend_height)
-
-    assert legend_title_gap == pytest.approx(cfg.canvas.linear.vertical_padding)
 
 
 @pytest.mark.linear
@@ -1525,9 +1523,7 @@ def test_linear_bar_uses_scale_font_size_for_length_bar_label(tmp_path: Path) ->
     )
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     svg_content = output_svg.read_text(encoding="utf-8")
-    length_bar_match = re.search(r'<g id="length_bar"[^>]*>(.*?)</g>', svg_content)
-    assert length_bar_match is not None
-    assert 'font-size="23.0"' in length_bar_match.group(1)
+    assert 'font-size="23.0"' in _extract_group_xml(svg_content, "length_bar")
 
 
 @pytest.mark.linear
@@ -1571,7 +1567,7 @@ def test_linear_ruler_label_options_apply_to_bottom_ruler(tmp_path: Path) -> Non
     )
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     svg_content = output_svg.read_text(encoding="utf-8")
-    length_bar_match = re.search(r'<g id="length_bar"[^>]*>(.*?)</g>', svg_content)
-    assert length_bar_match is not None
-    ruler_text_tags = _extract_ruler_text_tags(length_bar_match.group(1))
+    ruler_text_tags = _extract_ruler_text_tags(
+        _extract_group_xml(svg_content, "length_bar")
+    )
     assert any('fill="teal"' in tag and 'font-size="21.0"' in tag for tag in ruler_text_tags)

@@ -3,31 +3,22 @@ import {
   getComparisonLegendGroup,
   getLegendChildById,
   isInsideComparisonLegend,
-  isCurrentLegendHorizontal,
-  parseTransform,
   parseTransformXY
 } from './utils.js';
-import { getElementsBounds } from '../legend-layout/transform-utils.js';
+import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 
-export const createLegendLayoutActions = ({ state }) => {
-  const { mode, form, linearBaseConfig, legendInitialTransform, legendCurrentOffset, diagramElements } = state;
-  const horizontalLegendPadding = 20;
-
+export const createLegendLayoutActions = () => {
   const getHorizontalWrapWidth = (svg) => {
     if (!svg) return null;
-    const wrapAttr = svg.getAttribute('data-horizontal-wrap-width');
-    if (wrapAttr) {
-      const width = parseFloat(wrapAttr);
-      if (Number.isFinite(width) && width > 0) return width;
+    return parseCompositionMetadata(svg).primary.finalBounds.width;
+  };
+
+  const getLegendReflowMetrics = (svg) => {
+    const metrics = parseCompositionMetadata(svg).legendReflow;
+    if (!metrics) {
+      throw new Error('This diagram has no legend reflow metadata. Regenerate it before editing the legend.');
     }
-    const baseViewBox = svg.getAttribute('data-horizontal-viewbox');
-    if (baseViewBox) {
-      const parts = baseViewBox.split(/\s+/).map(parseFloat);
-      if (parts.length === 4 && parts[2] > 0) return parts[2];
-    }
-    const fallbackWidth = linearBaseConfig.value?.horizontalViewBox?.w;
-    if (fallbackWidth && fallbackWidth > 0) return fallbackWidth;
-    return null;
+    return metrics;
   };
 
   const centerHorizontalRows = (entries, textXOffset, availableWidth) => {
@@ -130,248 +121,6 @@ export const createLegendLayoutActions = ({ state }) => {
     });
   };
 
-  const getLegendLayoutRoot = (svg, layoutOverride = null) => {
-    const legendGroup = svg?.getElementById?.('legend');
-    if (!legendGroup) return null;
-
-    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-    const verticalLegend = legendGroup.querySelector('#legend_vertical');
-    const hasDualLegends = !!(horizontalLegend && verticalLegend);
-
-    if (!hasDualLegends) {
-      return legendGroup;
-    }
-
-    const requestedLayout =
-      layoutOverride === 'horizontal' || layoutOverride === 'vertical'
-        ? layoutOverride
-        : isCurrentLegendHorizontal(svg)
-          ? 'horizontal'
-          : 'vertical';
-
-    return requestedLayout === 'horizontal' ? horizontalLegend : verticalLegend;
-  };
-
-  const getLegendLayoutLocalBounds = (svg, layoutOverride = null) => {
-    const root = getLegendLayoutRoot(svg, layoutOverride);
-    if (!root) return null;
-
-    const displayAttr = root.getAttribute('display');
-    const styleDisplay = root.style?.display || '';
-    const restoreDisplayAttr = displayAttr;
-    const restoreStyleDisplay = styleDisplay;
-
-    if (displayAttr === 'none') {
-      root.removeAttribute('display');
-    }
-    if (styleDisplay === 'none') {
-      root.style.display = '';
-    }
-
-    let bounds = null;
-    try {
-      const bbox = root.getBBox();
-      bounds = {
-        root,
-        x: Number.isFinite(bbox.x) ? bbox.x : 0,
-        y: Number.isFinite(bbox.y) ? bbox.y : 0,
-        width: Number.isFinite(bbox.width) ? bbox.width : 0,
-        height: Number.isFinite(bbox.height) ? bbox.height : 0
-      };
-    } finally {
-      if (restoreDisplayAttr === 'none') {
-        root.setAttribute('display', 'none');
-      } else if (restoreDisplayAttr === null) {
-        root.removeAttribute('display');
-      }
-
-      if (restoreStyleDisplay === 'none') {
-        root.style.display = 'none';
-      } else if (restoreStyleDisplay === '') {
-        root.style.removeProperty('display');
-      } else {
-        root.style.display = restoreStyleDisplay;
-      }
-    }
-
-    return bounds;
-  };
-
-  const computeLinearVerticalLegendTop = (vbY, vbH, legendHeight, padding) => {
-    const ignoredIds = new Set(['length_bar', 'tick', 'labels', 'Axis']);
-    const legendElements = diagramElements.value.filter((el) => !ignoredIds.has(el.id));
-    const bounds = getElementsBounds(legendElements.length > 0 ? legendElements : diagramElements.value);
-    if (!bounds) {
-      return vbY + (vbH - legendHeight) / 2;
-    }
-
-    const centerY = bounds.y + bounds.height / 2;
-    let legendTop = centerY - legendHeight / 2;
-    const viewportBottom = vbY + vbH;
-
-    if (legendTop < vbY || legendTop + legendHeight > viewportBottom) {
-      legendTop = Math.max(vbY + (vbH - legendHeight) / 2, vbY + padding);
-    }
-
-    return legendTop;
-  };
-
-  const getLinearLegendAnchor = (svg, position = form.legend, bounds = null) => {
-    if (!svg || mode.value !== 'linear') return null;
-    if (position === 'none') return null;
-
-    const viewBox = svg.getAttribute('viewBox');
-    if (!viewBox) return null;
-    const parts = viewBox.split(/\s+/).map(parseFloat);
-    if (parts.length !== 4 || parts.some((value) => !Number.isFinite(value))) return null;
-
-    const [vbX, vbY, vbW, vbH] = parts;
-    const activeBounds = bounds || getLegendLayoutLocalBounds(svg);
-    if (!activeBounds) return null;
-
-    const padding = 20;
-    if (position === 'top' || position === 'bottom') {
-      const availableHorizontalWidth = vbW - padding * 2;
-      const wideHorizontalLegend =
-        availableHorizontalWidth > 0 && activeBounds.width > availableHorizontalWidth * 0.9;
-      let top = position === 'top' ? vbY + padding : vbY + vbH - activeBounds.height - padding;
-
-      if (position === 'bottom') {
-        const plotTitle = svg.getElementById('plot_title');
-        if (plotTitle && plotTitle.getAttribute('display') !== 'none') {
-          const titleOffset = parseTransform(plotTitle.getAttribute('transform'));
-          const titleBox = plotTitle.getBBox();
-          const titleTop = titleOffset.y + titleBox.y;
-          const legendBottom = top + activeBounds.height;
-          if (Number.isFinite(titleTop) && legendBottom + padding > titleTop) {
-            top = Math.max(vbY + padding, titleTop - activeBounds.height - padding);
-          }
-        }
-      }
-
-      return {
-        left: wideHorizontalLegend ? vbX + padding : vbX + (vbW - activeBounds.width) / 2,
-        top
-      };
-    }
-
-    return {
-      left: position === 'left' ? vbX + padding : vbX + vbW - activeBounds.width - padding,
-      top: computeLinearVerticalLegendTop(vbY, vbH, activeBounds.height, padding)
-    };
-  };
-
-  const expandCanvasForVerticalLegend = (svg) => {
-    if (mode.value !== 'linear') return;
-
-    const legendGroup = svg.getElementById('legend');
-    if (!legendGroup) return;
-
-    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-    const verticalLegend = legendGroup.querySelector('#legend_vertical');
-    const hasDualLegends = !!(horizontalLegend && verticalLegend);
-    const isHorizontalLayout = hasDualLegends
-      ? isCurrentLegendHorizontal(svg)
-      : form.legend === 'top' || form.legend === 'bottom';
-    if (isHorizontalLayout) return;
-
-    if (form.legend === 'none') return;
-
-    let legendGroupY = 0;
-    const legendGroupTransform = legendGroup.getAttribute('transform');
-    if (legendGroupTransform) {
-      const match = legendGroupTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
-      if (match) legendGroupY = parseFloat(match[2]);
-    }
-
-    let legendContentHeight = 0;
-    if (hasDualLegends) {
-      if (!verticalLegend || verticalLegend.getAttribute('display') === 'none') return;
-      const featureLegend = verticalLegend.querySelector('#feature_legend_v');
-      const pairwiseLegend = getLegendChildById(verticalLegend, 'pairwise_legend');
-
-      if (featureLegend) {
-        const featureBBox = featureLegend.getBBox();
-        legendContentHeight = featureBBox.y + featureBBox.height;
-      }
-
-      if (pairwiseLegend) {
-        const pairwiseTransform = pairwiseLegend.getAttribute('transform');
-        let pairwiseY = 0;
-        if (pairwiseTransform) {
-          const match = pairwiseTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
-          if (match) pairwiseY = parseFloat(match[2]);
-        }
-        const pairwiseBBox = pairwiseLegend.getBBox();
-        const pairwiseBottom = pairwiseY + pairwiseBBox.y + pairwiseBBox.height;
-        legendContentHeight = Math.max(legendContentHeight, pairwiseBottom);
-      }
-    } else {
-      const legendBBox = legendGroup.getBBox();
-      legendContentHeight = legendBBox.y + legendBBox.height;
-    }
-
-    const viewBox = svg.getAttribute('viewBox');
-    if (!viewBox) return;
-    const parts = viewBox.split(/\s+/).map(parseFloat);
-    if (parts.length !== 4) return;
-    let [vbX, vbY, vbW, vbH] = parts;
-
-    const legendBottomEdge = legendGroupY + legendContentHeight;
-    const bottomPadding = 20;
-
-    console.log(
-      `Canvas expansion check: legendGroupY=${legendGroupY.toFixed(1)}, legendContentHeight=${legendContentHeight.toFixed(
-        1
-      )}, legendBottomEdge=${legendBottomEdge.toFixed(1)}, vbH=${vbH.toFixed(1)}`
-    );
-
-    if (legendBottomEdge + bottomPadding > vbH) {
-      const newVbH = legendBottomEdge + bottomPadding;
-      console.log(`Expanding canvas for vertical legend: ${vbH.toFixed(1)} -> ${newVbH.toFixed(1)}`);
-
-      svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${newVbH}`);
-      svg.setAttribute('data-vertical-viewbox', `${vbX} ${vbY} ${vbW} ${newVbH}`);
-      linearBaseConfig.value.verticalViewBox = { x: vbX, y: vbY, w: vbW, h: newVbH };
-    }
-  };
-
-  const expandCanvasForHorizontalLegend = (svg) => {
-    if (mode.value !== 'linear') return;
-
-    const legendGroup = svg.getElementById('legend');
-    if (!legendGroup) return;
-
-    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-    const verticalLegend = legendGroup.querySelector('#legend_vertical');
-    const hasDualLegends = !!(horizontalLegend && verticalLegend);
-    const isHorizontalLayout = hasDualLegends
-      ? isCurrentLegendHorizontal(svg)
-      : form.legend === 'top' || form.legend === 'bottom';
-    if (!isHorizontalLayout) return;
-
-    if (form.legend === 'none') return;
-
-    const viewBox = svg.getAttribute('viewBox');
-    if (!viewBox) return;
-    const parts = viewBox.split(/\s+/).map(parseFloat);
-    if (parts.length !== 4) return;
-    const [vbX, vbY, vbW, vbH] = parts;
-
-    const legendOffset = parseTransform(legendGroup.getAttribute('transform'));
-    const legendBox = legendGroup.getBBox();
-    const legendBottomEdge = legendOffset.y + legendBox.y + legendBox.height;
-    const bottomPadding = 20;
-
-    if (legendBottomEdge + bottomPadding > vbY + vbH) {
-      const newVbH = legendBottomEdge + bottomPadding - vbY;
-      console.log(`Expanding canvas for horizontal legend: ${vbH.toFixed(1)} -> ${newVbH.toFixed(1)}`);
-      svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${newVbH}`);
-      svg.setAttribute('data-horizontal-viewbox', `${vbX} ${vbY} ${vbW} ${newVbH}`);
-      linearBaseConfig.value.horizontalViewBox = { x: vbX, y: vbY, w: vbW, h: newVbH };
-    }
-  };
-
   const updatePairwiseLegendPositions = (svg) => {
     const legendGroup = svg.getElementById('legend');
     if (!legendGroup) return;
@@ -381,24 +130,14 @@ export const createLegendLayoutActions = ({ state }) => {
     const hasDualLegends = !!(horizontalLegend && verticalLegend);
 
     if (!hasDualLegends) {
-      const layout = form.legend === 'top' || form.legend === 'bottom' ? 'horizontal' : 'vertical';
+      const legendSide = parseCompositionMetadata(svg).legendSide;
+      const layout = legendSide === 'top' || legendSide === 'bottom' ? 'horizontal' : 'vertical';
       const maxWidth = layout === 'horizontal' ? getHorizontalWrapWidth(svg) : null;
       reflowSingleLegendLayout(svg, layout, maxWidth);
-      expandCanvasForVerticalLegend(svg);
-      expandCanvasForHorizontalLegend(svg);
       return;
     }
 
-    let rectSize = 14;
-    const firstColorRect = legendGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
-    if (firstColorRect) {
-      const d = firstColorRect.getAttribute('d');
-      if (d) {
-        const lMatch = d.match(/L\s+([\d.]+),/);
-        if (lMatch) rectSize = parseFloat(lMatch[1]);
-      }
-    }
-    const lineMargin = (24 / 14) * rectSize;
+    const { lineHeight: lineMargin } = getLegendReflowMetrics(svg);
 
     if (verticalLegend) {
       const vFeatureLegend = verticalLegend.querySelector('#feature_legend_v');
@@ -465,8 +204,6 @@ export const createLegendLayoutActions = ({ state }) => {
       }
     }
 
-    expandCanvasForVerticalLegend(svg);
-    expandCanvasForHorizontalLegend(svg);
   };
 
   const reflowDualLegendLayout = (svg) => {
@@ -477,21 +214,8 @@ export const createLegendLayoutActions = ({ state }) => {
     const verticalLegend = legendGroup.querySelector('#legend_vertical');
     if (!horizontalLegend || !verticalLegend) return;
 
-    const viewBox = svg.getAttribute('viewBox');
-    let baseWidth = 800;
-    if (viewBox) {
-      const parts = viewBox.split(/\s+/).map(parseFloat);
-      if (parts.length === 4) baseWidth = parts[2];
-    }
-
-    const horizontalViewBox = svg.getAttribute('data-horizontal-viewbox');
-    let horizontalWidth = baseWidth;
-    if (horizontalViewBox) {
-      const parts = horizontalViewBox.split(/\s+/).map(parseFloat);
-      if (parts.length === 4) horizontalWidth = parts[2];
-    }
-    const wrapWidth = getHorizontalWrapWidth(svg);
-    if (wrapWidth) horizontalWidth = wrapWidth;
+    const horizontalWidth = getHorizontalWrapWidth(svg);
+    const reflowMetrics = getLegendReflowMetrics(svg);
 
     const layoutLegendGroup = (legend, layout, maxWidth) => {
       const featureGroup =
@@ -508,18 +232,11 @@ export const createLegendLayoutActions = ({ state }) => {
         centerSingleComparisonLegendParts(pairwiseLegend);
       }
 
-      let rectSize = 14;
-      const firstColorRect = featureGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
-      if (firstColorRect) {
-        const d = firstColorRect.getAttribute('d');
-        if (d) {
-          const lMatch = d.match(/L\s+([\d.]+),/);
-          if (lMatch) rectSize = parseFloat(lMatch[1]);
-        }
-      }
-
-      const lineHeight = (24 / 14) * rectSize;
-      const textXOffset = (22 / 14) * rectSize;
+      const {
+        colorRectSize: rectSize,
+        lineHeight,
+        textXOffset
+      } = reflowMetrics;
 
       const texts = Array.from(featureGroup.querySelectorAll('text'));
       const rects = Array.from(featureGroup.querySelectorAll('path')).filter((r) => {
@@ -551,12 +268,9 @@ export const createLegendLayoutActions = ({ state }) => {
           return a.y - b.y;
         });
 
-        let newX = textXOffset;
+        let cursorX = 0;
         let newY = rectSize / 2;
-        let wrapWidth = maxWidth || baseWidth;
-        if (Number.isFinite(wrapWidth)) {
-          wrapWidth = Math.max(wrapWidth - horizontalLegendPadding * 2, rectSize + textXOffset * 2);
-        }
+        let wrapWidth = Math.max(maxWidth, rectSize + textXOffset * 2);
         if (pairwiseLegend) {
           const pairwiseBBox = pairwiseLegend.getBBox();
           const pairwiseWidth = pairwiseBBox.width || 0;
@@ -572,10 +286,11 @@ export const createLegendLayoutActions = ({ state }) => {
           const textBBox = entry.text.getBBox();
           const entryWidth = rectSize + textXOffset + textBBox.width + textXOffset;
 
-          if (newX + entryWidth > wrapWidth && newX > textXOffset) {
-            newX = textXOffset;
+          if (cursorX + entryWidth > wrapWidth && cursorX > 0) {
+            cursorX = 0;
             newY += lineHeight;
           }
+          const newX = cursorX + textXOffset;
 
           entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
           if (entry.rect) {
@@ -585,7 +300,7 @@ export const createLegendLayoutActions = ({ state }) => {
           entry.newY = newY;
           entry.textWidth = textBBox.width;
 
-          newX += entryWidth;
+          cursorX += entryWidth;
         });
         centerHorizontalRows(entries, textXOffset, wrapWidth);
       } else {
@@ -638,7 +353,7 @@ export const createLegendLayoutActions = ({ state }) => {
     verticalLegend.removeAttribute('display');
 
     layoutLegendGroup(horizontalLegend, 'horizontal', horizontalWidth);
-    layoutLegendGroup(verticalLegend, 'vertical', baseWidth);
+    layoutLegendGroup(verticalLegend, 'vertical', horizontalWidth);
 
     if (horizontalDisplay !== null) {
       horizontalLegend.setAttribute('display', horizontalDisplay);
@@ -652,8 +367,6 @@ export const createLegendLayoutActions = ({ state }) => {
       verticalLegend.removeAttribute('display');
     }
 
-    expandCanvasForVerticalLegend(svg);
-    expandCanvasForHorizontalLegend(svg);
   };
 
   const compactLegendEntries = (svg) => {
@@ -670,19 +383,11 @@ export const createLegendLayoutActions = ({ state }) => {
 
     for (const targetGroup of targetGroups) {
       const comparisonLegend = getComparisonLegendGroup(targetGroup);
-      let rectSize = 14;
-      const firstColorRect = targetGroup.querySelector(
-        'path[fill]:not([fill="none"]):not([fill^="url("])'
-      );
-      if (firstColorRect) {
-        const d = firstColorRect.getAttribute('d');
-        if (d) {
-          const lMatch = d.match(/L\s+([\d.]+),/);
-          if (lMatch) rectSize = parseFloat(lMatch[1]);
-        }
-      }
-      const lineHeight = (24 / 14) * rectSize;
-      const textXOffset = (22 / 14) * rectSize;
+      const {
+        colorRectSize: rectSize,
+        lineHeight,
+        textXOffset
+      } = getLegendReflowMetrics(svg);
 
       const texts = Array.from(targetGroup.querySelectorAll('text')).filter((el) => {
         if (!comparisonLegend) return true;
@@ -723,42 +428,20 @@ export const createLegendLayoutActions = ({ state }) => {
           return a.y - b.y;
         });
 
-        const wrapWidth = getHorizontalWrapWidth(svg);
-        let maxWidth = wrapWidth || 800;
-        const legendGroup = svg.getElementById('legend');
-        if (legendGroup && !wrapWidth) {
-          const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-          if (horizontalLegend) {
-            const hPairwiseLegend = getLegendChildById(horizontalLegend, 'pairwise_legend');
-            if (hPairwiseLegend) {
-              const pairwiseTransform = hPairwiseLegend.getAttribute('transform');
-              if (pairwiseTransform) {
-                const match = pairwiseTransform.match(/translate\(\s*([\d.-]+)\s*,/);
-                if (match) {
-                  maxWidth = parseFloat(match[1]) - textXOffset;
-                }
-              }
-            } else {
-              const viewBox = svg.getAttribute('viewBox');
-              if (viewBox) {
-                const parts = viewBox.split(/\s+/).map(parseFloat);
-                if (parts.length === 4) maxWidth = parts[2] - textXOffset;
-              }
-            }
-          }
-        }
+        const maxWidth = getHorizontalWrapWidth(svg);
 
-        let newX = textXOffset;
+        let cursorX = 0;
         let newY = rectSize / 2;
 
         entries.forEach((entry) => {
           const textBBox = entry.text.getBBox();
           const entryWidth = rectSize + textXOffset + textBBox.width + textXOffset;
 
-          if (newX + entryWidth > maxWidth && newX > textXOffset) {
-            newX = textXOffset;
+          if (cursorX + entryWidth > maxWidth && cursorX > 0) {
+            cursorX = 0;
             newY += lineHeight;
           }
+          const newX = cursorX + textXOffset;
 
           entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
           entry.newX = newX;
@@ -770,7 +453,7 @@ export const createLegendLayoutActions = ({ state }) => {
             entry.rect.setAttribute('transform', `translate(${expectedRectX}, ${newY})`);
           }
 
-          newX += entryWidth;
+          cursorX += entryWidth;
         });
         centerHorizontalRows(entries, textXOffset, maxWidth);
       } else {
@@ -805,24 +488,17 @@ export const createLegendLayoutActions = ({ state }) => {
     });
     if (textElements.length === 0) return null;
 
-    let rectSize = 14;
+    const {
+      colorRectSize: rectSize,
+      lineHeight,
+      textXOffset
+    } = getLegendReflowMetrics(svg);
     const colorRects = Array.from(featureLegendGroup.querySelectorAll('path')).filter((r) => {
       const fill = r.getAttribute('fill');
       if (!fill || fill === 'none' || fill.startsWith('url(')) return false;
       if (isInsideComparisonLegend(r)) return false;
       return true;
     });
-    if (colorRects.length > 0) {
-      const d = colorRects[0].getAttribute('d');
-      if (d) {
-        const lMatch = d.match(/L\s+([\d.]+),/);
-        if (lMatch) rectSize = parseFloat(lMatch[1]);
-      }
-    }
-
-    const lineHeight = (24 / 14) * rectSize;
-    const textXOffset = (22 / 14) * rectSize;
-
     if (!isRootLegendGroup) {
       featureLegendGroup.setAttribute('transform', 'translate(0, 0)');
     }
@@ -879,16 +555,12 @@ export const createLegendLayoutActions = ({ state }) => {
     };
 
     if (layout === 'horizontal') {
-      let maxWidth = maxWidthOverride || 800;
-      if (!maxWidthOverride) {
-        const viewBox = svg.getAttribute('viewBox');
-        if (viewBox) {
-          const parts = viewBox.split(/\s+/).map(parseFloat);
-          if (parts.length === 4) maxWidth = parts[2];
-        }
+      const maxWidth = Number(maxWidthOverride);
+      if (!Number.isFinite(maxWidth) || maxWidth <= 0) {
+        throw new Error('Horizontal legend reflow requires a positive metadata-owned wrap width.');
       }
 
-      const availableWidth = Math.max(maxWidth - horizontalLegendPadding * 2, rectSize + textXOffset * 2);
+      const availableWidth = Math.max(maxWidth, rectSize + textXOffset * 2);
       const reservedOffset = Math.max(isRootLegendGroup ? 0 : featureOffset.x, 0);
       let maxFeatureWidth = availableWidth - reservedOffset;
       if (pairwiseLegend && pairwiseWidth > 0) {
@@ -903,17 +575,18 @@ export const createLegendLayoutActions = ({ state }) => {
         return a.y - b.y;
       });
 
-      let newX = textXOffset;
+      let cursorX = 0;
       let newY = rectSize / 2;
 
       entries.forEach((entry) => {
         const textBBox = entry.text.getBBox();
         const entryWidth = rectSize + textXOffset + textBBox.width + textXOffset;
 
-        if (newX + entryWidth > maxFeatureWidth && newX > textXOffset) {
-          newX = textXOffset;
+        if (cursorX + entryWidth > maxFeatureWidth && cursorX > 0) {
+          cursorX = 0;
           newY += lineHeight;
         }
+        const newX = cursorX + textXOffset;
 
         entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
         if (entry.rect) {
@@ -923,7 +596,7 @@ export const createLegendLayoutActions = ({ state }) => {
         entry.newY = newY;
         entry.textWidth = textBBox.width;
 
-        newX += entryWidth;
+        cursorX += entryWidth;
       });
       centerHorizontalRows(entries, textXOffset, maxFeatureWidth);
     } else {
@@ -997,35 +670,8 @@ export const createLegendLayoutActions = ({ state }) => {
     return { legendWidth: bbox.width, legendHeight: bbox.height };
   };
 
-  const recenterCurrentLegendRoot = (svg) => {
-    if (!svg || mode.value !== 'linear') return false;
-    if (form.legend === 'none') return false;
-
-    const legendGroup = svg.getElementById('legend');
-    if (!legendGroup || legendGroup.getAttribute('display') === 'none') return false;
-
-    const bounds = getLegendLayoutLocalBounds(svg);
-    if (!bounds) return false;
-    const anchor = getLinearLegendAnchor(svg, form.legend, bounds);
-    if (!anchor) return false;
-
-    const offsetX = Number(legendCurrentOffset?.x) || 0;
-    const offsetY = Number(legendCurrentOffset?.y) || 0;
-    const baseX = anchor.left - bounds.x;
-    const baseY = anchor.top - bounds.y;
-
-    legendInitialTransform.value = { x: baseX, y: baseY };
-    legendGroup.setAttribute('transform', `translate(${baseX + offsetX}, ${baseY + offsetY})`);
-    return true;
-  };
-
   return {
     compactLegendEntries,
-    expandCanvasForHorizontalLegend,
-    expandCanvasForVerticalLegend,
-    getLegendLayoutLocalBounds,
-    getLinearLegendAnchor,
-    recenterCurrentLegendRoot,
     reflowDualLegendLayout,
     reflowSingleLegendLayout,
     updatePairwiseLegendPositions

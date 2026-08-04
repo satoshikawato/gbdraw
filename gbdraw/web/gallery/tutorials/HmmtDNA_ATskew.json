@@ -382,10 +382,60 @@
       "body": "Click Generate Diagram. The preview should show the labeled mitochondrial feature ring, GC content, GC skew, AT skew, and a left legend that includes AT skew (+) and AT skew (-).",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp",
             "alt": "Generated human mitochondrial AT skew preview with the custom track stack and left legend.",
             "caption": "The generated preview includes the custom track stack and left legend."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/HmmtDNA_ATskew.gbdraw-session.json",
+            "viewport": {
+              "width": 1400,
+              "height": 1000
+            },
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); const slots = Array.isArray(app?.adv?.circular_track_slots) ? app.adv.circular_track_slots : []; if (!svg || slots.map((slot) => slot.id).join(',') !== 'features,gc_content,gc_skew,a_skew_2,ticks' || !content.includes('Homo sapiens') || !content.includes('AT skew (+)') || !content.includes('AT skew (-)') || app?.form?.legend !== 'left') throw new Error('Restored mitochondrial AT-skew SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 1; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } if (app.svgContainer) app.svgContainer.style.setProperty('transform', 'none', 'important'); const width = Math.min(1000, Number(svg.viewBox.baseVal.width) || 1000); const height = width * svg.viewBox.baseVal.height / svg.viewBox.baseVal.width; svg.style.setProperty('width', `${width}px`, 'important'); svg.style.setProperty('height', `${height}px`, 'important'); svg.style.setProperty('max-width', 'none', 'important'); svg.style.setProperty('max-height', 'none', 'important'); svg.setAttribute('data-capture-hmmt-atskew-final', 'true');"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              }
+            ],
+            "selector": "svg[data-capture-hmmt-atskew-final='true']",
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "circular",
+              "form.legend": "left",
+              "form.track_type": "middle",
+              "form.labels_mode": "out",
+              "adv.circular_track_slots_enabled": true,
+              "adv.circular_track_slots.length": 5,
+              "adv.circular_track_slots.0.id": "features",
+              "adv.circular_track_slots.1.id": "gc_content",
+              "adv.circular_track_slots.2.id": "gc_skew",
+              "adv.circular_track_slots.3.id": "a_skew_2",
+              "adv.circular_track_slots.3.renderer": "dinucleotide_skew",
+              "adv.circular_track_slots.3.enabled": true,
+              "adv.circular_track_slots.3.params.nt": "AT",
+              "adv.circular_track_slots.3.params.legend_label": "AT skew",
+              "adv.circular_track_slots.3.params.positive_color": "#deaf6e",
+              "adv.circular_track_slots.3.params.negative_color": "#7294e3",
+              "adv.circular_track_slots.4.id": "ticks",
+              "adv.circular_track_slots.4.enabled": true,
+              "adv.circular_track_slots.4.params.tick_label_layout": "label_in_tick_out"
+            },
+            "visibleText": [
+              "Homo sapiens",
+              "NC_012920.1",
+              "GC content",
+              "GC skew (+)",
+              "AT skew (+)",
+              "AT skew (-)"
+            ]
           }
         }
       ]

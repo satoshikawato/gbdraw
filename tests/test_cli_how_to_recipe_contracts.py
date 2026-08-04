@@ -13,6 +13,7 @@ from docs.recipes._scenario_support import (
     extract_executable_block,
     load_chapter,
 )
+from docs.recipes.run_cli_scenarios import _positions_form_documented_2x2_grid
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -239,6 +240,23 @@ def test_multi_record_layout_regenerates_from_a_clean_external_directory(
         / "h-cli-03"
         / "multi_record_circular_cli.svg"
     ).is_file()
+
+
+def test_multi_record_layout_accepts_visible_bounds_origin_compensation() -> None:
+    positions = [
+        (20.061, 0.892),
+        (1040.742, 0.0),
+        (0.0, 888.140),
+        (1054.576, 893.895),
+    ]
+
+    assert _positions_form_documented_2x2_grid(positions)
+    assert not _positions_form_documented_2x2_grid(
+        [positions[0], (1040.742, 40.0), positions[2], positions[3]]
+    )
+    assert not _positions_form_documented_2x2_grid(
+        [positions[0], (80.0, 0.0), positions[2], positions[3]]
+    )
 
 
 def test_linear_layout_how_to_uses_complete_sources_and_explicit_positions() -> None:

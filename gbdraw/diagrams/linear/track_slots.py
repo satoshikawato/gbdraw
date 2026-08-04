@@ -51,6 +51,12 @@ class LinearRecordVerticalPlan:
     canvas_band: VerticalBand
 
     @property
+    def paint_band(self) -> VerticalBand:
+        """Axis-and-slot paint extent, excluding reservation-only whitespace."""
+
+        return self.comparison_exclusion_band
+
+    @property
     def top_extent(self) -> float:
         return max(0.0, -self.record_body_band.top_y)
 

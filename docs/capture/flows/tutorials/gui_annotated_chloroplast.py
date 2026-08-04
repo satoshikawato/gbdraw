@@ -364,13 +364,22 @@ def capture_gui_annotated_chloroplast(
         )
 
         generate_and_inspect(page, _inspect_tracks_svg, _assert_plain_plastome)
-        _fit_circular_preview(page, target_zoom="60%")
+        _fit_circular_preview(
+            page,
+            target_zoom="60%",
+            pan_left_ratio=0.0,
+        )
         set_feature_search_visible(page, visible=False)
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[1]], "Circular"
         )
 
         _configure_gallery_presentation(page)
+        _fit_circular_preview(
+            page,
+            target_zoom="60%",
+            pan_left_ratio=0.0,
+        )
         annotations = page.get_by_label("Region Annotations", exact=True)
         annotations.click()
         page.get_by_label("Import TSV", exact=True).set_input_files(

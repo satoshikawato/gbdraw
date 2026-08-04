@@ -8,7 +8,6 @@ import gzip
 import io
 import json
 import os
-import re
 from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -49,6 +48,7 @@ if __package__:
         extract_executable_block,
         inspect_standard_svg,
         load_chapter,
+        parse_translate_chain,
         publish_output,
         validate_standard_svg,
     )
@@ -61,6 +61,7 @@ else:
         extract_executable_block,
         inspect_standard_svg,
         load_chapter,
+        parse_translate_chain,
         publish_output,
         validate_standard_svg,
     )
@@ -84,11 +85,6 @@ IMPLEMENTED_SCENARIOS = (
     "H-PY-05",
 )
 RUNNER_PATH = "docs/recipes/run_python_scenarios.py"
-_TRANSLATE_RE = re.compile(
-    r"translate\((?P<x>-?[0-9.]+),(?P<y>-?[0-9.]+)\)"
-)
-
-
 def run_scenario(
     scenario_id: str,
     *,
@@ -250,12 +246,12 @@ def _assert_gallery_bgc_definitions(
         if element.attrib.get("data-gbdraw-role") == "record-definition"
     ]
     translations = [
-        _TRANSLATE_RE.fullmatch(group.attrib.get("transform", ""))
+        parse_translate_chain(group.attrib.get("transform", ""))
         for group in definition_groups
     ]
-    if len(definition_groups) != 5 or any(match is None for match in translations):
+    if len(definition_groups) != 5 or any(item is None for item in translations):
         raise RecipeContractError(f"{scenario_id} definition groups are incomplete.")
-    x_positions = [float(match.group("x")) for match in translations if match]
+    x_positions = [translation[0] for translation in translations if translation]
     if max(x_positions) - min(x_positions) > 1e-6:
         raise RecipeContractError(
             f"{scenario_id} definitions are not locked to one left column."
@@ -1389,11 +1385,10 @@ def _assert_linear_rows(chapter: dict[str, object], *, output_path: Path) -> Non
         ):
             continue
         index = int(element.attrib["data-gbdraw-record-index"])
-        transform = element.attrib.get("transform", "")
-        match = re.fullmatch(r"translate\([^,]+,([^)]+)\)", transform)
-        if match is None:
+        translation = parse_translate_chain(element.attrib.get("transform", ""))
+        if translation is None:
             raise RecipeContractError("H-PY-02 record rows lost their translation.")
-        rows.append((index, float(match.group(1))))
+        rows.append((index, translation[1]))
     if rows != sorted(rows) or len(rows) != 2 or rows[0][1] >= rows[1][1]:
         raise RecipeContractError("H-PY-02 SVG does not retain two ordered Linear rows.")
 

@@ -135,7 +135,8 @@ def _linear_legend_svg() -> str:
     )
     legend_measurement = configurator.measure_legend(
         legend_table,
-        canvas_config,
+        placement=canvas_config.legend_position,
+        wrap_width=canvas_config.total_width,
     )
     drawing = Drawing(debug=False)
     drawing.add(

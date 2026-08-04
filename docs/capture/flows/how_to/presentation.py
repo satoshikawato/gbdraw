@@ -696,6 +696,9 @@ def _pan_preview_left(page: Page, distance_ratio: float = 0.27) -> None:
     )
     page.mouse.up()
     page.keyboard.press("Escape")
+    page.evaluate("() => window.getSelection()?.removeAllRanges()")
+    if page.evaluate("() => window.getSelection()?.rangeCount ?? 0") != 0:
+        raise AssertionError("Circular preview retained a text selection after panning")
 
 
 def _wait_for_preview_transform(page: Page) -> None:
@@ -819,7 +822,7 @@ def capture_gui_styling(
         )
         labels_panel.click()
         _fit_finished_circular_preview(page)
-        _pan_preview_left(page)
+        _pan_preview_left(page, distance_ratio=0.17)
         _wait_for_preview_transform(page)
         screenshot_bytes["style-result.png"] = capture_screenshot(
             page, output_paths["style-result.png"], "Circular"

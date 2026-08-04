@@ -26,6 +26,7 @@ import {
 import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
+import { cloneJsonData } from '../services/json-clone.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
@@ -50,6 +51,10 @@ import { createRunAnalysis } from './run-analysis.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
+import {
+  COMPOSITION_METADATA_ATTRIBUTE,
+  COMPOSITION_SCHEMA_ATTRIBUTE
+} from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
@@ -133,6 +138,36 @@ import {
 } from './depth-track-state.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, reactive } = window.Vue;
+
+export const createSessionImportRollbackState = ({
+  depthTrackUiCounts,
+  depthTracks,
+  featureListScrollTop,
+  featureListScrollRef,
+  selectedPairwiseBlockOrthogroupId
+}) => ({
+  capture: () => ({
+    circularDepthTrackUiCount: depthTrackUiCounts.circular,
+    depthTracks: cloneJsonData(depthTracks),
+    featureListScrollTop: featureListScrollTop.value,
+    selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value
+  }),
+  restore: async (snapshot) => {
+    depthTrackUiCounts.circular = snapshot.circularDepthTrackUiCount;
+    depthTracks.splice(
+      0,
+      depthTracks.length,
+      ...cloneJsonData(snapshot.depthTracks)
+    );
+    await nextTick();
+    featureListScrollTop.value = snapshot.featureListScrollTop;
+    if (featureListScrollRef.value) {
+      featureListScrollRef.value.scrollTop = snapshot.featureListScrollTop;
+    }
+    selectedPairwiseBlockOrthogroupId.value =
+      snapshot.selectedPairwiseBlockOrthogroupId;
+  }
+});
 
 export const createAppSetup = () => {
   const {
@@ -318,9 +353,6 @@ export const createAppSetup = () => {
     skipCaptureBaseConfig,
     skipPositionReapply,
     skipExtractOnSvgChange,
-    circularBaseConfig,
-    linearBaseConfig,
-    diagramElementBaseTransforms,
     featureKeys,
     defaultColorKeys,
     newColorFeat,
@@ -883,6 +915,7 @@ export const createAppSetup = () => {
 
   let featureSearchDebounceId = null;
   const featureListScrollRef = ref(null);
+  const selectedPairwiseBlockOrthogroupId = ref('');
   const resetFeatureListScroll = () => {
     featureListScrollTop.value = 0;
     if (featureListScrollRef.value) featureListScrollRef.value.scrollTop = 0;
@@ -1722,7 +1755,7 @@ export const createAppSetup = () => {
     }
   });
 
-  const refreshLoadedSessionSvgLayout = async () => {
+  const refreshLoadedSessionSvgLayout = async ({ ui = {} } = {}) => {
     await nextTick();
     await new Promise((resolve) => {
       if (typeof window.requestAnimationFrame === 'function') {
@@ -1732,24 +1765,42 @@ export const createAppSetup = () => {
       }
     });
 
-    if (mode.value !== 'linear') return;
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return;
-    const legendGroup = svg.getElementById?.('legend');
-    if (!legendGroup || legendGroup.getAttribute('display') === 'none') return;
-
-    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-    const verticalLegend = legendGroup.querySelector('#legend_vertical');
-    if (horizontalLegend && verticalLegend) {
-      legendActions.reflowDualLegendLayout(svg);
-    } else {
-      legendActions.updatePairwiseLegendPositions(svg);
-    }
-    legendActions.recenterCurrentLegendRoot(svg);
-
-    const idx = selectedResultIndex.value;
-    if (idx >= 0 && results.value.length > idx) {
-      results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+    try {
+      const hasSchema = svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null;
+      const hasMetadata = svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null;
+      if (!hasSchema && !hasMetadata) {
+        legendLayout.normalizeLegacySvg({
+          legendSide: form.legend || 'none',
+          titleSide: adv.plot_title_position || 'none',
+          userDeltas: {
+            primary: ui.diagramOffset
+              ? [ui.diagramOffset.x, ui.diagramOffset.y]
+              : null,
+            legend: ui.legendCurrentOffset
+              ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
+              : null,
+            lengthBar: ui.lengthBarUserOffset
+              ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
+              : null,
+            title: ui.plotTitleUserOffset
+              ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
+              : null
+          }
+        });
+      } else {
+        legendLayout.captureBaseConfig();
+      }
+      legendActions.setupLegendDrag();
+      legendLayout.setupDiagramDrag(false);
+      legendLayout.persistCurrentSvg();
+    } catch (error) {
+      errorLog.value = {
+        summary: error?.message || 'The saved SVG composition metadata is invalid.',
+        details: []
+      };
+      throw error;
     }
   };
 
@@ -1801,7 +1852,16 @@ export const createAppSetup = () => {
   };
 
   const importSession = async (event) => {
-    const result = await importSessionFromFile(event, { afterLoad: refreshLoadedSessionSvgLayout });
+    const result = await importSessionFromFile(event, {
+      afterLoad: refreshLoadedSessionSvgLayout,
+      rollbackState: createSessionImportRollbackState({
+        depthTrackUiCounts,
+        depthTracks: adv.depth_tracks,
+        featureListScrollTop,
+        featureListScrollRef,
+        selectedPairwiseBlockOrthogroupId
+      })
+    });
     if (result?.status === 'ok' || result?.status === 'legacy') {
       await nextTick();
       if (result?.status === 'ok') {
@@ -2249,7 +2309,6 @@ export const createAppSetup = () => {
     return style;
   });
 
-  const selectedPairwiseBlockOrthogroupId = ref('');
   const pairwiseBlockOrthogroups = computed(() => (
     Array.isArray(clickedPairwiseMatch.value?.blockOrthogroups)
       ? clickedPairwiseMatch.value.blockOrthogroups

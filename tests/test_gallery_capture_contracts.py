@@ -37,10 +37,160 @@ BASIC_EXAMPLES = {
 }
 
 
+LAYOUT_RESULT_CAPTURES = {
+    "HmmtDNA_basic_circular": {
+        "src": "./media/HmmtDNA_basic_circular/manual-04-01-final-preview.webp",
+        "selector": "svg[data-capture-hmmt-basic-final='true']",
+        "viewport": {"width": 1400, "height": 1000},
+        "state": {
+            "mode": "circular",
+            "form.legend": "right",
+            "form.track_type": "middle",
+            "form.labels_mode": "out",
+        },
+        "visible_text": {"Homo sapiens", "NC_012920.1", "GC content", "GC skew (+)"},
+    },
+    "lambda_basic_linear": {
+        "src": "./media/lambda_basic_linear/manual-05-01-final-preview.webp",
+        "selector": "svg[data-capture-lambda-final='true']",
+        "viewport": {"width": 1900, "height": 900},
+        "state": {
+            "mode": "linear",
+            "linearSeqs.length": 1,
+            "linearComparisonPlan.mode": "none",
+            "form.legend": "left",
+            "form.show_labels_linear": "all",
+            "form.scale_style": "ruler",
+        },
+        "visible_text": {"NC_001416.1", "48,502 bp", "major capsid protein", "CDS"},
+    },
+    "tobacco-chloroplast": {
+        "src": "./media/tobacco-chloroplast/manual-08-01-chloroplast-preview.webp",
+        "selector": "svg[data-capture-chloroplast-final='true']",
+        "viewport": {"width": 1400, "height": 1000},
+        "state": {
+            "mode": "circular",
+            "form.legend": "upper_left",
+            "annotationSets.0.id": "plastome_regions",
+            "adv.circular_track_slots_enabled": True,
+        },
+        "visible_text": {"Nicotiana tabacum", "NC_001879.2", "LSC", "IRb", "SSC", "IRa", "GC content"},
+    },
+    "Vnig_TUMSAT-TG-2018": {
+        "src": "./media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp",
+        "selector": "svg[data-capture-vnig-multirecord-final='true']",
+        "viewport": {"width": 1600, "height": 1100},
+        "state": {
+            "mode": "circular",
+            "form.multi_record_canvas": True,
+            "form.legend": "left",
+            "adv.multi_record_size_mode": "auto",
+            "adv.multi_record_min_radius_ratio": 0.55,
+            "adv.multi_record_column_gap_ratio": 0.1,
+            "adv.multi_record_row_gap_ratio": 0.05,
+            "adv.multi_record_positions": [
+                {"selector": "#1", "row": 1},
+                {"selector": "#2", "row": 1},
+                {"selector": "#3", "row": 2},
+                {"selector": "#4", "row": 2},
+                {"selector": "#5", "row": 2},
+                {"selector": "#6", "row": 2},
+            ],
+            "form.plot_title": "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome",
+            "adv.plot_title_position": "bottom",
+        },
+        "visible_text": {"Vibrio nigripulchritudo", "AP024087.1", "AP024088.1", "pVNTG1", "pVNTG4", "GC content", "GC skew (+)"},
+    },
+    "vibrio-harveyi-group-collinear": {
+        "src": "./media/vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp",
+        "selector": "svg[data-capture-vibrio-overview='true']",
+        "viewport": {"width": 1800, "height": 1100},
+        "state": {
+            "mode": "linear",
+            "linearSeqs.length": 11,
+            "linearRecordLayoutEnabled": True,
+            "linearRecordGap": 48,
+            "adv.multi_record_positions": [
+                {"selector": "#1", "row": 1},
+                {"selector": "#2", "row": 1},
+                {"selector": "#3", "row": 1},
+                {"selector": "#4", "row": 2},
+                {"selector": "#5", "row": 2},
+                {"selector": "#6", "row": 3},
+                {"selector": "#7", "row": 3},
+                {"selector": "#8", "row": 4},
+                {"selector": "#9", "row": 4},
+                {"selector": "#10", "row": 5},
+                {"selector": "#11", "row": 5},
+            ],
+            "form.legend": "bottom",
+            "form.plot_title": "",
+            "form.linear_track_layout": "above",
+            "form.scale_style": "ruler",
+            "form.show_labels_linear": "none",
+            "losatProgram": "blastp",
+            "losat.blastp.mode": "collinear",
+            "losat.blastp.collinearColorMode": "orientation_identity",
+        },
+        "visible_text": {"Vibrio harveyi", "Vibrio owensii", "Vibrio campbellii", "Vibrio parahaemolyticus", "Vibrio alginolyticus", "Collinear", "Inverted"},
+    },
+    "HmmtDNA_ATskew": {
+        "src": "./media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp",
+        "selector": "svg[data-capture-hmmt-atskew-final='true']",
+        "viewport": {"width": 1400, "height": 1000},
+        "state": {
+            "mode": "circular",
+            "form.legend": "left",
+            "form.track_type": "middle",
+            "form.labels_mode": "out",
+            "adv.circular_track_slots_enabled": True,
+            "adv.circular_track_slots.length": 5,
+            "adv.circular_track_slots.0.id": "features",
+            "adv.circular_track_slots.1.id": "gc_content",
+            "adv.circular_track_slots.2.id": "gc_skew",
+            "adv.circular_track_slots.3.id": "a_skew_2",
+            "adv.circular_track_slots.3.params.nt": "AT",
+            "adv.circular_track_slots.3.params.legend_label": "AT skew",
+            "adv.circular_track_slots.3.params.positive_color": "#deaf6e",
+            "adv.circular_track_slots.3.params.negative_color": "#7294e3",
+            "adv.circular_track_slots.4.id": "ticks",
+            "adv.circular_track_slots.4.params.tick_label_layout": "label_in_tick_out",
+        },
+        "visible_text": {"Homo sapiens", "NC_012920.1", "GC content", "GC skew (+)", "AT skew (+)", "AT skew (-)"},
+    },
+}
+
+
 def _load_tutorial(sample: dict[str, object]) -> dict[str, object]:
     tutorial_path = resolve_gallery_reference(str(sample["tutorial"]))
     assert tutorial_path is not None
     return json.loads(tutorial_path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("example_id", LAYOUT_RESULT_CAPTURES)
+def test_layout_sensitive_gallery_results_have_exact_capture_contracts(
+    example_id: str,
+) -> None:
+    expected = LAYOUT_RESULT_CAPTURES[example_id]
+    sample = load_ready_examples(example_id)[0]
+    tutorial = _load_tutorial(sample)
+    matches = [
+        operation
+        for _, operation in iter_operation_contexts(sample, tutorial)
+        if operation.get("media", {}).get("src") == expected["src"]
+    ]
+
+    assert len(matches) == 1
+    operation = matches[0]
+    capture = operation["capture"]
+    assert operation["dataDependent"] is True
+    assert capture["source"] == "webapp"
+    assert capture["session"] == sample["session"]
+    assert capture["selector"] == expected["selector"]
+    assert capture["viewport"] == expected["viewport"]
+    assert capture["cropPadding"] == 12
+    assert expected["state"].items() <= capture["assertAppState"].items()
+    assert expected["visible_text"] <= set(capture["visibleText"])
 
 
 @pytest.mark.parametrize("example_id", BASIC_EXAMPLES)

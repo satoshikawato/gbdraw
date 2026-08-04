@@ -813,6 +813,8 @@ export const createRunAnalysis = ({
     lastRunInfo,
     trackSlotResolvedGeometry,
     errorLog,
+    semanticFileWatchersSuppressed,
+    sessionImportRollbackInProgress,
     zoom,
     canvasPan,
     skipCaptureBaseConfig,
@@ -913,6 +915,10 @@ export const createRunAnalysis = ({
   let activeLosatAbortController = null;
   let latestCliHelperFiles = [];
   let latestCliHelperArchiveName = 'out-cli-files.zip';
+  const recordDiscoverySuppressed = () => Boolean(
+    semanticFileWatchersSuppressed?.value ||
+    sessionImportRollbackInProgress?.value
+  );
 
   const buildLatestCliHelperFiles = (runInfo, generatedCliFileMap, archiveBaseName) => {
     const helperFiles = Array.isArray(runInfo?.helperFiles) ? runInfo.helperFiles : [];
@@ -1392,8 +1398,12 @@ export const createRunAnalysis = ({
     });
   };
 
-  const refreshCircularRecordOrder = async ({ discoverRecords = true } = {}) => {
+  const refreshCircularRecordOrder = async ({
+    discoverRecords = true,
+    suppress = false
+  } = {}) => {
     const refreshGeneration = ++circularRecordRefreshGeneration;
+    if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(adv.multi_record_positions)) {
       adv.multi_record_positions = [];
     }
@@ -1425,7 +1435,10 @@ export const createRunAnalysis = ({
       try {
         pyodide = await ensureHelperRuntime();
       } catch (error) {
-        if (refreshGeneration !== circularRecordRefreshGeneration) return;
+        if (
+          refreshGeneration !== circularRecordRefreshGeneration ||
+          recordDiscoverySuppressed()
+        ) return;
         console.warn('Failed to start record discovery runtime:', error);
         circularRecordList.value = [];
         circularRecordDiscovery.status = 'error';
@@ -1436,6 +1449,7 @@ export const createRunAnalysis = ({
     }
     if (
       refreshGeneration !== circularRecordRefreshGeneration ||
+      recordDiscoverySuppressed() ||
       mode.value !== 'circular' ||
       cInputType.value !== inputType ||
       (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
@@ -1461,6 +1475,7 @@ export const createRunAnalysis = ({
           });
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
+        recordDiscoverySuppressed() ||
         mode.value !== 'circular' ||
         cInputType.value !== inputType ||
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
@@ -1478,6 +1493,7 @@ export const createRunAnalysis = ({
     } catch (error) {
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
+        recordDiscoverySuppressed() ||
         mode.value !== 'circular' ||
         cInputType.value !== inputType ||
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||

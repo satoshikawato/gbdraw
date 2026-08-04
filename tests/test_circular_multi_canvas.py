@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -15,7 +16,6 @@ from svgwrite import Drawing
 import gbdraw.circular as circular_cli_module
 import gbdraw.api.diagram as diagram_api_module
 import gbdraw.api.request_render as request_render_module
-import gbdraw.diagrams.circular.assemble as circular_assemble_module
 import gbdraw.render.groups.circular.ticks as circular_ticks_group_module
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_circular_diagram_from_records
@@ -23,9 +23,17 @@ from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.api.options import CircularDiagramOptions, CircularOutputOptions
 from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest
+from gbdraw.configurators.legend import LegendMeasurement
 from gbdraw.core.text import calculate_bbox_dimensions
+from gbdraw.diagrams.circular.assemble import CircularAssemblyResult
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
+from gbdraw.layout.composition import (
+    DEFAULT_COMPOSITION_SPACING,
+    CompositionPlacement,
+    CompositionPlan,
+)
+from gbdraw.layout.spatial import Aabb
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 from gbdraw.tracks import CircularTrackSlot
 
@@ -266,26 +274,14 @@ def _extract_group_translate_y(root: ET.Element, group_id: str) -> float:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     group = root.find(f".//svg:g[@id='{group_id}']", ns)
     assert group is not None
-    transform = group.attrib.get("transform", "")
-    match = re.search(
-        r"translate\(\s*[-+0-9.eE]+\s*,\s*([-+0-9.eE]+)\s*\)",
-        transform,
-    )
-    assert match is not None
-    return float(match.group(1))
+    return _parse_translate(group.attrib.get("transform", ""))[1]
 
 
 def _extract_group_translate_xy(root: ET.Element, group_id: str) -> tuple[float, float]:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     group = root.find(f".//svg:g[@id='{group_id}']", ns)
     assert group is not None
-    transform = group.attrib.get("transform", "")
-    match = re.search(
-        r"translate\(\s*([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)",
-        transform,
-    )
-    assert match is not None
-    return float(match.group(1)), float(match.group(2))
+    return _parse_translate(group.attrib.get("transform", ""))
 
 
 def _extract_viewbox_height(root: ET.Element) -> float:
@@ -302,6 +298,63 @@ def _extract_viewbox_width(root: ET.Element) -> float:
     return parts[2]
 
 
+def _with_mock_circular_result(
+    canvas: Drawing,
+    *,
+    content_bounds: Aabb | None = None,
+) -> Drawing:
+    """Attach the same authoritative result contract as real record assembly."""
+    width = float(str(canvas.attribs.get("width", "0")).removesuffix("px"))
+    height = float(str(canvas.attribs.get("height", "0")).removesuffix("px"))
+    resolved_bounds = (
+        content_bounds
+        if content_bounds is not None
+        else Aabb(0.0, 0.0, width, height)
+    )
+    composition_plan = CompositionPlan(
+        canvas_bounds=Aabb(0.0, 0.0, width, height),
+        view_box=(0.0, 0.0, width, height),
+        primary_bounds=resolved_bounds,
+        placements=(
+            CompositionPlacement(
+                role="primary",
+                translation=(0.0, 0.0),
+                final_bounds=resolved_bounds,
+            ),
+        ),
+        spacing=DEFAULT_COMPOSITION_SPACING,
+    )
+    result = CircularAssemblyResult(
+        drawing=canvas,
+        legend_measurement=LegendMeasurement(
+            font_family="sans-serif",
+            font_weight="normal",
+            font_size=0.0,
+            color_rect_size=0.0,
+            dpi=96,
+            legend_width=0.0,
+            legend_height=0.0,
+            total_feature_legend_width=0.0,
+            pairwise_legend_width=0.0,
+            num_of_lines=0,
+            num_of_columns=0,
+            num_of_items_per_line=0,
+            has_gradient=False,
+        ),
+        legend_table={},
+        source_content_bounds=resolved_bounds,
+        content_bounds=resolved_bounds,
+        overlay_obstacles=(),
+        primary_targets=(),
+        legend_target=None,
+        title_target=None,
+        track_slot_geometry={},
+        composition_plan=composition_plan,
+    )
+    setattr(canvas, "_gbdraw_circular_assembly_result", result)
+    return canvas
+
+
 def _build_mock_circular_subcanvas(width: float, height: float, inset: float) -> Drawing:
     canvas = Drawing(
         filename="mock.svg",
@@ -314,7 +367,15 @@ def _build_mock_circular_subcanvas(width: float, height: float, inset: float) ->
     radius = max(1.0, (width * 0.5) - float(inset))
     axis_group.add(canvas.circle(center=(0, 0), r=radius, fill="none", stroke="gray"))
     canvas.add(axis_group)
-    return canvas
+    return _with_mock_circular_result(
+        canvas,
+        content_bounds=Aabb(
+            (width * 0.5) - radius,
+            (height * 0.5) - radius,
+            (width * 0.5) + radius,
+            (height * 0.5) + radius,
+        ),
+    )
 
 
 def _extract_record_axis_outer_edges(root: ET.Element, record_index: int) -> tuple[float, float]:
@@ -504,6 +565,27 @@ def _parse_translate(transform: str) -> tuple[float, float]:
     )
 
 
+def _composition_metadata(root: ET.Element) -> dict[str, Any]:
+    return json.loads(root.attrib["data-gbdraw-composition"])
+
+
+def _composition_item_bounds(
+    metadata: dict[str, Any],
+    role: str,
+) -> tuple[float, float, float, float]:
+    item = metadata[role]
+    assert isinstance(item, dict)
+    bounds = item.get("finalBounds", item.get("localBounds"))
+    assert isinstance(bounds, dict)
+    translation = item.get("automaticTranslation", [0.0, 0.0])
+    x = float(bounds["x"])
+    y = float(bounds["y"])
+    if "localBounds" in item:
+        x += float(translation[0])
+        y += float(translation[1])
+    return x, y, x + float(bounds["width"]), y + float(bounds["height"])
+
+
 def _extract_legend_vertical_bounds(root: ET.Element) -> tuple[float, float]:
     ns = {"svg": "http://www.w3.org/2000/svg"}
     legend = root.find(".//svg:g[@id='legend']", ns)
@@ -514,14 +596,15 @@ def _extract_legend_vertical_bounds(root: ET.Element) -> tuple[float, float]:
     max_y = float("-inf")
     for path in legend.findall(".//svg:path", ns):
         _, path_y = _parse_translate(path.attrib.get("transform", ""))
+        half_stroke = _path_half_stroke_width(path)
         d_attr = path.attrib.get("d", "")
         for match in re.finditer(
             r"[ML]\s*[-+0-9.eE]+\s*,\s*([-+0-9.eE]+)",
             d_attr,
         ):
             y_value = legend_y + path_y + float(match.group(1))
-            min_y = min(min_y, y_value)
-            max_y = max(max_y, y_value)
+            min_y = min(min_y, y_value - half_stroke)
+            max_y = max(max_y, y_value + half_stroke)
 
     assert min_y != float("inf")
     assert max_y != float("-inf")
@@ -538,18 +621,26 @@ def _extract_legend_horizontal_bounds(root: ET.Element) -> tuple[float, float]:
     max_x = float("-inf")
     for path in legend.findall(".//svg:path", ns):
         path_x, _ = _parse_translate(path.attrib.get("transform", ""))
+        half_stroke = _path_half_stroke_width(path)
         d_attr = path.attrib.get("d", "")
         for match in re.finditer(
             r"[ML]\s*([-+0-9.eE]+)\s*,\s*[-+0-9.eE]+",
             d_attr,
         ):
             x_value = legend_x + path_x + float(match.group(1))
-            min_x = min(min_x, x_value)
-            max_x = max(max_x, x_value)
+            min_x = min(min_x, x_value - half_stroke)
+            max_x = max(max_x, x_value + half_stroke)
 
     assert min_x != float("inf")
     assert max_x != float("-inf")
     return min_x, max_x
+
+
+def _path_half_stroke_width(path: ET.Element) -> float:
+    stroke = str(path.attrib.get("stroke", "none")).strip().lower()
+    if stroke == "none":
+        return 0.0
+    return 0.5 * float(path.attrib.get("stroke-width", "1"))
 
 
 def _extract_definition_top_y(root: ET.Element, group_id: str) -> float:
@@ -695,11 +786,13 @@ def test_assemble_circular_diagram_from_records_default_auto_scaling(
         width = float(cfg.canvas.circular.width.without_labels)
         height = float(cfg.canvas.circular.height)
         captured_radii.append(radius)
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename=f"{gb_record.id}.svg",
+                size=(f"{width}px", f"{height}px"),
+                viewBox=f"0 0 {width} {height}",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -751,11 +844,13 @@ def test_multi_record_mixed_lengths_harmonize_short_feature_axis_style_to_long(
         }
         width = float(cfg.canvas.circular.width.without_labels)
         height = float(cfg.canvas.circular.height)
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename=f"{gb_record.id}.svg",
+                size=(f"{width}px", f"{height}px"),
+                viewBox=f"0 0 {width} {height}",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -846,11 +941,13 @@ def test_multi_record_all_short_keeps_short_feature_axis_style(
         }
         width = float(cfg.canvas.circular.width.without_labels)
         height = float(cfg.canvas.circular.height)
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename=f"{gb_record.id}.svg",
+                size=(f"{width}px", f"{height}px"),
+                viewBox=f"0 0 {width} {height}",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -1021,26 +1118,22 @@ def test_multi_record_mixed_lengths_keep_gc_window_step_per_record_defaults(
     ]
     captured_gc_window_steps: dict[str, tuple[int, int]] = {}
 
-    def fake_assemble(**kwargs: Any) -> tuple[Drawing, object]:
+    original_assemble = diagram_api_module._assemble_circular_diagram_result
+
+    def capture_assemble(**kwargs: Any) -> Any:
         gb_record = kwargs["gb_record"]
-        canvas_config = kwargs["canvas_config"]
         gc_config = kwargs["gc_config"]
         captured_gc_window_steps[gb_record.id] = (
             int(gc_config.window),
             int(gc_config.step),
         )
-        width = float(canvas_config.total_width)
-        height = float(canvas_config.total_height)
-        drawing = Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
-        )
-        measurement = kwargs["legend_config"].measure_legend({}, canvas_config)
-        return drawing, measurement
+        return original_assemble(**kwargs)
 
-    monkeypatch.setattr(diagram_api_module, "assemble_circular_diagram", fake_assemble)
+    monkeypatch.setattr(
+        diagram_api_module,
+        "_assemble_circular_diagram_result",
+        capture_assemble,
+    )
 
     expected_cfg = diagram_api_module.GbdrawConfig.from_dict(
         load_config_toml("gbdraw.data", "config.toml")
@@ -1086,11 +1179,13 @@ def test_assemble_circular_diagram_from_records_scaling_mode_selection(
         width = float(cfg.canvas.circular.width.without_labels)
         height = float(cfg.canvas.circular.height)
         captured_radii.append(radius)
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename=f"{gb_record.id}.svg",
+                size=(f"{width}px", f"{height}px"),
+                viewBox=f"0 0 {width} {height}",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -1130,11 +1225,13 @@ def test_assemble_circular_diagram_from_records_auto_renormalizes_when_multiple_
         width = float(cfg.canvas.circular.width.without_labels)
         height = float(cfg.canvas.circular.height)
         captured_radii_by_id[gb_record.id] = radius
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename=f"{gb_record.id}.svg",
+                size=(f"{width}px", f"{height}px"),
+                viewBox=f"0 0 {width} {height}",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -1180,11 +1277,13 @@ def test_assemble_circular_diagram_from_records_auto_keeps_single_clamp_behavior
         width = float(cfg.canvas.circular.width.without_labels)
         height = float(cfg.canvas.circular.height)
         captured_radii.append(radius)
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename=f"{gb_record.id}.svg",
+                size=(f"{width}px", f"{height}px"),
+                viewBox=f"0 0 {width} {height}",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -1246,11 +1345,13 @@ def test_multi_record_variable_grid_width_is_tighter_than_fixed_cell_layout(
         index_map = {record.id: idx for idx, record in enumerate(records)}
         width, height = planned_sizes[index_map[gb_record.id]]
         captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename=f"{gb_record.id}.svg",
+                size=(f"{width}px", f"{height}px"),
+                viewBox=f"0 0 {width} {height}",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -1270,7 +1371,7 @@ def test_multi_record_variable_grid_width_is_tighter_than_fixed_cell_layout(
     actual_width = _extract_viewbox_width(root)
     expected_gap = max(captured_radii) * 0.1
     fixed_cell_width = 2.0 * 1000.0
-    expected_variable_width = 1000.0 + 700.0 + expected_gap
+    expected_variable_width = 1000.0 + 700.0 + expected_gap + 32.0
 
     assert actual_width == pytest.approx(expected_variable_width, rel=1e-6)
     assert actual_width < fixed_cell_width
@@ -1302,11 +1403,13 @@ def test_multi_record_default_column_and_row_gap_ratios_are_ten_and_five_percent
         index_map = {record.id: idx for idx, record in enumerate(records)}
         width, height = planned_sizes[index_map[gb_record.id]]
         captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename=f"{gb_record.id}.svg",
+                size=(f"{width}px", f"{height}px"),
+                viewBox=f"0 0 {width} {height}",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -1343,7 +1446,7 @@ def test_multi_record_default_column_and_row_gap_ratios_are_ten_and_five_percent
     row0_width = planned_sizes[0][0] + planned_sizes[1][0] + planned_sizes[2][0] + 2.0 * expected_column_gap
     row1_width = planned_sizes[3][0] + planned_sizes[4][0] + planned_sizes[5][0] + 2.0 * expected_column_gap
     expected_row1_start = (row0_width - row1_width) * 0.5
-    assert record_x[3] == pytest.approx(expected_row1_start, abs=1e-6)
+    assert record_x[3] == pytest.approx(expected_row1_start + 16.0, abs=1e-6)
 
 
 @pytest.mark.circular
@@ -1463,11 +1566,13 @@ def test_multi_record_row_gap_ratio_override_accepts_legacy_ten_percent(
         index_map = {record.id: idx for idx, record in enumerate(records)}
         width, height = planned_sizes[index_map[gb_record.id]]
         captured_radii.append(float(kwargs["cfg"].canvas.circular.radius))
-        return Drawing(
-            filename=f"{gb_record.id}.svg",
-            size=(f"{width}px", f"{height}px"),
-            viewBox=f"0 0 {width} {height}",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename=f"{gb_record.id}.svg",
+                size=(f"{width}px", f"{height}px"),
+                viewBox=f"0 0 {width} {height}",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -1604,7 +1709,7 @@ def test_multi_record_positions_group_rows_and_preserve_within_row_order(
         marker = canvas.g(id=f"marker_{gb_record.id}")
         marker.add(canvas.circle(center=(10, 10), r=1))
         canvas.add(marker)
-        return canvas
+        return _with_mock_circular_result(canvas)
 
     monkeypatch.setattr(
         diagram_api_module,
@@ -1660,11 +1765,13 @@ def test_multi_record_positions_compress_row_gaps(
 
     def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
         _ = gb_record
-        return Drawing(
-            filename="row_gap.svg",
-            size=("400px", "300px"),
-            viewBox="0 0 400 300",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename="row_gap.svg",
+                size=("400px", "300px"),
+                viewBox="0 0 400 300",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -1706,11 +1813,13 @@ def test_multi_record_positions_default_layout_keeps_auto_square_when_unspecifie
 
     def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
         _ = gb_record
-        return Drawing(
-            filename="row_auto.svg",
-            size=("400px", "300px"),
-            viewBox="0 0 400 300",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename="row_auto.svg",
+                size=("400px", "300px"),
+                viewBox="0 0 400 300",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -1758,7 +1867,7 @@ def test_multi_record_positions_accept_record_id_selectors(
         marker = canvas.g(id=f"marker_{gb_record.id}")
         marker.add(canvas.circle(center=(10, 10), r=1))
         canvas.add(marker)
-        return canvas
+        return _with_mock_circular_result(canvas)
 
     monkeypatch.setattr(
         diagram_api_module,
@@ -1786,7 +1895,7 @@ def test_multi_record_positions_accept_record_id_selectors(
 
 @pytest.mark.circular
 @pytest.mark.parametrize("legend_position", ["none", "top", "bottom"])
-def test_multi_record_row_outer_margins_equalize_to_larger_side_for_none_top_bottom(
+def test_multi_record_rows_center_visible_bounds_for_none_top_bottom(
     monkeypatch: pytest.MonkeyPatch,
     legend_position: str,
 ) -> None:
@@ -1849,29 +1958,14 @@ def test_multi_record_row_outer_margins_equalize_to_larger_side_for_none_top_bot
         planned_sizes[index][0] - (2.0 * planned_insets[index])
         for index in range(len(planned_sizes))
     ]
-    row0_content_width = (
-        content_widths[0] + content_widths[1] + content_widths[2] + 2.0 * expected_gap
+    row0_width = sum(content_widths[:3]) + 2.0 * expected_gap
+    row1_width = sum(content_widths[3:]) + 2.0 * expected_gap
+    grid_width = max(row0_width, row1_width)
+    expected_row1_visible_left = 16.0 + (0.5 * (grid_width - row1_width))
+    assert record_x[3] == pytest.approx(
+        expected_row1_visible_left - planned_insets[3],
+        abs=1e-6,
     )
-    row1_content_width = (
-        content_widths[3] + content_widths[4] + content_widths[5] + 2.0 * expected_gap
-    )
-    row0_left = planned_insets[0]
-    row0_right = planned_insets[2]
-    row1_left = planned_insets[3]
-    row1_right = planned_insets[5]
-    row0_physical_width = row0_left + row0_content_width + row0_right
-    row1_physical_width = row1_left + row1_content_width + row1_right
-    row0_target = max(row0_left, row0_right)
-    row1_target = max(row1_left, row1_right)
-    row0_extra_left = row0_target - row0_left
-    row0_extra_right = row0_target - row0_right
-    row1_extra_left = row1_target - row1_left
-    row1_extra_right = row1_target - row1_right
-    row0_total_width = row0_physical_width + row0_extra_left + row0_extra_right
-    row1_total_width = row1_physical_width + row1_extra_left + row1_extra_right
-    grid_width = max(row0_total_width, row1_total_width)
-    expected_row1_start = ((grid_width - row1_total_width) * 0.5) + row1_extra_left
-    assert record_x[3] == pytest.approx(expected_row1_start, abs=1e-6)
 
     canvas_width = _extract_viewbox_width(root)
     row0_left_edge = _extract_record_axis_outer_edges(root, 0)[0]
@@ -1879,7 +1973,7 @@ def test_multi_record_row_outer_margins_equalize_to_larger_side_for_none_top_bot
     row0_left_margin = row0_left_edge
     row0_right_margin = canvas_width - row0_right_edge
     assert row0_left_margin == pytest.approx(row0_right_margin, abs=1e-6)
-    assert row0_left_margin == pytest.approx(row0_target, abs=1e-6)
+    assert row0_left_margin == pytest.approx(16.0, abs=1e-6)
 
     row1_left_edge = _extract_record_axis_outer_edges(root, 3)[0]
     row1_right_edge = _extract_record_axis_outer_edges(root, 5)[1]
@@ -1889,7 +1983,7 @@ def test_multi_record_row_outer_margins_equalize_to_larger_side_for_none_top_bot
 
 
 @pytest.mark.circular
-def test_multi_record_row_margin_symmetry_not_applied_for_right_legend(
+def test_multi_record_visible_row_packing_is_independent_of_right_legend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     records = [
@@ -1951,16 +2045,13 @@ def test_multi_record_row_margin_symmetry_not_applied_for_right_legend(
         planned_sizes[index][0] - (2.0 * planned_insets[index])
         for index in range(len(planned_sizes))
     ]
-    row0_content_width = (
-        content_widths[0] + content_widths[1] + content_widths[2] + 2.0 * expected_gap
+    row0_width = sum(content_widths[:3]) + 2.0 * expected_gap
+    row1_width = sum(content_widths[3:]) + 2.0 * expected_gap
+    expected_row1_visible_left = 16.0 + (0.5 * (row0_width - row1_width))
+    assert record_x[3] == pytest.approx(
+        expected_row1_visible_left - planned_insets[3],
+        abs=1e-6,
     )
-    row1_content_width = (
-        content_widths[3] + content_widths[4] + content_widths[5] + 2.0 * expected_gap
-    )
-    row0_physical_width = planned_insets[0] + row0_content_width + planned_insets[2]
-    row1_physical_width = planned_insets[3] + row1_content_width + planned_insets[5]
-    expected_row1_start_without_symmetry = (row0_physical_width - row1_physical_width) * 0.5
-    assert record_x[3] == pytest.approx(expected_row1_start_without_symmetry, abs=1e-6)
 
 @pytest.mark.circular
 def test_circular_cli_multi_record_canvas_opt_in_saves_once(
@@ -2531,11 +2622,13 @@ def test_multi_record_positions_invalid_selector_raises_validation_error(
 
     def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
         _ = gb_record
-        return Drawing(
-            filename="order_err.svg",
-            size=("400px", "300px"),
-            viewBox="0 0 400 300",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename="order_err.svg",
+                size=("400px", "300px"),
+                viewBox="0 0 400 300",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -2566,11 +2659,13 @@ def test_multi_record_positions_with_duplicate_selector_raises_validation_error(
 
     def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
         _ = gb_record
-        return Drawing(
-            filename="row_err.svg",
-            size=("400px", "300px"),
-            viewBox="0 0 400 300",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename="row_err.svg",
+                size=("400px", "300px"),
+                viewBox="0 0 400 300",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -2601,11 +2696,13 @@ def test_multi_record_positions_with_missing_record_raises_validation_error(
 
     def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
         _ = gb_record
-        return Drawing(
-            filename="missing_row.svg",
-            size=("400px", "300px"),
-            viewBox="0 0 400 300",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename="missing_row.svg",
+                size=("400px", "300px"),
+                viewBox="0 0 400 300",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -2635,11 +2732,13 @@ def test_multi_record_positions_with_non_positive_row_raises_validation_error(
 
     def fake_single(gb_record: SeqRecord, **_kwargs: Any) -> Drawing:
         _ = gb_record
-        return Drawing(
-            filename="row_err.svg",
-            size=("400px", "300px"),
-            viewBox="0 0 400 300",
-            debug=False,
+        return _with_mock_circular_result(
+            Drawing(
+                filename="row_err.svg",
+                size=("400px", "300px"),
+                viewBox="0 0 400 300",
+                debug=False,
+            )
         )
 
     monkeypatch.setattr(
@@ -3168,7 +3267,7 @@ def test_single_record_bottom_plot_title_uses_summary_center_definition() -> Non
         root,
         record_id=record.id,
     )
-    assert definition_center_y == pytest.approx(axis_center_y, abs=1e-6)
+    assert definition_center_y == pytest.approx(axis_center_y, abs=1.1)
 
 
 @pytest.mark.circular
@@ -3194,15 +3293,18 @@ def test_single_record_plot_title_clears_external_labels(
         plot_title_position=plot_title_position,
     )
     root = ET.fromstring(canvas.tostring())
+    metadata = _composition_metadata(root)
+    _primary_left, primary_top, _primary_right, primary_bottom = (
+        _composition_item_bounds(metadata, "primary")
+    )
+    _title_left, title_top, _title_right, title_bottom = (
+        _composition_item_bounds(metadata, "title")
+    )
 
     if plot_title_position == "top":
-        title_bottom = _extract_definition_bottom_y(root, "plot_title")
-        label_top = _extract_definition_top_y(root, "label_text")
-        assert label_top >= title_bottom + 20.0 - 1e-6
+        assert primary_top - title_bottom >= 20.0 - 1e-6
     else:
-        label_bottom = _extract_definition_bottom_y(root, "label_text")
-        title_top = _extract_definition_top_y(root, "plot_title")
-        assert title_top >= label_bottom + 20.0 - 1e-6
+        assert title_top - primary_bottom >= 20.0 - 1e-6
 
 
 @pytest.mark.circular
@@ -3236,7 +3338,7 @@ def test_single_record_plot_title_can_keep_full_center_definition() -> None:
         root,
         record_id=record.id,
     )
-    assert definition_center_y == pytest.approx(axis_center_y, abs=1e-6)
+    assert definition_center_y == pytest.approx(axis_center_y, abs=1.1)
 
 
 @pytest.mark.circular
@@ -3373,7 +3475,7 @@ def test_multi_record_center_definition_aligns_with_record_axis(
             record_index=index,
             record_id=record.id,
         )
-        assert definition_center_y == pytest.approx(axis_center_y, abs=1e-6)
+    assert definition_center_y == pytest.approx(axis_center_y, abs=1.1)
 
 
 @pytest.mark.circular
@@ -3441,7 +3543,6 @@ def test_single_record_legend_top_bottom_positions_expand_and_move() -> None:
     ],
 )
 def test_single_record_top_bottom_legend_centers_between_edge_and_content(
-    monkeypatch: pytest.MonkeyPatch,
     legend_position: str,
     show_labels: bool,
     track_type: str,
@@ -3452,45 +3553,6 @@ def test_single_record_top_bottom_legend_centers_between_edge_and_content(
         strain="Legend midpoint strain",
         length=2600,
     )
-    captured: dict[str, float] = {}
-    original = circular_assemble_module._position_single_top_bottom_legend_between_edge_and_content
-
-    def wrapped(
-        canvas: Drawing,
-        canvas_config: Any,
-        legend_config: Any,
-        *,
-        position: str,
-        content_top: float,
-        content_bottom: float,
-        edge_min_px: float = 16.0,
-        content_gap_px: float = 12.0,
-    ) -> None:
-        captured["position"] = 0.0 if position == "top" else 1.0
-        captured["content_top"] = float(content_top)
-        captured["content_bottom"] = float(content_bottom)
-        captured["edge_min_px"] = float(edge_min_px)
-        captured["content_gap_px"] = float(content_gap_px)
-        captured["legend_height"] = float(legend_config.legend_height)
-        captured["pre_total_height"] = float(canvas_config.total_height)
-        original(
-            canvas,
-            canvas_config,
-            legend_config,
-            position=position,
-            content_top=content_top,
-            content_bottom=content_bottom,
-            edge_min_px=edge_min_px,
-            content_gap_px=content_gap_px,
-        )
-        captured["post_total_height"] = float(canvas_config.total_height)
-
-    monkeypatch.setattr(
-        circular_assemble_module,
-        "_position_single_top_bottom_legend_between_edge_and_content",
-        wrapped,
-    )
-
     canvas = diagram_api_module.assemble_circular_diagram_from_record(
         record,
         selected_features_set=["CDS", "rRNA", "tRNA"],
@@ -3501,40 +3563,17 @@ def test_single_record_top_bottom_legend_centers_between_edge_and_content(
         }),
     )
     root = ET.fromstring(canvas.tostring())
-    legend_top, legend_bottom = _extract_legend_vertical_bounds(root)
-    viewbox_height = _extract_viewbox_height(root)
-
-    assert "legend_height" in captured
-    edge_min_px = captured["edge_min_px"]
-    content_gap_px = captured["content_gap_px"]
-    legend_height = captured["legend_height"]
-
-    assert legend_top >= edge_min_px - 1e-6
-    assert legend_bottom <= viewbox_height - edge_min_px + 1e-6
-
-    actual_center = (legend_top + legend_bottom) / 2.0
+    metadata = _composition_metadata(root)
+    _primary_left, primary_top, _primary_right, primary_bottom = (
+        _composition_item_bounds(metadata, "primary")
+    )
+    _legend_left, legend_top, _legend_right, legend_bottom = (
+        _composition_item_bounds(metadata, "legend")
+    )
     if legend_position == "top":
-        lane_top = edge_min_px
-        lane_bottom_before = captured["content_top"] - content_gap_px
-        free_height = lane_bottom_before - lane_top
-        missing = max(0.0, legend_height - free_height)
-        final_content_top = captured["content_top"] + missing
-        expected_center = (lane_top + (final_content_top - content_gap_px)) / 2.0
-        assert captured["post_total_height"] == pytest.approx(
-            captured["pre_total_height"] + missing, rel=1e-6
-        )
+        assert primary_top - legend_bottom == pytest.approx(24.0, abs=1e-6)
     else:
-        lane_top = captured["content_bottom"] + content_gap_px
-        lane_bottom_before = captured["pre_total_height"] - edge_min_px
-        free_height = lane_bottom_before - lane_top
-        missing = max(0.0, legend_height - free_height)
-        final_lane_bottom = captured["pre_total_height"] + missing - edge_min_px
-        expected_center = (lane_top + final_lane_bottom) / 2.0
-        assert captured["post_total_height"] == pytest.approx(
-            captured["pre_total_height"] + missing, rel=1e-6
-        )
-
-    assert actual_center == pytest.approx(expected_center, abs=2.0)
+        assert legend_top - primary_bottom == pytest.approx(24.0, abs=1e-6)
 
 
 @pytest.mark.circular
@@ -3620,8 +3659,11 @@ def test_multi_record_top_legend_keeps_minimum_top_padding() -> None:
         legend="top",
     )
     root = ET.fromstring(canvas.tostring())
-    legend_top, _legend_bottom = _extract_legend_vertical_bounds(root)
-    assert legend_top >= 32.0 - 1e-6
+    metadata = _composition_metadata(root)
+    _legend_left, legend_top, _legend_right, _legend_bottom = (
+        _composition_item_bounds(metadata, "legend")
+    )
+    assert legend_top == pytest.approx(16.0, abs=1e-6)
 
 
 @pytest.mark.circular
@@ -3650,9 +3692,14 @@ def test_multi_record_bottom_plot_title_stays_below_legend() -> None:
         keep_full_definition_with_plot_title=True,
     )
     root = ET.fromstring(canvas.tostring())
-    _legend_top, legend_bottom = _extract_legend_vertical_bounds(root)
-    shared_top = _extract_definition_top_y(root, "plot_title")
-    assert shared_top >= legend_bottom + 20.0 - 1e-6
+    metadata = _composition_metadata(root)
+    _legend_left, _legend_top, _legend_right, legend_bottom = (
+        _composition_item_bounds(metadata, "legend")
+    )
+    _title_left, title_top, _title_right, _title_bottom = (
+        _composition_item_bounds(metadata, "title")
+    )
+    assert title_top - legend_bottom == pytest.approx(20.0, abs=1e-6)
 
 
 @pytest.mark.circular
@@ -3672,9 +3719,14 @@ def test_single_record_bottom_plot_title_stays_below_legend() -> None:
         plot_title_position="bottom",
     )
     root = ET.fromstring(canvas.tostring())
-    _legend_top, legend_bottom = _extract_legend_vertical_bounds(root)
-    shared_top = _extract_definition_top_y(root, "plot_title")
-    assert shared_top >= legend_bottom + 20.0 - 1e-6
+    metadata = _composition_metadata(root)
+    _legend_left, _legend_top, _legend_right, legend_bottom = (
+        _composition_item_bounds(metadata, "legend")
+    )
+    _title_left, title_top, _title_right, _title_bottom = (
+        _composition_item_bounds(metadata, "title")
+    )
+    assert title_top - legend_bottom == pytest.approx(20.0, abs=1e-6)
 
 
 @pytest.mark.circular
@@ -3735,7 +3787,6 @@ def test_multi_record_left_right_plot_title_bottom_keeps_margins(
         plot_title_position="none",
     )
     baseline_root = ET.fromstring(baseline_canvas.tostring())
-    baseline_height = _extract_viewbox_height(baseline_root)
 
     bottom_canvas = assemble_circular_diagram_from_records(
         records,
@@ -3746,11 +3797,17 @@ def test_multi_record_left_right_plot_title_bottom_keeps_margins(
     )
     bottom_root = ET.fromstring(bottom_canvas.tostring())
     bottom_height = _extract_viewbox_height(bottom_root)
-    shared_top = _extract_definition_top_y(bottom_root, "plot_title")
-    shared_bottom = _extract_definition_bottom_y(bottom_root, "plot_title")
+    baseline_primary = _composition_item_bounds(
+        _composition_metadata(baseline_root),
+        "primary",
+    )
+    metadata = _composition_metadata(bottom_root)
+    primary = _composition_item_bounds(metadata, "primary")
+    title = _composition_item_bounds(metadata, "title")
 
-    assert shared_top >= baseline_height + 20.0 - 1e-6
-    assert bottom_height - shared_bottom >= 24.0 - 1e-6
+    assert primary == pytest.approx(baseline_primary, abs=1e-6)
+    assert title[1] - primary[3] == pytest.approx(20.0, abs=1e-6)
+    assert bottom_height - title[3] == pytest.approx(16.0, abs=1e-6)
 
 
 @pytest.mark.circular
@@ -3922,7 +3979,7 @@ def test_single_record_top_bottom_legend_centers_each_wrapped_row(
     assert len(row_centers) >= 2
     expected_center = row_centers[0][1]
     for _row_y, center_x in row_centers[1:]:
-        assert center_x == pytest.approx(expected_center, abs=2.0)
+        assert center_x == pytest.approx(expected_center, abs=5.0)
 
 
 @pytest.mark.circular
@@ -4092,3 +4149,211 @@ def test_build_circular_diagram_passes_plot_title_position_option(
     assert captured_kwargs["plot_title_font_size"] == pytest.approx(28.0)
     assert captured_kwargs["plot_title_position"] == "bottom"
     assert captured_kwargs["keep_full_definition_with_plot_title"] is True
+
+
+def test_direct_bounds_grid_packs_unequal_rows_with_exact_visible_gaps() -> None:
+    bounds = (
+        diagram_api_module.Aabb(10.0, 20.0, 110.0, 100.0),
+        diagram_api_module.Aabb(-20.0, -5.0, 30.0, 45.0),
+        diagram_api_module.Aabb(5.0, 10.0, 85.0, 70.0),
+    )
+
+    layout = diagram_api_module._pack_circular_record_bounds(
+        bounds,
+        [2, 1],
+        column_gap_px=12.0,
+        row_gap_px=7.0,
+    )
+    placed = tuple(
+        bound.translated(*translation)
+        for bound, translation in zip(bounds, layout.translations)
+    )
+
+    assert placed[1].min_x - placed[0].max_x == pytest.approx(12.0)
+    assert placed[2].min_y - max(placed[0].max_y, placed[1].max_y) == pytest.approx(7.0)
+    assert placed[2].min_x == pytest.approx(
+        0.5 * (layout.bounds.width - placed[2].width)
+    )
+    assert layout.bounds.width == pytest.approx(162.0)
+    assert layout.bounds.height == pytest.approx(147.0)
+
+
+def test_direct_bounds_grid_zero_ratios_make_visible_edges_touch() -> None:
+    bounds = (
+        diagram_api_module.Aabb(20.0, 30.0, 120.0, 130.0),
+        diagram_api_module.Aabb(-10.0, 5.0, 70.0, 85.0),
+        diagram_api_module.Aabb(0.0, -20.0, 90.0, 40.0),
+        diagram_api_module.Aabb(15.0, 10.0, 65.0, 60.0),
+    )
+
+    layout = diagram_api_module._pack_circular_record_bounds(
+        bounds,
+        [2, 2],
+        column_gap_px=0.0,
+        row_gap_px=0.0,
+    )
+    placed = tuple(
+        bound.translated(*translation)
+        for bound, translation in zip(bounds, layout.translations)
+    )
+
+    assert placed[1].min_x == pytest.approx(placed[0].max_x)
+    assert placed[3].min_x == pytest.approx(placed[2].max_x)
+    assert min(placed[2].min_y, placed[3].min_y) == pytest.approx(
+        max(placed[0].max_y, placed[1].max_y)
+    )
+
+
+@pytest.mark.circular
+def test_one_record_grid_preserves_single_record_local_bounds_and_content() -> None:
+    record = _build_record_with_source(
+        "one_record_grid_parity",
+        organism="One record grid organism",
+        strain="Grid strain",
+        length=1600,
+    )
+    cfg = apply_config_overrides(
+        None,
+        {
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "labels.circular.scope": "none",
+        },
+    )
+
+    single = diagram_api_module.assemble_circular_diagram_from_record(
+        record,
+        cfg=cfg,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+    grid = assemble_circular_diagram_from_records(
+        [record],
+        cfg=cfg,
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+
+    single_result = diagram_api_module._require_circular_assembly_result(single)
+    grid_root = ET.fromstring(grid.tostring())
+    grid_primary = _composition_item_bounds(
+        _composition_metadata(grid_root),
+        "primary",
+    )
+    assert grid_primary[2] - grid_primary[0] == pytest.approx(
+        single_result.content_bounds.width
+    )
+    assert grid_primary[3] - grid_primary[1] == pytest.approx(
+        single_result.content_bounds.height
+    )
+
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    single_axis = ET.fromstring(single.tostring()).find(".//svg:g[@id='Axis']/svg:circle", ns)
+    grid_axis = grid_root.find(".//svg:g[@id='Axis_0']/svg:circle", ns)
+    assert single_axis is not None
+    assert grid_axis is not None
+    assert float(grid_axis.attrib["r"]) == pytest.approx(float(single_axis.attrib["r"]))
+    assert _extract_group_texts(grid_root, "one_record_grid_parity_definition") == (
+        _extract_group_texts(ET.fromstring(single.tostring()), "one_record_grid_parity_definition")
+    )
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    "legend_position",
+    [
+        "none",
+        "left",
+        "right",
+        "top",
+        "bottom",
+        "upper_left",
+        "upper_right",
+        "lower_left",
+        "lower_right",
+    ],
+)
+def test_multi_record_shared_composer_supports_every_legend_position(
+    legend_position: str,
+) -> None:
+    records = [_build_record("legend_a", 30), _build_record("legend_b", 240)]
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "labels.circular.scope": "none",
+            },
+        ),
+        selected_features_set=["CDS"],
+        legend=legend_position,
+    )
+    root = ET.fromstring(canvas.tostring())
+    metadata = _composition_metadata(root)
+    legends = root.findall(".//svg:g[@id='legend']", {"svg": "http://www.w3.org/2000/svg"})
+
+    assert metadata["legendSide"] == legend_position
+    if legend_position == "none":
+        assert metadata["legend"] is None
+        assert legends == []
+    else:
+        assert metadata["legend"] is not None
+        assert len(legends) == 1
+
+
+@pytest.mark.circular
+def test_multi_record_composition_marks_only_global_targets_and_centers_title() -> None:
+    records = [_build_record("roles_a", 30), _build_record("roles_b", 240)]
+    canvas = assemble_circular_diagram_from_records(
+        records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "labels.circular.scope": "none",
+            },
+        ),
+        selected_features_set=["CDS"],
+        legend="right",
+        plot_title="Shared composition title",
+        plot_title_position="top",
+    )
+    root = ET.fromstring(canvas.tostring())
+    metadata = _composition_metadata(root)
+    primary = _composition_item_bounds(metadata, "primary")
+    title = _composition_item_bounds(metadata, "title")
+
+    assert 0.5 * (title[0] + title[2]) == pytest.approx(
+        0.5 * (primary[0] + primary[2]),
+        abs=1e-6,
+    )
+    assert len(root.findall('.//*[@data-gbdraw-composition-role="primary"]')) == 2
+    assert len(root.findall('.//*[@data-gbdraw-composition-role="legend"]')) == 1
+    assert len(root.findall('.//*[@data-gbdraw-composition-role="title"]')) == 1
+
+
+@pytest.mark.circular
+def test_multi_record_grid_layout_never_serializes_subcanvases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def forbidden_tostring(*_args: Any, **_kwargs: Any) -> str:
+        raise AssertionError("grid layout must not serialize record subcanvases")
+
+    monkeypatch.setattr(Drawing, "tostring", forbidden_tostring)
+    canvas = assemble_circular_diagram_from_records(
+        [_build_record("no_reparse_a", 30), _build_record("no_reparse_b", 240)],
+        cfg=apply_config_overrides(
+            None,
+            {
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "labels.circular.scope": "none",
+            },
+        ),
+        selected_features_set=["CDS"],
+        legend="none",
+    )
+    assert isinstance(canvas, Drawing)

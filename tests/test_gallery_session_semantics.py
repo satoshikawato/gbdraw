@@ -26,9 +26,20 @@ _SVG_NUMBER = r"-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 _PATH_POINT_RE = re.compile(
     rf"[ML]\s*({_SVG_NUMBER})\s*,?\s*({_SVG_NUMBER})"
 )
-_TRANSLATE_RE = re.compile(
-    rf"^translate\(\s*({_SVG_NUMBER})\s*[, ]\s*({_SVG_NUMBER})\s*\)$"
+_TRANSLATE_COMPONENT_RE = re.compile(
+    rf"translate\(\s*({_SVG_NUMBER})\s*[, ]\s*({_SVG_NUMBER})\s*\)"
 )
+
+
+def _translate_chain_y(transform: str) -> float:
+    matches = list(_TRANSLATE_COMPONENT_RE.finditer(transform))
+    assert matches, transform
+    cursor = 0
+    for match in matches:
+        assert not transform[cursor : match.start()].strip(), transform
+        cursor = match.end()
+    assert not transform[cursor:].strip(), transform
+    return sum(float(match.group(2)) for match in matches)
 
 
 def _example(example_id: str) -> GallerySessionExample:
@@ -150,9 +161,7 @@ def _group_translate_y(root: ET.Element, group_id: str) -> float:
     )
     assert group is not None, group_id
     transform = str(group.get("transform") or "")
-    match = _TRANSLATE_RE.fullmatch(transform)
-    assert match is not None, (group_id, transform)
-    return float(match.group(2))
+    return _translate_chain_y(transform)
 
 
 def _record_group_translate_y(
@@ -184,9 +193,7 @@ def _record_group_translate_y(
         )
     assert group is not None, (record_id, record_index)
     transform = str(group.get("transform") or "")
-    match = _TRANSLATE_RE.fullmatch(transform)
-    assert match is not None, (record_id, record_index, transform)
-    return float(match.group(2))
+    return _translate_chain_y(transform)
 
 
 def _circular_axis_and_feature_band(

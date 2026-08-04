@@ -1,4 +1,9 @@
-import { parseTransform } from './transform-utils.js';
+import { parseTransform, replaceLeadingTranslate } from './transform-utils.js';
+import {
+  bindCompositionMetadata,
+  COMPOSITION_SCHEMA_ATTRIBUTE,
+  compositionUserDeltas
+} from './composition-actions.js';
 import {
   closestRecordGroup,
   isMultiRecordCanvasSvg,
@@ -89,83 +94,15 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
   };
 
-  const getTopLevelDiagramGroupsForMultiRecord = (svg) => {
-    const groups = [];
-    const ids = [];
-
-    Array.from(svg.children).forEach((el) => {
-      if (!el || el.tagName.toLowerCase() !== 'g') return;
-      const id = el.getAttribute('id');
-      if (!id || isLegendOwnedGroup(el)) return;
-      groups.push(el);
-      ids.push(id);
-    });
-
-    return { groups, ids };
-  };
-
   const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';
   const isPlotTitleGroup = (group) => (group?.id || '') === 'plot_title';
 
-  const getDiagramGroupsForSingleRecordOrLinear = (svg) => {
-    const knownIds = ['tick', 'labels', 'Axis', 'gc_content', 'skew', 'gc_skew'];
-    const foundElements = [];
-    const foundIds = [];
-
-    knownIds.forEach((id) => {
-      const el = svg.getElementById(id);
-      if (el) {
-        foundElements.push(el);
-        foundIds.push(id);
-      }
-    });
-
-    const allGroups = svg.querySelectorAll('g[id]');
-    allGroups.forEach((group) => {
-      const id = group.id;
-      if (!id) return;
-
-      if (isLegendOwnedGroup(group)) return;
-      if (id === 'length_bar') return;
-      if (foundElements.includes(group)) return;
-
-      const isAccession = id.match(/^[A-Z]{2}_?\d+/) || id.match(/^[A-Z]+\d+\.\d+$/);
-      const isKnown = knownIds.includes(id);
-      const isDynamic =
-        isRecordGroup(group) ||
-        id.startsWith('definition_') ||
-        id.startsWith('seq_') ||
-        id.startsWith('track_') ||
-        id.startsWith('match_') ||
-        id.startsWith('comparison');
-
-      if (isAccession || isKnown || isDynamic) {
-        foundElements.push(group);
-        if (!foundIds.includes(id)) {
-          foundIds.push(id);
-        }
-      }
-    });
-
-    // Ensure top-level diagram groups (e.g., contig_1) are included even if IDs are lowercase.
-    Array.from(svg.children).forEach((el) => {
-      if (!el || el.tagName.toLowerCase() !== 'g') return;
-      const id = el.getAttribute('id');
-      if (!id || isLegendOwnedGroup(el)) return;
-      if (id === 'length_bar') return;
-      if (foundElements.includes(el)) return;
-      foundElements.push(el);
-      if (!foundIds.includes(id)) {
-        foundIds.push(id);
-      }
-    });
-
-    return { groups: foundElements, ids: foundIds };
-  };
-
   const setTranslate = (el, x, y) => {
     if (!el) return;
-    el.setAttribute('transform', `translate(${x}, ${y})`);
+    el.setAttribute(
+      'transform',
+      replaceLeadingTranslate(el.getAttribute('transform'), x, y)
+    );
   };
 
   const normalizeTransform = (transform) => {
@@ -175,12 +112,6 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
       x: Number.isFinite(x) ? x : 0,
       y: Number.isFinite(y) ? y : 0
     };
-  };
-
-  const transformsApproximatelyEqual = (a, b) => {
-    const left = normalizeTransform(a);
-    const right = normalizeTransform(b);
-    return Math.abs(left.x - right.x) < 0.001 && Math.abs(left.y - right.y) < 0.001;
   };
 
   const assignPlotTitleElement = (group) => {
@@ -266,82 +197,28 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     applyLengthBarTransform();
   };
 
-  const applyLengthBarBaseShift = (deltaX, deltaY) => {
-    if (!lengthBarElement.value) return;
-    const base = normalizeTransform(lengthBarOriginalTransform.value);
-    lengthBarOriginalTransform.value = {
-      x: base.x + deltaX,
-      y: base.y + deltaY
-    };
-    applyLengthBarTransform();
-  };
-
-  const setPlotTitleAutoTransform = (group, nextAutoTransform, { preserveUserOffset = true } = {}) => {
-    if (!group) {
+  const syncPlotTitleElement = (svg) => {
+    if (svg?.getAttribute?.(COMPOSITION_SCHEMA_ATTRIBUTE) !== '1') {
       clearPlotTitleState();
       return;
     }
-    assignPlotTitleElement(group);
-    plotTitleAutoTransform.value = normalizeTransform(nextAutoTransform);
-    if (!preserveUserOffset) {
-      plotTitleUserOffset.x = 0;
-      plotTitleUserOffset.y = 0;
-    }
-    applyPlotTitleTransform(group);
-  };
-
-  const resetPlotTitlePosition = () => {
-    plotTitleDragging.value = false;
-    plotTitleUserOffset.x = 0;
-    plotTitleUserOffset.y = 0;
-    if (plotTitleElement.value) {
-      plotTitleElement.value.style.opacity = '1';
-      applyPlotTitleTransform(plotTitleElement.value);
-    }
-  };
-
-  const syncPlotTitleElement = (svg, preserveOffset = false) => {
-    const nextPlotTitleGroup = svg?.getElementById('plot_title');
+    const binding = bindCompositionMetadata(svg);
+    const nextPlotTitleGroup = binding.title.targets[0] || null;
     if (!nextPlotTitleGroup) {
       clearPlotTitleState();
       return;
     }
 
-    const hadPlotTitleState = !!plotTitleElement.value;
-    const generatedTransform = parseTransform(nextPlotTitleGroup.getAttribute('transform'));
+    const generatedTransform = {
+      x: binding.metadata.title.automaticTranslation[0],
+      y: binding.metadata.title.automaticTranslation[1]
+    };
+    const titleDelta = compositionUserDeltas(svg).title || [0, 0];
     assignPlotTitleElement(nextPlotTitleGroup);
-    if (!preserveOffset) {
-      plotTitleAutoTransform.value = generatedTransform;
-      plotTitleUserOffset.x = 0;
-      plotTitleUserOffset.y = 0;
-    } else if (!hadPlotTitleState) {
-      plotTitleAutoTransform.value = generatedTransform;
-    } else {
-      const autoTransform = normalizeTransform(plotTitleAutoTransform.value);
-      const currentTransform = {
-        x: autoTransform.x + plotTitleUserOffset.x,
-        y: autoTransform.y + plotTitleUserOffset.y
-      };
-      if (!transformsApproximatelyEqual(generatedTransform, currentTransform)) {
-        plotTitleAutoTransform.value = generatedTransform;
-      }
-    }
+    plotTitleAutoTransform.value = generatedTransform;
+    plotTitleUserOffset.x = titleDelta[0];
+    plotTitleUserOffset.y = titleDelta[1];
     applyPlotTitleTransform(nextPlotTitleGroup);
-  };
-
-  const applyDiagramShift = (deltaX, deltaY) => {
-    if (diagramElements.value.length > 0) {
-      diagramElements.value.forEach((el) => {
-        const current = parseTransform(el.getAttribute('transform'));
-        const newX = current.x + deltaX;
-        const newY = current.y + deltaY;
-        setTranslate(el, newX, newY);
-        diagramElementOriginalTransforms.value.set(el, { x: newX, y: newY });
-      });
-    }
-    applyLengthBarBaseShift(deltaX, deltaY);
-    diagramOffset.x = 0;
-    diagramOffset.y = 0;
   };
 
   const refreshDiagramDragAffordances = () => {
@@ -474,13 +351,7 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     activeDragOriginalTransforms = new Map();
 
     activeDragElements.forEach((el) => {
-      if (activeDragMode === 'record') {
-        // Keep per-record drag independent from global offsets.
-        activeDragOriginalTransforms.set(el, parseTransform(el.getAttribute('transform')));
-      } else {
-        const original = diagramElementOriginalTransforms.value.get(el) || { x: 0, y: 0 };
-        activeDragOriginalTransforms.set(el, original);
-      }
+      activeDragOriginalTransforms.set(el, parseTransform(el.getAttribute('transform')));
       el.style.opacity = '0.8';
       el.style.willChange = 'transform';
     });
@@ -514,14 +385,10 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
       return;
     }
 
-    const includeGlobalOffset = activeDragMode === 'group';
-
     activeDragElements.forEach((el) => {
       const original = activeDragOriginalTransforms.get(el) || { x: 0, y: 0 };
-      const offsetX = includeGlobalOffset ? diagramOffset.x : 0;
-      const offsetY = includeGlobalOffset ? diagramOffset.y : 0;
-      const newX = original.x + offsetX + deltaX;
-      const newY = original.y + offsetY + deltaY;
+      const newX = original.x + deltaX;
+      const newY = original.y + deltaY;
       setTranslate(el, newX, newY);
     });
   };
@@ -548,8 +415,10 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     const deltaX = (currentX - dragStart.x) / zoom.value;
     const deltaY = (currentY - dragStart.y) / zoom.value;
     if (activeDragMode === 'group') {
-      diagramOffset.x += deltaX;
-      diagramOffset.y += deltaY;
+      const svg = svgContainer.value?.querySelector?.('svg') || null;
+      const deltas = svg ? compositionUserDeltas(svg).primary : [];
+      diagramOffset.x = deltas[0]?.[0] || 0;
+      diagramOffset.y = deltas[0]?.[1] || 0;
     } else if (activeDragMode === 'length_bar') {
       lengthBarUserOffset.x = activeLengthBarOffsetStart.x + deltaX;
       lengthBarUserOffset.y = activeLengthBarOffsetStart.y + deltaY;
@@ -576,38 +445,6 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     if (tx && history?.commit) await history.commit(tx);
   };
 
-  const resetDiagramPosition = () => {
-    diagramOffset.x = 0;
-    diagramOffset.y = 0;
-
-    debugLog('resetDiagramPosition called');
-    debugLog('diagramElements count:', diagramElements.value.length);
-    debugLog('originalTransforms size:', diagramElementOriginalTransforms.value.size);
-    debugLog('All originalTransforms entries:');
-    diagramElementOriginalTransforms.value.forEach((transform, mapEl) => {
-      debugLog(`Map entry: ${mapEl.id} -> (${transform.x}, ${transform.y})`);
-    });
-
-    diagramElements.value.forEach((el, idx) => {
-      const original = diagramElementOriginalTransforms.value.get(el);
-      const currentTransform = el.getAttribute('transform');
-      let foundInMap = false;
-      diagramElementOriginalTransforms.value.forEach((_, mapEl) => {
-        if (mapEl === el) foundInMap = true;
-      });
-      debugLog(
-        `Reset element ${idx} (${el.id}): current="${currentTransform}", foundInMap=${foundInMap}, original=`,
-        original
-      );
-      if (original && (original.x !== 0 || original.y !== 0)) {
-        setTranslate(el, original.x, original.y);
-      } else {
-        el.removeAttribute('transform');
-      }
-    });
-    resetLengthBarPosition();
-  };
-
   let setupDiagramDragCallCount = 0;
 
   const setupDiagramDrag = (preserveOffset = false) => {
@@ -615,6 +452,12 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
+    if (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== '1') {
+      diagramElements.value = [];
+      diagramElementIds.value = [];
+      return;
+    }
+    const binding = bindCompositionMetadata(svg);
     const isMultiRecordCanvas = isMultiRecordCanvasSvg(svg);
 
     if (!preserveOffset) {
@@ -622,67 +465,31 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
       diagramOffset.y = 0;
     }
 
-    const selectedGroups = isMultiRecordCanvas
-      ? getTopLevelDiagramGroupsForMultiRecord(svg)
-      : getDiagramGroupsForSingleRecordOrLinear(svg);
-    const foundElements = selectedGroups.groups.filter((el) => !isPlotTitleGroup(el));
-    const foundIds = selectedGroups.ids.filter((id) => id !== 'plot_title');
+    const foundElements = [...binding.primary.targets];
+    const foundIds = foundElements.map((element) => element.id || '').filter(Boolean);
 
     diagramElements.value = foundElements;
     diagramElementIds.value = foundIds;
     syncLengthBarElement(svg, preserveOffset);
-    syncPlotTitleElement(svg, preserveOffset);
+    syncPlotTitleElement(svg);
 
-    const previousOriginalTransformsById = new Map();
-    if (preserveOffset && isMultiRecordCanvas && diagramElementOriginalTransforms.value.size > 0) {
-      diagramElementOriginalTransforms.value.forEach((transform, mapEl) => {
-        const id = mapEl?.id || '';
-        if (!id) return;
-        if (!previousOriginalTransformsById.has(id)) {
-          previousOriginalTransformsById.set(id, []);
-        }
-        previousOriginalTransformsById.get(id).push(transform);
-      });
-    }
-
-    const remapCounters = new Map();
     const originalTransforms = new Map();
     debugLog(`setupDiagramDrag call #${setupDiagramDragCallCount}`);
     debugLog(
       `setupDiagramDrag: preserveOffset=${preserveOffset}, offset=(${diagramOffset.x}, ${diagramOffset.y}), generatedLegendPosition=${generatedLegendPosition.value}, isMultiRecordCanvas=${isMultiRecordCanvas}`
     );
     foundElements.forEach((el, idx) => {
-      if (preserveOffset && isMultiRecordCanvas) {
-        const id = el.id || '';
-        const preserved = previousOriginalTransformsById.get(id);
-        if (preserved && preserved.length > 0) {
-          const preservedIdx = remapCounters.get(id) || 0;
-          if (preservedIdx < preserved.length) {
-            const preservedTransform = preserved[preservedIdx];
-            remapCounters.set(id, preservedIdx + 1);
-            originalTransforms.set(el, preservedTransform);
-            debugLog(
-              `setupDiagramDrag element ${idx} (${id}): remapped preserved original=(${preservedTransform.x}, ${preservedTransform.y})`
-            );
-            return;
-          }
-        }
-      }
-
-      const transform = parseTransform(el.getAttribute('transform'));
-      debugLog(`setupDiagramDrag element ${idx} (${el.id}): DOM transform=(${transform.x}, ${transform.y})`);
-      if (!isMultiRecordCanvas && preserveOffset && (diagramOffset.x !== 0 || diagramOffset.y !== 0)) {
-        const adjusted = {
-          x: transform.x - diagramOffset.x,
-          y: transform.y - diagramOffset.y
-        };
-        debugLog(`setupDiagramDrag element ${idx}: adjusted to (${adjusted.x}, ${adjusted.y})`);
-        originalTransforms.set(el, adjusted);
-      } else {
-        originalTransforms.set(el, transform);
-      }
+      const transform = {
+        x: binding.metadata.primary.automaticTranslation[0],
+        y: binding.metadata.primary.automaticTranslation[1]
+      };
+      debugLog(`setupDiagramDrag element ${idx} (${el.id}): automatic=(${transform.x}, ${transform.y})`);
+      originalTransforms.set(el, transform);
     });
     diagramElementOriginalTransforms.value = originalTransforms;
+    const primaryDeltas = compositionUserDeltas(svg).primary;
+    diagramOffset.x = primaryDeltas[0]?.[0] || 0;
+    diagramOffset.y = primaryDeltas[0]?.[1] || 0;
     debugLog(`setupDiagramDrag finished: set ${originalTransforms.size} original transforms`);
     originalTransforms.forEach((transform, el) => {
       debugLog(`${el.id}: (${transform.x}, ${transform.y})`);
@@ -695,16 +502,10 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
   };
 
   return {
-    applyDiagramShift,
-    applyLengthBarBaseShift,
-    clearPlotTitleState,
     endDiagramDrag,
     onDiagramDrag,
     refreshDiagramDragAffordances,
-    resetDiagramPosition,
     resetLengthBarPosition,
-    resetPlotTitlePosition,
-    setPlotTitleAutoTransform,
     setupDiagramDrag,
     startDiagramDrag
   };

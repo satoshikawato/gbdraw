@@ -240,6 +240,30 @@ Phase 2 completes the internal state/planner consolidation:
 
 ## Behavior corrections
 
+### Outer diagram composition now follows visible content
+
+Circular and Linear figures now place docked legends and plot titles against
+the measured visible bounds of the completed primary diagram. The shared outer
+composer uses 24 px between primary content and a docked legend, 20 px between
+primary content and a docked title, 20 px between a legend and title on the
+same side, and 16 px around the final figure. These are internal defaults; this
+release adds no layout setting. Default canvases contain less unused space, and
+titles center on primary content rather than on the width after legend docking.
+
+Changing a docked legend or title position now changes only the outer group
+transforms and final viewBox. Circular radii and track bands, Linear record and
+track geometry, feature labels, and comparisons retain their record-local
+geometry. Corner legend positions remain overlays and keep collision-aware
+placement with 8 px of obstacle clearance.
+
+Circular multi-record layout now packs records from authoritative bounds
+reported by record assembly instead of serializing and reparsing intermediate
+SVG. Generated SVGs carry internal composition metadata schema 1. The Web
+editor uses that metadata for legend and title reflow, then applies any saved
+user drag offset. Supported older SVG results without the metadata pass through
+one explicit legacy adapter when loaded. Request schema 5 and session schema 40
+are unchanged.
+
 ### Web session restore now follows canonical authority
 
 For session versions 31–33, the Web app now reconstructs render settings and

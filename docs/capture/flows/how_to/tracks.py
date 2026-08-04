@@ -22,6 +22,7 @@ from flows.web_capture import (
     capture_screenshot,
     generate_and_inspect,
     open_browser_capture,
+    set_feature_search_visible,
     wait_for_worker,
 )
 
@@ -510,9 +511,17 @@ def _resize_sidebar(page: Page) -> None:
     page.mouse.up()
 
 
-def _fit_circular_preview(page: Page, target_zoom: str = "50%") -> None:
+def _fit_circular_preview(
+    page: Page,
+    target_zoom: str = "50%",
+    *,
+    pan_left_ratio: float = 0.38,
+) -> None:
     reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
     zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
+    if "100%" not in reset_zoom.inner_text():
+        reset_zoom.click()
+        expect(reset_zoom).to_contain_text("100%")
     for _ in range(12):
         if target_zoom in reset_zoom.inner_text():
             break
@@ -520,15 +529,22 @@ def _fit_circular_preview(page: Page, target_zoom: str = "50%") -> None:
     else:
         raise AssertionError(f"Could not reach Circular preview zoom {target_zoom}")
 
-    result_region = page.get_by_role("region", name="Result Preview", exact=True)
-    box = result_region.bounding_box()
-    if box is None:
-        raise AssertionError("Could not resolve the Circular result preview bounds")
-    y = box["y"] + (box["height"] * 0.52)
-    page.mouse.move(box["x"] + (box["width"] * 0.70), y)
-    page.mouse.down()
-    page.mouse.move(box["x"] + (box["width"] * 0.32), y, steps=10)
-    page.mouse.up()
+    if pan_left_ratio > 0.0:
+        result_region = page.get_by_role("region", name="Result Preview", exact=True)
+        box = result_region.bounding_box()
+        if box is None:
+            raise AssertionError("Could not resolve the Circular result preview bounds")
+        y = box["y"] + (box["height"] * 0.52)
+        start_ratio = 0.70
+        page.mouse.move(box["x"] + (box["width"] * start_ratio), y)
+        page.mouse.down()
+        page.mouse.move(
+            box["x"] + (box["width"] * (start_ratio - pan_left_ratio)),
+            y,
+            steps=10,
+        )
+        page.mouse.up()
+    page.evaluate("() => window.getSelection()?.removeAllRanges()")
 
 
 def _configure_title(page: Page, title: str) -> None:
@@ -731,6 +747,7 @@ def capture_gui_quantitative_tracks(
             _inspect_tracks_svg,
             _assert_quantitative_svg,
         )
+        set_feature_search_visible(page, visible=False)
         _fit_circular_preview(page)
         depth_section.scroll_into_view_if_needed()
         screenshot_bytes["track-result.png"] = capture_screenshot(
@@ -913,6 +930,7 @@ def capture_gui_annotation_tracks(
             _inspect_tracks_svg,
             _assert_annotation_svg,
         )
+        set_feature_search_visible(page, visible=False)
         _fit_circular_preview(page)
         annotation_slot.scroll_into_view_if_needed()
         screenshot_bytes["annotation-result.png"] = capture_screenshot(

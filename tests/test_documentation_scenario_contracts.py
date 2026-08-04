@@ -7,6 +7,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from docs.recipes._scenario_support import parse_translate_chain
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "docs/scenarios/manifest.json"
@@ -68,6 +70,16 @@ def _repo_path(relative_path: str) -> Path:
 
 def _svg_tree(path: Path) -> bytes:
     return ET.tostring(ET.parse(path).getroot())
+
+
+def test_recipe_transform_parser_accepts_composed_layout_translations() -> None:
+    assert parse_translate_chain("translate(16.0,-31.5)") == (16.0, -31.5)
+    assert parse_translate_chain(
+        "translate(16.0,-31.5) translate(75.0,61.0)"
+    ) == (91.0, 29.5)
+    assert parse_translate_chain("translate(4 5) translate(-1)") == (3.0, 5.0)
+    assert parse_translate_chain("") is None
+    assert parse_translate_chain("translate(1,2) scale(2)") is None
 
 
 def test_chapter_plan_gate_is_approved_with_a_bounded_fixture_budget() -> None:

@@ -1,5 +1,11 @@
 import { parseTransform } from './utils.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import {
+  bindCompositionMetadata,
+  COMPOSITION_SCHEMA_ATTRIBUTE,
+  compositionUserDeltas
+} from '../legend-layout/composition-actions.js';
+import { replaceLeadingTranslate } from '../legend-layout/transform-utils.js';
 
 export const createLegendDragActions = ({ state, extractLegendEntries, history = null }) => {
   const {
@@ -18,6 +24,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
   let legendDragFrameId = null;
   let pendingLegendPointer = null;
   let legendDragTxPromise = null;
+  let legendDragContext = null;
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
 
@@ -39,11 +46,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
 
   const applyLegendDragPosition = (clientX, clientY) => {
     if (!legendDragging.value) return;
-    if (!svgContainer.value) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-    const legendGroup = svg.getElementById('legend');
+    const legendGroup = legendDragContext?.binding.legend.targets[0] || null;
     if (!legendGroup) return;
 
     const deltaX = (clientX - legendDragStart.x) / zoom.value;
@@ -52,9 +55,12 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     const newX = legendOriginalTransform.value.x + deltaX;
     const newY = legendOriginalTransform.value.y + deltaY;
 
-    legendGroup.setAttribute('transform', `translate(${newX}, ${newY})`);
-    legendCurrentOffset.x = deltaX;
-    legendCurrentOffset.y = deltaY;
+    legendGroup.setAttribute(
+      'transform',
+      replaceLeadingTranslate(legendGroup.getAttribute('transform'), newX, newY)
+    );
+    legendCurrentOffset.x = newX - legendInitialTransform.value.x;
+    legendCurrentOffset.y = newY - legendInitialTransform.value.y;
   };
 
   const startLegendDrag = (e) => {
@@ -63,7 +69,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
-    const legendGroup = svg.getElementById('legend');
+    const binding = bindCompositionMetadata(svg);
+    const legendGroup = binding.legend.targets[0] || null;
     if (!legendGroup) return;
 
     e.preventDefault();
@@ -71,6 +78,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
 
     cancelLegendDragFrame();
     pendingLegendPointer = null;
+    legendDragContext = { binding, svg };
     legendDragTxPromise = history?.begin
       ? history.begin('Move legend', { source: 'legend-drag' })
       : null;
@@ -105,19 +113,18 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
       applyLegendDragPosition(finalPointer.x, finalPointer.y);
     }
 
-    if (svgContainer.value) {
-      const svg = svgContainer.value.querySelector('svg');
-      const legendGroup = svg?.getElementById('legend');
-      if (legendGroup) {
-        legendGroup.style.willChange = '';
-      }
+    const completedDragContext = legendDragContext;
+    const completedLegendGroup = completedDragContext?.binding.legend.targets[0] || null;
+    if (completedLegendGroup) {
+      completedLegendGroup.style.willChange = '';
     }
 
     pendingLegendPointer = null;
     legendDragging.value = false;
+    legendDragContext = null;
 
-    if (svgContainer.value) {
-      const svg = svgContainer.value.querySelector('svg');
+    if (completedDragContext?.svg) {
+      const svg = completedDragContext.svg;
       const idx = selectedResultIndex.value;
       if (svg && idx >= 0 && results.value.length > idx) {
         skipCaptureBaseConfig.value = true;
@@ -134,7 +141,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
-    const legendGroup = svg.getElementById('legend');
+    if (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== '1') return;
+    const legendGroup = bindCompositionMetadata(svg).legend.targets[0] || null;
     if (!legendGroup) return;
 
     setElementCursor(legendGroup, isLayoutRepositionModeEnabled() ? 'grab' : '');
@@ -144,11 +152,17 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
-    const legendGroup = svg.getElementById('legend');
+    const binding = bindCompositionMetadata(svg);
+    const legendGroup = binding.legend.targets[0] || null;
     if (!legendGroup) return;
 
-    const initial = legendInitialTransform.value;
-    legendGroup.setAttribute('transform', `translate(${initial.x}, ${initial.y})`);
+    const automatic = binding.metadata.legend?.automaticTranslation || [0, 0];
+    const initial = { x: automatic[0], y: automatic[1] };
+    legendInitialTransform.value = initial;
+    legendGroup.setAttribute(
+      'transform',
+      replaceLeadingTranslate(legendGroup.getAttribute('transform'), initial.x, initial.y)
+    );
     legendCurrentOffset.x = 0;
     legendCurrentOffset.y = 0;
 
@@ -168,11 +182,16 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
-    const legendGroup = svg.getElementById('legend');
+    if (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== '1') return;
+    const binding = bindCompositionMetadata(svg);
+    const legendGroup = binding.legend.targets[0] || null;
     if (!legendGroup) return;
 
-    const initialTransform = parseTransform(legendGroup.getAttribute('transform'));
-    legendInitialTransform.value = { ...initialTransform };
+    const automatic = binding.metadata.legend.automaticTranslation;
+    const offsets = compositionUserDeltas(svg).legend || [0, 0];
+    legendInitialTransform.value = { x: automatic[0], y: automatic[1] };
+    legendCurrentOffset.x = offsets[0];
+    legendCurrentOffset.y = offsets[1];
 
     legendGroup.onmousedown = startLegendDrag;
     refreshLegendDragAffordances();

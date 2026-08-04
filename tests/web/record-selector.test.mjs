@@ -290,4 +290,41 @@ assert.equal(ensureRuntimeCalls, 1);
 assert.equal(lazyReaderCalls, 1);
 assert.equal(lazyController.optionsFor(lazyState.linearSeqs[0])[1].value, 'Lazy');
 
+const rollbackState = {
+  mode: ref('linear'),
+  lInputType: ref('gb'),
+  pyodideReady: ref(true),
+  semanticFileWatchersSuppressed: ref(false),
+  sessionImportRollbackInProgress: ref(false),
+  linearSeqs: [{
+    uid: 'rollback-row',
+    gb: fileA,
+    fasta: null,
+    region_record_id: 'Preserved'
+  }]
+};
+let rejectStaleSelectorRead;
+const rollbackController = createLinearRecordSelector({
+  state: rollbackState,
+  reactive: (value) => value,
+  recordReader: () => new Promise((_resolve, reject) => {
+    rejectStaleSelectorRead = reject;
+  }),
+  logger: { warn: () => {} }
+});
+const staleSelectorRefresh = rollbackController.refresh();
+await Promise.resolve();
+const selectorStateBeforeRollback = structuredClone(
+  rollbackController.selectorStateByUid['rollback-row']
+);
+rollbackState.semanticFileWatchersSuppressed.value = true;
+await rollbackController.refresh({ suppress: true });
+rejectStaleSelectorRead(new Error('injected restored-file selector failure'));
+await staleSelectorRefresh;
+assert.deepEqual(
+  rollbackController.selectorStateByUid['rollback-row'],
+  selectorStateBeforeRollback
+);
+rollbackState.semanticFileWatchersSuppressed.value = false;
+
 console.log('record selector tests passed');

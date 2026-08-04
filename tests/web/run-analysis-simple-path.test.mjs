@@ -418,6 +418,40 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     workerMessages.filter(({ type }) => type === 'run').length,
     workerRunCountBeforeDiscoveryFailure
   );
+
+  state.form.multi_record_canvas = true;
+  state.files.c_gb = primary;
+  state.adv.multi_record_positions.splice(
+    0,
+    state.adv.multi_record_positions.length,
+    { selector: '#1', row: 2 }
+  );
+  state.circularRecordList.value = [{
+    selector: '#1',
+    record_id: 'preserved-record',
+    record_length: 123
+  }];
+  state.semanticFileWatchersSuppressed.value = false;
+  state.sessionImportRollbackInProgress.value = false;
+  let rejectStaleDiscovery;
+  ensurePyodideImpl = () => new Promise((_resolve, reject) => {
+    rejectStaleDiscovery = reject;
+  });
+  const staleDiscovery = runner.refreshCircularRecordOrder();
+  await Promise.resolve();
+  const discoveryStateBeforeRollback = {
+    records: structuredClone(state.circularRecordList.value),
+    positions: structuredClone(state.adv.multi_record_positions),
+    discovery: { ...state.circularRecordDiscovery }
+  };
+  state.semanticFileWatchersSuppressed.value = true;
+  await runner.refreshCircularRecordOrder({ suppress: true });
+  rejectStaleDiscovery(new Error('injected restored-file reparse failure'));
+  await staleDiscovery;
+  assert.deepEqual(state.circularRecordList.value, discoveryStateBeforeRollback.records);
+  assert.deepEqual(state.adv.multi_record_positions, discoveryStateBeforeRollback.positions);
+  assert.deepEqual(state.circularRecordDiscovery, discoveryStateBeforeRollback.discovery);
+  state.semanticFileWatchersSuppressed.value = false;
 });
 
 test('Linear mode none ignores dormant comparison state while active depth and annotations render', async () => {

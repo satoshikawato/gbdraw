@@ -239,11 +239,19 @@ def generate_and_inspect(
     return report
 
 
-def fit_complete_linear_preview(page: Page, target_zoom: str = "40%") -> None:
+def fit_complete_linear_preview(
+    page: Page,
+    target_zoom: str = "40%",
+    *,
+    pan_left: bool = False,
+) -> None:
     """Use the public preview controls to fit a whole Linear record in view."""
 
     reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
     zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
+    if "100%" not in reset_zoom.inner_text():
+        reset_zoom.click()
+        expect(reset_zoom).to_contain_text("100%")
     for _ in range(10):
         if target_zoom in reset_zoom.inner_text():
             break
@@ -253,19 +261,17 @@ def fit_complete_linear_preview(page: Page, target_zoom: str = "40%") -> None:
             f"Could not reach the documented Linear preview zoom: {target_zoom}"
         )
 
-    result_region = page.get_by_role("region", name="Result Preview", exact=True)
-    box = result_region.bounding_box()
-    if box is None:
-        raise AssertionError("Could not resolve the Result Preview bounds for panning")
-    y = box["y"] + (box["height"] * 0.82)
-    page.mouse.move(box["x"] + (box["width"] * 0.80), y)
-    page.mouse.down()
-    page.mouse.move(box["x"] + (box["width"] * 0.10), y, steps=12)
-    page.mouse.up()
-    page.mouse.click(
-        box["x"] + (box["width"] * 0.50),
-        box["y"] + (box["height"] * 0.90),
-    )
+    if pan_left:
+        result_region = page.get_by_role("region", name="Result Preview", exact=True)
+        box = result_region.bounding_box()
+        if box is None:
+            raise AssertionError("Could not resolve the Result Preview bounds for panning")
+        y = box["y"] + (box["height"] * 0.82)
+        page.mouse.move(box["x"] + (box["width"] * 0.80), y)
+        page.mouse.down()
+        page.mouse.move(box["x"] + (box["width"] * 0.10), y, steps=12)
+        page.mouse.up()
+    page.evaluate("() => window.getSelection()?.removeAllRanges()")
 
 
 def set_feature_search_visible(page: Page, *, visible: bool) -> None:

@@ -122,6 +122,18 @@ def test_showcase_comparisons_keep_worked_example_context() -> None:
         if panel.recipe
     ] == ["12", "18", "24"]
 
+    definition_recipe = figures["definition_font_size_comparison"].recipe
+    assert isinstance(definition_recipe, CompositeRecipe)
+    assert [
+        panel.recipe.extra_args[panel.recipe.extra_args.index("--plot_title") + 1]
+        for panel in definition_recipe.panels
+        if panel.recipe
+    ] == [
+        "--definition_font_size 20",
+        "--definition_font_size 28",
+        "--definition_font_size 36",
+    ]
+
     offset_recipe = figures["outer_label_offset_comparison"].recipe
     assert isinstance(offset_recipe, CompositeRecipe)
     assert len(offset_recipe.panels) == 9
@@ -286,9 +298,34 @@ def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> N
         assert support.exists()
         assert "wsv.*-like protein" in support.read_text()
 
+        label_override = reproducer.resolve_input(
+            "label_override.tsv",
+            "tutorial_3_label_override",
+            {},
+            dry_run=False,
+        )
+        assert label_override is not None
+        assert label_override.parent == tmp_path / "out" / "_support_assets"
+        assert "LC738868.1\tCDS\tlabel" in label_override.read_text()
+
         payload = reproducer.report_payload()
         assert payload["aliases_used"]
         assert payload["aliases_used"][0]["requested"] == "NC_000913.gbk"
+    finally:
+        reproducer.close()
+
+
+def test_label_override_showcase_uses_its_manifest_owned_table(tmp_path: Path) -> None:
+    reproducer = Reproducer(
+        project_root=PROJECT_ROOT,
+        output_root=tmp_path / "out",
+        figures=build_figure_specs(),
+    )
+    try:
+        assert reproducer.render_figure("tutorial_3_label_override") is True
+        svg = reproducer.output_path_for("tutorial_3_label_override").read_text()
+        assert ">gustavus-like protein<" in svg
+        assert ">protein gustavus-like protein<" not in svg
     finally:
         reproducer.close()
 

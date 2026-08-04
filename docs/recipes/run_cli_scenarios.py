@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import math
 import os
 import re
 import shlex
@@ -28,6 +29,7 @@ if __package__:
         extract_executable_block,
         inspect_standard_svg,
         load_chapter,
+        parse_translate_chain,
         publish_output,
         validate_standard_svg,
     )
@@ -40,6 +42,7 @@ else:
         extract_executable_block,
         inspect_standard_svg,
         load_chapter,
+        parse_translate_chain,
         publish_output,
         validate_standard_svg,
     )
@@ -71,9 +74,6 @@ IMPLEMENTED_SCENARIOS = (
     "H-CLI-13",
 )
 RUNNER_PATH = "docs/recipes/run_cli_scenarios.py"
-_TRANSLATE_RE = re.compile(
-    r"translate\((?P<x>-?[0-9.]+),(?P<y>-?[0-9.]+)\)"
-)
 _PATH_COORDINATE_RE = re.compile(r"[ML]\s+(-?[0-9.]+),(-?[0-9.]+)")
 _BGC_RECORD_IDS = (
     "BGC0000708",
@@ -530,10 +530,10 @@ def _assert_multi_record_circular_layout(
     expected_slots = ["ticks", "features", "gc_content", "gc_skew"]
     feature_counts: dict[str, int] = {}
     for group in record_groups:
-        match = _TRANSLATE_RE.fullmatch(group.attrib.get("transform", ""))
-        if match is None:
+        translation = parse_translate_chain(group.attrib.get("transform", ""))
+        if translation is None:
             raise RecipeContractError("H-CLI-03 record placement metadata is missing.")
-        positions.append((float(match.group("x")), float(match.group("y"))))
+        positions.append(translation)
         slots = [
             child.attrib["data-gbdraw-slot-id"]
             for child in group
@@ -562,16 +562,31 @@ def _assert_multi_record_circular_layout(
         record_groups,
         source_records=source_records,
     )
-    if not (
-        positions[0][1] == positions[1][1]
-        and positions[2][1] == positions[3][1]
-        and positions[0][1] < positions[2][1]
-        and abs(positions[0][0] - positions[2][0]) <= 10
-        and abs(positions[1][0] - positions[3][0]) <= 10
-        and positions[0][0] < positions[1][0]
-        and positions[2][0] < positions[3][0]
-    ):
+    if not _positions_form_documented_2x2_grid(positions):
         raise RecipeContractError("H-CLI-03 records do not form the documented 2x2 grid.")
+
+
+def _positions_form_documented_2x2_grid(
+    positions: list[tuple[float, float]],
+    *,
+    row_origin_tolerance: float = 25.0,
+    minimum_separation: float = 100.0,
+) -> bool:
+    if len(positions) != 4:
+        return False
+    top_row = positions[:2]
+    bottom_row = positions[2:]
+    rows = (top_row, bottom_row)
+    if any(abs(left[1] - right[1]) > row_origin_tolerance for left, right in rows):
+        return False
+    if min(position[1] for position in bottom_row) - max(
+        position[1] for position in top_row
+    ) < minimum_separation:
+        return False
+    return all(
+        right[0] - left[0] >= minimum_separation
+        for left, right in rows
+    )
 
 
 def _assert_multi_record_cds_gene_labels(
@@ -640,10 +655,10 @@ def _assert_linear_regions_orientation_layout(
     positions: list[tuple[float, float]] = []
     feature_counts: dict[str, int] = {}
     for group in record_groups:
-        match = _TRANSLATE_RE.fullmatch(group.attrib.get("transform", ""))
-        if match is None:
+        translation = parse_translate_chain(group.attrib.get("transform", ""))
+        if translation is None:
             raise RecipeContractError("H-CLI-04 record placement metadata is missing.")
-        positions.append((float(match.group("x")), float(match.group("y"))))
+        positions.append(translation)
         record_id = group.attrib["data-gbdraw-record-id"]
         feature_counts[record_id] = len(
             {
@@ -1172,9 +1187,9 @@ def _assert_similarity_groups(
     for element in root.iter():
         if not element.attrib.get("id", "").startswith("record_group_"):
             continue
-        match = _TRANSLATE_RE.fullmatch(element.attrib.get("transform", ""))
-        if match is not None:
-            record_x[element.attrib["data-gbdraw-record-id"]] = float(match.group("x"))
+        translation = parse_translate_chain(element.attrib.get("transform", ""))
+        if translation is not None:
+            record_x[element.attrib["data-gbdraw-record-id"]] = translation[0]
     feature_to_record: dict[str, str] = {}
     for element in og1_matches:
         feature_to_record[element.attrib["data-query-feature-svg-id"]] = (
@@ -1210,12 +1225,12 @@ def _assert_gallery_bgc_definitions(
         if element.attrib.get("data-gbdraw-role") == "record-definition"
     ]
     translations = [
-        _TRANSLATE_RE.fullmatch(group.attrib.get("transform", ""))
+        parse_translate_chain(group.attrib.get("transform", ""))
         for group in definition_groups
     ]
-    if len(definition_groups) != 5 or any(match is None for match in translations):
+    if len(definition_groups) != 5 or any(item is None for item in translations):
         raise RecipeContractError(f"{scenario_id} definition groups are incomplete.")
-    x_positions = [float(match.group("x")) for match in translations if match]
+    x_positions = [translation[0] for translation in translations if translation]
     if max(x_positions) - min(x_positions) > 1e-6:
         raise RecipeContractError(
             f"{scenario_id} definitions are not locked to one left column."
@@ -2061,8 +2076,27 @@ def _assert_export_set(workdir: Path) -> None:
     if png[:8] != b"\x89PNG\r\n\x1a\n" or len(png) < 100_000:
         raise RecipeContractError("H-CLI-13 PNG signature or size changed.")
     width, height = struct.unpack(">II", png[16:24])
-    if (width, height) != (1537, 1000) or not png.endswith(b"IEND\xaeB`\x82"):
-        raise RecipeContractError("H-CLI-13 PNG dimensions or trailer changed.")
+    try:
+        svg_width = float(static_root.attrib["width"].removesuffix("px"))
+        svg_height = float(static_root.attrib["height"].removesuffix("px"))
+        view_box = tuple(float(value) for value in static_root.attrib["viewBox"].split())
+    except (KeyError, ValueError) as exc:
+        raise RecipeContractError("H-CLI-13 SVG canvas geometry is invalid.") from exc
+    if (
+        len(view_box) != 4
+        or not math.isclose(view_box[2], svg_width)
+        or not math.isclose(view_box[3], svg_height)
+    ):
+        raise RecipeContractError("H-CLI-13 SVG size and viewBox differ.")
+    expected_png_dimensions = (int(svg_width), int(svg_height))
+    if (
+        (width, height) != expected_png_dimensions
+        or min(expected_png_dimensions) <= 0
+        or not png.endswith(b"IEND\xaeB`\x82")
+    ):
+        raise RecipeContractError(
+            "H-CLI-13 PNG dimensions do not match the SVG master or its trailer changed."
+        )
 
     pdf = (workdir / "cli_export.pdf").read_bytes()
     match = list(re.finditer(rb"startxref\s+(\d+)", pdf))

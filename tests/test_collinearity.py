@@ -87,7 +87,11 @@ def _linear_legend_measurement(
     )
     return (
         canvas_config,
-        configurator.measure_legend(legend_table, canvas_config),
+        configurator.measure_legend(
+            legend_table,
+            placement=canvas_config.legend_position,
+            wrap_width=canvas_config.total_width,
+        ),
         cfg,
     )
 
