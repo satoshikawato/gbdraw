@@ -128,8 +128,8 @@
       "capabilities": ["entry.hosted-gui", "input.genbank-embl-ddbj", "layout.circular-single", "track.gc-content", "track.dinucleotide-skew", "output.static-svg"],
       "canonical_for": ["entry.hosted-gui", "layout.circular-single"],
       "fixtures": ["human-mitochondrion"],
-      "settings": {"mode": "circular", "output_prefix": "human_mitochondrion", "species": "<i>Homo sapiens</i>", "track_preset": "middle", "separate_strands": true, "hide_gc_content": false, "hide_gc_skew": false, "label_mode": "out", "legend_position": "right"},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_first_circular.py", "tier": "core", "expected_outputs": ["human_mitochondrion.svg"], "assertions": ["first_result_step=2", "svg.accession=NC_012920.1", "svg.sequence_length=16569", "svg.safe_static_export=true"]},
+      "settings": {"mode": "circular", "output_prefix": "human_mitochondrion", "species": "<i>Homo sapiens</i>", "track_preset": "middle", "separate_strands": true, "hide_gc_content": false, "hide_gc_skew": false, "label_mode": "out", "cds_label_qualifier": "gene", "legend_position": "right"},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_first_circular.py", "tier": "core", "expected_outputs": ["human_mitochondrion.svg"], "assertions": ["first_result_step=2", "svg.accession=NC_012920.1", "svg.sequence_length=16569", "cds_labels_use_gene=true", "cds_product_labels_absent=true", "svg.safe_static_export=true"]},
       "screenshots": [
         {"path": "docs/images/t-gui-01/01-input-ready.png", "reason": "Confirm the selected tutorial file before generation.", "alt": "Circular GenBank input showing HmmtDNA.gbk selected"},
         {"path": "docs/images/t-gui-01/02-first-diagram.png", "reason": "Show the first successful diagram in Step 2.", "alt": "First circular human mitochondrial genome diagram"},
@@ -172,8 +172,8 @@
       "capabilities": ["comparison.browser-losatn", "output.comparison-data", "output.static-svg"],
       "canonical_for": ["comparison.browser-losatn"],
       "fixtures": ["lambda", "de3", "lambda-de3-comparison"],
-      "settings": {"mode": "linear", "program": "losatn", "task": "megablast", "scheduling": "serial", "threads": 1},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatn.py", "tier": "extended", "expected_outputs": ["lambda-de3.losatn.tsv", "lambda-de3-losatn.svg"], "assertions": ["first_result_step=2", "comparison.rows=6", "svg.links=6", "download.endpoints_match=true"]},
+      "settings": {"mode": "linear", "program": "losatn", "task": "megablast", "scheduling": "serial", "threads": 1, "pairwise_match_height": 120},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatn.py", "tier": "extended", "expected_outputs": ["lambda-de3.losatn.tsv", "lambda-de3-losatn.svg"], "assertions": ["first_result_step=2", "comparison.rows=6", "pairwise_match_height=120", "svg.links=6", "download.endpoints_match=true"]},
       "screenshots": [
         {"path": "docs/images/t-gui-03/01-input-ready.png", "reason": "Confirm both records and their order.", "alt": "Two complete GenBank records selected for a Linear diagram"},
         {"path": "docs/images/t-gui-03/02-first-diagram.png", "reason": "Show the plain two-record map before comparison.", "alt": "Two complete records in a plain linear diagram"},
@@ -194,8 +194,8 @@
       "capabilities": ["comparison.losatp-groups", "interactive.group-popup", "output.comparison-data", "output.fasta-data"],
       "canonical_for": ["comparison.losatp-groups"],
       "fixtures": ["aminoglycoside-bgc-five"],
-      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "similarity-groups", "scheduling": "serial", "threads": 1},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_groups.py", "tier": "extended", "expected_outputs": ["bgc_losatp_groups.tsv", "bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "whole_linear_record_count=5", "displayed_features=155", "feature_height=75", "feature_stroke_width=2", "labels=first_record_gene", "group_count=23", "svg.group_links=77", "adjacent_endpoints_only=true", "direct_0708_0713_edge=false", "raw_rows=232", "popup.has_group_members=true"]},
+      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "similarity-groups", "scheduling": "serial", "threads": 1, "separate_strands": false},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_groups.py", "tier": "extended", "expected_outputs": ["bgc_losatp_groups.tsv", "bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "whole_linear_record_count=5", "displayed_features=155", "feature_height=75", "feature_stroke_width=2", "labels=first_record_gene", "separate_strands=false", "group_count=23", "svg.group_links=77", "adjacent_endpoints_only=true", "direct_0708_0713_edge=false", "raw_rows=232", "popup.has_group_members=true"]},
       "screenshots": [
         {"path": "docs/images/t-gui-04/01-input-ready.png", "reason": "Confirm all five annotated BGC inputs and their order.", "alt": "Five annotated BGC records selected for protein comparison"},
         {"path": "docs/images/t-gui-04/02-first-diagram.png", "reason": "Show the plain five-record map before protein search.", "alt": "Plain five-record BGC linear diagram"},
@@ -422,7 +422,7 @@
       "canonical_for": ["input.multi-record", "layout.circular-multi"],
       "fixtures": ["human-mitochondrion", "metazoan-mitochondria-four"],
       "settings": {"mode": "circular", "grouping": "grid"},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/how_to/layouts.py", "tier": "extended", "expected_outputs": ["multi_record_circular.svg"], "assertions": ["record_count=4", "record_ids_match=true", "all_source_topologies=circular", "all_records_are_complete=true", "organism_labels_match=true", "feature_count=147", "labels_all_records=true", "cds_labels_use_gene=true", "cds_product_labels_absent=true", "grid_topology_match=true", "records_do_not_overlap=true"]},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/how_to/layouts.py", "tier": "extended", "expected_outputs": ["multi_record_circular.svg"], "assertions": ["record_count=4", "record_ids_match=true", "all_source_topologies=circular", "all_records_are_complete=true", "organism_labels_match=true", "feature_count=147", "labels_all_records=true", "cds_labels_use_gene=true", "cds_product_labels_absent=true", "grid_topology_match=true", "records_do_not_overlap=true", "preview_text_selection=none"]},
       "screenshots": [
         {"path": "docs/images/h-gui-02/grid-settings.png", "reason": "Record the grid placement choices.", "alt": "Circular multi-record grid settings"},
         {"path": "docs/images/h-gui-02/grid-result.png", "reason": "Verify the labeled, non-overlapping four-record canvas.", "alt": "Four complete mitochondrial genomes with gene labels arranged in a grid"}
@@ -497,7 +497,7 @@
       "capabilities": ["comparison.circular-rings", "output.fasta-data"],
       "canonical_for": ["comparison.circular-rings"],
       "fixtures": ["human-mitochondrion", "metazoan-mitochondria-four"],
-      "settings": {"mode": "circular", "comparison_source": "browser-losat", "program": "tlosatx", "reference_record": "NC_012920.1", "reference_side": "subject", "separate_strands": false, "labels": "out", "cds_label_qualifier": "gene"},
+      "settings": {"mode": "circular", "comparison_source": "browser-losat", "program": "tlosatx", "reference_record": "NC_012920.1", "reference_side": "subject", "track_preset": "middle", "separate_strands": false, "labels": "out", "cds_label_qualifier": "gene"},
       "execution": {"kind": "playwright", "path": "docs/capture/flows/how_to/comparisons.py", "tier": "extended", "expected_outputs": ["circular_similarity_rings.svg", "comparison_spans.fasta"], "assertions": ["ring_count=3", "all_source_topologies=circular", "all_records_are_complete=true", "record_ids_and_organisms_visible=true", "reference_side=subject", "separate_strands=false", "retained_hsps=106", "union_coverage_bp=9813", "cds_labels_use_gene=true", "cds_product_labels_absent=true", "span_fasta.records=2"]},
       "screenshots": [
         {"path": "docs/images/h-gui-06/ring-settings.png", "reason": "Show three complete mtDNA comparison sources, genetic codes, filters, and ring order.", "alt": "Circular TLOSATX settings for three complete mitochondrial comparison genomes"},
@@ -536,13 +536,13 @@
       "priority": "P1",
       "capabilities": ["comparison.losatp-collinear", "output.fasta-data"],
       "canonical_for": ["comparison.losatp-collinear", "output.fasta-data"],
-      "fixtures": ["aminoglycoside-bgc-five"],
-      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "collinear", "scheduling": "serial", "threads": 1},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/how_to/comparisons.py", "tier": "extended", "expected_outputs": ["bgc_collinear_blocks.svg", "collinear_members.fasta"], "assertions": ["whole_linear_record_count=5", "displayed_features=155", "feature_height=75", "feature_stroke_width=2", "labels=first_record_gene", "block_count=7", "anchor_counts=13,3,21,2,15,13,2", "orientation_match=true", "color_mode=orientation_identity", "member_fasta_records=5"]},
+      "fixtures": ["hepatoplasmataceae-five"],
+      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "collinear", "scheduling": "threaded", "threads": 32, "evidence_scope": "all", "track_preset": "middle", "separate_strands": true},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/how_to/comparisons.py", "tier": "extended", "expected_outputs": ["hepatoplasmataceae_collinear.svg", "collinear_members.fasta"], "assertions": ["whole_record_count=5", "displayed_features=2994", "all_source_topologies=circular", "all_records_are_complete=true", "evidence_scope=all", "cache_hits=25", "cache_misses=0", "worker_jobs=0", "adjacent_display_pairs=true", "orientation_match=true", "color_mode=orientation_identity", "span_fasta_records=2"]},
       "screenshots": [
-        {"path": "docs/images/h-gui-08/collinear-settings.png", "reason": "Record block scope and color mode.", "alt": "LOSATP Collinear block settings"},
-        {"path": "docs/images/h-gui-08/collinear-result.png", "reason": "Verify ordered blocks and orientations.", "alt": "Five BGC records connected by collinear protein-match blocks"},
-        {"path": "docs/images/h-gui-08/block-popup.png", "reason": "Show anchors and members for one block.", "alt": "Collinear block details popup"}
+        {"path": "docs/images/h-gui-08/collinear-settings.png", "reason": "Record all-record evidence scope and orientation color mode.", "alt": "LOSATP Collinear controls using all Hepatoplasmataceae record pairs"},
+        {"path": "docs/images/h-gui-08/collinear-result.png", "reason": "Verify ordered blocks across the five complete genomes.", "alt": "Five complete Hepatoplasmataceae genomes connected by collinear protein-match blocks"},
+        {"path": "docs/images/h-gui-08/block-popup.png", "reason": "Show anchors and envelope sequences for one block.", "alt": "Hepatoplasmataceae Collinear block details popup"}
       ],
       "sources": ["docs/TUTORIALS/4_Protein_Comparisons.md"],
       "destination": "docs/HOW_TO/GUI/draw-collinear-protein-blocks.md",

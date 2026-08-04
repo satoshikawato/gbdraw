@@ -201,6 +201,8 @@ def test_h_gui_03_to_06_flows_use_visible_controls_without_state_injection() -> 
         '"Pairwise Comparisons", exact=True',
         '"Separate Strands", exact=True',
         "expect(separate_strands).not_to_be_checked()",
+        'track_preset.select_option("middle")',
+        'expect(track_preset).to_have_value("middle")',
         'name=re.compile(r"Add Seq")',
         '"Priority File (TSV)", exact=True',
         'name="Pairwise match details", exact=True',
@@ -272,6 +274,8 @@ def test_nucleotide_pages_and_manifest_use_the_executable_scenarios() -> None:
             "NC_002333.2",
             "NC_024511.2",
             "NC_001328.1",
+            "Track Preset",
+            "Middle",
             "cds_gene_qualifier_priority.tsv",
             "circular_similarity_rings.svg",
             "comparison_spans.fasta",
@@ -295,6 +299,7 @@ def test_nucleotide_pages_and_manifest_use_the_executable_scenarios() -> None:
         "metazoan-mitochondria-four",
     }
     assert h6["settings"]["mode"] == "circular"
+    assert h6["settings"]["track_preset"] == "middle"
     assert h6["settings"]["separate_strands"] is False
     assert "lambda" not in h6["fixtures"]
     assert "de3" not in h6["fixtures"]

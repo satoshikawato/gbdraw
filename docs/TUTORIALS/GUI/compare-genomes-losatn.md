@@ -48,6 +48,7 @@ Return to **Input Genomes**, select **Run LOSAT**, and keep **LOSATN** selected.
 | Parallel runs | 1 run |
 | Threads per run | Fixed at 1 |
 | Task | `megablast` |
+| Pairwise Match Height | `120` |
 | Raw LOSAT filename | `lambda-de3.losatn.tsv` |
 | Output Prefix | `lambda-de3-losatn` |
 
@@ -57,7 +58,7 @@ Return to **Input Genomes**, select **Run LOSAT**, and keep **LOSATN** selected.
 
 ## Step 4: Run LOSATN and download the evidence
 
-Select **Generate Diagram** again. LOSATN runs in the browser, and the result should show six links. These links are high-identity nucleotide alignments; each link joins the query and subject intervals recorded in one TSV row.
+Select **Generate Diagram** again. LOSATN runs in the browser, and the result should show six links in the enlarged comparison corridor. These links are high-identity nucleotide alignments; each link joins the query and subject intervals recorded in one TSV row.
 
 ![Linear genome comparison with nucleotide similarity links](../../images/t-gui-03/04-comparison-result.png)
 

@@ -37,7 +37,7 @@ export the complete record. Do not trim it or split it into mock contigs.
 2. Upload `HmmtDNA.gbk` under **GenBank/DDBJ File**.
 3. Set **Species** to `<i>Homo sapiens</i>`.
 4. Set **Output Prefix** to `circular_similarity_rings`.
-5. Open **Layout** and turn off **Separate Strands**.
+5. Open **Layout**, set **Track Preset** to **Middle**, and turn off **Separate Strands**.
 
 Open **Labels**, choose **Out**, and upload
 [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)

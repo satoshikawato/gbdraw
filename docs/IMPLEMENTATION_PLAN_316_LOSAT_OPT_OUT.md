@@ -486,7 +486,7 @@ Update tutorial setup and captures:
 
 Do not recapture the Circular WSSV Pairwise panel solely because the Linear
 selector changed. Follow
-`docs/skills/web-gallery-screenshot-maintenance/SKILL.md` for capture
+`.agents/skills/web-gallery-screenshot-maintenance/SKILL.md` for capture
 maintenance and verify declared crop geometry and load checks.
 
 ### 8. Update user guidance without changing CLI contracts

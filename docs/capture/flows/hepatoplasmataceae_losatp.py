@@ -362,14 +362,16 @@ def capture_hepatoplasmataceae_collinear(
         _assert_all_vs_all_groups(inspect_gui_bgc_losatp_svg(result_region))
         _assert_loaded_all_vs_all(page, session_keys=session_cache_keys)
         set_feature_search_visible(page, visible=False)
-        screenshots[screenshot_names["input"]] = capture_screenshot(
-            page, output_paths[screenshot_names["input"]], "Linear"
-        )
+        if "input" in screenshot_names:
+            screenshots[screenshot_names["input"]] = capture_screenshot(
+                page, output_paths[screenshot_names["input"]], "Linear"
+            )
 
-        fit_complete_linear_preview(page, target_zoom="30%")
-        screenshots[screenshot_names["plain"]] = capture_screenshot(
-            page, output_paths[screenshot_names["plain"]], "Linear"
-        )
+        if "plain" in screenshot_names:
+            fit_complete_linear_preview(page, target_zoom="30%")
+            screenshots[screenshot_names["plain"]] = capture_screenshot(
+                page, output_paths[screenshot_names["plain"]], "Linear"
+            )
 
         _set_presentation(page, title=title)
         _configure_all_record_collinear(page, output_prefix=output_prefix)

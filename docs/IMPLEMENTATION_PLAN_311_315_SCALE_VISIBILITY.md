@@ -350,7 +350,7 @@ card and require visual review after the checkbox is added:
 - `gbdraw/web/gallery/tutorials/BGC0000708-BGC0000713.json`
 
 Regenerate only captures whose visible state or crop changes, following
-`docs/skills/web-gallery-screenshot-maintenance/SKILL.md`. Create or update the
+`.agents/skills/web-gallery-screenshot-maintenance/SKILL.md`. Create or update the
 task-specific operation register and active capture plan before recapture. If
 recapturing the three older tutorial definitions, bring their capture metadata
 up to the current deterministic contract (`dataDependent`, exact session,

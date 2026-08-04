@@ -59,6 +59,7 @@ execution and filtering:
 | Minimum identity | `30` |
 | Minimum length | `0` |
 | Pairwise Match Style | Curve |
+| Separate Strands | Off |
 | Output Prefix | `bgc_losatp_groups` |
 
 Match the Interactive SVG Gallery presentation with these display settings:

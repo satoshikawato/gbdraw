@@ -837,6 +837,9 @@ def capture_gui_circular_rings(
         separate_strands = page.get_by_label("Separate Strands", exact=True)
         separate_strands.uncheck()
         expect(separate_strands).not_to_be_checked()
+        track_preset = page.get_by_label("Track Preset", exact=True)
+        track_preset.select_option("middle")
+        expect(track_preset).to_have_value("middle")
 
         page.get_by_label("Pairwise Comparisons", exact=True).click()
         run_losat = page.get_by_role("radio", name="Run LOSAT", exact=True).last

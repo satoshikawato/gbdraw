@@ -158,7 +158,7 @@ captures. Data-dependent captures must load the example's own session, declare
 the expected app state, and prove that the controls or data identity named by
 the instruction are visible in the final crop.
 
-Read `docs/skills/web-gallery-screenshot-maintenance/SKILL.md` before editing
+Read `.agents/skills/web-gallery-screenshot-maintenance/SKILL.md` before editing
 Gallery tutorials or screenshots.
 
 ## Local build and verification

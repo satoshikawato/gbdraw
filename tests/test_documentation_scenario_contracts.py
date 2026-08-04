@@ -271,6 +271,7 @@ def test_first_gui_tutorial_keeps_the_fixed_accepted_path() -> None:
         "hide_gc_content": False,
         "hide_gc_skew": False,
         "label_mode": "out",
+        "cds_label_qualifier": "gene",
         "legend_position": "right",
     }
     assert chapter["execution"]["expected_outputs"] == ["human_mitochondrion.svg"]

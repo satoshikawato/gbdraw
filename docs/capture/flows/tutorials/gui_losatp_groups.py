@@ -43,4 +43,5 @@ def capture_gui_losatp_groups(
         },
         include_plain_result=True,
         download_member_fasta=False,
+        separate_strands=False,
     )

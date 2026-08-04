@@ -28,8 +28,12 @@ TUTORIAL_FLOW_PATH = (
 HOW_TO_FLOW_PATH = (
     REPO_ROOT / "docs" / "capture" / "flows" / "how_to" / "comparisons.py"
 )
-SEMANTICS_PATH = (
-    REPO_ROOT / "docs" / "capture" / "assertions" / "svg_semantics.py"
+HEPATOPLASMA_FLOW_PATH = (
+    REPO_ROOT
+    / "docs"
+    / "capture"
+    / "flows"
+    / "hepatoplasmataceae_losatp.py"
 )
 GALLERY_SVG_PATH = (
     WEB_ROOT / "gallery" / "examples" / "BGC0000708-BGC0000713.svg"
@@ -117,12 +121,12 @@ EXPECTED_FIRST_RECORD_LABELS = {
     "livY",
     "livZ",
 }
-EXPECTED_FASTA_IDS = {
-    "CAG38695.1",
-    "CAF33310.1",
-    "CAH58688.1",
-    "CAF32372.1",
-    "CAG34720.1",
+HEPATOPLASMATACEAE_RECORD_IDS = {
+    "AP027078.1",
+    "AP027131.1",
+    "AP027133.1",
+    "AP027132.1",
+    "NZ_CP006932.1",
 }
 PAGES = {
     "T-GUI-04": (
@@ -193,22 +197,6 @@ def _module_literal(path: Path, variable: str) -> object:
     raise AssertionError(f"Missing literal assignment {variable} in {path}")
 
 
-def _function_literal(path: Path, function: str, variable: str) -> object:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    function_node = next(
-        node
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == function
-    )
-    for node in ast.walk(function_node):
-        if not isinstance(node, ast.Assign):
-            continue
-        if any(isinstance(target, ast.Name) and target.id == variable for target in node.targets):
-            return ast.literal_eval(node.value)
-    raise AssertionError(f"Missing literal {function}.{variable} in {path}")
-
-
 def test_bgc_capture_uses_five_frozen_whole_native_linear_records() -> None:
     total_cds = 0
     for filename, size, digest, record_id, length, cds_count in FIXTURES:
@@ -238,10 +226,11 @@ def test_bgc_fixture_manifest_keeps_native_sources_and_scenario_ownership() -> N
     assert semantics["recordsAreWholeCanonicalSources"] is True
     assert semantics["tutorialScenarioId"] == "T-GUI-04"
     assert semantics["similarityGroupScenarioId"] == "H-GUI-07"
-    assert semantics["collinearScenarioId"] == "H-GUI-08"
-    assert {"T-GUI-04", "H-GUI-07", "H-GUI-08"} <= set(
+    assert semantics["collinearScenarioId"] == "H-CLI-08"
+    assert {"T-GUI-04", "H-GUI-07"} <= set(
         fixture["scenarioIds"]
     )
+    assert "H-GUI-08" not in fixture["scenarioIds"]
 
     files = manifest["files"]
     for filename, size, digest, record_id, length, cds_count in FIXTURES:
@@ -253,9 +242,10 @@ def test_bgc_fixture_manifest_keeps_native_sources_and_scenario_ownership() -> N
         assert entry["derivation"] is None
         assert entry["sizeBytes"] == size
         assert entry["sha256"] == digest
-        assert {"T-GUI-04", "H-GUI-07", "H-GUI-08"} <= set(
+        assert {"T-GUI-04", "H-GUI-07"} <= set(
             entry["scenarioIds"]
         )
+        assert "H-GUI-08" not in entry["scenarioIds"]
         assert len(entry["records"]) == 1
         record = entry["records"][0]
         assert record["id"] == record_id
@@ -265,7 +255,23 @@ def test_bgc_fixture_manifest_keeps_native_sources_and_scenario_ownership() -> N
         assert record["cdsCount"] == cds_count
 
 
-def test_bgc_flows_separate_similarity_groups_and_collinear_visible_ui() -> None:
+def test_hepatoplasmataceae_fixture_owns_both_collinear_gui_scenarios() -> None:
+    manifest = json.loads(FIXTURE_MANIFEST_PATH.read_text(encoding="utf-8"))
+    fixture = manifest["fixtures"]["hepatoplasmataceae-five"]
+    assert set(fixture["scenarioIds"]) == {"T-GUI-08", "H-GUI-08"}
+    assert set(fixture["expectedSemantics"]["recordIds"]) == (
+        HEPATOPLASMATACEAE_RECORD_IDS
+    )
+    assert fixture["expectedSemantics"]["recordsAreWholeCanonicalSources"] is True
+    assert fixture["expectedSemantics"]["collinearSearchScope"] == "all"
+
+    for file_id in (*fixture["fileIds"], *fixture["fileReferences"]):
+        assert {"T-GUI-08", "H-GUI-08"} <= set(
+            manifest["files"][file_id]["scenarioIds"]
+        )
+
+
+def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None:
     tutorial = TUTORIAL_FLOW_PATH.read_text(encoding="utf-8")
     how_to = HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
     common = COMMON_FLOW_PATH.read_text(encoding="utf-8")
@@ -274,10 +280,12 @@ def test_bgc_flows_separate_similarity_groups_and_collinear_visible_ui() -> None
     assert 'mode="collinear"' not in tutorial
     assert tutorial.count("include_plain_result=True") == 1
     assert tutorial.count("download_member_fasta=False") == 1
+    assert tutorial.count("separate_strands=False") == 1
     assert how_to.count('mode="orthogroup"') == 1
-    assert how_to.count('mode="collinear"') == 1
-    assert how_to.count("include_plain_result=False") == 2
-    assert how_to.count("download_member_fasta=True") == 1
+    assert 'mode="collinear"' not in how_to
+    assert how_to.count("include_plain_result=False") == 1
+    assert how_to.count("capture_hepatoplasmataceae_collinear(") == 1
+    assert 'output_prefix="hepatoplasmataceae_collinear"' in how_to
 
     for fragment in (
         'get_by_role("button", name="Linear", exact=True)',
@@ -414,51 +422,38 @@ def test_gallery_svg_is_the_frozen_similarity_group_reference() -> None:
     }
 
 
-def test_collinear_guards_pin_blocks_orientations_color_and_member_fasta() -> None:
-    source = SEMANTICS_PATH.read_text(encoding="utf-8")
-    common = COMMON_FLOW_PATH.read_text(encoding="utf-8")
-    assert _module_literal(SEMANTICS_PATH, "_BGC_ADJACENT_PAIRS") == (
-        EXPECTED_ADJACENT_PAIRS
-    )
-    assert _function_literal(
-        SEMANTICS_PATH,
-        "assert_gui_bgc_collinear_svg",
-        "expected",
-    ) == {
-        "block_0001": ("13", "plus"),
-        "block_0002": ("3", "minus"),
-        "block_0003": ("21", "plus"),
-        "block_0004": ("2", "plus"),
-        "block_0005": ("15", "plus"),
-        "block_0006": ("13", "plus"),
-        "block_0007": ("2", "plus"),
-    }
-    assert set(
-        _module_literal(COMMON_FLOW_PATH, "EXPECTED_MEMBER_PROTEIN_IDS")
-    ) == EXPECTED_FASTA_IDS
+def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> None:
+    source = HEPATOPLASMA_FLOW_PATH.read_text(encoding="utf-8")
+    wrapper = HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
     for fragment in (
-        "if len(matches) != 7",
-        '!= {"orientation_identity"}',
-        'else assert_gui_bgc_collinear_svg',
-        'else ("Block ID", "Anchors", "Orientation")',
-        '"Download all member amino-acid FASTA"',
-        'normalized_fasta = download_dir / "collinear_members.fasta"',
-        "expected = _expected_member_translations()",
-        "if downloaded[protein_id] != translation",
-        '"verifiedMembers": verified_members',
-        'hashlib.sha256(',
+        'page.get_by_label("Collinear evidence scope", exact=True).select_option("all")',
+        'page.get_by_label("Track Layout", exact=True).select_option("middle")',
+        '"Separate Strands"',
+        'page.get_by_label("Collinear color mode", exact=True).select_option',
+        '"orientation_identity"',
+        'telemetry.get("totalPairs") != 25',
+        'telemetry.get("cacheHits") != 25',
+        'telemetry.get("cacheMisses") != 0',
+        'telemetry.get("uniqueJobs") != 0',
+        'if endpoints != ADJACENT_PAIRS',
+        'download_dir, "collinear_members.fasta"',
+        'if len(records) != 2',
+        'sequence not in source_sequences[source_id]',
+        'capture_hepatoplasmataceae_collinear(',
+        'output_prefix="hepatoplasmataceae_collinear"',
     ):
-        assert fragment in source + common
+        assert fragment in source + wrapper
 
 
 def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> None:
-    required_assertions = {
+    group_assertions = {
         "T-GUI-04": {
             "whole_linear_record_count=5",
             "displayed_features=155",
             "feature_height=75",
             "feature_stroke_width=2",
             "labels=first_record_gene",
+            "separate_strands=false",
             "group_count=23",
             "svg.group_links=77",
             "adjacent_endpoints_only=true",
@@ -476,20 +471,9 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
             "adjacent_endpoints_only=true",
             "direct_0708_0713_edge=false",
         },
-        "H-GUI-08": {
-            "whole_linear_record_count=5",
-            "displayed_features=155",
-            "feature_height=75",
-            "feature_stroke_width=2",
-            "labels=first_record_gene",
-            "block_count=7",
-            "anchor_counts=13,3,21,2,15,13,2",
-            "orientation_match=true",
-            "color_mode=orientation_identity",
-            "member_fasta_records=5",
-        },
     }
-    for scenario_id, page_path in PAGES.items():
+    for scenario_id in ("T-GUI-04", "H-GUI-07"):
+        page_path = PAGES[scenario_id]
         chapter = _chapter(scenario_id)
         page = page_path.read_text(encoding="utf-8")
         assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
@@ -498,7 +482,8 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
         assert chapter["settings"]["program"] == "losatp"
         assert chapter["settings"]["scheduling"] == "serial"
         assert chapter["settings"]["threads"] == 1
-        assert required_assertions[scenario_id] <= set(
+        assert chapter["settings"]["separate_strands"] is False
+        assert group_assertions[scenario_id] <= set(
             chapter["execution"]["assertions"]
         )
         assert tuple(
@@ -527,23 +512,73 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
 
     tutorial = PAGES["T-GUI-04"].read_text(encoding="utf-8")
     groups = PAGES["H-GUI-07"].read_text(encoding="utf-8")
-    collinear = PAGES["H-GUI-08"].read_text(encoding="utf-8")
     assert "leave all optional Region fields blank" in tutorial
     assert "Reverse complement** only for `BGC0000713`" in tutorial
+    assert "| Separate Strands | Off |" in tutorial
     assert "23 stable\ngroups and 77 displayed group links" in tutorial
     assert "without\n   setting regions" in groups
     assert "Turn off **Separate Strands**" in groups
+    assert _chapter("T-GUI-04")["settings"]["separate_strands"] is False
     assert _chapter("H-GUI-07")["settings"]["separate_strands"] is False
+    assert "separate_strands=False" in TUTORIAL_FLOW_PATH.read_text(encoding="utf-8")
     assert "separate_strands=False" in HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
     assert "23\ngroups, and 77 links" in groups
-    assert "Do not crop a record" in collinear
-    assert "contains seven blocks" in collinear
-    assert "13`, `3`, `21`, `2`, `15`,\n`13`, and `2`" in collinear
-    for protein_id in EXPECTED_FASTA_IDS:
-        assert protein_id in collinear
+
+    collinear_path = PAGES["H-GUI-08"]
+    collinear = collinear_path.read_text(encoding="utf-8")
+    chapter = _chapter("H-GUI-08")
+    assert chapter["destination"] == str(collinear_path.relative_to(REPO_ROOT))
+    assert chapter["fixtures"] == ["hepatoplasmataceae-five"]
+    assert chapter["settings"] == {
+        "mode": "linear",
+        "program": "losatp",
+        "protein_mode": "collinear",
+        "scheduling": "threaded",
+        "threads": 32,
+        "evidence_scope": "all",
+        "track_preset": "middle",
+        "separate_strands": True,
+    }
+    assert {
+        "whole_record_count=5",
+        "displayed_features=2994",
+        "all_source_topologies=circular",
+        "all_records_are_complete=true",
+        "evidence_scope=all",
+        "cache_hits=25",
+        "cache_misses=0",
+        "worker_jobs=0",
+        "adjacent_display_pairs=true",
+        "orientation_match=true",
+        "color_mode=orientation_identity",
+        "span_fasta_records=2",
+    } <= set(chapter["execution"]["assertions"])
+    assert chapter["execution"]["expected_outputs"] == [
+        "hepatoplasmataceae_collinear.svg",
+        "collinear_members.fasta",
+    ]
+    assert tuple(
+        Path(screenshot["path"]).name for screenshot in chapter["screenshots"]
+    ) == SCREENSHOT_NAMES["H-GUI-08"]
+    for record_id in HEPATOPLASMATACEAE_RECORD_IDS:
+        assert record_id in collinear
+    for value in (
+        "Hepatoplasmataceae",
+        "All records",
+        "25 directional and self LOSATP results",
+        "Middle",
+        "Separate Strands",
+        "Ajisai",
+        "30%",
+        "hepatoplasmataceae_collinear.svg",
+        "two\nnon-empty nucleotide envelope sequences",
+    ):
+        assert value in collinear
+    for bgc_id in EXPECTED_RECORD_IDS:
+        assert bgc_id not in collinear
 
 
-def test_bgc_screenshots_are_full_pinned_viewports() -> None:
+def test_protein_comparison_screenshots_are_full_pinned_viewports() -> None:
     for scenario_id, names in SCREENSHOT_NAMES.items():
         root = REPO_ROOT / "docs" / "images" / scenario_id.lower()
         for name in names:

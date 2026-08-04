@@ -99,6 +99,8 @@ come from `gene`; CDS `product` descriptions are not used as label text.
   `cds_gene_qualifier_priority.tsv` under **Labels** and regenerate the diagram.
 - **The grid is crowded:** keep two records on each row and increase the row or
   column gap ratio.
+- **Blue highlighting appears behind label text:** click an empty preview area
+  after drag-panning. This is browser text selection, not an SVG label color.
 - **A source record is linear or partial:** use a Linear diagram. Circular mode
   must not be used to disguise a partial genomic region as a complete circle.
 

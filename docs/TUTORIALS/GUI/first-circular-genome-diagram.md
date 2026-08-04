@@ -10,6 +10,7 @@ Create a labeled Circular SVG from the bundled human mitochondrial GenBank recor
 
 - The gbdraw web app
 - The bundled `gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk` file
+- The bundled `gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv` label rule
 
 ## Step 1: Load the bundled mitochondrial genome
 
@@ -46,7 +47,7 @@ Select **Generate Diagram** again. The center label should show *Homo sapiens* i
 
 ## Step 4: Make the feature map easier to read
 
-Set the final layout values below. **Track Preset** and the three checkboxes are under **Layout**. **Label Mode** is under **Labels**, and **Legend Position** is under **Title & Legend**.
+Set the final layout values below. **Track Preset** and the three checkboxes are under **Layout**. **Label Mode** and **Priority File (TSV)** are under **Labels**, and **Legend Position** is under **Title & Legend**.
 
 | Control | Value |
 | --- | --- |
@@ -55,13 +56,14 @@ Set the final layout values below. **Track Preset** and the three checkboxes are
 | Hide GC Content | Off |
 | Hide GC Skew | Off |
 | Label Mode | Out |
+| Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |
 | Legend Position | Right |
 
 ![Circular layout controls set to Middle, Labels Out, and Legend Right](../../images/t-gui-01/04-layout-settings.png)
 
 *The visible Layout controls show Middle with separate strands enabled and both GC tracks retained. Keep Labels at Out and the legend at Right as listed above.*
 
-Select **Generate Diagram**. The completed map adds external feature labels and retains the right-side legend.
+Select **Generate Diagram**. The completed map adds external feature labels, uses the `gene` qualifier for every CDS label, and retains the right-side legend.
 
 ![Finished circular human mitochondrial genome diagram with external labels and a right legend](../../images/t-gui-01/04-finished-diagram.png)
 
@@ -77,7 +79,7 @@ In the **Result Preview** toolbar, select **SVG**.
 
 ## What you built
 
-You now have a static Circular SVG named `human_mitochondrion.svg`. It contains the `NC_012920.1` record, an italicized *Homo sapiens* label, 37 rendered features, external labels, coordinate ticks, GC content and skew tracks, and a right-side legend.
+You now have a static Circular SVG named `human_mitochondrion.svg`. It contains the `NC_012920.1` record, an italicized *Homo sapiens* label, 37 rendered features, all 13 CDS labels from `gene`, coordinate ticks, GC content and skew tracks, and a right-side legend.
 
 ## Next steps
 

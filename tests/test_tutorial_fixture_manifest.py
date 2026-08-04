@@ -195,7 +195,7 @@ def test_bgc_comparison_and_circular_multi_record_fixtures_are_distinct() -> Non
     assert bgc_semantics["galleryAlignedLosatpMode"] == "similarity-groups"
     assert bgc_semantics["tutorialScenarioId"] == "T-GUI-04"
     assert bgc_semantics["similarityGroupScenarioId"] == "H-GUI-07"
-    assert bgc_semantics["collinearScenarioId"] == "H-GUI-08"
+    assert bgc_semantics["collinearScenarioId"] == "H-CLI-08"
     assert bgc_semantics["losatpQualificationStatus"] == "qualified"
     assert bgc_semantics["rawAdjacentResultRows"] == 232
     assert bgc_semantics["similarityGroupCount"] == 23
@@ -250,7 +250,7 @@ def test_hepatoplasmataceae_fixture_supports_all_vs_all_collinear_tutorial() -> 
         if chapter["id"] == "T-GUI-08"
     )
 
-    assert fixture["scenarioIds"] == ["T-GUI-08"]
+    assert fixture["scenarioIds"] == ["T-GUI-08", "H-GUI-08"]
     assert semantics["recordIds"] == [
         "AP027078.1",
         "AP027131.1",

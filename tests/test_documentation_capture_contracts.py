@@ -11,6 +11,7 @@ from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CAPTURE_ROOT = REPO_ROOT / "docs" / "capture"
+WEB_INDEX_PATH = REPO_ROOT / "gbdraw" / "web" / "index.html"
 CONFIG_PATH = CAPTURE_ROOT / "config.py"
 WEB_CAPTURE_PATH = CAPTURE_ROOT / "flows" / "web_capture.py"
 CIRCULAR_FLOW_PATH = (
@@ -381,6 +382,7 @@ def test_first_circular_flow_uses_accessible_real_actions_without_state_shortcut
         'get_by_label("Hide GC Skew", exact=True)',
         'get_by_label("Legend Position", exact=True)',
         'get_by_label("Label Mode", exact=True)',
+        'get_by_label("Priority File (TSV)", exact=True).set_input_files',
         'get_by_role("button", name="SVG", exact=True)',
         "page.expect_download",
         "download.save_as",
@@ -542,6 +544,8 @@ def test_gui_circular_layout_flow_uses_complete_records_and_public_controls() ->
         'str(combined.seq) != str(source.seq)',
         "assert_gui_circular_layout_svg",
         "assert_gui_circular_layout_svg_download",
+        "window.getSelection()?.removeAllRanges()",
+        "selection_range_count != 0",
     ):
         assert required in source
 
@@ -587,6 +591,9 @@ def test_gui_circular_layout_flow_uses_complete_records_and_public_controls() ->
 
 def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
     source = GUI_LOSATN_FLOW_PATH.read_text(encoding="utf-8")
+    index_source = WEB_INDEX_PATH.read_text(encoding="utf-8")
+
+    assert 'aria-label="Pairwise Match Height"' in index_source
 
     for required in (
         'get_by_role("button", name="Linear", exact=True)',
@@ -602,6 +609,9 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
         'name="LOSAT threads per run", exact=True',
         'name="LOSATN task", exact=True',
         'name="Raw LOSAT filename", exact=True',
+        'get_by_label("Pairwise Match", exact=True)',
+        '"Pairwise Match Height", exact=True',
+        'pairwise_match_height.fill("120")',
         'select_option("serial")',
         'select_option("1")',
         'select_option("megablast")',
@@ -804,6 +814,11 @@ def test_t_gui_01_manifest_owns_the_complete_verified_journey() -> None:
         "docs/capture/flows/tutorials/gui_first_circular.py"
     )
     assert chapter["execution"]["expected_outputs"] == ["human_mitochondrion.svg"]
+    assert chapter["settings"]["cds_label_qualifier"] == "gene"
+    assert {
+        "cds_labels_use_gene=true",
+        "cds_product_labels_absent=true",
+    } <= set(chapter["execution"]["assertions"])
     assert chapter["destination"] == (
         "docs/TUTORIALS/GUI/first-circular-genome-diagram.md"
     )
@@ -879,6 +894,7 @@ def test_h_gui_02_manifest_owns_the_complete_verified_journey() -> None:
         "cds_product_labels_absent=true",
         "grid_topology_match=true",
         "records_do_not_overlap=true",
+        "preview_text_selection=none",
     ]
     assert chapter["destination"] == (
         "docs/HOW_TO/GUI/arrange-multiple-circular-records.md"
@@ -900,6 +916,7 @@ def test_t_gui_03_manifest_owns_the_complete_verified_journey() -> None:
         "task": "megablast",
         "scheduling": "serial",
         "threads": 1,
+        "pairwise_match_height": 120,
     }
     assert chapter["execution"]["path"] == (
         "docs/capture/flows/tutorials/gui_losatn.py"
@@ -912,6 +929,7 @@ def test_t_gui_03_manifest_owns_the_complete_verified_journey() -> None:
     assert chapter["execution"]["assertions"] == [
         "first_result_step=2",
         "comparison.rows=6",
+        "pairwise_match_height=120",
         "svg.links=6",
         "download.endpoints_match=true",
     ]
@@ -950,8 +968,10 @@ def test_circular_tutorial_follows_steps_and_defers_related_links() -> None:
         "| Hide GC Content | Off |",
         "| Hide GC Skew | Off |",
         "| Label Mode | Out |",
+        "| Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |",
         "| Legend Position | Right |",
         "`human_mitochondrion.svg`",
+        "all 13 CDS labels from `gene`",
     ):
         assert value in tutorial
 
@@ -1140,6 +1160,7 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
         "| Parallel runs | 1 run |",
         "| Threads per run | Fixed at 1 |",
         "| Task | `megablast` |",
+        "| Pairwise Match Height | `120` |",
         "`lambda-de3.losatn.tsv`",
         "`lambda-de3-losatn.svg`",
         "six qualified `megablast` rows",

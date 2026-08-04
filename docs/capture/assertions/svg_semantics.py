@@ -1074,7 +1074,7 @@ def assert_species_markup(report: dict[str, Any]) -> None:
 
 
 def assert_finished_circular_svg(report: dict[str, Any]) -> None:
-    """Verify the final labels and right-side legend in addition to base semantics."""
+    """Verify gene labels and the right-side legend in addition to base semantics."""
 
     assert_first_circular_svg(report)
     assert_species_markup(report)
@@ -1093,6 +1093,47 @@ def assert_finished_circular_svg(report: dict[str, Any]) -> None:
     texts = set(report.get("texts", []))
     if not {"tRNA", "rRNA", "CDS"}.issubset(texts):
         raise AssertionError("The final SVG is missing feature legend entries")
+    expected_cds_genes = {
+        "ATP6",
+        "ATP8",
+        "COX1",
+        "COX2",
+        "COX3",
+        "CYTB",
+        "ND1",
+        "ND2",
+        "ND3",
+        "ND4",
+        "ND4L",
+        "ND5",
+        "ND6",
+    }
+    missing_genes = expected_cds_genes - texts
+    if missing_genes:
+        raise AssertionError(
+            f"The final Circular SVG is missing CDS gene labels: {sorted(missing_genes)}"
+        )
+    forbidden_cds_products = {
+        "ATP synthase F0 subunit 6",
+        "ATP synthase F0 subunit 8",
+        "NADH dehydrogenase subunit 1",
+        "NADH dehydrogenase subunit 2",
+        "NADH dehydrogenase subunit 3",
+        "NADH dehydrogenase subunit 4",
+        "NADH dehydrogenase subunit 4L",
+        "NADH dehydrogenase subunit 5",
+        "NADH dehydrogenase subunit 6",
+        "cytochrome b",
+        "cytochrome c oxidase subunit I",
+        "cytochrome c oxidase subunit II",
+        "cytochrome c oxidase subunit III",
+    }
+    leaked_products = forbidden_cds_products & texts
+    if leaked_products:
+        raise AssertionError(
+            "The final Circular SVG uses CDS product text instead of gene labels: "
+            f"{sorted(leaked_products)}"
+        )
 
     record_translate = report.get("recordTranslate")
     legend_translate = report.get("legendTranslate")

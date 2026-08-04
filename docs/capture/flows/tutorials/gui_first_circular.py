@@ -24,6 +24,9 @@ from config import (
     FIRST_CIRCULAR_FIXTURE_PATH,
     FIRST_CIRCULAR_FIXTURE_SHA256,
     FIRST_CIRCULAR_FIXTURE_SIZE,
+    FIRST_LINEAR_LABEL_RULE_PATH,
+    FIRST_LINEAR_LABEL_RULE_SHA256,
+    FIRST_LINEAR_LABEL_RULE_SIZE,
 )
 from flows.web_capture import (
     assert_fixture_identity,
@@ -69,6 +72,11 @@ def capture_first_circular(
         FIRST_CIRCULAR_FIXTURE_PATH,
         expected_size=FIRST_CIRCULAR_FIXTURE_SIZE,
         expected_sha256=FIRST_CIRCULAR_FIXTURE_SHA256,
+    )
+    assert_fixture_identity(
+        FIRST_LINEAR_LABEL_RULE_PATH,
+        expected_size=FIRST_LINEAR_LABEL_RULE_SIZE,
+        expected_sha256=FIRST_LINEAR_LABEL_RULE_SHA256,
     )
     assert_output_paths(output_paths, FIRST_CIRCULAR_SCREENSHOT_NAMES, "T-GUI-01")
     download_dir.mkdir(parents=True, exist_ok=True)
@@ -143,6 +151,14 @@ def capture_first_circular(
         label_mode = page.get_by_label("Label Mode", exact=True)
         label_mode.select_option("out")
         expect(label_mode).to_have_value("out")
+        page.get_by_label("Priority File (TSV)", exact=True).set_input_files(
+            FIRST_LINEAR_LABEL_RULE_PATH
+        )
+        expect(
+            page.get_by_role(
+                "group", name="Priority File (TSV) selection", exact=True
+            )
+        ).to_contain_text("cds_gene_qualifier_priority.tsv")
 
         track_preset.scroll_into_view_if_needed()
         expect(track_preset).to_be_visible()

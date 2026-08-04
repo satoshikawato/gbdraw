@@ -185,6 +185,15 @@ def capture_gui_losatn(
         raw_filename.fill(EXPECTED_GUI_LOSATN_TSV)
         raw_filename.press("Tab")
         expect(raw_filename).to_have_value(EXPECTED_GUI_LOSATN_TSV)
+        pairwise_match = page.get_by_label("Pairwise Match", exact=True)
+        pairwise_match.click()
+        pairwise_match_height = page.get_by_label(
+            "Pairwise Match Height", exact=True
+        )
+        pairwise_match_height.fill("120")
+        pairwise_match_height.press("Tab")
+        expect(pairwise_match_height).to_have_value("120")
+        pairwise_match.click()
         task.scroll_into_view_if_needed()
         screenshot_bytes["03-losatn-settings.png"] = capture_screenshot(
             page, output_paths["03-losatn-settings.png"], "Linear"

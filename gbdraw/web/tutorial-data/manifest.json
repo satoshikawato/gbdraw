@@ -190,7 +190,6 @@
       "scenarioIds": [
         "T-GUI-04",
         "H-GUI-07",
-        "H-GUI-08",
         "H-GUI-11",
         "H-GUI-13",
         "H-CLI-07",
@@ -214,7 +213,7 @@
         "galleryAlignedLosatpMode": "similarity-groups",
         "tutorialScenarioId": "T-GUI-04",
         "similarityGroupScenarioId": "H-GUI-07",
-        "collinearScenarioId": "H-GUI-08",
+        "collinearScenarioId": "H-CLI-08",
         "losatpQualificationStatus": "qualified",
         "qualifiedOn": "2026-08-04",
         "rawAdjacentResultRows": 232,
@@ -348,7 +347,7 @@
         "hepatoplasmataceae-nz-cp006932-genbank"
       ],
       "fileReferences": ["ap027133-genbank"],
-      "scenarioIds": ["T-GUI-08"],
+      "scenarioIds": ["T-GUI-08", "H-GUI-08"],
       "expectedSemantics": {
         "recordCount": 5,
         "recordIds": ["AP027078.1", "AP027131.1", "AP027133.1", "AP027132.1", "NZ_CP006932.1"],
@@ -1040,7 +1039,7 @@
         "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the public tutorial fixture set."
       },
       "derivation": null,
-      "scenarioIds": ["T-CLI-05", "T-GUI-08", "H-GUI-09", "H-CLI-02", "H-CLI-09", "H-PY-03"]
+      "scenarioIds": ["T-CLI-05", "T-GUI-08", "H-GUI-08", "H-GUI-09", "H-CLI-02", "H-CLI-09", "H-PY-03"]
     },
     "ap027133-drr394922-depth-1kb": {
       "fixtureId": "depth-1kb",
@@ -1535,7 +1534,6 @@
       "scenarioIds": [
         "T-GUI-04",
         "H-GUI-07",
-        "H-GUI-08",
         "H-CLI-07",
         "H-CLI-08"
       ]
@@ -1583,7 +1581,6 @@
       "scenarioIds": [
         "T-GUI-04",
         "H-GUI-07",
-        "H-GUI-08",
         "H-CLI-07",
         "H-CLI-08"
       ]
@@ -1631,7 +1628,6 @@
       "scenarioIds": [
         "T-GUI-04",
         "H-GUI-07",
-        "H-GUI-08",
         "H-CLI-07",
         "H-CLI-08"
       ]
@@ -1679,7 +1675,6 @@
       "scenarioIds": [
         "T-GUI-04",
         "H-GUI-07",
-        "H-GUI-08",
         "H-CLI-07",
         "H-CLI-08"
       ]
@@ -1727,7 +1722,6 @@
       "scenarioIds": [
         "T-GUI-04",
         "H-GUI-07",
-        "H-GUI-08",
         "H-CLI-07",
         "H-CLI-08"
       ]
@@ -2016,7 +2010,7 @@
       "records": [{"id": "AP027078.1", "accession": "AP027078", "sequenceVersion": 1, "organism": "Candidatus Tyloplasma litorale", "description": "MAG: Candidatus Tyloplasma litorale Fukuoka2020 DNA, complete genome", "topology": "circular", "length": 615622, "sequenceSha256": "5f479286e8965f7d6c3b957e83b7abbf0cab5a0e073dc39a5f888fc193d7a7b9", "featureCount": 1127, "displayedFeatureCount": 530, "cdsCount": 530, "cdsStrandCounts": {"positive": 259, "negative": 271, "unknown": 0}}],
       "provenance": {"sourceName": "DDBJ/NCBI Nucleotide", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027078.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
       "derivation": null,
-      "scenarioIds": ["T-GUI-08"]
+      "scenarioIds": ["T-GUI-08", "H-GUI-08"]
     },
     "hepatoplasmataceae-ap027131-genbank": {
       "fixtureId": "hepatoplasmataceae-five",
@@ -2030,7 +2024,7 @@
       "records": [{"id": "AP027131.1", "accession": "AP027131", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma vulgare", "description": "MAG: Candidatus Hepatoplasma vulgare Av-JP DNA, complete genome", "topology": "circular", "length": 662108, "sequenceSha256": "96d069bd35c78c09d06cf16663f91ff6da91fcccc538420b2cdbccfbd58fef9e", "featureCount": 1252, "displayedFeatureCount": 595, "cdsCount": 595, "cdsStrandCounts": {"positive": 335, "negative": 260, "unknown": 0}}],
       "provenance": {"sourceName": "DDBJ/NCBI Nucleotide", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027131.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
       "derivation": null,
-      "scenarioIds": ["T-GUI-08"]
+      "scenarioIds": ["T-GUI-08", "H-GUI-08"]
     },
     "hepatoplasmataceae-ap027132-genbank": {
       "fixtureId": "hepatoplasmataceae-five",
@@ -2044,7 +2038,7 @@
       "records": [{"id": "AP027132.1", "accession": "AP027132", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma crinochetorum", "description": "MAG: Candidatus Hepatoplasma crinochetorum Tokyo2021 DNA, complete genome", "topology": "circular", "length": 643039, "sequenceSha256": "4eb16c23b766cc0ffa6e6dab0c0c96f5a22d0e074db61c735af4761fafad3c8b", "featureCount": 1210, "displayedFeatureCount": 573, "cdsCount": 573, "cdsStrandCounts": {"positive": 274, "negative": 299, "unknown": 0}}],
       "provenance": {"sourceName": "DDBJ/NCBI Nucleotide", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027132.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
       "derivation": null,
-      "scenarioIds": ["T-GUI-08"]
+      "scenarioIds": ["T-GUI-08", "H-GUI-08"]
     },
     "hepatoplasmataceae-nz-cp006932-genbank": {
       "fixtureId": "hepatoplasmataceae-five",
@@ -2058,7 +2052,7 @@
       "records": [{"id": "NZ_CP006932.1", "accession": "NZ_CP006932", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma crinochetorum Av", "description": "Candidatus Hepatoplasma crinochetorum Av chromosome, complete genome", "topology": "circular", "length": 657101, "sequenceSha256": "785e6afc80d9b3a316f20e7d60706cd610d6158be68934420598cbda203571b1", "featureCount": 1246, "displayedFeatureCount": 588, "cdsCount": 588, "cdsStrandCounts": {"positive": 281, "negative": 307, "unknown": 0}}],
       "provenance": {"sourceName": "NCBI Nucleotide (RefSeq)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NZ_CP006932.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
       "derivation": null,
-      "scenarioIds": ["T-GUI-08"]
+      "scenarioIds": ["T-GUI-08", "H-GUI-08"]
     },
     "shared-cds-gene-qualifier-priority": {
       "fixtureId": "shared-label-rules",

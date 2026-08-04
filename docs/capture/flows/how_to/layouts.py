@@ -161,6 +161,12 @@ def _fit_complete_grid_preview(page: Page, target_zoom: str = "30%") -> None:
         steps=12,
     )
     page.mouse.up()
+    page.evaluate("() => window.getSelection()?.removeAllRanges()")
+    selection_range_count = page.evaluate(
+        "() => window.getSelection()?.rangeCount ?? 0"
+    )
+    if selection_range_count != 0:
+        raise AssertionError("Circular preview retained a text selection after panning")
 
 
 def capture_gui_circular_layout(

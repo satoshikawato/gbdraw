@@ -12,6 +12,10 @@ from config import (
     GUI_LOSATP_GROUPS_HOW_TO_SCREENSHOT_NAMES,
 )
 from flows.bgc_losatp import BgcLosatpResult, capture_bgc_losatp
+from flows.hepatoplasmataceae_losatp import (
+    HepatoplasmataceaeCollinearResult,
+    capture_hepatoplasmataceae_collinear,
+)
 from flows.how_to.nucleotide_comparisons import (
     capture_gui_circular_rings,
     capture_gui_tlosatx,
@@ -67,28 +71,23 @@ def capture_gui_losatp_collinear(
     base_url: str,
     output_paths: Mapping[str, Path],
     download_dir: Path,
-) -> BgcLosatpResult:
-    """Run H-GUI-08 as a separate Collinear-block task."""
+) -> HepatoplasmataceaeCollinearResult:
+    """Run H-GUI-08 with all-record Hepatoplasmataceae evidence."""
 
     assert_output_paths(
         output_paths,
         GUI_LOSATP_COLLINEAR_SCREENSHOT_NAMES,
         "H-GUI-08",
     )
-    return capture_bgc_losatp(
+    return capture_hepatoplasmataceae_collinear(
         browser_type,
         base_url,
         output_paths,
         download_dir,
-        scenario_id="H-GUI-08",
-        mode="collinear",
-        output_prefix="bgc_collinear_blocks",
-        raw_tsv_name=None,
+        output_prefix="hepatoplasmataceae_collinear",
         screenshot_names={
             "settings": "collinear-settings.png",
             "result": "collinear-result.png",
             "popup": "block-popup.png",
         },
-        include_plain_result=False,
-        download_member_fasta=True,
     )

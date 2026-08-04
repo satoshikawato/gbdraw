@@ -3,80 +3,88 @@
 # How to draw collinear protein-match blocks with LOSATP
 
 Use **Collinear blocks** when conserved gene order is part of the comparison.
-This workflow uses the same five whole, Linear BGC records as the Similarity
-groups example, but produces ordered blocks instead of one ribbon per displayed
-group relation.
+This workflow reuses All-vs-all LOSATP evidence from five complete
+Hepatoplasmataceae genomes and reduces compatible protein groups to ordered
+blocks. The genomes remain complete records; the Linear view only arranges them
+as comparison rows.
+
+## Load the Hepatoplasmataceae project
+
+Load
+`gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz`.
+The project contains these records in display order:
+
+| Order | Record | Organism | Length |
+|---:|---|---|---:|
+| 1 | `AP027078.1` | *Candidatus Tyloplasma litorale* | 615,622 bp |
+| 2 | `AP027131.1` | *Candidatus Hepatoplasma vulgare* | 662,108 bp |
+| 3 | `AP027133.1` | *Candidatus Hepatoplasma scabrum* | 606,194 bp |
+| 4 | `AP027132.1` | *Candidatus Hepatoplasma crinochetorum* | 643,039 bp |
+| 5 | `NZ_CP006932.1` | *Candidatus Hepatoplasma crinochetorum* Av | 657,101 bp |
+
+All five source records are complete and naturally circular. The loaded project
+uses a Linear presentation so homologous intervals can be connected between
+rows. Its cache contains all 25 directional and self LOSATP results from the
+five-record All-vs-all search.
 
 ## Configure Collinear blocks
-
-Upload `BGC0000708`, `BGC0000709`, `BGC0000711`, `BGC0000712`, and
-`BGC0000713` in that order. Do not crop a record. Keep the first four source
-orientations and turn on **Reverse complement** only for `BGC0000713`, matching
-the Gallery layout.
 
 Select **Run LOSAT**, **LOSATP**, and **Collinear blocks**, then set:
 
 | Control | Value |
 |---|---|
-| Execution | Serial |
-| Total threads | `1` |
+| Execution | Threaded |
+| Total threads | `32` |
 | Parallel runs | `1 run` |
-| Max unit gap | `1` |
-| Min block genes | `2` |
-| Evidence scope | Adjacent pairs |
-| Diagonal drift | `1` |
-| Merge conflicts | `0` |
+| Threads per run | `32` |
+| Max unit gap | `0` |
+| Min block genes | `1` |
+| Evidence scope | All records |
+| Diagonal drift | `0` |
+| Merge conflicts | `1` |
 | Color mode | Orientation + identity |
 | Bitscore / E-value | `50` / `0.01` |
-| Minimum identity / length | `30` / `0` |
-| Output Prefix | `bgc_collinear_blocks` |
+| Minimum identity / length | `0` / `0` |
+| Pairwise Match Style | Curve |
+| Output Prefix | `hepatoplasmataceae_collinear` |
 
-Match the Interactive SVG Gallery presentation as well: choose the Orange
-palette and bundled BGC color tables; set **Show Labels** to **First record**,
-load the `CDS<TAB>gene` qualifier-priority table, and use label font size `18`,
-placement **Above feature**, and rotation `45`. Set **Feature Height** to `75`,
-**Block Stroke Width** and **Line Stroke Width** to `2`, turn on
-**Show Coordinate Scale (Linear)** with the **Ruler** style, and set
-**Axis Stroke Width** to `5`.
+Keep the project presentation at **Middle**, with **Separate Strands**, **Align
+to Center**, **Show GC Content**, and **Show GC Skew** on. Use the **Ajisai**
+palette, a coordinate **Ruler**, curved ribbons, a top title, and a right legend.
 
-![LOSATP Collinear block settings](../../images/h-gui-08/collinear-settings.png)
+![LOSATP Collinear controls using all Hepatoplasmataceae record pairs](../../images/h-gui-08/collinear-settings.png)
 
 ## Generate and inspect the blocks
 
-Select **Generate Diagram**. The qualified result contains seven blocks across
-adjacent record pairs. Their anchor counts are `13`, `3`, `21`, `2`, `15`,
-`13`, and `2`; orientations are plus, minus, plus, plus, plus, minus, and
-minus in source-record coordinates. Because `BGC0000713` is reverse-complemented
-for display, the last two blocks appear as plus-orientation blocks in the
-Gallery layout. Fit the complete preview at **40%** before capture or export. Only
-`BGC0000708` carries labels, and its CDS labels use `gene` values rather than
-`product` descriptions.
+Select **Generate Diagram**. All 25 cached directional and self results are
+reused, so this presentation change has no LOSATP cache miss and launches no new
+worker job. Block construction uses evidence from every record pair, while the
+finished ribbons connect adjacent display rows to keep the figure readable.
+Fit the complete preview at **30%**.
 
-![Five BGC records connected by collinear protein-match blocks](../../images/h-gui-08/collinear-result.png)
+![Five complete Hepatoplasmataceae genomes connected by collinear protein-match blocks](../../images/h-gui-08/collinear-result.png)
 
 Select a block to open its details. The popup reports its ID, orientation,
-identity color mode, span, score, and anchor count. It also lists the local
-collinear groups covered by the block.
+query and subject intervals, anchors, covered protein groups, and both envelope
+sequences.
 
-![Collinear block details popup](../../images/h-gui-08/block-popup.png)
+![Hepatoplasmataceae Collinear block details popup](../../images/h-gui-08/block-popup.png)
 
-Select the `og_1` row in the popup, then use **Download all member amino-acid
-FASTA**. The qualified `collinear_members.fasta` contains these five proteins:
-`CAG38695.1`, `CAF33310.1`, `CAH58688.1`, `CAF32372.1`, and `CAG34720.1`.
-The executable capture also checks every downloaded amino-acid sequence against
-the `translation` of the same `protein_id` in its raw GenBank record.
-Select **SVG** to save `bgc_collinear_blocks.svg`.
+Use **Both spans FASTA** to save `collinear_members.fasta`. It contains two
+non-empty nucleotide envelope sequences, and the executable capture verifies
+each against its complete source genome. Select **SVG** to save
+`hepatoplasmataceae_collinear.svg`.
 
 ## Troubleshooting
 
 - **Many short links appear:** confirm that **Collinear blocks**, not
   **Pairwise**, is selected.
-- **Orientations differ from this guide:** keep the first four source records
-  unchanged and reverse only `BGC0000713`.
-- **No member FASTA button appears:** select one local group row inside the
-  block popup first.
-- **A circular diagram appears:** switch back to **Linear**. These BGC entries
-  are linear region records.
+- **LOSATP starts running again:** load the documented session and confirm that
+  all 25 cached results are present before generating.
+- **Only adjacent evidence is used:** change **Evidence scope** to **All
+  records**.
+- **A Circular diagram appears:** switch back to **Linear** for the comparison
+  view. This does not change the complete circular source records.
 
 ## Related guides
 
