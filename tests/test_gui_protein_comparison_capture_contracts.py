@@ -270,10 +270,15 @@ def test_bgc_fixture_manifest_keeps_native_sources_and_scenario_ownership() -> N
         assert record["cdsCount"] == cds_count
 
 
-def test_hepatoplasmataceae_fixture_owns_both_collinear_gui_scenarios() -> None:
+def test_hepatoplasmataceae_fixture_owns_all_collinear_tutorial_variants() -> None:
     manifest = json.loads(FIXTURE_MANIFEST_PATH.read_text(encoding="utf-8"))
     fixture = manifest["fixtures"]["hepatoplasmataceae-five"]
-    assert set(fixture["scenarioIds"]) == {"T-GUI-08", "H-GUI-08"}
+    assert set(fixture["scenarioIds"]) == {
+        "T-GUI-08",
+        "T-CLI-10",
+        "T-PY-07",
+        "H-GUI-08",
+    }
     assert set(fixture["expectedSemantics"]["recordIds"]) == (
         HEPATOPLASMATACEAE_RECORD_IDS
     )

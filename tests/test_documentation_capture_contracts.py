@@ -216,6 +216,9 @@ def test_capture_environment_is_pinned_and_loopback_only() -> None:
         "T-GUI-06",
         "T-GUI-08",
         "T-GUI-09",
+        "T-GUI-10",
+        "T-GUI-11",
+        "T-GUI-12",
         "H-GUI-07",
         "H-GUI-08",
         "H-GUI-09",
@@ -249,6 +252,18 @@ def test_capture_environment_is_pinned_and_loopback_only() -> None:
         "ring-settings.png",
         "ring-result.png",
         "hsp-popup.png",
+    )
+    assert config["GUI_FEATURE_HIGHLIGHT_SCREENSHOT_NAMES"] == (
+        "presentation-settings.png",
+        "presentation-result.png",
+    )
+    assert config["GUI_TABLE_COMPARISON_SCREENSHOT_NAMES"] == (
+        "comparison-settings.png",
+        "comparison-result.png",
+    )
+    assert config["GUI_QUANTITATIVE_MAP_SCREENSHOT_NAMES"] == (
+        "track-settings.png",
+        "track-result.png",
     )
 
 
@@ -733,6 +748,36 @@ def test_runner_regenerates_and_checks_every_implemented_scenario() -> None:
     assert source.count("run_scenario as run_python_scenario") == 1
     assert "_run_recipes(cli_ids, run_cli_scenario, check=args.check)" in source
     assert "_run_recipes(python_ids, run_python_scenario, check=args.check)" in source
+
+
+def test_screenshot_comparison_allows_only_bounded_raster_noise(tmp_path: Path) -> None:
+    from docs.capture import run_all
+
+    expected_path = tmp_path / "expected.png"
+    tolerated_path = tmp_path / "tolerated.png"
+    excessive_count_path = tmp_path / "excessive-count.png"
+    excessive_delta_path = tmp_path / "excessive-delta.png"
+    expected = Image.new("RGB", (120, 1), (100, 100, 100))
+    expected.save(expected_path)
+
+    tolerated = expected.copy()
+    for x in range(run_all.MAX_RASTER_NOISE_PIXELS):
+        tolerated.putpixel((x, 0), (101, 100, 100))
+    tolerated.save(tolerated_path)
+    assert run_all._images_match(expected_path, tolerated_path)
+
+    excessive_count = tolerated.copy()
+    excessive_count.putpixel(
+        (run_all.MAX_RASTER_NOISE_PIXELS, 0),
+        (101, 100, 100),
+    )
+    excessive_count.save(excessive_count_path)
+    assert not run_all._images_match(expected_path, excessive_count_path)
+
+    excessive_delta = expected.copy()
+    excessive_delta.putpixel((0, 0), (102, 100, 100))
+    excessive_delta.save(excessive_delta_path)
+    assert not run_all._images_match(expected_path, excessive_delta_path)
 
 
 def test_runner_all_orchestrates_gui_cli_and_python_with_check(monkeypatch) -> None:

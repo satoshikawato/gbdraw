@@ -4,10 +4,7 @@
 
 | GUI | CLI | Python API |
 | --- | --- | --- |
-| **This page** | Not yet migrated | Not yet migrated |
-
-Future variants must restore the same five records and adjacent-pair Collinear
-evidence; they must not switch to Similarity groups or all-vs-all display.
+| **This page** | [Command-line workflow](../CLI/compare-proteins-losatp-collinear.md) | [Python workflow](../PYTHON/compare-proteins-losatp-collinear.md) |
 
 Start from the Interactive SVG Gallery's completed LOSATP **Collinear blocks**
 project for five complete Hepatoplasmataceae genomes. Every screenshot in this

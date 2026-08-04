@@ -6,10 +6,7 @@
 
 | GUI | CLI | Python API |
 | --- | --- | --- |
-| Not yet migrated | **This page** | Not yet migrated |
-
-Future variants must retain the same complete human mitochondrial feature set,
-functional presentation rules, and D-loop region bracket.
+| [Web-app workflow](../GUI/highlight-mitochondrial-features.md) | **This page** | [Python workflow](../PYTHON/highlight-mitochondrial-features.md) |
 
 This project starts with the complete 16,569 bp human mitochondrial reference
 and turns it into a focused presentation without changing its GenBank
@@ -112,7 +109,6 @@ gbdraw circular \
 gbdraw circular \
   --gbk HmmtDNA.gbk \
   -k CDS,rRNA,tRNA \
-  --palette colorblind \
   --table tables/presentation_colors.tsv \
   --qualifier_priority cds_gene_qualifier_priority.tsv \
   --label_whitelist tables/presentation_labels.tsv \

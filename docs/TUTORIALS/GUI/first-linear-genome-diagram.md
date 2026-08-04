@@ -4,10 +4,7 @@
 
 | GUI | CLI | Python API |
 | --- | --- | --- |
-| **This page** | [Command-line workflow](../CLI/first-linear-genome-diagram.md) | Not yet migrated |
-
-The implemented variants build the same complete Lambda map. A Python variant
-must reproduce that figure rather than introduce a different example.
+| **This page** | [Command-line workflow](../CLI/first-linear-genome-diagram.md) | [Python workflow](../PYTHON/first-linear-genome-diagram.md) |
 
 Create a labeled Linear SVG from the complete bundled Lambda phage GenBank record. You will generate a working map in Step 2, then add concise gene labels and a coordinate ruler before exporting it.
 

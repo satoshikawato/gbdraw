@@ -59,6 +59,9 @@ GUI_ANNOTATED_CHLOROPLAST_SCENARIO_ID = "T-GUI-05"
 GUI_PRECOMPUTED_CIRCULAR_RINGS_SCENARIO_ID = "T-GUI-06"
 GUI_LOSATP_TUTORIAL_COLLINEAR_SCENARIO_ID = "T-GUI-08"
 GUI_INTERACTIVE_HANDOFF_SCENARIO_ID = "T-GUI-09"
+GUI_FEATURE_HIGHLIGHT_SCENARIO_ID = "T-GUI-10"
+GUI_TABLE_COMPARISON_SCENARIO_ID = "T-GUI-11"
+GUI_QUANTITATIVE_MAP_SCENARIO_ID = "T-GUI-12"
 GUI_LOSATP_GROUPS_HOW_TO_SCENARIO_ID = "H-GUI-07"
 GUI_LOSATP_COLLINEAR_SCENARIO_ID = "H-GUI-08"
 GUI_QUANTITATIVE_TRACKS_SCENARIO_ID = "H-GUI-09"
@@ -83,6 +86,9 @@ IMPLEMENTED_SCENARIO_IDS = (
     GUI_PRECOMPUTED_CIRCULAR_RINGS_SCENARIO_ID,
     GUI_LOSATP_TUTORIAL_COLLINEAR_SCENARIO_ID,
     GUI_INTERACTIVE_HANDOFF_SCENARIO_ID,
+    GUI_FEATURE_HIGHLIGHT_SCENARIO_ID,
+    GUI_TABLE_COMPARISON_SCENARIO_ID,
+    GUI_QUANTITATIVE_MAP_SCENARIO_ID,
     GUI_LOSATP_GROUPS_HOW_TO_SCENARIO_ID,
     GUI_LOSATP_COLLINEAR_SCENARIO_ID,
     GUI_QUANTITATIVE_TRACKS_SCENARIO_ID,
@@ -177,6 +183,18 @@ GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES = (
     "05-session-download.png",
     "06-reloaded-result.png",
 )
+GUI_FEATURE_HIGHLIGHT_SCREENSHOT_NAMES = (
+    "presentation-settings.png",
+    "presentation-result.png",
+)
+GUI_TABLE_COMPARISON_SCREENSHOT_NAMES = (
+    "comparison-settings.png",
+    "comparison-result.png",
+)
+GUI_QUANTITATIVE_MAP_SCREENSHOT_NAMES = (
+    "track-settings.png",
+    "track-result.png",
+)
 GUI_LOSATP_GROUPS_HOW_TO_SCREENSHOT_NAMES = (
     "group-settings.png",
     "group-result.png",
@@ -242,6 +260,9 @@ SCREENSHOT_NAMES_BY_SCENARIO = {
         GUI_LOSATP_TUTORIAL_COLLINEAR_SCREENSHOT_NAMES
     ),
     GUI_INTERACTIVE_HANDOFF_SCENARIO_ID: GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES,
+    GUI_FEATURE_HIGHLIGHT_SCENARIO_ID: GUI_FEATURE_HIGHLIGHT_SCREENSHOT_NAMES,
+    GUI_TABLE_COMPARISON_SCENARIO_ID: GUI_TABLE_COMPARISON_SCREENSHOT_NAMES,
+    GUI_QUANTITATIVE_MAP_SCENARIO_ID: GUI_QUANTITATIVE_MAP_SCREENSHOT_NAMES,
     GUI_LOSATP_GROUPS_HOW_TO_SCENARIO_ID: (
         GUI_LOSATP_GROUPS_HOW_TO_SCREENSHOT_NAMES
     ),
@@ -595,6 +616,24 @@ def gui_interactive_handoff_screenshot_paths() -> dict[str, Path]:
     """Resolve all T-GUI-09 images from the approved manifest."""
 
     return screenshot_paths_for(GUI_INTERACTIVE_HANDOFF_SCENARIO_ID)
+
+
+def gui_feature_highlight_screenshot_paths() -> dict[str, Path]:
+    """Resolve all T-GUI-10 images from the approved manifest."""
+
+    return screenshot_paths_for(GUI_FEATURE_HIGHLIGHT_SCENARIO_ID)
+
+
+def gui_table_comparison_screenshot_paths() -> dict[str, Path]:
+    """Resolve all T-GUI-11 images from the approved manifest."""
+
+    return screenshot_paths_for(GUI_TABLE_COMPARISON_SCENARIO_ID)
+
+
+def gui_quantitative_map_screenshot_paths() -> dict[str, Path]:
+    """Resolve all T-GUI-12 images from the approved manifest."""
+
+    return screenshot_paths_for(GUI_QUANTITATIVE_MAP_SCENARIO_ID)
 
 
 def gui_losatp_groups_how_to_screenshot_paths() -> dict[str, Path]:

@@ -6,10 +6,7 @@
 
 | GUI | CLI | Python API |
 | --- | --- | --- |
-| [Web-app workflow](../GUI/first-linear-genome-diagram.md) | **This page** | Not yet migrated |
-
-The implemented variants build the same complete Lambda map. A Python variant
-must reproduce that figure rather than introduce a different example.
+| [Web-app workflow](../GUI/first-linear-genome-diagram.md) | **This page** | [Python workflow](../PYTHON/first-linear-genome-diagram.md) |
 
 You will draw the complete 48,502 bp Lambda reference genome with concise gene
 labels and a ruler on the record axis. The result is one standard SVG containing
@@ -47,9 +44,10 @@ gbdraw linear \
   --gbk NC_001416.gb \
   --qualifier_priority cds_gene_qualifier_priority.tsv \
   --show_labels all \
+  --separate_strands \
   --scale_style ruler \
-  --track_layout above \
-  --ruler_on_axis \
+  --track_layout middle \
+  --legend left \
   -o lambda_linear \
   -f svg
 ```
@@ -61,7 +59,7 @@ the current directory.
 ## Step 3: Inspect the SVG
 
 Open `lambda_linear.svg`. The definition at the left identifies `NC_001416.1`
-and `48,502 bp`. The axis is marked every 5 kbp, and short labels such as `A`,
+and `48,502 bp`. The centered ruler is marked every 5 kbp, and short labels such as `A`,
 `B`, `J`, and `int` remain legible near their CDS features.
 
 ![Linear Lambda genome with concise gene labels and a ruler](../../images/t-cli-02/lambda_linear.svg)
@@ -72,15 +70,15 @@ active or external content in this standard SVG.
 
 ## If the command fails
 
-- `--ruler_on_axis is ignored`: keep `--scale_style ruler` and
-  `--track_layout above` in the same command.
+- The ruler is missing: keep `--scale_style ruler` and `--track_layout middle`
+  in the same command.
 - `Output file already exists`: use a new empty directory or a new output
   prefix. gbdraw refuses to replace the existing SVG by default.
 
 ## What you built
 
 You created a whole-record Lambda map with compact biological labels and an
-axis ruler. Run `python docs/recipes/run_cli_scenarios.py --scenario T-CLI-02`
+centered ruler. Run `python docs/recipes/run_cli_scenarios.py --scenario T-CLI-02`
 from a repository checkout to regenerate the published figure and repeat its
 semantic checks. Use the [CLI reference](../../REFERENCE/command-line.md) for
 other Linear layout options. See [Choose circular or linear](../../EXPLANATION/choose-circular-or-linear.md)

@@ -4,10 +4,7 @@
 
 | GUI | CLI | Python API |
 | --- | --- | --- |
-| **This page** | Not yet migrated | Not yet migrated |
-
-Future variants must reproduce this complete Lambda–DE3 comparison and its six
-LOSATN links; they must not substitute another record pair.
+| **This page** | [Command-line workflow](../CLI/compare-genomes-losatn.md) | [Python workflow](../PYTHON/compare-genomes-losatn.md) |
 
 Compare the complete Lambda and DE3 phage genomes with browser LOSATN. You will first draw both records without a comparison, then run a serial, one-thread `megablast` search and export its evidence with the finished SVG.
 

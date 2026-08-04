@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import io
 import json
 import os
@@ -68,6 +69,15 @@ else:
 IMPLEMENTED_SCENARIOS = (
     "T-PY-01",
     "T-PY-02",
+    "T-PY-03",
+    "T-PY-04",
+    "T-PY-05",
+    "T-PY-06",
+    "T-PY-07",
+    "T-PY-08",
+    "T-PY-09",
+    "T-PY-10",
+    "T-PY-11",
     "H-PY-01",
     "H-PY-02",
     "H-PY-03",
@@ -165,6 +175,30 @@ def _validate_scenario(
             stdout=stdout,
             output_path=generated_paths[0],
         )
+    elif scenario_id in {"T-PY-03", "T-PY-04", "T-PY-05", "T-PY-06", "T-PY-07"}:
+        _validate_migrated_tutorial(
+            chapter,
+            namespace=namespace,
+            stdout=stdout,
+            output_path=generated_paths[0],
+            used_entries=used_entries,
+        )
+    elif scenario_id == "T-PY-08":
+        _validate_interactive_handoff_tutorial(
+            chapter,
+            namespace=namespace,
+            stdout=stdout,
+            outputs=outputs,
+            used_entries=used_entries,
+        )
+    elif scenario_id in {"T-PY-09", "T-PY-10", "T-PY-11"}:
+        _validate_cli_origin_tutorial(
+            chapter,
+            namespace=namespace,
+            stdout=stdout,
+            output_path=generated_paths[0],
+            used_entries=used_entries,
+        )
     elif scenario_id == "H-PY-01":
         _validate_circular_and_multi_record_howto(
             chapter,
@@ -203,6 +237,246 @@ def _validate_scenario(
         )
     else:  # pragma: no cover - IMPLEMENTED_SCENARIOS owns this dispatch.
         raise RecipeContractError(f"No Python validator for {scenario_id}.")
+
+
+def _validate_migrated_tutorial(
+    chapter: dict[str, object],
+    *,
+    namespace: dict[str, object],
+    stdout: str,
+    output_path: Path,
+    used_entries: list[dict[str, object]],
+) -> None:
+    scenario_id = str(chapter["id"])
+    expected_type = RequestRenderResult if scenario_id == "T-PY-05" else Diagram
+    if not isinstance(namespace.get("diagram"), expected_type):
+        raise RecipeContractError(
+            f"{scenario_id} must retain its public render result in `diagram`."
+        )
+    if namespace.get("saved_path") != Path(output_path.name):
+        raise RecipeContractError(f"{scenario_id} did not retain its saved path.")
+    if f"Saved {output_path.name}" not in stdout:
+        raise RecipeContractError(f"{scenario_id} did not report its saved diagram.")
+    if scenario_id != "T-PY-07":
+        validate_standard_svg(
+            chapter,
+            output_path=output_path,
+            used_entries=used_entries,
+        )
+    evidence = inspect_standard_svg(chapter, output_path=output_path)
+    expected_records = {
+        "T-PY-03": frozenset({"NC_001416.1"}),
+        "T-PY-04": frozenset({"NC_001416.1", "NC_042057.1"}),
+        "T-PY-05": frozenset({
+            "BGC0000708",
+            "BGC0000709",
+            "BGC0000711",
+            "BGC0000712",
+            "BGC0000713",
+        }),
+        "T-PY-06": frozenset({"NC_012920.1"}),
+        "T-PY-07": frozenset({
+            "AP027078.1",
+            "AP027131.1",
+            "AP027133.1",
+            "AP027132.1",
+            "NZ_CP006932.1",
+        }),
+    }[scenario_id]
+    if evidence.record_ids != expected_records:
+        raise RecipeContractError(f"{scenario_id} rendered the wrong record set.")
+    if scenario_id == "T-PY-04":
+        _assert_losatn_matches(chapter, output_path=output_path)
+    elif scenario_id == "T-PY-05":
+        root = ElementTree.parse(output_path).getroot()
+        matches = [
+            element
+            for element in root.iter()
+            if element.attrib.get("data-match-kind") == "orthogroup"
+        ]
+        if len(matches) != 77 or not any(
+            element.attrib.get("data-orthogroup-id") == "og_1"
+            for element in matches
+        ):
+            raise RecipeContractError(
+                "T-PY-05 changed the Similarity-group link set."
+            )
+    elif scenario_id == "T-PY-06":
+        root = ElementTree.parse(output_path).getroot()
+        matches = [
+            element
+            for element in root.iter()
+            if element.attrib.get("data-match-kind") == "homology"
+        ]
+        if len(matches) != 106 or {
+            element.attrib.get("data-track-label") for element in matches
+        } != {
+            "Danio rerio (NC_002333.2)",
+            "Drosophila melanogaster (NC_024511.2)",
+            "Caenorhabditis elegans (NC_001328.1)",
+        }:
+            raise RecipeContractError("T-PY-06 changed its three comparison rings.")
+    elif scenario_id == "T-PY-07":
+        if len(evidence.feature_ids) != 2_994:
+            raise RecipeContractError(
+                "T-PY-07 changed its complete-record feature set."
+            )
+        root = ElementTree.parse(output_path).getroot()
+        matches = [
+            element
+            for element in root.iter()
+            if element.attrib.get("data-match-kind") == "collinear"
+        ]
+        if len(matches) != 500:
+            raise RecipeContractError("T-PY-07 changed its Collinear match set.")
+
+
+def _validate_interactive_handoff_tutorial(
+    chapter: dict[str, object],
+    *,
+    namespace: dict[str, object],
+    stdout: str,
+    outputs: dict[str, Path],
+    used_entries: list[dict[str, object]],
+) -> None:
+    request = namespace.get("request")
+    result = namespace.get("result")
+    restored_request = namespace.get("restored_request")
+    restored_result = namespace.get("restored_result")
+    if not isinstance(request, CircularDiagramRequest):
+        raise RecipeContractError("T-PY-08 did not build a Circular request.")
+    if not isinstance(result, RequestRenderResult):
+        raise RecipeContractError("T-PY-08 did not return a render result.")
+    if not isinstance(restored_request, CircularDiagramRequest):
+        raise RecipeContractError("T-PY-08 did not decode its session request.")
+    if not isinstance(restored_result, RequestRenderResult):
+        raise RecipeContractError("T-PY-08 replay returned the wrong result type.")
+    if not isinstance(namespace.get("session_document"), SessionDocument):
+        raise RecipeContractError("T-PY-08 did not retain its session document.")
+    if not isinstance(namespace.get("loaded_document"), SessionDocument):
+        raise RecipeContractError("T-PY-08 did not reload its saved session.")
+
+    initial_path = outputs["interactive_human_mitochondrion.svg"]
+    restored_path = outputs["restored_interactive_figure.svg"]
+    validate_standard_svg(
+        chapter,
+        output_path=initial_path,
+        used_entries=used_entries,
+    )
+    validate_standard_svg(
+        chapter,
+        output_path=restored_path,
+        used_entries=used_entries,
+    )
+    if initial_path.read_bytes() != restored_path.read_bytes():
+        raise RecipeContractError("T-PY-08 session replay changed the static SVG.")
+
+    interactive_path = outputs["interactive_human_mitochondrion.interactive.svg"]
+    interactive_root = ElementTree.parse(interactive_path).getroot()
+    interactive_source = interactive_path.read_text(encoding="utf-8")
+    feature_ids = {
+        element.attrib["data-gbdraw-feature-id"]
+        for element in interactive_root.iter()
+        if "data-gbdraw-feature-id" in element.attrib
+    }
+    metadata = [
+        element
+        for element in interactive_root.iter()
+        if element.attrib.get("id") == "gbdraw-interactive-feature-metadata"
+    ]
+    if (
+        interactive_root.attrib.get("data-gbdraw-interactive-svg") != "true"
+        or len(feature_ids) != 37
+        or len(metadata) != 1
+        or metadata[0].attrib.get("data-schema") != "3"
+        or "COX1" not in interactive_source
+        or "gbdraw-feature-search-controls" not in interactive_source
+    ):
+        raise RecipeContractError("T-PY-08 interactive metadata changed.")
+
+    with gzip.open(
+        outputs["interactive_handoff.gbdraw-session.json.gz"],
+        "rt",
+        encoding="utf-8",
+    ) as handle:
+        session = json.load(handle)
+    if (
+        session.get("format") != "gbdraw-session"
+        or session.get("version") != CURRENT_SESSION_VERSION
+        or session.get("createdAt") != "2026-08-04T00:00:00+00:00"
+        or session.get("renderRequest", {}).get("schema")
+        != CANONICAL_REQUEST_SCHEMA
+        or session.get("renderRequest", {}).get("mode") != "circular"
+    ):
+        raise RecipeContractError("T-PY-08 wrote a non-current session payload.")
+    if (
+        "Exported the interactive figure and session" not in stdout
+        or "Restored restored_interactive_figure.svg" not in stdout
+    ):
+        raise RecipeContractError("T-PY-08 did not report its handoff outputs.")
+
+
+def _validate_cli_origin_tutorial(
+    chapter: dict[str, object],
+    *,
+    namespace: dict[str, object],
+    stdout: str,
+    output_path: Path,
+    used_entries: list[dict[str, object]],
+) -> None:
+    scenario_id = str(chapter["id"])
+    expected_type = RequestRenderResult if scenario_id == "T-PY-10" else Diagram
+    if not isinstance(namespace.get("diagram"), expected_type):
+        raise RecipeContractError(
+            f"{scenario_id} retained the wrong public render result."
+        )
+    if namespace.get("saved_path") != Path(output_path.name):
+        raise RecipeContractError(f"{scenario_id} did not retain its saved path.")
+    if f"Saved {output_path.name}" not in stdout:
+        raise RecipeContractError(f"{scenario_id} did not report its saved diagram.")
+    validate_standard_svg(
+        chapter,
+        output_path=output_path,
+        used_entries=used_entries,
+    )
+
+    cli_reference = {
+        "T-PY-09": PUBLISHED_IMAGE_ROOT
+        / "t-cli-03"
+        / "mitochondrial_features_highlighted.svg",
+        "T-PY-10": PUBLISHED_IMAGE_ROOT
+        / "t-cli-04"
+        / "table_driven_comparison.svg",
+        "T-PY-11": PUBLISHED_IMAGE_ROOT
+        / "t-cli-05"
+        / "quantitative_genome_map.svg",
+    }[scenario_id]
+    generated_tree = ElementTree.tostring(ElementTree.parse(output_path).getroot())
+    reference_tree = ElementTree.tostring(ElementTree.parse(cli_reference).getroot())
+    if generated_tree != reference_tree:
+        raise RecipeContractError(
+            f"{scenario_id} SVG differs from its CLI project figure."
+        )
+
+    if scenario_id == "T-PY-10":
+        root = ElementTree.parse(output_path).getroot()
+        matches = [
+            element
+            for element in root.iter()
+            if element.attrib.get("data-match-kind") == "pairwise"
+        ]
+        pairs = {
+            (
+                element.attrib.get("data-query-record-id"),
+                element.attrib.get("data-subject-record-id"),
+            )
+            for element in matches
+        }
+        if len(matches) != 82 or pairs != {
+            ("LC738868.1", "LC738874.1"),
+            ("LC738870.1", "LC738873.1"),
+        }:
+            raise RecipeContractError("T-PY-10 changed its two comparison pairs.")
 
 
 def _validate_first_python_tutorial(

@@ -52,6 +52,11 @@ IMPLEMENTED_SCENARIOS = (
     "T-CLI-04",
     "T-CLI-05",
     "T-CLI-06",
+    "T-CLI-07",
+    "T-CLI-08",
+    "T-CLI-09",
+    "T-CLI-10",
+    "T-CLI-11",
     "H-CLI-01",
     "H-CLI-02",
     "H-CLI-03",
@@ -223,6 +228,10 @@ _SCENARIO_REQUIRED_FIXTURE_FILES = {
 }
 
 _OUTPUT_INPUT_FILES = {
+    ("T-CLI-11", "restored_interactive_figure.svg"): {
+        "HmmtDNA.gbk",
+        "cds_gene_qualifier_priority.tsv",
+    },
     ("T-CLI-03", "mitochondrial_features_baseline.svg"): {
         "HmmtDNA.gbk",
     },
@@ -379,10 +388,11 @@ def _materialize_generated_tables(scenario_id: str, workdir: Path) -> set[str]:
 
 def _artifact_comparison_payload(scenario_id: str, path: Path) -> bytes:
     payload = path.read_bytes()
-    if scenario_id == "H-CLI-12" and path.name in {
-        "cli_session.json",
-        "cli_session.json.gz",
-    }:
+    normalized_session_names = {
+        "H-CLI-12": {"cli_session.json", "cli_session.json.gz"},
+        "T-CLI-11": {"interactive_handoff.gbdraw-session.json.gz"},
+    }
+    if path.name in normalized_session_names.get(scenario_id, set()):
         session = json.loads(gzip.decompress(payload) if path.suffix == ".gz" else payload)
 
         def without_file_times(value: object) -> object:
@@ -743,7 +753,11 @@ def _match_elements(root: ElementTree.Element) -> list[ElementTree.Element]:
     ]
 
 
-def _assert_complete_metazoan_mtdna_conservation(output_path: Path) -> None:
+def _assert_complete_metazoan_mtdna_conservation(
+    output_path: Path,
+    *,
+    title: str = "Complete metazoan mitochondrial TLOSATX evidence",
+) -> None:
     root = ElementTree.parse(output_path).getroot()
     record_ids = {
         element.attrib["data-gbdraw-record-id"]
@@ -836,7 +850,7 @@ def _assert_complete_metazoan_mtdna_conservation(output_path: Path) -> None:
     } | {
         "NC_012920.1",
         "16,569 bp",
-        "Complete metazoan mitochondrial TLOSATX evidence",
+        title,
     }
     if not required_text <= text_nodes:
         raise RecipeContractError(
@@ -889,6 +903,75 @@ def _assert_precomputed_comparison(
     _assert_complete_metazoan_mtdna_conservation(output_path)
 
 
+def _assert_tutorial_losatn_comparison(
+    chapter: dict[str, object], output_path: Path
+) -> None:
+    evidence = inspect_standard_svg(chapter, output_path=output_path)
+    root = ElementTree.parse(output_path).getroot()
+    matches = _match_elements(root)
+    expected_pair = ("NC_001416.1", "NC_042057.1")
+    expected_lengths = {21_232, 6_412, 5_205, 1_914, 1_620, 254}
+    if evidence.record_ids != frozenset(expected_pair):
+        raise RecipeContractError("T-CLI-07 rendered the wrong complete records.")
+    if len(matches) != 6 or {
+        int(float(element.attrib["data-alignment-length"])) for element in matches
+    } != expected_lengths:
+        raise RecipeContractError("T-CLI-07 retained the wrong LOSATN evidence.")
+    for element in matches:
+        attributes = element.attrib
+        if (
+            attributes.get("data-query-record-id"),
+            attributes.get("data-subject-record-id"),
+        ) != expected_pair or attributes.get("data-match-kind") != "pairwise":
+            raise RecipeContractError("T-CLI-07 changed its comparison endpoints.")
+        if attributes.get("data-pairwise-match-style") != "ribbon":
+            raise RecipeContractError("T-CLI-07 must retain the GUI ribbon style.")
+
+
+def _assert_hepatoplasmataceae_collinear(
+    chapter: dict[str, object], output_path: Path
+) -> None:
+    evidence = inspect_standard_svg(chapter, output_path=output_path)
+    expected_records = {
+        "AP027078.1",
+        "AP027131.1",
+        "AP027133.1",
+        "AP027132.1",
+        "NZ_CP006932.1",
+    }
+    if evidence.record_ids != expected_records or len(evidence.feature_ids) != 2_994:
+        raise RecipeContractError("T-CLI-10 rendered the wrong complete genomes.")
+    root = ElementTree.parse(output_path).getroot()
+    matches = [
+        element
+        for element in root.iter()
+        if element.attrib.get("data-match-kind") == "collinear"
+    ]
+    expected_pairs = {
+        ("AP027078.1", "AP027131.1"),
+        ("AP027131.1", "AP027133.1"),
+        ("AP027133.1", "AP027132.1"),
+        ("AP027132.1", "NZ_CP006932.1"),
+    }
+    observed_pairs = {
+        (
+            element.attrib.get("data-query-record-id"),
+            element.attrib.get("data-subject-record-id"),
+        )
+        for element in matches
+    }
+    if len(matches) != 500 or observed_pairs != expected_pairs:
+        raise RecipeContractError("T-CLI-10 changed its adjacent Collinear evidence.")
+    required_text = {
+        "LOSATP Collinear blocks across Hepatoplasmataceae",
+        "GC content",
+        "GC skew (+)",
+        "GC skew (-)",
+    }
+    if not required_text <= evidence.text_nodes:
+        raise RecipeContractError("T-CLI-10 lost its title or quantitative tracks.")
+
+
 def _assert_bgc_svg(
     chapter: dict[str, object], output_path: Path
 ) -> tuple[ElementTree.Element, list[ElementTree.Element]]:
@@ -905,13 +988,19 @@ def _assert_pinned_losat(command: list[str], *, scenario_id: str) -> None:
     mode_index = command.index("--protein_blastp_mode") + 1
     threads_index = command.index("--losatp_threads") + 1
     expected_mode = {
+        "T-CLI-08": "orthogroup",
+        "T-CLI-10": "collinear",
         "H-CLI-06": "pairwise",
         "H-CLI-07": "orthogroup",
         "H-CLI-08": "collinear",
     }[scenario_id]
-    if command[mode_index] != expected_mode or command[threads_index] != "1":
+    expected_threads = "32" if scenario_id == "T-CLI-10" else "1"
+    if (
+        command[mode_index] != expected_mode
+        or command[threads_index] != expected_threads
+    ):
         raise RecipeContractError(
-            f"{scenario_id} must run its documented LOSATP mode with one thread."
+            f"{scenario_id} must run its documented LOSATP mode and thread count."
         )
     if "--losatp_bin" in command or "--ncbi_blastp_bin" in command:
         raise RecipeContractError(
@@ -2093,6 +2182,66 @@ def _assert_export_set(workdir: Path) -> None:
             raise RecipeContractError(f"H-CLI-13 {filename} is not valid DSC PostScript.")
 
 
+def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
+    initial_path = workdir / "interactive_human_mitochondrion.svg"
+    restored_path = workdir / "restored_interactive_figure.svg"
+    if initial_path.read_bytes() != restored_path.read_bytes():
+        raise RecipeContractError("T-CLI-11 session replay changed the static SVG.")
+
+    interactive_path = workdir / "interactive_human_mitochondrion.interactive.svg"
+    interactive_root = ElementTree.parse(interactive_path).getroot()
+    interactive_source = interactive_path.read_text(encoding="utf-8")
+    feature_ids = {
+        element.attrib["data-gbdraw-feature-id"]
+        for element in interactive_root.iter()
+        if "data-gbdraw-feature-id" in element.attrib
+    }
+    metadata = [
+        element
+        for element in interactive_root.iter()
+        if element.attrib.get("id") == "gbdraw-interactive-feature-metadata"
+    ]
+    if (
+        interactive_root.attrib.get("data-gbdraw-interactive-svg") != "true"
+        or len(feature_ids) != 37
+        or len(metadata) != 1
+        or metadata[0].attrib.get("data-schema") != "3"
+        or "COX1" not in interactive_source
+        or any(
+            token not in interactive_source
+            for token in (
+                "gbdraw-feature-search-controls",
+                "zoomViewBy",
+                "resetView",
+                "Search",
+            )
+        )
+    ):
+        raise RecipeContractError(
+            "T-CLI-11 interactive controls or feature metadata changed."
+        )
+
+    with gzip.open(
+        workdir / "interactive_handoff.gbdraw-session.json.gz",
+        "rt",
+        encoding="utf-8",
+    ) as handle:
+        session = json.load(handle)
+    resources = session.get("resources", {})
+    if (
+        session.get("format") != "gbdraw-session"
+        or session.get("version") != 40
+        or session.get("renderRequest", {}).get("schema") != 5
+        or session.get("renderRequest", {}).get("mode") != "circular"
+        or len(resources) < 2
+        or not any(
+            str(resource.get("name", "")).endswith("HmmtDNA.gbk")
+            for resource in resources.values()
+            if isinstance(resource, dict)
+        )
+    ):
+        raise RecipeContractError("T-CLI-11 session payload changed.")
+
 def run_scenario(
     scenario_id: str,
     *,
@@ -2136,6 +2285,20 @@ def run_scenario(
         command_jobs = [
             (commands[0], ("cli_session.json", "cli_session_roundtrip.svg")),
             (commands[1], ("cli_session.json.gz", "cli_session_roundtrip.svg")),
+        ]
+    elif scenario_id == "T-CLI-11":
+        if len(commands) != 2 or expected_outputs != [
+            "interactive_human_mitochondrion.svg",
+            "interactive_human_mitochondrion.interactive.svg",
+            "interactive_handoff.gbdraw-session.json.gz",
+            "restored_interactive_figure.svg",
+        ]:
+            raise RecipeContractError(
+                "T-CLI-11 must export SVG, Interactive SVG, session, and replayed SVG."
+            )
+        command_jobs = [
+            (commands[0], tuple(expected_outputs[:3])),
+            (commands[1], (expected_outputs[3],)),
         ]
     elif scenario_id == "H-CLI-13":
         if len(commands) != 1 or expected_outputs != [
@@ -2189,7 +2352,7 @@ def run_scenario(
                 env=environment,
                 capture_output=True,
                 text=True,
-                timeout=300 if scenario_id in {"H-CLI-06", "H-CLI-07", "H-CLI-08"} else 120,
+                timeout=300 if scenario_id in {"T-CLI-08", "T-CLI-10", "H-CLI-06", "H-CLI-07", "H-CLI-08"} else 120,
                 check=False,
             )
             if result.returncode != 0:
@@ -2209,7 +2372,7 @@ def run_scenario(
                     continue
                 if scenario_id == "H-CLI-04":
                     _assert_linear_regions_orientation_layout(chapter, generated_path)
-                elif scenario_id == "T-CLI-06":
+                elif scenario_id in {"T-CLI-06", "T-CLI-10"}:
                     inspect_standard_svg(chapter, output_path=generated_path)
                 else:
                     validate_standard_svg(
@@ -2274,6 +2437,15 @@ def run_scenario(
                         generated_path,
                         command=command,
                     )
+                elif scenario_id == "T-CLI-07":
+                    _assert_tutorial_losatn_comparison(chapter, generated_path)
+                elif scenario_id == "T-CLI-09":
+                    _assert_complete_metazoan_mtdna_conservation(
+                        generated_path,
+                        title="Precomputed TLOSATX rings around Homo sapiens mtDNA",
+                    )
+                elif scenario_id == "T-CLI-10":
+                    _assert_hepatoplasmataceae_collinear(chapter, generated_path)
                 elif scenario_id == "H-CLI-05":
                     _assert_precomputed_comparison(chapter, generated_path)
                 elif scenario_id == "H-CLI-02":
@@ -2306,7 +2478,7 @@ def run_scenario(
                         workdir=workdir,
                         scenario_id=scenario_id,
                     )
-            if scenario_id in {"H-CLI-06", "H-CLI-07", "H-CLI-08"}:
+            if scenario_id in {"T-CLI-08", "T-CLI-10", "H-CLI-06", "H-CLI-07", "H-CLI-08"}:
                 _assert_pinned_losat(command, scenario_id=scenario_id)
             if scenario_id == "H-CLI-06":
                 _assert_pairwise_protein_search(
@@ -2315,6 +2487,8 @@ def run_scenario(
                     svg_path=workdir / "cli_losatp_pairwise.svg",
                 )
             elif scenario_id == "H-CLI-07":
+                _assert_similarity_groups(chapter, workdir / output_names[0])
+            elif scenario_id == "T-CLI-08":
                 _assert_similarity_groups(chapter, workdir / output_names[0])
             elif scenario_id == "H-CLI-08":
                 _assert_collinear_blocks(chapter, workdir / output_names[0])
@@ -2333,6 +2507,8 @@ def run_scenario(
             )
         elif scenario_id == "H-CLI-13":
             _assert_export_set(workdir)
+        elif scenario_id == "T-CLI-11":
+            _assert_tutorial_interactive_handoff(workdir)
         assert_exact_workdir_files(
             chapter,
             workdir=workdir,

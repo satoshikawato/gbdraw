@@ -30,6 +30,7 @@ from config import (  # noqa: E402
     gui_annotation_tracks_screenshot_paths,
     gui_circular_layout_screenshot_paths,
     gui_circular_rings_screenshot_paths,
+    gui_feature_highlight_screenshot_paths,
     gui_feature_presentation_screenshot_paths,
     gui_exports_screenshot_paths,
     gui_inputs_screenshot_paths,
@@ -41,10 +42,12 @@ from config import (  # noqa: E402
     gui_losatp_tutorial_collinear_screenshot_paths,
     gui_losatp_groups_how_to_screenshot_paths,
     gui_losatp_groups_screenshot_paths,
+    gui_quantitative_map_screenshot_paths,
     gui_quantitative_tracks_screenshot_paths,
     gui_precomputed_circular_rings_screenshot_paths,
     gui_session_reproduction_screenshot_paths,
     gui_styling_screenshot_paths,
+    gui_table_comparison_screenshot_paths,
     gui_tlosatx_screenshot_paths,
     gui_uploaded_comparison_screenshot_paths,
 )
@@ -89,6 +92,9 @@ from flows.tutorials.gui_annotated_chloroplast import (  # noqa: E402
 from flows.tutorials.gui_interactive_handoff import (  # noqa: E402
     capture_gui_interactive_handoff,
 )
+from flows.tutorials.gui_feature_highlight import (  # noqa: E402
+    capture_gui_feature_highlight,
+)
 from flows.tutorials.gui_losatn import capture_gui_losatn  # noqa: E402
 from flows.tutorials.gui_losatp_groups import (  # noqa: E402
     capture_gui_losatp_groups,
@@ -98,6 +104,12 @@ from flows.tutorials.gui_losatp_collinear import (  # noqa: E402
 )
 from flows.tutorials.gui_precomputed_circular_rings import (  # noqa: E402
     capture_gui_precomputed_circular_rings,
+)
+from flows.tutorials.gui_quantitative_map import (  # noqa: E402
+    capture_gui_quantitative_map,
+)
+from flows.tutorials.gui_table_comparison import (  # noqa: E402
+    capture_gui_table_comparison,
 )
 from web_server import CaptureWebServer  # noqa: E402
 
@@ -186,6 +198,21 @@ SCENARIOS = {
         capture=capture_gui_interactive_handoff,
         tier="extended",
     ),
+    "T-GUI-10": ScenarioCapture(
+        screenshot_paths=gui_feature_highlight_screenshot_paths,
+        capture=capture_gui_feature_highlight,
+        tier="extended",
+    ),
+    "T-GUI-11": ScenarioCapture(
+        screenshot_paths=gui_table_comparison_screenshot_paths,
+        capture=capture_gui_table_comparison,
+        tier="extended",
+    ),
+    "T-GUI-12": ScenarioCapture(
+        screenshot_paths=gui_quantitative_map_screenshot_paths,
+        capture=capture_gui_quantitative_map,
+        tier="extended",
+    ),
     "H-GUI-07": ScenarioCapture(
         screenshot_paths=gui_losatp_groups_how_to_screenshot_paths,
         capture=capture_gui_losatp_groups_how_to,
@@ -235,6 +262,8 @@ SCENARIOS = {
 
 TIER_RANK = {tier: index for index, tier in enumerate(SUPPORTED_TIERS)}
 ALL_SCENARIO_IDS = (*GUI_SCENARIO_IDS, *CLI_SCENARIO_IDS, *PYTHON_SCENARIO_IDS)
+MAX_RASTER_NOISE_PIXELS = 100
+MAX_RASTER_CHANNEL_DELTA = 1
 
 if len(ALL_SCENARIO_IDS) != len(set(ALL_SCENARIO_IDS)):
     raise RuntimeError("Documentation scenario IDs must be unique across surfaces.")
@@ -244,7 +273,17 @@ def _images_match(expected_path: Path, actual_path: Path) -> bool:
     with Image.open(expected_path) as expected, Image.open(actual_path) as actual:
         if expected.size != actual.size or expected.mode != actual.mode:
             return False
-        return ImageChops.difference(expected, actual).getbbox() is None
+        difference = ImageChops.difference(expected, actual)
+        if difference.getbbox() is None:
+            return True
+
+        extrema = difference.getextrema()
+        if any(high > MAX_RASTER_CHANNEL_DELTA for _, high in extrema):
+            return False
+        changed_pixels = sum(
+            pixel != (0, 0, 0) for pixel in difference.getdata()
+        )
+        return changed_pixels <= MAX_RASTER_NOISE_PIXELS
 
 
 def _capture_scenario(

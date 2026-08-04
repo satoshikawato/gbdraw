@@ -4,10 +4,7 @@
 
 | GUI | CLI | Python API |
 | --- | --- | --- |
-| **This page** | Not yet migrated | Not yet migrated |
-
-Future variants must reproduce this five-record BGC figure aligned to the same
-Similarity group.
+| **This page** | [Command-line workflow](../CLI/compare-proteins-losatp.md) | [Python workflow](../PYTHON/compare-proteins-losatp.md) |
 
 Use LOSATP **Similarity groups** to compare five aminoglycoside biosynthetic
 gene-cluster records. The records remain Linear. They are native BGC database

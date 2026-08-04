@@ -4,10 +4,7 @@
 
 | GUI | CLI | Python API |
 | --- | --- | --- |
-| **This page** | Not yet migrated | Not yet migrated |
-
-Future variants must reproduce the same mitochondrial reference, comparison
-ring order, evidence, labels, and colors.
+| **This page** | [Command-line workflow](../CLI/add-precomputed-circular-comparison-rings.md) | [Python workflow](../PYTHON/add-precomputed-circular-comparison-rings.md) |
 
 Add three translated-nucleotide comparison rings around the complete human
 mitochondrial genome. The searches are already frozen as TLOSATX outfmt 6

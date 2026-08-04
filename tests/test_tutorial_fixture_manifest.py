@@ -250,7 +250,12 @@ def test_hepatoplasmataceae_fixture_supports_gallery_collinear_tutorial() -> Non
         if chapter["id"] == "T-GUI-08"
     )
 
-    assert fixture["scenarioIds"] == ["T-GUI-08", "H-GUI-08"]
+    assert fixture["scenarioIds"] == [
+        "T-GUI-08",
+        "T-CLI-10",
+        "T-PY-07",
+        "H-GUI-08",
+    ]
     assert semantics["recordIds"] == [
         "AP027078.1",
         "AP027131.1",

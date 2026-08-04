@@ -6,10 +6,7 @@
 
 | GUI | CLI | Python API |
 | --- | --- | --- |
-| Not yet migrated | **This page** | Not yet migrated |
-
-Future variants must reproduce the same complete AP027133 map, depth data, GC
-tracks, and default-width feature ring.
+| [Web-app workflow](../GUI/build-a-quantitative-genome-map.md) | **This page** | [Python workflow](../PYTHON/build-a-quantitative-genome-map.md) |
 
 This project combines measured sequencing depth with two sequence-derived
 tracks on the complete 606,194 bp circular `AP027133.1` record.

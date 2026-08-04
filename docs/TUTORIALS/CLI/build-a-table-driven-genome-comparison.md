@@ -6,10 +6,7 @@
 
 | GUI | CLI | Python API |
 | --- | --- | --- |
-| Not yet migrated | **This page** | Not yet migrated |
-
-Future variants must preserve the same four Majanivirus records, biological
-pair endpoints, orientations, and comparison evidence.
+| [Web-app workflow](../GUI/build-a-table-driven-genome-comparison.md) | **This page** | [Python workflow](../PYTHON/build-a-table-driven-genome-comparison.md) |
 
 This project treats record placement and comparison endpoints as reviewable
 data. Four complete majanivirus genomes form a single comparison stack. Each

@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "plan_source": "docs/internal/TUTORIAL_COVERAGE_EXPANSION_IMPLEMENTATION_PLAN_2026-08-04.md",
+  "plan_source": "docs/internal/TUTORIAL_CROSS_SURFACE_PARITY_IMPLEMENTATION_PLAN_2026-08-04.md",
   "approval": {
     "status": "approved",
     "date": "2026-08-04",
-    "basis": "Implementation requested from the approved tutorial-coverage expansion plan",
-    "notes": "This expansion supersedes docs/internal/DOCUMENTATION_RENOVATION_PLAN_2026-08-03.md for the chapter census while retaining that plan as the original documentation-renovation approval record."
+    "basis": "The user requested completion of every remaining cross-surface Tutorial migration",
+    "notes": "This parity plan extends the approved tutorial-coverage expansion without changing the fixture budgets or the completed documentation-renovation architecture."
   },
   "package_budgets": {
     "core_uncompressed_bytes": 1048576,
@@ -20,17 +20,7 @@
     "navigation": "Every implemented variant links to the other variants through a Choose how to build this figure table.",
     "exceptions": "A surface may be marked unavailable only when it cannot express the figure; it must name the missing capability and must not substitute a different figure.",
     "migration": "Existing single-surface projects remain explicit backlog items; new projects must not be added as partial projects.",
-    "legacy_migration_projects": [
-      "first-linear-genome",
-      "lambda-de3-genome-comparison",
-      "aminoglycoside-similarity-groups",
-      "mitochondrial-comparison-rings",
-      "hepatoplasmataceae-collinear",
-      "interactive-session-handoff",
-      "mitochondrial-feature-presentation",
-      "majanivirus-table-comparison",
-      "quantitative-hepatoplasma-map"
-    ]
+    "legacy_migration_projects": []
   },
   "tutorial_projects": {
     "first-circular-genome": {
@@ -40,18 +30,18 @@
     },
     "first-linear-genome": {
       "figure": "Complete Lambda linear genome map with labels and ruler",
-      "variants": {"gui": "T-GUI-02", "cli": "T-CLI-02", "python": null},
-      "parity": "migration"
+      "variants": {"gui": "T-GUI-02", "cli": "T-CLI-02", "python": "T-PY-03"},
+      "parity": "verified"
     },
     "lambda-de3-genome-comparison": {
       "figure": "Complete Lambda and DE3 linear comparison with six LOSATN links",
-      "variants": {"gui": "T-GUI-03", "cli": null, "python": null},
-      "parity": "migration"
+      "variants": {"gui": "T-GUI-03", "cli": "T-CLI-07", "python": "T-PY-04"},
+      "parity": "verified"
     },
     "aminoglycoside-similarity-groups": {
       "figure": "Five complete aminoglycoside BGC records aligned to one LOSATP Similarity group",
-      "variants": {"gui": "T-GUI-04", "cli": null, "python": null},
-      "parity": "migration"
+      "variants": {"gui": "T-GUI-04", "cli": "T-CLI-08", "python": "T-PY-05"},
+      "parity": "verified"
     },
     "gallery-chloroplast-map": {
       "figure": "Interactive SVG Gallery tobacco plastome with functional colors, radial labels, structural regions, and GC content",
@@ -60,33 +50,33 @@
     },
     "mitochondrial-comparison-rings": {
       "figure": "Human mitochondrial reference with three ordered precomputed comparison rings",
-      "variants": {"gui": "T-GUI-06", "cli": null, "python": null},
-      "parity": "migration"
+      "variants": {"gui": "T-GUI-06", "cli": "T-CLI-09", "python": "T-PY-06"},
+      "parity": "verified"
     },
     "hepatoplasmataceae-collinear": {
       "figure": "Five complete Hepatoplasmataceae genomes with adjacent LOSATP Collinear blocks",
-      "variants": {"gui": "T-GUI-08", "cli": null, "python": null},
-      "parity": "migration"
+      "variants": {"gui": "T-GUI-08", "cli": "T-CLI-10", "python": "T-PY-07"},
+      "parity": "verified"
     },
     "interactive-session-handoff": {
       "figure": "Interactive human mitochondrial figure reproduced from a saved session",
-      "variants": {"gui": "T-GUI-09", "cli": null, "python": null},
-      "parity": "migration"
+      "variants": {"gui": "T-GUI-09", "cli": "T-CLI-11", "python": "T-PY-08"},
+      "parity": "verified"
     },
     "mitochondrial-feature-presentation": {
       "figure": "Complete human mitochondrial map with functional colors and D-loop region bracket",
-      "variants": {"gui": null, "cli": "T-CLI-03", "python": null},
-      "parity": "migration"
+      "variants": {"gui": "T-GUI-10", "cli": "T-CLI-03", "python": "T-PY-09"},
+      "parity": "verified"
     },
     "majanivirus-table-comparison": {
       "figure": "Four Majanivirus records in two biological comparison pairs driven by TSV manifests",
-      "variants": {"gui": null, "cli": "T-CLI-04", "python": null},
-      "parity": "migration"
+      "variants": {"gui": "T-GUI-11", "cli": "T-CLI-04", "python": "T-PY-10"},
+      "parity": "verified"
     },
     "quantitative-hepatoplasma-map": {
       "figure": "Complete AP027133 genome with mean depth, GC content, and GC skew",
-      "variants": {"gui": null, "cli": "T-CLI-05", "python": null},
-      "parity": "migration"
+      "variants": {"gui": "T-GUI-12", "cli": "T-CLI-05", "python": "T-PY-11"},
+      "parity": "verified"
     }
   },
   "capability_groups": {
@@ -383,6 +373,66 @@
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
+      "id": "T-GUI-10",
+      "project_id": "mitochondrial-feature-presentation",
+      "title": "Highlight mitochondrial features in the web app",
+      "role": "tutorial",
+      "surface": "gui",
+      "priority": "P1",
+      "capabilities": ["entry.hosted-gui", "presentation.feature-colors", "presentation.qualifier-priority", "presentation.label-filters", "presentation.label-overrides", "presentation.shapes", "presentation.strokes", "track.region-annotations", "track.custom-circular-slots", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["human-mitochondrion"],
+      "settings": {"mode": "circular", "record_id": "NC_012920.1", "output_prefix": "mitochondrial_features_highlighted", "track_preset": "spreadout", "separate_strands": true, "label_mode": "both", "legend_position": "right"},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_feature_highlight.py", "tier": "extended", "expected_outputs": ["mitochondrial_features_highlighted.svg"], "assertions": ["first_result_step=3", "all_13_cds_visible=true", "labels_and_colors_match=true", "shapes=arrow,rectangle", "d_loop_annotation=origin_spanning_bracket", "track_slots=ticks,features,mitochondrial_regions", "parity=T-CLI-03,T-PY-09"]},
+      "screenshots": [
+        {"path": "docs/images/t-gui-10/presentation-settings.png", "reason": "Record the feature, label, stroke, and D-loop track settings.", "alt": "Web-app settings for highlighted mitochondrial features and the D-loop bracket"},
+        {"path": "docs/images/t-gui-10/presentation-result.png", "reason": "Verify the finished feature presentation.", "alt": "Human mitochondrial map with functional colors, selected labels, and a D-loop bracket"}
+      ],
+      "sources": ["docs/TUTORIALS/CLI/highlight-mitochondrial-features.md", "docs/HOW_TO/GUI/style-features-labels-titles-and-legends.md"],
+      "destination": "docs/TUTORIALS/GUI/highlight-mitochondrial-features.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-GUI-11",
+      "project_id": "majanivirus-table-comparison",
+      "title": "Compare two Majanivirus genome pairs in the web app",
+      "role": "tutorial",
+      "surface": "gui",
+      "priority": "P1",
+      "capabilities": ["entry.hosted-gui", "input.multi-record", "input.reverse-complement", "layout.linear-multi-row", "layout.rulers", "comparison.uploaded-tables", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["majanivirus-table-comparison"],
+      "settings": {"mode": "linear", "record_count": 4, "rows": [1, 2, 3, 4], "reverse_complement": [false, false, true, true], "comparison_pairs": [["LC738868.1", "LC738874.1"], ["LC738870.1", "LC738873.1"]]},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_table_comparison.py", "tier": "extended", "expected_outputs": ["table_driven_comparison.svg"], "assertions": ["first_result_step=3", "record_cells_and_orientations_match=true", "comparison_endpoint_pairs=2", "retained_matches=82", "pairwise_match_style=curve", "rulers_and_shared_scale=true", "parity=T-CLI-04,T-PY-10"]},
+      "screenshots": [
+        {"path": "docs/images/t-gui-11/comparison-settings.png", "reason": "Record the four-row layout and two explicit uploaded comparison pairs.", "alt": "Web-app record layout and uploaded comparison settings for four Majanivirus genomes"},
+        {"path": "docs/images/t-gui-11/comparison-result.png", "reason": "Verify both filtered comparison layers and record-local rulers.", "alt": "Four Majanivirus genomes joined by two filtered TBLASTX comparison layers"}
+      ],
+      "sources": ["docs/TUTORIALS/CLI/build-a-table-driven-genome-comparison.md", "docs/HOW_TO/GUI/use-uploaded-blast-results.md"],
+      "destination": "docs/TUTORIALS/GUI/build-a-table-driven-genome-comparison.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-GUI-12",
+      "project_id": "quantitative-hepatoplasma-map",
+      "title": "Build a quantitative genome map in the web app",
+      "role": "tutorial",
+      "surface": "gui",
+      "priority": "P1",
+      "capabilities": ["entry.hosted-gui", "track.depth-numeric", "track.gc-content", "track.dinucleotide-skew", "track.custom-circular-slots", "layout.axes", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["depth-1kb"],
+      "settings": {"mode": "circular", "record_id": "AP027133.1", "window": 1000, "step": 1000, "depth_range": [0, 80], "gc_percent_range": [10, 55]},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_quantitative_map.py", "tier": "extended", "expected_outputs": ["quantitative_genome_map.svg"], "assertions": ["first_result_step=3", "depth_rows=607", "depth_coordinate_coverage=true", "track_slots=ticks,features,depth_1,gc_content,gc_skew", "axes_and_ticks=true", "parity=T-CLI-05,T-PY-11"]},
+      "screenshots": [
+        {"path": "docs/images/t-gui-12/track-settings.png", "reason": "Record the depth, GC-content, GC-skew, and explicit slot settings.", "alt": "Web-app quantitative-track settings for AP027133.1"},
+        {"path": "docs/images/t-gui-12/track-result.png", "reason": "Verify the completed three-track quantitative map.", "alt": "AP027133.1 map with blue depth, GC content, and GC skew rings"}
+      ],
+      "sources": ["docs/TUTORIALS/CLI/build-a-quantitative-genome-map.md", "docs/HOW_TO/GUI/add-depth-gc-and-skew-tracks.md"],
+      "destination": "docs/TUTORIALS/GUI/build-a-quantitative-genome-map.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
       "id": "T-CLI-01",
       "project_id": "first-circular-genome",
       "title": "Create a reproducible circular diagram from the command line",
@@ -485,6 +535,91 @@
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
+      "id": "T-CLI-07",
+      "project_id": "lambda-de3-genome-comparison",
+      "title": "Compare Lambda and DE3 from the command line",
+      "role": "tutorial",
+      "surface": "cli",
+      "priority": "P1",
+      "capabilities": ["entry.linear-cli", "comparison.uploaded-tables", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["lambda", "de3", "lambda-de3-comparison"],
+      "settings": {"mode": "linear", "working_directory": "empty", "record_order": ["NC_001416.1", "NC_042057.1"], "comparison_rows": 6, "pairwise_match_height": 120},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "core", "expected_outputs": ["lambda-de3-losatn.svg"], "assertions": ["first_result_step=2", "exit_code=0", "svg.records=NC_001416.1,NC_042057.1", "svg.links=6", "pairwise_match_height=120", "parity=T-GUI-03,T-PY-04"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/compare-genomes-losatn.md"],
+      "destination": "docs/TUTORIALS/CLI/compare-genomes-losatn.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-CLI-08",
+      "project_id": "aminoglycoside-similarity-groups",
+      "title": "Create protein Similarity groups with LOSATP from the command line",
+      "role": "tutorial",
+      "surface": "cli",
+      "priority": "P1",
+      "capabilities": ["entry.linear-cli", "comparison.losatp-groups", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["aminoglycoside-bgc-five"],
+      "settings": {"mode": "linear", "working_directory": "empty", "protein_mode": "orthogroup", "threads": 1, "alignment_group": "og_1", "separate_strands": false},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "exit_code=0", "group_count=23", "svg.group_links=77", "alignment_group=og_1", "parity=T-GUI-04,T-PY-05"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp.md"],
+      "destination": "docs/TUTORIALS/CLI/compare-proteins-losatp.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-CLI-09",
+      "project_id": "mitochondrial-comparison-rings",
+      "title": "Add precomputed circular comparison rings from the command line",
+      "role": "tutorial",
+      "surface": "cli",
+      "priority": "P1",
+      "capabilities": ["entry.circular-cli", "comparison.uploaded-tables", "comparison.circular-rings", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["human-mitochondrion", "metazoan-mitochondria-comparison"],
+      "settings": {"mode": "circular", "working_directory": "empty", "reference": "subject", "ring_order": ["NC_002333.2", "NC_024511.2", "NC_001328.1"], "ring_width": 18, "ring_gap": 4},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["precomputed_circular_rings.svg"], "assertions": ["first_result_step=2", "exit_code=0", "svg.accession=NC_012920.1", "svg.rings=3", "svg.hits=106", "parity=T-GUI-06,T-PY-06"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/add-precomputed-circular-comparison-rings.md"],
+      "destination": "docs/TUTORIALS/CLI/add-precomputed-circular-comparison-rings.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-CLI-10",
+      "project_id": "hepatoplasmataceae-collinear",
+      "title": "Reproduce the Hepatoplasmataceae Collinear map from the command line",
+      "role": "tutorial",
+      "surface": "cli",
+      "priority": "P1",
+      "capabilities": ["entry.linear-cli", "comparison.losatp-collinear", "track.gc-content", "track.dinucleotide-skew", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["hepatoplasmataceae-five"],
+      "settings": {"mode": "linear", "working_directory": "empty", "record_order": ["AP027078.1", "AP027131.1", "AP027133.1", "AP027132.1", "NZ_CP006932.1"], "protein_mode": "collinear", "scope": "adjacent", "threads": 32},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["losatp_collinear.svg"], "assertions": ["first_result_step=2", "exit_code=0", "record_count=5", "svg.collinear_matches=500", "scope=adjacent", "parity=T-GUI-08,T-PY-07"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp-collinear.md"],
+      "destination": "docs/TUTORIALS/CLI/compare-proteins-losatp-collinear.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-CLI-11",
+      "project_id": "interactive-session-handoff",
+      "title": "Create an interactive figure and reproduce it from a CLI session",
+      "role": "tutorial",
+      "surface": "cli",
+      "priority": "P1",
+      "capabilities": ["entry.circular-cli", "interactive.session-save-load", "output.interactive-svg", "output.reproducible-handoff", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["human-mitochondrion"],
+      "settings": {"mode": "circular", "working_directory": "empty", "record_id": "NC_012920.1", "track_preset": "middle", "separate_strands": true, "label_mode": "out", "species": "<i>Homo sapiens</i>", "legend_position": "right"},
+      "execution": {"kind": "cli-recipe", "path": "docs/recipes/run_cli_scenarios.py", "tier": "extended", "expected_outputs": ["interactive_human_mitochondrion.svg", "interactive_human_mitochondrion.interactive.svg", "interactive_handoff.gbdraw-session.json.gz", "restored_interactive_figure.svg"], "assertions": ["first_result_step=1", "exit_code=0", "interactive_svg.offline_controls=true", "session.gzip=true", "session.current_schema=true", "restored_svg.byte_identical=true", "parity=T-GUI-09,T-PY-08"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/create-and-resume-an-interactive-figure.md", "docs/HOW_TO/CLI/save-and-regenerate-sessions.md"],
+      "destination": "docs/TUTORIALS/CLI/create-and-resume-an-interactive-figure.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
       "id": "T-PY-01",
       "project_id": "first-circular-genome",
       "title": "Draw and save your first genome diagram from Python",
@@ -516,6 +651,159 @@
       "screenshots": [],
       "sources": ["gbdraw/web/gallery/examples.json", "docs/TUTORIALS/GUI/build-an-annotated-chloroplast-map.md", "docs/REFERENCE/python-api.md"],
       "destination": "docs/TUTORIALS/PYTHON/build-an-annotated-chloroplast-map.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-PY-03",
+      "project_id": "first-linear-genome",
+      "title": "Create a reproducible linear diagram from Python",
+      "role": "tutorial",
+      "surface": "python",
+      "priority": "P1",
+      "capabilities": ["entry.simple-python", "program.simple-drawing", "layout.linear-single-row", "layout.rulers", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["lambda"],
+      "settings": {"mode": "linear", "working_directory": "empty", "record_id": "NC_001416.1", "track_layout": "middle", "separate_strands": true, "labels": "all", "scale_style": "ruler", "legend": "left"},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["python_lambda_linear.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.accession=NC_001416.1", "svg.ruler=true", "parity=T-GUI-02,T-CLI-02"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/first-linear-genome-diagram.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/PYTHON/first-linear-genome-diagram.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-PY-04",
+      "project_id": "lambda-de3-genome-comparison",
+      "title": "Compare Lambda and DE3 from Python",
+      "role": "tutorial",
+      "surface": "python",
+      "priority": "P1",
+      "capabilities": ["entry.simple-python", "program.comparisons-tracks", "comparison.uploaded-tables", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["lambda", "de3", "lambda-de3-comparison"],
+      "settings": {"mode": "linear", "working_directory": "empty", "record_order": ["NC_001416.1", "NC_042057.1"], "comparison_rows": 6, "pairwise_match_height": 120},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["python_lambda_de3_losatn.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.records=NC_001416.1,NC_042057.1", "svg.links=6", "parity=T-GUI-03,T-CLI-07"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/compare-genomes-losatn.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/PYTHON/compare-genomes-losatn.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-PY-05",
+      "project_id": "aminoglycoside-similarity-groups",
+      "title": "Create protein Similarity groups with LOSATP from Python",
+      "role": "tutorial",
+      "surface": "python",
+      "priority": "P1",
+      "capabilities": ["entry.simple-python", "program.comparisons-tracks", "comparison.losatp-groups", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["aminoglycoside-bgc-five"],
+      "settings": {"mode": "linear", "working_directory": "empty", "protein_mode": "orthogroup", "threads": 1, "alignment_group": "og_1", "separate_strands": false},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "group_count=23", "svg.group_links=77", "parity=T-GUI-04,T-CLI-08"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/PYTHON/compare-proteins-losatp.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-PY-06",
+      "project_id": "mitochondrial-comparison-rings",
+      "title": "Add precomputed circular comparison rings from Python",
+      "role": "tutorial",
+      "surface": "python",
+      "priority": "P1",
+      "capabilities": ["entry.simple-python", "program.comparisons-tracks", "comparison.circular-rings", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["human-mitochondrion", "metazoan-mitochondria-comparison"],
+      "settings": {"mode": "circular", "working_directory": "empty", "reference": "subject", "ring_order": ["NC_002333.2", "NC_024511.2", "NC_001328.1"], "ring_width": 18, "ring_gap": 4},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_precomputed_circular_rings.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "svg.accession=NC_012920.1", "svg.rings=3", "svg.hits=106", "parity=T-GUI-06,T-CLI-09"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/add-precomputed-circular-comparison-rings.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/PYTHON/add-precomputed-circular-comparison-rings.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-PY-07",
+      "project_id": "hepatoplasmataceae-collinear",
+      "title": "Reproduce the Hepatoplasmataceae Collinear map from Python",
+      "role": "tutorial",
+      "surface": "python",
+      "priority": "P1",
+      "capabilities": ["entry.simple-python", "program.comparisons-tracks", "comparison.losatp-collinear", "track.gc-content", "track.dinucleotide-skew", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["hepatoplasmataceae-five"],
+      "settings": {"mode": "linear", "working_directory": "empty", "record_order": ["AP027078.1", "AP027131.1", "AP027133.1", "AP027132.1", "NZ_CP006932.1"], "protein_mode": "collinear", "scope": "adjacent", "threads": 32},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["losatp_collinear.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "record_count=5", "svg.collinear_matches=500", "parity=T-GUI-08,T-CLI-10"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp-collinear.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/PYTHON/compare-proteins-losatp-collinear.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-PY-08",
+      "project_id": "interactive-session-handoff",
+      "title": "Create an interactive figure and reproduce it from Python",
+      "role": "tutorial",
+      "surface": "python",
+      "priority": "P1",
+      "capabilities": ["entry.typed-python", "interactive.session-save-load", "output.interactive-svg", "output.reproducible-handoff", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["human-mitochondrion"],
+      "settings": {"mode": "circular", "working_directory": "empty", "record_id": "NC_012920.1", "track_preset": "middle", "separate_strands": true, "label_mode": "out", "species": "<i>Homo sapiens</i>", "legend_position": "right"},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["interactive_human_mitochondrion.svg", "interactive_human_mitochondrion.interactive.svg", "interactive_handoff.gbdraw-session.json.gz", "restored_interactive_figure.svg"], "assertions": ["first_result_step=1", "snippet_executes=true", "return_type=RequestRenderResult", "interactive_svg.offline_controls=true", "session.gzip=true", "session.current_schema=true", "restored_svg.byte_identical=true", "parity=T-GUI-09,T-CLI-11"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/GUI/create-and-resume-an-interactive-figure.md", "docs/HOW_TO/PYTHON/build-typed-requests-and-round-trip-sessions.md"],
+      "destination": "docs/TUTORIALS/PYTHON/create-and-resume-an-interactive-figure.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-PY-09",
+      "project_id": "mitochondrial-feature-presentation",
+      "title": "Highlight mitochondrial features from Python",
+      "role": "tutorial",
+      "surface": "python",
+      "priority": "P1",
+      "capabilities": ["entry.simple-python", "presentation.feature-colors", "presentation.qualifier-priority", "presentation.label-filters", "presentation.label-overrides", "presentation.shapes", "presentation.strokes", "track.region-annotations", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["human-mitochondrion"],
+      "settings": {"mode": "circular", "working_directory": "empty", "record_id": "NC_012920.1", "finished_output": "mitochondrial_features_highlighted.svg"},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "core", "expected_outputs": ["mitochondrial_features_highlighted.svg"], "assertions": ["first_result_step=1", "snippet_executes=true", "return_type=Diagram", "all_13_cds_visible=true", "labels_and_colors_match=true", "shapes=arrow,rectangle", "d_loop_annotation=origin_spanning_bracket", "parity=T-GUI-10,T-CLI-03"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/CLI/highlight-mitochondrial-features.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/PYTHON/highlight-mitochondrial-features.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-PY-10",
+      "project_id": "majanivirus-table-comparison",
+      "title": "Compare two Majanivirus genome pairs from Python",
+      "role": "tutorial",
+      "surface": "python",
+      "priority": "P1",
+      "capabilities": ["entry.typed-python", "input.tsv-manifests", "layout.linear-multi-row", "layout.rulers", "comparison.uploaded-tables", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["majanivirus-table-comparison"],
+      "settings": {"mode": "linear", "working_directory": "empty", "record_count": 4, "layout": "single-column biological pairs", "finished_output": "table_driven_comparison.svg"},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["table_driven_comparison.svg"], "assertions": ["first_result_step=1", "snippet_executes=true", "return_type=RequestRenderResult", "record_cells_and_orientations_match=true", "comparison_endpoint_pairs=2", "rulers_and_shared_scale=true", "parity=T-GUI-11,T-CLI-04"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/CLI/build-a-table-driven-genome-comparison.md", "docs/REFERENCE/typed-requests.md"],
+      "destination": "docs/TUTORIALS/PYTHON/build-a-table-driven-genome-comparison.md",
+      "status": {"implementation": "verified", "review": "approved"}
+    },
+    {
+      "id": "T-PY-11",
+      "project_id": "quantitative-hepatoplasma-map",
+      "title": "Build a quantitative genome map from Python",
+      "role": "tutorial",
+      "surface": "python",
+      "priority": "P1",
+      "capabilities": ["entry.simple-python", "track.depth-numeric", "track.gc-content", "track.dinucleotide-skew", "track.custom-circular-slots", "layout.axes", "output.static-svg"],
+      "canonical_for": [],
+      "fixtures": ["depth-1kb"],
+      "settings": {"mode": "circular", "working_directory": "empty", "record_id": "AP027133.1", "window": 1000, "step": 1000, "finished_output": "quantitative_genome_map.svg"},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["quantitative_genome_map.svg"], "assertions": ["first_result_step=1", "snippet_executes=true", "return_type=Diagram", "depth_rows=607", "depth_coordinate_coverage=true", "track_slots=depth,gc_content,gc_skew", "axes_and_ticks=true", "parity=T-GUI-12,T-CLI-05"]},
+      "screenshots": [],
+      "sources": ["docs/TUTORIALS/CLI/build-a-quantitative-genome-map.md", "docs/REFERENCE/python-api.md"],
+      "destination": "docs/TUTORIALS/PYTHON/build-a-quantitative-genome-map.md",
       "status": {"implementation": "verified", "review": "approved"}
     },
     {
