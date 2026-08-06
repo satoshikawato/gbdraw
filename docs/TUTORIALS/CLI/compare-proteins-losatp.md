@@ -81,7 +81,7 @@ The bundled LOSAT runtime performs four adjacent searches and writes
 
 ## Step 3: Verify the groups
 
-The recipe pins the bundled LOSAT version, checks 232 qualified raw rows, 23
+This command pins the bundled LOSAT version and checks 232 raw rows, 23
 groups, 77 adjacent links, the reversed fifth record, and the final
 presentation:
 

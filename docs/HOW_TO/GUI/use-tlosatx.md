@@ -15,10 +15,10 @@ Download the bundled complete records:
 - [`NC_042057.1.gb`](../../../gbdraw/web/tutorial-data/de3/NC_042057.1.gb),
   `NC_042057.1`, 42,925 bp.
 
-The qualified reference output is
+The frozen reference output is
 [`lambda-de3.tlosatx.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.tlosatx.tsv).
-It contains 397 rows from LOSAT 0.1.0 browser WASM. Two serial runs produced
-the same bytes.
+It contains 397 rows from LOSAT 0.1.0 running in the browser (WASM); two
+separate serial runs produced byte-identical results.
 
 ## Configure TLOSATX
 
@@ -48,10 +48,9 @@ display filter, and draws seven links.
 Select **Save Raw LOSAT TSV** to download `lambda-de3.tlosatx.tsv`, then select
 **SVG** to download `lambda-de3-tlosatx.svg`.
 
-The executable capture checks that the TSV has 397 rows and the same SHA-256
-digest as the frozen evidence. It separately checks that the SVG has seven
-links, complete 48,502 bp and 42,925 bp records, and no coordinates outside
-either genome.
+Your downloaded TSV should have 397 rows and match the frozen reference
+output above. The SVG should show seven links, the complete 48,502 bp and
+42,925 bp records, and no coordinates outside either genome.
 
 ## Troubleshooting
 

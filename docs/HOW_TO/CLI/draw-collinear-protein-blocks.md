@@ -90,8 +90,7 @@ The executable check confirms:
 - exactly seven `collinear` paths carry stable block IDs, adjacent endpoints,
   anchor counts, ordered unit lists, orientation, score, and color-mode data;
 - each query and subject unit list has the declared number of anchors;
-- four plus blocks use the qualified blue fills and three minus blocks use the
-  qualified red fills;
+- four plus blocks use blue fills and three minus blocks use red fills;
 - no block directly connects `BGC0000708` and `BGC0000713`.
 
 Run `python docs/recipes/run_cli_scenarios.py --scenario H-CLI-08` from a

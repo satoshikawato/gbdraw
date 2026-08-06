@@ -71,9 +71,9 @@ Check the result before exporting:
 | GC percentage ticks | 0%, 20%, 40%, 60%, 80%, 100% |
 | Skew legend | `GC skew (+)` and `GC skew (-)` |
 
-Select **SVG** to save `quantitative_tracks.svg`. The capture check parses the
-downloaded SVG and verifies the record, track order, depth and percentage axes,
-legend text, and all 607 frozen input values.
+Select **SVG** to save `quantitative_tracks.svg`. The downloaded SVG should
+show the record, the tracks in the order set above, depth and percentage
+axes, the legend text, and all 607 depth values plotted.
 
 ## Troubleshooting
 

@@ -10,7 +10,7 @@ circle.
 
 ## Before you start
 
-The capture uses these four RefSeq records:
+This guide uses these four RefSeq records:
 
 | Role | Organism | RefSeq | Length | Topology |
 |---|---|---|---:|---|
@@ -26,10 +26,11 @@ The packaged records are
 and
 [`NC_001328.1.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_001328.1.gb).
 
-**Run LOSAT** accepts comparison FASTA files. The capture converts each of the
-last three GenBank records to one whole-record FASTA entry and checks that its
-accession, length, and sequence are unchanged. When preparing files manually,
-export the complete record. Do not trim it or split it into mock contigs.
+**Run LOSAT** accepts comparison FASTA files. The three bundled ring FASTA
+files are the last three GenBank records above, exported as one whole-record
+FASTA entry each with the same accession, length, and sequence. When
+preparing your own files, export the complete record; do not trim it or
+split it into mock contigs.
 
 ## Load the complete circular reference
 
@@ -84,22 +85,21 @@ Select **Generate Diagram**, then zoom to 50%.
 ![Complete human mtDNA with three sequence-similarity rings](../../images/h-gui-06/ring-result.png)
 
 The displayed human record is the TLOSATX subject. Each ring keeps its source
-accession and has at least one retained HSP. The capture records the union of
-all HSP intervals on `NC_012920.1` and rejects any interval outside 1 to
-16,569.
+accession and shows at least one retained HSP, with every interval falling
+within the displayed human reference (1–16,569).
 
 Select one colored HSP to open **Homology ring match**. The popup shows both
 record IDs, aligned coordinates, orientation, identity, and alignment length.
-Use the combined **FASTA** button to download both nucleotide spans. The
-capture stores that proof as `comparison_spans.fasta` and verifies that it has
-two non-empty records.
+Use the combined **FASTA** button to download both nucleotide spans as
+`comparison_spans.fasta`; it should contain two non-empty records, one for
+each side of the match.
 
 ![Similarity-ring HSP details popup](../../images/h-gui-06/hsp-popup.png)
 
-Select **SVG** to save `circular_similarity_rings.svg`. The SVG check requires
-three rings in the documented order, the complete 16,569 bp human reference,
-all four accessions and species labels, 13 CDS `gene` labels, and zero CDS
-`product` labels.
+Select **SVG** to save `circular_similarity_rings.svg`. The finished diagram
+should show three rings in the documented order, the complete 16,569 bp
+human reference, all four accessions and species labels, 13 CDS `gene`
+labels, and zero CDS `product` labels.
 
 ## Troubleshooting
 

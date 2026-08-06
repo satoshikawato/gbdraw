@@ -64,9 +64,10 @@ Diagram**, then select **SVG** to save `reloaded_diagram.svg`.
 
 ![Diagram restored from a saved session in a new browser context](../../images/h-gui-14/reloaded-result.png)
 
-The executable capture compares semantic SVG content before saving, after
-fresh-context loading, after regeneration, and in the downloaded SVG. A
-matching screenshot alone is not treated as a successful round trip.
+Confirm this match at every stage — before saving, after loading in the
+fresh context, after regeneration, and in the downloaded SVG — rather than
+trusting a visual comparison alone. The underlying labels and placement are
+what must round-trip, not pixel-for-pixel appearance.
 
 ## Troubleshooting
 

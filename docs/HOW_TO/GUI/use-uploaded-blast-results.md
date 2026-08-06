@@ -53,9 +53,9 @@ Check the result:
 | Displayed links | 7 |
 | Minimum displayed alignment length | 1,000 |
 
-Select **SVG** to save `uploaded_comparison.svg`. The capture parses each link
-from the downloaded SVG and checks its query, subject, coordinates, identity,
-alignment length, E-value, and bit score against the frozen table.
+Select **SVG** to save `uploaded_comparison.svg`. Each of the seven links in
+the downloaded SVG should carry its query, subject, coordinates, identity,
+alignment length, E-value, and bit score from the uploaded TSV.
 
 ## Troubleshooting
 

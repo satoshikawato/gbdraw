@@ -82,9 +82,10 @@ logical features (195 SVG feature elements after compound locations are
 expanded), one `annotations` SVG slot bound to `plastome_regions`, and the
 `AT skew (+)` and `AT skew (-)` legend entries.
 
-Select **SVG** to save `region_annotations_and_slots.svg`. The executable
-capture checks each annotation ID, label, record binding, mark, lane source,
-custom-slot order, outside placement, and downloaded SVG safety.
+Select **SVG** to save `region_annotations_and_slots.svg`. The downloaded
+SVG should carry each annotation's ID, label, record binding, and mark, the
+custom-slot order and outside placement shown above, and no embedded
+scripts.
 
 ## Troubleshooting
 

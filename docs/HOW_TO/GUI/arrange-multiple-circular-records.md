@@ -26,10 +26,21 @@ and
 [`NC_001328.1.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_001328.1.gb).
 Each file contains one complete record annotated as circular.
 
-The Circular uploader accepts one GenBank container. Put the four unchanged
-GenBank entries in one file; do not concatenate their nucleotide sequences. The
-executable capture builds `complete_metazoan_mitochondria.gb` by joining the four
-file byte streams, so each entry keeps its own `LOCUS` line and `//` terminator.
+The Circular uploader accepts one GenBank container, so combine the four
+downloaded files into a single file named `complete_metazoan_mitochondria.gb`
+before uploading. GenBank flat files can be concatenated safely: each record
+already ends with its own `//` terminator, so placing the four files one
+after another (in the row order above) with nothing else added or removed
+produces one valid multi-record file. Use a plain-text editor and paste each
+file's full contents in order, or, from a terminal in the download folder:
+
+```bash
+cat HmmtDNA.gbk NC_002333.2.gb NC_024511.2.gb NC_001328.1.gb \
+  > complete_metazoan_mitochondria.gb
+```
+
+Do not edit or reorder the nucleotide sequence inside any record while
+combining the files.
 
 ## Load all four complete records
 

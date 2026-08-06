@@ -607,7 +607,7 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
         "Ajisai",
         "30%",
         "hepatoplasmataceae_collinear.svg",
-        "two\nnon-empty nucleotide envelope sequences",
+        "contain two non-empty nucleotide envelope sequences",
     ):
         assert value in collinear
     for bgc_id in EXPECTED_RECORD_IDS:

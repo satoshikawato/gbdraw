@@ -31,7 +31,7 @@ whole BGC records `BGC0000708`, `BGC0000709`, `BGC0000711`, `BGC0000712`, and
 
 ## Generate and verify the groups
 
-Select **Generate Diagram**. The qualified output has 155 CDS features, 23
+Select **Generate Diagram**. The output has 155 CDS features, 23
 groups, and 77 links. Links connect adjacent displayed records only:
 `0708→0709→0711→0712→0713`. A shared group can span all five records without a
 direct first-to-last ribbon. Fit the complete preview at **40%** before capture
@@ -46,8 +46,8 @@ Select a link to inspect its group. Confirm that the popup shows a stable
 ![Protein similarity-group member popup](../../images/h-gui-07/group-popup.png)
 
 Save the first raw adjacent result as `bgc_similarity_groups.tsv`, then select
-**SVG** to save `bgc_similarity_groups.svg`. In the qualified capture the TSV
-has 232 twelve-column LOSATP rows and the SVG retains the same 77 group links.
+**SVG** to save `bgc_similarity_groups.svg`. The TSV should have 232
+twelve-column LOSATP rows, and the SVG should retain the same 77 group links.
 
 ## When to use another mode
 

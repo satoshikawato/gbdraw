@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | [Web app](../GUI/compare-proteins-losatp-collinear.md) | **Command line** | [Python API](../PYTHON/compare-proteins-losatp-collinear.md) |
 
-Run the qualified adjacent LOSATP search across five complete genomes and draw
+Run an adjacent LOSATP search across five complete genomes and draw
 the same Collinear blocks used by the GUI Tutorial.
 
 ## Step 1: Prepare the records

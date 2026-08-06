@@ -87,10 +87,10 @@ Check the result before exporting:
 | Legend order | tRNA, rRNA, CDS, GC content, GC skew (+), GC skew (-) |
 | Title | `Human mitochondrial genome: selected gene labels` |
 
-Select **SVG** to save `styled_features_labels_legend.svg`. The executable
-capture parses that downloaded file and checks all 37 feature glyphs, the
-three feature fills, the palette-derived GC colors, every selected gene label,
-the exact title, and the legend order.
+Select **SVG** to save `styled_features_labels_legend.svg`. The downloaded
+file should contain all 37 feature glyphs, the three feature fills, the
+palette-derived GC colors, every selected gene label, the exact title, and
+the legend order set above.
 
 ## Troubleshooting
 

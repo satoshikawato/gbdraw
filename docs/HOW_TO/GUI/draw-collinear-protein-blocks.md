@@ -70,9 +70,9 @@ sequences.
 
 ![Hepatoplasmataceae Collinear block details popup](../../images/h-gui-08/block-popup.png)
 
-Use **Both spans FASTA** to save `collinear_members.fasta`. It contains two
-non-empty nucleotide envelope sequences, and the executable capture verifies
-each against its complete source genome. Select **SVG** to save
+Use **Both spans FASTA** to save `collinear_members.fasta`. It should
+contain two non-empty nucleotide envelope sequences, one matching each
+block's source genome. Select **SVG** to save
 `hepatoplasmataceae_collinear.svg`.
 
 ## Troubleshooting

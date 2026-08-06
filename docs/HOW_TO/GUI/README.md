@@ -2,7 +2,7 @@
 
 # Web app how-to guides
 
-The task guides in this section use the hosted app and the local `gbdraw gui` application. Each documented action is covered by a fresh-browser capture scenario.
+The task guides in this section use the hosted app and the local `gbdraw gui` application.
 
 ## Inputs
 

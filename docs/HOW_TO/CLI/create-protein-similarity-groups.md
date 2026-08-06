@@ -111,4 +111,4 @@ documented `--qualifier_priority` option.
 
 Confirm `losat --version`, the one-thread setting, input checksums, order, and
 thresholds. Treat a result from another runtime or setting as a new analysis,
-not as the qualified artifact shown here.
+not as the exact result shown here.

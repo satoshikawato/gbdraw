@@ -104,10 +104,10 @@ remains visible. Check these details before export:
 | Foreground stroke | `#263238`, 2.5 px |
 | Overlap policy | Enabled, with additional radial lanes where needed |
 
-Select **SVG** to save `feature_visibility_shapes.svg`. The executable capture
-checks the visible controls and then parses the SVG for the record identity,
-feature count, underlay count, mixed shape geometry, foreground stroke, and
-multiple overlap lanes.
+Select **SVG** to save `feature_visibility_shapes.svg`. The downloaded SVG
+should show the record identity, the feature and underlay counts, the mixed
+shape geometry from the table above, the foreground stroke, and multiple
+overlap lanes where features collide.
 
 ## Troubleshooting
 

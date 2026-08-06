@@ -39,6 +39,8 @@
 | [How-to guides](./docs/HOW_TO/README.md) | Focused procedures for inputs, layout, comparisons, tracks, styling, sessions, and export. |
 | [Explanation](./docs/EXPLANATION/README.md) | Choose a layout, interface, comparison method, or publication workflow. |
 | [Reference](./docs/REFERENCE/README.md) | Controls, options, schemas, APIs, compatibility, outputs, and fixture provenance. |
+| [Changelog](./CHANGELOG.md) | What changed, by version. |
+| [Contributing](./CONTRIBUTING.md) | Report a bug, set up a development environment, and submit a pull request. |
 | [Gallery](./docs/GALLERY.md) | Example plots and commands. |
 | [FAQ](./docs/FAQ.md) | Common questions and known limitations. |
 | [About](./docs/ABOUT.md) | Citation information and project background. |

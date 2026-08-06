@@ -11,7 +11,6 @@ TUTORIAL_ROOT = DOCS_ROOT / "TUTORIALS"
 TUTORIAL_INDEX = TUTORIAL_ROOT / "README.md"
 MANIFEST = DOCS_ROOT / "scenarios" / "manifest.json"
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[([^\]\n]+)\]\(([^)\n]+)\)")
-NUMBERED_TUTORIAL_RE = re.compile(r"(\d+)_.+\.md")
 FIRST_H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 
 
@@ -31,15 +30,6 @@ def _local_target(source: Path, raw_target: str) -> Path | None:
     return source.resolve() if not path_part else (source.parent / path_part).resolve()
 
 
-def _legacy_tutorials() -> list[Path]:
-    numbered: list[tuple[int, Path]] = []
-    for path in TUTORIAL_ROOT.glob("[0-9]*_*.md"):
-        match = NUMBERED_TUTORIAL_RE.fullmatch(path.name)
-        if match:
-            numbered.append((int(match.group(1)), path.resolve()))
-    return [path for _, path in sorted(numbered)]
-
-
 def _tutorial_chapters() -> list[dict[str, object]]:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     return [chapter for chapter in manifest["chapters"] if chapter["role"] == "tutorial"]
@@ -53,30 +43,6 @@ def _public_docs() -> list[Path]:
             continue
         paths.append(path)
     return paths
-
-
-def test_numbered_paths_are_short_compatibility_landings() -> None:
-    legacy = _legacy_tutorials()
-    assert [int(path.name.split("_", 1)[0]) for path in legacy] == list(range(1, 10))
-
-    for path in legacy:
-        source = path.read_text(encoding="utf-8")
-        targets = {
-            target
-            for _, raw_target in _markdown_links(path)
-            if (target := _local_target(path, raw_target)) is not None
-        }
-        assert len(source.splitlines()) <= 40, path.name
-        assert "compatibility" in source.casefold(), path.name
-        assert "```" not in source, path.name
-        assert "tests/test_inputs" not in source, path.name
-        assert "wget " not in source, path.name
-        assert any(
-            target.is_relative_to(DOCS_ROOT / section)
-            for target in targets
-            for section in ("TUTORIALS", "HOW_TO", "REFERENCE", "EXPLANATION")
-            if target != path
-        ), path.name
 
 
 def test_surface_indexes_list_each_canonical_tutorial_once_with_its_h1() -> None:
@@ -108,9 +74,7 @@ def test_surface_indexes_list_each_canonical_tutorial_once_with_its_h1() -> None
     assert indexed == [REPO_ROOT / str(chapter["destination"]) for chapter in chapters]
 
 
-def test_tutorial_root_routes_by_surface_before_compatibility_links() -> None:
-    source = TUTORIAL_INDEX.read_text(encoding="utf-8")
-    compatibility_offset = source.index("## Compatibility")
+def test_tutorial_root_routes_by_surface() -> None:
     surface_targets = [
         TUTORIAL_ROOT / "GUI" / "README.md",
         TUTORIAL_ROOT / "CLI" / "README.md",
@@ -122,13 +86,9 @@ def test_tutorial_root_routes_by_surface_before_compatibility_links() -> None:
     assert [target.resolve() for target in surface_targets] == [
         target for target in resolved if target in {path.resolve() for path in surface_targets}
     ]
-    for relative_target in ("GUI/README.md", "CLI/README.md", "PYTHON/README.md"):
-        assert source.index(f"({relative_target})") < compatibility_offset
-    assert set(_legacy_tutorials()) <= {target for target in resolved if target is not None}
 
 
 def test_readme_and_docs_landing_route_through_the_tutorial_index() -> None:
-    legacy = set(_legacy_tutorials())
     for source in (REPO_ROOT / "README.md", DOCS_ROOT / "DOCS.md"):
         targets = {
             target
@@ -136,7 +96,6 @@ def test_readme_and_docs_landing_route_through_the_tutorial_index() -> None:
             if (target := _local_target(source, raw_target)) is not None
         }
         assert TUTORIAL_INDEX.resolve() in targets
-        assert targets.isdisjoint(legacy)
 
 
 def test_public_tutorial_labels_route_to_the_canonical_index() -> None:
@@ -150,9 +109,8 @@ def test_public_tutorial_labels_route_to_the_canonical_index() -> None:
     assert incorrect == []
 
 
-def test_tutorial_root_contains_one_index_and_nine_compatibility_pages() -> None:
-    expected = {TUTORIAL_INDEX.resolve(), *_legacy_tutorials()}
-    assert {path.resolve() for path in TUTORIAL_ROOT.glob("*.md")} == expected
+def test_tutorial_root_contains_only_the_index() -> None:
+    assert {path.resolve() for path in TUTORIAL_ROOT.glob("*.md")} == {TUTORIAL_INDEX.resolve()}
 
 
 def test_public_docs_do_not_expose_the_example_maintenance_script() -> None:

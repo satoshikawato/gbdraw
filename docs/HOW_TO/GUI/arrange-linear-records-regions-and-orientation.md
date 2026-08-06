@@ -51,10 +51,10 @@ Select **Generate Diagram**. Zoom to 30% to inspect both complete rows.
 ![Linear diagram with one reversed record and a coordinate ruler](../../images/h-gui-03/orientation-result.png)
 
 The result shows `1-48502` for `NC_001416.1` and `42925-1` for
-`NC_042057.1`. The descending DE3 range records the reverse orientation. The
-capture checks the source lengths separately, stores row 1 for Lambda and row
-2 for DE3 in the generated controls, confirms that the SVG record groups do
-not overlap, and checks that only DE3 has the reverse-complement flag.
+`NC_042057.1`. The descending DE3 range records the reverse orientation. Row
+1 stays Lambda and row 2 stays DE3 in the generated controls, the two record
+groups in the SVG do not overlap, and only DE3 carries the
+reverse-complement flag.
 
 Select **SVG** to save `linear_regions_orientation.svg`.
 

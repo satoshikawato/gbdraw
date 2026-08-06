@@ -12,7 +12,7 @@ line, or from Python.
 | --- | --- | --- | --- | --- |
 | Create and export a first Circular diagram | A labeled human mitochondrial genome with GC content and GC skew. | [Open](GUI/first-circular-genome-diagram.md) | [Open](CLI/first-circular-genome-diagram.md) | [Open](PYTHON/first-genome-diagram.md) |
 | Create and export a first Linear diagram | The complete Lambda genome with annotated features and a coordinate scale. | [Open](GUI/first-linear-genome-diagram.md) | [Open](CLI/first-linear-genome-diagram.md) | [Open](PYTHON/first-linear-genome-diagram.md) |
-| Compare nucleotide sequences with LOSATN | Complete Lambda and DE3 genomes connected by their qualified nucleotide matches. | [Open](GUI/compare-genomes-losatn.md) | [Open](CLI/compare-genomes-losatn.md) | [Open](PYTHON/compare-genomes-losatn.md) |
+| Compare nucleotide sequences with LOSATN | Complete Lambda and DE3 genomes connected by their nucleotide matches. | [Open](GUI/compare-genomes-losatn.md) | [Open](CLI/compare-genomes-losatn.md) | [Open](PYTHON/compare-genomes-losatn.md) |
 | Group homologous proteins with LOSATP | Five aminoglycoside biosynthetic gene clusters aligned to `og_1` and connected by Similarity-group links. | [Open](GUI/compare-proteins-losatp.md) | [Open](CLI/compare-proteins-losatp.md) | [Open](PYTHON/compare-proteins-losatp.md) |
 | Reproduce a polished Gallery map | The tobacco chloroplast genome with functional colors, feature labels, plastome-region annotations, and GC content. | [Open](GUI/build-an-annotated-chloroplast-map.md) | [Open](CLI/build-an-annotated-chloroplast-map.md) | [Open](PYTHON/build-an-annotated-chloroplast-map.md) |
 | Add comparison rings from precomputed evidence | The human mitochondrial genome surrounded by three filtered TLOSATX comparison rings. | [Open](GUI/add-precomputed-circular-comparison-rings.md) | [Open](CLI/add-precomputed-circular-comparison-rings.md) | [Open](PYTHON/add-precomputed-circular-comparison-rings.md) |
@@ -24,20 +24,10 @@ line, or from Python.
 Browse the same projects by interface in the [web app](GUI/README.md),
 [command-line](CLI/README.md), and [Python](PYTHON/README.md) indexes.
 
-## Compatibility routes for the retired numbered guides
-
-The migration to focused Tutorial, How-to, Reference, and Explanation pages is complete. The former numbered URLs remain as short compatibility routes for one renovation release:
-
-1. [Style a circular genome diagram](1_Customizing_Plots.md)
-2. [Draw genome comparison links from precomputed BLAST results](2_Comparative_Genomics.md)
-3. [Set feature colors and labels](3_Advanced_Customization.md)
-4. [Draw protein matches from annotated CDS features](4_Protein_Comparisons.md)
-5. [Use TSV manifests for CLI inputs](5_Table_Driven_Inputs.md)
-6. [Plot read depth and other numeric tracks](6_Depth_Quantitative_Tracks.md)
-7. [Arrange linear tracks, record labels, and rulers](7_Linear_Layout.md)
-8. [Create interactive SVGs and restore saved sessions](8_Interactive_SVG_Sessions.md)
-9. [Control feature visibility and shapes](9_Feature_Visibility_Shapes.md)
-
-Each compatibility page points to the current canonical destinations and contains no duplicate runnable procedure. Complete option inventories, schemas, defaults, and compatibility history live in [Reference](../REFERENCE/README.md).
+The migration from the former numbered guides (`1_Customizing_Plots.md`
+through `9_Feature_Visibility_Shapes.md`) to focused Tutorial, How-to,
+Reference, and Explanation pages is complete; those numbered URLs have been
+removed. Complete option inventories, schemas, defaults, and compatibility
+history live in [Reference](../REFERENCE/README.md).
 
 [Documentation home](../DOCS.md) | [How-to guides](../HOW_TO/README.md) | [Explanation](../EXPLANATION/README.md) | [Reference](../REFERENCE/README.md)

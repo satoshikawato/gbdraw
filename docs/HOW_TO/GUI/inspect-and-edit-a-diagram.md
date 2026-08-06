@@ -65,11 +65,11 @@ Choose **Layout edit**, then drag the legend slightly upward and inward. Turn
 
 ![Regenerated diagram retaining feature and legend edits](../../images/h-gui-13/edited-result.png)
 
-Choose **SVG** to save `edited_diagram.svg`. The executable capture parses that
-download and checks the same three feature IDs, colors, strokes, legend text,
-and legend position. The feature edits are therefore checked across
-regeneration, while the final layout is checked across export; neither check
-relies on a temporary developer-tools style.
+Choose **SVG** to save `edited_diagram.svg`. The download should keep the
+same three feature IDs, colors, strokes, legend text, and legend position
+you set above: the feature-color edits survive the diagram regeneration from
+the previous section, and the legend position survives export, so neither is
+a temporary, browser-only visual change.
 
 ## Inspect LOSATP match and Similarity group popups
 
@@ -103,7 +103,8 @@ sequence actions. The same five-member group is available from the
 - **Edits disappear after regeneration:** use the popup or selected-feature
   **Apply** actions; browser developer tools only change transient SVG markup.
 - **A BGC match is labelled Collinear:** rerun LOSATP in **Similarity groups**
-  mode. Collinear blocks are a separate analysis and popup contract.
+  mode. Collinear blocks come from a different analysis and show a different
+  popup.
 
 ## Related guides
 
