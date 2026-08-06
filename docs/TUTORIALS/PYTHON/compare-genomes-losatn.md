@@ -60,13 +60,5 @@ comparison ribbons.
 
 ![Lambda and DE3 LOSATN comparison from Python](../../images/t-py-04/python_lambda_de3_losatn.svg)
 
-## Step 3: Verify the result
-
-Run the literal code in a clean directory and repeat the SVG checks:
-
-```bash
-python docs/recipes/run_python_scenarios.py --scenario T-PY-04 --check
-```
-
 The validator checks the record order, source lengths, six retained matches,
 comparison height, and standard-SVG safety.

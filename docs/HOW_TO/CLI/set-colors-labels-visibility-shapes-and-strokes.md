@@ -23,7 +23,7 @@ The source is the complete circular 16,569 bp `NC_012920.1` record.
 Save this as `tables/presentation_colors.tsv`:
 
 ```tsv
-CDS	gene	^ND[1-6]$	#3B82F6	NADH dehydrogenase
+CDS	gene	^ND(4L|[1-6])$	#3B82F6	NADH dehydrogenase
 CDS	gene	^COX[1-3]$	#EF4444	Cytochrome c oxidase
 CDS	gene	^ATP[68]$	#F59E0B	ATP synthase
 CDS	gene	^CYTB$	#8B5CF6	Cytochrome b

@@ -113,13 +113,8 @@ print(f"Saved {saved_path}")
 ```
 <!-- executable:T-PY-11:end -->
 
-## Step 2: Verify the result
-
-```bash
-python docs/recipes/run_python_scenarios.py --scenario T-PY-11 --check
-```
-
-The validator checks 607 depth values, the 0x–80x and 10%–55% axes, the signed
-GC-skew fills, the five-slot order, and exact parity with the CLI output.
+Open `quantitative_genome_map.svg`. It should plot all 607 depth values on a
+0x–80x axis, GC content on a 10%–55% axis, and the signed GC-skew fills, in
+the same five-slot order as the CLI figure.
 
 ![AP027133.1 depth, GC content, and GC skew from Python](../../images/t-py-11/quantitative_genome_map.svg)

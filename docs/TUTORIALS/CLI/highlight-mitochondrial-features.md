@@ -47,7 +47,7 @@ Save this as `tables/presentation_colors.tsv`. Rows are evaluated in order;
 the first matching feature-specific rule wins over the base palette.
 
 ```tsv
-CDS	gene	^ND[1-6]$	#3B82F6	NADH dehydrogenase
+CDS	gene	^ND(4L|[1-6])$	#3B82F6	NADH dehydrogenase
 CDS	gene	^COX[1-3]$	#EF4444	Cytochrome c oxidase
 CDS	gene	^ATP[68]$	#F59E0B	ATP synthase
 CDS	gene	^CYTB$	#8B5CF6	Cytochrome b

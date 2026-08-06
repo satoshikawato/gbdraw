@@ -47,16 +47,7 @@ print(f"Saved {saved_path}")
 <!-- executable:T-PY-03:end -->
 
 The returned `Diagram` keeps the parsed record in memory and writes one standard
-SVG. Open `python_lambda_linear.svg` to see the labeled whole-record map.
+SVG. Open `python_lambda_linear.svg` to see the labeled whole-record map, all
+73 CDS features, the ruler, and the two separated strands.
 
 ![Complete Lambda linear map from Python](../../images/t-py-03/python_lambda_linear.svg)
-
-## Step 3: Verify the result
-
-The executable recipe checks the record identity, 73 stable feature IDs,
-representative gene labels, ruler marks, strand separation, and standard-SVG
-safety. Run it from a repository checkout with:
-
-```bash
-python docs/recipes/run_python_scenarios.py --scenario T-PY-03 --check
-```

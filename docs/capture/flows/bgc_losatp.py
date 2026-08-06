@@ -675,6 +675,11 @@ def capture_bgc_losatp(
             )
 
         fit_complete_linear_preview(page, target_zoom="40%")
+        name = screenshot_names["settings"]
+        page.get_by_label("LOSATP blastp mode", exact=True).scroll_into_view_if_needed()
+        screenshot_bytes[name] = capture_screenshot(
+            page, output_paths[name], "Linear"
+        )
         if align_orthogroup_id is not None:
             alignment_popup = _open_orthogroup_alignment_target(
                 page, align_orthogroup_id
@@ -697,11 +702,6 @@ def capture_bgc_losatp(
                     f"Expected alignment to {align_orthogroup_id}, found {aligned_state!r}"
                 )
             fit_complete_linear_preview(page, target_zoom="40%")
-        name = screenshot_names["settings"]
-        page.get_by_label("LOSATP blastp mode", exact=True).scroll_into_view_if_needed()
-        screenshot_bytes[name] = capture_screenshot(
-            page, output_paths[name], "Linear"
-        )
         name = screenshot_names["result"]
         screenshot_bytes[name] = capture_screenshot(
             page, output_paths[name], "Linear"

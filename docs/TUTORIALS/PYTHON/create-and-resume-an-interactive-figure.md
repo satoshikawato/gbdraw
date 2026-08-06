@@ -94,15 +94,9 @@ print("Restored restored_interactive_figure.svg")
 ```
 <!-- executable:T-PY-08:end -->
 
-## Step 2: Verify the handoff
-
-```bash
-python docs/recipes/run_python_scenarios.py --scenario T-PY-08 --check
-```
-
-The runner executes the block in a clean directory and checks the typed return
-values, current session and request schemas, embedded resources, interactive
-controls and feature metadata, and exact static-SVG reproduction.
+Open `restored_interactive_figure.svg`. It should reproduce the original
+static export exactly, from the same embedded resources and feature
+metadata carried by the saved session.
 
 ![Human mitochondrial map restored from Python](../../images/t-py-08/restored_interactive_figure.svg)
 

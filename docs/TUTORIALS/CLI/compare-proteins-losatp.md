@@ -79,12 +79,6 @@ The bundled LOSAT runtime performs four adjacent searches and writes
 
 ![Five BGC records aligned to Similarity group og_1](../../images/t-cli-08/bgc_losatp_groups.svg)
 
-## Step 3: Verify the groups
-
-This command pins the bundled LOSAT version and checks 232 raw rows, 23
-groups, 77 adjacent links, the reversed fifth record, and the final
-presentation:
-
-```bash
-python docs/recipes/run_cli_scenarios.py --scenario T-CLI-08 --check
-```
+The search produces 232 raw rows, reduced to 23 Similarity groups and 77
+adjacent links; the fifth record stays reversed, matching the browser
+Tutorial's alignment.

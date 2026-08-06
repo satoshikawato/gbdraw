@@ -92,11 +92,5 @@ print(f"Saved {saved_path}")
 
 ![Human mitochondrial reference with three rings from Python](../../images/t-py-06/python_precomputed_circular_rings.svg)
 
-## Step 3: Verify the result
-
-```bash
-python docs/recipes/run_python_scenarios.py --scenario T-PY-06 --check
-```
-
-The runner verifies the ordered labels, subject-reference mapping, 106 retained
-HSPs, companion sequence identities, and the standard SVG.
+The saved SVG should keep the ordered ring labels, the subject-reference
+mapping, and 106 retained HSPs across the three companion sequences.

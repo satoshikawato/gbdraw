@@ -48,11 +48,6 @@ gbdraw circular \
 
 ![Human mitochondrial reference with three TLOSATX rings](../../images/t-cli-09/precomputed_circular_rings.svg)
 
-## Step 3: Verify the result
-
-```bash
-python docs/recipes/run_cli_scenarios.py --scenario T-CLI-09 --check
-```
-
-The validator checks the subject-reference direction, ring order, labels,
-comparison FASTA identities, 106 retained HSPs, and standard-SVG safety.
+The finished SVG keeps the subject-reference direction, the rings in the
+documented order with their labels, and the comparison FASTA identities; 106
+HSPs are retained across the three rings.

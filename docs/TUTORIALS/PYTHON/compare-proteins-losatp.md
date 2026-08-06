@@ -126,11 +126,5 @@ print(f"Saved {saved_path}")
 
 ![Five BGC records aligned to og_1 from Python](../../images/t-py-05/python_bgc_losatp_groups.svg)
 
-## Step 3: Verify the result
-
-```bash
-python docs/recipes/run_python_scenarios.py --scenario T-PY-05 --check
-```
-
-The runner checks the fixed record order, reversed fifth record, pinned LOSAT
-runtime, 23 groups, 77 adjacent links, and the `og_1` alignment.
+The fixed record order and reversed fifth record match the browser Tutorial,
+reduced to 23 Similarity groups and 77 adjacent links and aligned on `og_1`.

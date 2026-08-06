@@ -48,15 +48,9 @@ The first command writes the static master, the offline Interactive SVG, and
 the compressed working session. The second command reads only the session and
 writes the restored static SVG.
 
-## Step 2: Verify the handoff
-
-```bash
-python docs/recipes/run_cli_scenarios.py --scenario T-CLI-11 --check
-```
-
-The validator checks the current session schema, embedded GenBank resource,
-37 stable feature IDs, `COX1` search metadata, offline interactive controls,
-and byte-identical static SVGs before and after replay.
+Open `restored_interactive_figure.svg`. It should match the original static
+master exactly: the same 37 feature IDs, the same `COX1` search metadata, and
+the same visible content, reproduced entirely from the saved session.
 
 ![Human mitochondrial map restored from the CLI session](../../images/t-cli-11/restored_interactive_figure.svg)
 

@@ -38,7 +38,7 @@ from gbdraw.api import AnnotationOptions, CircularTrackSlot, ScalarSpec
 
 color_table = DataFrame(
     [
-        ["CDS", "gene", "^ND[1-6]$", "#3B82F6", "NADH dehydrogenase"],
+        ["CDS", "gene", "^ND(4L|[1-6])$", "#3B82F6", "NADH dehydrogenase"],
         ["CDS", "gene", "^COX[1-3]$", "#EF4444", "Cytochrome c oxidase"],
         ["CDS", "gene", "^ATP[68]$", "#F59E0B", "ATP synthase"],
         ["CDS", "gene", "^CYTB$", "#8B5CF6", "Cytochrome b"],
@@ -147,14 +147,8 @@ print(f"Saved {saved_path}")
 ```
 <!-- executable:T-PY-09:end -->
 
-## Step 2: Verify the result
-
-```bash
-python docs/recipes/run_python_scenarios.py --scenario T-PY-09 --check
-```
-
-The validator checks all 37 features, the five functional colors, selected
-renamed labels, arrow and rectangle shapes, stroke geometry, and the one
-origin-spanning D-loop bracket.
+Open `mitochondrial_features_highlighted.svg`. It should keep all 37
+features, the five functional legend colors, the renamed labels, the arrow
+and rectangle shapes set above, and the one origin-spanning D-loop bracket.
 
 ![Highlighted human mitochondrial features from Python](../../images/t-py-09/mitochondrial_features_highlighted.svg)

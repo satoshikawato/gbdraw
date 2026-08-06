@@ -41,11 +41,5 @@ Lambda and DE3 records.
 
 ![Lambda and DE3 LOSATN comparison from the CLI](../../images/t-cli-07/lambda-de3-losatn.svg)
 
-## Step 3: Verify the evidence
-
-The recipe verifies both accessions, all six endpoint pairs and alignment
-lengths, the 120 px comparison geometry, and standard-SVG safety:
-
-```bash
-python docs/recipes/run_cli_scenarios.py --scenario T-CLI-07 --check
-```
+Both accessions and all six endpoint pairs should match the TSV, drawn in the
+120 px comparison band set above.

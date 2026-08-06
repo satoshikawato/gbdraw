@@ -54,7 +54,7 @@ EXPECTED_SLOTS = (
     ("mitochondrial_regions", "annotations"),
 )
 
-COLOR_TABLE = """CDS\tgene\t^ND[1-6]$\t#3B82F6\tNADH dehydrogenase
+COLOR_TABLE = """CDS\tgene\t^ND(4L|[1-6])$\t#3B82F6\tNADH dehydrogenase
 CDS\tgene\t^COX[1-3]$\t#EF4444\tCytochrome c oxidase
 CDS\tgene\t^ATP[68]$\t#F59E0B\tATP synthase
 CDS\tgene\t^CYTB$\t#8B5CF6\tCytochrome b
