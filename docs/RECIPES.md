@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [CLI how-to guides](./HOW_TO/CLI/README.md) | **Recipes** | [Reference](./REFERENCE/README.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
 
 # Recipes
 
@@ -466,4 +466,4 @@ gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg,interactive_svg
 It does not require CairoSVG, Node.js, Playwright, Chromium, or a web build step.
 Open the interactive file in a browser; some desktop SVG viewers block embedded scripts.
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [CLI how-to guides](./HOW_TO/CLI/README.md) | **Recipes** | [Reference](./REFERENCE/README.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

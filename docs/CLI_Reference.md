@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | **CLI Reference** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Reference](./REFERENCE/README.md) | **CLI Reference (generated)** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
 
 # Command-Line Reference
 
@@ -1393,4 +1393,4 @@ hit set is not guaranteed to be identical to LOSAT.
 - [Draw Collinear protein-match blocks with LOSATP](./HOW_TO/CLI/draw-collinear-protein-blocks.md)
 - [Use record, comparison, conservation, annotation, and track tables](./HOW_TO/CLI/use-input-tables.md)
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | **CLI Reference** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Reference](./REFERENCE/README.md) | **CLI Reference (generated)** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

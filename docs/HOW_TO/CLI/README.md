@@ -17,3 +17,5 @@ These guides run their documented commands from a clean temporary directory. Use
 - [How to set colors, labels, visibility, shapes, and strokes](set-colors-labels-visibility-shapes-and-strokes.md)
 - [How to save and regenerate sessions safely](save-and-regenerate-sessions.md)
 - [How to export static and interactive outputs](export-static-and-interactive-outputs.md)
+
+Need a short, copyable command for one specific task instead of a full walkthrough? See [Recipes](../../RECIPES.md), a template appendix that assumes the working directory and inputs described above.

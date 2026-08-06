@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | **FAQ** | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Installation](./INSTALL.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Explanation](./EXPLANATION/README.md) | [Reference](./REFERENCE/README.md) | [Gallery](./GALLERY.md) | **FAQ** | [About](./ABOUT.md)
 
 # Frequently asked questions
 
@@ -195,4 +195,4 @@ Non-SVG export requires CairoSVG. Install the optional export dependency and, if
 - Trans-introns are not currently visualized.
 - Mixed-format text such as `<i>Ca.</i> Tyloplasma litorale` does not reliably survive SVG-to-PNG/PDF/EPS/PS conversion. Use SVG if you need exact mixed formatting.
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | **FAQ** | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Installation](./INSTALL.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Explanation](./EXPLANATION/README.md) | [Reference](./REFERENCE/README.md) | [Gallery](./GALLERY.md) | **FAQ** | [About](./ABOUT.md)

@@ -1,3 +1,5 @@
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+
 # Create protein Similarity groups with LOSATP in the browser
 
 ## Choose how to build this figure
@@ -98,7 +100,7 @@ before capturing or exporting it.
 
 ## Step 4: Run LOSATP
 
-Select **Generate Diagram** again. The qualified result contains 23 stable
+Select **Generate Diagram** again. The result contains 23 stable
 groups and 77 displayed group links. The four displayed endpoint pairs are
 `0708→0709`, `0709→0711`, `0711→0712`, and `0712→0713`.
 
@@ -121,7 +123,7 @@ x-coordinate. This is the alignment used by the Interactive SVG Gallery.
 ![Five whole BGC records aligned to similarity group og_1](../../images/t-gui-04/05-comparison-result.png)
 
 Under **Raw LOSAT results**, name the first adjacent result
-`bgc_losatp_groups.tsv` and select **Save Raw LOSAT TSV**. The qualified file
+`bgc_losatp_groups.tsv` and select **Save Raw LOSAT TSV**. The file
 contains 232 twelve-column rows. Select **SVG** after alignment to save
 `bgc_losatp_groups.svg`.
 

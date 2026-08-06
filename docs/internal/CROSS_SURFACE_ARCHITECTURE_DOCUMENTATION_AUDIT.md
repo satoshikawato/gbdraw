@@ -216,12 +216,12 @@ assembled a camelCase request for session saving. It also imported private CLI p
 helpers and maintained a second set of transport defaults.
 
 Current resolution:
-[`buildCanonicalRenderRequest()`](../gbdraw/web/js/services/session-request.js) is
+[`buildCanonicalRenderRequest()`](../../gbdraw/web/js/services/session-request.js) is
 the Web projection used by fresh rendering, session saving, replay downloads, and
 Gallery promotion. The
-[diagram worker](../gbdraw/web/js/workers/diagram-generation-worker.js) receives
+[diagram worker](../../gbdraw/web/js/workers/diagram-generation-worker.js) receives
 `renderRequest` and `resources`, and the
-[Python bridge](../gbdraw/web_support/request_render.py) decodes the request at the
+[Python bridge](../../gbdraw/web_support/request_render.py) decodes the request at the
 public typed boundary. `run-analysis.js` retains UI validation and analysis staging,
 but it no longer constructs diagram argv or imports private parser state. Run Info
 exposes one `--session` replay command from the same document.
@@ -261,13 +261,13 @@ while the package-root API inspected only caller-supplied options. Computed grou
 could be absent from an interactive SVG. The two paths also treated metadata failures
 differently.
 
-Current resolution: the typed [Linear build path](../gbdraw/api/diagram.py) produces
+Current resolution: the typed [Linear build path](../../gbdraw/api/diagram.py) produces
 a `LinearDiagramBuildResult` containing the `Drawing` and
 `LinearDiagramMetadata`. The direct compatibility builder retains its `Drawing`
 return but is not the preferred public workflow. The metadata includes computed
 protein comparison tables, normalized Linear comparisons, similarity groups, and
 collinearity results. `PreparedDiagramRequest` and `RequestRenderResult` in the
-[request renderer](../gbdraw/api/request_render.py) carry that typed value to
+[request renderer](../../gbdraw/api/request_render.py) carry that typed value to
 interactive context generation and session artifacts. Production code no longer
 attaches or reads computed analysis metadata through private attributes on a drawing.
 
@@ -293,12 +293,12 @@ searched for option-name strings. Large JavaScript fallback maps duplicated expe
 support. A help-text edit could therefore alter a capability result.
 
 Current resolution:
-[`get_web_runtime_capabilities()`](../gbdraw/web_support/capabilities.py) returns a
+[`get_web_runtime_capabilities()`](../../gbdraw/web_support/capabilities.py) returns a
 versioned, JSON-compatible manifest owned by the Python runtime. The manifest declares
 its schema, worker render protocol, supported request schemas, unknown-field policy,
 resource encodings, rendering option schema, feature and track renderers, and analysis
 artifact schemas. The diagram worker sends it during initialization.
-[`validateWebRuntimeCapabilities()`](../gbdraw/web/js/services/runtime-capabilities.js)
+[`validateWebRuntimeCapabilities()`](../../gbdraw/web/js/services/runtime-capabilities.js)
 compares the complete shape and values once before accepting render work. A mismatch
 returns a stable user message and a diagnostic for developers. Source inspection and
 option fallback maps are absent.
@@ -313,7 +313,7 @@ interactive output.
 Current resolution:
 `PreparedDiagramInputs` owns resolved GFF candidate types and the reusable feature
 bundle for a request plan.
-[`ResolvedFeatureInputs`](../gbdraw/api/prepared.py) owns loaded default and custom
+[`ResolvedFeatureInputs`](../../gbdraw/api/prepared.py) owns loaded default and custom
 colors, compiled visibility rules, and their normalized lookup maps.
 `PreparedDiagramRequest` carries those values through assembly and interactive
 metadata generation. Circular batch items share the same prepared feature inputs.
@@ -366,16 +366,16 @@ Readers accepted session versions 34–38 and request schemas 3–4 even though 
 formats had not reached first-parent `main` or a release.
 
 Current resolution: the current
-[request renderer](../gbdraw/api/request_render.py) accepts only
+[request renderer](../../gbdraw/api/request_render.py) accepts only
 `CurrentRequestArtifacts`. The
-[session compatibility adapter](../gbdraw/api/session_compat.py) owns released
+[session compatibility adapter](../../gbdraw/api/session_compat.py) owns released
 persisted-artifact parsing, protein candidate promotion, retired ID rewriting,
 derived evidence recovery, and released Linear slot migration. Session versions
 27–33 and request schemas 1–2 remain supported alongside current session version 39
 and request schema 5. Branch-only versions and schemas are rejected.
 
 The session reader and current renderer share the session-neutral validator in
-[`protein_artifacts.py`](../gbdraw/analysis/protein_artifacts.py). It requires the
+[`protein_artifacts.py`](../../gbdraw/analysis/protein_artifacts.py). It requires the
 current derived envelope, rejects retired and feature-analysis IDs, and resolves
 every runtime handle through the current protein identity manifest. A strict
 zero-hit artifact remains valid without fabricated runtime handles.
@@ -446,16 +446,16 @@ At audit time, session versions, cache schemas, migration details, and internal 
 formats were repeated across task tutorials, FAQ, Python API prose, CLI Reference,
 and release notes.
 
-Current resolution: [Session and request compatibility](./SESSION_COMPATIBILITY.md)
+Current resolution: [Session and request compatibility](../SESSION_COMPATIBILITY.md)
 owns the current support and migration contract. Task documents retain the action,
 expected result, and recoverable failures, then link to that reference. Typed
-integration material lives in [TYPED_API.md](./TYPED_API.md). Release notes retain
+integration material lives in [TYPED_API.md](../TYPED_API.md). Release notes retain
 historical changes. Documentation contracts prevent current task guides from
 reintroducing internal compatibility terms.
 
 ### D-06: Web developer guidance
 
-At audit time, [the Web maintenance guide](../gbdraw/web/CLAUDE.md) described
+At audit time, [the Web maintenance guide](../../gbdraw/web/CLAUDE.md) described
 single-genome Circular behavior, CDN assets, permissive CSP, main-thread Pyodide
 rendering, and source locations by approximate line number.
 

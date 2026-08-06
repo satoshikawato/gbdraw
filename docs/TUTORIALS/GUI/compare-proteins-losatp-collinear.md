@@ -1,3 +1,5 @@
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+
 # Recreate the Gallery LOSATP Collinear blocks figure
 
 ## Choose how to build this figure

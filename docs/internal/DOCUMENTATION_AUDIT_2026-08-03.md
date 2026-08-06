@@ -23,18 +23,18 @@
 
 | 順位 | ID | 対象 | 問題 | 推奨する改修 |
 |---:|---|---|---|---|
-| 1 | P0-1 | [Release notes](./RELEASE_NOTES_0.14.0b0.md) | session v39を現行としているが、正本と実装はv40。 | v40導入内容と互換範囲を履歴として記録し、`current` を固定されたリリース時点の記述へ変える。 |
-| 2 | P0-2 | [Tutorial 7](./TUTORIALS/7_Linear_Layout.md) | 宣言した作業ディレクトリから、未準備ファイルと解決不能な相対パスを使う。 | 全入力の取得・コピーを冒頭に集約し、クリーンな作業ディレクトリで全コマンドを通す。 |
-| 3 | P0-3 | [Tutorial 9](./TUTORIALS/9_Feature_Visibility_Shapes.md) | 主要図の再現方法がGallery sessionの読み込みに依存し、元の`.gbk`からの完全なCLI/GUI手順がない。 | 実入力、完全なCLI、同値なGUI操作を本文の主経路にし、sessionは検算用の近道へ降格する。 |
-| 4 | P0-4 | [Python API](./PYTHON_API.md) | MjeNMV図のラベル選択に説明がなく、ラベルと定量トラック/tickが競合する。コードと掲載PNGも別レシピ。 | quick startと完成例を分け、ラベル方針を説明し、実際のPythonコードから掲載図を生成する。 |
-| 5 | P0-5 | [Tutorial 5: GFF3 + FASTA](./TUTORIALS/5_Table_Driven_Inputs.md#3-linear---records_table-for-gff3--fasta-rows) | 87 bpの合成例で、実ファイルでも完成図でもない。 | 既存のNCBI由来lambda fixtureを使い、records table、コマンド、結果図、検証値を掲載する。 |
-| 6 | P0-6 | [Tutorial 5: similarity ring](./TUTORIALS/5_Table_Driven_Inputs.md#5-circular-blast-similarity-rings-with---conservation_table) | 23,709 HSP中5件だけが残り、掲載縮尺ではリングがほぼ空に見える。 | 閾値とHSP重複を再検討し、保持件数とreference上の被覆を明記してから図を再生成する。 |
-| 7 | P1-1 | [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md) | 後半のmulti-record例が、冒頭で準備していないGenBank/BLAST入力を要求する。 | `examples/linear_multi_*.tsv` と関連入力を使う一つの準備手順に統合する。 |
+| 1 | P0-1 | [Release notes](../RELEASE_NOTES_0.14.0b0.md) | session v39を現行としているが、正本と実装はv40。 | v40導入内容と互換範囲を履歴として記録し、`current` を固定されたリリース時点の記述へ変える。 |
+| 2 | P0-2 | Tutorial 7 | 宣言した作業ディレクトリから、未準備ファイルと解決不能な相対パスを使う。 | 全入力の取得・コピーを冒頭に集約し、クリーンな作業ディレクトリで全コマンドを通す。 |
+| 3 | P0-3 | Tutorial 9 | 主要図の再現方法がGallery sessionの読み込みに依存し、元の`.gbk`からの完全なCLI/GUI手順がない。 | 実入力、完全なCLI、同値なGUI操作を本文の主経路にし、sessionは検算用の近道へ降格する。 |
+| 4 | P0-4 | [Python API](../PYTHON_API.md) | MjeNMV図のラベル選択に説明がなく、ラベルと定量トラック/tickが競合する。コードと掲載PNGも別レシピ。 | quick startと完成例を分け、ラベル方針を説明し、実際のPythonコードから掲載図を生成する。 |
+| 5 | P0-5 | Tutorial 5: GFF3 + FASTA | 87 bpの合成例で、実ファイルでも完成図でもない。 | 既存のNCBI由来lambda fixtureを使い、records table、コマンド、結果図、検証値を掲載する。 |
+| 6 | P0-6 | Tutorial 5: similarity ring | 23,709 HSP中5件だけが残り、掲載縮尺ではリングがほぼ空に見える。 | 閾値とHSP重複を再検討し、保持件数とreference上の被覆を明記してから図を再生成する。 |
+| 7 | P1-1 | Tutorial 2 | 後半のmulti-record例が、冒頭で準備していないGenBank/BLAST入力を要求する。 | `examples/linear_multi_*.tsv` と関連入力を使う一つの準備手順に統合する。 |
 | 8 | P1-2 | 全Tutorial | source checkout内の`tests/test_inputs`、暗黙のカレントディレクトリ、先行節の変数やファイルに依存する。 | 各TutorialにRequirements、Inputs、Working directory、Expected outputs、Validationを置く。 |
 | 9 | P1-3 | 掲載図の生成契約 | Markdownのコマンド、Pythonコード、manifest recipe、掲載画像が別々に変わり得る。 | 一つの実行可能recipeからコマンドと図を作るか、両者の正規化SVG同等性をテストする。 |
-| 10 | P1-4 | [Gallery](./GALLERY.md) | 「commands付き」と案内されるが、各図に入力、コマンド、versionがない。再生成に不足する入力もある。 | showcaseと呼び直すか、各図にcanonical recipe/session、入力入手先、versionを付ける。 |
-| 11 | P1-5 | [Workflow guide](./WORKFLOW_GUIDE.md)ほか | `Web UX profile v1` は内部監査用の名前で、一般利用者に保証する内容が不明。`hosted web app` も反復される。 | 見出しを削除し、必要な「Web appの既定値/入力制限」だけを書く。製品名は`web app`に統一する。 |
-| 12 | P1-6 | [Quickstart](./QUICKSTART.md) | 現在のNCBI annotationを取得する手順と、2025-07-17の固定fixtureから作った掲載図を同一視している。 | 固定fixtureとchecksumを配布するか、annotation更新により図が変わることを明記する。 |
+| 10 | P1-4 | [Gallery](../GALLERY.md) | 「commands付き」と案内されるが、各図に入力、コマンド、versionがない。再生成に不足する入力もある。 | showcaseと呼び直すか、各図にcanonical recipe/session、入力入手先、versionを付ける。 |
+| 11 | P1-5 | [Workflow guide](../WORKFLOW_GUIDE.md)ほか | `Web UX profile v1` は内部監査用の名前で、一般利用者に保証する内容が不明。`hosted web app` も反復される。 | 見出しを削除し、必要な「Web appの既定値/入力制限」だけを書く。製品名は`web app`に統一する。 |
+| 12 | P1-6 | [Quickstart](../QUICKSTART.md) | 現在のNCBI annotationを取得する手順と、2025-07-17の固定fixtureから作った掲載図を同一視している。 | 固定fixtureとchecksumを配布するか、annotation更新により図が変わることを明記する。 |
 | 13 | P2-1 | 情報構造 | README、Docs、Installation、Workflowにinterface選択とprivacy説明が重複する。内部計画文書も公開文書と同じ階層にある。 | 文書ごとの役割を決め、内部文書を`docs/internal/`等へ分離する。 |
 | 14 | P2-2 | Reference | CLI helpと手書き説明、Typed APIとsession compatibility、release notesに同じ契約が重複する。 | 現行仕様の正本を一つにし、他文書は利用手順とリンクだけを持つ。 |
 | 15 | P2-3 | Installation/Export | InstallationにPyPI経路がない一方、Exportは`pip install "gbdraw[export]"`を前提にする。 | PyPIを正式経路として説明するか、ExportをBioconda/source別の追加手順に直す。 |
@@ -44,7 +44,7 @@
 
 ### P0-1: release notesのsession versionを正す
 
-[Release notesの145–149行](./RELEASE_NOTES_0.14.0b0.md#L145-L149)、[175–177行](./RELEASE_NOTES_0.14.0b0.md#L175-L177)、[192–194行](./RELEASE_NOTES_0.14.0b0.md#L192-L194)、[400–417行](./RELEASE_NOTES_0.14.0b0.md#L400-L417)は、session v39をcurrent writerとしている。これに対して、[Session compatibility](./SESSION_COMPATIBILITY.md#L10-L25)はwriter v40、accepted versions 27–33/39–40、typed bridge 31–33/39–40を正本としており、実装の[`CURRENT_SESSION_VERSION`](../gbdraw/session_io.py#L40-L46)も40である。さらに[手動browser acceptance script](../tests/run_losat_cache_browser_acceptance.py#L23-L31)が39を固定しているため、この更新漏れを検出できていない。
+[Release notesの145–149行](../RELEASE_NOTES_0.14.0b0.md#L145-L149)、[175–177行](../RELEASE_NOTES_0.14.0b0.md#L175-L177)、[192–194行](../RELEASE_NOTES_0.14.0b0.md#L192-L194)、[400–417行](../RELEASE_NOTES_0.14.0b0.md#L400-L417)は、session v39をcurrent writerとしている。これに対して、[Session compatibility](../SESSION_COMPATIBILITY.md#L10-L25)はwriter v40、accepted versions 27–33/39–40、typed bridge 31–33/39–40を正本としており、実装の[`CURRENT_SESSION_VERSION`](../../gbdraw/session_io.py#L40-L46)も40である。さらに[手動browser acceptance script](../../tests/run_losat_cache_browser_acceptance.py#L23-L31)が39を固定しているため、この更新漏れを検出できていない。
 
 完了条件は次のとおり。
 
@@ -55,7 +55,7 @@
 
 ### P0-2: Tutorial 7を空の作業ディレクトリで通す
 
-[Tutorial 7の23–31行](./TUTORIALS/7_Linear_Layout.md#L23-L31)は`tutorial-7-work`を作って移動するが、その後の手順は次の入力を準備していない。
+Tutorial 7の23–31行は`tutorial-7-work`を作って移動するが、その後の手順は次の入力を準備していない。
 
 - 234–243行: `annotations.tsv`
 - 257–266行: 移動後には解決しない`tests/test_inputs/...`
@@ -65,9 +65,9 @@
 
 ### P0-3: Tutorial 9を`.gbk`起点にする
 
-[Tutorial 9の31–65行](./TUTORIALS/9_Feature_Visibility_Shapes.md#L31-L65)は、Circular/Linear Gallery sessionをダウンロードし、GUIでshaft ratioだけを変える手順である。[67–92行](./TUTORIALS/9_Feature_Visibility_Shapes.md#L67-L92)のCLIは最小例で、掲載されているGallery品質の図を再現しない。掲載図のmanifestも、入力コマンドではなく[`SessionVariantRecipe`](../tools/reproduce_examples_manifest.py#L2095-L2141)から生成される。
+Tutorial 9の31–65行は、Circular/Linear Gallery sessionをダウンロードし、GUIでshaft ratioだけを変える手順である。67–92行のCLIは最小例で、掲載されているGallery品質の図を再現しない。掲載図のmanifestも、入力コマンドではなく[`SessionVariantRecipe`](../../tools/reproduce_examples_manifest.py#L2095-L2141)から生成される。
 
-Circularには、すでに[`HMMTDNA_ATSKEW_COMMAND`](../tools/prepare_interactive_gallery_assets.py#L106-L117)という完全なcanonical commandがある。これを起点に、`HmmtDNA.gbk`、qualifier-priority TSV、feature types、palette、window/step、labels、track slots、legend、font sizesを保ったまま、次の2項目だけを明示的に変える。
+Circularには、すでに[`HMMTDNA_ATSKEW_COMMAND`](../../tools/prepare_interactive_gallery_assets.py#L106-L117)という完全なcanonical commandがある。これを起点に、`HmmtDNA.gbk`、qualifier-priority TSV、feature types、palette、window/step、labels、track slots、legend、font sizesを保ったまま、次の2項目だけを明示的に変える。
 
 ```text
 --arrow_head_length_ratio auto
@@ -80,9 +80,9 @@ Linearも同じ形式にする。5件のBGC GenBank、比較方法、色/qualifi
 
 ### P0-4: Python APIのquick startと完成例を分離する
 
-[Circular quick start](./PYTHON_API.md#L16-L83)は、4つの環境変数、2つのcolor table、label whitelist、4つのtrack slot、多数のconfig overrideを必要とする。これはAPIの最小導入ではなく、完成図のレシピである。
+[Circular quick start](../PYTHON_API.md#L16-L83)は、4つの環境変数、2つのcolor table、label whitelist、4つのtrack slot、多数のconfig overrideを必要とする。これはAPIの最小導入ではなく、完成図のレシピである。
 
-現在の[`python-api-label-whitelist.tsv`](../examples/python-api-label-whitelist.tsv)は、10件の異なるproduct名を一つの正規表現で選ぶが、選択基準を説明していない。掲載PNGでは複数の内側ラベルがGC content/skew帯や`300 kbp` tickと競合し、左側のleader lineも密集している。さらに、本文はPythonでSVGを保存する一方、掲載PNGは[`CliRecipe`](../tools/reproduce_examples_manifest.py#L1376-L1423)で作る「CLI-equivalent」図である。[実行テスト](../tests/test_api_library_usage.py#L54-L85)はSVGの存在だけを確認するため、Python出力と掲載図がずれても通る。
+現在の[`python-api-label-whitelist.tsv`](../../examples/python-api-label-whitelist.tsv)は、10件の異なるproduct名を一つの正規表現で選ぶが、選択基準を説明していない。掲載PNGでは複数の内側ラベルがGC content/skew帯や`300 kbp` tickと競合し、左側のleader lineも密集している。さらに、本文はPythonでSVGを保存する一方、掲載PNGは[`CliRecipe`](../../tools/reproduce_examples_manifest.py#L1376-L1423)で作る「CLI-equivalent」図である。[実行テスト](../../tests/test_api_library_usage.py#L54-L85)はSVGの存在だけを確認するため、Python出力と掲載図がずれても通る。
 
 推奨する構成は次のとおり。
 
@@ -96,9 +96,9 @@ Linearも同じ形式にする。5件のBGC GenBank、比較方法、色/qualifi
 
 ### P0-5: Tutorial 5のGFF3 + FASTAを実データへ置き換える
 
-[現行手順](./TUTORIALS/5_Table_Driven_Inputs.md#L90-L133)は87 bp、CDS 1件の合成データをheredocで2組作る。ファイル形式のsmoke testとしては有効だが、公開Tutorialの完成例には情報量が足りず、結果図もない。
+現行手順は87 bp、CDS 1件の合成データをheredocで2組作る。ファイル形式のsmoke testとしては有効だが、公開Tutorialの完成例には情報量が足りず、結果図もない。
 
-公開fixtureは[`gbdraw/web/tutorial-data/lambda-gff3`](../gbdraw/web/tutorial-data/lambda-gff3/)に集約する。RefSeq `NC_001416.1`の全長48,502 bpをcropや分割せず、`NC_001416.gff3`と`NC_001416.fna`へ決定論的に変換する。検証ではsingle record ID、gene 92件、CDS 73件、CDS strand（+47/-26）、translation 73件、元GenBankとの全長配列一致を確認する。
+公開fixtureは[`gbdraw/web/tutorial-data/lambda-gff3`](../../gbdraw/web/tutorial-data/lambda-gff3/)に集約する。RefSeq `NC_001416.1`の全長48,502 bpをcropや分割せず、`NC_001416.gff3`と`NC_001416.fna`へ決定論的に変換する。検証ではsingle record ID、gene 92件、CDS 73件、CDS strand（+47/-26）、translation 73件、元GenBankとの全長配列一致を確認する。
 
 同じGFF3/FASTA pairをrecords tableの1行で参照し、`record_id`に`NC_001416.1`を指定する。出典accession、全長変換、ファイルへの直接リンク、checksum、期待record/CDS数も書く。multi-recordの手順では、1本の自然配列を人工的に分割せず、別々の実在BGC recordを再利用する。新しい掲載図をmanifestへ登録し、toy heredocは削除する。
 
@@ -106,7 +106,7 @@ Linearも同じ形式にする。5件のBGC GenBank、比較方法、色/qualifi
 
 ### P0-6: similarity ringを教材として読める密度にする
 
-[現行コマンド](./TUTORIALS/5_Table_Driven_Inputs.md#L163-L197)は`--identity 95 --alignment_length 1000`で、23,709 HSPから5件だけを残す。SVG内のpath数とalt textは一致しているため、生成バグではない。しかし、完成図では5本が短く、feature/GC/skewの間でほぼ空のリングに見える。
+現行コマンドは`--identity 95 --alignment_length 1000`で、23,709 HSPから5件だけを残す。SVG内のpath数とalt textは一致しているため、生成バグではない。しかし、完成図では5本が短く、feature/GC/skewの間でほぼ空のリングに見える。
 
 同じBLAST表に対する予備集計は次のとおり。
 
@@ -125,13 +125,13 @@ Linearも同じ形式にする。5件のBGC GenBank、比較方法、色/qualifi
 
 ### Tutorialを入力から検証まで一つの契約にする
 
-[Tutorial index](./TUTORIALS/README.md#L3-L17)は番号付き文書を「complete set of command-line guides」と呼ぶが、現状はその契約を満たしていない。
+[Tutorial index](../TUTORIALS/README.md#L3-L17)は番号付き文書を「complete set of command-line guides」と呼ぶが、現状はその契約を満たしていない。
 
-- [Tutorial 2](./TUTORIALS/2_Comparative_Genomics.md#L19-L35)は最初の2 recordだけを準備し、後のmulti-record節は別の未準備入力へ切り替わる。
-- [Tutorial 4](./TUTORIALS/4_Protein_Comparisons.md#L63-L91)は`tests/test_inputs`のstyle tableを使い、checkout外では省略するよう案内するため、掲載図と同じ結果にならない。
-- [Tutorial 6](./TUTORIALS/6_Depth_Quantitative_Tracks.md#L17-L30)は前半のdepth例がsource checkout専用である。
-- [Tutorial 7](./TUTORIALS/7_Linear_Layout.md)には前述の未準備入力がある。
-- [Tutorial 8](./TUTORIALS/8_Interactive_SVG_Sessions.md#L42-L55)はschema v3と過去互換の説明がTutorialの操作手順に入り込んでいる。詳細はcompatibility referenceへ移せる。
+- Tutorial 2は最初の2 recordだけを準備し、後のmulti-record節は別の未準備入力へ切り替わる。
+- Tutorial 4は`tests/test_inputs`のstyle tableを使い、checkout外では省略するよう案内するため、掲載図と同じ結果にならない。
+- Tutorial 6は前半のdepth例がsource checkout専用である。
+- Tutorial 7には前述の未準備入力がある。
+- Tutorial 8はschema v3と過去互換の説明がTutorialの操作手順に入り込んでいる。詳細はcompatibility referenceへ移せる。
 
 全Tutorialで次の短い型を共有する。
 
@@ -159,7 +159,7 @@ placeholderを含む短いコマンドはRecipesへ、現在/過去のschema説�
 
 ### Galleryを「眺めるページ」か「再現するページ」か決める
 
-[Docs landing](./DOCS.md#L20-L32)と[README](../README.md)はGalleryをcommands付きとして案内するが、[Gallery本文](./GALLERY.md#L100-L104)には一般的なQuickstart/Tutorialへのリンクしかない。`M16-5_fugaku`、`Pandoravirus_salinus_forest`、4-record Escherichia-Shigella等には個別recipeがない。
+[Docs landing](../DOCS.md#L20-L32)と[README](../../README.md)はGalleryをcommands付きとして案内するが、[Gallery本文](../GALLERY.md#L100-L104)には一般的なQuickstart/Tutorialへのリンクしかない。`M16-5_fugaku`、`Pandoravirus_salinus_forest`、4-record Escherichia-Shigella等には個別recipeがない。
 
 figure inventoryには61件のdocs figureがあるが、10 recipeは必要入力を解決できない。公開Galleryに直接出る不足入力は`Shigella_dysenteriae.gbk`、`M16-5.gb`、`Pandoravirus_salinus.gb`で、archived recipeにも`NC_007205.gb`、`NC_005042.gb`、`NC_016510.gb`、`NZ_CP010822.gb`、`NC_000921.gb`、`NC_000962.gb`が不足している。追跡済み出力が存在することと、現在再生成できることは別である。
 
@@ -167,13 +167,13 @@ figure inventoryには61件のdocs figureがあるが、10 recipeは必要入力
 
 ### `Contents can’t be shown` の発生範囲と対応
 
-初回の並行監査では、`Contents can’t be shown`相当のサービス停止が一度発生した。そのタスクに割り当てていた文書範囲は、[Tutorial 5の90–206行](./TUTORIALS/5_Table_Driven_Inputs.md#L90-L206)と[Tutorial 9の6–197行](./TUTORIALS/9_Feature_Visibility_Shapes.md#L6-L197)、および両者の掲載資産である。サービスは原因となった単一行・画像・語句を返さなかったため、これ以上狭い原因箇所は断定できない。後続監査をCLI、ファイル、再現手順に限定したところ、同じ停止は再発しなかった。
+初回の並行監査では、`Contents can’t be shown`相当のサービス停止が一度発生した。そのタスクに割り当てていた文書範囲は、Tutorial 5の90–206行とTutorial 9の6–197行、および両者の掲載資産である。サービスは原因となった単一行・画像・語句を返さなかったため、これ以上狭い原因箇所は断定できない。後続監査をCLI、ファイル、再現手順に限定したところ、同じ停止は再発しなかった。
 
-監査時点では、[Gallery 55行](./GALLERY.md#L55)が41,525,346-byteのSVGを、[Gallery 64行](./GALLERY.md#L64)が9,049,364-byteのSVGを`<img>`として直接埋め込んでいた。両方の`<img>`要素を削除し、full-size出力へのリンクだけを残した。Markdown previewはこの2ファイルを画像として読み込まなくなったため、同じ表示が再発する場合は別の箇所を調べる。
+監査時点では、[Gallery 55行](../GALLERY.md#L55)が41,525,346-byteのSVGを、[Gallery 64行](../GALLERY.md#L64)が9,049,364-byteのSVGを`<img>`として直接埋め込んでいた。両方の`<img>`要素を削除し、full-size出力へのリンクだけを残した。Markdown previewはこの2ファイルを画像として読み込まなくなったため、同じ表示が再発する場合は別の箇所を調べる。
 
 ### 一般向け用語から内部契約名を外す
 
-[`Web UX profile v1`](./WORKFLOW_GUIDE.md#L45-L62)は、[内部architecture audit](./CROSS_SURFACE_ARCHITECTURE_DOCUMENTATION_AUDIT.md#L403-L419)のP-01を閉じるために導入された名前である。実装上のdefault差を明示する目的は正しいが、利用者が`v1`を選択、保存、確認できるわけではない。表には実装のplot-title defaultも含まれず、公開version contractとしても不完全である。
+[`Web UX profile v1`](../WORKFLOW_GUIDE.md#L45-L62)は、[内部architecture audit](./CROSS_SURFACE_ARCHITECTURE_DOCUMENTATION_AUDIT.md#L403-L419)のP-01を閉じるために導入された名前である。実装上のdefault差を明示する目的は正しいが、利用者が`v1`を選択、保存、確認できるわけではない。表には実装のplot-title defaultも含まれず、公開version contractとしても不完全である。
 
 この見出しとversion名は削除し、次の二つだけを平易に残す。
 
@@ -184,14 +184,14 @@ figure inventoryには61件のdocs figureがあるが、10 recipeは必要入力
 
 ### 現行仕様と履歴を分離する
 
-- [CLI Reference](./CLI_Reference.md)は巨大なgenerated helpの直後に同じoptionを手書きで説明する。generated appendixとcurated semanticsを分ける。
-- [Typed API](./TYPED_API.md)はsession/schemaのaccepted versionsを重複記載せず、[Session compatibility](./SESSION_COMPATIBILITY.md)へリンクする。
+- [CLI Reference](../CLI_Reference.md)は巨大なgenerated helpの直後に同じoptionを手書きで説明する。generated appendixとcurated semanticsを分ける。
+- [Typed API](../TYPED_API.md)はsession/schemaのaccepted versionsを重複記載せず、[Session compatibility](../SESSION_COMPATIBILITY.md)へリンクする。
 - FAQやRecipesの`now`、`new diagrams`、`older`といった差分起点の説明は現在形に直し、移行履歴はRelease notesに置く。
-- [Recipes](./RECIPES.md)は「copy-paste commands」より「command templates」が正確である。外部BLAST+、入力ファイル、working directory等の前提を冒頭に置く。
+- [Recipes](../RECIPES.md)は「copy-paste commands」より「command templates」が正確である。外部BLAST+、入力ファイル、working directory等の前提を冒頭に置く。
 
 ## Quickstartと一般導線
 
-[Quickstart](./QUICKSTART.md#L17-L31)はNCBI EUtilsから現在の`NC_000913.3` annotationを取得するが、掲載図の再生成は[`NC_000913.gbk`を固定された`tests/test_inputs/MG1655.gbk`へalias](../tests/test_reproduce_examples.py#L247-L269)している。accessionのsequence versionが同じでもannotationは更新され得る。再現性を優先するなら固定fixtureの公開URLとchecksumを使い、最新annotationを使うなら掲載図との差が出ることを明記する。
+[Quickstart](../QUICKSTART.md#L17-L31)はNCBI EUtilsから現在の`NC_000913.3` annotationを取得するが、掲載図の再生成は[`NC_000913.gbk`を固定された`tests/test_inputs/MG1655.gbk`へalias](../../tests/test_reproduce_examples.py#L247-L269)している。accessionのsequence versionが同じでもannotationは更新され得る。再現性を優先するなら固定fixtureの公開URLとchecksumを使い、最新annotationを使うなら掲載図との差が出ることを明記する。
 
 文書の役割は次のように整理する。
 

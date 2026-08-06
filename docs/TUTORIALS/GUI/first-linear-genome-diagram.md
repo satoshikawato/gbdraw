@@ -1,3 +1,5 @@
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+
 # Create and export your first linear genome diagram
 
 ## Choose how to build this figure

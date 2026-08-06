@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | [Python API](./PYTHON_API.md) | [Export](./EXPORT.md)
+[Documentation home](./DOCS.md) | [About](./ABOUT.md) | [Reference](./REFERENCE/README.md) | [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md)
 
 # gbdraw 0.14.0b0 release notes
 
@@ -459,4 +459,4 @@ regenerated with `gbdraw circular --session` or
 GUI state. Paths decoded by `materialize_session` remain valid only inside the
 active materialization context.
 
-[Home](./DOCS.md) | [Python API](./PYTHON_API.md) | [Export](./EXPORT.md)
+[Documentation home](./DOCS.md) | [About](./ABOUT.md) | [Reference](./REFERENCE/README.md) | [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md)

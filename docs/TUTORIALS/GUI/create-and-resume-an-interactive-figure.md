@@ -1,3 +1,5 @@
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+
 # Create an interactive figure and reproduce it from a saved session
 
 ## Choose how to build this figure

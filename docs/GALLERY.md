@@ -25,12 +25,12 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td width="50%" valign="top">
       <a href="../examples/M16-5_fugaku.svg"><img src="../examples/M16-5_fugaku.svg" alt="Compact circular genome map of Candidatus Sukunaarchaeum mirabile" width="100%"></a><br>
       <strong><em>Ca.</em> Sukunaarchaeum mirabile</strong><br>
-      A compact archaeal genome using separated strands, a centered feature track, and the <code>fugaku</code> palette.
+      A compact archaeal genome using separated strands, a centered feature track, and the <code>fugaku</code> palette. This input is not bundled with gbdraw; browse the <a href="https://gbdraw.app/gallery/palettes/">Circular Palette Explorer</a> to try <code>fugaku</code> on your own genome.
     </td>
     <td width="50%" valign="top">
       <a href="../examples/Pandoravirus_salinus_forest.svg"><img src="../examples/Pandoravirus_salinus_forest.svg" alt="Circular Pandoravirus salinus genome map with dense feature tracks" width="100%"></a><br>
       <strong><em>Pandoravirus salinus</em></strong><br>
-      A large viral genome with dense forward- and reverse-strand annotations using the <code>forest</code> palette.
+      A large viral genome with dense forward- and reverse-strand annotations using the <code>forest</code> palette. This input is not bundled with gbdraw; browse the <a href="https://gbdraw.app/gallery/palettes/">Circular Palette Explorer</a> to try <code>forest</code> on your own genome.
     </td>
   </tr>
 </table>

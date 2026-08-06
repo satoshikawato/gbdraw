@@ -1,3 +1,5 @@
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+
 # Add circular comparison rings from precomputed results
 
 ## Choose how to build this figure

@@ -18,7 +18,7 @@ Before editing or reviewing Gallery tutorial screenshots, writing, or structured
 - `docs/WEB_GALLERY_OPERATION_SCREENSHOTS_PLAN.md`, if present
 - `docs/WEB_GALLERY_REAL_UI_SCREENSHOT_ROLLOUT_PLAN.md`, if present
 - `docs/WEB_GALLERY_DROPDOWN_SCREENSHOT_PLAN.md`, if present
-- `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`, if present
+- `docs/internal/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`, if present
 - `docs/WEB_GALLERY_SCREENSHOT_RECAPTURE_PLAN.md`, if present
 
 Then inspect the target tutorial JSON and media directory:
@@ -60,7 +60,7 @@ Then inspect the target tutorial JSON and media directory:
 8. Review tutorial writing and structure: remove generic Requirements, avoid unnecessary Files tab steps, keep pre-generation setup, generated-result inspection, and post-generation edits separate, and omit redundant operation `title`/`body` when a clear step plus media caption already conveys the action.
 9. Review structured content: convert repeated-field setup lists, file mappings, record metadata, track recipes, and color rules to tables when rows share the same fields; keep simple one-column checklists as bullets.
 10. For sweeping audits, make a temporary contact sheet of referenced media for each tutorial and inspect the updated contact sheet after fixes. For every recrop or replacement, also compare the old and new images side by side at the same displayed size. Reject the replacement when it makes the operated control less compact, removes a useful selected target, or adds page area without adding information needed for the documented action.
-11. Record screenshot, writing, and structured-content decisions in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
+11. Record screenshot, writing, and structured-content decisions in the operation register or the active screenshot plan before replacing files. If no active register exists, create or update `docs/internal/WEB_GALLERY_OPERATION_SCREENSHOT_REGISTER.md`.
 12. After tutorial references are fixed, scan `gbdraw/web/gallery/media/` for WebP files unreferenced by tutorial JSON. If tests or docs still refer to an otherwise stale media fixture, update them to use current referenced media before deleting the stale file.
 13. Keep batches small. Do not migrate every tutorial in one risky change.
     For an explicitly exhaustive audit, batching must not reduce semantic

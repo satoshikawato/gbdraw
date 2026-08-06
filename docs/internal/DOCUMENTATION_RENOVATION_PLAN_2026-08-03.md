@@ -63,7 +63,7 @@ byte-identical during planning. The tutorial structure also follows the
 
 The plan is based on the following sources.
 
-- [Documentation audit](../DOCUMENTATION_AUDIT_2026-08-03.md), including all P0-P2 findings.
+- [Documentation audit](./DOCUMENTATION_AUDIT_2026-08-03.md), including all P0-P2 findings.
 - Repository and web-maintenance guidance in [`CLAUDE.md`](../../CLAUDE.md) and
   [`gbdraw/web/CLAUDE.md`](../../gbdraw/web/CLAUDE.md).
 - Browser navigation and controls in [`gbdraw/web/index.html`](../../gbdraw/web/index.html).

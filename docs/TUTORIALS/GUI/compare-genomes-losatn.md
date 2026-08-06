@@ -1,3 +1,5 @@
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+
 # Compare two genomes with LOSATN in the browser
 
 ## Choose how to build this figure
@@ -19,7 +21,7 @@ Compare the complete Lambda and DE3 phage genomes with browser LOSATN. You will 
 - `gbdraw/web/tutorial-data/de3/NC_042057.1.gb`
 - `gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv`
 
-The two GenBank files are the browser inputs. The bundled TSV is the frozen reference output. The executable capture requires a fresh browser run to reproduce all 436 bytes. The TSV is not uploaded during this Tutorial.
+The two GenBank files are the browser inputs. The bundled TSV is the frozen reference output your own run should match; you will produce it yourself in Step 4 rather than uploading it.
 
 ## Step 1: Load both complete genomes
 
@@ -60,7 +62,7 @@ Return to **Input Genomes**, select **Run LOSAT**, and keep **LOSATN** selected.
 
 ![LOSATN selected with deterministic single-thread settings](../../images/t-gui-03/03-losatn-settings.png)
 
-*Serial execution, one total thread, one run, and `megablast` match the qualified fixture recipe.*
+*Serial execution, one total thread, one run, and `megablast` produce the deterministic six-link result shown throughout this tutorial.*
 
 ## Step 4: Run LOSATN and download the evidence
 

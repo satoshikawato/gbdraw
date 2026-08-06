@@ -1,3 +1,5 @@
+[Documentation home](../../DOCS.md) | [How-to guides](../README.md) | [GUI how-to guides](./README.md)
+
 # How to use GenBank and GFF3 + FASTA inputs
 
 Use either one annotated GenBank file or one matched GFF3 and FASTA pair for a Linear diagram. This guide runs both paths with the complete bundled Lambda record so their results can be checked against the same biological source.

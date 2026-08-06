@@ -15,7 +15,7 @@ shows implemented variants and migration gaps.
 - [Web app Tutorials](./TUTORIALS/GUI/README.md)
 - [Command-line Tutorials](./TUTORIALS/CLI/README.md)
 - [Python Tutorial](./TUTORIALS/PYTHON/README.md)
-- [All Tutorials and retired-guide compatibility routes](./TUTORIALS/README.md)
+- [All Tutorials](./TUTORIALS/README.md)
 
 ## How-to guides
 
@@ -39,8 +39,10 @@ Frequently used pages:
 - [Output format and export reference](./REFERENCE/output-formats-and-export.md)
 - [Gallery](./GALLERY.md)
 - [Palette Explorer](./PALETTE_EXPLORER.md)
+- [Recipes (CLI command templates)](./RECIPES.md)
 - [FAQ](./FAQ.md)
 - [About and citation](./ABOUT.md)
+- [Release notes](./RELEASE_NOTES_0.14.0b0.md)
 
 ## Entry points
 

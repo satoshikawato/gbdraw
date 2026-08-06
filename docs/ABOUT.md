@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **About**
+[Documentation home](./DOCS.md) | [Installation](./INSTALL.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Explanation](./EXPLANATION/README.md) | [Reference](./REFERENCE/README.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **About**
 
 # About `gbdraw`
 
@@ -16,6 +16,8 @@ Project links:
 
 - GitHub: https://github.com/satoshikawato/gbdraw/
 - Web app: https://gbdraw.app/
+- [Release notes](./RELEASE_NOTES_0.14.0b0.md) and the [full changelog](../CHANGELOG.md)
+- [Contributing](../CONTRIBUTING.md) and the [Code of Conduct](../CODE_OF_CONDUCT.md)
 
 ## Acknowledgments and inspiration
 
@@ -34,4 +36,4 @@ Project links:
 
 The current project grew out of earlier plotting scripts published in [satoshikawato/bio_small_scripts](https://github.com/satoshikawato/bio_small_scripts/).
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **About**
+[Documentation home](./DOCS.md) | [Installation](./INSTALL.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Explanation](./EXPLANATION/README.md) | [Reference](./REFERENCE/README.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | **About**
