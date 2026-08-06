@@ -369,8 +369,8 @@ def calculate_feature_position_factors_circular(
             center_positive = BASE + (0.5 * lane_spacing) + (0.5 * lane_width)
             center_negative = BASE - (0.5 * lane_spacing) - (0.5 * lane_width)
         elif track_type == "spreadout":
-            center_positive = BASE + lane_spacing + (0.5 * lane_width)
-            center_negative = center_positive + lane_step
+            center_negative = BASE + lane_spacing + (0.5 * lane_width)
+            center_positive = center_negative + lane_step
         elif track_type == "tuckin":
             center_positive = BASE - lane_spacing - (0.5 * lane_width)
             center_negative = center_positive - lane_step

@@ -15,6 +15,9 @@ from config import (
     FIRST_CIRCULAR_FIXTURE_PATH,
     FIRST_CIRCULAR_FIXTURE_SHA256,
     FIRST_CIRCULAR_FIXTURE_SIZE,
+    FIRST_LINEAR_LABEL_RULE_PATH,
+    FIRST_LINEAR_LABEL_RULE_SHA256,
+    FIRST_LINEAR_LABEL_RULE_SIZE,
 )
 from flows.web_capture import (
     assert_fixture_identity,
@@ -34,6 +37,11 @@ def assert_human_mitochondrion_fixture() -> dict[str, Any]:
         FIRST_CIRCULAR_FIXTURE_PATH,
         expected_size=FIRST_CIRCULAR_FIXTURE_SIZE,
         expected_sha256=FIRST_CIRCULAR_FIXTURE_SHA256,
+    )
+    assert_fixture_identity(
+        FIRST_LINEAR_LABEL_RULE_PATH,
+        expected_size=FIRST_LINEAR_LABEL_RULE_SIZE,
+        expected_sha256=FIRST_LINEAR_LABEL_RULE_SHA256,
     )
     records = list(SeqIO.parse(FIRST_CIRCULAR_FIXTURE_PATH, "genbank"))
     if len(records) != 1:
@@ -112,6 +120,14 @@ def apply_finished_human_settings(page: Page, *, output_prefix: str) -> None:
     label_mode = page.get_by_label("Label Mode", exact=True)
     label_mode.select_option("out")
     expect(label_mode).to_have_value("out")
+    page.get_by_label("Priority File (TSV)", exact=True).set_input_files(
+        FIRST_LINEAR_LABEL_RULE_PATH
+    )
+    expect(
+        page.get_by_role(
+            "group", name="Priority File (TSV) selection", exact=True
+        )
+    ).to_contain_text(FIRST_LINEAR_LABEL_RULE_PATH.name)
     labels.click()
 
 

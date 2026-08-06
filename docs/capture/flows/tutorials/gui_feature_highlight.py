@@ -19,11 +19,9 @@ from flows.how_to.presentation import (
     HUMAN_MITOCHONDRION_PATH,
     HUMAN_MITOCHONDRION_SHA256,
     HUMAN_MITOCHONDRION_SIZE,
-    _fit_finished_circular_preview,
     _inspect_downloaded_presentation_svg,
     _inspect_presentation_svg,
     _open_human_circular,
-    _pan_preview_left,
     _park_feature_search,
     _wait_for_preview_transform,
     CaptureResult,
@@ -31,6 +29,7 @@ from flows.how_to.presentation import (
 from flows.how_to.tracks import (
     _inspect_tracks_svg,
     _inspect_tracks_svg_file,
+    _fit_circular_preview,
     _resize_sidebar,
     _track_slot_snapshot,
 )
@@ -60,12 +59,10 @@ CDS\tgene\t^ATP[68]$\t#F59E0B\tATP synthase
 CDS\tgene\t^CYTB$\t#8B5CF6\tCytochrome b
 rRNA\tgene\t^RNR[12]$\t#10B981\tRibosomal RNA
 """
-LABEL_WHITELIST = """CDS\tgene\t^(ND1|COX2|ATP8|ATP6|COX3|CYTB)$
+LABEL_WHITELIST = """CDS\tgene\t^(ND[1-6]|ND4L|COX[1-3]|ATP[68]|CYTB)$
 rRNA\tgene\t^RNR[12]$
 """
 LABEL_OVERRIDES = """record_id\tfeature_type\tqualifier\tvalue\tlabel_text
-NC_012920.1\tCDS\tlabel\t^ND1$\tComplex I (ND1)
-NC_012920.1\tCDS\tlabel\t^COX2$\tOxidase II
 NC_012920.1\trRNA\tlabel\t^s-rRNA$\t12S rRNA
 NC_012920.1\trRNA\tlabel\t^l-rRNA$\t16S rRNA
 """
@@ -219,8 +216,19 @@ def _assert_highlight_svg(report: Mapping[str, Any]) -> None:
         "NC_012920.1",
         "16,569 bp",
         TITLE,
-        "Complex I (ND1)",
-        "Oxidase II",
+        "ND1",
+        "ND2",
+        "COX1",
+        "COX2",
+        "ATP8",
+        "ATP6",
+        "COX3",
+        "ND3",
+        "ND4L",
+        "ND4",
+        "ND5",
+        "ND6",
+        "CYTB",
         "12S rRNA",
         "16S rRNA",
         "D-loop",
@@ -269,11 +277,12 @@ def _assert_control_state(report: Mapping[str, Any]) -> None:
         "titlePosition": "top",
         "legendPosition": "right",
         "labelsMode": "both",
-        "separateStrands": True,
-        "trackPreset": "spreadout",
+        "separateStrands": False,
+        "trackPreset": "middle",
         "palette": "default",
         "filterMode": "Whitelist",
         "priorityFile": GENE_PRIORITY_RULE_PATH.name,
+        "priorityRules": [["CDS", "gene"]],
         "arrowHeadLengthRatio": "",
         "arrowShaftWidthRatio": 0.72,
         "blockStrokeColor": "#1f2937",
@@ -364,8 +373,8 @@ def capture_gui_feature_highlight(
         _open_human_circular(page, OUTPUT_PREFIX)
 
         page.get_by_label("Species", exact=True).fill("<i>Homo sapiens</i>")
-        page.get_by_label("Track Preset", exact=True).select_option("spreadout")
-        page.get_by_label("Separate Strands", exact=True).check()
+        page.get_by_label("Track Preset", exact=True).select_option("middle")
+        page.get_by_label("Separate Strands", exact=True).uncheck()
 
         colors = page.get_by_label("Colors", exact=True)
         colors.click()
@@ -441,6 +450,13 @@ def capture_gui_feature_highlight(
         page.get_by_role(
             "group", name="Circular track slot mitochondrial_regions", exact=True
         ).scroll_into_view_if_needed()
+        page.locator("#circular-custom-track-slots-panel").evaluate(
+            """panel => {
+              const children = Array.from(panel.children);
+              for (const child of children.slice(0, 3)) child.style.display = 'none';
+              panel.parentElement?.scrollIntoView({ block: 'start' });
+            }"""
+        )
         screenshot_bytes[SCREENSHOT_NAMES[0]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[0]], "Circular"
         )
@@ -454,12 +470,12 @@ def capture_gui_feature_highlight(
         _assert_highlight_svg(final_report)
 
         _park_feature_search(page)
-        _fit_finished_circular_preview(page)
-        page.get_by_role("button", name="Zoom out", exact=True).click()
-        expect(page.get_by_role("button", name="Reset zoom", exact=True)).to_contain_text(
-            "50%"
+        _fit_circular_preview(
+            page,
+            target_zoom="70%",
+            pan_left_ratio=0.19,
+            pan_up_ratio=0.026,
         )
-        _pan_preview_left(page, 0.28)
         _wait_for_preview_transform(page)
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[1]], "Circular"

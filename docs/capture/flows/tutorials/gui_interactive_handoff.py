@@ -252,11 +252,12 @@ def capture_gui_interactive_handoff(
         prefix.press("Tab")
         final_report = generate_finished_human_diagram(page)
         _assert_reproduced(source_report, final_report)
-        _reset_finished_preview_viewport(page, target_zoom=50)
+        _reset_finished_preview_viewport(page, target_zoom=60)
         final_report["restoredPreviewFrame"] = _frame_finished_preview_with_legend(
             page
         )
         set_feature_search_visible(page, visible=False)
+        _stabilize_static_capture_surface(page)
         screenshot_bytes[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[5]] = (
             capture_screenshot(
                 page,

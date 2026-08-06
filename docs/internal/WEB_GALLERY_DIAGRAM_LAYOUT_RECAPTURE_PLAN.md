@@ -1,6 +1,6 @@
 # Web and Gallery diagram-layout recapture plan
 
-Status: In progress; owner outputs refreshed, corrected browser recapture pending
+Status: Completed; owner outputs and linked Gallery results verified
 Prepared: 2026-08-04
 Implementation owner: WP7 diagram-layout artifact refresh
 
@@ -23,12 +23,11 @@ The Circular record-local GC/skew-radius defect is resolved. Regression and
 visual checks verified the corrected renderer before capture. Screenshots must
 use that renderer and may not hide or normalize renderer defects.
 
-The first owner-run documentation pass replaced 18 generated-result PNGs and
-left seven input/settings PNGs byte-stable. The six outputs for `T-GUI-01` and
-`H-GUI-03` passed review. Capture-flow corrections are now in place for the
-remaining 12 outputs across `T-GUI-02`, `T-GUI-05`, `H-GUI-02`, `H-GUI-09`,
-`H-GUI-10`, and `H-GUI-11`; their corrected recapture and the six Gallery
-result WebPs await the approved local Chromium run.
+The final owner run reviewed every in-scope PNG at 1440×900, accepted the
+corrected documentation captures, refreshed all 11 Gallery sessions, and
+recaptured the six linked Gallery result WebPs from their exact sessions. The
+strict Gallery audit now checks 117 operations and media entries, and the
+desktop/mobile tutorial and session-regeneration browser suites pass.
 
 ## Capture classes
 
@@ -136,7 +135,7 @@ upper-left legend; no plot title.
 | Output | Class / decision | Selector or action state | Caption intent | Alt text |
 | --- | --- | --- | --- | --- |
 | `docs/images/t-gui-05/01-input-ready.png` | `D-OP`; Keep expected | Resize the settings pane, select Circular/GenBank, upload `NC_001879.gbk`, and fill prefix `annotated_chloroplast_map`. | Confirm the complete tobacco plastome input. | Tobacco plastome GenBank file ready in Circular mode |
-| `docs/images/t-gui-05/02-first-diagram.png` | `D-RESULT`; Recapture | Generate the plain complete plastome, fit to 60%, and hide the floating feature-search control. | Show the plain plastome before custom tracks. | First circular tobacco plastome diagram |
+| `docs/images/t-gui-05/02-first-diagram.png` | `D-RESULT`; Recapture | Generate the plain complete plastome, fit to 70%, and hide the floating feature-search control. | Show the plain plastome before custom tracks. | First circular tobacco plastome diagram |
 | `docs/images/t-gui-05/03-annotation-table.png` | `D-OP`; Recapture | Apply Gallery presentation settings; open `Region Annotations`; import the TSV; assert set id `plastome_regions` and four lane controls; scroll the section into view. | Record the four imported structural regions. | Annotation table containing LSC, SSC, IRa, and IRb regions |
 | `docs/images/t-gui-05/04-track-settings.png` | `D-OP`; Recapture | Enable custom stack; remove ticks/skew; bind `plastome_regions` to an inside annotations slot at radius 0.65 and width 20 px; set GC content to radius 0.56 and width 0.08; scroll group `Circular track slot plastome_regions` into view. | Record the Gallery three-slot stack. | Circular custom-track controls for features, one plastome-region lane, and GC content |
 | `docs/images/t-gui-05/05-finished-diagram.png` | `D-RESULT`; Recapture | Generate and assert 147 logical/197 rendered features, labels LSC/IRb/SSC/IRa, required legend entries, and no skew; fit to 50% and close any feature dialog. | Show the Gallery-equivalent finished figure. | Gallery-style tobacco plastome with functional colors, radial labels, structural regions, GC content, and upper-left legend |
@@ -186,7 +185,7 @@ axis/ticks; top title; right legend.
 | Output | Class / decision | Selector or action state | Caption intent | Alt text |
 | --- | --- | --- | --- | --- |
 | `docs/images/h-gui-09/track-settings.png` | `D-OP`; Keep expected | Resize the sidebar; open `Depth TSV tracks`; upload depth TSV; set window/step/min/max, axis/ticks/title and tick intervals; set dinucleotide mode Percent with axis/ticks; enable custom stack; scroll the depth section into view. | Show the selected quantitative series and scale. | Depth, GC content, and skew track settings |
-| `docs/images/h-gui-09/track-result.png` | `D-RESULT`; Recapture | Generate; assert slot order, depth and percent ticks, `AP027133.1`, title, legends, and 576 features; fit Circular preview to 50%. | Verify series order, axes, and legend. | Genome diagram with depth, GC content, and skew tracks |
+| `docs/images/h-gui-09/track-result.png` | `D-RESULT`; Recapture | Generate; assert slot order, depth and percent ticks, `AP027133.1`, title, legends, and 576 features; fit Circular preview to 70%. | Verify series order, axes, and legend. | Genome diagram with depth, GC content, and skew tracks |
 
 Gallery relation: `HmmtDNA_ATskew` is contextual quantitative-track coverage
 only; it has no depth series and adds AT skew, so it is not parity evidence for
@@ -202,7 +201,7 @@ legend.
 | Output | Class / decision | Selector or action state | Caption intent | Alt text |
 | --- | --- | --- | --- | --- |
 | `docs/images/h-gui-10/slot-settings.png` | `D-OP`; Keep expected | Import `plastome_regions`; set legend label and lanes; enable custom stack; change `gc_skew` to AT/`AT skew`; add annotations, bind the set, move it outside, enable labels, and scroll group `Circular track slot annotations` into view. | Show annotation and numeric slot placement. | Custom track-slot settings with annotation and numeric tracks |
-| `docs/images/h-gui-10/annotation-result.png` | `D-RESULT`; Recapture | Generate; assert slot order, outside annotation placement, visible LSC/IRb/SSC/IRa and AT-skew legend, and 145 logical/195 rendered features; fit to 50%. | Verify annotation lanes and visible labels. | Genome diagram with region annotations in custom slots |
+| `docs/images/h-gui-10/annotation-result.png` | `D-RESULT`; Recapture | Generate; assert slot order, outside annotation placement, visible LSC/IRb/SSC/IRa and AT-skew legend, and 145 logical/195 rendered features; fit to 70%. | Verify annotation lanes and visible labels. | Genome diagram with region annotations in custom slots |
 
 Gallery relation: `tobacco-chloroplast` is contextual coverage on the same
 record and annotation set; its single inside lane, no AT skew, upper-left
@@ -234,12 +233,12 @@ but they do not become parity evidence for these documentation scenarios.
 
 | Scenario coverage | Relation | Media / exact session | Required state and capture | Caption / alt | Decision |
 | --- | --- | --- | --- | --- | --- |
-| T-GUI-01; H-GUI-11 | Exact for T-GUI-01; contextual for H-GUI-11 | `media/HmmtDNA_basic_circular/manual-04-01-final-preview.webp`; `sessions/HmmtDNA_basic_circular.gbdraw-session.json` | Circular single; right legend; Middle; Out; `Homo sapiens`, accession, GC content/skew visible. Viewport 1400×1000; hide preview chrome; reset transform; render SVG at 1000 px width; selector `svg[data-capture-hmmt-basic-final='true']`; padding 12. | Caption: “The completed figure retains labeled features, GC content, GC skew, coordinate ticks, record metadata, and the right legend.” Alt: “Completed circular human mitochondrial genome diagram with labeled features, GC content, GC skew, coordinate ticks, record metadata, and a right legend.” | Recapture after session refresh. Existing declarative contract remains authoritative. |
-| T-GUI-02 | Exact | `media/lambda_basic_linear/manual-05-01-final-preview.webp`; `sessions/lambda_basic_linear.gbdraw-session.json` | Linear one record; comparison mode none; left legend; all labels; ruler; accession/length/CDS visible. Viewport 1900×900; hide preview chrome; reset transform; render SVG at 1370 px width; selector `svg[data-capture-lambda-final='true']`; padding 12. | Caption: “The completed figure retains both strand lanes, all feature labels, the ruler, record metadata, and the left legend.” Alt: “Completed linear lambda phage diagram with two strand lanes, feature labels, a coordinate ruler, record metadata, and a left CDS legend.” | Recapture after session refresh. Existing declarative contract remains authoritative. |
-| T-GUI-05; H-GUI-10 | Exact for T-GUI-05; contextual for H-GUI-10 | `media/tobacco-chloroplast/manual-08-01-chloroplast-preview.webp`; `sessions/tobacco-chloroplast.gbdraw-session.json` | Circular; upper-left legend; set `plastome_regions`; custom stack enabled; LSC/IRb/SSC/IRa and GC content visible. Viewport 1400×1000; hide preview chrome; reset transform; render SVG at 1000 px width; selector `svg[data-capture-chloroplast-final='true']`; padding 12. | Caption: “The completed map shows all four labeled region brackets, chloroplast feature colors, radial gene labels, the inner GC-content track, and one entry per legend category.” Alt: “Completed Nicotiana tabacum chloroplast map with four region brackets, chloroplast feature colors, radial gene labels, an inner GC-content track, record metadata, and one entry per legend category.” | Recapture after session refresh. Existing declarative contract remains authoritative. |
-| H-GUI-02 | Contextual only | `media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp`; `sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz` | Before capture metadata is added, require Circular grid, six records, positions `#1@1,#2@1,#3@2,#4@2,#5@2,#6@2`, Auto sizing, min radius 0.55, gaps 0.1/0.05, left legend, bottom title, and chromosome/plasmid identity text. Use viewport 1600×1100; hide preview chrome; reset pan/zoom; size the real SVG without upscaling; selector `svg[data-capture-vnig-multirecord-final='true']`; padding 12. | Caption: “The generated preview uses automatic radius scaling for two chromosomes and four plasmids.” Alt: “Generated Vibrio multi-record preview with two chromosomes and four plasmids.” | Add exact-session declarative metadata, then recapture. Current manual-only bitmap is not an executable contract. |
-| H-GUI-03 | Contextual only | `media/vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp`; `sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz` | Linear 11 records in five rows; positions `#1@1,#2@1,#3@1,#4@2,#5@2,#6@3,#7@3,#8@4,#9@4,#10@5,#11@5`; 48 px gap; bottom legend; no plot title; species and Collinear/Inverted text visible. Viewport 1800×1100; zoom 55%; selector `svg[data-capture-vibrio-overview='true']`; padding 12; retain the existing ≥20 px two-legend assertion and add app-state/visible-text assertions. | Caption: “The completed title-free diagram retains all 11 replicons, centers each 18 px bold species name and 16 px strain name on its feature row, preserves the Axis-sized gap around each collinear block band, and places the legend below the final row.” Alt: “Generated five-row Vibrio Harveyi-group diagram with bold species names, 11 replicons, and orientation-and-identity collinear blocks.” | Strengthen the existing exact-session contract, then recapture. |
-| H-GUI-09 | Contextual only | `media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp`; `sessions/HmmtDNA_ATskew.gbdraw-session.json` | Before capture metadata is added, require Circular single; left legend; enabled slot order `features,gc_content,gc_skew,a_skew_2,ticks`; AT-skew colors/label; `label_in_tick_out`; Homo sapiens and GC/AT skew legend text. Use viewport 1400×1000; hide preview chrome; reset transform; size the real SVG without upscaling; selector `svg[data-capture-hmmt-atskew-final='true']`; padding 12. | Caption: “The generated preview includes the custom track stack and left legend.” Alt: “Generated human mitochondrial AT skew preview with the custom track stack and left legend.” | Add exact-session declarative metadata, then recapture. Current manual-only bitmap is not an executable contract. |
+| T-GUI-01; H-GUI-11 | Exact for T-GUI-01; contextual for H-GUI-11 | `media/HmmtDNA_basic_circular/manual-04-01-final-preview.webp`; `sessions/HmmtDNA_basic_circular.gbdraw-session.json` | Circular single; right legend; Middle; Out; `Homo sapiens`, accession, GC content/skew visible. Viewport 1400×1000; hide preview chrome; reset transform; render SVG at 1000 px width; selector `svg[data-capture-hmmt-basic-final='true']`; padding 12. | Caption: “The completed figure retains labeled features, GC content, GC skew, coordinate ticks, record metadata, and the right legend.” Alt: “Completed circular human mitochondrial genome diagram with labeled features, GC content, GC skew, coordinate ticks, record metadata, and a right legend.” | Recaptured from refreshed exact session and visually verified at 3072×2049. |
+| T-GUI-02 | Exact | `media/lambda_basic_linear/manual-05-01-final-preview.webp`; `sessions/lambda_basic_linear.gbdraw-session.json` | Linear one record; comparison mode none; left legend; all labels; ruler; accession/length/CDS visible. Viewport 1900×900; hide preview chrome; reset transform; render SVG at 1370 px width; selector `svg[data-capture-lambda-final='true']`; padding 12. | Caption: “The completed figure retains both strand lanes, all feature labels, the ruler, record metadata, and the left legend.” Alt: “Completed linear lambda phage diagram with two strand lanes, feature labels, a coordinate ruler, record metadata, and a left CDS legend.” | Recaptured from refreshed exact session and visually verified at 4182×1452. |
+| T-GUI-05; H-GUI-10 | Exact for T-GUI-05; contextual for H-GUI-10 | `media/tobacco-chloroplast/manual-08-01-chloroplast-preview.webp`; `sessions/tobacco-chloroplast.gbdraw-session.json` | Circular; upper-left legend; set `plastome_regions`; custom stack enabled; LSC/IRb/SSC/IRa and GC content visible. Viewport 1400×1000; hide preview chrome; reset transform; render SVG at 1000 px width; selector `svg[data-capture-chloroplast-final='true']`; padding 12. | Caption: “The completed map shows all four labeled region brackets, chloroplast feature colors, radial gene labels, the inner GC-content track, and one entry per legend category.” Alt: “Completed Nicotiana tabacum chloroplast map with four region brackets, chloroplast feature colors, radial gene labels, an inner GC-content track, record metadata, and one entry per legend category.” | Recaptured from refreshed exact session and visually verified at 3072×2187. |
+| H-GUI-02 | Contextual only | `media/Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp`; `sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz` | Require Circular grid, six records, the documented Auto sizing and row positions, left legend, bottom title, and chromosome/plasmid identity text. Use viewport 1600×1100; hide preview chrome; reset pan/zoom; selector `svg[data-capture-vnig-multirecord-final='true']`; padding 12. | Caption: “The generated preview uses automatic radius scaling for two chromosomes and four plasmids.” Alt: “Generated Vibrio multi-record preview with two chromosomes and four plasmids.” | Exact-session metadata added; recaptured and visually verified at 3072×2016. |
+| H-GUI-03 | Contextual only | `media/vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp`; `sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz` | Linear 11 records in five rows; 48 px gap; bottom legend; no plot title; species and Collinear/Inverted text visible. Viewport 1800×1100; selector `svg[data-capture-vibrio-overview='true']`; padding 12. | Caption: “The completed title-free diagram retains all 11 replicons, centers each 18 px bold species name and 16 px strain name on its feature row, preserves the Axis-sized gap around each collinear block band, and places the legend below the final row.” Alt: “Generated five-row Vibrio Harveyi-group diagram with bold species names, 11 replicons, and orientation-and-identity collinear blocks.” | Exact-session assertions strengthened; recaptured and visually verified at 3804×1200. |
+| H-GUI-09 | Contextual only | `media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp`; `sessions/HmmtDNA_ATskew.gbdraw-session.json` | Require Circular single; left legend; enabled slot order `features,gc_content,gc_skew,a_skew_2,ticks`; AT-skew colors/label; `label_in_tick_out`; Homo sapiens and GC/AT skew legend text. Use viewport 1400×1000; hide preview chrome; reset transform; selector `svg[data-capture-hmmt-atskew-final='true']`; padding 12. | Caption: “The generated preview includes the custom track stack and left legend.” Alt: “Generated human mitochondrial AT skew preview with the custom track stack and left legend.” | Exact-session metadata added; recaptured and visually verified at 3072×2304. |
 
 All adjacent `G-OP` controls remain `Keep` unless the strict metadata check or
 side-by-side review proves that the operated control/state is stale. Do not
@@ -331,3 +330,16 @@ node --check gbdraw/web/gallery/gallery.js
 npx playwright test tests/web/gallery-tutorial.playwright.spec.js --project=chromium
 npx playwright test tests/web/gallery-session-regeneration.playwright.spec.js --project=chromium
 ```
+
+## Completion evidence
+
+- All manifest-owned documentation screenshots reproduce through their capture
+  scenarios; all GUI PNGs are 1440×900 RGB.
+- The strict Gallery audit validates 117 media entries, 117 operations, and 117
+  operation-media entries after refreshing all 11 sessions.
+- Documentation capture and scenario contract tests pass, including bounded
+  comparison for the two Chromium complex-SVG raster cases.
+- Gallery desktop/mobile tutorial tests and session-regeneration tests pass.
+- Circular radial-layout tests explicitly require the plus strand to be outside
+  the minus strand for separated `Tuckin`, `Middle`, and `Spreadout` layouts.
+- Renderer output-comparison and circular feature-width regression suites pass.

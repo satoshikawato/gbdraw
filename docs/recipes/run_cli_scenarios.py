@@ -165,6 +165,15 @@ _FEATURE_PRESENTATION_TABLES = {
 
 _TUTORIAL_FEATURE_PRESENTATION_TABLES = {
     **_FEATURE_PRESENTATION_TABLES,
+    "tables/presentation_labels.tsv": (
+        "CDS\tgene\t^(ND[1-6]|ND4L|COX[1-3]|ATP[68]|CYTB)$\n"
+        "rRNA\tgene\t^RNR[12]$\n"
+    ),
+    "tables/presentation_label_overrides.tsv": (
+        "record_id\tfeature_type\tqualifier\tvalue\tlabel_text\n"
+        "NC_012920.1\trRNA\tlabel\t^s-rRNA$\t12S rRNA\n"
+        "NC_012920.1\trRNA\tlabel\t^l-rRNA$\t16S rRNA\n"
+    ),
     "tables/mitochondrial_regions.tsv": (
         "set_id\tid\tmark\trecord\tstart\tend\tcoordinate_space\twraps_origin\tlabel\tlane\tstroke\tstroke_width\tline_cap\tlabel_color\tlabel_font_size\tlabel_orientation\tlabel_offset\n"
         "mitochondrial_regions\td_loop\tbracket\tNC_012920.1\t16024\t576\tsource\ttrue\tD-loop\t0\t#202020\t3\ttick\t#202020\t14\ttangent\t7\n"
@@ -1889,22 +1898,31 @@ def _assert_feature_presentation(
     if not {"#3B82F6", "#EF4444", "#F59E0B", "#8B5CF6", "#10B981"} <= fills:
         raise RecipeContractError(f"{scenario_id} specific feature colors changed.")
     required_text = {
-        "Complex I (ND1)",
-        "Oxidase II",
-        "12S rRNA",
-        "16S rRNA",
-        "ATP8",
-        "ATP6",
-        "COX3",
-        "CYTB",
         "NADH dehydrogenase",
         "Cytochrome c oxidase",
         "ATP synthase",
         "Cytochrome b",
         "Ribosomal RNA",
     }
+    if scenario_id == "T-CLI-03":
+        required_text.update(
+            {
+                "ND1", "ND2", "COX1", "COX2", "ATP8", "ATP6", "COX3",
+                "ND3", "ND4L", "ND4", "ND5", "ND6", "CYTB", "12S rRNA",
+                "16S rRNA",
+            }
+        )
+        forbidden_text = {"s-rRNA", "l-rRNA"}
+    else:
+        required_text.update(
+            {
+                "Complex I (ND1)", "Oxidase II", "ATP8", "ATP6", "COX3",
+                "CYTB", "12S rRNA", "16S rRNA",
+            }
+        )
+        forbidden_text = {"s-rRNA", "l-rRNA", "COX1"}
     text_nodes = _text_nodes(root)
-    if not required_text <= text_nodes or {"s-rRNA", "l-rRNA", "COX1"} & text_nodes:
+    if not required_text <= text_nodes or forbidden_text & text_nodes:
         raise RecipeContractError(f"{scenario_id} label filtering or overrides changed.")
     foreground = list(rendered.values())
     if any(
@@ -1932,7 +1950,17 @@ def _assert_feature_presentation(
             radii.add(
                 round(math.hypot(float(match.group(1)), float(match.group(2))))
             )
-    if "--resolve_overlaps" not in command or len(radii) < 4:
+    if scenario_id == "T-CLI-03":
+        if (
+            "--resolve_overlaps" in command
+            or "--separate_strands" in command
+            or "--track_type" not in command
+            or command[command.index("--track_type") + 1] != "middle"
+        ):
+            raise RecipeContractError(
+                "T-CLI-03 must keep one unstranded Middle feature lane."
+            )
+    elif "--resolve_overlaps" not in command or len(radii) < 4:
         raise RecipeContractError(f"{scenario_id} overlap lanes changed.")
 
 

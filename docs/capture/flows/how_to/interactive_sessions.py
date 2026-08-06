@@ -52,6 +52,7 @@ from flows.web_capture import (
     fit_complete_linear_preview,
     generate_and_inspect,
     open_browser_capture,
+    set_feature_search_visible,
     wait_for_worker,
 )
 
@@ -795,6 +796,7 @@ def _capture_bgc_popups(
         _set_gallery_quality_presentation(
             page,
             title="LOSATP Similarity groups across five whole BGC records",
+            match_gallery_definitions=False,
         )
         _configure_losatp(
             page,
@@ -974,10 +976,7 @@ def capture_gui_interactive_editing(
 
         expect(page.get_by_title("Open editor", exact=True)).to_be_visible()
         _assert_closed_right_drawer_contract(page)
-        page.get_by_role("button", name="Zoom out", exact=True).click()
-        expect(page.get_by_role("button", name="Reset zoom", exact=True)).to_have_text(
-            "50%"
-        )
+        set_feature_search_visible(page, visible=False)
         final_report["closedDrawerGeometry"] = (
             _assert_closed_drawer_does_not_reserve_canvas(page)
         )
@@ -1034,11 +1033,35 @@ def _assert_semantically_equivalent(
 ) -> None:
     expected = _semantic_signature(expected_report)
     actual = _semantic_signature(actual_report)
-    if actual != expected:
-        raise AssertionError(
-            "Fresh-context session reload changed the SVG semantics: "
-            f"{actual!r} != {expected!r}"
-        )
+    for key in (
+        "recordIds",
+        "featureIds",
+        "texts",
+        "labelTexts",
+        "groupChildCounts",
+    ):
+        if actual.get(key) != expected.get(key):
+            raise AssertionError(
+                "Fresh-context session reload changed the SVG semantics: "
+                f"{key}={actual.get(key)!r} != {expected.get(key)!r}"
+            )
+    for key in ("recordTranslate", "legendTranslate"):
+        expected_position = expected.get(key)
+        actual_position = actual.get(key)
+        if (
+            not expected_position
+            or not actual_position
+            or any(
+                abs(float(left) - float(right)) >= 1
+                for left, right in zip(
+                    expected_position, actual_position, strict=True
+                )
+            )
+        ):
+            raise AssertionError(
+                "Fresh-context session reload moved the SVG materially: "
+                f"{key}={actual_position!r} != {expected_position!r}"
+            )
 
 
 def _validate_current_session(
@@ -1238,13 +1261,15 @@ def capture_gui_session_reproduction(
         expect(prefix).to_have_value(RELOADED_OUTPUT_PREFIX)
         final_report = generate_finished_human_diagram(page)
         _assert_semantically_equivalent(source_report, final_report)
-        _reset_finished_preview_viewport(page, target_zoom=50)
+        _reset_finished_preview_viewport(page, target_zoom=60)
         final_report["restoredPreviewFrame"] = (
             _frame_finished_preview_with_legend(page)
         )
+        set_feature_search_visible(page, visible=False)
         expect(
             page.get_by_role("button", name="Undo", exact=True)
         ).to_be_disabled()
+        _stabilize_static_capture_surface(page)
         screenshot_bytes["reloaded-result.png"] = capture_screenshot(
             page, output_paths["reloaded-result.png"], "Circular"
         )

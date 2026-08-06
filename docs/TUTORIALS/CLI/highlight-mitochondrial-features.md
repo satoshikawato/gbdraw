@@ -59,7 +59,7 @@ rRNA	gene	^RNR[12]$	#10B981	Ribosomal RNA
 Save this whitelist as `tables/presentation_labels.tsv`:
 
 ```tsv
-CDS	gene	^(ND1|COX2|ATP8|ATP6|COX3|CYTB)$
+CDS	gene	^(ND[1-6]|ND4L|COX[1-3]|ATP[68]|CYTB)$
 rRNA	gene	^RNR[12]$
 ```
 
@@ -68,15 +68,13 @@ Then save these resolved-label replacements as
 
 ```tsv
 record_id	feature_type	qualifier	value	label_text
-NC_012920.1	CDS	label	^ND1$	Complex I (ND1)
-NC_012920.1	CDS	label	^COX2$	Oxidase II
 NC_012920.1	rRNA	label	^s-rRNA$	12S rRNA
 NC_012920.1	rRNA	label	^l-rRNA$	16S rRNA
 ```
 
-The qualifier-priority file first selects `gene` for CDS labels. The whitelist
-then limits which labels appear, and the override table renames selected
-resolved labels.
+The qualifier-priority file selects `gene` for all 13 CDS labels. The whitelist
+keeps those CDS and the two rRNAs in scope, and the override table renames the
+two rRNA labels.
 
 ## Step 5: Add the D-loop as a region annotation
 
@@ -119,9 +117,7 @@ gbdraw circular \
   --feature_shape tRNA=arrow \
   --arrow_head_length_ratio auto \
   --arrow_shaft_width_ratio 0.72 \
-  --resolve_overlaps \
-  --separate_strands \
-  --track_type spreadout \
+  --track_type middle \
   --circular_track_slot 'ticks:ticks@side=outside,tick_label_layout=label_out_tick_in' \
   --circular_track_slot 'features:features@side=overlay,lane_direction=split' \
   --circular_track_slot 'mitochondrial_regions:annotations@set_id=mitochondrial_regions,side=inside,w=24px,show_labels=true,padding_px=1,overflow=compress' \
@@ -144,12 +140,11 @@ gbdraw circular \
 
 ## Step 7: Verify what changed
 
-Open `mitochondrial_features_highlighted.svg`. Check for `Complex I (ND1)`,
-`Oxidase II`, `12S rRNA`, and `16S rRNA`; COX1 and the other 12 CDS must remain
-present. The blue,
-red, amber, violet, and green rules should appear in the legend. rRNA blocks
-are rectangular, directional features remain arrows, and the D-loop appears
-as one origin-spanning inner bracket.
+Open `mitochondrial_features_highlighted.svg`. Check that all 13 CDS labels use
+their gene names, including `COX1`, and that `12S rRNA` and `16S rRNA` are also
+present. The blue, red, amber, violet, and green rules should appear in the
+legend. rRNA blocks are rectangular, directional features remain arrows, and
+the D-loop appears as one origin-spanning inner bracket.
 
 ![Human mitochondrial map with all CDS, explicit feature colors, and a D-loop region bracket](../../images/t-cli-03/mitochondrial_features_highlighted.svg)
 

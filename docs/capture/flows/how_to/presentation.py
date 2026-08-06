@@ -247,6 +247,12 @@ root => {
         : [],
       defaultColorFile: fileName(app?.files?.d_color),
       priorityFile: fileName(app?.files?.qualifier_priority),
+      priorityRules: Array.isArray(app?.manualPriorityRules)
+        ? app.manualPriorityRules.map((rule) => [
+            String(rule?.feat || ''),
+            String(rule?.order || '')
+          ])
+        : [],
       featureShapes: { ...(app?.adv?.feature_shapes || {}) },
       arrowHeadLengthRatio: String(app?.adv?.arrow_head_length_ratio ?? ''),
       arrowShaftWidthRatio: Number(app?.adv?.arrow_shaft_width_ratio),

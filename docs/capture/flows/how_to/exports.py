@@ -32,6 +32,7 @@ from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
     open_browser_capture,
+    set_feature_search_visible,
     wait_for_worker,
 )
 
@@ -392,6 +393,7 @@ def capture_gui_exports(
 
         fit_finished_human_preview(page)
         pan_finished_human_preview_left(page)
+        set_feature_search_visible(page, visible=False)
         page.wait_for_timeout(250)
         screenshot_bytes["exported-result.png"] = capture_screenshot(
             page, output_paths["exported-result.png"], "Circular"

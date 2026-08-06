@@ -48,15 +48,13 @@ color_table = DataFrame(
 )
 label_whitelist = DataFrame(
     [
-        ["CDS", "gene", "^(ND1|COX2|ATP8|ATP6|COX3|CYTB)$"],
+        ["CDS", "gene", "^(ND[1-6]|ND4L|COX[1-3]|ATP[68]|CYTB)$"],
         ["rRNA", "gene", "^RNR[12]$"],
     ],
     columns=["feature_type", "qualifier", "keyword"],
 )
 label_overrides = DataFrame(
     [
-        ["NC_012920.1", "CDS", "label", "^ND1$", "Complex I (ND1)"],
-        ["NC_012920.1", "CDS", "label", "^COX2$", "Oxidase II"],
         ["NC_012920.1", "rRNA", "label", "^s-rRNA$", "12S rRNA"],
         ["NC_012920.1", "rRNA", "label", "^l-rRNA$", "16S rRNA"],
     ],
@@ -124,8 +122,8 @@ options = CircularOptions(
     legend="right",
     config_overrides={
         "canvas.resolve_overlaps": False,
-        "canvas.strandedness": True,
-        "canvas.circular.track_type": "spreadout",
+        "canvas.strandedness": False,
+        "canvas.circular.track_type": "middle",
         "labels.circular.scope": "both",
         "labels.rendering": "auto",
         "objects.features.arrow_geometry.head_length_ratio": "auto",
@@ -147,8 +145,9 @@ print(f"Saved {saved_path}")
 ```
 <!-- executable:T-PY-09:end -->
 
-Open `mitochondrial_features_highlighted.svg`. It should keep all 37
-features, the five functional legend colors, the renamed labels, the arrow
-and rectangle shapes set above, and the one origin-spanning D-loop bracket.
+Open `mitochondrial_features_highlighted.svg`. It should keep all 37 features,
+use gene names for CDS labels, show the two renamed rRNA labels, retain the five
+functional legend colors and the arrow and rectangle shapes, and include one
+origin-spanning D-loop bracket.
 
 ![Highlighted human mitochondrial features from Python](../../images/t-py-09/mitochondrial_features_highlighted.svg)

@@ -792,6 +792,50 @@ def test_screenshot_comparison_allows_only_bounded_raster_noise(tmp_path: Path) 
     assert not run_all._images_match(expected_path, excessive_delta_path)
 
 
+def test_complex_svg_screenshot_comparison_is_bounded_to_the_preview(
+    tmp_path: Path,
+) -> None:
+    from docs.capture import run_all
+
+    expected_path = tmp_path / "expected.png"
+    raster_noise_path = tmp_path / "raster-noise.png"
+    chrome_change_path = tmp_path / "chrome-change.png"
+    diagram_change_path = tmp_path / "diagram-change.png"
+    expected = Image.new("RGB", (1440, 900), "white")
+    expected.save(expected_path)
+
+    raster_noise = expected.copy()
+    for x in range(700, 708):
+        raster_noise.putpixel((x, 200), (0, 0, 0))
+    raster_noise.save(raster_noise_path)
+    assert not run_all._images_match(expected_path, raster_noise_path)
+    assert run_all._images_match(
+        expected_path,
+        raster_noise_path,
+        allow_complex_svg_raster_noise=True,
+    )
+
+    chrome_change = expected.copy()
+    chrome_change.putpixel((100, 40), (0, 0, 0))
+    chrome_change.save(chrome_change_path)
+    assert not run_all._images_match(
+        expected_path,
+        chrome_change_path,
+        allow_complex_svg_raster_noise=True,
+    )
+
+    diagram_change = expected.copy()
+    for x in range(700, 800):
+        for y in range(200, 300):
+            diagram_change.putpixel((x, y), (0, 0, 0))
+    diagram_change.save(diagram_change_path)
+    assert not run_all._images_match(
+        expected_path,
+        diagram_change_path,
+        allow_complex_svg_raster_noise=True,
+    )
+
+
 def test_runner_all_orchestrates_gui_cli_and_python_with_check(monkeypatch) -> None:
     from docs.capture import run_all
 

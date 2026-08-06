@@ -367,7 +367,7 @@ def capture_gui_quantitative_map(
             page, _inspect_tracks_svg, _assert_quantitative_map
         )
         final_report["state"] = state
-        _fit_circular_preview(page, target_zoom="50%")
+        _fit_circular_preview(page, target_zoom="70%", pan_left_ratio=0.16)
         set_feature_search_visible(page, visible=False)
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[1]], "Circular"

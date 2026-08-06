@@ -46,9 +46,9 @@ ALL_VS_ALL_SESSION = (
     / "sessions"
     / "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz"
 )
-ALL_VS_ALL_SESSION_SIZE = 14_927_346
+ALL_VS_ALL_SESSION_SIZE = 14_973_140
 ALL_VS_ALL_SESSION_SHA256 = (
-    "03c7f010ef10991bc169e4fc376d0338854aae944755725fd16aec1646582a15"
+    "d9aeaa9ab70cede297f6ae2eaa51a8ed0a6ffc40216b70cb97570d2518ead500"
 )
 GALLERY_COLLINEAR_SESSION = (
     Path(__file__).resolve().parents[3]
@@ -58,9 +58,9 @@ GALLERY_COLLINEAR_SESSION = (
     / "sessions"
     / "hepatoplasmataceae_collinear.gbdraw-session.json.gz"
 )
-GALLERY_COLLINEAR_SESSION_SIZE = 11_459_099
+GALLERY_COLLINEAR_SESSION_SIZE = 11_398_634
 GALLERY_COLLINEAR_SESSION_SHA256 = (
-    "3013e651f676b86cfdbcb599bb85054e4a9994431d0b22d6949d501374c37985"
+    "4a054b6239b83b98f22105dd5bf409592a94b8a75d8fa12710ab118ddbaf825c"
 )
 
 
@@ -507,7 +507,9 @@ def capture_hepatoplasmataceae_collinear(
             _assert_all_record_search(page, session_keys=session_cache_keys)
         else:
             _assert_gallery_adjacent_search(page, session_keys=session_cache_keys)
-        fit_complete_linear_preview(page, target_zoom="30%")
+        fit_complete_linear_preview(
+            page, target_zoom="40%", pan_left=True
+        )
         screenshots[screenshot_names["result"]] = capture_screenshot(
             page, output_paths[screenshot_names["result"]], "Linear"
         )

@@ -34,6 +34,7 @@ from flows.web_capture import (
     capture_screenshot,
     generate_and_inspect,
     open_browser_capture,
+    set_feature_search_visible,
     wait_for_worker,
 )
 
@@ -177,6 +178,7 @@ def capture_first_circular(
             "60%"
         )
         _pan_finished_preview_left(page)
+        set_feature_search_visible(page, visible=False)
         screenshot_bytes["04-finished-diagram.png"] = capture_screenshot(
             page, output_paths["04-finished-diagram.png"], "Circular"
         )

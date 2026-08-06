@@ -376,7 +376,7 @@
       "capabilities": ["entry.hosted-gui", "presentation.feature-colors", "presentation.qualifier-priority", "presentation.label-filters", "presentation.label-overrides", "presentation.shapes", "presentation.strokes", "track.region-annotations", "track.custom-circular-slots", "output.static-svg"],
       "canonical_for": [],
       "fixtures": ["human-mitochondrion"],
-      "settings": {"mode": "circular", "record_id": "NC_012920.1", "output_prefix": "mitochondrial_features_highlighted", "track_preset": "spreadout", "separate_strands": true, "label_mode": "both", "legend_position": "right"},
+      "settings": {"mode": "circular", "record_id": "NC_012920.1", "output_prefix": "mitochondrial_features_highlighted", "track_preset": "middle", "separate_strands": false, "label_mode": "both", "legend_position": "right"},
       "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_feature_highlight.py", "tier": "extended", "expected_outputs": ["mitochondrial_features_highlighted.svg"], "assertions": ["first_result_step=3", "all_13_cds_visible=true", "labels_and_colors_match=true", "shapes=arrow,rectangle", "d_loop_annotation=origin_spanning_bracket", "track_slots=ticks,features,mitochondrial_regions", "parity=T-CLI-03,T-PY-09"]},
       "screenshots": [
         {"path": "docs/images/t-gui-10/presentation-settings.png", "reason": "Record the feature, label, stroke, and D-loop track settings.", "alt": "Web-app settings for highlighted mitochondrial features and the D-loop bracket"},

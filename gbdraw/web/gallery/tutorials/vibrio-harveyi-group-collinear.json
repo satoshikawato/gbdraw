@@ -340,7 +340,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('Vibrio harveyi') || !content.includes('Vibrio owensii') || !content.includes('Vibrio campbellii') || !content.includes('Vibrio parahaemolyticus') || !content.includes('Vibrio alginolyticus') || !content.includes('Collinear') || !content.includes('Inverted') || svg.getElementById('plot_title')) throw new Error('Restored title-free Vibrio collinear SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 0.55; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } svg.setAttribute('data-capture-vibrio-overview', 'true');"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; const rows = Array.isArray(app?.linearRecordRows) ? app.linearRecordRows.map((entry) => Number(entry?.row)) : []; if (JSON.stringify(rows) !== JSON.stringify([1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5])) throw new Error('Restored Vibrio row placement does not match the tutorial.'); const content = String(app?.results?.[0]?.content || ''); const svg = app?.svgContainer?.querySelector('svg'); if (!svg || !content.includes('Vibrio harveyi') || !content.includes('Vibrio owensii') || !content.includes('Vibrio campbellii') || !content.includes('Vibrio parahaemolyticus') || !content.includes('Vibrio alginolyticus') || !content.includes('Collinear') || !content.includes('Inverted') || svg.getElementById('plot_title')) throw new Error('Restored title-free Vibrio collinear SVG does not match the tutorial.'); app.resultPanelTab = 'preview'; app.zoom = 0.55; if (app.canvasPan) { app.canvasPan.x = 0; app.canvasPan.y = 0; } svg.setAttribute('data-capture-vibrio-overview', 'true');"
               },
               {"type": "wait", "ms": 100},
               {
@@ -356,19 +356,7 @@
               "linearSeqs.length": 11,
               "linearRecordLayoutEnabled": true,
               "linearRecordGap": 48,
-              "adv.multi_record_positions": [
-                {"selector": "#1", "row": 1},
-                {"selector": "#2", "row": 1},
-                {"selector": "#3", "row": 1},
-                {"selector": "#4", "row": 2},
-                {"selector": "#5", "row": 2},
-                {"selector": "#6", "row": 3},
-                {"selector": "#7", "row": 3},
-                {"selector": "#8", "row": 4},
-                {"selector": "#9", "row": 4},
-                {"selector": "#10", "row": 5},
-                {"selector": "#11", "row": 5}
-              ],
+              "linearRecordRows.length": 11,
               "form.legend": "bottom",
               "form.plot_title": "",
               "form.linear_track_layout": "above",

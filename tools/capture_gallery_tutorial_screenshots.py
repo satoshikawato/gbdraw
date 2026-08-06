@@ -548,12 +548,22 @@ def wait_for_web_app_ready(page) -> None:
 
 
 def load_web_app_session(page, session_path: Path) -> None:
-    page.locator('input[accept^=".json,"]').set_input_files(str(session_path))
+    with page.expect_event("dialog", timeout=180_000) as dialog_info:
+        page.locator('input[accept^=".json,"]').set_input_files(str(session_path))
+    dialog = dialog_info.value
+    message = dialog.message
+    dialog.accept()
+    if message != "Session loaded successfully!":
+        raise RuntimeError(f"Could not load capture session: {message}")
     page.wait_for_function(
         """
         () => {
           const app = window.__GBDRAW_APP__;
-          return Boolean(app && Array.isArray(app.results) && app.results.length > 0);
+          return Boolean(
+            app &&
+            Array.isArray(app.results) &&
+            app.results.length > 0
+          );
         }
         """,
         timeout=120000,

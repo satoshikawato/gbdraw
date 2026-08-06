@@ -304,6 +304,23 @@ def capture_screenshot(page: Page, path: Path, mode_name: str) -> int:
         "() => !document.fonts || document.fonts.status === 'loaded'",
         timeout=ACTION_TIMEOUT_MS,
     )
+    page.evaluate(
+        """
+        () => {
+          for (const svg of document.querySelectorAll('.result-pane svg')) {
+            if (svg.parentElement) svg.parentElement.style.transition = 'none';
+          }
+        }
+        """
+    )
+    page.evaluate(
+        """
+        () => new Promise((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(resolve));
+        })
+        """
+    )
+    page.wait_for_timeout(350)
     page.screenshot(
         path=str(path),
         full_page=False,

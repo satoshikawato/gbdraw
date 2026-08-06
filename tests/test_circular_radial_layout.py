@@ -95,8 +95,37 @@ def test_stranded_feature_stack_lane_order_is_preset_deterministic() -> None:
     assert tuckin.lane_centers_by_track_id[0] == pytest.approx(93.0)
     assert middle.lane_centers_by_track_id[-1] == pytest.approx(94.0)
     assert middle.lane_centers_by_track_id[0] == pytest.approx(106.0)
-    assert spreadout.lane_centers_by_track_id[0] == pytest.approx(107.0)
-    assert spreadout.lane_centers_by_track_id[-1] == pytest.approx(119.0)
+    assert spreadout.lane_centers_by_track_id[-1] == pytest.approx(107.0)
+    assert spreadout.lane_centers_by_track_id[0] == pytest.approx(119.0)
+
+    for metrics in (tuckin, middle, spreadout):
+        assert metrics.lane_centers_by_track_id[0] > metrics.lane_centers_by_track_id[-1]
+
+
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+def test_stranded_feature_position_factors_keep_positive_strand_outermost(
+    track_type: str,
+) -> None:
+    positive = calculate_feature_position_factors_circular(
+        total_length=1000,
+        strand="positive",
+        track_ratio=0.19,
+        cds_ratio=0.1,
+        offset=0.0,
+        track_type=track_type,
+        strandedness=True,
+    )
+    negative = calculate_feature_position_factors_circular(
+        total_length=1000,
+        strand="negative",
+        track_ratio=0.19,
+        cds_ratio=0.1,
+        offset=0.0,
+        track_type=track_type,
+        strandedness=True,
+    )
+
+    assert positive[1] > negative[1]
 
 
 def test_middle_combined_feature_center_is_axis_radius() -> None:

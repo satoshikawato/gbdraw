@@ -167,9 +167,9 @@ def _outside_lane_order(track_ids: Sequence[int], *, strandedness: bool) -> tupl
     ids = [int(track_id) for track_id in track_ids]
     has_negative = any(track_id < 0 for track_id in ids)
     if bool(strandedness) or has_negative:
-        positive = sorted((track_id for track_id in ids if track_id >= 0), key=lambda value: (value != 0, value))
-        negative = sorted((track_id for track_id in ids if track_id < 0), key=lambda value: abs(value))
-        return tuple(positive + negative)
+        negative = sorted((track_id for track_id in ids if track_id < 0), key=lambda value: abs(value), reverse=True)
+        positive = sorted((track_id for track_id in ids if track_id >= 0), reverse=True)
+        return tuple(negative + positive)
     return tuple(sorted(ids))
 
 

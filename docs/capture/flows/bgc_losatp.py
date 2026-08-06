@@ -27,6 +27,7 @@ from flows.web_capture import (
     fit_complete_linear_preview,
     generate_and_inspect,
     open_browser_capture,
+    set_feature_search_visible,
     wait_for_worker,
 )
 
@@ -674,6 +675,7 @@ def capture_bgc_losatp(
                 }
             )
 
+        set_feature_search_visible(page, visible=False)
         fit_complete_linear_preview(page, target_zoom="40%")
         name = screenshot_names["settings"]
         page.get_by_label("LOSATP blastp mode", exact=True).scroll_into_view_if_needed()
@@ -702,6 +704,10 @@ def capture_bgc_losatp(
                     f"Expected alignment to {align_orthogroup_id}, found {aligned_state!r}"
                 )
             fit_complete_linear_preview(page, target_zoom="40%")
+        else:
+            fit_complete_linear_preview(
+                page, target_zoom="40%", pan_left=True
+            )
         name = screenshot_names["result"]
         screenshot_bytes[name] = capture_screenshot(
             page, output_paths[name], "Linear"

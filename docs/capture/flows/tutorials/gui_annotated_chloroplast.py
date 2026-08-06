@@ -366,7 +366,7 @@ def capture_gui_annotated_chloroplast(
         generate_and_inspect(page, _inspect_tracks_svg, _assert_plain_plastome)
         _fit_circular_preview(
             page,
-            target_zoom="60%",
+            target_zoom="70%",
             pan_left_ratio=0.0,
         )
         set_feature_search_visible(page, visible=False)
@@ -377,7 +377,7 @@ def capture_gui_annotated_chloroplast(
         _configure_gallery_presentation(page)
         _fit_circular_preview(
             page,
-            target_zoom="60%",
+            target_zoom="70%",
             pan_left_ratio=0.0,
         )
         annotations = page.get_by_label("Region Annotations", exact=True)
@@ -406,7 +406,9 @@ def capture_gui_annotated_chloroplast(
         final_report = generate_and_inspect(
             page, _inspect_tracks_svg, _assert_gallery_chloroplast
         )
-        _fit_circular_preview(page, target_zoom="50%")
+        _fit_circular_preview(
+            page, target_zoom="50%", pan_left_ratio=0.32
+        )
         popup = page.get_by_role("dialog", name=re.compile(r"^Feature details:"))
         if popup.is_visible():
             popup.get_by_role(

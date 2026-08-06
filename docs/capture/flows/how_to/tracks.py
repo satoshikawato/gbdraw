@@ -513,9 +513,10 @@ def _resize_sidebar(page: Page) -> None:
 
 def _fit_circular_preview(
     page: Page,
-    target_zoom: str = "50%",
+    target_zoom: str = "70%",
     *,
-    pan_left_ratio: float = 0.38,
+    pan_left_ratio: float = 0.24,
+    pan_up_ratio: float = 0.0,
 ) -> None:
     reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
     zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
@@ -540,7 +541,7 @@ def _fit_circular_preview(
         page.mouse.down()
         page.mouse.move(
             box["x"] + (box["width"] * (start_ratio - pan_left_ratio)),
-            y,
+            y - (box["height"] * pan_up_ratio),
             steps=10,
         )
         page.mouse.up()
@@ -931,7 +932,7 @@ def capture_gui_annotation_tracks(
             _assert_annotation_svg,
         )
         set_feature_search_visible(page, visible=False)
-        _fit_circular_preview(page)
+        _fit_circular_preview(page, pan_up_ratio=0.01)
         annotation_slot.scroll_into_view_if_needed()
         screenshot_bytes["annotation-result.png"] = capture_screenshot(
             page,
