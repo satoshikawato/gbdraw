@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from playwright.sync_api import BrowserType, expect
+from playwright.sync_api import BrowserType, Locator, Page, expect
 
 from assertions.downloads import (
     EXPECTED_GUI_LOSATN_SVG,
@@ -51,6 +51,23 @@ class CaptureResult:
     download: dict[str, Any]
     tsv_download: dict[str, Any]
     popup: dict[str, str]
+
+
+def _linear_pair(page: Page, query_index: int, subject_index: int) -> Locator:
+    endpoint_uids = []
+    for index in (query_index, subject_index):
+        record = page.get_by_role(
+            "group", name=f"Linear sequence {index}", exact=True
+        )
+        uid = record.get_attribute("data-linear-record-uid")
+        if not uid:
+            raise AssertionError(f"Linear sequence {index} has no stable record UID")
+        endpoint_uids.append(uid)
+    pair = page.locator(
+        f'fieldset[data-edge-key="{endpoint_uids[0]}->{endpoint_uids[1]}"]'
+    )
+    expect(pair).to_have_count(1)
+    return pair
 
 
 def _assert_match_popup(page: Any) -> dict[str, str]:
@@ -113,9 +130,11 @@ def capture_gui_losatn(
         linear.click()
         expect(linear).to_have_attribute("aria-pressed", "true")
         page.get_by_role("radio", name="GenBank", exact=True).check()
-        no_comparison = page.get_by_role(
+        global_source = page.locator('[data-capture="linear-blast-source"]')
+        expect(global_source).to_have_count(1)
+        no_comparison = global_source.get_by_role(
             "radio", name="No comparison", exact=True
-        ).first
+        )
         no_comparison.check()
         expect(no_comparison).to_be_checked()
 
@@ -144,10 +163,12 @@ def capture_gui_losatn(
             page, output_paths["02-first-diagram.png"], "Linear"
         )
 
-        run_losat = page.get_by_role("radio", name="Run LOSAT", exact=True).first
+        run_losat = global_source.get_by_role(
+            "radio", name="Run LOSAT", exact=True
+        )
         run_losat.check()
         expect(run_losat).to_be_checked()
-        losatn = page.get_by_role("radio", name="LOSATN", exact=True).first
+        losatn = page.get_by_role("radio", name="LOSATN", exact=True)
         losatn.check()
         expect(losatn).to_be_checked()
 
@@ -179,8 +200,9 @@ def capture_gui_losatn(
         )
         output_prefix.fill("lambda-de3-losatn")
         expect(output_prefix).to_have_value("lambda-de3-losatn")
-        raw_filename = page.get_by_role(
-            "textbox", name="Raw LOSAT filename", exact=True
+        pair = _linear_pair(page, 1, 2)
+        raw_filename = pair.get_by_role(
+            "textbox", name="Raw LOSAT filename for #1 to #2", exact=True
         )
         raw_filename.fill(EXPECTED_GUI_LOSATN_TSV)
         raw_filename.press("Tab")
@@ -207,9 +229,9 @@ def capture_gui_losatn(
             page, output_paths["04-comparison-result.png"], "Linear"
         )
 
-        tsv_button = page.get_by_role(
-            "button", name="Save Raw LOSAT TSV", exact=True
-        ).first
+        tsv_button = pair.get_by_role(
+            "button", name="Save Raw LOSAT TSV for #1 to #2", exact=True
+        )
         expect(tsv_button).to_be_enabled()
         with page.expect_download(timeout=ACTION_TIMEOUT_MS) as tsv_download_info:
             tsv_button.click()

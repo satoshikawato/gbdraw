@@ -92,6 +92,7 @@ import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
   adjacentRowPairs,
+  buildLinearComparisonTimeline,
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
@@ -383,10 +384,42 @@ export const createAppSetup = () => {
     left?.losatFilename === right?.losatFilename
   );
 
-  const invalidateLinearComparisonArtifacts = () => {
+  const reindexLinearLosatCacheInfo = () => {
+    if (!Array.isArray(losatCacheInfo.value)) return;
+    const indexByUid = new Map(
+      linearSeqs.map((sequence, index) => [String(sequence?.uid || ''), index])
+    );
+    const resolvedByEdgeKey = new Map(
+      linearComparisonResolution.value.edges.map((edge) => [edge.edgeKey, edge])
+    );
+    losatCacheInfo.value = losatCacheInfo.value.flatMap((entry) => {
+      const edgeKey = String(entry?.edgeKey || '');
+      if (!edgeKey) return [entry];
+      const resolved = resolvedByEdgeKey.get(edgeKey);
+      const queryUid = String(resolved?.queryUid || entry?.queryUid || '');
+      const subjectUid = String(resolved?.subjectUid || entry?.subjectUid || '');
+      const queryIndex = indexByUid.get(queryUid);
+      const subjectIndex = indexByUid.get(subjectUid);
+      if (!Number.isInteger(queryIndex) || !Number.isInteger(subjectIndex)) return [];
+      return [{
+        ...entry,
+        edgeKey,
+        queryUid,
+        subjectUid,
+        queryIndex,
+        subjectIndex,
+        ordinal: Number.isInteger(Number(resolved?.ordinal))
+          ? Number(resolved.ordinal)
+          : entry.ordinal
+      }];
+    });
+  };
+
+  const invalidateLinearComparisonArtifacts = ({ preserveLosatCacheInfo = false } = {}) => {
     files.linearCanonicalComparisons = [];
     if (Array.isArray(losatCacheInfo.value)) {
-      losatCacheInfo.value = losatCacheInfo.value.filter((entry) => !entry?.edgeKey);
+      if (preserveLosatCacheInfo) reindexLinearLosatCacheInfo();
+      else losatCacheInfo.value = losatCacheInfo.value.filter((entry) => !entry?.edgeKey);
     }
   };
 
@@ -425,36 +458,38 @@ export const createAppSetup = () => {
     return !unchanged;
   };
 
-  const syncLinearRecordLayout = () => {
+  const syncLinearRecordLayout = ({ preserveLosatCacheInfo = false } = {}) => {
     const next = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
     const rowsUnchanged = next.length === linearRecordRows.length && next.every((entry, index) => (
       entry.uid === linearRecordRows[index]?.uid && entry.row === linearRecordRows[index]?.row
     ));
     if (!rowsUnchanged) linearRecordRows.splice(0, linearRecordRows.length, ...next);
     const comparisonsChanged = syncLinearComparisonRecords({ invalidate: false });
-    if (!rowsUnchanged || comparisonsChanged) invalidateLinearComparisonArtifacts();
+    if (!rowsUnchanged || comparisonsChanged) {
+      invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo });
+    }
     return !rowsUnchanged || comparisonsChanged;
   };
   const setLinearRecordRow = (uid, row) => {
-    syncLinearRecordLayout();
+    syncLinearRecordLayout({ preserveLosatCacheInfo: true });
     const previous = linearRecordRows.find((entry) => entry.uid === uid)?.row;
     updateLinearRecordRow(linearRecordRows, uid, row);
     if (linearRecordRows.find((entry) => entry.uid === uid)?.row !== previous) {
-      invalidateLinearComparisonArtifacts();
+      invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo: true });
     }
   };
   const setLinearRecordLayoutEnabled = (enabled) => {
     const nextEnabled = Boolean(enabled);
     if (linearRecordLayoutEnabled.value === nextEnabled) return;
     linearRecordLayoutEnabled.value = nextEnabled;
-    syncLinearRecordLayout();
-    invalidateLinearComparisonArtifacts();
+    syncLinearRecordLayout({ preserveLosatCacheInfo: true });
+    invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo: true });
   };
   const moveLinearRecordWithinRow = (uid, direction) => {
     const next = moveLinearRecordInRow(linearSeqs, linearRecordRows, uid, direction);
     linearRecordRows.splice(0, linearRecordRows.length, ...next);
-    syncLinearComparisonRecords();
-    invalidateLinearComparisonArtifacts();
+    syncLinearComparisonRecords({ invalidate: false });
+    invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo: true });
   };
 
   const linearComparisonGlobalAction = computed(() => {
@@ -462,6 +497,37 @@ export const createAppSetup = () => {
     if (linearComparisonPlan.mode !== LINEAR_COMPARISON_MODES.ADJACENT) return 'selected';
     return linearComparisonPlan.defaultSource;
   });
+
+  const linearComparisonTimeline = computed(() => buildLinearComparisonTimeline({
+    sequences: linearSeqs,
+    layout: effectiveLinearComparisonLayout(),
+    plan: linearComparisonPlan,
+    resolution: linearComparisonResolution.value
+  }));
+  const linearComparisonPairForEdgeKey = (edgeKey) => {
+    for (const row of linearComparisonTimeline.value.rows) {
+      const pair = row.boundaryAfter?.pairs.find((entry) => entry.edgeKey === edgeKey);
+      if (pair) return pair;
+    }
+    return null;
+  };
+  const linearComparisonRecordLabel = (uid) => {
+    const sequence = linearSeqs.find((entry) => entry.uid === uid);
+    const label = String(
+      sequence?.definition ||
+      sequence?.gb?.name ||
+      sequence?.gff?.name ||
+      sequence?.fasta?.name ||
+      'Record'
+    ).replace(/<[^>]*>/g, '').trim();
+    return label || 'Record';
+  };
+  const focusLinearComparisonPair = async (edgeKey) => {
+    await nextTick();
+    const container = [...document.querySelectorAll('[data-edge-key]')]
+      .find((element) => element.dataset.edgeKey === edgeKey);
+    container?.querySelector('input, select, button')?.focus();
+  };
 
   const setLinearComparisonGlobalAction = (action) => {
     const normalized = String(action || '').trim().toLowerCase();
@@ -496,9 +562,17 @@ export const createAppSetup = () => {
   };
 
   const findEdgeIndex = (edges, id) => edges.findIndex((edge) => edge.id === id);
-  const findEdgeIndexByKey = (edges, edgeKey) => edges.findIndex((edge) => (
-    linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) === edgeKey
-  ));
+  const findEdgeIndexForPair = (edges, pair) => {
+    const ownerId = pair?.draft?.id || pair?.resolved?.id || pair?.edgeId || '';
+    const ownerIndex = ownerId ? findEdgeIndex(edges, ownerId) : -1;
+    if (ownerIndex >= 0) return ownerIndex;
+    const matchingIndexes = edges
+      .map((edge, index) => (
+        linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) === pair?.edgeKey ? index : -1
+      ))
+      .filter((index) => index >= 0);
+    return matchingIndexes.length === 1 ? matchingIndexes[0] : -1;
+  };
 
   const upsertSelectedComparison = (next, {
     id = '',
@@ -508,7 +582,14 @@ export const createAppSetup = () => {
   }) => {
     const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
     let index = id ? findEdgeIndex(next.edges, id) : -1;
-    if (index < 0) index = findEdgeIndexByKey(next.edges, edgeKey);
+    if (index < 0) {
+      const matchingIndexes = next.edges
+        .map((edge, edgeIndex) => (
+          linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) === edgeKey ? edgeIndex : -1
+        ))
+        .filter((edgeIndex) => edgeIndex >= 0);
+      if (!id || matchingIndexes.length === 1) index = matchingIndexes[0] ?? -1;
+    }
     if (index < 0) {
       next.edges.push(createLinearComparisonEdge({
         queryUid,
@@ -526,7 +607,7 @@ export const createAppSetup = () => {
     return edge;
   };
 
-  const addLinearComparison = () => {
+  const addLinearComparison = async () => {
     if (linearSeqs.length < 2) return;
     syncLinearRecordLayout();
     const [firstPair] = adjacentRowPairs(
@@ -537,6 +618,7 @@ export const createAppSetup = () => {
     const next = selectedPlanForEdit();
     upsertSelectedComparison(next, { queryUid, subjectUid });
     replaceLinearComparisonPlan(next);
+    await focusLinearComparisonPair(linearComparisonEdgeKey(queryUid, subjectUid));
   };
   const omitLinearComparison = (id) => {
     const next = selectedPlanForEdit();
@@ -629,7 +711,12 @@ export const createAppSetup = () => {
     const resolved = linearComparisonResolution.value.edges.find((edge) => edge.edgeKey === edgeKey);
     if (!resolved) return;
     const next = normalizeLinearComparisonPlan(linearComparisonPlan);
-    let index = findEdgeIndexByKey(next.edges, edgeKey);
+    const pair = linearComparisonPairForEdgeKey(edgeKey) || {
+      edgeKey,
+      edgeId: resolved.id,
+      resolved
+    };
+    let index = findEdgeIndexForPair(next.edges, pair);
     if (index < 0) {
       next.edges.push(createLinearComparisonEdge({
         queryUid: resolved.queryUid,
@@ -667,10 +754,10 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonGapAction = (edgeKey, action) => {
-    const gap = linearAdjacentComparisonRows.value.find((entry) => entry.edgeKey === edgeKey);
-    if (!gap) return;
+    const pair = linearComparisonPairForEdgeKey(edgeKey);
+    if (!pair) return;
     const next = selectedPlanForEdit();
-    const index = findEdgeIndexByKey(next.edges, edgeKey);
+    const index = findEdgeIndexForPair(next.edges, pair);
     if (action === 'none') {
       if (index >= 0) {
         next.edges[index].included = false;
@@ -682,13 +769,24 @@ export const createAppSetup = () => {
       return;
     }
     upsertSelectedComparison(next, {
-      queryUid: gap.queryUid,
-      subjectUid: gap.subjectUid,
+      id: pair.edgeId,
+      queryUid: pair.queryUid,
+      subjectUid: pair.subjectUid,
       source: action === LINEAR_COMPARISON_SOURCES.UPLOAD
         ? LINEAR_COMPARISON_SOURCES.UPLOAD
         : LINEAR_COMPARISON_SOURCES.LOSAT
     });
     replaceLinearComparisonPlan(next);
+  };
+  const setLinearComparisonCardFile = (edgeKey, file) => {
+    let pair = linearComparisonPairForEdgeKey(edgeKey);
+    let draft = pair?.draft || null;
+    if (!draft) {
+      setLinearComparisonGapAction(edgeKey, LINEAR_COMPARISON_SOURCES.UPLOAD);
+      pair = linearComparisonPairForEdgeKey(edgeKey);
+      draft = pair?.draft || null;
+    }
+    if (draft) setLinearComparisonFile(draft.id, file);
   };
   const linearRecordRowFor = (uid, fallback) => {
     return linearRecordRows.find((entry) => entry.uid === uid)?.row || fallback;
@@ -697,36 +795,6 @@ export const createAppSetup = () => {
     linearRecordLayoutEnabled.value
       ? linearRecordPositionTokens(linearSeqs, linearRecordRows)
       : []
-  ));
-  const linearAdjacentComparisonRows = computed(() => {
-    const resolvedByKey = new Map(
-      linearComparisonResolution.value.edges.map((edge) => [edge.edgeKey, edge])
-    );
-    const draftByKey = new Map(
-      linearComparisonPlan.edges.map((edge) => [
-        linearComparisonEdgeKey(edge.queryUid, edge.subjectUid),
-        edge
-      ])
-    );
-    const indexByUid = new Map(linearSeqs.map((sequence, index) => [sequence.uid, index]));
-    return adjacentRowPairs(linearSeqs, effectiveLinearComparisonLayout()).map(([queryUid, subjectUid]) => {
-      const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
-      const resolved = resolvedByKey.get(edgeKey) || null;
-      const draft = draftByKey.get(edgeKey) || null;
-      return {
-        edgeKey,
-        queryUid,
-        subjectUid,
-        queryIndex: indexByUid.get(queryUid),
-        subjectIndex: indexByUid.get(subjectUid),
-        source: resolved?.source || 'none',
-        active: Boolean(resolved),
-        draft
-      };
-    });
-  });
-  const linearResolvedLosatEdges = computed(() => (
-    linearComparisonResolution.value.edges.filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT)
   ));
   const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
     (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [])
@@ -2758,7 +2826,7 @@ export const createAppSetup = () => {
     adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
   };
 
-  const applyLinearSeqMutation = (items) => {
+  const applyLinearSeqMutation = (items, { preserveLosatCacheInfo = false } = {}) => {
     const depthWidth = linearDepthLogicalWidth();
     const next = normalizeLinearSeqList(items);
     if (depthWidth > 0) {
@@ -2773,7 +2841,7 @@ export const createAppSetup = () => {
       reconcileLinearComparisonPlan(linearComparisonPlan, linearSeqs),
       { invalidate: false }
     );
-    invalidateLinearComparisonArtifacts();
+    invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo });
     linearReorderNotice.value = '';
   };
 
@@ -2843,7 +2911,7 @@ export const createAppSetup = () => {
     const current = Array.from(linearSeqs);
     const [moved] = current.splice(from, 1);
     current.splice(to, 0, moved);
-    applyLinearSeqMutation(current);
+    applyLinearSeqMutation(current, { preserveLosatCacheInfo: true });
   };
 
   const moveLinearSeqUp = (index) => {
@@ -2962,8 +3030,8 @@ export const createAppSetup = () => {
     hasLinearComparisonIntent,
     hasActiveLinearLosatIntent,
     hasActiveLinearUploadIntent,
-    linearAdjacentComparisonRows,
-    linearResolvedLosatEdges,
+    linearComparisonTimeline,
+    linearComparisonRecordLabel,
     linearLosatCacheInfoByEdgeKey,
     linearLayoutTokens,
     syncLinearRecordLayout,
@@ -2978,6 +3046,7 @@ export const createAppSetup = () => {
     setLinearComparisonEndpoint,
     setLinearComparisonSource,
     setLinearComparisonFile,
+    setLinearComparisonCardFile,
     reuseLinearComparisonFile,
     deactivateLinearComparisonFile,
     setLinearComparisonLosatFilename,

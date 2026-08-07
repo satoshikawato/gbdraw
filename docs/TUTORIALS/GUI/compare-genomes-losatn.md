@@ -72,7 +72,7 @@ Select **Generate Diagram** again. LOSATN runs in the browser, and the result sh
 
 *The longest match covers 21,232 aligned bases at 99.981% identity.*
 
-Under **Raw LOSAT results**, select **Save Raw LOSAT TSV**. The browser saves `lambda-de3.losatn.tsv`. Then select **SVG** in the **Result Preview** toolbar to save `lambda-de3-losatn.svg`.
+In the comparison between sequence 1 and sequence 2, select **Save Raw LOSAT TSV**. The browser saves `lambda-de3.losatn.tsv`. Then select **SVG** in the **Result Preview** toolbar to save `lambda-de3-losatn.svg`.
 
 The TSV should contain six tab-separated rows. Every query interval falls within 1–48,502, and every subject interval falls within 1–42,925.
 

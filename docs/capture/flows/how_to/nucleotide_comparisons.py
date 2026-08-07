@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from Bio import SeqIO
-from playwright.sync_api import BrowserType, Page, expect
+from playwright.sync_api import BrowserType, Locator, Page, expect
 
 from assertions.svg_semantics import (
     assert_plain_gui_losatn_svg,
@@ -85,6 +85,23 @@ class ComparisonCaptureResult:
     fasta_download: dict[str, Any] | None = None
     popup: dict[str, Any] | None = None
     source_records: tuple[dict[str, Any], ...] = ()
+
+
+def _linear_pair(page: Page, query_index: int, subject_index: int) -> Locator:
+    endpoint_uids = []
+    for index in (query_index, subject_index):
+        record = page.get_by_role(
+            "group", name=f"Linear sequence {index}", exact=True
+        )
+        uid = record.get_attribute("data-linear-record-uid")
+        if not uid:
+            raise AssertionError(f"Linear sequence {index} has no stable record UID")
+        endpoint_uids.append(uid)
+    pair = page.locator(
+        f'fieldset[data-edge-key="{endpoint_uids[0]}->{endpoint_uids[1]}"]'
+    )
+    expect(pair).to_have_count(1)
+    return pair
 
 
 def _read_blast_rows(path: Path) -> tuple[tuple[str, ...], ...]:
@@ -317,26 +334,26 @@ def capture_gui_uploaded_comparison(
         wait_for_worker(page)
         _load_complete_linear_inputs(page)
 
-        upload_choices = page.get_by_role(
+        pair = _linear_pair(page, 1, 2)
+        edge_upload = pair.get_by_role(
             "radio", name="Upload BLAST TSV", exact=True
         )
-        expect(upload_choices).to_have_count(2)
-        edge_upload = upload_choices.last
         edge_upload.check()
         expect(edge_upload).to_be_checked()
-        blast_input = page.get_by_label("BLAST TSV", exact=True).first
+        blast_input = pair.get_by_label(
+            "BLAST TSV for #1 to #2", exact=True
+        )
         blast_input.set_input_files(TLOSATX_REFERENCE_PATH)
-        blast_selection = page.get_by_role(
-            "group", name="BLAST TSV selection", exact=True
-        ).first
+        blast_selection = pair.get_by_role(
+            "group", name="BLAST TSV for #1 to #2 selection", exact=True
+        )
         expect(blast_selection).to_contain_text(EXPECTED_TLOSATX_TSV)
         _set_linear_comparison_filter(page, 1_000)
 
         prefix = page.get_by_label("Output Prefix", exact=True)
         prefix.fill("uploaded_comparison")
         expect(prefix).to_have_value("uploaded_comparison")
-        source = page.get_by_label("Linear comparison source", exact=True).first
-        expect(source).to_have_value("upload")
+        expect(edge_upload).to_be_checked()
         blast_selection.scroll_into_view_if_needed()
         blast_selection.hover()
         page.mouse.wheel(0, 240)
@@ -403,10 +420,14 @@ def capture_gui_tlosatx(
         wait_for_worker(page)
         _load_complete_linear_inputs(page)
 
-        run_losat = page.get_by_role("radio", name="Run LOSAT", exact=True).first
+        global_source = page.locator('[data-capture="linear-blast-source"]')
+        expect(global_source).to_have_count(1)
+        run_losat = global_source.get_by_role(
+            "radio", name="Run LOSAT", exact=True
+        )
         run_losat.check()
         expect(run_losat).to_be_checked()
-        tlosatx = page.get_by_role("radio", name="TLOSATX", exact=True).first
+        tlosatx = page.get_by_role("radio", name="TLOSATX", exact=True)
         tlosatx.check()
         expect(tlosatx).to_be_checked()
         execution = page.get_by_role("combobox", name="LOSAT execution", exact=True)
@@ -436,8 +457,9 @@ def capture_gui_tlosatx(
         prefix = page.get_by_label("Output Prefix", exact=True)
         prefix.fill("lambda-de3-tlosatx")
         expect(prefix).to_have_value("lambda-de3-tlosatx")
-        raw_filename = page.get_by_role(
-            "textbox", name="Raw LOSAT filename", exact=True
+        pair = _linear_pair(page, 1, 2)
+        raw_filename = pair.get_by_role(
+            "textbox", name="Raw LOSAT filename for #1 to #2", exact=True
         )
         raw_filename.fill(EXPECTED_TLOSATX_TSV)
         raw_filename.press("Tab")
@@ -459,9 +481,9 @@ def capture_gui_tlosatx(
             page, output_paths["tlosatx-result.png"], "Linear"
         )
 
-        tsv_button = page.get_by_role(
-            "button", name="Save Raw LOSAT TSV", exact=True
-        ).first
+        tsv_button = pair.get_by_role(
+            "button", name="Save Raw LOSAT TSV for #1 to #2", exact=True
+        )
         expect(tsv_button).to_be_enabled()
         with page.expect_download(timeout=ACTION_TIMEOUT_MS) as tsv_info:
             tsv_button.click()

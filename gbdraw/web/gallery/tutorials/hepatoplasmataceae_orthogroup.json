@@ -141,6 +141,7 @@
               "linearComparisonPlan.defaultSource": "losat",
               "losatProgram": "blastp"
             },
+            "visibleText": ["Apply to all adjacent gaps"],
             "visibleControls": [
               {"label": "Run LOSAT", "checked": true},
               {"label": "LOSATP", "checked": true}

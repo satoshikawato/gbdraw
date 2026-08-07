@@ -1,6 +1,6 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-08-06
+Last updated: 2026-08-07
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
@@ -39,6 +39,21 @@ remain visible by default.
 The comparison-panel captures declare the exact saved session, comparison-plan
 state, LOSAT program, and visible selected controls. Record-upload crops no
 longer describe the retired per-record raw-result filename field.
+
+## Linear comparison row boundaries
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-03-01-open-pairwise.webp` | Recapture | Exact BGC session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups; shared thread and threshold settings | Planned |
+| `BGC0000708-BGC0000713` | `manual-03-03-first-comparison-boundary.webp` | Add | Exact BGC session; first `record-1->record-2` boundary; LOSAT source; endpoint identities, raw filename, cache state, and raw TSV action inside the crop | Planned |
+| `hepatoplasmataceae_orthogroup` | `manual-03-01-browser-losat.webp` | Recapture | Exact orthogroup session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups | Planned |
+| `hepatoplasmataceae_collinear` | `manual-03-01-open-pairwise.webp` | Recapture | Exact collinear session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Collinear blocks | Planned |
+| `majanivirus_orthogroup` | `manual-03-01-open-pairwise.webp` | Recapture | Exact Majanivirus session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups | Planned |
+| `vibrio-harveyi-group-collinear` | `manual-04-03-adjacent-pairs.webp` | Keep | Tight **Evidence scope** dropdown crop; no global or pair-specific comparison controls | Inspected; current 840×483 crop remains truthful |
+
+The new BGC boundary operation is data-dependent. Its capture contract uses
+the BGC session, asserts the `record-1->record-2` edge and LOSAT source, and
+keeps the pair-specific raw filename and download action in the final crop.
 
 ## Worked-example final previews
 

@@ -186,6 +186,7 @@
               "adv.identity": 30,
               "adv.alignment_length": 0
             },
+            "visibleText": ["Apply to all adjacent gaps"],
             "visibleControls": [
               {"label": "Run LOSAT", "checked": true},
               {"label": "LOSATP", "checked": true},
@@ -220,6 +221,48 @@
               "options": ["Similarity groups", "Collinear blocks", "Pairwise"],
               "label": "blastp mode"
             }
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "First comparison boundary",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-03-03-first-comparison-boundary.webp",
+            "alt": "Comparison between sequence 1 and sequence 2 with Run LOSAT selected, a Raw LOSAT filename, ready cache status, and the Save Raw LOSAT TSV action.",
+            "caption": "The boundary between sequence 1 and sequence 2 keeps that pair's raw filename, cache status, and Raw LOSAT TSV export together."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {"width": 1600, "height": 1100},
+            "selector": "[data-edge-key='record-1->record-2']",
+            "cropPadding": {"top": 12, "right": 24, "bottom": 12, "left": 12},
+            "waitForSelector": "[data-edge-key='record-1->record-2']",
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.0.uid": "record-1",
+              "linearSeqs.1.uid": "record-2",
+              "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
+              "linearComparisonResolution.edges.0.source": "losat"
+            },
+            "visibleControls": [
+              {
+                "selector": "[data-edge-key='record-1->record-2'] input[type='radio']:checked",
+                "checked": true
+              },
+              {
+                "selector": "[data-edge-key='record-1->record-2'] input[aria-label='Raw LOSAT filename for #1 to #2']",
+                "value": ""
+              }
+            ],
+            "visibleText": [
+              "#1",
+              "Streptomyces lividus CBS 844.73",
+              "#2",
+              "Streptomyces fradiae ATCC 10745",
+              "Raw result ready",
+              "Save Raw LOSAT TSV"
+            ]
           }
         }
       ]

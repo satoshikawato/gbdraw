@@ -624,6 +624,7 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
 
     for required in (
         'get_by_role("button", name="Linear", exact=True)',
+        'page.locator(\'[data-capture="linear-blast-source"]\')',
         'name="No comparison", exact=True',
         'get_by_role("button", name="Add sequence", exact=True)',
         'get_by_test_id("linear-genbank-1").set_input_files',
@@ -635,14 +636,16 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
         'name="LOSAT parallel runs", exact=True',
         'name="LOSAT threads per run", exact=True',
         'name="LOSATN task", exact=True',
-        'name="Raw LOSAT filename", exact=True',
+        'fieldset[data-edge-key=',
+        'get_attribute("data-linear-record-uid")',
+        'name="Raw LOSAT filename for #1 to #2", exact=True',
         'get_by_label("Pairwise Match", exact=True)',
         '"Pairwise Match Height", exact=True',
         'pairwise_match_height.fill("120")',
         'select_option("serial")',
         'select_option("1")',
         'select_option("megablast")',
-        'name="Save Raw LOSAT TSV", exact=True',
+        'name="Save Raw LOSAT TSV for #1 to #2", exact=True',
         'get_by_role("button", name="SVG", exact=True)',
         'name="Pairwise match 1", exact=True',
         'first_match.press("Enter")',
@@ -656,14 +659,15 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
     first_result = source.index("first_report = generate_and_inspect")
     configure_losat = source.index('name="Run LOSAT", exact=True')
     final_result = source.index("final_report = generate_and_inspect")
-    tsv_download = source.index('name="Save Raw LOSAT TSV", exact=True')
+    tsv_download = source.index(
+        'name="Save Raw LOSAT TSV for #1 to #2", exact=True'
+    )
     svg_download = source.index('name="SVG", exact=True')
     popup = source.index('name="Pairwise match 1", exact=True')
     assert first_result < configure_losat < final_result
     assert final_result < tsv_download < svg_download < popup
 
     for forbidden in (
-        "page.locator(",
         "get_by_text(",
         "localStorage",
         "sessionStorage",
@@ -674,6 +678,9 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
         "region_start",
         "region_end",
         "NC_001416_part",
+        ').first',
+        'name="Raw LOSAT filename", exact=True',
+        'name="Save Raw LOSAT TSV", exact=True',
     ):
         assert forbidden not in source
     assert "tlosatx" not in source.lower()
@@ -1261,8 +1268,11 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
         "`lambda-de3.losatn.tsv`",
         "`lambda-de3-losatn.svg`",
         "Lambda 1..21231 to DE3 20081..41311",
+        "comparison between sequence 1 and sequence 2",
     ):
         assert value in tutorial
+
+    assert "Raw LOSAT results" not in tutorial
 
     next_steps = tutorial.index("## Next steps")
     for related_target in (

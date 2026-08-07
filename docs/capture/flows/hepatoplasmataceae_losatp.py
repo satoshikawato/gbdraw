@@ -203,8 +203,10 @@ def _set_presentation(page: Page, *, title: str) -> None:
 def _configure_all_record_collinear(
     page: Page, *, output_prefix: str, evidence_scope: str = "all"
 ) -> None:
-    page.get_by_role("radio", name="Run LOSAT", exact=True).first.check()
-    page.get_by_role("radio", name="LOSATP", exact=True).first.check()
+    global_source = page.locator('[data-capture="linear-blast-source"]')
+    expect(global_source).to_have_count(1)
+    global_source.get_by_role("radio", name="Run LOSAT", exact=True).check()
+    page.get_by_role("radio", name="LOSATP", exact=True).check()
     page.get_by_label("LOSAT execution", exact=True).select_option(
         "threaded" if evidence_scope == "all" else "auto"
     )

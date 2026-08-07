@@ -25,6 +25,7 @@ COMPARISON_FLOW_PATH = (
     / "nucleotide_comparisons.py"
 )
 MANIFEST_PATH = REPO_ROOT / "docs" / "scenarios" / "manifest.json"
+FAQ_PATH = REPO_ROOT / "docs" / "FAQ.md"
 
 PAGES = {
     "H-GUI-03": REPO_ROOT
@@ -194,10 +195,16 @@ def test_h_gui_03_to_06_flows_use_visible_controls_without_state_injection() -> 
     ):
         assert fragment in layout
     for fragment in (
+        'page.locator(\'[data-capture="linear-blast-source"]\')',
+        'fieldset[data-edge-key=',
+        'get_attribute("data-linear-record-uid")',
         'name="Upload BLAST TSV", exact=True',
-        '"BLAST TSV", exact=True',
+        '"BLAST TSV for #1 to #2", exact=True',
+        '"BLAST TSV for #1 to #2 selection", exact=True',
         'name="TLOSATX", exact=True',
         'name="LOSAT execution", exact=True',
+        'name="Raw LOSAT filename for #1 to #2", exact=True',
+        'name="Save Raw LOSAT TSV for #1 to #2", exact=True',
         '"Pairwise Comparisons", exact=True',
         '"Separate Strands", exact=True',
         "expect(separate_strands).not_to_be_checked()",
@@ -213,7 +220,6 @@ def test_h_gui_03_to_06_flows_use_visible_controls_without_state_injection() -> 
 
     for source in (layout, comparisons):
         for forbidden in (
-            "page.locator(",
             "get_by_text(",
             "localStorage",
             "sessionStorage",
@@ -223,6 +229,16 @@ def test_h_gui_03_to_06_flows_use_visible_controls_without_state_injection() -> 
             "set_content(",
         ):
             assert forbidden not in source
+    assert "page.locator(" not in layout
+    for forbidden in (
+        "upload_choices",
+        "raw_names",
+        "raw_buttons",
+        'get_by_label("Linear comparison source"',
+        'name="Raw LOSAT filename", exact=True',
+        'name="Save Raw LOSAT TSV", exact=True',
+    ):
+        assert forbidden not in comparisons
 
 
 def test_nucleotide_capture_accessibility_labels_are_in_the_public_ui() -> None:
@@ -237,6 +253,14 @@ def test_nucleotide_capture_accessibility_labels_are_in_the_public_ui() -> None:
         'aria-label="Linear record gap"',
         "TLOSATX gencode for sequence ${idx + 1}",
         'aria-label="Linear comparison minimum alignment length"',
+        'data-capture="linear-blast-source"',
+        "Apply to all adjacent gaps",
+        ':data-edge-key="pair.edgeKey"',
+        'label="BLAST TSV"',
+        ':data-input-aria-label="`BLAST TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"',
+        ">Raw LOSAT filename</label>",
+        "Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}",
+        "Save Raw LOSAT TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}",
         'aria-label="Pairwise Comparisons"',
         'aria-label="Circular reference gencode"',
         "Comparison ring label ${row.index + 1}",
@@ -303,6 +327,18 @@ def test_nucleotide_pages_and_manifest_use_the_executable_scenarios() -> None:
     assert h6["settings"]["separate_strands"] is False
     assert "lambda" not in h6["fixtures"]
     assert "de3" not in h6["fixtures"]
+
+    for scenario_id in ("H-GUI-04", "H-GUI-05"):
+        page = PAGES[scenario_id].read_text(encoding="utf-8")
+        assert "comparison between sequence 1 and sequence 2" in page
+        assert "Adjacent gaps" not in page
+        assert "Raw LOSAT results" not in page
+
+    faq = FAQ_PATH.read_text(encoding="utf-8")
+    assert "**Apply to all adjacent gaps**" in faq
+    assert "**Advanced pair setup**" in faq
+    assert "**Adjacent gaps**" not in faq
+    assert "**Raw LOSAT results**" not in faq
 
 
 def test_nucleotide_screenshots_are_full_pinned_viewports() -> None:

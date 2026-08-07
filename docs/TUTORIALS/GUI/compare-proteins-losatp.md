@@ -122,9 +122,9 @@ x-coordinate. This is the alignment used by the Interactive SVG Gallery.
 
 ![Five whole BGC records aligned to similarity group og_1](../../images/t-gui-04/05-comparison-result.png)
 
-Under **Raw LOSAT results**, name the first adjacent result
-`bgc_losatp_groups.tsv` and select **Save Raw LOSAT TSV**. The file
-contains 232 twelve-column rows. Select **SVG** after alignment to save
+In the comparison between sequence 1 and sequence 2, set **Raw LOSAT
+filename** to `bgc_losatp_groups.tsv` and select **Save Raw LOSAT TSV**. The
+file contains 232 twelve-column rows. Select **SVG** after alignment to save
 `bgc_losatp_groups.svg`.
 
 ## Step 6: Inspect a group

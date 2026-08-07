@@ -149,10 +149,107 @@ LAYOUT_RESULT_CAPTURES = {
 }
 
 
+LINEAR_COMPARISON_PANEL_EXAMPLES = {
+    "BGC0000708-BGC0000713",
+    "hepatoplasmataceae_orthogroup",
+    "hepatoplasmataceae_collinear",
+    "majanivirus_orthogroup",
+}
+
+
+FIRST_COMPARISON_BOUNDARY_CAPTURE = {
+    "src": "./media/BGC0000708-BGC0000713/manual-03-03-first-comparison-boundary.webp",
+    "selector": "[data-edge-key='record-1->record-2']",
+    "viewport": {"width": 1600, "height": 1100},
+    "state": {
+        "mode": "linear",
+        "linearSeqs.0.uid": "record-1",
+        "linearSeqs.1.uid": "record-2",
+        "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
+        "linearComparisonResolution.edges.0.source": "losat",
+    },
+    "visible_text": {
+        "#1",
+        "Streptomyces lividus CBS 844.73",
+        "#2",
+        "Streptomyces fradiae ATCC 10745",
+        "Raw result ready",
+        "Save Raw LOSAT TSV",
+    },
+}
+
+
 def _load_tutorial(sample: dict[str, object]) -> dict[str, object]:
     tutorial_path = resolve_gallery_reference(str(sample["tutorial"]))
     assert tutorial_path is not None
     return json.loads(tutorial_path.read_text(encoding="utf-8"))
+
+
+def test_linear_comparison_panels_name_the_global_default_scope() -> None:
+    for example_id in LINEAR_COMPARISON_PANEL_EXAMPLES:
+        sample = load_ready_examples(example_id)[0]
+        tutorial = _load_tutorial(sample)
+        panel_operations = [
+            operation
+            for _, operation in iter_operation_contexts(sample, tutorial)
+            if operation.get("media", {}).get("src", "").endswith(
+                (
+                    "manual-03-01-open-pairwise.webp",
+                    "manual-03-01-browser-losat.webp",
+                )
+            )
+        ]
+
+        assert len(panel_operations) == 1
+        assert "Apply to all adjacent gaps" in panel_operations[0]["capture"][
+            "visibleText"
+        ]
+
+
+def test_first_linear_comparison_boundary_has_an_exact_capture_contract() -> None:
+    sample = load_ready_examples("BGC0000708-BGC0000713")[0]
+    tutorial = _load_tutorial(sample)
+    matches = [
+        operation
+        for _, operation in iter_operation_contexts(sample, tutorial)
+        if operation.get("media", {}).get("src")
+        == FIRST_COMPARISON_BOUNDARY_CAPTURE["src"]
+    ]
+
+    assert len(matches) == 1
+    operation = matches[0]
+    capture = operation["capture"]
+    expected = FIRST_COMPARISON_BOUNDARY_CAPTURE
+    assert operation["dataDependent"] is True
+    assert capture["source"] == "webapp"
+    assert capture["session"] == sample["session"]
+    assert capture["selector"] == expected["selector"]
+    assert capture["waitForSelector"] == expected["selector"]
+    assert capture["viewport"] == expected["viewport"]
+    assert capture["cropPadding"] == {
+        "top": 12,
+        "right": 24,
+        "bottom": 12,
+        "left": 12,
+    }
+    assert expected["state"].items() <= capture["assertAppState"].items()
+    assert expected["visible_text"] <= set(capture["visibleText"])
+    assert capture["visibleControls"] == [
+        {
+            "selector": (
+                "[data-edge-key='record-1->record-2'] "
+                "input[type='radio']:checked"
+            ),
+            "checked": True,
+        },
+        {
+            "selector": (
+                "[data-edge-key='record-1->record-2'] "
+                "input[aria-label='Raw LOSAT filename for #1 to #2']"
+            ),
+            "value": "",
+        },
+    ]
 
 
 @pytest.mark.parametrize("example_id", LAYOUT_RESULT_CAPTURES)

@@ -25,9 +25,9 @@ cropped, split, or relabeled.
 1. Select **Linear** and **GenBank**.
 2. Upload `NC_001416.gb` under sequence 1.
 3. Select **Add Seq**, then upload `NC_042057.1.gb` under sequence 2.
-4. Under **Adjacent gaps**, select **Upload BLAST TSV** for the sequence 1 to
-   sequence 2 edge.
-5. Upload `lambda-de3.tlosatx.tsv` for that edge.
+4. In the comparison between sequence 1 and sequence 2, select **Upload BLAST
+   TSV**.
+5. Upload `lambda-de3.tlosatx.tsv` in that comparison.
 6. Set **Output Prefix** to `uploaded_comparison`.
 
 Open **Pairwise Match** and set **Minimum Length** to `1000`. Seven of the 397

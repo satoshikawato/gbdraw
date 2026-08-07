@@ -313,6 +313,9 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
 
     for fragment in (
         'get_by_role("button", name="Linear", exact=True)',
+        'page.locator(\'[data-capture="linear-blast-source"]\')',
+        'fieldset[data-edge-key=',
+        'get_attribute("data-linear-record-uid")',
         'get_by_role("radio", name="GenBank", exact=True)',
         '"radio", name="No comparison", exact=True',
         'get_by_role("button", name="Add sequence", exact=True)',
@@ -320,9 +323,11 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
         'f"Definition for sequence {index}"',
         'f"Subtitle / title for sequence {index}"',
         'f"Reverse complement for sequence {index}"',
-        'get_by_role("radio", name="Run LOSAT", exact=True)',
+        '"radio", name="Run LOSAT", exact=True',
         'get_by_role("radio", name="LOSATP", exact=True)',
         'get_by_label("LOSATP blastp mode", exact=True)',
+        'name="Raw LOSAT filename for #1 to #2", exact=True',
+        'name="Save Raw LOSAT TSV for #1 to #2", exact=True',
         'get_by_role("button", name="SVG", exact=True)',
         "page.expect_download",
         "download.save_as",
@@ -371,8 +376,22 @@ def test_bgc_flow_pins_gallery_presentation_and_losatp_values() -> None:
         'page.get_by_label("Collinear minimum block genes", exact=True).fill("2")',
         'page.get_by_label("Collinear evidence scope", exact=True).select_option',
         '"orientation_identity"',
+        'first_pair = _linear_pair(page, 1, 2)',
+        'name="Raw LOSAT filename for #1 to #2", exact=True',
+        'name="Save Raw LOSAT TSV for #1 to #2", exact=True',
     ):
         assert fragment in source
+
+    for forbidden in (
+        "raw_names",
+        "raw_buttons",
+        "enabled_indexes",
+        "raw_index",
+        "to_have_count(4)",
+        'name="Raw LOSAT filename", exact=True',
+        'name="Save Raw LOSAT TSV", exact=True',
+    ):
+        assert forbidden not in source
 
     priority = WEB_ROOT / "tutorial-data" / "shared" / "cds_gene_qualifier_priority.tsv"
     assert priority.read_bytes() == b"CDS\tgene\n"
@@ -450,6 +469,7 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
     source = HEPATOPLASMA_FLOW_PATH.read_text(encoding="utf-8")
     wrapper = HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
     for fragment in (
+        'page.locator(\'[data-capture="linear-blast-source"]\')',
         'page.get_by_label("Collinear evidence scope", exact=True).select_option(',
         'evidence_scope = "all" if starting_project == "all-vs-all" else "adjacent"',
         "_assert_gallery_adjacent_search(page, session_keys=session_cache_keys)",
@@ -469,6 +489,10 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         'output_prefix="hepatoplasmataceae_collinear"',
     ):
         assert fragment in source + wrapper
+    assert (
+        'get_by_role("radio", name="Run LOSAT", exact=True).first'
+        not in source
+    )
 
 
 def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> None:
@@ -542,6 +566,8 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
     assert "Reverse complement** only for `BGC0000713`" in tutorial
     assert "| Separate Strands | Off |" in tutorial
     assert "23 stable\ngroups and 77 displayed group links" in tutorial
+    assert "comparison between sequence 1 and sequence 2" in tutorial
+    assert "Raw LOSAT results" not in tutorial
     assert "without\n   setting regions" in groups
     assert "Turn off **Separate Strands**" in groups
     assert _chapter("T-GUI-04")["settings"]["separate_strands"] is False

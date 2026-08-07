@@ -97,12 +97,12 @@ they can participate in a later comparison.
 See the screenshot in [How to use uploaded BLAST results](./HOW_TO/GUI/use-uploaded-blast-results.md)
 for the exact control to select.
 
-Use **Run LOSAT** or **Upload BLAST TSV** for all positional adjacent gaps. In
-upload mode, a gap without a file is deliberately skipped. Use **Selected
-pairs** when one diagram needs a mixture of LOSAT edges, uploaded edges, and
-omitted edges. Edit an entry under **Adjacent gaps**, or click **Add** under
-**Selected pairs and retained drafts**, to create that plan. An included
-uploaded edge must have an active file.
+Use **Run LOSAT** or **Upload BLAST TSV** under **Apply to all adjacent gaps**
+for every positional gap. In upload mode, a gap without a file is deliberately
+skipped. To mix LOSAT, uploaded, and omitted edges, change the source in the
+relevant comparison boundary, such as the comparison between sequence 1 and
+sequence 2. Select **Add** under **Advanced pair setup** to add another pair.
+An included uploaded edge must have an active file.
 
 ## Why did gbdraw rerun LOSATP after I loaded a session?
 

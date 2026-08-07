@@ -212,6 +212,7 @@
               "adv.identity": 20,
               "adv.alignment_length": 0
             },
+            "visibleText": ["Apply to all adjacent gaps"],
             "visibleControls": [
               {"label": "Run LOSAT", "checked": true},
               {"label": "LOSATP", "checked": true}

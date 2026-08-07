@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from Bio import SeqIO
-from playwright.sync_api import BrowserType, Page, expect
+from playwright.sync_api import BrowserType, Locator, Page, expect
 
 from assertions.svg_semantics import (
     assert_gui_bgc_collinear_svg,
@@ -92,6 +92,23 @@ class BgcLosatpResult:
     group_count: int
 
 
+def _linear_pair(page: Page, query_index: int, subject_index: int) -> Locator:
+    endpoint_uids = []
+    for index in (query_index, subject_index):
+        record = page.get_by_role(
+            "group", name=f"Linear sequence {index}", exact=True
+        )
+        uid = record.get_attribute("data-linear-record-uid")
+        if not uid:
+            raise AssertionError(f"Linear sequence {index} has no stable record UID")
+        endpoint_uids.append(uid)
+    pair = page.locator(
+        f'fieldset[data-edge-key="{endpoint_uids[0]}->{endpoint_uids[1]}"]'
+    )
+    expect(pair).to_have_count(1)
+    return pair
+
+
 def assert_bgc_fixtures() -> None:
     """Require five unchanged, whole, naturally linear BGC records."""
 
@@ -116,9 +133,11 @@ def _set_bgc_inputs(page: Page) -> None:
     linear.click()
     expect(linear).to_have_attribute("aria-pressed", "true")
     page.get_by_role("radio", name="GenBank", exact=True).check()
-    no_comparison = page.get_by_role(
+    global_source = page.locator('[data-capture="linear-blast-source"]')
+    expect(global_source).to_have_count(1)
+    no_comparison = global_source.get_by_role(
         "radio", name="No comparison", exact=True
-    ).first
+    )
     no_comparison.check()
 
     add_sequence = page.get_by_role("button", name="Add sequence", exact=True)
@@ -278,10 +297,14 @@ def _set_gallery_quality_presentation(
 
 
 def _configure_losatp(page: Page, *, mode: str, output_prefix: str) -> None:
-    run_losat = page.get_by_role("radio", name="Run LOSAT", exact=True).first
+    global_source = page.locator('[data-capture="linear-blast-source"]')
+    expect(global_source).to_have_count(1)
+    run_losat = global_source.get_by_role(
+        "radio", name="Run LOSAT", exact=True
+    )
     run_losat.check()
     expect(run_losat).to_be_checked()
-    losatp = page.get_by_role("radio", name="LOSATP", exact=True).first
+    losatp = page.get_by_role("radio", name="LOSATP", exact=True)
     losatp.check()
     expect(losatp).to_be_checked()
 
@@ -714,38 +737,19 @@ def capture_bgc_losatp(
         )
 
         if raw_tsv_name is not None:
-            raw_names = page.get_by_role(
-                "textbox", name="Raw LOSAT filename", exact=True
+            first_pair = _linear_pair(page, 1, 2)
+            raw_name = first_pair.get_by_role(
+                "textbox", name="Raw LOSAT filename for #1 to #2", exact=True
             )
-            raw_buttons = page.get_by_role(
-                "button", name="Save Raw LOSAT TSV", exact=True
+            raw_button = first_pair.get_by_role(
+                "button", name="Save Raw LOSAT TSV for #1 to #2", exact=True
             )
-            expect(raw_names).to_have_count(4)
-            expect(raw_buttons).to_have_count(4)
-            enabled_indexes = [
-                index
-                for index in range(raw_buttons.count())
-                if raw_buttons.nth(index).is_enabled()
-            ]
-            if not enabled_indexes:
-                cache_debug = page.evaluate(
-                    """
-                    () => (window.__GBDRAW_APP__?.losatCacheInfo || []).map((entry) => ({
-                      edgeKey: entry?.edgeKey,
-                      ordinal: entry?.ordinal,
-                      filename: entry?.filename
-                    }))
-                    """
-                )
-                raise AssertionError(
-                    f"No raw LOSATP result is downloadable: {cache_debug!r}"
-                )
-            raw_index = enabled_indexes[0]
-            raw_names.nth(raw_index).fill(raw_tsv_name)
-            raw_names.nth(raw_index).press("Tab")
+            expect(raw_button).to_be_enabled()
+            raw_name.fill(raw_tsv_name)
+            raw_name.press("Tab")
             raw_path, _ = _download_text_button(
                 page,
-                button=raw_buttons.nth(raw_index),
+                button=raw_button,
                 download_dir=download_dir,
                 expected_name=raw_tsv_name,
             )

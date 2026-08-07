@@ -134,6 +134,7 @@
               "losatProgram": "blastp",
               "losat.blastp.mode": "collinear"
             },
+            "visibleText": ["Apply to all adjacent gaps"],
             "visibleControls": [
               {"label": "Run LOSAT", "checked": true},
               {"label": "LOSATP", "checked": true}

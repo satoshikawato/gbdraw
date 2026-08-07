@@ -28,7 +28,8 @@ separate serial runs produced byte-identical results.
 4. Set **Execution** to **Serial**, **Total threads** to `1 thread`, and
    **Parallel runs** to `1 run`. **Threads per run** remains fixed at 1.
 5. Set the gencode for both records to `1`.
-6. Set **Output Prefix** to `lambda-de3-tlosatx` and **Raw LOSAT filename** to
+6. Set **Output Prefix** to `lambda-de3-tlosatx`. In the comparison between
+   sequence 1 and sequence 2, set **Raw LOSAT filename** to
    `lambda-de3.tlosatx.tsv`.
 7. Open **Pairwise Match** and set **Minimum Length** to `1000`.
 
@@ -45,8 +46,9 @@ display filter, and draws seven links.
 
 ![Whole Lambda and DE3 comparison with seven TLOSATX links](../../images/h-gui-05/tlosatx-result.png)
 
-Select **Save Raw LOSAT TSV** to download `lambda-de3.tlosatx.tsv`, then select
-**SVG** to download `lambda-de3-tlosatx.svg`.
+In the comparison between sequence 1 and sequence 2, select **Save Raw LOSAT
+TSV** to download `lambda-de3.tlosatx.tsv`. Then select **SVG** to download
+`lambda-de3-tlosatx.svg`.
 
 Your downloaded TSV should have 397 rows and match the frozen reference
 output above. The SVG should show seven links, the complete 48,502 bp and
