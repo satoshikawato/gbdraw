@@ -1,6 +1,6 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-08-07
+Last updated: 2026-08-08
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
@@ -27,13 +27,13 @@ remain visible by default.
 | --- | --- | --- | --- | --- |
 | `lambda_basic_linear` | `manual-02-03-no-comparison.webp` | Add | Exact Lambda session; Linear; **No comparison** selected; focused global comparison choices | Captured and visually verified (1008×300, DSF 3, quality 94) |
 | `BGC0000708-BGC0000713` | `manual-02-01-record-text-row.webp` | Recapture | Exact BGC session; row 1 GenBank, organism, and subtitle controls; omit the retired per-record LOSAT filename area | Recaptured and visually verified (1008×1263, DSF 3, quality 94) |
-| `BGC0000708-BGC0000713` | `manual-03-01-open-pairwise.webp` | Recapture | Exact BGC session; Linear; **Run LOSAT**; LOSATP; Similarity groups; thread and threshold values from the tutorial table | Recaptured and visually verified (1068×1686, DSF 3, quality 94) |
+| `BGC0000708-BGC0000713` | `manual-03-01-open-pairwise.webp` | Recapture | Exact BGC session; Linear; **Run LOSAT**; LOSATP; Similarity groups; thread and threshold values from the tutorial table | Recaptured and visually verified (1068×1791, DSF 3, quality 95) |
 | `hepatoplasmataceae_orthogroup` | `manual-02-01-upload-row-context.webp` | Recapture | Exact orthogroup session; row 1 GenBank and neighboring record controls; omit the retired per-record LOSAT filename area | Recaptured and visually verified (1008×1263, DSF 3, quality 94) |
-| `hepatoplasmataceae_orthogroup` | `manual-03-01-browser-losat.webp` | Recapture | Exact orthogroup session; Linear; **Run LOSAT**; LOSATP; comparison selector and LOSAT settings both visible | Recaptured and visually verified (996×1686, DSF 3, quality 94) |
+| `hepatoplasmataceae_orthogroup` | `manual-03-01-browser-losat.webp` | Recapture | Exact orthogroup session; Linear; **Run LOSAT**; LOSATP; comparison selector and LOSAT settings both visible | Recaptured and visually verified (996×1791, DSF 3, quality 95) |
 | `majanivirus_orthogroup` | `manual-02-01-upload-row-label-context.webp` | Recapture | Exact Majanivirus session; row 1 GenBank and organism label; omit the retired per-record LOSAT filename area | Recaptured and visually verified (1008×1263, DSF 3, quality 94) |
-| `majanivirus_orthogroup` | `manual-03-01-open-pairwise.webp` | Recapture | Exact Majanivirus session; `adjacent + losat`; LOSATP Similarity groups; requested 32 threads per run; tutorial thresholds | Recaptured and visually verified (996×1686, DSF 3, quality 94) |
+| `majanivirus_orthogroup` | `manual-03-01-open-pairwise.webp` | Recapture | Exact Majanivirus session; `adjacent + losat`; LOSATP Similarity groups; requested 32 threads per run; tutorial thresholds | Recaptured and visually verified (996×1791, DSF 3, quality 95) |
 | `hepatoplasmataceae_collinear` | `manual-02-01-upload-row-context.webp` | Recapture | Exact collinear session; row 1 GenBank and neighboring record controls; omit the retired per-record LOSAT filename area | Recaptured and visually verified (1008×1263, DSF 3, quality 94) |
-| `hepatoplasmataceae_collinear` | `manual-03-01-open-pairwise.webp` | Replace | Convert the stale manual crop to a declarative exact-session capture with `adjacent + losat`, LOSATP, and Collinear blocks | Recaptured and visually verified (996×2058, DSF 3, quality 94) |
+| `hepatoplasmataceae_collinear` | `manual-03-01-open-pairwise.webp` | Replace | Convert the stale manual crop to a declarative exact-session capture with `adjacent + losat`, LOSATP, and Collinear blocks | Recaptured and visually verified (996×2166, DSF 3, quality 95) |
 | `vibrio-harveyi-group-collinear` | `manual-04-03-adjacent-pairs.webp` | Inspect | Exact Vibrio session; LOSATP Collinear blocks; Evidence scope **Adjacent pairs**; retain only if the new global selector stays outside the crop | Inspected; keep existing crop (840×483), which does not show the global selector |
 
 The comparison-panel captures declare the exact saved session, comparison-plan
@@ -44,11 +44,11 @@ longer describe the retired per-record raw-result filename field.
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
-| `BGC0000708-BGC0000713` | `manual-03-01-open-pairwise.webp` | Recapture | Exact BGC session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups; shared thread and threshold settings | Planned |
-| `BGC0000708-BGC0000713` | `manual-03-03-first-comparison-boundary.webp` | Add | Exact BGC session; first `record-1->record-2` boundary; LOSAT source; endpoint identities, raw filename, cache state, and raw TSV action inside the crop | Planned |
-| `hepatoplasmataceae_orthogroup` | `manual-03-01-browser-losat.webp` | Recapture | Exact orthogroup session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups | Planned |
-| `hepatoplasmataceae_collinear` | `manual-03-01-open-pairwise.webp` | Recapture | Exact collinear session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Collinear blocks | Planned |
-| `majanivirus_orthogroup` | `manual-03-01-open-pairwise.webp` | Recapture | Exact Majanivirus session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups | Planned |
+| `BGC0000708-BGC0000713` | `manual-03-01-open-pairwise.webp` | Recapture | Exact BGC session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups; shared thread and threshold settings | Recaptured and visually verified (1068×1791, DSF 3, quality 95); full-example media check passed |
+| `BGC0000708-BGC0000713` | `manual-03-03-first-comparison-boundary.webp` | Add | Exact BGC session; first `record-1->record-2` boundary; LOSAT source; endpoint identities, raw filename, cache state, and raw TSV action inside the crop | Captured and visually verified (978×681, DSF 3, quality 95); full-example media check passed |
+| `hepatoplasmataceae_orthogroup` | `manual-03-01-browser-losat.webp` | Recapture | Exact orthogroup session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups | Recaptured and visually verified (996×1791, DSF 3, quality 95); full-example media check passed |
+| `hepatoplasmataceae_collinear` | `manual-03-01-open-pairwise.webp` | Recapture | Exact collinear session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Collinear blocks | Recaptured and visually verified (996×2166, DSF 3, quality 95); full-example media check passed |
+| `majanivirus_orthogroup` | `manual-03-01-open-pairwise.webp` | Recapture | Exact Majanivirus session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups | Recaptured and visually verified (996×1791, DSF 3, quality 95); full-example media check passed |
 | `vibrio-harveyi-group-collinear` | `manual-04-03-adjacent-pairs.webp` | Keep | Tight **Evidence scope** dropdown crop; no global or pair-specific comparison controls | Inspected; current 840×483 crop remains truthful |
 
 The new BGC boundary operation is data-dependent. Its capture contract uses

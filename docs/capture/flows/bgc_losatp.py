@@ -616,6 +616,22 @@ def capture_bgc_losatp(
                 expect(separate_strands_control).not_to_be_checked()
         if "input" in screenshot_names:
             name = screenshot_names["input"]
+            fifth_record = page.get_by_role(
+                "group", name="Linear sequence 5", exact=True
+            )
+            fifth_file = fifth_record.get_by_role(
+                "group", name="GenBank File selection", exact=True
+            )
+            reverse_complement = page.get_by_label(
+                "Reverse complement for sequence 5", exact=True
+            )
+            reverse_complement.evaluate(
+                "(element) => element.scrollIntoView({ block: 'center' })"
+            )
+            expect(fifth_file).to_contain_text("BGC0000713.gbk")
+            expect(fifth_file).to_be_in_viewport()
+            expect(reverse_complement).to_be_checked()
+            expect(reverse_complement).to_be_in_viewport()
             screenshot_bytes[name] = capture_screenshot(
                 page, output_paths[name], "Linear"
             )
@@ -701,7 +717,9 @@ def capture_bgc_losatp(
         set_feature_search_visible(page, visible=False)
         fit_complete_linear_preview(page, target_zoom="40%")
         name = screenshot_names["settings"]
-        page.get_by_label("LOSATP blastp mode", exact=True).scroll_into_view_if_needed()
+        page.locator('[data-capture="linear-blast-source"]').evaluate(
+            "(element) => element.scrollIntoView({ block: 'start' })"
+        )
         screenshot_bytes[name] = capture_screenshot(
             page, output_paths[name], "Linear"
         )
@@ -728,9 +746,13 @@ def capture_bgc_losatp(
                 )
             fit_complete_linear_preview(page, target_zoom="40%")
         else:
-            fit_complete_linear_preview(
-                page, target_zoom="40%", pan_left=True
+            fit_complete_linear_preview(page, target_zoom="40%")
+        if scenario_id == "H-GUI-07":
+            result_pair = _linear_pair(page, 1, 2)
+            result_pair.evaluate(
+                "(element) => element.scrollIntoView({ block: 'center' })"
             )
+            expect(result_pair).to_contain_text("Raw result ready")
         name = screenshot_names["result"]
         screenshot_bytes[name] = capture_screenshot(
             page, output_paths[name], "Linear"

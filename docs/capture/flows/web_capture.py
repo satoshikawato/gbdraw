@@ -242,10 +242,8 @@ def generate_and_inspect(
 def fit_complete_linear_preview(
     page: Page,
     target_zoom: str = "40%",
-    *,
-    pan_left: bool = False,
 ) -> None:
-    """Use the public preview controls to fit a whole Linear record in view."""
+    """Use the public preview controls to center a whole Linear diagram in view."""
 
     reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
     zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
@@ -261,16 +259,80 @@ def fit_complete_linear_preview(
             f"Could not reach the documented Linear preview zoom: {target_zoom}"
         )
 
-    if pan_left:
-        result_region = page.get_by_role("region", name="Result Preview", exact=True)
-        box = result_region.bounding_box()
+    page.wait_for_timeout(250)
+    result_region = page.get_by_role("region", name="Result Preview", exact=True)
+    canvas = result_region.locator(
+        "div.absolute.inset-0.overflow-auto.flex.p-2"
+    ).first
+
+    def preview_geometry() -> dict[str, float] | None:
+        return canvas.evaluate(
+            """
+            (element) => {
+              const svg = element.querySelector(':scope > div > svg');
+              const wrapper = svg?.parentElement;
+              if (!wrapper) return null;
+              const canvasRect = element.getBoundingClientRect();
+              const wrapperRect = wrapper.getBoundingClientRect();
+              return {
+                canvasLeft: canvasRect.left,
+                canvasRight: canvasRect.right,
+                canvasWidth: canvasRect.width,
+                canvasCenterX: (canvasRect.left + canvasRect.right) / 2,
+                wrapperLeft: wrapperRect.left,
+                wrapperRight: wrapperRect.right,
+                wrapperWidth: wrapperRect.width,
+                wrapperCenterX: (wrapperRect.left + wrapperRect.right) / 2,
+              };
+            }
+            """
+        )
+
+    geometry = preview_geometry()
+    if geometry is None:
+        raise AssertionError("Could not resolve the rendered Linear preview")
+    if geometry["wrapperWidth"] > geometry["canvasWidth"] + 4:
+        raise AssertionError(
+            "The documented Linear preview zoom does not fit the complete diagram: "
+            f"{geometry!r}"
+        )
+
+    delta_x = geometry["canvasCenterX"] - geometry["wrapperCenterX"]
+    if abs(delta_x) > 2:
+        box = canvas.bounding_box()
         if box is None:
             raise AssertionError("Could not resolve the Result Preview bounds for panning")
-        y = box["y"] + (box["height"] * 0.82)
-        page.mouse.move(box["x"] + (box["width"] * 0.80), y)
+        usable_width = box["width"] - 32
+        if abs(delta_x) > usable_width:
+            raise AssertionError(
+                "The Linear preview requires an unsafe centering drag: "
+                f"{geometry!r}"
+            )
+        start_x = box["x"] + (box["width"] - 16 if delta_x < 0 else 16)
+        y = box["y"] + (box["height"] * 0.65)
+        page.mouse.move(start_x, y)
         page.mouse.down()
-        page.mouse.move(box["x"] + (box["width"] * 0.10), y, steps=12)
+        page.mouse.move(start_x + delta_x, y, steps=12)
         page.mouse.up()
+        page.wait_for_timeout(250)
+
+    centered = preview_geometry()
+    if centered is None:
+        raise AssertionError("The rendered Linear preview disappeared while centering")
+    center_error = abs(centered["wrapperCenterX"] - centered["canvasCenterX"])
+    edge_tolerance = max(
+        2,
+        ((centered["wrapperWidth"] - centered["canvasWidth"]) / 2) + 2,
+    )
+    if (
+        center_error > 2
+        or centered["wrapperLeft"] < centered["canvasLeft"] - edge_tolerance
+        or centered["wrapperRight"] > centered["canvasRight"] + edge_tolerance
+    ):
+        raise AssertionError(
+            "The complete Linear diagram is not centered inside Result Preview: "
+            f"{centered!r}"
+        )
     page.evaluate("() => window.getSelection()?.removeAllRanges()")
 
 

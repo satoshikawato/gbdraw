@@ -227,7 +227,7 @@ def test_first_linear_comparison_boundary_has_an_exact_capture_contract() -> Non
     assert capture["waitForSelector"] == expected["selector"]
     assert capture["viewport"] == expected["viewport"]
     assert capture["cropPadding"] == {
-        "top": 12,
+        "top": 0,
         "right": 24,
         "bottom": 12,
         "left": 12,

@@ -152,7 +152,7 @@
     },
     {
       "title": "Configure browser LOSAT",
-      "body": "In Pairwise Comparisons, choose Run LOSAT and LOSATP, then set blastp mode to Similarity groups.",
+      "body": "Under Apply to all adjacent gaps, choose Run LOSAT and LOSATP, then set blastp mode to Similarity groups.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -171,7 +171,7 @@
       "operations": [
         {
           "dataDependent": true,
-          "title": "Pairwise Comparisons panel",
+          "title": "Run LOSAT settings panel",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-01-open-pairwise.webp",
             "alt": "Run LOSAT settings with LOSATP Similarity groups, Safe total threads, a requested maximum of 32 threads per run, and thresholds 100, 1e-3, 20, and 0.",

@@ -216,7 +216,9 @@ def capture_gui_losatn(
         pairwise_match_height.press("Tab")
         expect(pairwise_match_height).to_have_value("120")
         pairwise_match.click()
-        task.scroll_into_view_if_needed()
+        global_source.evaluate(
+            "(element) => element.scrollIntoView({ block: 'start' })"
+        )
         screenshot_bytes["03-losatn-settings.png"] = capture_screenshot(
             page, output_paths["03-losatn-settings.png"], "Linear"
         )

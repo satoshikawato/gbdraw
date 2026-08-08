@@ -445,6 +445,23 @@ def test_first_circular_flow_uses_accessible_real_actions_without_state_shortcut
         assert forbidden not in shared_source
 
 
+def test_shared_linear_preview_fit_centers_the_complete_rendered_diagram() -> None:
+    source = WEB_CAPTURE_PATH.read_text(encoding="utf-8")
+
+    for required in (
+        'get_by_role("button", name="Reset zoom", exact=True)',
+        "wrapperCenterX",
+        "canvasCenterX",
+        'geometry["wrapperWidth"] > geometry["canvasWidth"] + 4',
+        'center_error > 2',
+        'centered["wrapperLeft"] < centered["canvasLeft"] - edge_tolerance',
+        'centered["wrapperRight"] > centered["canvasRight"] + edge_tolerance',
+    ):
+        assert required in source
+
+    assert "pan_left" not in source
+
+
 def test_first_linear_flow_uses_accessible_real_actions_without_state_shortcuts() -> None:
     source = LINEAR_FLOW_PATH.read_text(encoding="utf-8")
 

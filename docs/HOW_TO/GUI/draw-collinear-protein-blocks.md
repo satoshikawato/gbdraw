@@ -60,7 +60,7 @@ Select **Generate Diagram**. All 25 cached directional and self results are
 reused, so this presentation change has no LOSATP cache miss and launches no new
 worker job. Block construction uses evidence from every record pair, while the
 finished ribbons connect adjacent display rows to keep the figure readable.
-Fit the complete preview at **30%**.
+Fit the complete preview at **40%**.
 
 ![Five complete Hepatoplasmataceae genomes connected by collinear protein-match blocks](../../images/h-gui-08/collinear-result.png)
 

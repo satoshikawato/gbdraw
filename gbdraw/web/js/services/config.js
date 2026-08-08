@@ -76,6 +76,7 @@ import {
 import {
   createDefaultLinearComparisonPlan,
   createLinearComparisonEdge,
+  linearComparisonEdgeKey,
   normalizeLinearComparisonPlan,
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan
@@ -2187,6 +2188,45 @@ const losatCacheInfoIdentity = (entry) => {
   return identity;
 };
 
+const restoredLosatCacheInfoIdentity = (entry) => {
+  const identity = losatCacheInfoIdentity(entry);
+  if (state.mode.value !== 'linear') return identity;
+
+  const queryInstanceUid = String(entry?.queryRecordInstanceKey || '').trim();
+  const subjectInstanceUid = String(entry?.subjectRecordInstanceKey || '').trim();
+  if (
+    Boolean(queryInstanceUid) !== Boolean(subjectInstanceUid)
+    || (queryInstanceUid && identity.queryUid && queryInstanceUid !== identity.queryUid)
+    || (subjectInstanceUid && identity.subjectUid && subjectInstanceUid !== identity.subjectUid)
+  ) return {};
+
+  const queryUid = queryInstanceUid || identity.queryUid || '';
+  const subjectUid = subjectInstanceUid || identity.subjectUid || '';
+  if (!queryUid || !subjectUid || queryUid === subjectUid) return {};
+
+  const indexByUid = new Map(
+    state.linearSeqs.map((sequence, index) => [String(sequence?.uid || ''), index])
+  );
+  const queryIndex = indexByUid.get(queryUid);
+  const subjectIndex = indexByUid.get(subjectUid);
+  if (!Number.isInteger(queryIndex) || !Number.isInteger(subjectIndex)) return {};
+
+  const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
+  if (identity.edgeKey && identity.edgeKey !== edgeKey) return {};
+  const resolved = state.linearComparisonResolution.value.edges.find(
+    (edge) => edge.edgeKey === edgeKey
+  );
+  return {
+    ...identity,
+    edgeKey,
+    queryUid,
+    subjectUid,
+    queryIndex,
+    subjectIndex,
+    ...(Number.isInteger(resolved?.ordinal) ? { ordinal: resolved.ordinal } : {})
+  };
+};
+
 const serializeLosatCache = () => {
   const cacheMap = state.losatCache?.value;
   if (!cacheMap || cacheMap.size === 0) return [];
@@ -2254,7 +2294,7 @@ const applyLosatCache = (entries, legacyEnvelope = null) => {
         key: entry.key,
         filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
         display: true,
-        ...losatCacheInfoIdentity(entry)
+        ...restoredLosatCacheInfoIdentity(entry)
       });
     });
   }

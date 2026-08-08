@@ -492,6 +492,7 @@ def capture_hepatoplasmataceae_collinear(
             output_prefix=output_prefix,
             evidence_scope=evidence_scope,
         )
+        fit_complete_linear_preview(page, target_zoom="40%")
         page.get_by_label("Collinear evidence scope", exact=True).scroll_into_view_if_needed()
         screenshots[screenshot_names["settings"]] = capture_screenshot(
             page, output_paths[screenshot_names["settings"]], "Linear"
@@ -509,9 +510,7 @@ def capture_hepatoplasmataceae_collinear(
             _assert_all_record_search(page, session_keys=session_cache_keys)
         else:
             _assert_gallery_adjacent_search(page, session_keys=session_cache_keys)
-        fit_complete_linear_preview(
-            page, target_zoom="40%", pan_left=True
-        )
+        fit_complete_linear_preview(page, target_zoom="40%")
         screenshots[screenshot_names["result"]] = capture_screenshot(
             page, output_paths[screenshot_names["result"]], "Linear"
         )

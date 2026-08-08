@@ -629,7 +629,7 @@ def capture_gui_linear_layout(
         ):
             raise AssertionError(f"The documented ruler is not active: {rendered_state!r}")
 
-        fit_complete_linear_preview(page, target_zoom="30%", pan_left=True)
+        fit_complete_linear_preview(page, target_zoom="30%")
         screenshot_bytes["orientation-result.png"] = capture_screenshot(
             page, output_paths["orientation-result.png"], "Linear"
         )

@@ -102,7 +102,7 @@
     },
     {
       "title": "Use browser LOSAT",
-      "body": "In Pairwise Comparisons, choose Run LOSAT. Set LOSAT Mode to LOSATP.",
+      "body": "Under Apply to all adjacent gaps, choose Run LOSAT. Set LOSAT Mode to LOSATP.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -117,7 +117,7 @@
           "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-01-open-pairwise.webp",
-            "alt": "Pairwise Comparisons panel with Run LOSAT and LOSATP selected.",
+            "alt": "Apply to all adjacent gaps controls with Run LOSAT and LOSATP selected.",
             "caption": "Select Run LOSAT and set LOSAT Mode to LOSATP."
           },
           "capture": {

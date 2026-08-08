@@ -2,7 +2,8 @@
 
 Date: 2026-08-07
 
-Status: planned
+Status: implemented (2026-08-08; scoped acceptance passed, broader suite has
+unrelated baseline failures recorded below)
 
 ## Baseline and history
 
@@ -550,6 +551,53 @@ regeneration.
 - Public instructions name the new endpoint-boundary location, executable
   capture scripts select the intended edge rather than a global ordinal, and
   affected screenshots show the real current UI.
+
+## Implementation record (2026-08-08)
+
+The endpoint-owned comparison timeline, stable pair-card actions, draft repair,
+and UID-keyed raw-cache lifecycle are implemented without changing the CLI,
+Python API, renderer geometry, session writer schema, Gallery sessions, or
+tracked reference SVGs. The focused Gallery regression required one load-only
+compatibility repair in `gbdraw/web/js/services/config.js`: legacy raw LOSAT
+display metadata is reconstructed only when both raw endpoint instance keys
+agree with explicit endpoint fields, both endpoints belong to the current
+Linear records, and any explicit `edgeKey` agrees with the derived directional
+edge. The writer and session version remain unchanged. Positive and negative
+coverage uses the frozen version-39 BGC session fixture.
+
+Documentation capture fitting now measures the transformed SVG wrapper and
+Result Preview canvas, pans by their actual horizontal center delta, and checks
+the final bounds. This replaced the fixed drag that shifted reduced Linear
+previews to the right.
+
+Observed evidence:
+
+- Linear browser coverage: 13 Chromium Playwright tests passed.
+- Session raw-cache validation: 37 Node tests passed.
+- Web UX, documentation, protein/nucleotide capture, and Gallery contracts:
+  69 pytest tests passed.
+- All seven documentation scenarios regenerated and then passed exact-byte
+  `--tier extended --check`; 26 final PNGs passed independent visual review.
+- All five refreshed Gallery operations passed their example checks; the six
+  retained/refreshed WebPs passed visual review and Gallery contracts (16/16).
+- The broader `python -m pytest tests/ -v -m "not slow"` gate selected 2,994
+  tests. After a PTY interruption at 69%, the remaining alphabetic test set was
+  rerun with
+  `python -m pytest tests/test_[o-z]*.py -v -m "not slow"`, covering every
+  selected test. After subtracting the four repeated passing onboarding tests,
+  the unique aggregate was 2,968 passed, 7 failed, and 19 skipped, with 11 slow
+  tests deselected.
+- The seven unrelated failures were:
+  `tests/test_cli_tables_tracks_sessions_exports_recipe_contracts.py::test_recipe_regenerates_from_a_clean_external_directory[H-CLI-13]`,
+  `tests/test_gui_interactive_capture_contracts.py::test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context`,
+  `tests/test_public_contract.py::test_public_api_and_cli_contract_snapshot`,
+  `tests/test_reproduce_examples.py::test_public_figures_have_reproduction_inventory_coverage`,
+  `tests/test_session_io.py::test_session_sidecar_saves_complete_orthogroup_state`,
+  `tests/test_web_packaging.py::test_web_session_definition_resource_rehydration`,
+  and `tests/test_web_request_render.py::test_embedded_web_request_preserves_in_memory_comparison_metadata`.
+  Removing the new `config.js` compatibility adapter did not change the
+  session-definition failure, confirming that failure is not caused by this
+  implementation.
 
 ## Delivery notes
 

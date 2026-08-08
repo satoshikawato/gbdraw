@@ -102,7 +102,7 @@
     },
     {
       "title": "Use browser LOSAT",
-      "body": "In Pairwise Comparisons, choose Run LOSAT and set LOSAT Mode to LOSATP.",
+      "body": "Under Apply to all adjacent gaps, choose Run LOSAT and set LOSAT Mode to LOSATP.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [

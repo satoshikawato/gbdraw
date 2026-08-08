@@ -100,7 +100,7 @@ def capture_first_linear(
         first_report = generate_and_inspect(
             page, inspect_first_linear_svg, assert_first_linear_svg
         )
-        fit_complete_linear_preview(page, target_zoom="30%", pan_left=True)
+        fit_complete_linear_preview(page, target_zoom="30%")
         screenshot_bytes["02-first-diagram.png"] = capture_screenshot(
             page, output_paths["02-first-diagram.png"], "Linear"
         )
@@ -154,7 +154,7 @@ def capture_first_linear(
             page, inspect_first_linear_svg, assert_first_linear_svg
         )
         assert_finished_linear_svg(final_report)
-        fit_complete_linear_preview(page, target_zoom="30%", pan_left=True)
+        fit_complete_linear_preview(page, target_zoom="30%")
         screenshot_bytes["04-finished-diagram.png"] = capture_screenshot(
             page, output_paths["04-finished-diagram.png"], "Linear"
         )

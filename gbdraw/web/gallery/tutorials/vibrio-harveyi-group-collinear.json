@@ -134,7 +134,7 @@
     },
     {
       "title": "Run LOSATP in Collinear blocks mode",
-      "body": "In Pairwise Comparisons, select Run LOSAT and LOSATP. In LOSAT Settings, choose Collinear blocks and use adjacent pairs as evidence.",
+      "body": "Under Apply to all adjacent gaps, select Run LOSAT and LOSATP. In LOSAT Settings, choose Collinear blocks and use adjacent pairs as evidence.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [

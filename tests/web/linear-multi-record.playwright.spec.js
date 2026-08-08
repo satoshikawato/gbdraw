@@ -1016,6 +1016,57 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   );
 });
 
+test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ page }) => {
+  test.setTimeout(180000);
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const imported = await page.evaluate(async () => {
+    const response = await fetch(
+      '/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
+    );
+    const text = await response.text();
+    const session = JSON.parse(text);
+    const sourceVisibleEntries = session.losatCache.entries.filter(
+      (entry) => entry.display !== false
+    );
+    const file = new File(
+      [text],
+      'BGC0000708-BGC0000713.gbdraw-session.json',
+      { type: 'application/json' }
+    );
+    const result = await window.__GBDRAW_APP__.importSession({
+      target: { files: [file], value: '' }
+    });
+    return {
+      status: result?.status,
+      sourceHasNoEdgeIdentity: sourceVisibleEntries.every(
+        (entry) => !entry.edgeKey && !entry.queryUid && !entry.subjectUid
+      ),
+      restoredEdgeKeys: window.__GBDRAW_APP__.losatCacheInfo.map(
+        (entry) => entry.edgeKey
+      )
+    };
+  });
+
+  expect(imported).toEqual({
+    status: 'ok',
+    sourceHasNoEdgeIdentity: true,
+    restoredEdgeKeys: [
+      'record-1->record-2',
+      'record-2->record-3',
+      'record-3->record-4',
+      'record-4->record-5'
+    ]
+  });
+  const firstPair = linearComparisonPair(page, 'record-1->record-2');
+  await expect(firstPair).toContainText('Raw result ready');
+  await expect(firstPair.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #1 to #2'
+  })).toBeEnabled();
+});
+
 test('Candidate render post-processing sanitizes and reapplies stable styles before commit', async ({ page }) => {
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
