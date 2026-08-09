@@ -23,7 +23,20 @@ _TRANSLATE_COMPONENT_RE = re.compile(
 
 
 class RecipeContractError(RuntimeError):
-    """A documented recipe no longer satisfies its manifest contract."""
+    """A recorded recipe no longer satisfies its manifest contract."""
+
+
+def verified_scenario_ids(*, expected_kind: str, runner_path: str) -> tuple[str, ...]:
+    """Return verified scenarios executed by one recipe runner."""
+
+    manifest = json.loads(SCENARIO_MANIFEST_PATH.read_text(encoding="utf-8"))
+    return tuple(
+        scenario["id"]
+        for scenario in manifest["scenarios"]
+        if scenario["execution"]["kind"] == expected_kind
+        and scenario["execution"]["path"] == runner_path
+        and scenario["status"]["implementation"] == "verified"
+    )
 
 
 def parse_translate_chain(value: str) -> tuple[float, float] | None:
@@ -102,7 +115,7 @@ def load_chapter(
 ) -> dict[str, Any]:
     manifest = json.loads(SCENARIO_MANIFEST_PATH.read_text(encoding="utf-8"))
     chapter = next(
-        (item for item in manifest["chapters"] if item["id"] == scenario_id),
+        (item for item in manifest["scenarios"] if item["id"] == scenario_id),
         None,
     )
     if chapter is None:
@@ -131,13 +144,16 @@ def load_chapter(
 
 def extract_executable_block(chapter: dict[str, Any], *, language: str) -> str:
     scenario_id = chapter["id"]
-    destination = (REPO_ROOT / chapter["destination"]).resolve()
-    if not destination.is_relative_to(REPO_ROOT) or not destination.is_file():
+    relative_source = chapter["execution"].get("source", chapter.get("destination"))
+    if not relative_source:
+        raise RecipeContractError(f"{scenario_id} has no executable source.")
+    source_path = (REPO_ROOT / relative_source).resolve()
+    if not source_path.is_relative_to(REPO_ROOT) or not source_path.is_file():
         raise RecipeContractError(
-            f"{scenario_id} destination is missing: {chapter['destination']}"
+            f"{scenario_id} executable source is missing: {relative_source}"
         )
 
-    source = destination.read_text(encoding="utf-8")
+    source = source_path.read_text(encoding="utf-8")
     start = f"<!-- executable:{scenario_id}:start -->"
     end = f"<!-- executable:{scenario_id}:end -->"
     if source.count(start) != 1 or source.count(end) != 1:

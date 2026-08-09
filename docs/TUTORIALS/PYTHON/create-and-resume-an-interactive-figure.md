@@ -154,6 +154,5 @@ also be byte-identical.
 
 ## Next steps
 
-- [Build typed requests and round-trip sessions](../../HOW_TO/PYTHON/build-typed-requests-and-round-trip-sessions.md)
 - [Review typed-request fields](../../REFERENCE/typed-requests.md)
-- [Review session compatibility](../../REFERENCE/session-and-request-compatibility.md)
+- [Review session round trips and compatibility](../../REFERENCE/session-and-request-compatibility.md)

@@ -5,8 +5,8 @@
 This page retains the detailed version-by-version migration history for gbdraw
 session files, canonical render requests, and saved LOSAT results. The concise
 [session and request compatibility reference](./REFERENCE/session-and-request-compatibility.md)
-is the canonical owner of current support. Tutorials and the FAQ describe what
-a user should do; release notes record when a format changed.
+documents current support. Tutorials and the FAQ describe what a user should
+do; release notes record when a format changed.
 
 ## Supported versions
 

@@ -1,4 +1,4 @@
-[Documentation](./DOCS.md) | [Interactive SVG how-to](./HOW_TO/GUI/export-publication-and-interactive-figures.md) | [Output reference](./REFERENCE/output-formats-and-export.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [Output formats and export](./REFERENCE/output-formats-and-export.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md)
 
 # SVG IDs and semantic hooks
 
@@ -67,4 +67,4 @@ Other `data-gbdraw-*` attributes may support layout bookkeeping, transient
 editor state, or the embedded standalone runtime. They are not part of this
 semantic selector contract unless listed above.
 
-[Documentation](./DOCS.md) | [Interactive SVG how-to](./HOW_TO/GUI/export-publication-and-interactive-figures.md) | [Output reference](./REFERENCE/output-formats-and-export.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [Output formats and export](./REFERENCE/output-formats-and-export.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md)

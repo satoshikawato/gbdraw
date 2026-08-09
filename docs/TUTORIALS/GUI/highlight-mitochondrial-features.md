@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md)
 
 # Highlight mitochondrial features in the web app
 
@@ -122,7 +122,5 @@ Select **SVG** to save `mitochondrial_features_highlighted.svg`.
 
 ## Next steps
 
-- [Style features, labels, titles, and legends](../../HOW_TO/GUI/style-features-labels-titles-and-legends.md)
-- [Control feature visibility, shapes, strokes, and overlaps](../../HOW_TO/GUI/control-feature-visibility-shapes-strokes-and-overlaps.md)
-- [Add region annotations and track slots](../../HOW_TO/GUI/add-region-annotations-and-track-slots.md)
-- [Review the presentation-table reference](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)
+- [Feature presentation](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
+- [Tracks, axes, and annotations](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)

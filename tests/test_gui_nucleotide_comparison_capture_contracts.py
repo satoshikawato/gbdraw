@@ -27,24 +27,6 @@ COMPARISON_FLOW_PATH = (
 WEB_CAPTURE_PATH = REPO_ROOT / "docs" / "capture" / "flows" / "web_capture.py"
 FAQ_PATH = REPO_ROOT / "docs" / "FAQ.md"
 
-PAGES = {
-    "H-GUI-03": REPO_ROOT
-    / "docs"
-    / "HOW_TO"
-    / "GUI"
-    / "arrange-linear-records-regions-and-orientation.md",
-    "H-GUI-04": REPO_ROOT
-    / "docs"
-    / "HOW_TO"
-    / "GUI"
-    / "use-uploaded-blast-results.md",
-    "H-GUI-05": REPO_ROOT / "docs" / "HOW_TO" / "GUI" / "use-tlosatx.md",
-    "H-GUI-06": REPO_ROOT
-    / "docs"
-    / "HOW_TO"
-    / "GUI"
-    / "add-circular-similarity-rings.md",
-}
 SCREENSHOT_NAMES = {
     "H-GUI-03": ("record-layout.png", "orientation-result.png"),
     "H-GUI-04": ("comparison-plan.png", "comparison-result.png"),
@@ -66,7 +48,7 @@ def _blast_rows(path: Path) -> list[list[str]]:
         ]
 
 
-def test_linear_how_tos_use_whole_lambda_and_de3_records_only() -> None:
+def test_linear_evidence_uses_whole_lambda_and_de3_records_only() -> None:
     expected = (
         (
             DATA_ROOT / "lambda" / "NC_001416.gb",
@@ -266,48 +248,21 @@ def test_nucleotide_capture_accessibility_labels_are_in_the_public_ui() -> None:
         assert label in source
 
 
-def test_nucleotide_pages_and_manifest_use_the_executable_scenarios() -> None:
-    expected_values = {
-        "H-GUI-03": (
-            "NC_001416.1",
-            "48,502 bp",
-            "NC_042057.1",
-            "42,925 bp",
-            "linear_regions_orientation.svg",
-        ),
-        "H-GUI-04": (
-            "397",
-            "7",
-            "uploaded_comparison.svg",
-            "lambda-de3.tlosatx.tsv",
-        ),
-        "H-GUI-05": (
-            "Serial",
-            "397",
-            "lambda-de3.tlosatx.tsv",
-            "lambda-de3-tlosatx.svg",
-        ),
-        "H-GUI-06": (
-            "NC_012920.1",
-            "NC_002333.2",
-            "NC_024511.2",
-            "NC_001328.1",
-            "Track Preset",
-            "Middle",
-            "cds_gene_qualifier_priority.tsv",
-            "circular_similarity_rings.svg",
-            "comparison_spans.fasta",
-        ),
+def test_nucleotide_manifest_records_the_executable_evidence() -> None:
+    expected_outputs = {
+        "H-GUI-03": ["linear_regions_orientation.svg"],
+        "H-GUI-04": ["uploaded_comparison.svg"],
+        "H-GUI-05": ["lambda-de3.tlosatx.tsv", "lambda-de3-tlosatx.svg"],
+        "H-GUI-06": ["circular_similarity_rings.svg", "comparison_spans.fasta"],
     }
-    for scenario_id, page_path in PAGES.items():
-        page = page_path.read_text(encoding="utf-8")
+    for scenario_id, outputs in expected_outputs.items():
         chapter = chapter_for(scenario_id)
-        assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
+        assert chapter["role"] == "evidence"
+        assert "destination" not in chapter
+        assert chapter["execution"]["expected_outputs"] == outputs
         assert tuple(
             Path(screenshot["path"]).name for screenshot in chapter["screenshots"]
         ) == SCREENSHOT_NAMES[scenario_id]
-        for value in expected_values[scenario_id]:
-            assert value in page
 
     h3 = chapter_for("H-GUI-03")
     assert set(h3["fixtures"]) == {"lambda", "de3"}
@@ -321,12 +276,6 @@ def test_nucleotide_pages_and_manifest_use_the_executable_scenarios() -> None:
     assert h6["settings"]["separate_strands"] is False
     assert "lambda" not in h6["fixtures"]
     assert "de3" not in h6["fixtures"]
-
-    for scenario_id in ("H-GUI-04", "H-GUI-05"):
-        page = PAGES[scenario_id].read_text(encoding="utf-8")
-        assert "comparison between sequence 1 and sequence 2" in page
-        assert "Adjacent gaps" not in page
-        assert "Raw LOSAT results" not in page
 
     faq = FAQ_PATH.read_text(encoding="utf-8")
     assert "**Apply to all adjacent gaps**" in faq

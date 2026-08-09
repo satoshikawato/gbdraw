@@ -125,5 +125,4 @@ identities. The finished SVG should retain 106 HSPs across the three rings.
 
 ## Next steps
 
-- [Draw comparisons from other precomputed tables](../../HOW_TO/CLI/draw-precomputed-comparisons.md)
-- [Review comparison result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Review uploaded comparison tables and result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)

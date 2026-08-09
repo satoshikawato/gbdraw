@@ -1,8 +1,8 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Reference](./REFERENCE/README.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | **Gallery** | [Installation](./INSTALL.md) | [About](./ABOUT.md)
 
 # Gallery
 
-This is a curated showcase of figures made with gbdraw. Click any figure to open the full-size output. A tracked image is not, by itself, a reproducible recipe: only entries linked to a version-pinned fixture and an executable Tutorial or How-to guide are described as reproducible.
+This is a curated showcase of figures made with gbdraw. Click any figure to open the full-size output. A tracked image is not, by itself, a reproducible recipe. Entries are described as reproducible only when they link to a version-pinned fixture and an executable Tutorial.
 
 For zooming, feature popups, match inspection, and downloadable sessions, open the [interactive gallery](https://gbdraw.app/gallery/).
 
@@ -13,12 +13,12 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td width="50%" valign="top">
       <a href="../examples/NC_001879_regions.svg"><img src="../examples/NC_001879_regions.svg" alt="Circular Nicotiana tabacum chloroplast map with LSC, SSC, IRa, and IRb region brackets" width="100%"></a><br>
       <strong><em>Nicotiana tabacum</em> chloroplast</strong><br>
-      Feature labels, a GC-content track, and LSC, SSC, IRa, and IRb region brackets. See <a href="./HOW_TO/GUI/add-region-annotations-and-track-slots.md">How to add region annotations and custom track slots</a> or open the <a href="https://gbdraw.app/gallery/#tobacco-chloroplast">interactive example</a>.
+      Feature labels, a GC-content track, and LSC, SSC, IRa, and IRb region brackets. Follow the <a href="./TUTORIALS/GUI/build-an-annotated-chloroplast-map.md">annotated chloroplast Tutorial</a> or open the <a href="https://gbdraw.app/gallery/#tobacco-chloroplast">interactive example</a>.
     </td>
     <td width="50%" valign="top">
       <a href="../examples/HmmtDNA_qualifier_priority_soft_pastels.svg"><img src="../examples/HmmtDNA_qualifier_priority_soft_pastels.svg" alt="Circular human mitochondrial genome with labels placed inside and outside the feature ring" width="100%"></a><br>
       <strong>Human mitochondrial genome</strong><br>
-      Qualifier-based labels placed inside and outside the ring with the <code>soft_pastels</code> palette. See <a href="./HOW_TO/GUI/style-features-labels-titles-and-legends.md">How to style features, labels, titles, and legends</a>.
+      Qualifier-based labels placed inside and outside the ring with the <code>soft_pastels</code> palette. See the <a href="./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation">feature-presentation technical documentation</a>.
     </td>
   </tr>
   <tr>
@@ -42,7 +42,7 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td width="50%" valign="top">
       <a href="../examples/Escherichia_Shigella_pair.svg"><img src="../examples/Escherichia_Shigella_pair.svg" alt="Linear comparison of Escherichia coli and Shigella dysenteriae with nucleotide match ribbons" width="100%"></a><br>
       <strong><em>Escherichia coli</em> and <em>Shigella dysenteriae</em></strong><br>
-      A two-record Linear diagram with nucleotide-match ribbons and separated feature strands. See <a href="./HOW_TO/GUI/use-uploaded-blast-results.md">How to use uploaded BLAST results</a>.
+      A two-record Linear diagram with nucleotide-match ribbons and separated feature strands. See the <a href="./REFERENCE/web-app.md#comparison-surfaces">web app comparison documentation</a>.
     </td>
     <td width="50%" valign="top">
       <a href="../examples/Escherichia_Shigella_multi.svg"><img src="../examples/Escherichia_Shigella_multi.svg" alt="Four-record linear comparison of Escherichia and Shigella genomes" width="100%"></a><br>
@@ -82,19 +82,19 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td width="50%" valign="top">
       <a href="../examples/O157_H7_stx_whitelist.svg"><img src="../examples/O157_H7_stx_whitelist.svg" alt="Circular Escherichia coli O157 H7 genome with selected virulence-feature labels" width="100%"></a><br>
       <strong>Selected virulence-feature labels</strong><br>
-      A label whitelist keeps attention on selected <em>E. coli</em> O157:H7 features. See <a href="./HOW_TO/GUI/style-features-labels-titles-and-legends.md">How to style features, labels, titles, and legends</a>.
+      A label whitelist keeps attention on selected <em>E. coli</em> O157:H7 features. See the <a href="./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation">feature-presentation technical documentation</a>.
     </td>
     <td width="50%" valign="top">
       <a href="../examples/tutorial-6-depth-circular.svg"><img src="../examples/tutorial-6-depth-circular.svg" alt="Circular bacterial genome with a blue read-depth track and quantitative tick labels" width="100%"></a><br>
       <strong>Read-depth track</strong><br>
-      A circular depth profile with a quantitative axis and evenly spaced tick labels. See <a href="./HOW_TO/GUI/add-depth-gc-and-skew-tracks.md">How to add depth, GC content, and skew tracks</a>.
+      A circular depth profile with a quantitative axis and evenly spaced tick labels. Follow the <a href="./TUTORIALS/GUI/build-a-quantitative-genome-map.md">quantitative genome map Tutorial</a>.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <a href="../examples/tutorial-9-feature-shapes.svg"><img src="../examples/tutorial-9-feature-shapes.svg" alt="Human mitochondrial genome with rectangular CDS, rRNA, and tRNA features" width="100%"></a><br>
       <strong>Feature-shape overrides</strong><br>
-      CDS, rRNA, and tRNA features rendered as rectangles instead of directional arrows. See <a href="./HOW_TO/GUI/control-feature-visibility-shapes-strokes-and-overlaps.md">How to control feature visibility, shapes, strokes, and overlaps</a>.
+      CDS, rRNA, and tRNA features rendered as rectangles instead of directional arrows. Follow the <a href="./TUTORIALS/GUI/highlight-mitochondrial-features.md">mitochondrial feature Tutorial</a>.
     </td>
     <td width="50%" valign="top">
       <a href="https://gbdraw.app/gallery/palettes/"><img src="../examples/AP027078_tuckin_separate_strands_default.svg" alt="Circular genome map in the default gbdraw color palette" width="100%"></a><br>
@@ -108,6 +108,6 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
 
 - Use the [web app](https://gbdraw.app/) to create a diagram in the browser.
 - Follow the [Quickstart](./QUICKSTART.md) to choose a checked first workflow.
-- Browse the [Tutorials](./TUTORIALS/README.md) for complete workflows, [How-to guides](./HOW_TO/README.md) for focused tasks, or [Recipes](./RECIPES.md) for command templates.
+- Browse the [Tutorials](./TUTORIALS/README.md) for complete workflows, [Technical documentation](./REFERENCE/README.md) for exact behavior, or [Recipes](./RECIPES.md) for command templates.
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Reference](./REFERENCE/README.md) | **Gallery** | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | **Gallery** | [Installation](./INSTALL.md) | [About](./ABOUT.md)

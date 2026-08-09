@@ -6,7 +6,7 @@ in one configuration owner.
 
 ## Flow contract
 
-1. Start from a fresh browser context. A restore chapter may reload only the
+1. Start from a fresh browser context. A restore scenario may reload only the
    session that its own earlier steps created from original source inputs; do
    not preload a bundled Gallery session or finished project.
 2. Reach the UI through normal navigation.
@@ -33,6 +33,6 @@ For a new screenshot system, use device scale factor 2 or higher for UI text.
 An established repository may retain a lower factor only when one documented,
 tested capture contract owns it and the final text remains readable at its
 published size; treat a density change as a repository-wide artifact migration,
-not a per-chapter override. Recapture at the selected density and never upscale
+not a per-scenario override. Recapture at the selected density and never upscale
 an existing bitmap. Compare replacement captures with the old image at the same
 rendered size before accepting them.

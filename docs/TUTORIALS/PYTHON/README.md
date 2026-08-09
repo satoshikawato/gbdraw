@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [All Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [Python how-to guides](../../HOW_TO/PYTHON/README.md) | [Python API reference](../../REFERENCE/python-api.md)
+[Documentation home](../../DOCS.md) | [All Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [Python API technical documentation](../../REFERENCE/python-api.md) | [FAQ](../../FAQ.md) | [Gallery](../../GALLERY.md)
 
 # Python Tutorials
 

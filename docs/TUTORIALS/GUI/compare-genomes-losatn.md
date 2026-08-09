@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md)
 
 # Compare two genomes with LOSATN in the browser
 
@@ -102,7 +102,7 @@ Select the longest comparison ribbon in the preview. The **Pairwise match** popu
 
 ## Next steps
 
-- [Use uploaded comparison results](../../HOW_TO/GUI/use-uploaded-blast-results.md)
-- [Arrange multiple Linear records](../../HOW_TO/GUI/arrange-linear-records-regions-and-orientation.md)
+- [Review web app comparison surfaces](../../REFERENCE/web-app.md#comparison-surfaces)
+- [Review record selection and layout](../../REFERENCE/web-app.md#record-selection-and-layout)
 - [Choose an export format](../../REFERENCE/output-formats-and-export.md)
 - [Review input and TSV schemas](../../REFERENCE/input-formats-and-tsv-schemas.md)

@@ -1260,6 +1260,7 @@ ORIGIN
     },
     ui: { mode: 'circular', legend: 'left', linearLegendPosition: 'right' }
   };
+  expect(repairedCanonicalSession.renderRequest.diagramOptions.output.legend).toBe('bottom');
   await input.setInputFiles({
     name: 'repaired-canonical.gbdraw-session.json',
     mimeType: 'application/json',
@@ -1275,7 +1276,7 @@ ORIGIN
   }))).toEqual({
     mode: 'linear',
     comparisonHeight: null,
-    legend: 'bottom',
+    legend: 'right',
     plotTitlePosition: 'top'
   });
 });

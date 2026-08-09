@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md)
 
 # Create protein Similarity groups with LOSATP in the browser
 
@@ -152,7 +152,6 @@ member count, record coverage, RBH seeds, paths, and every member protein.
 
 ## Next steps
 
-- [Create protein similarity groups as a focused task](../../HOW_TO/GUI/create-protein-similarity-groups.md)
-- [Draw Collinear protein-match blocks](../../HOW_TO/GUI/draw-collinear-protein-blocks.md)
-- [Choose a genome-comparison method](../../EXPLANATION/choose-a-genome-comparison-method.md)
-- [Review comparison programs and result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Review LOSATP comparison modes](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Draw Collinear protein-match blocks](compare-proteins-losatp-collinear.md)
+- [Choose a genome-comparison method](../../FAQ.md#which-comparison-method-should-i-use)

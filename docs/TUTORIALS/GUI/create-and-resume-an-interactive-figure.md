@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md)
 
 # Create an interactive figure and reproduce it from a saved session
 
@@ -96,7 +96,7 @@ subpixel browser font measurement may vary by less than one pixel.
 
 ## Next steps
 
-- [Inspect and edit a diagram](../../HOW_TO/GUI/inspect-and-edit-a-diagram.md)
-- [Save, restore, undo, and reproduce work](../../HOW_TO/GUI/save-restore-undo-and-reproduce-work.md)
-- [Export publication and interactive figures](../../HOW_TO/GUI/export-publication-and-interactive-figures.md)
+- [Review preview, search, and editor behavior](../../REFERENCE/web-app.md#preview-search-and-editor)
+- [Review session and request compatibility](../../REFERENCE/session-and-request-compatibility.md)
+- [Review output formats and export](../../REFERENCE/output-formats-and-export.md)
 - [Review Interactive SVG semantic hooks](../../REFERENCE/interactive-svg-and-semantic-hooks.md)

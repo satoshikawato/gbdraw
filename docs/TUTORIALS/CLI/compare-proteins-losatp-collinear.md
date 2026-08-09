@@ -120,5 +120,5 @@ rendered Collinear match elements colored by orientation and identity.
 
 ## Next steps
 
-- [Draw Collinear blocks for another CLI project](../../HOW_TO/CLI/draw-collinear-protein-blocks.md)
-- [Choose a genome-comparison method](../../EXPLANATION/choose-a-genome-comparison-method.md)
+- [Review LOSATP comparison modes](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Choose a genome-comparison method](../../FAQ.md#which-comparison-method-should-i-use)

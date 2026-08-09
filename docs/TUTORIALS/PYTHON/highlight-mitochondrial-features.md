@@ -203,5 +203,5 @@ strokes, legend, and D-loop bracket with your SVG.
 
 ## Next steps
 
-- [Add tracks, annotations, colors, and labels](../../HOW_TO/PYTHON/add-tracks-annotations-colors-and-labels.md)
+- [Review Python layout and track options](../../REFERENCE/python-api.md#layout-and-track-options)
 - [Review feature-rule and label schemas](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)

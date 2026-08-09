@@ -114,5 +114,5 @@ comparison height, and standard-SVG safety.
 
 ## Next steps
 
-- [Draw Linear diagrams and comparisons from Python](../../HOW_TO/PYTHON/draw-linear-diagrams-and-comparisons.md)
+- [Review Python Linear comparison options](../../REFERENCE/python-api.md#linear-options)
 - [Review comparison thresholds and result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)

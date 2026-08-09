@@ -35,24 +35,9 @@ CIRCULAR_TUTORIAL_PATH = (
 LINEAR_TUTORIAL_PATH = (
     REPO_ROOT / "docs" / "TUTORIALS" / "GUI" / "first-linear-genome-diagram.md"
 )
-GUI_INPUTS_HOW_TO_PATH = (
-    REPO_ROOT
-    / "docs"
-    / "HOW_TO"
-    / "GUI"
-    / "use-genbank-and-gff3-fasta-inputs.md"
-)
-GUI_CIRCULAR_LAYOUT_HOW_TO_PATH = (
-    REPO_ROOT
-    / "docs"
-    / "HOW_TO"
-    / "GUI"
-    / "arrange-multiple-circular-records.md"
-)
 GUI_LOSATN_TUTORIAL_PATH = (
     REPO_ROOT / "docs" / "TUTORIALS" / "GUI" / "compare-genomes-losatn.md"
 )
-GUI_HOW_TO_INDEX_PATH = REPO_ROOT / "docs" / "HOW_TO" / "GUI" / "README.md"
 CIRCULAR_FIXTURE_PATH = (
     REPO_ROOT
     / "gbdraw"
@@ -214,7 +199,7 @@ def test_capture_environment_is_pinned_and_loopback_only() -> None:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     expected_gui_ids = tuple(
         chapter["id"]
-        for chapter in manifest["chapters"]
+        for chapter in manifest["scenarios"]
         if chapter["execution"]["kind"] == "playwright"
         and chapter["status"]["implementation"] == "verified"
     )
@@ -724,6 +709,7 @@ def test_download_contract_parses_and_validates_all_static_svgs() -> None:
 
 def test_runner_uses_manifest_ids_tiers_and_generic_screenshot_lookup() -> None:
     from docs.capture import run_all
+    from docs.recipes import run_cli_scenarios, run_python_scenarios
 
     source = RUNNER_PATH.read_text(encoding="utf-8")
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -731,7 +717,7 @@ def test_runner_uses_manifest_ids_tiers_and_generic_screenshot_lookup() -> None:
     def ids_for(kind: str) -> tuple[str, ...]:
         return tuple(
             chapter["id"]
-            for chapter in manifest["chapters"]
+            for chapter in manifest["scenarios"]
             if chapter["execution"]["kind"] == kind
             and chapter["status"]["implementation"] == "verified"
         )
@@ -742,6 +728,8 @@ def test_runner_uses_manifest_ids_tiers_and_generic_screenshot_lookup() -> None:
     assert run_all.GUI_SCENARIO_IDS == ids_for("playwright")
     assert run_all.CLI_SCENARIO_IDS == ids_for("cli-recipe")
     assert run_all.PYTHON_SCENARIO_IDS == ids_for("python-recipe")
+    assert run_cli_scenarios.SCENARIO_IDS == ids_for("cli-recipe")
+    assert run_python_scenarios.SCENARIO_IDS == ids_for("python-recipe")
     assert set(run_all.CAPTURE_FUNCTIONS) == set(run_all.GUI_SCENARIO_IDS)
     assert run_all.SUPPORTED_TIERS == ("core", "extended", "nightly")
     assert "ScenarioCapture" not in source
@@ -944,7 +932,7 @@ def test_t_gui_02_manifest_owns_the_complete_verified_journey() -> None:
     assert chapter["status"] == {"implementation": "verified", "review": "approved"}
 
 
-def test_h_gui_01_manifest_owns_the_complete_verified_journey() -> None:
+def test_h_gui_01_manifest_records_the_complete_verified_journey() -> None:
     chapter = chapter_for("H-GUI-01")
     manifest_screenshots = {
         Path(item["path"]).name: item["alt"] for item in chapter["screenshots"]
@@ -954,14 +942,13 @@ def test_h_gui_01_manifest_owns_the_complete_verified_journey() -> None:
     assert chapter["settings"] == {"mode": "linear", "external_network": False}
     assert chapter["execution"]["path"] == "docs/capture/flows/how_to/inputs.py"
     assert chapter["execution"]["expected_outputs"] == ["lambda_gff3.svg"]
-    assert chapter["destination"] == (
-        "docs/HOW_TO/GUI/use-genbank-and-gff3-fasta-inputs.md"
-    )
+    assert chapter["role"] == "evidence"
+    assert "destination" not in chapter
     assert manifest_screenshots == GUI_INPUTS_SCREENSHOTS
     assert chapter["status"] == {"implementation": "verified", "review": "approved"}
 
 
-def test_h_gui_02_manifest_owns_the_complete_verified_journey() -> None:
+def test_h_gui_02_manifest_records_the_complete_verified_journey() -> None:
     chapter = chapter_for("H-GUI-02")
     manifest_screenshots = {
         Path(item["path"]).name: item["alt"] for item in chapter["screenshots"]
@@ -991,9 +978,8 @@ def test_h_gui_02_manifest_owns_the_complete_verified_journey() -> None:
         "records_do_not_overlap=true",
         "preview_text_selection=none",
     ]
-    assert chapter["destination"] == (
-        "docs/HOW_TO/GUI/arrange-multiple-circular-records.md"
-    )
+    assert chapter["role"] == "evidence"
+    assert "destination" not in chapter
     assert manifest_screenshots == GUI_CIRCULAR_LAYOUT_SCREENSHOTS
     assert chapter["status"] == {"implementation": "verified", "review": "approved"}
 
@@ -1069,13 +1055,9 @@ def test_circular_tutorial_follows_steps_and_defers_related_links() -> None:
         assert value in tutorial
 
     next_steps = tutorial.index("## Next steps")
-    for related_target in (
-        "first-linear-genome-diagram.md",
-        "../../HOW_TO/GUI/style-features-labels-titles-and-legends.md",
-        "compare-genomes-losatn.md",
-        "../../HOW_TO/GUI/save-restore-undo-and-reproduce-work.md",
-    ):
-        assert tutorial.index(related_target) > next_steps
+    assert tutorial.index("first-linear-genome-diagram.md") > next_steps
+    assert tutorial.index("compare-genomes-losatn.md") > next_steps
+    assert ("HOW" + "_TO") not in tutorial
 
 
 def test_linear_tutorial_shows_the_step_two_result_and_defers_related_links() -> None:
@@ -1114,115 +1096,13 @@ def test_linear_tutorial_shows_the_step_two_result_and_defers_related_links() ->
 
     next_steps = tutorial.index("## Next steps")
     for related_target in (
-        "../../HOW_TO/GUI/arrange-linear-records-regions-and-orientation.md",
-        "../../HOW_TO/GUI/style-features-labels-titles-and-legends.md",
         "compare-genomes-losatn.md",
         "../../REFERENCE/output-formats-and-export.md",
     ):
         assert tutorial.index(related_target) > next_steps
         assert (LINEAR_TUTORIAL_PATH.parent / related_target).resolve().is_file()
+    assert ("HOW" + "_TO") not in tutorial
 
-
-def test_gui_inputs_how_to_documents_both_paths_and_the_actual_error() -> None:
-    how_to = GUI_INPUTS_HOW_TO_PATH.read_text(encoding="utf-8")
-    headings = [
-        "## Before you start",
-        "## Use the GenBank input",
-        "## Use a matched GFF3 and FASTA pair",
-        "## Diagnose a record-ID mismatch",
-        "## Verify the result",
-        "## Related guides",
-    ]
-    positions = [how_to.index(heading) for heading in headings]
-    assert positions == sorted(positions)
-
-    for name, alt in GUI_INPUTS_SCREENSHOTS.items():
-        assert f"![{alt}](../../images/h-gui-01/{name})" in how_to
-
-    for value in (
-        "`NC_001416.gb`",
-        "`NC_001416.gff3`",
-        "`NC_001416.fna`",
-        "complete `NC_001416.1` record",
-        "do not crop or split the 48,502 bp sequence",
-        "| Rendered CDS features | 73 |",
-        "| Positive-strand CDS | 47 |",
-        "| Negative-strand CDS | 26 |",
-        "`lambda_gff3.svg`",
-        "No matching FASTA record found for GFF record NC_001416.1.",
-    ):
-        assert value in how_to
-
-    for related_target in (
-        "../../GFF3_FASTA.md",
-        "../../REFERENCE/input-formats-and-tsv-schemas.md",
-        "../../TUTORIALS/GUI/first-linear-genome-diagram.md",
-    ):
-        assert (GUI_INPUTS_HOW_TO_PATH.parent / related_target).resolve().is_file()
-
-    assert "./use-genbank-and-gff3-fasta-inputs.md" in (
-        GUI_HOW_TO_INDEX_PATH.read_text(encoding="utf-8")
-    )
-
-
-def test_gui_circular_layout_how_to_uses_only_complete_circular_records() -> None:
-    how_to = GUI_CIRCULAR_LAYOUT_HOW_TO_PATH.read_text(encoding="utf-8")
-    headings = [
-        "## Before you start",
-        "## Load all four complete records",
-        "## Set the 2 by 2 grid",
-        "## Generate and verify the grid",
-        "## Troubleshooting",
-        "## Related guides",
-    ]
-    positions = [how_to.index(heading) for heading in headings]
-    assert positions == sorted(positions)
-
-    for name, alt in GUI_CIRCULAR_LAYOUT_SCREENSHOTS.items():
-        assert f"![{alt}](../../images/h-gui-02/{name})" in how_to
-
-    for value in (
-        "complete, naturally",
-        "does not crop a record, split a sequence into artificial contigs",
-        "*Homo sapiens*",
-        "*Danio rerio*",
-        "*Drosophila melanogaster*",
-        "*Caenorhabditis elegans*",
-        "`NC_012920.1`",
-        "`NC_002333.2`",
-        "`NC_024511.2`",
-        "`NC_001328.1`",
-        "16,569 bp",
-        "16,596 bp",
-        "19,524 bp",
-        "13,794 bp",
-        "so combine the four",
-        "single file named `complete_metazoan_mitochondria.gb`",
-        "GenBank flat files can be concatenated safely",
-        "Do not edit or reorder the nucleotide sequence",
-        "| Record Size Mode | Equal |",
-        "| Min Radius Ratio | `0.75` |",
-        "| Column Gap Ratio | `0.40` |",
-        "| Row Gap Ratio | `0.08` |",
-        "| Label Mode | Out |",
-        "`cds_gene_qualifier_priority.tsv`",
-        "CDS labels use concise gene",
-        "rather than the longer `product`",
-        "descriptions",
-        "Every circle has feature labels",
-        "**Keep Full Definition with Plot Title**",
-        "147 displayed mitochondrial features",
-        "Circular mode",
-        "must not be used to disguise a partial genomic region",
-        "`multi_record_circular.svg`",
-    ):
-        assert value in how_to
-
-    assert "BGC0000708" not in how_to
-    assert "BGC0000713" not in how_to
-    assert "./arrange-multiple-circular-records.md" in (
-        GUI_HOW_TO_INDEX_PATH.read_text(encoding="utf-8")
-    )
 
 
 def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
@@ -1263,14 +1143,13 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
 
     next_steps = tutorial.index("## Next steps")
     for related_target in (
-        "../../HOW_TO/GUI/use-uploaded-blast-results.md",
-        "../../HOW_TO/GUI/arrange-linear-records-regions-and-orientation.md",
         "../../REFERENCE/output-formats-and-export.md",
         "../../REFERENCE/input-formats-and-tsv-schemas.md",
     ):
         assert tutorial.index(related_target) > next_steps
         assert (GUI_LOSATN_TUTORIAL_PATH.parent / related_target).resolve().is_file()
 
+    assert ("HOW" + "_TO") not in tutorial
     assert "tlosatx" not in tutorial.lower()
 
 

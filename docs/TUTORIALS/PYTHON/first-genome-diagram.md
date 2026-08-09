@@ -123,6 +123,23 @@ The recipe runner extracts the exact Python block above, executes it in a clean
 temporary directory, verifies that `diagram` is a `Diagram`, and checks the
 same SVG semantics as the CLI tutorial.
 
+## Continue to a multi-record Circular diagram
+
+`read_genbank()` also accepts a list of paths, and `draw_circular()` accepts
+the returned list of records. A four-record continuation can combine the human
+record from this Tutorial with complete GenBank records [NCBI
+`NC_002333.2`](https://www.ncbi.nlm.nih.gov/nuccore/NC_002333.2), [NCBI
+`NC_024511.2`](https://www.ncbi.nlm.nih.gov/nuccore/NC_024511.2), and [NCBI
+`NC_001328.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001328.1). Save those
+additional downloads as `NC_002333.2.gb`, `NC_024511.2.gb`, and
+`NC_001328.1.gb`.
+
+Pass all four paths to `read_genbank()`, then pass its result to
+`draw_circular()` and save `python_multi_record.svg`. Use options without the
+single-record `species` value so that each record keeps its own definition.
+The [Python layout and track options](../../REFERENCE/python-api.md#layout-and-track-options)
+document multi-record drawing.
+
 ## If the program fails
 
 - `ModuleNotFoundError: No module named 'gbdraw'`: activate the environment

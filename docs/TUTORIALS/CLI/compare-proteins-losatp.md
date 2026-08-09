@@ -147,7 +147,23 @@ The image above is the Reference result. Verify 232 raw rows, 23 Similarity
 groups, and 77 adjacent links. The fifth record should remain reversed, matching
 the browser Tutorial's alignment.
 
+## Variant: draw individual Pairwise matches
+
+The same five records can produce individual curves instead of Similarity
+groups. In the command above, change `--protein_blastp_mode orthogroup` to
+`pairwise`, remove `--align_orthogroup_feature CAG38695.1`, and set
+`--protein_blastp_max_hits` to `1`, `--protein_blastp_output` to
+`cli_losatp_pairwise.tsv`, and `--show_labels` to `none`. Use
+`cli_losatp_pairwise` for `-o` and change the title to `LOSATP Pairwise protein
+matches across five BGC records`.
+
+Pairwise mode searches four adjacent pairs. It does not run a direct
+`BGC0000708` to `BGC0000713` comparison. With the thresholds in this Tutorial,
+the raw file has 791 rows and the SVG has 76 individual links. See the
+[command-line comparison boundary](../../REFERENCE/command-line.md#comparison-boundary)
+for mode and runtime rules.
+
 ## Next steps
 
-- [Create protein Similarity groups for another CLI project](../../HOW_TO/CLI/create-protein-similarity-groups.md)
-- [Choose a genome-comparison method](../../EXPLANATION/choose-a-genome-comparison-method.md)
+- [Review LOSATP comparison modes](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Choose a genome-comparison method](../../FAQ.md#which-comparison-method-should-i-use)

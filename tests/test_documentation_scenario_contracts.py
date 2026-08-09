@@ -12,14 +12,8 @@ from docs.recipes._scenario_support import parse_translate_chain
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "docs/scenarios/manifest.json"
-SCENARIO_ID_RE = re.compile(r"^(?:T|H|R|E|A)-[A-Z]+-\d{2}$")
-ROLE_COUNTS = {
-    "tutorial": 30,
-    "how-to": 33,
-    "reference": 10,
-    "explanation": 6,
-    "auxiliary": 2,
-}
+SCENARIO_ID_RE = re.compile(r"^(?:T|H|R|A)-[A-Z]+-\d{2}$")
+ALLOWED_ROLES = {"tutorial", "evidence", "reference", "auxiliary"}
 ALLOWED_SURFACES = {"gui", "cli", "python", "cross-surface", "gallery"}
 ALLOWED_PRIORITIES = {"P0", "P1", "P2"}
 ALLOWED_TIERS = {"core", "extended", "nightly"}
@@ -82,10 +76,10 @@ def test_recipe_transform_parser_accepts_composed_layout_translations() -> None:
     assert parse_translate_chain("translate(1,2) scale(2)") is None
 
 
-def test_chapter_plan_gate_is_approved_with_a_bounded_fixture_budget() -> None:
+def test_scenario_plan_gate_is_approved_with_a_bounded_fixture_budget() -> None:
     manifest = _manifest()
 
-    assert manifest["schema_version"] == 1
+    assert manifest["schema_version"] == 2
     assert manifest["approval"]["status"] == "approved"
     assert _repo_path(manifest["plan_source"]).is_file()
 
@@ -97,52 +91,21 @@ def test_chapter_plan_gate_is_approved_with_a_bounded_fixture_budget() -> None:
     }
 
 
-def test_chapter_census_matches_the_reviewed_plan() -> None:
-    chapters = _manifest()["chapters"]
+def test_scenario_registry_has_unique_ids_and_public_destinations() -> None:
+    scenarios = _manifest()["scenarios"]
 
-    assert len(chapters) == 81
-    assert Counter(chapter["role"] for chapter in chapters) == ROLE_COUNTS
-
-    ids = [chapter["id"] for chapter in chapters]
-    destinations = [chapter["destination"] for chapter in chapters]
+    assert set(Counter(scenario["role"] for scenario in scenarios)) <= ALLOWED_ROLES
+    ids = [scenario["id"] for scenario in scenarios]
+    destinations = [
+        scenario["destination"]
+        for scenario in scenarios
+        if "destination" in scenario
+    ]
     assert len(ids) == len(set(ids))
     assert len(destinations) == len(set(destinations))
 
-    assert [chapter["id"] for chapter in chapters[:30]] == [
-        "T-GUI-01",
-        "T-GUI-02",
-        "T-GUI-03",
-        "T-GUI-04",
-        "T-GUI-05",
-        "T-GUI-06",
-        "T-GUI-08",
-        "T-GUI-09",
-        "T-GUI-10",
-        "T-GUI-12",
-        "T-CLI-01",
-        "T-CLI-02",
-        "T-CLI-03",
-        "T-CLI-05",
-        "T-CLI-06",
-        "T-CLI-07",
-        "T-CLI-08",
-        "T-CLI-09",
-        "T-CLI-10",
-        "T-CLI-11",
-        "T-PY-01",
-        "T-PY-02",
-        "T-PY-03",
-        "T-PY-04",
-        "T-PY-05",
-        "T-PY-06",
-        "T-PY-07",
-        "T-PY-08",
-        "T-PY-09",
-        "T-PY-11",
-    ]
 
-
-def test_every_chapter_records_its_destination_inputs_and_executable_proof() -> None:
+def test_every_scenario_records_inputs_and_executable_proof() -> None:
     manifest = _manifest()
     known_capabilities = {
         capability
@@ -151,23 +114,19 @@ def test_every_chapter_records_its_destination_inputs_and_executable_proof() -> 
     }
     known_fixtures = set(manifest["fixtures"])
 
-    for chapter in manifest["chapters"]:
+    for chapter in manifest["scenarios"]:
         chapter_id = chapter["id"]
         assert SCENARIO_ID_RE.fullmatch(chapter_id), chapter_id
         assert chapter["title"].strip()
+        assert chapter["role"] in ALLOWED_ROLES
         assert chapter["surface"] in ALLOWED_SURFACES
         assert chapter["priority"] in ALLOWED_PRIORITIES
         assert chapter["capabilities"], chapter_id
         assert set(chapter["capabilities"]) <= known_capabilities
-        assert set(chapter["canonical_for"]) <= set(chapter["capabilities"])
+        assert ("canonical" + "_for") not in chapter
         assert set(chapter["fixtures"]) <= known_fixtures
         assert isinstance(chapter["settings"], dict)
 
-        if chapter["role"] == "how-to":
-            assert chapter["title"].startswith("How to "), chapter_id
-
-        destination = _repo_path(chapter["destination"])
-        assert "internal" not in destination.relative_to(REPO_ROOT).parts
         for source in chapter["sources"]:
             assert _repo_path(source).exists(), f"{chapter_id}: missing source {source}"
 
@@ -178,17 +137,46 @@ def test_every_chapter_records_its_destination_inputs_and_executable_proof() -> 
         assert isinstance(execution["expected_outputs"], list)
         assert execution["assertions"], chapter_id
 
+        destination = None
+        if chapter["role"] == "evidence":
+            assert "destination" not in chapter
+            if execution["kind"] in {"cli-recipe", "python-recipe"}:
+                assert execution["source"] == "docs/internal/SCENARIO_EVIDENCE.md"
+                assert _repo_path(execution["source"]).is_file()
+        else:
+            destination = _repo_path(chapter["destination"])
+            assert "internal" not in destination.relative_to(REPO_ROOT).parts
+
         status = chapter["status"]
         assert status["review"] == "approved"
         assert status["implementation"] in {"planned", "implemented", "verified"}
         if status["implementation"] != "planned":
-            assert destination.is_file(), f"{chapter_id}: destination is not implemented"
+            if destination is not None:
+                assert destination.is_file(), (
+                    f"{chapter_id}: destination is not implemented"
+                )
             assert _repo_path(execution["path"]).is_file(), (
                 f"{chapter_id}: executable proof is not implemented"
             )
 
 
-def test_each_major_capability_has_exactly_one_canonical_owner() -> None:
+def _markdown_heading_anchors(source: str) -> set[str]:
+    anchors: set[str] = set()
+    counts: Counter[str] = Counter()
+    for line in source.splitlines():
+        match = re.match(r"^#{1,6}\s+(.+?)\s*$", line)
+        if match is None:
+            continue
+        heading = re.sub(r"[<>`*_]", "", match.group(1)).lower()
+        anchor = re.sub(r"[^a-z0-9 _-]", "", heading)
+        anchor = re.sub(r"[ -]+", "-", anchor).strip("-")
+        suffix = counts[anchor]
+        counts[anchor] += 1
+        anchors.add(f"{anchor}-{suffix}" if suffix else anchor)
+    return anchors
+
+
+def test_each_major_capability_has_one_public_owner_and_execution_evidence() -> None:
     manifest = _manifest()
     groups = manifest["capability_groups"]
     expected_groups = {
@@ -205,17 +193,32 @@ def test_each_major_capability_has_exactly_one_canonical_owner() -> None:
     assert set(groups) == expected_groups
 
     vocabulary = [capability for capabilities in groups.values() for capability in capabilities]
-    owners = [
+    owners = [capability for values in manifest["public_owners"].values() for capability in values]
+    exercised = {
         capability
-        for chapter in manifest["chapters"]
-        for capability in chapter["canonical_for"]
-    ]
+        for scenario in manifest["scenarios"]
+        for capability in scenario["capabilities"]
+    }
     assert len(vocabulary) == len(set(vocabulary))
     assert Counter(owners) == Counter({capability: 1 for capability in vocabulary})
+    assert exercised == set(vocabulary)
+
+    technical_index = (REPO_ROOT / "docs/REFERENCE/README.md").read_text(
+        encoding="utf-8"
+    )
+    for target in manifest["public_owners"]:
+        relative_path, _, anchor = target.partition("#")
+        path = _repo_path(relative_path)
+        assert path.is_file(), target
+        assert "internal" not in path.relative_to(REPO_ROOT).parts
+        assert f"({path.name})" in technical_index, target
+        if anchor:
+            source = path.read_text(encoding="utf-8")
+            assert anchor in _markdown_heading_anchors(source), target
 
 
 def test_screenshots_are_owned_purposeful_and_within_the_reviewed_budget() -> None:
-    chapters = _manifest()["chapters"]
+    chapters = _manifest()["scenarios"]
     owned_paths: list[str] = []
 
     for chapter in chapters:
@@ -260,7 +263,7 @@ def test_screenshots_are_owned_purposeful_and_within_the_reviewed_budget() -> No
 
 def test_tutorials_declare_an_early_visible_result_on_their_real_surface() -> None:
     tutorials = [
-        chapter for chapter in _manifest()["chapters"] if chapter["role"] == "tutorial"
+        chapter for chapter in _manifest()["scenarios"] if chapter["role"] == "tutorial"
     ]
     expected_kind = {
         "gui": "playwright",
@@ -290,40 +293,34 @@ def test_tutorials_declare_an_early_visible_result_on_their_real_surface() -> No
         assert chapter["execution"]["kind"] == expected_kind[chapter["surface"]]
 
 
-def test_tutorial_projects_define_one_figure_with_three_surface_variants() -> None:
+def test_tutorial_projects_define_one_figure_with_intentional_surface_variants() -> None:
     manifest = _manifest()
     policy = manifest["tutorial_project_policy"]
     projects = manifest["tutorial_projects"]
     tutorials = {
         chapter["id"]: chapter
-        for chapter in manifest["chapters"]
+        for chapter in manifest["scenarios"]
         if chapter["role"] == "tutorial"
     }
 
-    assert policy["required_surfaces"] == ["gui", "cli", "python"]
-    assert "same figure" in policy["rule"]
-    assert "must not substitute a different figure" in policy["exceptions"]
-    assert {
-        project_id
-        for project_id, project in projects.items()
-        if project["parity"] == "migration"
-    } == set(policy["legacy_migration_projects"])
+    allowed_surfaces = set(policy["allowed_surfaces"])
+    assert allowed_surfaces == {"gui", "cli", "python"}
+    assert "materially different reader journey" in policy["rule"]
+    assert "does not require a separate public page" in policy["evidence"]
 
     owned_variants: dict[str, str] = {}
     for project_id, project in projects.items():
         assert project["figure"].strip(), project_id
-        assert project["parity"] in {"migration", "verified"}
+        assert project["parity"] == "verified"
         variants = project["variants"]
-        assert list(variants) == policy["required_surfaces"]
+        assert variants
+        assert set(variants) <= allowed_surfaces
         implemented = {
             surface: scenario_id
             for surface, scenario_id in variants.items()
             if scenario_id is not None
         }
         assert implemented, project_id
-        if project["parity"] == "verified":
-            assert set(implemented) == set(policy["required_surfaces"])
-
         for surface, scenario_id in implemented.items():
             chapter = tutorials[scenario_id]
             assert chapter["surface"] == surface
@@ -376,7 +373,7 @@ def test_verified_tutorial_non_browser_renderers_publish_the_same_svg_tree() -> 
 def test_first_gui_tutorial_keeps_the_fixed_accepted_path() -> None:
     chapter = next(
         chapter
-        for chapter in _manifest()["chapters"]
+        for chapter in _manifest()["scenarios"]
         if chapter["id"] == "T-GUI-01"
     )
 
@@ -397,48 +394,20 @@ def test_first_gui_tutorial_keeps_the_fixed_accepted_path() -> None:
     assert len(chapter["screenshots"]) == 6
 
 
-def test_public_scenario_contracts_do_not_depend_on_internal_or_test_inputs() -> None:
+def test_public_destinations_and_execution_paths_keep_their_boundaries() -> None:
     manifest_text = MANIFEST_PATH.read_text(encoding="utf-8")
 
     assert "tests/test_inputs" not in manifest_text
-    for chapter in _manifest()["chapters"]:
-        assert not chapter["destination"].startswith("docs/internal/")
+    for chapter in _manifest()["scenarios"]:
+        if "destination" in chapter:
+            assert not chapter["destination"].startswith("docs/internal/")
         assert not chapter["execution"]["path"].startswith("docs/internal/")
+        source = chapter["execution"].get("source")
+        if source is not None:
+            assert source == "docs/internal/SCENARIO_EVIDENCE.md"
 
 
-def test_explanation_chapters_are_present_and_keep_surface_boundaries_clear() -> None:
-    explanations = [
-        chapter
-        for chapter in _manifest()["chapters"]
-        if chapter["role"] == "explanation"
-    ]
-
-    assert len(explanations) == 6
-    for chapter in explanations:
-        path = _repo_path(chapter["destination"])
-        assert path.is_file(), chapter["id"]
-        source = path.read_text(encoding="utf-8")
-        assert source.startswith("[Documentation home]")
-        assert f"# {chapter['title']}" in source
-        assert "Web UX profile" not in source
-        assert "tests/test_inputs" not in source
-        assert "lambda_two_contigs" not in source
-
-    comparison = _repo_path(
-        next(
-            chapter["destination"]
-            for chapter in explanations
-            if chapter["id"] == "E-COMPARISON-01"
-        )
-    ).read_text(encoding="utf-8")
-    assert "LOSATN and TLOSATX run in the web app" in comparison
-    assert "not phylogenetic orthogroups" in comparison
-
-
-def test_explanation_pages_do_not_duplicate_runnable_recipe_authority() -> None:
-    for chapter in _manifest()["chapters"]:
-        if chapter["role"] != "explanation":
-            continue
-        source = _repo_path(chapter["destination"]).read_text(encoding="utf-8")
-        assert "```bash" not in source
-        assert "```python" not in source
+def test_retired_public_categories_are_not_scenarios() -> None:
+    roles = {scenario["role"] for scenario in _manifest()["scenarios"]}
+    assert ("how" + "-to") not in roles
+    assert ("expla" + "nation") not in roles

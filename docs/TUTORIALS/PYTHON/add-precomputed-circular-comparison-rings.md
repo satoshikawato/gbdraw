@@ -161,5 +161,5 @@ mapping, and 106 retained HSPs across the three companion sequences.
 
 ## Next steps
 
-- [Browse focused Python task guides](../../HOW_TO/PYTHON/README.md)
+- [Python API technical documentation](../../REFERENCE/python-api.md)
 - [Review comparison result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)

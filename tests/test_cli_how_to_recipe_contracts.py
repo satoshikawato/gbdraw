@@ -21,17 +21,20 @@ SCENARIO_ID = "H-CLI-01"
 LAYOUT_SCENARIO_ID = "H-CLI-03"
 LINEAR_LAYOUT_SCENARIO_ID = "H-CLI-04"
 RUNNER = "docs/recipes/run_cli_scenarios.py"
+EVIDENCE_SOURCE = "docs/internal/SCENARIO_EVIDENCE.md"
 
 
-def test_input_how_to_uses_whole_lambda_records_on_both_input_paths() -> None:
+def test_input_evidence_uses_whole_lambda_records_on_both_input_paths() -> None:
     chapter = load_chapter(
         SCENARIO_ID,
         expected_kind="cli-recipe",
         runner_path=RUNNER,
     )
-    source = (REPO_ROOT / chapter["destination"]).read_text(encoding="utf-8")
     recipe = extract_executable_block(chapter, language="bash")
 
+    assert chapter["role"] == "evidence"
+    assert "destination" not in chapter
+    assert chapter["execution"]["source"] == EVIDENCE_SOURCE
     assert chapter["execution"]["expected_outputs"] == [
         "lambda_genbank.svg",
         "lambda_gff3.svg",
@@ -40,13 +43,9 @@ def test_input_how_to_uses_whole_lambda_records_on_both_input_paths() -> None:
     assert "--gbk NC_001416.gb" in recipe
     assert "--gff NC_001416.gff3" in recipe
     assert "--fasta NC_001416.fna" in recipe
-    assert "48,502 bp" in source
-    assert "without cropping or\nsplitting it" in source
-    assert "artificial contigs" in source
-    assert "lambda_two_contigs" not in source
 
 
-def test_input_how_to_fixtures_are_complete_and_sequence_identical() -> None:
+def test_input_evidence_fixtures_are_complete_and_sequence_identical() -> None:
     fixture_manifest = json.loads(
         (REPO_ROOT / "gbdraw/web/tutorial-data/manifest.json").read_text(
             encoding="utf-8"
@@ -78,7 +77,7 @@ def test_input_how_to_fixtures_are_complete_and_sequence_identical() -> None:
     }
 
 
-def test_input_how_to_regenerates_from_a_clean_external_directory(
+def test_input_evidence_regenerates_from_a_clean_external_directory(
     tmp_path: Path,
 ) -> None:
     environment = os.environ.copy()
@@ -117,9 +116,11 @@ def test_multi_record_layout_uses_four_complete_circular_mitochondria() -> None:
         expected_kind="cli-recipe",
         runner_path=RUNNER,
     )
-    source = (REPO_ROOT / chapter["destination"]).read_text(encoding="utf-8")
     recipe = extract_executable_block(chapter, language="bash")
 
+    assert chapter["role"] == "evidence"
+    assert "destination" not in chapter
+    assert chapter["execution"]["source"] == EVIDENCE_SOURCE
     assert chapter["fixtures"] == [
         "human-mitochondrion",
         "metazoan-mitochondria-four",
@@ -139,19 +140,6 @@ def test_multi_record_layout_uses_four_complete_circular_mitochondria() -> None:
     assert "--qualifier_priority cds_gene_qualifier_priority.tsv" in recipe
     assert "--labels out" in recipe
     assert "--label_font_size 10" in recipe
-    assert "complete, naturally circular RefSeq mitochondrial records" in source
-    assert "No record is cropped, concatenated, or split" in source
-    assert "147 displayed features" in source
-    assert "Each CDS label uses the feature's concise `gene` value" in source
-    assert "`product`\ndescriptions are not used as labels" in source
-    for organism in (
-        "human",
-        "zebrafish",
-        "fruit fly",
-        "nematode",
-    ):
-        assert organism in source
-
     fixture_manifest = json.loads(
         (REPO_ROOT / "gbdraw/web/tutorial-data/manifest.json").read_text(
             encoding="utf-8"
@@ -259,24 +247,19 @@ def test_multi_record_layout_accepts_visible_bounds_origin_compensation() -> Non
     )
 
 
-def test_linear_layout_how_to_uses_complete_sources_and_explicit_positions() -> None:
+def test_linear_layout_evidence_uses_complete_sources_and_explicit_positions() -> None:
     chapter = load_chapter(
         LINEAR_LAYOUT_SCENARIO_ID,
         expected_kind="cli-recipe",
         runner_path=RUNNER,
     )
-    source = (REPO_ROOT / chapter["destination"]).read_text(encoding="utf-8")
     recipe = extract_executable_block(chapter, language="bash")
-    prose = " ".join(source.split())
 
+    assert chapter["role"] == "evidence"
+    assert "destination" not in chapter
+    assert chapter["execution"]["source"] == EVIDENCE_SOURCE
     assert chapter["fixtures"] == ["lambda", "aminoglycoside-bgc-five"]
     assert chapter["execution"]["expected_outputs"] == ["linear_layout_cli.svg"]
-    assert "# How to arrange linear records, regions, orientation, labels, and rulers" in source
-    assert "## Prerequisites" in source
-    assert "## Verification" in source
-    assert "## Troubleshooting" in source
-    assert "../../../gbdraw/web/tutorial-data/manifest.json" in source
-    assert "../../images/h-cli-04/linear_layout_cli.svg" in source
     assert "--gbk NC_001416.gb BGC0000708.gbk BGC0000713.gbk" in recipe
     assert "--region NC_001416.1:5001-35500" in recipe
     assert recipe.count("--record_id") == 3
@@ -289,9 +272,6 @@ def test_linear_layout_how_to_uses_complete_sources_and_explicit_positions() -> 
     assert "--show_labels all" in recipe
     assert "--ruler_on_axis" in recipe
     assert "-o linear_layout_cli" in recipe
-    assert "local ruler still reads from 5 kbp through 30 kbp from left to right" in prose
-    assert "`racG` appears to the left of `racP`" in prose
-    assert "descend" not in source.lower()
 
 
 def test_linear_layout_sources_match_canonical_fixture_records() -> None:

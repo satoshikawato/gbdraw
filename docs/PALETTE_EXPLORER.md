@@ -8,4 +8,4 @@ The exact palette tokens and semantic colors come from [`gbdraw/data/color_palet
 
 Palette names describe appearance, not a guaranteed accessibility grade. Check contrast against the final background and at final print size. Do not rely on color alone for a biological distinction; combine it with labels, order, track position, feature shape, stroke, or another redundant cue.
 
-Use [How to style features, labels, titles, and legends](./HOW_TO/GUI/style-features-labels-titles-and-legends.md) when a figure also needs specific-color rules, qualifier priorities, label filters, title, or legend changes.
+See [feature presentation](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation) for specific-color rules, qualifier priorities, label filters, titles, and legends.

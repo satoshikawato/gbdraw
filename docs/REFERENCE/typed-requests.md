@@ -1,4 +1,4 @@
-[Documentation home](../DOCS.md) | [Python API](python-api.md) | [Session compatibility](session-and-request-compatibility.md)
+[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [FAQ](../FAQ.md)
 
 # Typed request reference
 
@@ -70,7 +70,9 @@ The legacy `depth_table`, `depth_file`, `depth_tables`, `depth_files`, and `dept
 
 Pass `CurrentRequestArtifacts` when an integration already owns current raw comparison results, derived grouping/block results, or the protein identity manifest. The fresh render boundary accepts only the current artifact schemas, and every derived runtime handle must resolve through the supplied manifest.
 
-`CurrentRequestArtifacts` does not accept an arbitrary session JSON mapping. Persisted sessions enter through `render_session()`, where the compatibility adapter migrates supported versions before current rendering.
+`CurrentRequestArtifacts` does not accept an arbitrary session JSON mapping.
+Use `render_session()` for a supported saved session and
+`CurrentRequestArtifacts` only for current analysis-artifact models.
 
 ## Session lifecycle
 
@@ -84,7 +86,15 @@ Pass `CurrentRequestArtifacts` when an integration already owns current raw comp
 | `with_request_output()` | replace output settings without mutating the request |
 | `render_session()` | migrate supported persisted state and replay the request plus saved analysis artifacts |
 
+`build_session_document()` and `save_session_document()` accept optional
+`title` and `created_at` values. If `created_at` is omitted, the writer records
+the current UTC save time. A fixed timestamp can make a test fixture
+byte-reproducible; it does not make a replay universally reproducible.
+
 Materialized paths expire when the materialization context closes. `session_to_request()` followed by `render_request()` renders only the decoded typed request; use `render_session()` when saved comparison artifacts must also be replayed.
+
+Session conversion rejects values from the wrong mode. For example, a Circular
+request containing Linear track values raises `SessionConversionError`.
 
 The canonical request schema is a materialized wire format. It does not encode runtime cardinality, deferred table paths, record-derived output naming, or collection-level transforms. The encoder rejects an unresolved request instead of dropping those fields; call `resolve_request()` first. Session writers perform this resolution automatically.
 
@@ -94,7 +104,7 @@ The canonical request schema is a materialized wire format. It does not encode r
 
 ## Related
 
-- [How to build typed requests and round-trip sessions](../HOW_TO/PYTHON/build-typed-requests-and-round-trip-sessions.md)
+- [Python Tutorials](../TUTORIALS/PYTHON/README.md)
 - [Python API reference](python-api.md)
 - [Session and request compatibility](session-and-request-compatibility.md)
 - [Input formats and TSV schemas](input-formats-and-tsv-schemas.md)

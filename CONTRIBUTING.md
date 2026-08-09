@@ -95,22 +95,30 @@ project's record of intended rendering behavior.
 
 ## Changing documentation
 
-`docs/` follows a [Diátaxis](https://diataxis.fr/) structure (Tutorials,
-How-to guides, Reference, Explanation); see
-[`docs/DOCS.md`](./docs/DOCS.md) for the index and
-[`docs/internal/DOCUMENTATION_RENOVATION_PLAN_2026-08-03.md`](./docs/internal/DOCUMENTATION_RENOVATION_PLAN_2026-08-03.md)
-for the rationale behind it. Most commands and code blocks in Tutorials and
-How-to guides are checked by the test suite against the current CLI, GUI,
-and Python API:
+Public documentation has four routes: [Tutorials](./docs/TUTORIALS/README.md),
+[Technical documentation](./docs/REFERENCE/README.md),
+[FAQ](./docs/FAQ.md), and [Gallery](./docs/GALLERY.md). See
+[`docs/DOCS.md`](./docs/DOCS.md) for the index and the
+[current implementation plan](./docs/internal/DOCUMENTATION_SIMPLIFICATION_IMPLEMENTATION_PLAN_2026-08-09.md)
+for the ownership and evidence rules.
+
+Use the fewest pages that answer distinct reader questions. Before adding a
+public page, identify the reader question, the existing owner, and whether the
+change should keep, merge, delete, or create a page. A separate GUI, CLI, or
+Python test scenario does not require a separate public page. Technical
+documentation owns exact contracts; FAQ answers choices and troubleshooting by
+linking to those contracts.
+
+Tutorial commands, public code blocks, and internal evidence scenarios are
+checked against the current CLI, GUI, and Python API:
 
 ```bash
 pytest tests/ -v -k documentation
 ```
 
-Keep a new page inside the existing structure (pick Tutorial, How-to,
-Reference, or Explanation based on what the reader is trying to do) rather
-than adding a new top-level document. Internal planning and audit documents
-belong in `docs/internal/`, not alongside user-facing pages.
+Extend an existing owner before adding a new top-level document. Internal
+plans, audits, and executable evidence registries belong in `docs/internal/`,
+not alongside user-facing pages.
 
 ## Style
 

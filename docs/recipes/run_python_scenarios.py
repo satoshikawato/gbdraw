@@ -52,6 +52,7 @@ if __package__:
         parse_translate_chain,
         publish_output,
         validate_standard_svg,
+        verified_scenario_ids,
     )
 else:
     from _scenario_support import (
@@ -66,27 +67,17 @@ else:
         parse_translate_chain,
         publish_output,
         validate_standard_svg,
+        verified_scenario_ids,
     )
 
 
-IMPLEMENTED_SCENARIOS = (
-    "T-PY-01",
-    "T-PY-02",
-    "T-PY-03",
-    "T-PY-04",
-    "T-PY-05",
-    "T-PY-06",
-    "T-PY-07",
-    "T-PY-08",
-    "T-PY-09",
-    "T-PY-11",
-    "H-PY-01",
-    "H-PY-02",
-    "H-PY-03",
-    "H-PY-04",
-    "H-PY-05",
-)
 RUNNER_PATH = "docs/recipes/run_python_scenarios.py"
+SCENARIO_IDS = verified_scenario_ids(
+    expected_kind="python-recipe",
+    runner_path=RUNNER_PATH,
+)
+
+
 def run_scenario(
     scenario_id: str,
     *,
@@ -115,7 +106,10 @@ def run_scenario(
         try:
             os.chdir(workdir)
             with redirect_stdout(output):
-                exec(compile(recipe, chapter["destination"], "exec"), namespace)
+                source_name = chapter["execution"].get(
+                    "source", chapter.get("destination", scenario_id)
+                )
+                exec(compile(recipe, source_name, "exec"), namespace)
         finally:
             os.chdir(previous_cwd)
 
@@ -235,7 +229,7 @@ def _validate_scenario(
             stdout=stdout,
             outputs=outputs,
         )
-    else:  # pragma: no cover - IMPLEMENTED_SCENARIOS owns this dispatch.
+    else:  # pragma: no cover - the manifest limits this dispatch.
         raise RecipeContractError(f"No Python validator for {scenario_id}.")
 
 
@@ -1354,7 +1348,7 @@ def main() -> int:
     selection.add_argument(
         "--all", action="store_true", help="Run all implemented Python recipes."
     )
-    selection.add_argument("--scenario", choices=IMPLEMENTED_SCENARIOS)
+    selection.add_argument("--scenario", choices=SCENARIO_IDS)
     parser.add_argument(
         "--output-root",
         type=Path,
@@ -1368,7 +1362,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    scenario_ids = IMPLEMENTED_SCENARIOS if args.all else (args.scenario,)
+    scenario_ids = SCENARIO_IDS if args.all else (args.scenario,)
     try:
         for scenario_id in scenario_ids:
             destinations = run_scenario(

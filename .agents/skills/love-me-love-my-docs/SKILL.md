@@ -5,7 +5,7 @@ description: >-
   or mobile workflows. Capture real GUI screenshots with executable scripts,
   run documented commands from clean directories, execute literal code
   examples, and bind every visible result to regeneration evidence. Use for
-  user manuals, user guides, Tutorials, How-to guides, onboarding docs,
+  user manuals, user guides, Tutorials, procedural docs, onboarding docs,
   documentation with screenshots, or requests that mention
   love-me-love-my-docs or /love-me-love-my-docs.
 ---
@@ -32,12 +32,12 @@ Copy this into your response and check items off:
 ```
 Docs Progress:
 - [ ] Step 1: Frame — audience, language(s), surfaces, output format
-- [ ] Step 2: Flow census — user journeys mined from routes/screens; Chapter Plan Gate passed
+- [ ] Step 2: Flow census — user journeys mined from routes/screens; Public-page Decision Gate passed
 - [ ] Step 3: Demo data — stable public inputs or safe seeded data; zero private data
 - [ ] Step 4: Smoke proof — one workflow runs end-to-end and its result renders in the docs
 - [ ] Step 5: Execution harness — GUI capture and/or clean CLI/Python execution per documented flow
 - [ ] Step 6: Evidence run — screenshots, commands, code, downloads, and results generated completely
-- [ ] Step 7: Manual written — role-correct chapters with inputs, actions, expected results, and useful media
+- [ ] Step 7: Manual written — page decisions applied with inputs, actions, expected results, and useful media
 - [ ] Step 8: Verify + report — no broken images, rot pre-mortem passed, regeneration command documented
 ```
 
@@ -59,30 +59,27 @@ Docs Progress:
 
 ## Step 2 — Flow census
 
-Mine the user journeys from evidence, not memory: routes, navigation menus,
-screen registries, CLI entry points, public APIs, and existing documentation
-manifests (`file:line` each). Classify:
+Mine user journeys and evidence scenarios from evidence, not memory: routes,
+navigation menus, screen registries, CLI entry points, public APIs, and
+existing documentation manifests (`file:line` each). Record the reader goal,
+surfaces exercised, screens or commands touched, and any internal/debug flows
+that should be skipped. Treat scenarios as verification units, not as a public
+page inventory.
 
-- **Core flows** — what 80% of users do (login, create X, publish, search)
-  → each becomes a chapter.
-- **Secondary flows** — settings, profile, exports → grouped chapters.
-- **Admin flows** — separate manual or section, per Step 1.
-- **Skip** — internal/debug routes, with a note.
-
-Assign each public chapter one information role. Use
-[references/manual-structure.md](references/manual-structure.md) to separate
-guided Tutorials, focused How-to guides, conceptual Explanation, and exact
-Reference. Advanced end-to-end projects remain Tutorials; complexity alone
-does not turn a learning journey into a How-to guide.
-
-**Chapter Plan Gate** — before writing a single capture script, present a
-compact brief in chat: one numbered line per chapter (flow, route/nav
-evidence `file:line`, screens touched, screenshot count estimate) plus the
-skip list. 10–20 lines total; ask for confirmation **once**. Changing the
-chapter list here costs one message; changing it after the harness exists
-costs a rewrite. No harness code may exist before this gate passes. If the
-user cannot respond (headless/CI run), proceed and mark the chapter plan
-`UNCONFIRMED` in the final report.
+**Public-page Decision Gate** — before writing a capture script or public
+page, present a compact table with one row per reader question or affected
+page: reader question, route/navigation evidence, existing public owner,
+evidence scenarios and surfaces, `keep` / `merge` / `delete` / `new`
+disposition, and resulting owner. Default to `merge`; use `new` only when no
+existing owner can answer the distinct reader question clearly. One or many
+evidence scenarios may support one public page, and a scenario may support no
+public page. Surface-specific evidence proves that surface works; it does not
+require a surface-specific page unless the reader journey is materially
+different. Use
+[references/manual-structure.md](references/manual-structure.md) for the page
+ownership rules. Ask for confirmation **once**. No harness code may exist
+before this gate passes. If the user cannot respond (headless/CI run), proceed
+and mark the decision table `UNCONFIRMED` in the final report.
 
 ## Step 3 — Demo data hygiene
 
@@ -95,11 +92,11 @@ Screenshots outlive databases. Before any capture:
 - Consistent state: the same seed produces the same screens, so re-runs
   diff cleanly. Seed script lives next to the capture script.
 - For sequence-based tools, make the reader obtain original sequence records
-  from an authoritative public database by accession. A public Tutorial or
-  How-to guide must not use a repository-bundled sequence file or a prebuilt
-  project/session as its reader-facing input. Give the database page or API,
-  format choice, exact save name, and identity checks. A procedural chapter
-  may reload only a session the reader created earlier in that same chapter
+  from an authoritative public database by accession. A public procedural page
+  must not use a repository-bundled sequence file or a prebuilt project/session
+  as its reader-facing input. Give the database page or API, format choice,
+  exact save name, and identity checks. A page may reload only a session the
+  reader created earlier in that same page
   from the original inputs.
 - Do not assume that an accession's nucleotide version also freezes its
   feature table. When rendered features or protein searches depend on an
@@ -139,22 +136,22 @@ Screenshots outlive databases. Before any capture:
 
 Before writing every flow, prove the thinnest slice works. This is where the
 operational unknowns live, and finding them on flow 1 of 1 is cheaper than
-finding them after all chapters are drafted:
+finding them after all pages are drafted:
 
 1. Boot the app (document the exact command) and verify the base URL
    responds.
 2. Log the demo account in once; save the storage state to
    `docs/capture/auth.json`.
 3. Verify one seeded entity is visible on a real page.
-4. Capture ONE screenshot through the harness skeleton and render ONE
-   chapter page that references it, in the chosen output format.
+4. Capture ONE screenshot through the harness skeleton and render ONE public
+   page that references it, in the chosen output format.
 
 For a CLI or Python-only manual, replace items 1–4 with one clean-directory
 run of the exact documented command or literal program, validate the named
-output, and render that generated result in one chapter.
+output, and render that generated result in one public page.
 
 **Exit criterion (mechanical):** one image file exists on disk and one
-rendered chapter page displays it. Until then, no second capture script
+rendered public page displays it. Until then, no second capture script
 may be written. Any numbered item that fails is a named finding (app
 won't boot, auth broken, seed invisible) — report it; do not script
 around it.
@@ -187,8 +184,11 @@ around it.
   commands from a new temporary directory with only declared inputs. Execute
   the literal published Python block rather than a parallel test-only example.
   Prefer generated diagrams and parsed output checks over terminal screenshots.
-- One script/flow per chapter; screenshots named
-  `<chapter>/<step-number>-<slug>.png` — the filename IS the step order.
+- Organize scripts and flows by independently runnable evidence scenario, not
+  by public page. Several scenarios may support one page, and a scenario may
+  support no page. Separate GUI, CLI, and Python harnesses do not by themselves
+  require separate public pages. Name screenshots
+  `<scenario-id>/<step-number>-<slug>.png` — the filename IS the step order.
 - Commit the harness to `docs/capture/`. It is product code now.
 
 ## Step 6 — Capture run
@@ -201,13 +201,14 @@ or output mismatch. Re-run until the evidence set is complete and consistent.
 ## Step 7 — Write the manual
 
 Structure and style per
-[references/manual-structure.md](references/manual-structure.md). Write each
-chapter for its information role. A Tutorial teaches one complete project; a
-How-to guide solves one focused task; Explanation supports a choice or mental
-model; Reference owns exact lookup facts. Procedural chapters identify the
-starting state, every input and filename, the performed actions, the expected
-result, verification, and troubleshooting. Write in user language ("select
-**Publish**"), never developer language ("trigger the POST endpoint").
+[references/manual-structure.md](references/manual-structure.md). Apply the
+decision table: extend the resulting owner, merge duplicated material, delete
+pages only after preserving unique content or evidence, and create a page only
+for a distinct unanswered reader question. Do not clone prose for each
+surface merely because its execution evidence is separate. Procedural pages
+identify the starting state, every input and filename, the performed actions,
+the expected result, verification, and troubleshooting. Write in user language
+("select **Publish**"), never developer language ("trigger the POST endpoint").
 
 ## Step 8 — Verify and report
 
@@ -227,8 +228,9 @@ result, verification, and troubleshooting. Write in user language ("select
     step one).
   - **Environment:** base URL, viewport, theme, and locale are pinned
     constants in one place — never repeated per script.
-- Report: chapters written, screenshots generated, flows that failed
-  automation (app findings), and the one-command regeneration story.
+- Report: pages kept, merged, deleted, or added; screenshots generated; flows
+  that failed automation (app findings); and the one-command regeneration
+  story.
 - Offer the standing suggestion: wire the capture run into CI so UI
   changes that break the manual fail loudly instead of rotting silently.
 

@@ -49,7 +49,7 @@ SCREENSHOT_MAX_BYTES = 2_500_000
 
 @cache
 def load_manifest() -> dict[str, Any]:
-    """Load the approved chapter manifest."""
+    """Load the approved scenario manifest."""
 
     return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
@@ -64,7 +64,7 @@ def load_tutorial_data_manifest() -> dict[str, Any]:
 def chapter_for(scenario_id: str) -> dict[str, Any]:
     """Return one approved scenario entry."""
 
-    for chapter in load_manifest()["chapters"]:
+    for chapter in load_manifest()["scenarios"]:
         if chapter["id"] == scenario_id:
             return chapter
     raise KeyError(f"Unknown documentation scenario: {scenario_id}")
@@ -75,7 +75,7 @@ def scenario_ids_for(execution_kind: str) -> tuple[str, ...]:
 
     return tuple(
         chapter["id"]
-        for chapter in load_manifest()["chapters"]
+        for chapter in load_manifest()["scenarios"]
         if chapter.get("execution", {}).get("kind") == execution_kind
         and chapter.get("status", {}).get("implementation") == "verified"
     )
@@ -93,7 +93,7 @@ def supported_tiers() -> tuple[str, ...]:
     return tuple(
         dict.fromkeys(
             str(chapter["execution"]["tier"])
-            for chapter in load_manifest()["chapters"]
+            for chapter in load_manifest()["scenarios"]
             if chapter.get("execution", {}).get("tier")
         )
     )

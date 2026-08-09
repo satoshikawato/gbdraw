@@ -32,25 +32,6 @@ BGC_ROOT = (
     / "tutorial-data"
     / "aminoglycoside-bgc-five"
 )
-HOW_TO_PAGES = {
-    "H-GUI-13": (
-        REPO_ROOT / "docs" / "HOW_TO" / "GUI" / "inspect-and-edit-a-diagram.md"
-    ),
-    "H-GUI-14": (
-        REPO_ROOT
-        / "docs"
-        / "HOW_TO"
-        / "GUI"
-        / "save-restore-undo-and-reproduce-work.md"
-    ),
-    "H-GUI-15": (
-        REPO_ROOT
-        / "docs"
-        / "HOW_TO"
-        / "GUI"
-        / "export-publication-and-interactive-figures.md"
-    ),
-}
 SCREENSHOT_NAMES = {
     "H-GUI-13": (
         "search-popup.png",
@@ -257,13 +238,9 @@ def test_interactive_accessibility_labels_are_public_ui_contracts() -> None:
         assert label in source
 
 
-def test_manifest_pages_runner_and_screenshot_contracts_match() -> None:
+def test_manifest_runner_and_screenshot_evidence_contracts_match() -> None:
     from docs.capture import config as capture_config
     from docs.capture import run_all
-
-    index = (
-        REPO_ROOT / "docs" / "HOW_TO" / "GUI" / "README.md"
-    ).read_text(encoding="utf-8")
 
     for scenario_id, names in SCREENSHOT_NAMES.items():
         chapter = chapter_for(scenario_id)
@@ -271,19 +248,14 @@ def test_manifest_pages_runner_and_screenshot_contracts_match() -> None:
             "implementation": "verified",
             "review": "approved",
         }
-        assert chapter["destination"] == str(
-            HOW_TO_PAGES[scenario_id].relative_to(REPO_ROOT)
-        )
+        assert chapter["role"] == "evidence"
+        assert "destination" not in chapter
         assert tuple(
             Path(screenshot["path"]).name for screenshot in chapter["screenshots"]
         ) == names
         assert capture_config.screenshot_names_for(scenario_id) == names
         assert scenario_id in run_all.CAPTURE_FUNCTIONS
 
-        page = HOW_TO_PAGES[scenario_id].read_text(encoding="utf-8")
-        for name in names:
-            assert f"../../images/{scenario_id.lower()}/{name}" in page
-        assert HOW_TO_PAGES[scenario_id].name in index
 
 
 def test_interactive_screenshots_are_deterministic_pngs() -> None:

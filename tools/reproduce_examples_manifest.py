@@ -49,7 +49,7 @@ UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
     ),
     "examples/quickstart-labeled-rna-features.svg": (
         "Former Quickstart label example retained for one compatibility release after the "
-        "runnable recipe moved to its canonical How-to chapter."
+        "runnable recipe moved to its technical documentation owner."
     ),
     "examples/majani.svg": (
         "Linked from the Gallery but not embedded because the full-size SVG is too large "

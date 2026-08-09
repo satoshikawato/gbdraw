@@ -30,20 +30,19 @@
 
 ## Documentation
 
-| Guide | Description |
+| Route | Use it for |
 | --- | --- |
-| [Start here](./docs/TUTORIALS/README.md) | Learn the complete workflow from downloading the inputs to checking a first Circular or Linear figure. |
-| [Full documentation](./docs/DOCS.md) | Choose a guide by what you want to learn, do, understand, or look up. |
-| [Installation](./docs/INSTALL.md) | Hosted app, Bioconda, and local development installation. |
-| [Task guides](./docs/HOW_TO/README.md) | Adapt inputs, layout, comparisons, tracks, styling, sessions, and export to your own work. |
-| [Get the tutorial inputs](./docs/GETTING_TUTORIAL_DATA.md) | Download accession-pinned sequences from their databases and preserve the documented filenames. |
-| [Concepts & decisions](./docs/EXPLANATION/README.md) | Understand and choose a layout, interface, comparison method, or publication workflow. |
-| [Technical reference](./docs/REFERENCE/README.md) | Look up controls, options, schemas, APIs, compatibility, outputs, and source provenance. |
-| [Changelog](./CHANGELOG.md) | What changed, by version. |
-| [Contributing](./CONTRIBUTING.md) | Report a bug, set up a development environment, and submit a pull request. |
-| [Gallery](./docs/GALLERY.md) | Example plots and commands. |
-| [FAQ](./docs/FAQ.md) | Common questions and known limitations. |
-| [About](./docs/ABOUT.md) | Citation information and project background. |
+| [Tutorials](./docs/TUTORIALS/README.md) | Build complete, reproducible figures in the web app, on the command line, or from Python. |
+| [Technical documentation](./docs/REFERENCE/README.md) | Look up controls, options, schemas, APIs, compatibility, outputs, and source provenance. |
+| [FAQ](./docs/FAQ.md) | Choose a layout, interface, or comparison method and resolve common problems. |
+| [Gallery](./docs/GALLERY.md) | Inspect finished static and interactive figures before choosing a workflow. |
+
+The [documentation home](./docs/DOCS.md) links the four routes above. Supporting
+pages cover [installation](./docs/INSTALL.md), [tutorial
+inputs](./docs/GETTING_TUTORIAL_DATA.md), [citation and project
+background](./docs/ABOUT.md), and the [changelog](./CHANGELOG.md).
+See [Contributing](./CONTRIBUTING.md) to report a bug, set up a development
+environment, or submit a pull request.
 
 ## Use without local installation
 

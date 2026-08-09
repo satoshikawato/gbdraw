@@ -1,4 +1,4 @@
-[Documentation home](../DOCS.md) | [Output reference](output-formats-and-export.md) | [SVG hook inventory](../SVG_SEMANTIC_HOOKS.md)
+[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [Output formats](output-formats-and-export.md) | [SVG hook inventory](../SVG_SEMANTIC_HOOKS.md)
 
 # Interactive SVG and semantic-hook reference
 
@@ -15,12 +15,14 @@ may change after reverse-complement display or another rendering transformation.
 `protein_id` and `sourceProteinId` values are display and export metadata, not join keys.
 
 Consumers must fail closed when a biological identity is missing, ambiguous, or inconsistent.
-Every identity field supplied for one endpoint—including a rendered ID, stable feature ID, and
-source feature index—must resolve to the same feature in the same record. Do not recover a failed
+Every identity field supplied for one endpoint, including a rendered ID, stable feature ID, and
+source feature index, must resolve to the same feature in the same record. Do not recover a failed
 identity lookup by matching a public protein label.
 
 Interactive SVG adds embedded controls, searchable metadata, feature and match popups, group inspection, and supported sequence downloads. Static SVG may retain semantic groups without embedding the interactive application.
 
 Generated interactive output sanitizes input-derived text and markup. Untrusted input must not become executable `<script>` content or `on*` event-handler attributes. Species text accepts the documented limited markup for display, not arbitrary HTML execution.
 
-The [SVG ID and attribute inventory](../SVG_SEMANTIC_HOOKS.md) lists the exact integration tokens. This page owns their current meaning. Integration tests should assert semantic role, biological identity, and containment instead of exact path bytes.
+The [SVG ID and attribute inventory](../SVG_SEMANTIC_HOOKS.md) lists the exact
+integration tokens. This page documents their current meaning; path order and
+exact path bytes are not stable hooks.

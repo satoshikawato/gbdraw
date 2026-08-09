@@ -69,7 +69,7 @@ def _documentation_scenario_artifacts() -> set[str]:
         )
     )
     artifacts: set[str] = set()
-    for chapter in manifest["chapters"]:
+    for chapter in manifest["scenarios"]:
         artifacts.update(item["path"] for item in chapter["screenshots"])
         if chapter["execution"]["kind"] not in {"cli-recipe", "python-recipe"}:
             continue

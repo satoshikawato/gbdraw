@@ -35,20 +35,6 @@ PRIORITY_PATH = (
     / "shared"
     / "cds_gene_qualifier_priority.tsv"
 )
-STYLE_PAGE = (
-    REPO_ROOT
-    / "docs"
-    / "HOW_TO"
-    / "GUI"
-    / "style-features-labels-titles-and-legends.md"
-)
-PRESENTATION_PAGE = (
-    REPO_ROOT
-    / "docs"
-    / "HOW_TO"
-    / "GUI"
-    / "control-feature-visibility-shapes-strokes-and-overlaps.md"
-)
 SCREENSHOTS = {
     "H-GUI-11": (
         REPO_ROOT / "docs" / "images" / "h-gui-11" / "style-settings.png",
@@ -212,44 +198,14 @@ def test_presentation_accessibility_labels_are_public_ui_contracts() -> None:
         assert label in source
 
 
-def test_presentation_pages_match_scenarios_and_executable_values() -> None:
-    style = STYLE_PAGE.read_text(encoding="utf-8")
-    presentation = PRESENTATION_PAGE.read_text(encoding="utf-8")
-    for scenario_id, page_path in (
-        ("H-GUI-11", STYLE_PAGE),
-        ("H-GUI-12", PRESENTATION_PAGE),
-    ):
+def test_presentation_evidence_matches_scenarios_and_screenshots() -> None:
+    for scenario_id in ("H-GUI-11", "H-GUI-12"):
         chapter = chapter_for(scenario_id)
-        assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
+        assert chapter["role"] == "evidence"
+        assert "destination" not in chapter
         assert tuple(
             REPO_ROOT / screenshot["path"] for screenshot in chapter["screenshots"]
         ) == SCREENSHOTS[scenario_id]
-
-    for value in (
-        "NC_012920.1",
-        "16,569 bp",
-        "soft_pastels",
-        "CDS",
-        "gene",
-        "never `product`",
-        "COX1",
-        "ATP6",
-        "styled_features_labels_legend.svg",
-    ):
-        assert value in style
-    for value in (
-        "NC_012920.1",
-        "16,569 bp",
-        "D-loop",
-        "Exclude from matching",
-        "#263238",
-        "2.5",
-        "22 tRNAs",
-        "feature_visibility_shapes.svg",
-    ):
-        assert value in presentation
-    assert "not cropped or split" in style
-    assert "partial linear region" in presentation
 
 
 def test_committed_presentation_screenshots_are_full_pinned_viewports() -> None:

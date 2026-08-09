@@ -129,5 +129,5 @@ order, labels, colors, and parity with the Python API rendering.
 
 ## Next steps
 
-- [Add region annotations and track slots](../../HOW_TO/CLI/add-region-annotations-and-track-slots.md)
+- [Annotation table fields](../../REFERENCE/input-formats-and-tsv-schemas.md#annotation-table-fields)
 - [Review track and annotation schemas](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)

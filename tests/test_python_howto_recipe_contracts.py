@@ -24,6 +24,7 @@ SCENARIO_MANIFEST = REPO_ROOT / "docs" / "scenarios" / "manifest.json"
 FIXTURE_ROOT = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"
 FIXTURE_MANIFEST = FIXTURE_ROOT / "manifest.json"
 RUNNER = "docs/recipes/run_python_scenarios.py"
+EVIDENCE_REGISTRY = REPO_ROOT / "docs" / "internal" / "SCENARIO_EVIDENCE.md"
 SCENARIO_IDS = ("H-PY-01", "H-PY-02", "H-PY-03", "H-PY-04", "H-PY-05")
 FIXTURE_FILES = {
     "H-PY-01": (
@@ -60,100 +61,72 @@ def _chapters() -> dict[str, dict[str, object]]:
     manifest = json.loads(SCENARIO_MANIFEST.read_text(encoding="utf-8"))
     return {
         chapter["id"]: chapter
-        for chapter in manifest["chapters"]
+        for chapter in manifest["scenarios"]
         if chapter["id"] in SCENARIO_IDS
     }
 
 
-def test_python_howto_pages_match_their_approved_scenarios() -> None:
+def test_python_evidence_entries_match_their_approved_scenarios() -> None:
     chapters = _chapters()
+    registry = EVIDENCE_REGISTRY.read_text(encoding="utf-8")
 
     assert set(chapters) == set(SCENARIO_IDS)
     for scenario_id, chapter in chapters.items():
-        destination = REPO_ROOT / str(chapter["destination"])
-        source = destination.read_text(encoding="utf-8")
-
-        assert chapter["role"] == "how-to"
+        assert chapter["role"] == "evidence"
+        assert "destination" not in chapter
         assert chapter["surface"] == "python"
         assert chapter["execution"]["kind"] == "python-recipe"
         assert chapter["execution"]["path"] == RUNNER
+        assert chapter["execution"]["source"] == (
+            "docs/internal/SCENARIO_EVIDENCE.md"
+        )
         assert chapter["status"] == {
             "implementation": "verified",
             "review": "approved",
         }
-        assert source.startswith("[Documentation home]")
-        assert f"# {chapter['title']}" in source
-        assert "## Prerequisites" in source
-        assert "## Verification" in source
-        assert "## Troubleshooting" in source
-        assert "../../GETTING_TUTORIAL_DATA.md" in source
-        assert "../../REFERENCE/" in source
-        assert "tests/test_inputs" not in source
-        assert "lambda_two_contigs" not in source
-        assert "lambda_left" not in source
-        assert "lambda_right" not in source
-        assert "http://" not in source
-        assert "https://" in source
+        assert registry.count(f"<!-- executable:{scenario_id}:start -->") == 1
+        assert registry.count(f"<!-- executable:{scenario_id}:end -->") == 1
 
         for output_name in chapter["execution"]["expected_outputs"]:
-            assert output_name in source
+            assert output_name in extract_executable_block(chapter, language="python")
             assert (PUBLISHED_IMAGE_ROOT / scenario_id.lower() / output_name).is_file()
 
-    multi_record_source = (
-        REPO_ROOT / str(chapters["H-PY-01"]["destination"])
-    ).read_text(encoding="utf-8")
-    assert "four complete, naturally circular" in " ".join(
-        multi_record_source.split()
-    )
-    assert "linear region" not in multi_record_source
-    assert "BGC0000708" not in multi_record_source
-    assert "Gallery" not in multi_record_source
 
-
-def test_python_howtos_use_authoritative_sequences_and_pinned_support_files() -> None:
+def test_python_evidence_uses_pinned_fixture_files() -> None:
     fixture_manifest = json.loads(FIXTURE_MANIFEST.read_text(encoding="utf-8"))
     chapters = _chapters()
 
     for scenario_id, file_ids in FIXTURE_FILES.items():
-        source = (REPO_ROOT / str(chapters[scenario_id]["destination"])).read_text(
-            encoding="utf-8"
-        )
+        recipe = extract_executable_block(chapters[scenario_id], language="python")
         for file_id in file_ids:
             entry = fixture_manifest["files"][file_id]
             fixture_path = FIXTURE_ROOT / entry["relativePath"]
             payload = fixture_path.read_bytes()
 
             if entry["inputType"] in {"genbank", "fasta"}:
-                assert entry["relativePath"] not in source
-                provenance = entry["provenance"]
-                authoritative_urls = [provenance["sourceUrl"]]
-                verification = provenance.get("mirrorVerification")
-                if verification:
-                    authoritative_urls.append(
-                        verification["authoritativeRequestUrl"]
-                    )
-                assert any(url in source for url in authoritative_urls)
                 for record in entry.get("records", []):
-                    assert record["id"] in source
+                    assert record["id"] in recipe or Path(entry["relativePath"]).name in recipe
             else:
-                assert entry["relativePath"] in source
-                assert entry["sha256"] in source
+                assert Path(entry["relativePath"]).name in recipe
             assert len(payload) == entry["sizeBytes"]
             assert hashlib.sha256(payload).hexdigest() == entry["sha256"]
 
 
-def test_every_python_howto_marker_has_one_public_owner_and_compiles() -> None:
+def test_every_python_evidence_marker_has_one_internal_owner_and_compiles() -> None:
     public_sources = [
         path.read_text(encoding="utf-8")
         for path in (REPO_ROOT / "docs").rglob("*.md")
         if "internal" not in path.relative_to(REPO_ROOT / "docs").parts
     ]
+    registry = EVIDENCE_REGISTRY.read_text(encoding="utf-8")
 
     for scenario_id in SCENARIO_IDS:
         start = f"<!-- executable:{scenario_id}:start -->"
         end = f"<!-- executable:{scenario_id}:end -->"
-        assert sum(source.count(start) for source in public_sources) == 1
-        assert sum(source.count(end) for source in public_sources) == 1
+        assert sum(source.count(start) for source in public_sources) == 0
+        assert sum(source.count(end) for source in public_sources) == 0
+        assert registry.count(start) == 1
+        assert registry.count(end) == 1
 
         chapter = load_chapter(
             scenario_id,
@@ -161,7 +134,7 @@ def test_every_python_howto_marker_has_one_public_owner_and_compiles() -> None:
             runner_path=RUNNER,
         )
         recipe = extract_executable_block(chapter, language="python")
-        compile(recipe, str(chapter["destination"]), "exec")
+        compile(recipe, str(chapter["execution"]["source"]), "exec")
         for output_name in chapter["execution"]["expected_outputs"]:
             assert output_name in recipe
 
@@ -256,7 +229,7 @@ def test_every_python_howto_marker_has_one_public_owner_and_compiles() -> None:
     assert "gbdraw.session_io" not in typed_recipe
 
 
-def test_python_howto_recipes_regenerate_from_a_clean_external_context(
+def test_python_evidence_recipes_regenerate_from_a_clean_external_context(
     tmp_path: Path,
 ) -> None:
     environment = os.environ.copy()

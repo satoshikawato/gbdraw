@@ -13,6 +13,11 @@ MANIFEST = DOCS_ROOT / "scenarios" / "manifest.json"
 TUTORIAL_DATA_MANIFEST = REPO_ROOT / "gbdraw" / "web" / "tutorial-data" / "manifest.json"
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[([^\]\n]+)\]\(([^)\n]+)\)")
 FIRST_H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
+RETIRED_PUBLIC_DIRS = {"HOW" + "_TO", "EXPLANA" + "TION"}
+ACTIVE_INTERNAL_DOCS = (
+    DOCS_ROOT / "internal" / "DOCUMENTATION_SIMPLIFICATION_IMPLEMENTATION_PLAN_2026-08-09.md",
+    DOCS_ROOT / "internal" / "SCENARIO_EVIDENCE.md",
+)
 
 
 def _markdown_links(path: Path) -> list[tuple[str, str]]:
@@ -33,16 +38,7 @@ def _local_target(source: Path, raw_target: str) -> Path | None:
 
 def _tutorial_chapters() -> list[dict[str, object]]:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    return [chapter for chapter in manifest["chapters"] if chapter["role"] == "tutorial"]
-
-
-def _procedural_chapters() -> list[dict[str, object]]:
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    return [
-        chapter
-        for chapter in manifest["chapters"]
-        if chapter["role"] in {"tutorial", "how-to"}
-    ]
+    return [chapter for chapter in manifest["scenarios"] if chapter["role"] == "tutorial"]
 
 
 def _tutorial_manifest() -> dict[str, object]:
@@ -67,7 +63,7 @@ def _public_docs() -> list[Path]:
 def test_surface_indexes_list_each_canonical_tutorial_once_with_its_h1() -> None:
     manifest = _tutorial_manifest()
     chapters = [
-        chapter for chapter in manifest["chapters"] if chapter["role"] == "tutorial"
+        chapter for chapter in manifest["scenarios"] if chapter["role"] == "tutorial"
     ]
     chapter_by_id = {chapter["id"]: chapter for chapter in chapters}
     indexed: list[Path] = []
@@ -78,6 +74,7 @@ def test_surface_indexes_list_each_canonical_tutorial_once_with_its_h1() -> None
         surface_chapters = [
             chapter_by_id[project["variants"][surface.casefold()]]
             for project in manifest["tutorial_projects"].values()
+            if surface.casefold() in project["variants"]
         ]
         links = [
             (label, target)
@@ -111,7 +108,7 @@ def test_procedural_docs_acquire_sequences_from_authoritative_sources() -> None:
     ]
     failures: list[str] = []
 
-    for chapter in _procedural_chapters():
+    for chapter in _tutorial_chapters():
         scenario_id = str(chapter["id"])
         destination = REPO_ROOT / str(chapter["destination"])
         source = destination.read_text(encoding="utf-8")
@@ -125,13 +122,6 @@ def test_procedural_docs_acquire_sequences_from_authoritative_sources() -> None:
                 failures.append(f"{scenario_id}: bundled sequence {relative_path}")
 
             record_ids = [str(record["id"]) for record in file.get("records", [])]
-            is_reader_input = chapter["role"] == "tutorial" or (
-                Path(relative_path).name in source
-                or any(record_id in source for record_id in record_ids)
-            )
-            if not is_reader_input:
-                continue
-
             provenance = file["provenance"]
             source_urls = [str(provenance["sourceUrl"])]
             verification = provenance.get("mirrorVerification")
@@ -166,7 +156,7 @@ def test_procedural_docs_acquire_sequences_from_authoritative_sources() -> None:
 def test_procedural_docs_do_not_link_prebuilt_sessions() -> None:
     failures: list[str] = []
 
-    for chapter in _procedural_chapters():
+    for chapter in _tutorial_chapters():
         destination = REPO_ROOT / str(chapter["destination"])
         source = destination.read_text(encoding="utf-8")
         if "gbdraw/web/gallery/sessions/" in source:
@@ -195,20 +185,20 @@ def test_tutorial_root_routes_by_surface() -> None:
 def test_documentation_landing_pages_state_distinct_information_roles() -> None:
     expectations = {
         TUTORIAL_INDEX: (
-            "# Start here: gbdraw Tutorials",
-            "Every row below is a Tutorial",
-        ),
-        DOCS_ROOT / "HOW_TO" / "README.md": (
-            "# Task guides",
-            "focused",
-        ),
-        DOCS_ROOT / "EXPLANATION" / "README.md": (
-            "# Concepts & decisions",
-            "do not own runnable procedures",
+            "# Tutorials",
+            "complete figure",
         ),
         DOCS_ROOT / "REFERENCE" / "README.md": (
-            "# Technical reference",
-            "lookup material for exact current facts",
+            "# Technical documentation",
+            "exact",
+        ),
+        DOCS_ROOT / "FAQ.md": (
+            "# Frequently asked questions",
+            "Which",
+        ),
+        DOCS_ROOT / "GALLERY.md": (
+            "# Gallery",
+            "examples",
         ),
     }
 
@@ -217,39 +207,42 @@ def test_documentation_landing_pages_state_distinct_information_roles() -> None:
         for phrase in required:
             assert phrase in source
 
-    docs_home = (DOCS_ROOT / "DOCS.md").read_text(encoding="utf-8")
-    assert "Worked examples" not in docs_home
-
-
-def test_every_advanced_project_tutorial_links_to_a_task_guide() -> None:
-    manifest = _tutorial_manifest()
-    chapter_by_id = {
-        chapter["id"]: chapter
-        for chapter in manifest["chapters"]
-        if chapter["role"] == "tutorial"
+def test_readme_and_docs_landing_route_to_the_four_public_destinations() -> None:
+    expected = {
+        TUTORIAL_INDEX.resolve(),
+        (DOCS_ROOT / "REFERENCE" / "README.md").resolve(),
+        (DOCS_ROOT / "FAQ.md").resolve(),
+        (DOCS_ROOT / "GALLERY.md").resolve(),
     }
-    failures: list[str] = []
-
-    for project in list(manifest["tutorial_projects"].values())[2:]:
-        for scenario_id in project["variants"].values():
-            chapter = chapter_by_id[scenario_id]
-            source = (REPO_ROOT / str(chapter["destination"])).read_text(
-                encoding="utf-8"
-            )
-            if "HOW_TO/" not in source:
-                failures.append(str(scenario_id))
-
-    assert failures == []
-
-
-def test_readme_and_docs_landing_route_through_the_tutorial_index() -> None:
     for source in (REPO_ROOT / "README.md", DOCS_ROOT / "DOCS.md"):
         targets = {
             target
             for _, raw_target in _markdown_links(source)
             if (target := _local_target(source, raw_target)) is not None
         }
-        assert TUTORIAL_INDEX.resolve() in targets
+        assert expected <= targets
+
+
+def test_public_docs_do_not_link_to_retired_categories() -> None:
+    offenders = [
+        f"{source.relative_to(REPO_ROOT)} -> {raw_target}"
+        for source in _public_docs()
+        for _, raw_target in _markdown_links(source)
+        if (target := _local_target(source, raw_target)) is not None
+        and RETIRED_PUBLIC_DIRS.intersection(target.parts)
+    ]
+    assert offenders == []
+
+
+def test_active_internal_documentation_local_links_resolve() -> None:
+    missing = [
+        f"{source.relative_to(REPO_ROOT)} -> {raw_target}"
+        for source in ACTIVE_INTERNAL_DOCS
+        for _, raw_target in _markdown_links(source)
+        if (target := _local_target(source, raw_target)) is not None
+        and not target.exists()
+    ]
+    assert missing == []
 
 
 def test_public_tutorial_labels_route_to_the_canonical_index() -> None:

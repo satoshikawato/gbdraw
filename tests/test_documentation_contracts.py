@@ -20,9 +20,10 @@ BROWSER_ACCEPTANCE = REPO_ROOT / "tests" / "run_losat_cache_browser_acceptance.p
 CURRENT_TASK_DOCS = (
     "docs/CLI_Reference.md",
     "docs/FAQ.md",
-    "docs/HOW_TO/GUI/save-restore-undo-and-reproduce-work.md",
-    "docs/HOW_TO/CLI/save-and-regenerate-sessions.md",
-    "docs/HOW_TO/PYTHON/build-typed-requests-and-round-trip-sessions.md",
+    "docs/REFERENCE/web-app.md",
+    "docs/TUTORIALS/GUI/create-and-resume-an-interactive-figure.md",
+    "docs/TUTORIALS/CLI/create-and-resume-an-interactive-figure.md",
+    "docs/TUTORIALS/PYTHON/create-and-resume-an-interactive-figure.md",
 )
 
 
@@ -109,9 +110,9 @@ def test_current_compatibility_reference_and_history_have_distinct_roles() -> No
     current = SESSION_COMPATIBILITY.read_text(encoding="utf-8")
     history = COMPATIBILITY_HISTORY.read_text(encoding="utf-8")
 
-    assert "this page is the current support authority" in current
+    assert "this page documents current support" in current
     assert "# Session and request compatibility history" in history
-    assert "canonical owner of current support" in history
+    assert "documents current support" in history
     assert "This page is the current compatibility reference" not in history
 
 
@@ -120,11 +121,12 @@ def test_generated_cli_inventory_delegates_current_semantics() -> None:
     semantics = (REPO_ROOT / "docs/REFERENCE/command-line.md").read_text(
         encoding="utf-8"
     )
+    inventory_prose = " ".join(inventory.split())
 
     assert "# Generated command-line option inventory" in inventory
     assert "[command-line reference](./REFERENCE/command-line.md)" in inventory
-    assert "canonical owner of current CLI semantics" in inventory
-    assert "This page is the canonical owner of current command semantics" in semantics
+    assert "documents current CLI semantics" in inventory_prose
+    assert "This page documents current command semantics" in semantics
 
 
 def test_python_api_describes_its_four_output_forms() -> None:

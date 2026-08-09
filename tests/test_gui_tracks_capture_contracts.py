@@ -20,16 +20,6 @@ TOBACCO_ROOT = (
     / "tutorial-data"
     / "tobacco-plastome-regions"
 )
-QUANTITATIVE_PAGE = (
-    REPO_ROOT / "docs" / "HOW_TO" / "GUI" / "add-depth-gc-and-skew-tracks.md"
-)
-ANNOTATION_PAGE = (
-    REPO_ROOT
-    / "docs"
-    / "HOW_TO"
-    / "GUI"
-    / "add-region-annotations-and-track-slots.md"
-)
 SCREENSHOTS = {
     "H-GUI-09": (
         REPO_ROOT / "docs" / "images" / "h-gui-09" / "track-settings.png",
@@ -181,49 +171,17 @@ def test_track_capture_accessibility_labels_are_part_of_the_public_ui() -> None:
         assert label in source
 
 
-def test_track_pages_match_the_approved_manifest_and_executable_values() -> None:
-    quantitative = QUANTITATIVE_PAGE.read_text(encoding="utf-8")
-    annotation = ANNOTATION_PAGE.read_text(encoding="utf-8")
-    for scenario_id, page_path in (
-        ("H-GUI-09", QUANTITATIVE_PAGE),
-        ("H-GUI-10", ANNOTATION_PAGE),
-    ):
+def test_track_evidence_matches_the_approved_manifest() -> None:
+    for scenario_id in ("H-GUI-09", "H-GUI-10"):
         chapter = chapter_for(scenario_id)
-        assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
+        assert chapter["role"] == "evidence"
+        assert "destination" not in chapter
         assert chapter["execution"]["path"] == (
             "docs/capture/flows/how_to/tracks.py"
         )
         assert tuple(
             REPO_ROOT / screenshot["path"] for screenshot in chapter["screenshots"]
         ) == SCREENSHOTS[scenario_id]
-
-    for value in (
-        "AP027133.1",
-        "606,194 bp",
-        "607",
-        "12.446x",
-        "74.546x",
-        "Depth Window",
-        "1000",
-        "quantitative_tracks.svg",
-    ):
-        assert value in quantitative
-    for value in (
-        "NC_001879.2",
-        "155,943 bp",
-        "plastome_regions",
-        "LSC",
-        "IRb",
-        "SSC",
-        "IRa",
-        "AT skew",
-        "region_annotations_and_slots.svg",
-    ):
-        assert value in annotation
-    assert "cropped" in quantitative
-    assert "split" in quantitative
-    assert "partial linear region" in annotation
-
 
 def test_committed_track_screenshots_are_full_pinned_viewports() -> None:
     for paths in SCREENSHOTS.values():

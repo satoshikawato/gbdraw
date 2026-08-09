@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [All Tutorials](../README.md) | [Web app how-to guides](../../HOW_TO/GUI/README.md) | [Web app reference](../../REFERENCE/web-app.md)
+[Documentation home](../../DOCS.md) | [All Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md) | [FAQ](../../FAQ.md) | [Gallery](../../GALLERY.md)
 
 # Web app Tutorials
 
@@ -27,4 +27,7 @@ session.
 9. [Highlight mitochondrial features in the web app](highlight-mitochondrial-features.md)
 10. [Build a quantitative genome map in the web app](build-a-quantitative-genome-map.md)
 
-Each Tutorial is captured from a fresh browser context through the visible interface. Task-specific alternatives follow in the [Web app how-to guides](../../HOW_TO/GUI/README.md).
+Each Tutorial is captured from a fresh browser context through the visible
+interface. Use the [web app technical
+documentation](../../REFERENCE/web-app.md) for controls and alternatives for
+specific tasks.

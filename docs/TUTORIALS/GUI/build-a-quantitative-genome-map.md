@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md)
 
 # Build a quantitative genome map in the web app
 
@@ -86,6 +86,5 @@ Select **SVG** to save `quantitative_genome_map.svg`.
 
 ## Next steps
 
-- [Add depth, GC, and skew tracks](../../HOW_TO/GUI/add-depth-gc-and-skew-tracks.md)
-- [Understand tracks, axes, and layout](../../EXPLANATION/understand-tracks-axes-and-layout.md)
+- [Review tracks, axes, and annotations](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)
 - [Review the depth TSV schema](../../REFERENCE/input-formats-and-tsv-schemas.md)

@@ -38,7 +38,7 @@ REFERENCE_FILES = {
 }
 DOCUMENTATION_PAGES = (
     *(REFERENCE_ROOT / name for name in REFERENCE_FILES),
-    *(REPO_ROOT / "docs" / "EXPLANATION").glob("*.md"),
+    REPO_ROOT / "docs" / "FAQ.md",
     REPO_ROOT / "docs" / "GALLERY.md",
     REPO_ROOT / "docs" / "PALETTE_EXPLORER.md",
 )
@@ -189,14 +189,15 @@ def test_public_reference_rejects_artificially_split_lambda_fixture() -> None:
         path.read_text(encoding="utf-8")
         for path in sorted(REFERENCE_ROOT.glob("*.md"))
     )
+    public_prose = " ".join(public_reference.split())
 
     assert "lambda_two_contigs" not in public_reference
     assert "lambda_left" not in public_reference
     assert "lambda_right" not in public_reference
-    assert "naturally single sequence is never divided" in public_reference
+    assert "does not split one biological sequence into artificial records" in public_prose
 
 
-def test_reference_explanation_and_auxiliary_local_links_resolve() -> None:
+def test_technical_faq_and_gallery_local_links_resolve() -> None:
     missing: list[str] = []
     for source in DOCUMENTATION_PAGES:
         for raw_target in MARKDOWN_LINK_RE.findall(source.read_text(encoding="utf-8")):
@@ -220,11 +221,9 @@ def test_comparison_and_gallery_examples_use_whole_lambda_de3_and_five_bgcs() ->
         )
     )
 
-    assert "NC_001416.1" in comparison
-    assert "NC_042057.1" in comparison
-    assert re.search(r"six\s+raw rows", comparison)
-    assert re.search(r"397\s+raw rows", comparison)
-    assert "T4" not in comparison
+    for method in ("LOSATN", "TLOSATX", "LOSATP Pairwise", "Similarity groups", "Collinear"):
+        assert method in comparison
+    assert "not a phylogenetic orthogroup" in " ".join(comparison.split())
     assert fixture_manifest["fixtures"]["lambda-de3-comparison"]["expectedSemantics"][
         "recordsAreWholeCanonicalSources"
     ] is True

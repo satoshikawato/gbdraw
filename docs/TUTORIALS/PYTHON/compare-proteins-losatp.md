@@ -194,5 +194,5 @@ record aligned on `og_1`.
 
 ## Next steps
 
-- [Browse focused Python task guides](../../HOW_TO/PYTHON/README.md)
-- [Choose a genome-comparison method](../../EXPLANATION/choose-a-genome-comparison-method.md)
+- [Python API technical documentation](../../REFERENCE/python-api.md)
+- [Choose a genome-comparison method](../../FAQ.md#which-comparison-method-should-i-use)

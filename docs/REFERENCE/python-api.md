@@ -1,4 +1,4 @@
-[Documentation home](../DOCS.md) | [Python Tutorial](../TUTORIALS/PYTHON/README.md) | [Python how-to guides](../HOW_TO/PYTHON/README.md) | [Typed requests](typed-requests.md)
+[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [Technical documentation](README.md) | [FAQ](../FAQ.md)
 
 # Python API reference
 
@@ -13,7 +13,11 @@ draw_circular(records: RecordCollection, *, options: CircularOptions | None = No
 draw_linear(records: RecordCollection, *, options: LinearOptions | None = None, layout: LinearLayout | None = None) -> Diagram
 ```
 
-`read_genbank()` returns every record from every supplied file. `read_gff()` requires equally sized GFF3 and FASTA path lists and matching sequence IDs. Both drawing functions reject an empty record collection, non-`SeqRecord` members, and option or layout objects for the wrong mode.
+`read_genbank()` returns every record from every supplied file. `read_gff()` requires equally sized GFF3 and FASTA path lists and matching sequence IDs. Each drawing function accepts one Biopython `SeqRecord` or a sequence of records. Both reject an empty record collection, non-`SeqRecord` members, and option or layout objects for the wrong mode.
+
+The reader helpers accept filesystem paths, not open file handles. If another
+library has already parsed an upload or in-memory stream, pass its Biopython
+`SeqRecord` values directly to `draw_circular()` or `draw_linear()`.
 
 ## Package-root exports
 
@@ -68,6 +72,10 @@ E-value, bitscore, and identity must be finite and non-negative; identity is lim
 
 `CircularTrackOptions` and `LinearTrackOptions` accept an ordered `slots` sequence and a zero-based `axis_index`. Circular tracks also accept `center_reserved_radius`. An explicit slot sequence is authoritative; the axis index must agree with the selected mode and slot types.
 
+Package-root `CircularTrackOptions.slots` contains
+`gbdraw.api.CircularTrackSlot` values. This cross-namespace type is part of the
+public track contract.
+
 Each `DepthTrackOptions` represents one logical series. `source` is one path or `DataFrame` for one displayed record, or one path, `DataFrame`, or `None` per record. `label`, `color`, tick intervals, and tick font size default to `None`. `height` is supported only by Linear diagrams; Circular options reject it.
 
 ## Circular options
@@ -103,6 +111,9 @@ Important `LinearComparisonOptions` defaults are:
 
 `protein_mode` accepts `none`, `pairwise`, `orthogroup`, or `collinear`. The `orthogroup` token means gbdraw Similarity groups; it does not claim phylogenetic orthology.
 
+`LinearComparisonOptions(blast_files=...)` consumes prepared comparison TSV
+files. Supplying those files does not start a nucleotide or protein search.
+
 ## Canonical label overrides
 
 `config_overrides` uses canonical dotted leaf paths:
@@ -116,7 +127,8 @@ Important `LinearComparisonOptions` defaults are:
 | `labels.linear.rotation` | finite degrees |
 | `labels.rendering` | `auto`, `embedded_only`, `external_only` |
 
-Fresh Python requests reject the retired flat label aliases and old `canvas.*show_labels` paths. Supported persisted-session readers perform compatibility migration; new code should not emit retired names.
+New requests use these dotted paths. Retired flat label names and
+`canvas.*show_labels` paths are not accepted.
 
 ## `Diagram` output
 
@@ -129,6 +141,10 @@ Fresh Python requests reject the retired flat label aliases and old `canvas.*sho
 | `to_bytes(format="svg")` | SVG, interactive SVG, PNG, PDF, EPS, or PS bytes |
 | `save(path, *, format=None, overwrite=False)` | writes exactly one file and returns its `Path` |
 
+For static SVG, `to_svg()` equals
+`to_bytes("svg").decode("utf-8")`. `save(..., format="svg")` writes that same
+UTF-8 payload.
+
 PNG, PDF, EPS, and PS require CairoSVG. `save()` infers a known format from the path unless `format` is explicit and refuses to replace an existing file unless `overwrite=True`.
 
 ## Errors
@@ -138,7 +154,7 @@ Catch `gbdraw.exceptions.GbdrawError` for expected gbdraw failures and `Validati
 ## Related
 
 - [Draw and save your first genome diagram from Python](../TUTORIALS/PYTHON/first-genome-diagram.md)
-- [Python how-to guides](../HOW_TO/PYTHON/README.md)
+- [Python Tutorials](../TUTORIALS/PYTHON/README.md)
 - [Typed request reference](typed-requests.md)
 - [Session and request compatibility](session-and-request-compatibility.md)
 - [Output format and export reference](output-formats-and-export.md)

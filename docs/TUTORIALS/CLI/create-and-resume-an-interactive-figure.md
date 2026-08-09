@@ -1,4 +1,4 @@
-[Home](../../DOCS.md) | [Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [CLI sessions](../../HOW_TO/CLI/save-and-regenerate-sessions.md)
+[Home](../../DOCS.md) | [Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [Session compatibility](../../REFERENCE/session-and-request-compatibility.md)
 
 # Create an interactive figure and reproduce it from a CLI session
 
@@ -111,6 +111,5 @@ browser.
 
 ## Next steps
 
-- [Save and regenerate CLI sessions](../../HOW_TO/CLI/save-and-regenerate-sessions.md)
-- [Export static and interactive formats](../../HOW_TO/CLI/export-static-and-interactive-outputs.md)
-- [Review session compatibility](../../REFERENCE/session-and-request-compatibility.md)
+- [Review session and request compatibility](../../REFERENCE/session-and-request-compatibility.md)
+- [Review output formats and export](../../REFERENCE/output-formats-and-export.md)

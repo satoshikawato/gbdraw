@@ -168,5 +168,5 @@ order, axes, tick labels, colors, and legend with your SVG.
 
 ## Next steps
 
-- [Add tracks, annotations, colors, and labels](../../HOW_TO/PYTHON/add-tracks-annotations-colors-and-labels.md)
+- [Review Python layout and track options](../../REFERENCE/python-api.md#layout-and-track-options)
 - [Review depth TSV schemas](../../REFERENCE/input-formats-and-tsv-schemas.md)

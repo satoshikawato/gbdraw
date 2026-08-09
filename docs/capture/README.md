@@ -1,6 +1,6 @@
 # Documentation capture
 
-This directory contains the implemented executable browser journeys listed in `config.py`. `run_all.py` is the cross-surface documentation orchestrator: it runs those GUI journeys and directly calls the canonical CLI and Python recipe APIs in `docs/recipes/`. It does not reimplement recipes or launch nested runner subprocesses.
+This directory contains the executable browser journeys listed in `config.py`. `run_all.py` is the cross-surface evidence orchestrator: it runs those GUI journeys and directly calls the CLI and Python recipe APIs in `docs/recipes/`. It does not reimplement recipes or launch nested runner subprocesses.
 
 For GUI scenarios, the runner starts the packaged web app on `127.0.0.1`,
 uploads accession- and checksum-verified frozen test copies through visible
@@ -121,4 +121,4 @@ python docs/capture/run_all.py --scenario H-GUI-15 --tier core --check
 
 GUI tiers are cumulative. The first GUI run can take a few minutes while the packaged Python diagram worker starts. Worker and generation waits are bounded at three minutes each. CLI and Python recipes may still be run through their standalone runners for surface-specific development; `run_all.py` is the authoritative whole-documentation entry point.
 
-After regeneration, inspect every directory named by the manifest at normal document width. Pixel comparison detects stale committed images. The semantic checks separately verify accessions, complete sequence lengths and topology, feature and comparison counts, track ordering and axes, popup metadata, exported evidence, legend placement, and static-SVG safety.
+After regeneration, inspect every published Tutorial image directory at normal document width. Pixel comparison detects stale committed images. The semantic checks separately verify accessions, complete sequence lengths and topology, feature and comparison counts, track ordering and axes, popup metadata, exported evidence, legend placement, and static-SVG safety.

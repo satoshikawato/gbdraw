@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md)
 
 # Create and export your first circular genome diagram
 
@@ -102,6 +102,6 @@ In the **Result Preview** toolbar, select **SVG**.
 ## Next steps
 
 - [Create a Linear layout](first-linear-genome-diagram.md)
-- [Customize plot colors and labels](../../HOW_TO/GUI/style-features-labels-titles-and-legends.md)
+- [Review feature-presentation rules](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
 - [Compare genomes](compare-genomes-losatn.md)
-- [Save and restore an interactive session](../../HOW_TO/GUI/save-restore-undo-and-reproduce-work.md)
+- [Save and restore an interactive session](../../REFERENCE/session-and-request-compatibility.md)

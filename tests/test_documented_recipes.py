@@ -36,7 +36,9 @@ def _local_target(source: Path, raw_target: str) -> Path | None:
 def _canonical_destinations_by_source() -> dict[Path, set[Path]]:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     destinations: dict[Path, set[Path]] = defaultdict(set)
-    for chapter in manifest["chapters"]:
+    for chapter in manifest["scenarios"]:
+        if "destination" not in chapter:
+            continue
         destination = (REPO_ROOT / chapter["destination"]).resolve()
         for source in chapter["sources"]:
             destinations[(REPO_ROOT / source).resolve()].add(destination)
@@ -77,6 +79,7 @@ def test_legacy_paths_are_never_canonical_chapter_destinations() -> None:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     destinations = {
         (REPO_ROOT / chapter["destination"]).resolve()
-        for chapter in manifest["chapters"]
+        for chapter in manifest["scenarios"]
+        if "destination" in chapter
     }
     assert destinations.isdisjoint(path.resolve() for path in LEGACY_ROUTERS)

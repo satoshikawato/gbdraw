@@ -175,5 +175,5 @@ coordinates or treat missing depth as zero.
 
 ## Next steps
 
-- [Add depth, GC, and skew tracks](../../HOW_TO/CLI/add-depth-gc-and-skew-tracks.md)
+- [Review tracks, axes, and annotations](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)
 - [Review depth TSV schemas](../../REFERENCE/input-formats-and-tsv-schemas.md)

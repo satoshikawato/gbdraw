@@ -1,15 +1,16 @@
-[Documentation home](../DOCS.md) | **Start here** | [Task guides](../HOW_TO/README.md) | [Concepts & decisions](../EXPLANATION/README.md) | [Technical reference](../REFERENCE/README.md)
+[Documentation home](../DOCS.md) | **Tutorials** | [Technical documentation](../REFERENCE/README.md) | [FAQ](../FAQ.md) | [Gallery](../GALLERY.md)
 
-# Start here: gbdraw Tutorials
+# Tutorials
 
 Choose what you want to learn, then open the workflow for the interface you use.
-Each row builds the same biological figure in the web app, from the command
-line, or from Python.
+Each row builds the same complete figure in the web app, from the command line,
+or from Python.
 
-Every row below is a Tutorial. The first two are foundational lessons; the
-remaining rows are advanced project Tutorials that teach a complete finished
-figure. Use a [Task guide](../HOW_TO/README.md) when you already know the basics
-and need to adapt one focused technique to your own data.
+Every row below is a Tutorial. Start here with one of the first two projects,
+which teach a first Circular or Linear figure. The remaining rows cover more
+advanced finished figures. Use the [Technical
+documentation](../REFERENCE/README.md) when you need to adapt an exact input,
+option, comparison, track, session, or export behavior.
 
 ## Choose a tutorial
 
@@ -29,4 +30,4 @@ and need to adapt one focused technique to your own data.
 Browse the same projects by interface in the [web app](GUI/README.md),
 [command-line](CLI/README.md), and [Python](PYTHON/README.md) indexes.
 
-[Documentation home](../DOCS.md) | **Start here** | [Task guides](../HOW_TO/README.md) | [Concepts & decisions](../EXPLANATION/README.md) | [Technical reference](../REFERENCE/README.md)
+[Documentation home](../DOCS.md) | **Tutorials** | [Technical documentation](../REFERENCE/README.md) | [FAQ](../FAQ.md) | [Gallery](../GALLERY.md)

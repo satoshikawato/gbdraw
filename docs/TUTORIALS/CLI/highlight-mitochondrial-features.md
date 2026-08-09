@@ -215,5 +215,5 @@ the SVG still contains the same complete `NC_012920.1` sequence context.
 
 ## Next steps
 
-- [Set colors, labels, visibility, shapes, and strokes](../../HOW_TO/CLI/set-colors-labels-visibility-shapes-and-strokes.md)
+- [Review feature-presentation rules](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
 - [Review feature-rule and label schemas](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)

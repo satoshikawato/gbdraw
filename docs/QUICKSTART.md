@@ -1,4 +1,4 @@
-[Documentation home](./DOCS.md) | [Installation](./INSTALL.md) | [Start here](./TUTORIALS/README.md) | [Task guides](./HOW_TO/README.md) | [Technical reference](./REFERENCE/README.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [Installation](./INSTALL.md)
 
 # Quickstart
 
@@ -28,9 +28,9 @@ Use [Draw and save your first genome diagram from Python](./TUTORIALS/PYTHON/fir
 to download the inputs, save a complete Python program under the documented
 filename, run it, and compare its output with the generated reference figure.
 
-After your first diagram, choose a focused [Task guide](./HOW_TO/README.md).
-Use [Concepts & decisions](./EXPLANATION/README.md) when you need to choose an
-approach, and [Technical reference](./REFERENCE/README.md) for exact controls,
-options, schemas, APIs, and output behavior.
+After your first diagram, choose another [Tutorial](./TUTORIALS/README.md) for a
+complete figure. Use the [FAQ](./FAQ.md) to choose an approach and [Technical
+documentation](./REFERENCE/README.md) for exact controls, options, schemas,
+APIs, and output behavior.
 
-[Documentation home](./DOCS.md) | [Installation](./INSTALL.md) | [Start here](./TUTORIALS/README.md) | [Task guides](./HOW_TO/README.md) | [Technical reference](./REFERENCE/README.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [Installation](./INSTALL.md)

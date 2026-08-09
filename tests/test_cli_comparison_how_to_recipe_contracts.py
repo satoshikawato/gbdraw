@@ -19,6 +19,7 @@ from docs.recipes._scenario_support import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNNER = "docs/recipes/run_cli_scenarios.py"
 SCENARIOS = ("H-CLI-05", "H-CLI-06", "H-CLI-07", "H-CLI-08")
+EVIDENCE_SOURCE = "docs/internal/SCENARIO_EVIDENCE.md"
 BGC_RECORDS = (
     ("bgc-0000708-genbank", "BGC0000708", 40_579, 30, "9a5f971c5ed8c406b20574fb50aac567609deb787eb1e8d4635050aa264a04b0"),
     ("bgc-0000709-genbank", "BGC0000709", 50_466, 38, "4b66b7e4b78d429d12176e1e36d0e48178c562a9d128d4308b38753af9995255"),
@@ -36,7 +37,7 @@ def _fixture_manifest() -> dict[str, object]:
     )
 
 
-def test_comparison_how_to_manifest_and_navigation_are_complete() -> None:
+def test_comparison_evidence_manifest_entries_are_complete() -> None:
     expected = {
         "H-CLI-05": (
             [
@@ -48,44 +49,35 @@ def test_comparison_how_to_manifest_and_navigation_are_complete() -> None:
                 "metazoan-mitochondria-comparison",
             ],
             ["linear_precomputed_comparison.svg", "circular_conservation_ring.svg"],
-            "draw-precomputed-comparisons.md",
         ),
         "H-CLI-06": (
             ["aminoglycoside-bgc-five"],
             ["cli_losatp_pairwise.tsv", "cli_losatp_pairwise.svg"],
-            "run-losatp-pairwise.md",
         ),
         "H-CLI-07": (
             ["aminoglycoside-bgc-five"],
             ["cli_losatp_groups.svg"],
-            "create-protein-similarity-groups.md",
         ),
         "H-CLI-08": (
             ["aminoglycoside-bgc-five"],
             ["cli_losatp_collinear.svg"],
-            "draw-collinear-protein-blocks.md",
         ),
     }
-    index = (REPO_ROOT / "docs/HOW_TO/CLI/README.md").read_text(encoding="utf-8")
 
-    for scenario_id, (fixtures, outputs, filename) in expected.items():
+    for scenario_id, (fixtures, outputs) in expected.items():
         chapter = load_chapter(
             scenario_id,
             expected_kind="cli-recipe",
             runner_path=RUNNER,
         )
-        source = (REPO_ROOT / chapter["destination"]).read_text(encoding="utf-8")
+        assert chapter["role"] == "evidence"
+        assert "destination" not in chapter
+        assert chapter["execution"]["source"] == EVIDENCE_SOURCE
         assert chapter["fixtures"] == fixtures
         assert chapter["execution"]["expected_outputs"] == outputs
         assert chapter["status"]["implementation"] == "verified"
         assert chapter["status"]["review"] == "approved"
-        assert "## Prerequisites" in source
-        assert "## Verification" in source
-        assert "## Troubleshooting" in source
-        assert "../../../gbdraw/web/tutorial-data/manifest.json" in source
         assert extract_executable_block(chapter, language="bash")
-        assert f"]({filename})" in index
-        assert "T4" not in source
 
 
 def test_precomputed_recipe_uses_linear_phages_and_circular_complete_mtdna() -> None:
@@ -95,7 +87,6 @@ def test_precomputed_recipe_uses_linear_phages_and_circular_complete_mtdna() -> 
         runner_path=RUNNER,
     )
     recipe = extract_executable_block(chapter, language="bash")
-    source = (REPO_ROOT / chapter["destination"]).read_text(encoding="utf-8")
     manifest = _fixture_manifest()
     files = manifest["files"]
 
@@ -110,10 +101,6 @@ def test_precomputed_recipe_uses_linear_phages_and_circular_complete_mtdna() -> 
     assert "--conservation_reference subject" in recipe
     assert "--qualifier_priority cds_gene_qualifier_priority.tsv" in recipe
     assert "--labels out" in recipe
-    assert "complete 48,502 bp" in source
-    assert "complete 42,925 bp" in source
-    assert "All four source\nrecords are complete and naturally circular" in source
-
     expected_files = {
         "lambda-genbank": ("NC_001416.1", 48_502, "4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7"),
         "de3-genbank": ("NC_042057.1", 42_925, "288eb87480f8fe6eab6246fe1fc4af78c85a6cb7e591c47fd7d7f0170c932e09"),
@@ -208,14 +195,15 @@ def test_losatp_recipes_use_five_whole_records_and_distinct_modes() -> None:
     assert bgc["expectedSemantics"]["galleryAlignedLosatpMode"] == "similarity-groups"
 
 
-def test_pairwise_page_defers_gallery_representative_to_similarity_groups() -> None:
-    source = (REPO_ROOT / "docs/HOW_TO/CLI/run-losatp-pairwise.md").read_text(
-        encoding="utf-8"
-    )
+def test_technical_documentation_distinguishes_pairwise_and_similarity_groups() -> None:
+    source = (
+        REPO_ROOT
+        / "docs/REFERENCE/comparison-programs-thresholds-and-results.md"
+    ).read_text(encoding="utf-8")
     prose = " ".join(source.split())
-    assert "not the representative Gallery analysis" in prose
-    assert "Similarity-group guide" in source
-    assert "does not run or imply a direct 0708→0713 comparison" in prose
+    assert "Pairwise" in source
+    assert "Similarity groups" in source
+    assert "not a phylogenetic orthogroup" in prose
 
 
 def test_published_pairwise_raw_evidence_is_hydrated_and_complete() -> None:
@@ -233,7 +221,7 @@ def test_published_pairwise_raw_evidence_is_hydrated_and_complete() -> None:
 
 
 @pytest.mark.parametrize("scenario_id", SCENARIOS)
-def test_comparison_how_to_regenerates_from_a_clean_external_directory(
+def test_comparison_evidence_regenerates_from_a_clean_external_directory(
     scenario_id: str,
     tmp_path: Path,
 ) -> None:

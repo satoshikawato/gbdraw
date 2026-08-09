@@ -98,5 +98,4 @@ band set above.
 
 ## Next steps
 
-- [Draw comparisons from prepared evidence](../../HOW_TO/CLI/draw-precomputed-comparisons.md)
-- [Review comparison thresholds and result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Review uploaded comparison tables and result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)

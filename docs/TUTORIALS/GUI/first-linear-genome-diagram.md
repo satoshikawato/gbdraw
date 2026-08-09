@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md)
 
 # Create and export your first linear genome diagram
 
@@ -83,7 +83,7 @@ In the **Result Preview** toolbar, select **SVG**. The browser saves `lambda_lin
 
 ## Next steps
 
-- [Arrange multiple Linear records and regions](../../HOW_TO/GUI/arrange-linear-records-regions-and-orientation.md)
-- [Customize plot colors and labels](../../HOW_TO/GUI/style-features-labels-titles-and-legends.md)
+- [Review record selection and layout](../../REFERENCE/web-app.md#record-selection-and-layout)
+- [Review feature-presentation rules](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
 - [Compare genomes](compare-genomes-losatn.md)
 - [Choose another output format](../../REFERENCE/output-formats-and-export.md)

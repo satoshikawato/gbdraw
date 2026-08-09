@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [All Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [CLI how-to guides](../../HOW_TO/CLI/README.md) | [Command-line reference](../../REFERENCE/command-line.md)
+[Documentation home](../../DOCS.md) | [All Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [Command-line technical documentation](../../REFERENCE/command-line.md) | [FAQ](../../FAQ.md) | [Gallery](../../GALLERY.md)
 
 # Command-line Tutorials
 

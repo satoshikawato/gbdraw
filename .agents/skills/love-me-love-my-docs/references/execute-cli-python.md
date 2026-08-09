@@ -10,7 +10,8 @@ For each scenario:
 2. acquire original sequence inputs from the documented authoritative database
    by accession; offline automation may copy only checksum-verified mirrors of
    those exact downloads;
-3. create only the files whose complete contents appear in the chapter;
+3. create only the files whose complete contents appear in the executable
+   source named by the scenario;
 4. run the exact fenced CLI block or literal Python program without editing;
 5. capture exit status and safe stdout/stderr;
 6. reject undeclared inputs and unexpected outputs;
@@ -35,6 +36,8 @@ cannot see.
 - Keep generated reference artifacts owned by the recipe. Regenerate and
   visually inspect them; never patch their bytes by hand.
 
-Document the empty-directory preparation, direct input links, exact save names,
-working-tree layout, run command, expected console message, generated files,
-visible checks, and common failures.
+When the scenario supports a public procedure, document the empty-directory
+preparation, direct input links, exact save names, working-tree layout, run
+command, expected console message, generated files, visible checks, and common
+failures. Internal regression evidence may retain only the literal inputs and
+executable block needed by its runner.

@@ -1,4 +1,4 @@
-[Documentation home](./DOCS.md) | [Start here](./TUTORIALS/README.md) | [Task guides](./HOW_TO/README.md) | [Gallery](./GALLERY.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md)
 
 # Get the tutorial inputs
 
@@ -73,23 +73,16 @@ use accession-specific GenBank download URLs from the
 
 Some workflows need gbdraw-specific rule tables, quantitative tracks, or
 precomputed comparison tables. These are not substitutes for the original
-sequence records. Open the support-file link in the Tutorial, select
+sequence records. Open the support file link in the Tutorial, select
 **Download raw file**, and save it with the exact filename shown.
 
 On Windows, choose **All files** if the save dialog tries to append `.txt`.
 Do not copy the rendered GitHub page into a text file.
 
-If you plan to follow several Tutorials, you may clone the repository once to
-obtain only those support files:
-
-```bash
-git clone --depth 1 https://github.com/satoshikawato/gbdraw.git gbdraw-tutorial-support
-```
-
-Support data live under
-`gbdraw-tutorial-support/gbdraw/web/tutorial-data/`. Copy only the support
-files listed by the current Tutorial into a new working directory. Continue to
-download every GenBank or FASTA sequence from its accession-linked database.
+Each Tutorial links its support files directly and provides raw file download
+commands where a command-line workflow needs them. No repository checkout is
+required. Continue to download every GenBank or FASTA sequence from its
+accession-linked database.
 
 ## Check what you downloaded
 
@@ -139,4 +132,4 @@ records the accession and checksum of the frozen copies used by automated
 offline tests. Those internal copies make regression tests deterministic; they
 are not the reader-facing sequence acquisition path.
 
-[Documentation home](./DOCS.md) | [Start here](./TUTORIALS/README.md) | [Task guides](./HOW_TO/README.md) | [Gallery](./GALLERY.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md)

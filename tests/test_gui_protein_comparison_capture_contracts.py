@@ -158,20 +158,6 @@ PAGES = {
     "T-GUI-04": (
         REPO_ROOT / "docs" / "TUTORIALS" / "GUI" / "compare-proteins-losatp.md"
     ),
-    "H-GUI-07": (
-        REPO_ROOT
-        / "docs"
-        / "HOW_TO"
-        / "GUI"
-        / "create-protein-similarity-groups.md"
-    ),
-    "H-GUI-08": (
-        REPO_ROOT
-        / "docs"
-        / "HOW_TO"
-        / "GUI"
-        / "draw-collinear-protein-blocks.md"
-    ),
     "T-GUI-08": (
         REPO_ROOT
         / "docs"
@@ -574,7 +560,7 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
     )
 
 
-def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> None:
+def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() -> None:
     group_assertions = {
         "T-GUI-04": {
             "whole_linear_record_count=5",
@@ -602,10 +588,7 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
         },
     }
     for scenario_id in ("T-GUI-04", "H-GUI-07"):
-        page_path = PAGES[scenario_id]
         chapter = chapter_for(scenario_id)
-        page = page_path.read_text(encoding="utf-8")
-        assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
         assert chapter["fixtures"] == ["aminoglycoside-bgc-five"]
         assert chapter["settings"]["mode"] == "linear"
         assert chapter["settings"]["program"] == "losatp"
@@ -622,38 +605,41 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
             "implementation": "verified",
             "review": "approved",
         }
-        for record_id in EXPECTED_RECORD_IDS:
-            assert record_id in page
-        for value in (
-            "Feature Height",
-            "`75`",
-            "Block Stroke Width",
-            "Line Stroke Width",
-            "Show Coordinate Scale",
-            "Ruler",
-            "Axis Stroke Width",
-            "`5`",
-            "40%",
-            "First record",
-            "`gene`",
-        ):
-            assert value in page
+        if scenario_id == "H-GUI-07":
+            assert chapter["role"] == "evidence"
+            assert "destination" not in chapter
+        else:
+            page_path = PAGES[scenario_id]
+            page = page_path.read_text(encoding="utf-8")
+            assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
+            for record_id in EXPECTED_RECORD_IDS:
+                assert record_id in page
+            for value in (
+                "Feature Height",
+                "`75`",
+                "Block Stroke Width",
+                "Line Stroke Width",
+                "Show Coordinate Scale",
+                "Ruler",
+                "Axis Stroke Width",
+                "`5`",
+                "40%",
+                "First record",
+                "`gene`",
+            ):
+                assert value in page
 
     tutorial = PAGES["T-GUI-04"].read_text(encoding="utf-8")
-    groups = PAGES["H-GUI-07"].read_text(encoding="utf-8")
     assert "leave all optional Region fields blank" in tutorial
     assert "Reverse complement** only for `BGC0000713`" in tutorial
     assert "| Separate Strands | Off |" in tutorial
     assert "23 stable\ngroups and 77 displayed group links" in tutorial
     assert "comparison between sequence 1 and sequence 2" in tutorial
     assert "Raw LOSAT results" not in tutorial
-    assert "without setting regions" in " ".join(groups.split())
-    assert "Turn off **Separate Strands**" in groups
     assert chapter_for("T-GUI-04")["settings"]["separate_strands"] is False
     assert chapter_for("H-GUI-07")["settings"]["separate_strands"] is False
     assert "separate_strands=False" in TUTORIAL_FLOW_PATH.read_text(encoding="utf-8")
     assert "separate_strands=False" in HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
-    assert "23\ngroups, and 77 links" in groups
 
     gallery_collinear = PAGES["T-GUI-08"].read_text(encoding="utf-8")
     gallery_chapter = chapter_for("T-GUI-08")
@@ -728,10 +714,9 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
     )
     assert "anchor" not in " ".join(gallery_popup.values()).casefold()
 
-    collinear_path = PAGES["H-GUI-08"]
-    collinear = collinear_path.read_text(encoding="utf-8")
     chapter = chapter_for("H-GUI-08")
-    assert chapter["destination"] == str(collinear_path.relative_to(REPO_ROOT))
+    assert chapter["role"] == "evidence"
+    assert "destination" not in chapter
     assert chapter["fixtures"] == ["hepatoplasmataceae-five"]
     assert chapter["settings"] == {
         "mode": "linear",
@@ -778,40 +763,10 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
     assert tuple(
         Path(screenshot["path"]).name for screenshot in chapter["screenshots"]
     ) == SCREENSHOT_NAMES["H-GUI-08"]
-    for record_id in HEPATOPLASMATACEAE_RECORD_IDS:
-        assert record_id in collinear
-    for page in (gallery_collinear, collinear):
-        for revision_url in PINNED_NCBI_REVISION_URLS.values():
-            assert revision_url in page
-        assert page.count("NCBI Revision History snapshot") >= 5
-        assert "All five links are official NCBI Revision History" in page
-        assert "`sat=3`" in page
-        for satkey in ("69902295", "69902296", "69902298", "69902297"):
-            assert f"`satkey={satkey}`" in page
-        assert "`sat=60`" in page
-        assert "`satkey=39275474`" in page
-        assert (
-            "do not substitute a repository copy or a Gallery session"
-            in " ".join(page.split())
-        )
-    normalized_collinear = " ".join(collinear.split())
-    for value in (
-        "Hepatoplasmataceae",
-        "All records",
-        "25 directional and self search jobs",
-        "Features on axis",
-        "Separate Strands",
-        "Ajisai",
-        "40%",
-        "hepatoplasmataceae_collinear.svg",
-        "contain two non-empty nucleotide envelope sequences",
-        "four times to reach **80%**",
-        "Select **Zoom out** six times to reach **40%**",
-        "at least 32 logical processors",
-        "scroll within the popup",
-        "Drag the popup by its header",
-    ):
-        assert value in normalized_collinear
+    for revision_url in PINNED_NCBI_REVISION_URLS.values():
+        assert revision_url in gallery_collinear
+    assert gallery_collinear.count("NCBI Revision History snapshot") >= 5
+    assert "All five links are official NCBI Revision History" in gallery_collinear
     how_to_detail = chapter["screenshots"][-2]
     assert how_to_detail["reason"] == (
         "Show Pairwise match 1 wholly inside Result Preview at 80% zoom."
@@ -830,8 +785,6 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
         "span popup"
     )
     assert "anchor" not in " ".join(how_to_popup.values()).casefold()
-    for bgc_id in EXPECTED_RECORD_IDS:
-        assert bgc_id not in collinear
 
 
 def test_protein_comparison_screenshots_are_full_pinned_viewports() -> None:

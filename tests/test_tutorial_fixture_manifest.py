@@ -135,7 +135,7 @@ def test_tutorial_fixture_manifest_is_complete_unique_and_within_budget() -> Non
     scenario_manifest = json.loads(
         (REPO_ROOT / "docs" / "scenarios" / "manifest.json").read_text(encoding="utf-8")
     )
-    known_scenarios = {chapter["id"] for chapter in scenario_manifest["chapters"]}
+    known_scenarios = {chapter["id"] for chapter in scenario_manifest["scenarios"]}
     assert declared_scenarios <= known_scenarios
 
 
@@ -243,7 +243,7 @@ def test_hepatoplasmataceae_fixture_supports_gallery_collinear_tutorial() -> Non
     )
     scenario = next(
         chapter
-        for chapter in scenario_manifest["chapters"]
+        for chapter in scenario_manifest["scenarios"]
         if chapter["id"] == "T-GUI-08"
     )
 

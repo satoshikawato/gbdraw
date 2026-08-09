@@ -13,6 +13,7 @@ from Bio.SeqRecord import SeqRecord
 
 import gbdraw.circular as circular_module
 import gbdraw.cli_utils.session as cli_session
+import gbdraw.api.request_render as request_render_module
 import gbdraw.session as session_module
 from gbdraw.api.requests import (
     CircularBatchRequest,
@@ -752,13 +753,21 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
             losat_derived_cache_entries=({"schema": 3},),
         )
 
-    def fake_save(path, request, **kwargs):
-        captured["saved_path"] = path
+    def fake_build(request, **kwargs):
         captured["saved_request"] = request
         captured["adjunct"] = kwargs["adjunct"]
+        return object()
+
+    def fake_write(path, document, **kwargs):
+        captured["saved_path"] = path
 
     monkeypatch.setattr(cli_session, "_render_request", fake_render)
-    monkeypatch.setattr(session_module, "save_session_document", fake_save)
+    monkeypatch.setattr(
+        session_module,
+        "_build_session_document_from_resolved_request",
+        fake_build,
+    )
+    monkeypatch.setattr(session_module, "_write_session_document", fake_write)
     sidecar_path = tmp_path / "saved.gbdraw-session.json"
 
     assert cli_session.render_canonical_session_if_present(
@@ -782,6 +791,41 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
     assert adjunct["losatDerivedCache"] == {"entries": []}
     assert "depth_tick_interval" in session["config"]["adv"]
     assert "collinearMaxGeneGap" in session["config"]["losat"]["blastp"]
+
+
+def test_linear_cli_sidecar_reuses_the_render_request_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "input.gb"
+    output_prefix = tmp_path / "diagram"
+    _write_genbank(input_path)
+    real_plan_request = request_render_module.plan_request
+    plan_calls = 0
+
+    def count_plan_request(request):
+        nonlocal plan_calls
+        plan_calls += 1
+        return real_plan_request(request)
+
+    monkeypatch.setattr(request_render_module, "plan_request", count_plan_request)
+    linear_main(
+        [
+            "--gbk",
+            str(input_path),
+            "--output",
+            str(output_prefix),
+            "--format",
+            "svg",
+            "--no-gc",
+            "--no-skew",
+            "--legend",
+            "none",
+            "--save_session",
+        ]
+    )
+
+    assert plan_calls == 1
 
 
 def test_saved_cli_invocation_does_not_persist_overwrite_permission() -> None:

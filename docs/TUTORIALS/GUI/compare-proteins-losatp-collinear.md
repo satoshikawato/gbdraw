@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md)
 
 # Recreate the Gallery LOSATP Collinear blocks figure
 
@@ -156,9 +156,19 @@ one from each endpoint genome. Then scroll within the popup to inspect its
 orientation, covered Similarity groups, and anchors. Close the popup, then
 select **SVG** to save `losatp_collinear.svg`.
 
+## Variant: use all-record evidence
+
+Keep **Adjacent pairs** for the checked result above. To build blocks from
+every record pair, change **Evidence scope** to **All records** in Step 3. A
+fresh five-record run executes 25 directional and self search jobs. Block
+construction uses evidence from every record pair, while the finished ribbons
+still connect adjacent display rows.
+
+See [selected Linear edges](../../REFERENCE/comparison-programs-thresholds-and-results.md#selected-linear-edges)
+for the scope and display rules.
+
 ## Next steps
 
-- [Draw Collinear blocks as a focused task](../../HOW_TO/GUI/draw-collinear-protein-blocks.md)
-- [Create protein Similarity groups](../../HOW_TO/GUI/create-protein-similarity-groups.md)
-- [Choose a genome-comparison method](../../EXPLANATION/choose-a-genome-comparison-method.md)
-- [Review LOSATP result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Review LOSATP comparison modes](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Create protein Similarity groups](compare-proteins-losatp.md)
+- [Choose a genome-comparison method](../../FAQ.md#which-comparison-method-should-i-use)

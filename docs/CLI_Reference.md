@@ -1,12 +1,12 @@
-[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Command semantics](./REFERENCE/command-line.md) | **Generated option inventory** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [Command semantics](./REFERENCE/command-line.md) | **Generated option inventory** | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [About](./ABOUT.md)
 
 # Generated command-line option inventory
 
 This generated inventory mirrors the current command help from
 `python -m gbdraw.cli` and lists every available option and default. For
 curated command behavior, input boundaries, and error semantics, use the
-[command-line reference](./REFERENCE/command-line.md); that page is the
-canonical owner of current CLI semantics.
+[command-line reference](./REFERENCE/command-line.md), which documents current
+CLI semantics.
 
 Every diagram run writes a base `.svg` and any additional requested formats.
 Both commands validate that complete target set before rendering and refuse to
@@ -1365,9 +1365,9 @@ record each:
 
 ```bash
 gbdraw linear \
-  --gbk tests/test_inputs/AP027131.gb tests/test_inputs/AP027132.gb \
-  --depth_track tests/test_inputs/AP027131.DRR394921.depth.tsv '' \
-  --depth_track '' tests/test_inputs/AP027132.DRR394921.depth.tsv \
+  --gbk record-a.gb record-b.gb \
+  --depth_track record-a.depth.tsv '' \
+  --depth_track '' record-b.depth.tsv \
   -o sparse-depth \
   -f svg
 ```
@@ -1387,14 +1387,14 @@ still force a native LOSAT executable on any platform with `--losatp_bin`.
 NCBI BLAST+ fallback produces compatible outfmt 6 protein comparisons, but its
 hit set is not guaranteed to be identical to LOSAT.
 
-## Related guides
+## Related documentation
 
 - [Quickstart](./QUICKSTART.md)
 - [Recipes](./RECIPES.md)
-- [Command-line guides](./TUTORIALS/README.md)
-- [Run Pairwise protein searches with LOSATP](./HOW_TO/CLI/run-losatp-pairwise.md)
-- [Create protein Similarity groups with LOSATP](./HOW_TO/CLI/create-protein-similarity-groups.md)
-- [Draw Collinear protein-match blocks with LOSATP](./HOW_TO/CLI/draw-collinear-protein-blocks.md)
-- [Use record, comparison, conservation, annotation, and track tables](./HOW_TO/CLI/use-input-tables.md)
+- [Command-line Tutorials](./TUTORIALS/CLI/README.md)
+- [LOSATP modes and comparison semantics](./REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Similarity group Tutorial](./TUTORIALS/CLI/compare-proteins-losatp.md)
+- [Collinear block Tutorial](./TUTORIALS/CLI/compare-proteins-losatp-collinear.md)
+- [Input formats and TSV schemas](./REFERENCE/input-formats-and-tsv-schemas.md)
 
-[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Reference](./REFERENCE/README.md) | **CLI Reference (generated)** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | **CLI Reference (generated)** | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [About](./ABOUT.md)

@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md)
 
 # Add circular comparison rings from precomputed results
 
@@ -106,9 +106,20 @@ reference and comparison intervals as `circular_hsp_spans.fasta`.
 
 Select **SVG** to save `precomputed_circular_rings.svg`.
 
+## Variant: run TLOSATX in the browser
+
+To compute the three rings instead of uploading frozen tables, keep the same
+displayed reference, comparison FASTA order, labels, and filters. Under
+**Pairwise Comparisons**, select **Run LOSAT** and **TLOSATX**. Set the
+reference gencode to `2`; use subject gencodes `2`, `5`, and `5` for zebrafish,
+fruit fly, and nematode, respectively. The displayed human record is the
+TLOSATX subject.
+
+The 106-HSP check in Step 4 applies only to the precomputed tables. See
+[filters and direction](../../REFERENCE/comparison-programs-thresholds-and-results.md#filters-and-direction)
+for the live search contract.
+
 ## Next steps
 
-- [Add Circular similarity rings as a focused task](../../HOW_TO/GUI/add-circular-similarity-rings.md)
-- [Use uploaded BLAST results](../../HOW_TO/GUI/use-uploaded-blast-results.md)
-- [Choose a genome-comparison method](../../EXPLANATION/choose-a-genome-comparison-method.md)
-- [Review comparison result semantics](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Review Circular rings and uploaded comparison tables](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Choose a genome-comparison method](../../FAQ.md#which-comparison-method-should-i-use)

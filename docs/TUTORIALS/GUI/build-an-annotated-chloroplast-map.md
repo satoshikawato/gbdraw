@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app](../../HOW_TO/GUI/README.md)
+[Documentation home](../../DOCS.md) | [Tutorials](../README.md) | [Web app technical documentation](../../REFERENCE/web-app.md)
 
 # Recreate the Interactive SVG Gallery chloroplast map
 
@@ -122,6 +122,4 @@ track. Select **SVG** to save `annotated_chloroplast_map.svg`.
 
 ## Next steps
 
-- [Add region annotations and custom track slots](../../HOW_TO/GUI/add-region-annotations-and-track-slots.md)
-- [Understand tracks, axes, and layout](../../EXPLANATION/understand-tracks-axes-and-layout.md)
-- [Review track and annotation schemas](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)
+- [Review tracks, axes, and annotations](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)

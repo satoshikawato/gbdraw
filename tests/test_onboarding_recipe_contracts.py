@@ -27,7 +27,7 @@ def _chapters() -> dict[str, dict[str, object]]:
     manifest = json.loads(SCENARIO_MANIFEST.read_text(encoding="utf-8"))
     return {
         chapter["id"]: chapter
-        for chapter in manifest["chapters"]
+        for chapter in manifest["scenarios"]
         if chapter["id"] in SCENARIO_IDS
     }
 
@@ -119,9 +119,19 @@ def test_onboarding_recipes_regenerate_from_an_external_clean_context(
         else os.pathsep.join((str(REPO_ROOT), existing_pythonpath))
     )
 
-    for runner in RUNNER_BY_KIND.values():
+    chapters = _chapters()
+    for scenario_id in SCENARIO_IDS:
+        execution = chapters[scenario_id]["execution"]
+        assert isinstance(execution, dict)
+        runner = RUNNER_BY_KIND[str(execution["kind"])]
         result = subprocess.run(
-            [sys.executable, str(REPO_ROOT / runner), "--all", "--check"],
+            [
+                sys.executable,
+                str(REPO_ROOT / runner),
+                "--scenario",
+                scenario_id,
+                "--check",
+            ],
             cwd=tmp_path,
             env=environment,
             capture_output=True,

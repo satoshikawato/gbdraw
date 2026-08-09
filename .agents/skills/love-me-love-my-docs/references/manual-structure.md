@@ -1,60 +1,59 @@
-# Manual structure and information roles
+# Manual structure and public-page ownership
 
-Use one public information role per chapter. A topic may appear in more than
-one role only when each page answers a different reader question and links to a
-single owner for shared facts or procedures.
+Plan public pages around distinct reader questions and existing owners, not
+around capability, workflow, evidence-scenario, or interface counts. Evidence
+scenarios are internal verification units: one or many scenarios may support a
+single public page, and a scenario may support no public page. Evidence for a
+GUI, CLI, Python, or mobile surface validates that surface without requiring a
+separate surface-specific page.
 
-## Tutorial: learn by completing a project
+## Public-page decision gate
 
-A Tutorial may be foundational or advanced. Keep advanced, multi-feature
-projects as Tutorials when the reader follows a controlled learning sequence
-to a finished result.
+Before drafting, record one row for every reader question or affected page:
 
-Include:
+| Reader question | Existing owner | Evidence scenarios and surfaces | Disposition | Resulting owner |
+| --- | --- | --- | --- | --- |
 
-1. a concrete outcome and finished result;
-2. a surface switch when the same figure has GUI, CLI, and Python variants;
-3. a file table that distinguishes **Download**, **Create**, **Generated**, and
-   **Reference result** files;
-4. the fresh starting state or empty working directory;
-5. numbered actions, with the first visible result early in the sequence;
-6. expected intermediate and final results;
-7. useful screenshots for GUI decisions and generated figures for CLI/Python;
-8. verification cues, troubleshooting, and links to focused How-to and exact
-   Reference pages.
+Use only these dispositions:
 
-Teach one successful route. Link optional variations instead of branching the
-lesson into an option inventory.
+- `keep`: the existing page owns and answers the question clearly;
+- `merge`: move useful material into an existing owner and remove duplication;
+- `delete`: remove a page that has no distinct reader question after preserving
+  unique content and executable evidence in the proper owners;
+- `new`: create a page only when editing an existing owner cannot answer the
+  distinct question clearly.
 
-## How-to guide: accomplish one focused task
+Default to `merge`. Do not create one page per capability, user flow, evidence
+scenario, or interface. A separate surface page needs a materially different
+reader journey, not merely a separate capture or execution harness.
 
-State the required starting state and exact inputs, then give the shortest
-complete procedure for the named goal. Identify the expected output and how to
-verify it. Include troubleshooting for known boundary failures. Link to a
-Tutorial for foundational learning and to Reference for exhaustive values.
+## Public page patterns
 
-The How-to guide owns the adaptable task procedure. A related Tutorial may use
-the task inside a larger project, but should not duplicate its full option
-matrix or every variant.
+- **Tutorials:** Teach a deliberate learning progression to a finished result.
+  A Tutorial may be foundational or advanced. Teach one successful route and
+  link optional variations instead of branching into an option inventory.
+- **Technical documentation:** Own exact behavior, inputs, controls, options,
+  schemas, API contracts, sessions, outputs, errors, compatibility, and limits.
+  Use compact operational examples only when they clarify the contract.
+- **FAQ:** Answer choices and troubleshooting questions concisely. Link exact
+  values and full contracts to their Technical documentation owner instead of
+  repeating them.
+- **Gallery:** Help readers discover finished outcomes. Link to a reproducible
+  Tutorial when one exists; do not make Gallery entries own procedures or
+  technical contracts.
 
-## Explanation: understand or choose
-
-Start with the decision or concept. Explain the mental model, alternatives,
-trade-offs, and consequences. Use diagrams or comparison tables when they aid
-understanding. Do not own a runnable end-to-end recipe, fixed defaults, schema
-history, or exhaustive tokens; link to How-to and Reference.
-
-## Reference: look up exact facts
-
-Organize exact current contracts for scanning: supported values, defaults,
-signatures, schemas, formats, errors, compatibility, and limits. Avoid a
-numbered "main workflow" or tutorial narrative. Give minimal syntax examples
-only when they clarify a contract, and link procedural use to the canonical
-How-to guide.
+For a Tutorial, include a concrete outcome and finished result; a file table
+that distinguishes **Download**, **Create**, **Generated**, and **Reference
+result** files; the fresh starting state or empty working directory; numbered
+actions with an early visible result; expected intermediate and final results;
+useful screenshots or generated figures; verification cues; troubleshooting;
+and links to the exact technical owner. Present surface variants together when
+that serves the same reader journey; split them only when their journeys are
+materially different.
 
 ## File and result contract
 
-For every procedural chapter:
+For every procedural page:
 
 - direct sequence acquisition to the authoritative public database by
   accession, format, and exact save name;
@@ -62,14 +61,14 @@ For every procedural chapter:
   depends on a mutable feature table; a nucleotide accession version alone is
   not sufficient evidence for annotation-sensitive output;
 - never tell a reader to use a repository-bundled sequence, finished Gallery
-  session, or other prebuilt project state as a Tutorial or How-to input;
+  session, or other prebuilt project state as a public procedural input;
 - use session reload only after the reader created that session from original
-  inputs in the same session-focused procedural chapter;
+  inputs in the same session-focused procedural page;
 - keep frozen repository copies internal to deterministic offline verification
   and apply the mirror-verification gate in Step 3 of `SKILL.md`; a
   `legacy-unverified` mirror cannot back a public visible result;
 - link each non-sequence supplied input to its source and state its exact save
-  name, or show its complete contents/derivation in the chapter;
+  name, or show its complete contents or derivation on the page;
 - show complete contents for every file the reader must create;
 - name outputs before the action that generates them;
 - show the expected directory tree when several files interact;

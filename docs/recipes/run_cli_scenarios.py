@@ -33,6 +33,7 @@ if __package__:
         parse_translate_chain,
         publish_output,
         validate_standard_svg,
+        verified_scenario_ids,
     )
 else:
     from _scenario_support import (
@@ -47,35 +48,15 @@ else:
         parse_translate_chain,
         publish_output,
         validate_standard_svg,
+        verified_scenario_ids,
     )
 
 
-IMPLEMENTED_SCENARIOS = (
-    "T-CLI-01",
-    "T-CLI-02",
-    "T-CLI-03",
-    "T-CLI-05",
-    "T-CLI-06",
-    "T-CLI-07",
-    "T-CLI-08",
-    "T-CLI-09",
-    "T-CLI-10",
-    "T-CLI-11",
-    "H-CLI-01",
-    "H-CLI-02",
-    "H-CLI-03",
-    "H-CLI-04",
-    "H-CLI-05",
-    "H-CLI-06",
-    "H-CLI-07",
-    "H-CLI-08",
-    "H-CLI-09",
-    "H-CLI-10",
-    "H-CLI-11",
-    "H-CLI-12",
-    "H-CLI-13",
-)
 RUNNER_PATH = "docs/recipes/run_cli_scenarios.py"
+SCENARIO_IDS = verified_scenario_ids(
+    expected_kind="cli-recipe",
+    runner_path=RUNNER_PATH,
+)
 _PATH_COORDINATE_RE = re.compile(r"[ML]\s+(-?[0-9.]+),(-?[0-9.]+)")
 _BGC_RECORD_IDS = (
     "BGC0000708",
@@ -1305,19 +1286,21 @@ def _assert_baseline_svg(
         raise RecipeContractError(f"{chapter['id']} baseline unexpectedly contains matches.")
 
 
-def _assert_generated_tables_are_documented(
+def _assert_generated_tables_are_recorded(
     chapter: dict[str, object], scenario_id: str
 ) -> None:
     tables = _GENERATED_TABLES.get(scenario_id, {})
     if not tables:
         return
-    destination = Path(__file__).resolve().parents[2] / str(chapter["destination"])
-    source = destination.read_text(encoding="utf-8")
+    execution = chapter["execution"]
+    relative_source = execution.get("source", chapter.get("destination"))
+    source_path = Path(__file__).resolve().parents[2] / str(relative_source)
+    source = source_path.read_text(encoding="utf-8")
     for table_source in tables.values():
-        documented = f"```tsv\n{table_source.rstrip()}\n```"
-        if documented not in source:
+        recorded = f"```tsv\n{table_source.rstrip()}\n```"
+        if recorded not in source:
             raise RecipeContractError(
-                f"{scenario_id} generated table content differs from its guide."
+                f"{scenario_id} generated table content differs from its evidence."
             )
 
 
@@ -2176,7 +2159,7 @@ def run_scenario(
         runner_path=RUNNER_PATH,
     )
     recipe = extract_executable_block(chapter, language="bash")
-    _assert_generated_tables_are_documented(chapter, scenario_id)
+    _assert_generated_tables_are_recorded(chapter, scenario_id)
     commands = _parse_commands(recipe, scenario_id=scenario_id)
     expected_mode = chapter["settings"].get("mode")
     if expected_mode is not None and any(
@@ -2467,7 +2450,7 @@ def main() -> int:
     selection.add_argument(
         "--all", action="store_true", help="Run all implemented CLI recipes."
     )
-    selection.add_argument("--scenario", choices=IMPLEMENTED_SCENARIOS)
+    selection.add_argument("--scenario", choices=SCENARIO_IDS)
     parser.add_argument(
         "--output-root",
         type=Path,
@@ -2481,7 +2464,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    scenario_ids = IMPLEMENTED_SCENARIOS if args.all else (args.scenario,)
+    scenario_ids = SCENARIO_IDS if args.all else (args.scenario,)
     try:
         for scenario_id in scenario_ids:
             destinations = run_scenario(
