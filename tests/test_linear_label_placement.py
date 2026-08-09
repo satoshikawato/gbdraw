@@ -943,7 +943,6 @@ def test_linear_external_label_track_index_matches_legacy_scan() -> None:
             indexed_track_indexes,
             indexed_label_by_id,
             label,
-            bucket_size=16.0,
         )
         indexed_assignments.append(indexed_track)
         indexed_tracks.setdefault(f"track_{indexed_track}", []).append(label)

@@ -36,19 +36,6 @@ from svgwrite import Drawing
 SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
 
 
-def _stub_typed_request_export(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
-
-
 def _feature_width_slots(width: str) -> list[str]:
     return [
         f"features:features@w={width}",
@@ -581,6 +568,7 @@ def test_cli_labels_mode_maps_to_circular_scope(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
@@ -588,7 +576,6 @@ def test_cli_labels_mode_maps_to_circular_scope(
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_modify_config_dict(
         config_dict: dict,
@@ -633,6 +620,7 @@ def test_cli_labels_mode_maps_to_circular_scope(
 def test_cli_fractional_definition_font_size_forwards_derived_interval(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, object] = {}
@@ -644,7 +632,6 @@ def test_cli_fractional_definition_font_size_forwards_derived_interval(
         lambda paths, **_kwargs: [record],
     )
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_modify_config_dict(
         config_dict: dict,
@@ -684,13 +671,16 @@ def test_cli_fractional_definition_font_size_forwards_derived_interval(
     assert captured["objects.definition.circular.interval"] == 14
 
 
-def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_cli_feature_width_forwards_internal_feature_track_spec(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stub_typed_request_export,
+) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
@@ -710,13 +700,13 @@ def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pyt
 def test_cli_hidden_scale_geometry_shortcut_omits_implicit_ticks(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
@@ -761,12 +751,12 @@ def test_cli_geometry_shortcuts_reject_explicit_slot_geometry(
     value: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     with pytest.raises(
         ValidationError,
@@ -791,13 +781,13 @@ def test_cli_geometry_shortcuts_reject_explicit_slot_geometry(
 def test_cli_gc_track_width_radius_forwards_internal_track_specs(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
@@ -836,13 +826,13 @@ def test_cli_gc_track_width_radius_respects_suppress_flags(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots

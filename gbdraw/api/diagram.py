@@ -71,6 +71,9 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
 )
+from gbdraw.config.models.objects import (  # type: ignore[reportMissingImports]
+    normalize_pairwise_match_style,
+)
 from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
 from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
@@ -1098,13 +1101,6 @@ def _resolve_circular_plot_title_position(
     return cast(Literal["none", "top", "bottom"], normalized)
 
 
-def _resolve_pairwise_match_style(style: str) -> Literal["ribbon", "curve"]:
-    normalized = str(style).strip().lower()
-    if normalized not in {"ribbon", "curve"}:
-        raise ValidationError("pairwise_match_style must be one of: ribbon, curve")
-    return cast(Literal["ribbon", "curve"], normalized)
-
-
 def _resolve_plot_title_font_size(value: float | None) -> float:
     if value is None:
         return float(_PLOT_TITLE_DEFAULT_FONT_SIZE)
@@ -1600,7 +1596,7 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("protein_comparison_pairs requires protein_blastp_mode='pairwise'")
     if normalized_protein_pairs is not None and linear_comparisons:
         raise ValidationError("Pass either protein_comparison_pairs or linear_comparisons, not both")
-    normalized_pairwise_match_style = _resolve_pairwise_match_style(pairwise_match_style)
+    normalized_pairwise_match_style = normalize_pairwise_match_style(pairwise_match_style)
     normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(
         str(collinearity_anchor_mode)
     )
@@ -1677,7 +1673,7 @@ def assemble_linear_diagram_from_records(
     feature_visibility_rules = resolved_feature_inputs.feature_visibility_rules
 
     if normalized_pairwise_match_style == "ribbon":
-        normalized_pairwise_match_style = _resolve_pairwise_match_style(
+        normalized_pairwise_match_style = normalize_pairwise_match_style(
             str(cfg.objects.blast_match.style)
         )
     cfg = replace(

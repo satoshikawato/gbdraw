@@ -796,7 +796,7 @@ def test_circular_multi_builder_forwards_layout_options(
 
 
 @pytest.mark.circular
-def test_api_circular_minimal(examples_dir: Path, temp_output_dir: Path) -> None:
+def test_api_circular_minimal(examples_dir: Path, tmp_path: Path) -> None:
     record_path = examples_dir / "MjeNMV.gb"
     record = next(SeqIO.parse(str(record_path), "genbank"))
 
@@ -804,7 +804,7 @@ def test_api_circular_minimal(examples_dir: Path, temp_output_dir: Path) -> None
     default_colors = load_default_colors("", palette="default")
     color_table = read_color_table("")
 
-    output_prefix = temp_output_dir / "api_circular_minimal"
+    output_prefix = tmp_path / "api_circular_minimal"
     canvas = assemble_circular_diagram_from_record(
         record,
         cfg=GbdrawConfig.from_dict(config_dict),
@@ -825,7 +825,7 @@ def test_api_circular_minimal(examples_dir: Path, temp_output_dir: Path) -> None
 @pytest.mark.linear
 def test_api_linear_gene_specific_rule_uses_default_fallback_for_legend(
     test_inputs_dir: Path,
-    temp_output_dir: Path,
+    tmp_path: Path,
 ) -> None:
     record_path = test_inputs_dir / "HmmtDNA.gbk"
     record = next(SeqIO.parse(str(record_path), "genbank"))
@@ -837,7 +837,7 @@ def test_api_linear_gene_specific_rule_uses_default_fallback_for_legend(
         columns=["feature_type", "qualifier_key", "value", "color", "caption"],
     )
 
-    output_prefix = temp_output_dir / "api_linear_gene_legend_fallback"
+    output_prefix = tmp_path / "api_linear_gene_legend_fallback"
     canvas = assemble_linear_diagram_from_records(
         [record],
         blast_files=None,
@@ -857,7 +857,7 @@ def test_api_linear_gene_specific_rule_uses_default_fallback_for_legend(
 
 
 @pytest.mark.linear
-def test_api_linear_minimal(examples_dir: Path, temp_output_dir: Path) -> None:
+def test_api_linear_minimal(examples_dir: Path, tmp_path: Path) -> None:
     gbk_files = [
         str(examples_dir / "MjeNMV.gb"),
         str(examples_dir / "MelaMJNV.gb"),
@@ -868,7 +868,7 @@ def test_api_linear_minimal(examples_dir: Path, temp_output_dir: Path) -> None:
     default_colors = load_default_colors("", palette="default", load_comparison=False)
     color_table = read_color_table("")
 
-    output_prefix = temp_output_dir / "api_linear_minimal"
+    output_prefix = tmp_path / "api_linear_minimal"
     canvas = assemble_linear_diagram_from_records(
         records,
         blast_files=None,

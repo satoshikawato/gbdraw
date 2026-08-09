@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from Bio import SeqIO
-from playwright.sync_api import BrowserType, Locator, Page, expect
+from playwright.sync_api import BrowserType, Page, expect
 
 from assertions.svg_semantics import (
     assert_gui_bgc_collinear_svg,
@@ -26,6 +26,7 @@ from flows.web_capture import (
     capture_screenshot,
     fit_complete_linear_preview,
     generate_and_inspect,
+    linear_pair,
     open_browser_capture,
     set_feature_search_visible,
     wait_for_worker,
@@ -90,23 +91,6 @@ class BgcLosatpResult:
     fasta_download: dict[str, Any] | None
     popup: dict[str, Any]
     group_count: int
-
-
-def _linear_pair(page: Page, query_index: int, subject_index: int) -> Locator:
-    endpoint_uids = []
-    for index in (query_index, subject_index):
-        record = page.get_by_role(
-            "group", name=f"Linear sequence {index}", exact=True
-        )
-        uid = record.get_attribute("data-linear-record-uid")
-        if not uid:
-            raise AssertionError(f"Linear sequence {index} has no stable record UID")
-        endpoint_uids.append(uid)
-    pair = page.locator(
-        f'fieldset[data-edge-key="{endpoint_uids[0]}->{endpoint_uids[1]}"]'
-    )
-    expect(pair).to_have_count(1)
-    return pair
 
 
 def assert_bgc_fixtures() -> None:
@@ -748,7 +732,7 @@ def capture_bgc_losatp(
         else:
             fit_complete_linear_preview(page, target_zoom="40%")
         if scenario_id == "H-GUI-07":
-            result_pair = _linear_pair(page, 1, 2)
+            result_pair = linear_pair(page, 1, 2)
             result_pair.evaluate(
                 "(element) => element.scrollIntoView({ block: 'center' })"
             )
@@ -759,7 +743,7 @@ def capture_bgc_losatp(
         )
 
         if raw_tsv_name is not None:
-            first_pair = _linear_pair(page, 1, 2)
+            first_pair = linear_pair(page, 1, 2)
             raw_name = first_pair.get_by_role(
                 "textbox", name="Raw LOSAT filename for #1 to #2", exact=True
             )

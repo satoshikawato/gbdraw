@@ -627,40 +627,6 @@ def _require_one_records_table_record(records_table: RecordsTable, row, loaded):
     )
 
 
-def record_major_depth_track_files_from_cli(
-    depth_track_groups: list[list[str]] | None,
-    *,
-    record_count: int,
-) -> list[list[str | None]] | None:
-    if not depth_track_groups:
-        return None
-    logical_tracks: list[list[str | None]] = []
-    for track_number, group in enumerate(depth_track_groups, start=1):
-        values = [
-            None
-            if str(path).strip().lower() in {"", "-", "none", "null"}
-            else str(path)
-            for path in (group or [])
-        ]
-        if not values or all(value is None for value in values):
-            raise ValidationError(f"--depth_track #{track_number} must include at least one file.")
-        if len(values) not in {1, record_count}:
-            raise ValidationError(
-                f"--depth_track #{track_number} must contain one file or one per record ({record_count}); got {len(values)}."
-            )
-        logical_tracks.append(values)
-
-    if all(len(values) == 1 for values in logical_tracks):
-        return [[values[0] for values in logical_tracks]]
-
-    rows: list[list[str | None]] = [[] for _ in range(record_count)]
-    for values in logical_tracks:
-        expanded = values * record_count if len(values) == 1 else values
-        for record_index, path in enumerate(expanded):
-            rows[record_index].append(path)
-    return rows
-
-
 __all__ = [
     "add_analysis_args",
     "add_color_args",

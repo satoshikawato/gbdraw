@@ -24,6 +24,7 @@ if __package__:
     from ._scenario_support import (
         PUBLISHED_IMAGE_ROOT,
         RecipeContractError,
+        assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
         copy_declared_inputs,
         extract_executable_block,
@@ -37,6 +38,7 @@ else:
     from _scenario_support import (
         PUBLISHED_IMAGE_ROOT,
         RecipeContractError,
+        assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
         copy_declared_inputs,
         extract_executable_block,
@@ -1095,7 +1097,7 @@ def _assert_similarity_groups(
 ) -> None:
     root, matches = _assert_bgc_svg(chapter, output_path)
     if chapter["id"] == "T-CLI-08":
-        _assert_gallery_bgc_definitions(root, scenario_id="T-CLI-08")
+        assert_gallery_bgc_definitions(root, scenario_id="T-CLI-08")
     expected_group_counts = Counter(
         {
             "og_1": 4,
@@ -1223,53 +1225,6 @@ def _assert_similarity_groups(
         aligned_centers.append(record_x[record_id] + (min(x_values) + max(x_values)) / 2)
     if max(aligned_centers) - min(aligned_centers) > 1e-6:
         raise RecipeContractError("H-CLI-07 CAG38695.1 group is not aligned.")
-
-
-def _assert_gallery_bgc_definitions(
-    root: ElementTree.Element, *, scenario_id: str
-) -> None:
-    definition_groups = [
-        element
-        for element in root.iter()
-        if element.attrib.get("data-gbdraw-role") == "record-definition"
-    ]
-    translations = [
-        parse_translate_chain(group.attrib.get("transform", ""))
-        for group in definition_groups
-    ]
-    if len(definition_groups) != 5 or any(item is None for item in translations):
-        raise RecipeContractError(f"{scenario_id} definition groups are incomplete.")
-    x_positions = [translation[0] for translation in translations if translation]
-    if max(x_positions) - min(x_positions) > 1e-6:
-        raise RecipeContractError(
-            f"{scenario_id} definitions are not locked to one left column."
-        )
-
-    expected = {
-        "name": (20.0, "bold", "black"),
-        "subtitle": (20.0, "normal", "black"),
-        "accession": (20.0, "normal", "#7b7c7d"),
-        "length": (20.0, "normal", "#7b7c7d"),
-    }
-    for group in definition_groups:
-        lines = {
-            element.attrib.get("data-definition-line-kind", ""): (
-                float(element.attrib.get("font-size", "0")),
-                element.attrib.get("font-weight", ""),
-                element.attrib.get("fill", "").lower(),
-            )
-            for element in group.iter()
-            if element.attrib.get("data-definition-line-kind")
-        }
-        anchors = {
-            element.attrib.get("text-anchor", "")
-            for element in group.iter()
-            if element.attrib.get("data-definition-line-kind")
-        }
-        if lines != expected or anchors != {"start"}:
-            raise RecipeContractError(
-                f"{scenario_id} definition typography differs from the Gallery."
-            )
 
 
 def _assert_collinear_blocks(

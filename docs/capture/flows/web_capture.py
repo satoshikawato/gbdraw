@@ -10,7 +10,7 @@ from typing import Any, Callable, Mapping
 from urllib.parse import urlsplit
 
 from PIL import Image
-from playwright.sync_api import Browser, BrowserContext, BrowserType, Page, Route, expect
+from playwright.sync_api import Browser, BrowserContext, BrowserType, Locator, Page, Route, expect
 
 from config import (
     ACTION_TIMEOUT_MS,
@@ -202,6 +202,23 @@ def wait_for_worker(page: Page) -> None:
         )
     if not worker_state["isolated"]:
         raise AssertionError("Capture page is not cross-origin isolated")
+
+
+def linear_pair(page: Page, query_index: int, subject_index: int) -> Locator:
+    endpoint_uids = []
+    for index in (query_index, subject_index):
+        record = page.get_by_role(
+            "group", name=f"Linear sequence {index}", exact=True
+        )
+        uid = record.get_attribute("data-linear-record-uid")
+        if not uid:
+            raise AssertionError(f"Linear sequence {index} has no stable record UID")
+        endpoint_uids.append(uid)
+    pair = page.locator(
+        f'fieldset[data-edge-key="{endpoint_uids[0]}->{endpoint_uids[1]}"]'
+    )
+    expect(pair).to_have_count(1)
+    return pair
 
 
 def generate_and_inspect(

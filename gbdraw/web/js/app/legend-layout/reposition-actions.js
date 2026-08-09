@@ -24,7 +24,6 @@ const setLegendVariant = (legendGroup, side) => {
 
 export const createLegendRepositionActions = ({
   state,
-  debugLog = () => {},
   legendActions,
   svgActions
 }) => {
@@ -143,7 +142,6 @@ export const createLegendRepositionActions = ({
     const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding });
     syncStateFromComposition(svg, nextBinding);
     persist(svg);
-    debugLog(`Composition schema 1 legend layout applied: ${newPosition}`);
     return true;
   };
 

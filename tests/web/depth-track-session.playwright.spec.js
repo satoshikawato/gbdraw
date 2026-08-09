@@ -1,7 +1,6 @@
 const { test, expect } = require('@playwright/test');
-const { createReadStream, existsSync, readFileSync } = require('node:fs');
-const { createServer } = require('node:http');
-const { extname, join, normalize, resolve, sep } = require('node:path');
+const { readFileSync } = require('node:fs');
+const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -11,60 +10,10 @@ const repeatRegionGenbankPath = join(repoRoot, 'tests/test_inputs/NC_001454.1.gb
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
 const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000709.gbk');
 
-const contentTypes = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.wasm': 'application/wasm',
-  '.whl': 'application/octet-stream',
-  '.data': 'application/octet-stream'
-};
-
-let server;
-let baseUrl;
-
-test.beforeAll(async () => {
-  await new Promise((resolveServer, rejectServer) => {
-    server = createServer((request, response) => {
-      const url = new URL(request.url || '/', 'http://127.0.0.1');
-      const requestedPath = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.(?:\/|\\|$))+/, '');
-      const filePath = resolve(repoRoot, requestedPath.replace(/^[/\\]+/, ''));
-      if (!filePath.startsWith(`${repoRoot}${sep}`) && filePath !== repoRoot) {
-        response.writeHead(403);
-        response.end('Forbidden');
-        return;
-      }
-      const finalPath = filePath === repoRoot ? join(repoRoot, 'gbdraw/web/index.html') : filePath;
-      if (!existsSync(finalPath)) {
-        response.writeHead(404);
-        response.end('Not found');
-        return;
-      }
-      response.writeHead(200, {
-        'Content-Type': contentTypes[extname(finalPath)] || 'application/octet-stream'
-      });
-      createReadStream(finalPath).pipe(response);
-    });
-    server.once('error', rejectServer);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      baseUrl = `http://127.0.0.1:${address.port}`;
-      resolveServer();
-    });
-  });
-});
-
-test.afterAll(async () => {
-  await new Promise((resolveClose) => server.close(resolveClose));
-});
-
 test('diagram worker startup leaves the main helper runtime lazy', async ({ page }) => {
   test.setTimeout(180000);
   const genbank = readFileSync(hmmtDnaPath, 'utf8');
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(
     () => (
@@ -246,8 +195,20 @@ const runDiagramWithDiagnostics = async (page) => page.evaluate(async () => {
   };
 });
 
+test('Circular GFF3 mode exposes one annotation and one FASTA uploader', async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  await expect(page.getByLabel('GenBank/DDBJ File', { exact: true })).toHaveCount(1);
+  await page.getByLabel('GFF3 + FASTA', { exact: true }).check();
+
+  await expect(page.getByLabel('GenBank/DDBJ File', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('GFF3 File', { exact: true })).toHaveCount(1);
+  await expect(page.getByLabel('FASTA File', { exact: true })).toHaveCount(1);
+});
+
 test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const showDepthCheckbox = page.locator('label:has-text("Show Depth") input[type="checkbox"]').first();
@@ -279,7 +240,7 @@ test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page })
 test('Linear Depth above Features generates with repeat_region underlays', async ({ page }) => {
   test.setTimeout(300000);
   const genbank = readFileSync(repeatRegionGenbankPath, 'utf8');
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(() => (
     window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true
@@ -398,7 +359,7 @@ test('Linear Depth above Features generates with repeat_region underlays', async
 });
 
 test('Linear depth add, clear, and remove keep global sparse columns aligned', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const result = await page.evaluate(async () => {
@@ -548,7 +509,7 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
 });
 
 test('Linear custom slot panel and enable state preserve the explicit stack', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const result = await page.evaluate(() => {
@@ -618,7 +579,7 @@ test('Linear custom slot panel and enable state preserve the explicit stack', as
 });
 
 test('Custom Track disclosure and editable IDs preserve transient row identity in both modes', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const result = await page.evaluate(async () => {
@@ -815,7 +776,7 @@ test('Custom Track disclosure and editable IDs preserve transient row identity i
 });
 
 test('Color value controls preserve Auto, None, and named colors', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const result = await page.evaluate(async () => {
@@ -900,7 +861,7 @@ test('Color value controls preserve Auto, None, and named colors', async ({ page
 });
 
 test('Definition line colors preserve raw values and present named, Auto, and None states', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const result = await page.evaluate(async () => {
@@ -976,7 +937,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
     };
   });
   page.on('dialog', (dialog) => dialog.accept());
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.evaluate(() => {
     window.__GBDRAW_APP__.pyodideReady = true;
@@ -1104,7 +1065,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
 });
 
 test('Session preflight rejects invalid canonical data without resetting live state', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   await page.evaluate(async () => {
@@ -1374,7 +1335,7 @@ ORIGIN
     return JSON.parse(JSON.stringify(state.layoutPreferences));
   });
 
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.evaluate(async ({ genbankText }) => {
     const app = window.__GBDRAW_APP__;
@@ -1619,7 +1580,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     }));
   });
 
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.evaluate(({ genbankText, nestedStyle }) => {
     const app = window.__GBDRAW_APP__;
@@ -2052,7 +2013,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
 });
 
 test('Session commit failure restores the pre-import state', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const recordText = `LOCUS       ROLLBACK                    4 bp    DNA     linear   UNK 01-JAN-1980
@@ -2143,7 +2104,7 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
   test.setTimeout(240000);
   const genbank = readFileSync(hmmtDnaPath, 'utf8');
 
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.evaluate((genbankText) => {
     const app = window.__GBDRAW_APP__;
@@ -2277,7 +2238,7 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   const depthA = makeDepthTsv('BGC0000711', 30837, 10);
   const depthB = makeDepthTsv('BGC0000713', 31892, 50);
 
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   await page.evaluate(({ genbankAText, genbankBText, depthAText, depthBText }) => {
@@ -2420,7 +2381,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   const depthA = makeDepthTsv('BGC0000708', 40579, 10);
   const depthB = makeDepthTsv('BGC0000709', 50466, 50);
 
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.evaluate(({ genbankAText, genbankBText, depthAText, depthBText }) => {
     const app = window.__GBDRAW_APP__;
@@ -2578,7 +2539,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
 
 test('BGC session keeps restored feature metadata selectable in the preview', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.evaluate(() => {
     window.__GBDRAW_APP__.pyodideReady = true;
@@ -2654,7 +2615,7 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
 
 test('BGC session selected feature Hide undo redo keeps visibility and legend stable', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.evaluate(() => {
     window.__GBDRAW_APP__.pyodideReady = true;

@@ -66,7 +66,6 @@ class DiagramRunResult:
     protein_identity_manifest: Mapping[str, Any] | None = None
     legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] | None = None
     legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] | None = None
-    linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
     run_metadata: Mapping[str, Any] = field(default_factory=dict)
     canonical_request: DiagramRequest | None = None
     biological_feature_metadata: tuple[Mapping[str, Any], ...] = ()
@@ -437,7 +436,6 @@ def save_session_sidecar_if_requested(
             source_session=source_session,
             cli_invocation_args=invocation_args,
             file_bindings=tuple(bindings),
-            linear_record_metadata=run_result.linear_record_metadata,
         ),
         svg_results=svg_results,
         embedded_files=session_files,

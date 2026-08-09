@@ -1,41 +1,12 @@
 const fs = require('node:fs');
-const http = require('node:http');
-const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test, expect } = require('@playwright/test');
-
-let moduleServer;
-let moduleOrigin;
-
-test.beforeAll(async () => {
-  moduleServer = http.createServer((request, response) => {
-    if (request.url === '/blank.html') {
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      response.end('<!doctype html><html><body></body></html>');
-      return;
-    }
-    const relativePath = String(request.url || '').replace(/^\/+/, '');
-    const filePath = path.resolve(process.cwd(), relativePath);
-    if (!filePath.startsWith(path.resolve(process.cwd()) + path.sep) || !fs.existsSync(filePath)) {
-      response.writeHead(404);
-      response.end('Not found');
-      return;
-    }
-    response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-    response.end(fs.readFileSync(filePath));
-  });
-  await new Promise((resolve) => moduleServer.listen(0, '127.0.0.1', resolve));
-  moduleOrigin = `http://127.0.0.1:${moduleServer.address().port}`;
-});
-
-test.afterAll(async () => {
-  if (moduleServer) await new Promise((resolve) => moduleServer.close(resolve));
-});
 
 test('browser export embeds the exact selected schema-3 item and expands references', async ({
   page
 }, testInfo) => {
-  await page.goto(`${moduleOrigin}/blank.html`);
+  await page.goto('/');
+  const origin = new URL(page.url()).origin;
   const exported = await page.evaluate(async ({ origin }) => {
     const { enrichSvgWithStandaloneInteractivity } = await import(
       `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
@@ -225,7 +196,7 @@ test('browser export embeds the exact selected schema-3 item and expands referen
       sourceGroup: catalog.items[0].orthogroups[0],
       svgText: new XMLSerializer().serializeToString(svg)
     };
-  }, { origin: moduleOrigin });
+  }, { origin });
 
   expect(exported.enriched).toBe(true);
   expect(exported.embedded.schema).toBe(3);
@@ -390,7 +361,8 @@ test('browser export embeds the exact selected schema-3 item and expands referen
 test('standalone rejects conflicting compact provenance markers', async ({
   page
 }, testInfo) => {
-  await page.goto(`${moduleOrigin}/blank.html`);
+  await page.goto('/');
+  const origin = new URL(page.url()).origin;
   const variants = await page.evaluate(async ({ origin }) => {
     const { enrichSvgWithStandaloneInteractivity } = await import(
       `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
@@ -491,7 +463,7 @@ test('standalone rejects conflicting compact provenance markers', async ({
         svgText: new XMLSerializer().serializeToString(svg)
       };
     });
-  }, { origin: moduleOrigin });
+  }, { origin });
 
   await page.addInitScript(() => {
     window.__expandedInvalidFeature = false;
@@ -522,12 +494,13 @@ test('standalone rejects conflicting compact provenance markers', async ({
 test('Download Interactive SVG forwards live editor overrides without mutating the catalog', async ({
   page
 }) => {
-  await page.goto(`${moduleOrigin}/blank.html`);
+  await page.goto('/');
+  const origin = new URL(page.url()).origin;
   await page.addScriptTag({
-    url: `${moduleOrigin}/gbdraw/web/vendor/vue/vue.global.js`
+    url: '/gbdraw/web/vendor/vue/vue.global.js'
   });
   await page.addScriptTag({
-    url: `${moduleOrigin}/gbdraw/web/vendor/dompurify/purify.min.js`
+    url: '/gbdraw/web/vendor/dompurify/purify.min.js'
   });
 
   const exported = await page.evaluate(async ({ origin }) => {
@@ -609,7 +582,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
       URL.revokeObjectURL = originalRevokeObjectURL;
       HTMLAnchorElement.prototype.click = originalClick;
     }
-  }, { origin: moduleOrigin });
+  }, { origin });
 
   expect(exported.embedded.items[0].features[0].displayLabel)
     .toBe('Live feature label');

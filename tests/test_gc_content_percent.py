@@ -402,18 +402,12 @@ def test_linear_gc_content_percent_axis_inherits_depth_tick_font_size() -> None:
 def test_circular_cli_gc_percent_options_forward_to_api(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
+    stub_typed_request_export,
 ) -> None:
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [_make_record()])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(tmp_path / f"{output_prefix}.svg")
-        ],
-    )
 
     def fake_assemble(*args, **kwargs):
         captured["options"] = kwargs["options"]

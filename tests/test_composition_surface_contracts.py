@@ -380,7 +380,8 @@ def test_linear_cli_rejects_circular_corner_legend_before_rendering(
     test_inputs_dir: Path,
     tmp_path: Path,
 ) -> None:
-    return_code, output, svg_path = gbdraw_runner.run_linear(
+    return_code, output, svg_path = gbdraw_runner.run(
+        "linear",
         [test_inputs_dir / "BGC0000708.gbk"],
         "invalid-corner-legend",
         tmp_path,

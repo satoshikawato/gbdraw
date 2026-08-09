@@ -1,37 +1,7 @@
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
-const http = require('node:http');
-const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test, expect } = require('@playwright/test');
-
-let moduleServer;
-let moduleOrigin;
-
-test.beforeAll(async () => {
-  moduleServer = http.createServer((request, response) => {
-    if (request.url === '/blank.html') {
-      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      response.end('<!doctype html><html><body></body></html>');
-      return;
-    }
-    const relativePath = String(request.url || '').replace(/^\/+/, '');
-    const filePath = path.resolve(process.cwd(), relativePath);
-    if (!filePath.startsWith(path.resolve(process.cwd()) + path.sep) || !fs.existsSync(filePath)) {
-      response.writeHead(404);
-      response.end('Not found');
-      return;
-    }
-    response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-    response.end(fs.readFileSync(filePath));
-  });
-  await new Promise((resolve) => moduleServer.listen(0, '127.0.0.1', resolve));
-  moduleOrigin = `http://127.0.0.1:${moduleServer.address().port}`;
-});
-
-test.afterAll(async () => {
-  if (moduleServer) await new Promise((resolve) => moduleServer.close(resolve));
-});
 
 test('standalone search updates only hits and active feature parts at 25k features', async ({ page }, testInfo) => {
   test.setTimeout(120_000);
@@ -375,7 +345,8 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
 });
 
 test('legacy feature-array fallback remains readable as compact v2 metadata', async ({ page }) => {
-  await page.goto(`${moduleOrigin}/blank.html`);
+  await page.goto('/');
+  const origin = new URL(page.url()).origin;
   const payload = await page.evaluate(async ({ origin }) => {
     const { enrichSvgWithStandaloneInteractivity } = await import(
       `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
@@ -468,7 +439,7 @@ test('legacy feature-array fallback remains readable as compact v2 metadata', as
       ]
     });
     return JSON.parse(svg.querySelector('#gbdraw-interactive-feature-metadata').textContent);
-  }, { origin: moduleOrigin });
+  }, { origin });
 
   expect(payload.schema).toBe('gbdraw-interactive-feature-popup-v2');
   expect(payload.features[0].nucleotide_fasta).toBeUndefined();
@@ -539,7 +510,8 @@ test('legacy feature-array fallback remains readable as compact v2 metadata', as
 });
 
 test('standalone orthogroup FASTA retains non-rendered biological members', async ({ page }, testInfo) => {
-  await page.goto(`${moduleOrigin}/blank.html`);
+  await page.goto('/');
+  const origin = new URL(page.url()).origin;
   const svgText = await page.evaluate(async ({ origin }) => {
     const { enrichSvgWithStandaloneInteractivity } = await import(
       `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
@@ -630,7 +602,7 @@ test('standalone orthogroup FASTA retains non-rendered biological members', asyn
     visibleFeature.amino_acid_fasta = '>h_ffffffffffffffffffffffffff\\nMVISIBLE';
     metadata.textContent = JSON.stringify(payload);
     return new XMLSerializer().serializeToString(svg);
-  }, { origin: moduleOrigin });
+  }, { origin });
 
   const svgPath = testInfo.outputPath('standalone-hidden-orthogroup.svg');
   fs.writeFileSync(svgPath, svgText, 'utf8');
@@ -703,7 +675,8 @@ test('standalone orthogroup FASTA retains non-rendered biological members', asyn
 });
 
 test('preview search renderer applies result and active differences only', async ({ page }) => {
-  await page.goto(`${moduleOrigin}/blank.html`);
+  await page.goto('/');
+  const origin = new URL(page.url()).origin;
   const result = await page.evaluate(async ({ origin }) => {
     const preview = await import(`${origin}/gbdraw/web/js/app/feature-search/preview-svg.js`);
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -741,7 +714,7 @@ test('preview search renderer applies result and active differences only', async
       dimmedCount: svg.querySelectorAll('.gbdraw-preview-feature-search-dimmed').length,
       rootActive: svg.classList.contains('gbdraw-preview-feature-search-results-active')
     };
-  }, { origin: moduleOrigin });
+  }, { origin });
 
   expect(result).toEqual({
     resultMutationCount: 6,

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 
 from Bio import SeqIO
 from PIL import Image
 
+from docs.capture.config import chapter_for
 from gbdraw.session_io import CURRENT_SESSION_VERSION
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CAPTURE_ROOT = REPO_ROOT / "docs" / "capture"
@@ -17,9 +16,6 @@ INTERACTIVE_FLOW = (
 )
 EXPORT_FLOW = CAPTURE_ROOT / "flows" / "how_to" / "exports.py"
 HUMAN_HELPER = CAPTURE_ROOT / "flows" / "human_circular.py"
-CONFIG_PATH = CAPTURE_ROOT / "config.py"
-RUNNER_PATH = CAPTURE_ROOT / "run_all.py"
-MANIFEST_PATH = REPO_ROOT / "docs" / "scenarios" / "manifest.json"
 INDEX_PATH = REPO_ROOT / "gbdraw" / "web" / "index.html"
 HUMAN_FIXTURE = (
     REPO_ROOT
@@ -77,13 +73,6 @@ SCREENSHOT_NAMES = {
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _chapter(scenario_id: str) -> dict[str, object]:
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    return next(
-        chapter for chapter in manifest["chapters"] if chapter["id"] == scenario_id
-    )
 
 
 def test_interactive_flows_use_whole_natural_source_records() -> None:
@@ -215,7 +204,7 @@ def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None
         "_assert_semantically_equivalent(source_report, exported)",
         "_stabilize_static_capture_surface(page)",
         "backdrop-filter: none !important",
-        "_reset_finished_preview_viewport(page, target_zoom=50)",
+        "_reset_finished_preview_viewport(page, target_zoom=60)",
         'final_report["restoredPreviewFrame"]',
         "_frame_finished_preview_with_legend(page)",
         'error: \'record and legend do not fit\'',
@@ -269,14 +258,15 @@ def test_interactive_accessibility_labels_are_public_ui_contracts() -> None:
 
 
 def test_manifest_pages_runner_and_screenshot_contracts_match() -> None:
-    config = CONFIG_PATH.read_text(encoding="utf-8")
-    runner = RUNNER_PATH.read_text(encoding="utf-8")
+    from docs.capture import config as capture_config
+    from docs.capture import run_all
+
     index = (
         REPO_ROOT / "docs" / "HOW_TO" / "GUI" / "README.md"
     ).read_text(encoding="utf-8")
 
     for scenario_id, names in SCREENSHOT_NAMES.items():
-        chapter = _chapter(scenario_id)
+        chapter = chapter_for(scenario_id)
         assert chapter["status"] == {
             "implementation": "verified",
             "review": "approved",
@@ -287,8 +277,8 @@ def test_manifest_pages_runner_and_screenshot_contracts_match() -> None:
         assert tuple(
             Path(screenshot["path"]).name for screenshot in chapter["screenshots"]
         ) == names
-        assert f'"{scenario_id}": ScenarioCapture(' in runner
-        assert scenario_id.replace("-", "_") not in config
+        assert capture_config.screenshot_names_for(scenario_id) == names
+        assert scenario_id in run_all.CAPTURE_FUNCTIONS
 
         page = HOW_TO_PAGES[scenario_id].read_text(encoding="utf-8")
         for name in names:

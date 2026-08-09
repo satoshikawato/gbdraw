@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import sys
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -22,40 +21,15 @@ if str(CAPTURE_ROOT) not in sys.path:
     sys.path.insert(0, str(CAPTURE_ROOT))
 
 from config import (  # noqa: E402
-    IMPLEMENTED_SCENARIO_IDS as GUI_SCENARIO_IDS,
-    SUPPORTED_TIERS,
-    first_circular_screenshot_paths,
-    first_linear_screenshot_paths,
-    gui_annotated_chloroplast_screenshot_paths,
-    gui_annotation_tracks_screenshot_paths,
-    gui_circular_layout_screenshot_paths,
-    gui_circular_rings_screenshot_paths,
-    gui_feature_highlight_screenshot_paths,
-    gui_feature_presentation_screenshot_paths,
-    gui_exports_screenshot_paths,
-    gui_inputs_screenshot_paths,
-    gui_interactive_editing_screenshot_paths,
-    gui_interactive_handoff_screenshot_paths,
-    gui_linear_layout_screenshot_paths,
-    gui_losatn_screenshot_paths,
-    gui_losatp_collinear_screenshot_paths,
-    gui_losatp_tutorial_collinear_screenshot_paths,
-    gui_losatp_groups_how_to_screenshot_paths,
-    gui_losatp_groups_screenshot_paths,
-    gui_quantitative_map_screenshot_paths,
-    gui_quantitative_tracks_screenshot_paths,
-    gui_precomputed_circular_rings_screenshot_paths,
-    gui_session_reproduction_screenshot_paths,
-    gui_styling_screenshot_paths,
-    gui_tlosatx_screenshot_paths,
-    gui_uploaded_comparison_screenshot_paths,
+    scenario_ids_for,
+    scenario_tier,
+    screenshot_paths_for,
+    supported_tiers,
 )
 from docs.recipes.run_cli_scenarios import (  # noqa: E402
-    IMPLEMENTED_SCENARIOS as CLI_SCENARIO_IDS,
     run_scenario as run_cli_scenario,
 )
 from docs.recipes.run_python_scenarios import (  # noqa: E402
-    IMPLEMENTED_SCENARIOS as PYTHON_SCENARIO_IDS,
     run_scenario as run_python_scenario,
 )
 from flows.how_to.comparisons import (  # noqa: E402
@@ -115,142 +89,38 @@ CaptureFunction = Callable[
     Any,
 ]
 
-
-@dataclass(frozen=True)
-class ScenarioCapture:
-    screenshot_paths: Callable[[], dict[str, Path]]
-    capture: CaptureFunction
-    tier: str
-
-
-SCENARIOS = {
-    "T-GUI-01": ScenarioCapture(
-        screenshot_paths=first_circular_screenshot_paths,
-        capture=capture_first_circular,
-        tier="core",
-    ),
-    "T-GUI-02": ScenarioCapture(
-        screenshot_paths=first_linear_screenshot_paths,
-        capture=capture_first_linear,
-        tier="core",
-    ),
-    "H-GUI-01": ScenarioCapture(
-        screenshot_paths=gui_inputs_screenshot_paths,
-        capture=capture_gui_inputs,
-        tier="core",
-    ),
-    "T-GUI-03": ScenarioCapture(
-        screenshot_paths=gui_losatn_screenshot_paths,
-        capture=capture_gui_losatn,
-        tier="extended",
-    ),
-    "H-GUI-02": ScenarioCapture(
-        screenshot_paths=gui_circular_layout_screenshot_paths,
-        capture=capture_gui_circular_layout,
-        tier="extended",
-    ),
-    "H-GUI-03": ScenarioCapture(
-        screenshot_paths=gui_linear_layout_screenshot_paths,
-        capture=capture_gui_linear_layout,
-        tier="extended",
-    ),
-    "H-GUI-04": ScenarioCapture(
-        screenshot_paths=gui_uploaded_comparison_screenshot_paths,
-        capture=capture_gui_uploaded_comparison,
-        tier="extended",
-    ),
-    "H-GUI-05": ScenarioCapture(
-        screenshot_paths=gui_tlosatx_screenshot_paths,
-        capture=capture_gui_tlosatx,
-        tier="extended",
-    ),
-    "H-GUI-06": ScenarioCapture(
-        screenshot_paths=gui_circular_rings_screenshot_paths,
-        capture=capture_gui_circular_rings,
-        tier="extended",
-    ),
-    "T-GUI-04": ScenarioCapture(
-        screenshot_paths=gui_losatp_groups_screenshot_paths,
-        capture=capture_gui_losatp_groups,
-        tier="extended",
-    ),
-    "T-GUI-05": ScenarioCapture(
-        screenshot_paths=gui_annotated_chloroplast_screenshot_paths,
-        capture=capture_gui_annotated_chloroplast,
-        tier="extended",
-    ),
-    "T-GUI-06": ScenarioCapture(
-        screenshot_paths=gui_precomputed_circular_rings_screenshot_paths,
-        capture=capture_gui_precomputed_circular_rings,
-        tier="extended",
-    ),
-    "T-GUI-08": ScenarioCapture(
-        screenshot_paths=gui_losatp_tutorial_collinear_screenshot_paths,
-        capture=capture_gui_losatp_tutorial_collinear,
-        tier="extended",
-    ),
-    "T-GUI-09": ScenarioCapture(
-        screenshot_paths=gui_interactive_handoff_screenshot_paths,
-        capture=capture_gui_interactive_handoff,
-        tier="extended",
-    ),
-    "T-GUI-10": ScenarioCapture(
-        screenshot_paths=gui_feature_highlight_screenshot_paths,
-        capture=capture_gui_feature_highlight,
-        tier="extended",
-    ),
-    "T-GUI-12": ScenarioCapture(
-        screenshot_paths=gui_quantitative_map_screenshot_paths,
-        capture=capture_gui_quantitative_map,
-        tier="extended",
-    ),
-    "H-GUI-07": ScenarioCapture(
-        screenshot_paths=gui_losatp_groups_how_to_screenshot_paths,
-        capture=capture_gui_losatp_groups_how_to,
-        tier="extended",
-    ),
-    "H-GUI-08": ScenarioCapture(
-        screenshot_paths=gui_losatp_collinear_screenshot_paths,
-        capture=capture_gui_losatp_collinear,
-        tier="extended",
-    ),
-    "H-GUI-09": ScenarioCapture(
-        screenshot_paths=gui_quantitative_tracks_screenshot_paths,
-        capture=capture_gui_quantitative_tracks,
-        tier="extended",
-    ),
-    "H-GUI-10": ScenarioCapture(
-        screenshot_paths=gui_annotation_tracks_screenshot_paths,
-        capture=capture_gui_annotation_tracks,
-        tier="extended",
-    ),
-    "H-GUI-11": ScenarioCapture(
-        screenshot_paths=gui_styling_screenshot_paths,
-        capture=capture_gui_styling,
-        tier="extended",
-    ),
-    "H-GUI-12": ScenarioCapture(
-        screenshot_paths=gui_feature_presentation_screenshot_paths,
-        capture=capture_gui_feature_presentation,
-        tier="extended",
-    ),
-    "H-GUI-13": ScenarioCapture(
-        screenshot_paths=gui_interactive_editing_screenshot_paths,
-        capture=capture_gui_interactive_editing,
-        tier="extended",
-    ),
-    "H-GUI-14": ScenarioCapture(
-        screenshot_paths=gui_session_reproduction_screenshot_paths,
-        capture=capture_gui_session_reproduction,
-        tier="extended",
-    ),
-    "H-GUI-15": ScenarioCapture(
-        screenshot_paths=gui_exports_screenshot_paths,
-        capture=capture_gui_exports,
-        tier="core",
-    ),
+CAPTURE_FUNCTIONS: dict[str, CaptureFunction] = {
+    "T-GUI-01": capture_first_circular,
+    "T-GUI-02": capture_first_linear,
+    "T-GUI-03": capture_gui_losatn,
+    "T-GUI-04": capture_gui_losatp_groups,
+    "T-GUI-05": capture_gui_annotated_chloroplast,
+    "T-GUI-06": capture_gui_precomputed_circular_rings,
+    "T-GUI-08": capture_gui_losatp_tutorial_collinear,
+    "T-GUI-09": capture_gui_interactive_handoff,
+    "T-GUI-10": capture_gui_feature_highlight,
+    "T-GUI-12": capture_gui_quantitative_map,
+    "H-GUI-01": capture_gui_inputs,
+    "H-GUI-02": capture_gui_circular_layout,
+    "H-GUI-03": capture_gui_linear_layout,
+    "H-GUI-04": capture_gui_uploaded_comparison,
+    "H-GUI-05": capture_gui_tlosatx,
+    "H-GUI-06": capture_gui_circular_rings,
+    "H-GUI-07": capture_gui_losatp_groups_how_to,
+    "H-GUI-08": capture_gui_losatp_collinear,
+    "H-GUI-09": capture_gui_quantitative_tracks,
+    "H-GUI-10": capture_gui_annotation_tracks,
+    "H-GUI-11": capture_gui_styling,
+    "H-GUI-12": capture_gui_feature_presentation,
+    "H-GUI-13": capture_gui_interactive_editing,
+    "H-GUI-14": capture_gui_session_reproduction,
+    "H-GUI-15": capture_gui_exports,
 }
 
+GUI_SCENARIO_IDS = scenario_ids_for("playwright")
+CLI_SCENARIO_IDS = scenario_ids_for("cli-recipe")
+PYTHON_SCENARIO_IDS = scenario_ids_for("python-recipe")
+SUPPORTED_TIERS = supported_tiers()
 TIER_RANK = {tier: index for index, tier in enumerate(SUPPORTED_TIERS)}
 ALL_SCENARIO_IDS = (*GUI_SCENARIO_IDS, *CLI_SCENARIO_IDS, *PYTHON_SCENARIO_IDS)
 MAX_RASTER_NOISE_PIXELS = 100
@@ -262,6 +132,8 @@ COMPLEX_SVG_RASTER_CASES = {
 
 if len(ALL_SCENARIO_IDS) != len(set(ALL_SCENARIO_IDS)):
     raise RuntimeError("Documentation scenario IDs must be unique across surfaces.")
+if set(GUI_SCENARIO_IDS) != set(CAPTURE_FUNCTIONS):
+    raise RuntimeError("Every manifest-owned GUI capture requires one callable.")
 
 
 def _images_match(
@@ -317,7 +189,7 @@ def _capture_scenario(
     base_url: str,
     download_root: Path,
 ) -> None:
-    result = SCENARIOS[scenario_id].capture(
+    result = CAPTURE_FUNCTIONS[scenario_id](
         browser_type,
         base_url,
         output_paths,
@@ -438,7 +310,7 @@ def _check(
                     f"The committed {scenario_id} screenshots are stale: "
                     f"{', '.join(stale)}. Regenerate with "
                     "python docs/capture/run_all.py "
-                    f"--scenario {scenario_id} --tier {SCENARIOS[scenario_id].tier}"
+                    f"--scenario {scenario_id} --tier {scenario_tier(scenario_id)}"
                 )
             print(f"{scenario_id}: all committed screenshots match a fresh capture")
 
@@ -487,19 +359,19 @@ def main(argv: list[str] | None = None) -> int:
     included_gui_ids = tuple(
         scenario_id
         for scenario_id in GUI_SCENARIO_IDS
-        if TIER_RANK[SCENARIOS[scenario_id].tier] <= TIER_RANK[args.tier]
+        if TIER_RANK[scenario_tier(scenario_id)] <= TIER_RANK[args.tier]
     )
 
-    if args.scenario == "all" or args.scenario in SCENARIOS:
+    if args.scenario == "all" or args.scenario in CAPTURE_FUNCTIONS:
         if args.scenario != "all" and args.scenario not in included_gui_ids:
             raise ValueError(
-                f"{args.scenario} requires --tier {SCENARIOS[args.scenario].tier}"
+                f"{args.scenario} requires --tier {scenario_tier(args.scenario)}"
             )
         gui_ids = (
             included_gui_ids if args.scenario == "all" else (args.scenario,)
         )
         output_paths_by_scenario = {
-            scenario_id: SCENARIOS[scenario_id].screenshot_paths()
+            scenario_id: screenshot_paths_for(scenario_id)
             for scenario_id in gui_ids
         }
         if args.check:

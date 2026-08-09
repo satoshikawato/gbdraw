@@ -45,6 +45,55 @@ def parse_translate_chain(value: str) -> tuple[float, float] | None:
     return offset_x, offset_y
 
 
+def assert_gallery_bgc_definitions(
+    root: ElementTree.Element, *, scenario_id: str
+) -> None:
+    """Require the shared five-record Gallery definition layout and typography."""
+
+    definition_groups = [
+        element
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-role") == "record-definition"
+    ]
+    translations = [
+        parse_translate_chain(group.attrib.get("transform", ""))
+        for group in definition_groups
+    ]
+    if len(definition_groups) != 5 or any(item is None for item in translations):
+        raise RecipeContractError(f"{scenario_id} definition groups are incomplete.")
+    x_positions = [translation[0] for translation in translations if translation]
+    if max(x_positions) - min(x_positions) > 1e-6:
+        raise RecipeContractError(
+            f"{scenario_id} definitions are not locked to one left column."
+        )
+
+    expected = {
+        "name": (20.0, "bold", "black"),
+        "subtitle": (20.0, "normal", "black"),
+        "accession": (20.0, "normal", "#7b7c7d"),
+        "length": (20.0, "normal", "#7b7c7d"),
+    }
+    for group in definition_groups:
+        lines = {
+            element.attrib.get("data-definition-line-kind", ""): (
+                float(element.attrib.get("font-size", "0")),
+                element.attrib.get("font-weight", ""),
+                element.attrib.get("fill", "").lower(),
+            )
+            for element in group.iter()
+            if element.attrib.get("data-definition-line-kind")
+        }
+        anchors = {
+            element.attrib.get("text-anchor", "")
+            for element in group.iter()
+            if element.attrib.get("data-definition-line-kind")
+        }
+        if lines != expected or anchors != {"start"}:
+            raise RecipeContractError(
+                f"{scenario_id} definition typography differs from the Gallery."
+            )
+
+
 def load_chapter(
     scenario_id: str,
     *,

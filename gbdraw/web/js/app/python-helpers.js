@@ -544,45 +544,6 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
-def convert_protein_blast_to_genomic_tsv(blast_text, protein_maps_json, max_hits=5):
-    """Convert LOSATP blastp output into genomic comparison TSV for gbdraw linear."""
-    try:
-        from io import StringIO
-        from gbdraw.analysis.protein_colinearity import (
-            cap_hits_per_query,
-            convert_protein_hits_to_genomic_links,
-            parse_losatp_outfmt6,
-        )
-        from gbdraw.io.comparisons import COMPARISON_COLUMNS
-        try:
-            from gbdraw.analysis.protein_colinearity import convert_pair_protein_hits_to_genomic_links
-        except ImportError:
-            convert_pair_protein_hits_to_genomic_links = None
-
-        raw_maps = json.loads(str(protein_maps_json))
-        if isinstance(raw_maps, dict):
-            raw_maps = [raw_maps]
-
-        protein_maps = [_build_web_cds_protein_map(raw_map) for raw_map in raw_maps]
-        hits = parse_losatp_outfmt6(str(blast_text or ""))
-        capped = cap_hits_per_query(hits, max_hits=int(max_hits or 5))
-        if len(protein_maps) >= 2 and convert_pair_protein_hits_to_genomic_links is not None:
-            converted = convert_pair_protein_hits_to_genomic_links(
-                capped,
-                protein_maps[0],
-                protein_maps[1],
-            )
-        else:
-            protein_map = {}
-            for current_map in protein_maps:
-                protein_map.update(current_map)
-            converted = convert_protein_hits_to_genomic_links(capped, protein_map)
-        handle = StringIO()
-        converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(handle, sep=chr(9), header=False, index=False, lineterminator=chr(10))
-        return json.dumps({"tsv": handle.getvalue(), "hit_count": int(converted.shape[0])})
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
-
 def _build_web_cds_protein_map(raw_map):
     from gbdraw.analysis.protein_colinearity import CdsProtein
 

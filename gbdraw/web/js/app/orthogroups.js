@@ -13,6 +13,7 @@ import {
   resolveDisplayProteinId
 } from './feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
+import { copyTextToClipboard } from '../utils/clipboard.js';
 import {
   RECORD_INDEX_KEYS,
   STABLE_FEATURE_ID_KEYS,
@@ -54,27 +55,6 @@ const makeSafeFilename = (value, fallback = 'orthogroup') => {
 
 const sequenceKindLabel = (sequenceKind) => (sequenceKind === 'aa' ? 'aa' : 'nt');
 const sequenceExtension = (sequenceKind) => (sequenceKindLabel(sequenceKind) === 'aa' ? 'faa' : 'fna');
-
-const copyTextToClipboard = async (text) => {
-  const value = String(text ?? '');
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.left = '-9999px';
-  textarea.style.top = '0';
-  document.body.appendChild(textarea);
-  textarea.select();
-  try {
-    document.execCommand('copy');
-  } finally {
-    document.body.removeChild(textarea);
-  }
-};
 
 const numericOrthogroupId = (id) => {
   const match = String(id || '').match(/^og_(\d+)$/i);

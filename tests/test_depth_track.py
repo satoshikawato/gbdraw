@@ -45,18 +45,6 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import LinearComparison
 
 
-def _stub_typed_request_export(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
-
-
 def _make_record(record_id: str = "rec1", length: int = 120) -> SeqRecord:
     record = SeqRecord(Seq("ATGC" * (length // 4)), id=record_id, name=record_id)
     record.annotations["molecule_type"] = "DNA"
@@ -1929,6 +1917,7 @@ def test_cli_rejects_removed_depth_tick_interval(get_args) -> None:
 def test_circular_cli_depth_options_forward_to_api(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _make_record()
     captured: dict[str, object] = {}
@@ -1937,7 +1926,6 @@ def test_circular_cli_depth_options_forward_to_api(
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
         captured["options"] = kwargs["options"]
@@ -2000,6 +1988,7 @@ def test_circular_cli_depth_options_forward_to_api(
 def test_circular_cli_reads_depth_file_once_for_multiple_records(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     records = [_make_record("rec1"), _make_record("rec2")]
     depth_file = tmp_path / "depth.tsv"
@@ -2017,7 +2006,6 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
     monkeypatch.setattr(depth_tracks_module, "read_depth_tsv", counting_read_depth_tsv)
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     circular_cli_module.circular_main(
         [
@@ -2039,6 +2027,7 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
 def test_linear_cli_depth_options_forward_to_api(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _make_record()
     captured: dict[str, object] = {}
@@ -2048,7 +2037,6 @@ def test_linear_cli_depth_options_forward_to_api(
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_build(_records, *, options, **_kwargs):
         captured["options"] = options
@@ -2111,6 +2099,7 @@ def test_linear_cli_depth_options_forward_to_api(
 def test_linear_cli_repeated_depth_track_forwards_record_major_files(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     records = [_make_record("rec1"), _make_record("rec2")]
     captured: dict[str, object] = {}
@@ -2118,7 +2107,6 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_build(_records, *, options, **_kwargs):
         captured["options"] = options
@@ -2193,6 +2181,7 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
 def test_linear_cli_depth_track_placeholders_keep_record_slots(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     records = [_make_record("rec1"), _make_record("rec2")]
     captured: dict[str, object] = {}
@@ -2200,7 +2189,6 @@ def test_linear_cli_depth_track_placeholders_keep_record_slots(
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_build(_records, *, options, **_kwargs):
         captured["options"] = options
@@ -2319,13 +2307,13 @@ def test_linear_cli_sparse_depth_tracks_render_end_to_end(
 def test_circular_cli_repeated_depth_track_forwards_record_major_files(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     records = [_make_record("rec1"), _make_record("rec2")]
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
         captured["options"] = kwargs["options"]

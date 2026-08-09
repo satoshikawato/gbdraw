@@ -24,6 +24,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
+    "numpy>=1.23",
     "pandas",
     "svgwrite",
     "biopython",

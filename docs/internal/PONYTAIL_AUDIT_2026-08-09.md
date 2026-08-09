@@ -1,10 +1,35 @@
 # gbdraw Ponytail Audit 2026-08-09
 
-## 結論
+## 実装結果
 
-現行 worktree には、約 11,500 行、約 13 MiB、条件つきで直接 npm 依存最大 1 個、CI ジョブ 1 個の削減余地がある。削減対象は、廃止済みアルゴリズム、同じ状態を復元する複数の経路、テスト専用の production API、実装文字列を固定するテスト、Git 履歴で足りる保存物である。
+この監査を同日の worktree に適用した。Findings 1〜17、19〜25、27〜29 は実装済みである。主な変更は、未到達の interactive/collinearity 実装と raw argv projector の削除、Web と capture の owner 集約、重複する test helper/server/codec/download 処理の統合、履歴保存物と未使用 asset の削除である。
 
-最初に扱うべき P0 は次の 6 件である。
+| 状態 | Findings | 結果 |
+| --- | --- | --- |
+| 完了 | 1〜17、19〜25、27〜29 | finding に記載した削除または既存 owner への統合を実施した。 |
+| 条件つき完了 | 18 | 参照がない `selection.json` と `tsconfig.tsbuildinfo` を削除した。WOFF、TTF、SVG は現行 CSS の fallback URL が参照しており、supported-browser baseline を変更していないため残した。 |
+| 維持 | 26 | `playwright.config.js` が `// @ts-check` を使うため、`@types/node` と lockfile entry を残した。 |
+
+released session の reader/migration、orthogroup mode の公開 normalizer/type alias、`save_figure` の期限つき compatibility path は残した。新規 CLI session の描画状態は canonical request だけを authority とし、raw argv は provenance と legacy replay に限定した。この変更に合わせ、T-CLI-11 と H-CLI-12 の session artifact を canonical writer の出力で再生成した。どちらも旧 `form`、`losat`、`cliOptions` 投影を除き、再描画 SVG は変更前と一致する。監査時点の finding リンクと削減量は調査スナップショットであり、実装後に削除された行を指すものを含む。
+
+### 検証結果
+
+| 対象 | 結果 |
+| --- | --- |
+| Python | `ruff check gbdraw/`、sdist/wheel build、reference output 16件、example 再現 14件が通過した。 |
+| Web | 既知の WSSV rehydration 1件を除く直接 Node 61件、対象 Playwright、offline asset 検査が通過した。WSSV の `0 !== 20` は HEAD archive でも再現した。 |
+| Documentation | CLI と Python の全 recipe が `--all --check` を通過した。T-GUI-01 の6画像とSVG、T-PY-08 の4 artifact も clean capture と一致した。 |
+| 全体 | `pytest tests/ -m "not slow" --timeout=1800 -q` は 2,925 passed、17 skipped、6 deselected、5 failed だった。 |
+
+全体 gate の5件は、本監査の差分外または HEAD でも再現する既知不整合である。2件は `GETTING_TUTORIAL_DATA.md` へ導線を移した後に残った旧 manifest-link assertion、1件は既存 worktree の Linear CLI contract hash、1件は record-scoped feature identity を持たない orthogroup test fixture、1件は上記 WSSV rehydration である。監査差分で発生した stale internal caller、cancellation rollback、feature-catalog scope の回帰は focused test と最終 gate の両方で解消を確認した。
+
+次回修正用の owner、再現コマンド、受け入れ条件は [TEST_FAILURE_HANDOFF_2026-08-09.md](./TEST_FAILURE_HANDOFF_2026-08-09.md) に記録した。
+
+## 監査時点の結論
+
+監査時点の worktree には、約 11,500 行、約 13 MiB、条件つきで直接 npm 依存最大 1 個、CI ジョブ 1 個の削減余地があった。削減対象は、廃止済みアルゴリズム、同じ状態を復元する複数の経路、テスト専用の production API、実装文字列を固定するテスト、Git 履歴で足りる保存物である。
+
+監査時点で最初に扱うべき P0 は次の 6 件だった。
 
 1. Web の実装文字列テストと Python 内生成 Node テストを、既存の直接 JavaScript テストへ寄せる。
 2. Python と standalone JavaScript に残る未到達の interactive match payload v1 を削除する。
@@ -13,7 +38,7 @@
 5. CLI セッション writer の raw argv 再投影を廃止し、canonical request を唯一の描画設定とする。
 6. ドキュメント capture の scenario と fixture 定義を既存 manifest に集約する。
 
-この文書は改善候補と実施方針を記録する。production code、テスト、生成物は変更していない。
+この節以下は、実装前に記録した改善候補と実施方針である。実施後の状態は上の「実装結果」を正とする。
 
 ## 監査条件
 

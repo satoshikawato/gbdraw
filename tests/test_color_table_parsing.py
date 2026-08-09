@@ -58,15 +58,16 @@ def test_read_color_table_rejects_missing_required_columns(tmp_path: Path) -> No
 def test_circular_cli_accepts_existing_four_column_color_table(
     gbdraw_runner,
     examples_dir: Path,
-    temp_output_dir: Path,
+    tmp_path: Path,
 ) -> None:
     gbk_file = examples_dir / "MjeNMV.gb"
     color_table = examples_dir / "feature_specific_color_table.txt"
 
-    returncode, output, svg_path = gbdraw_runner.run_circular(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "circular",
         [gbk_file],
         "circular_four_column_color_table",
-        temp_output_dir,
+        tmp_path,
         extra_args=["-t", str(color_table), "--legend", "right"],
     )
 

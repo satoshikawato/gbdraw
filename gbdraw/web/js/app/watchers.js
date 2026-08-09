@@ -40,7 +40,6 @@ export const setupWatchers = ({
   watch,
   nextTick,
   onMounted,
-  debugLog,
   legendActions,
   svgActions,
   featureActions,
@@ -359,17 +358,6 @@ export const setupWatchers = ({
         previewRuntime?.clearActiveRuntime?.();
       }
 
-      if (svgContainer.value) {
-        if (svg) {
-          const tickEl = svg.querySelector(
-            'g[data-gbdraw-slot-renderer="ticks"]'
-          ) || svg.getElementById('tick');
-          if (tickEl) {
-            debugLog(`After DOM update - tick transform: ${tickEl.getAttribute('transform')}`);
-          }
-        }
-      }
-
       if (svg && !isIncrementalEdit) {
         const normalizedSvgChanged = measureTiming(timingEntries, 'watch(svgContent) normalize unique SVG ids', () => {
           const skewChanged = ensureUniqueSkewClipPathIds(svg);
@@ -418,8 +406,6 @@ export const setupWatchers = ({
 
       if (!isIncrementalEdit) {
         measureTiming(timingEntries, 'watch(svgContent) captureOriginalStroke', captureOriginalStroke);
-        debugLog('Full base config capture (fresh generation)');
-
         canvasPadding.top = 0;
         canvasPadding.right = 0;
         canvasPadding.bottom = 0;

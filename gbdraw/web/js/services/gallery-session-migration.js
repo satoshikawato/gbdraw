@@ -20,6 +20,7 @@ import {
   normalizeLinearComparisonPlan,
   resolveLinearComparisonPlan
 } from '../app/linear-comparisons.js';
+import { textToBase64, textToBytes } from './file-content-cache.js';
 
 const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -118,19 +119,9 @@ const selectorToken = (record, index) => {
   return `#${index + 1}`;
 };
 
-const textToBase64 = (text) => {
-  const bytes = new TextEncoder().encode(String(text));
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-  return btoa(binary);
-};
-
 const cachedLosatFile = (entry, fallbackName) => {
   const text = String(entry?.text || '');
-  const bytes = new TextEncoder().encode(text);
+  const bytes = textToBytes(text);
   return {
     name: String(entry?.filename || fallbackName || 'comparison.tsv'),
     type: 'text/tab-separated-values',

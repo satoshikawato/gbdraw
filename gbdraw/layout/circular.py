@@ -82,7 +82,6 @@ class CircularFeatureLayout:
     lanes_by_track_id: Mapping[int, CircularFeatureLane]
     primary_band_px: RadialBand
     all_band_px: RadialBand
-    stack_metrics: CircularFeatureStackMetrics | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(

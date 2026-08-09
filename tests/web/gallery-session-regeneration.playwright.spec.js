@@ -1,53 +1,9 @@
 const { test, expect } = require('@playwright/test');
-const { createReadStream, existsSync } = require('node:fs');
-const { createServer } = require('node:http');
-const { extname, resolve, sep } = require('node:path');
-
-const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
-const contentTypes = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.wasm': 'application/wasm',
-  '.whl': 'application/octet-stream'
-};
-
-let server;
-let baseUrl;
-
-test.beforeAll(async () => {
-  await new Promise((resolveServer, rejectServer) => {
-    server = createServer((request, response) => {
-      const url = new URL(request.url || '/', 'http://127.0.0.1');
-      const filePath = resolve(repoRoot, decodeURIComponent(url.pathname).replace(/^[/\\]+/, ''));
-      if ((!filePath.startsWith(`${repoRoot}${sep}`) && filePath !== repoRoot) || !existsSync(filePath)) {
-        response.writeHead(404);
-        response.end('Not found');
-        return;
-      }
-      response.writeHead(200, {
-        'Content-Type': contentTypes[extname(filePath)] || 'application/octet-stream'
-      });
-      createReadStream(filePath).pipe(response);
-    });
-    server.once('error', rejectServer);
-    server.listen(0, '127.0.0.1', () => {
-      baseUrl = `http://127.0.0.1:${server.address().port}`;
-      resolveServer();
-    });
-  });
-});
-
-test.afterAll(async () => {
-  await new Promise((resolveClose) => server.close(resolveClose));
-});
 
 test('Gallery session colors, record labels, and feature labels survive regeneration', async ({ page }) => {
   test.setTimeout(240000);
   page.on('dialog', (dialog) => dialog.accept());
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const imported = await page.evaluate(async () => {

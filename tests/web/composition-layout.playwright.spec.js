@@ -1,60 +1,11 @@
 const { test, expect } = require('@playwright/test');
-const { createReadStream, existsSync } = require('node:fs');
-const { createServer } = require('node:http');
-const { extname, normalize, resolve, sep } = require('node:path');
-
-const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
-const contentTypes = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.svg': 'image/svg+xml'
-};
-
-let server;
-let baseUrl;
-
-test.beforeAll(async () => {
-  await new Promise((resolveServer, rejectServer) => {
-    server = createServer((request, response) => {
-      const url = new URL(request.url || '/', 'http://127.0.0.1');
-      if (url.pathname === '/') {
-        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        response.end('<!doctype html><html><body></body></html>');
-        return;
-      }
-      const requestedPath = normalize(decodeURIComponent(url.pathname))
-        .replace(/^(\.\.(?:\/|\\|$))+/, '');
-      const filePath = resolve(repoRoot, requestedPath.replace(/^[/\\]+/, ''));
-      if (
-        (!filePath.startsWith(`${repoRoot}${sep}`) && filePath !== repoRoot) ||
-        !existsSync(filePath)
-      ) {
-        response.writeHead(404);
-        response.end('Not found');
-        return;
-      }
-      response.writeHead(200, {
-        'Content-Type': contentTypes[extname(filePath)] || 'application/octet-stream'
-      });
-      createReadStream(filePath).pipe(response);
-    });
-    server.once('error', rejectServer);
-    server.listen(0, '127.0.0.1', () => {
-      baseUrl = `http://127.0.0.1:${server.address().port}`;
-      resolveServer();
-    });
-  });
-});
-
-test.afterAll(async () => {
-  await new Promise((resolveClose) => server.close(resolveClose));
-});
 
 test('schema 1 composition survives browser edit, drag, history, reset, export, and sanitization boundaries', async ({ page }) => {
   const runtimeRequests = [];
   page.on('request', (request) => runtimeRequests.push(request.url()));
-  await page.goto(baseUrl);
-  await page.addScriptTag({ url: `${baseUrl}/gbdraw/web/vendor/dompurify/purify.min.js` });
+  await page.goto('/');
+  const origin = new URL(page.url()).origin;
+  await page.addScriptTag({ url: '/gbdraw/web/vendor/dompurify/purify.min.js' });
 
   const result = await page.evaluate(async ({ origin }) => {
     const composition = await import(`${origin}/gbdraw/web/js/app/legend-layout/composition-actions.js`);
@@ -173,7 +124,7 @@ test('schema 1 composition survives browser edit, drag, history, reset, export, 
       sanitizerRemovedScript: !sanitizedSvg.querySelector('script'),
       sanitizerRemovedHandler: !sanitizedSvg.querySelector('[onclick]')
     };
-  }, { origin: baseUrl });
+  }, { origin });
 
   expect(result.beforeDeltas).toEqual({
     primary: [[4, -3]],
@@ -202,11 +153,12 @@ test('schema 1 composition survives browser edit, drag, history, reset, export, 
   expect(result.sanitizedRoleCount).toBe(3);
   expect(result.sanitizerRemovedScript).toBe(true);
   expect(result.sanitizerRemovedHandler).toBe(true);
-  expect(runtimeRequests.every((url) => url.startsWith(baseUrl))).toBe(true);
+  expect(runtimeRequests.every((url) => url.startsWith(origin))).toBe(true);
 });
 
 test('legacy normalization is explicit and malformed current metadata never falls back', async ({ page }) => {
-  await page.goto(baseUrl);
+  await page.goto('/');
+  const origin = new URL(page.url()).origin;
   const result = await page.evaluate(async ({ origin }) => {
     const composition = await import(`${origin}/gbdraw/web/js/app/legend-layout/composition-actions.js`);
     document.body.innerHTML = [
@@ -240,7 +192,7 @@ test('legacy normalization is explicit and malformed current metadata never fall
       malformedError: error,
       malformedHasMetadata: malformed.hasAttribute(composition.COMPOSITION_METADATA_ATTRIBUTE)
     };
-  }, { origin: baseUrl });
+  }, { origin });
 
   expect(result.legacyNormalized).toBe(true);
   expect(result.deltas).toEqual({ primary: [[3, -4]], legend: [5, 2], title: null });

@@ -1741,11 +1741,7 @@ def render_request(
     plan = plan_request(request)
     batch_outputs_preflighted = isinstance(plan, CircularBatchRequestPlan)
     plan.preflight_outputs()
-    prepared = (
-        build_request_plan_diagram(plan)
-        if artifacts is None
-        else build_request_plan_diagram(plan, artifacts=artifacts)
-    )
+    prepared = build_request_plan_diagram(plan, artifacts=artifacts)
     return render_prepared_request(
         prepared,
         batch_outputs_preflighted=batch_outputs_preflighted,

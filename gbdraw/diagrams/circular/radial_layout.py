@@ -345,13 +345,11 @@ def build_circular_feature_layout(
         lanes_by_track_id=lanes,
         primary_band_px=primary_band,
         all_band_px=all_band,
-        stack_metrics=metrics,
     )
 
 
 def _tick_layout_from_params(
     *,
-    axis_radius_px: float,
     total_length: int,
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
@@ -599,7 +597,6 @@ def _measure_radial_slot(
         tick_params = dict(intent.params)
         tick_params["_slot_side"] = intent.side
         tick_layout = _tick_layout_from_params(
-            axis_radius_px=float(axis_radius_px),
             total_length=int(total_length),
             canvas_config=canvas_config,
             cfg=cfg,
@@ -1708,15 +1705,11 @@ def resolve_circular_radial_layout(
     canvas_config: CircularCanvasConfigurator,
     slots: Sequence[CircularTrackSlot],
     feature_dict: Mapping[str, Any] | None = None,
-    show_features: bool = True,
-    show_ticks: bool = True,
     definition_reserved_radius_px: float | None = None,
-    feature_track_ratio_factor_override: float | None = None,
     tick_track_channel_override: str | None = None,
     preferred_anchor_slot_ids: Collection[str] = (),
     depth_config: DepthConfigurator | None = None,
 ) -> CircularRadialLayout:
-    del show_features, show_ticks, feature_track_ratio_factor_override
     cfg = canvas_config.profile.config
     axis_radius_px = float(canvas_config.radius)
     axis = CircularAxisLayout(

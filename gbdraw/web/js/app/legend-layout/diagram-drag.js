@@ -11,7 +11,7 @@ import {
 } from '../record-groups.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
-export const createDiagramDragActions = ({ state, debugLog = () => {}, history = null }) => {
+export const createDiagramDragActions = ({ state, history = null }) => {
   const {
     results,
     selectedResultIndex,
@@ -32,7 +32,6 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     plotTitleUserOffset,
     layoutRepositionMode,
     zoom,
-    generatedLegendPosition,
     skipCaptureBaseConfig
   } = state;
 
@@ -445,10 +444,7 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     if (tx && history?.commit) await history.commit(tx);
   };
 
-  let setupDiagramDragCallCount = 0;
-
   const setupDiagramDrag = (preserveOffset = false) => {
-    setupDiagramDragCallCount++;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -458,8 +454,6 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
       return;
     }
     const binding = bindCompositionMetadata(svg);
-    const isMultiRecordCanvas = isMultiRecordCanvasSvg(svg);
-
     if (!preserveOffset) {
       diagramOffset.x = 0;
       diagramOffset.y = 0;
@@ -474,27 +468,17 @@ export const createDiagramDragActions = ({ state, debugLog = () => {}, history =
     syncPlotTitleElement(svg);
 
     const originalTransforms = new Map();
-    debugLog(`setupDiagramDrag call #${setupDiagramDragCallCount}`);
-    debugLog(
-      `setupDiagramDrag: preserveOffset=${preserveOffset}, offset=(${diagramOffset.x}, ${diagramOffset.y}), generatedLegendPosition=${generatedLegendPosition.value}, isMultiRecordCanvas=${isMultiRecordCanvas}`
-    );
-    foundElements.forEach((el, idx) => {
+    foundElements.forEach((el) => {
       const transform = {
         x: binding.metadata.primary.automaticTranslation[0],
         y: binding.metadata.primary.automaticTranslation[1]
       };
-      debugLog(`setupDiagramDrag element ${idx} (${el.id}): automatic=(${transform.x}, ${transform.y})`);
       originalTransforms.set(el, transform);
     });
     diagramElementOriginalTransforms.value = originalTransforms;
     const primaryDeltas = compositionUserDeltas(svg).primary;
     diagramOffset.x = primaryDeltas[0]?.[0] || 0;
     diagramOffset.y = primaryDeltas[0]?.[1] || 0;
-    debugLog(`setupDiagramDrag finished: set ${originalTransforms.size} original transforms`);
-    originalTransforms.forEach((transform, el) => {
-      debugLog(`${el.id}: (${transform.x}, ${transform.y})`);
-    });
-
     refreshDiagramDragAffordances();
 
     svg.removeEventListener('mousedown', startDiagramDrag);

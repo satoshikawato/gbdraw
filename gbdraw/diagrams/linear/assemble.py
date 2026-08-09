@@ -944,7 +944,6 @@ def _build_linear_record_vertical_plans(
     feature_geometries: list[LinearFeatureLaneGeometry],
     labels_by_record: list[list[dict]],
     canvas_config: LinearCanvasConfigurator,
-    cfg: GbdrawConfig,
     gc_config: GcContentConfigurator,
     skew_config: GcSkewConfigurator,
     record_depth_by_index: list[dict[int, DepthTrackData]],
@@ -1441,7 +1440,7 @@ def _collect_linear_primary_bounds(
         )
 
         for band in record_collision_bands[record_index]:
-            if band.kind != "definition" or band.width <= 0.0:
+            if band.kind != "definition" or band.x_end <= band.x_start:
                 continue
             bounds.append(
                 Aabb(
@@ -1760,9 +1759,7 @@ def assemble_linear_diagram(
     record_feature_layers = _precalculate_feature_layers(
         records,
         feature_config,
-        canvas_config,
         profile,
-        orthogroup_label_eligibility=orthogroup_label_eligibility,
     )
     record_feature_dicts = [
         result.foreground_features for result in record_feature_layers
@@ -1902,7 +1899,6 @@ def assemble_linear_diagram(
         feature_geometries=record_feature_lane_geometries,
         labels_by_record=all_labels,
         canvas_config=canvas_config,
-        cfg=cfg,
         gc_config=gc_config,
         skew_config=skew_config,
         record_depth_by_index=record_depth_by_index,
@@ -2204,7 +2200,6 @@ def assemble_linear_diagram(
             feature_geometries=record_feature_lane_geometries,
             labels_by_record=all_labels,
             canvas_config=canvas_config,
-            cfg=cfg,
             gc_config=gc_config,
             skew_config=skew_config,
             record_depth_by_index=record_depth_by_index,

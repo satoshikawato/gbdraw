@@ -41,6 +41,10 @@ python tools/prepare_browser_wheel.py --refresh-cache-bust
 python -m build
 ```
 
+- Allow at least 30 minutes for test commands before treating them as timed
+  out, and monitor long runs incrementally. Keep shorter test-owned timeout
+  assertions unchanged unless the task explicitly requires changing them.
+
 ## Browser / Playwright Checks
 
 - Do not conclude that browser testing is unavailable just because `node_modules/`, `package.json`, or `@playwright/test` is missing at the repo root. This workspace may have Playwright installed through Python/conda instead.

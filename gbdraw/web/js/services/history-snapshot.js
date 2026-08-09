@@ -422,16 +422,9 @@ export const createHistorySnapshotService = ({
     throw new Error('createHistorySnapshotService requires state and fileStore.');
   }
 
-  const buildHistorySnapshot = async () => {
-    const config = typeof buildConfigData === 'function'
-      ? buildConfigData()
-      : {
-          form: state.form,
-          adv: state.adv,
-          linearComparisonPlan: cloneLinearComparisonPlanMetadata(state.linearComparisonPlan)
-        };
+  const buildGeneratedArtifactSnapshot = ({ includePreviewNavigation = true } = {}) => {
     const ui = typeof buildUiStateData === 'function'
-      ? buildUiStateData({ includePreviewNavigation: false })
+      ? buildUiStateData({ includePreviewNavigation })
       : buildFallbackUiStateData(state);
     const features = typeof buildFeatureStateData === 'function'
       ? buildFeatureStateData()
@@ -453,14 +446,73 @@ export const createHistorySnapshotService = ({
         };
 
     return cloneJsonData({
-      config,
       ui,
-      files: buildFilesData(state, fileStore),
       results,
       features,
       editorState,
       orthogroupState,
       runState
+    });
+  };
+
+  const applyArtifactDomains = (snapshot, { trusted = false } = {}) => {
+    const ui = snapshot?.ui || {};
+    if (typeof applyResultsData === 'function') {
+      applyResultsData(snapshot?.results || [], ui);
+    } else {
+      applyFallbackResultsData(state, snapshot?.results || []);
+      applyFallbackUiStateData(state, { selectedResultIndex: ui.selectedResultIndex });
+    }
+
+    if (typeof applyFeatureStateData === 'function') {
+      applyFeatureStateData(snapshot?.features || {});
+    } else {
+      applyFallbackFeatureStateData(state, snapshot?.features || {});
+    }
+
+    if (typeof applyOrthogroupStateData === 'function') {
+      applyOrthogroupStateData(snapshot?.orthogroupState || {});
+    } else {
+      applyFallbackOrthogroupStateData(state, snapshot?.orthogroupState || {});
+    }
+
+    if (typeof applyEditorStateData === 'function') {
+      applyEditorStateData(snapshot?.editorState || {}, { trusted });
+    }
+
+    if (typeof applyRunStateData === 'function') {
+      applyRunStateData(snapshot?.runState || {});
+    } else {
+      setRef(state.lastRunInfo, cloneJsonData(snapshot?.runState?.lastRunInfo) || null);
+      setRef(state.pairwiseMatchFactors, clonePlainObject(snapshot?.runState?.pairwiseMatchFactors));
+    }
+  };
+
+  const applyGeneratedArtifactSnapshot = (snapshot) => {
+    if (!snapshot || typeof snapshot !== 'object') return;
+    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
+    if (state.skipPositionReapply) state.skipPositionReapply.value = true;
+    applyArtifactDomains(snapshot, { trusted: true });
+    if (typeof applyUiStateData === 'function') {
+      applyUiStateData(snapshot.ui || {});
+    } else {
+      applyFallbackUiStateData(state, snapshot.ui || {});
+    }
+  };
+
+  const buildHistorySnapshot = async () => {
+    const config = typeof buildConfigData === 'function'
+      ? buildConfigData()
+      : {
+          form: state.form,
+          adv: state.adv,
+          linearComparisonPlan: cloneLinearComparisonPlanMetadata(state.linearComparisonPlan)
+        };
+
+    return cloneJsonData({
+      config,
+      files: buildFilesData(state, fileStore),
+      ...buildGeneratedArtifactSnapshot({ includePreviewNavigation: false })
     });
   };
 
@@ -498,35 +550,7 @@ export const createHistorySnapshotService = ({
     if (state.skipPositionReapply) state.skipPositionReapply.value = true;
     if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
 
-    if (typeof applyResultsData === 'function') {
-      applyResultsData(snapshot.results || [], ui);
-    } else {
-      applyFallbackResultsData(state, snapshot.results || []);
-      applyFallbackUiStateData(state, { selectedResultIndex: ui.selectedResultIndex });
-    }
-
-    if (typeof applyFeatureStateData === 'function') {
-      applyFeatureStateData(snapshot.features || {});
-    } else {
-      applyFallbackFeatureStateData(state, snapshot.features || {});
-    }
-
-    if (typeof applyOrthogroupStateData === 'function') {
-      applyOrthogroupStateData(snapshot.orthogroupState || {});
-    } else {
-      applyFallbackOrthogroupStateData(state, snapshot.orthogroupState || {});
-    }
-
-    if (typeof applyEditorStateData === 'function') {
-      applyEditorStateData(snapshot.editorState || {});
-    }
-
-    if (typeof applyRunStateData === 'function') {
-      applyRunStateData(snapshot.runState || {});
-    } else {
-      setRef(state.lastRunInfo, cloneJsonData(snapshot.runState?.lastRunInfo) || null);
-      setRef(state.pairwiseMatchFactors, clonePlainObject(snapshot.runState?.pairwiseMatchFactors));
-    }
+    applyArtifactDomains(snapshot);
 
     await nextTick();
     await nextFrame();
@@ -540,7 +564,9 @@ export const createHistorySnapshotService = ({
   const snapshotSignature = (snapshot) => JSON.stringify(snapshot);
 
   return {
+    applyGeneratedArtifactSnapshot,
     applyHistorySnapshot,
+    buildGeneratedArtifactSnapshot,
     buildHistorySnapshot,
     snapshotSignature
   };

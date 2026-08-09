@@ -16,11 +16,8 @@ Usage:
 import hashlib
 import re
 import shutil
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
@@ -30,7 +27,6 @@ from tests.utils.svg_compare import compare_svgs
 # Reference output directory
 TESTS_DIR = Path(__file__).parent
 REFERENCE_DIR = TESTS_DIR / "reference_outputs"
-EXAMPLES_DIR = TESTS_DIR.parent / "examples"
 
 
 def _strip_additive_semantic_attributes(svg_text: str) -> str:
@@ -84,58 +80,6 @@ def replace_reference_atomically(source: Path, destination: Path) -> None:
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
-
-
-def find_input(filename: str) -> Optional[Path]:
-    """Find an input file in examples or external directories."""
-    search_dirs = [
-        EXAMPLES_DIR,
-        TESTS_DIR / "test_inputs",
-        Path("/home/kawato/study/2025-09-17_gbdraw_test"),
-        Path("/home/kawato/study/2025-05-15_gbdraw"),
-    ]
-    for d in search_dirs:
-        if d.exists():
-            f = d / filename
-            if f.exists():
-                return f
-    return None
-
-
-def run_gbdraw_circular(gbk_file: Path, output_dir: Path, output_name: str, extra_args: list[str]) -> Path:
-    """Run gbdraw circular and return output path."""
-    cmd = [
-        sys.executable, "-m", "gbdraw.cli", "circular",
-        "--gbk", str(gbk_file),
-        "-o", output_name,
-        "-f", "svg",
-    ] + extra_args
-
-    result = subprocess.run(cmd, cwd=str(output_dir), capture_output=True, text=True, timeout=300)
-    if result.returncode != 0:
-        raise RuntimeError(f"gbdraw failed: {result.stderr}")
-
-    return output_dir / f"{output_name}.svg"
-
-
-def run_gbdraw_linear(gbk_files: list[Path], output_dir: Path, output_name: str,
-                      extra_args: list[str], blast_files: list[Path] = None) -> Path:
-    """Run gbdraw linear and return output path."""
-    cmd = [
-        sys.executable, "-m", "gbdraw.cli", "linear",
-        "--gbk", *[str(f) for f in gbk_files],
-        "-o", output_name,
-        "-f", "svg",
-    ]
-    if blast_files:
-        cmd.extend(["-b", *[str(f) for f in blast_files]])
-    cmd.extend(extra_args)
-
-    result = subprocess.run(cmd, cwd=str(output_dir), capture_output=True, text=True, timeout=300)
-    if result.returncode != 0:
-        raise RuntimeError(f"gbdraw failed: {result.stderr}")
-
-    return output_dir / f"{output_name}.svg"
 
 
 # Test case definitions - these define the canonical test cases for regression testing
@@ -235,6 +179,31 @@ TEST_CASES = {
 }
 
 
+def _render_case(name, config, output_dir, find_test_input, gbdraw_runner) -> Path:
+    input_names = config["gbk"]
+    if isinstance(input_names, str):
+        input_names = [input_names]
+    gbk_files = [find_test_input(filename) for filename in input_names]
+    if not all(gbk_files):
+        pytest.skip(f"Some input files not found: {input_names}")
+
+    blast_files = [find_test_input(filename) for filename in config.get("blast", ())]
+    if not all(blast_files):
+        pytest.skip(f"Some BLAST files not found: {config['blast']}")
+
+    returncode, output, output_svg = gbdraw_runner.run(
+        config["type"],
+        gbk_files,
+        name,
+        output_dir,
+        blast_files=blast_files,
+        extra_args=config["args"],
+    )
+    if returncode != 0:
+        raise RuntimeError(f"gbdraw failed: {output}")
+    return output_svg
+
+
 @pytest.mark.reference_generation
 class TestGenerateReferences:
     """Generate reference outputs for comparison testing.
@@ -243,26 +212,13 @@ class TestGenerateReferences:
     """
 
     @pytest.mark.parametrize("name,config", TEST_CASES.items())
-    def test_generate_reference(self, name, config, tmp_path):
+    def test_generate_reference(
+        self, name, config, tmp_path, find_test_input, gbdraw_runner
+    ):
         """Generate a reference output for a test case."""
-        if config["type"] == "circular":
-            gbk = find_input(config["gbk"])
-            if not gbk:
-                pytest.skip(f"Input file {config['gbk']} not found")
-
-            output_svg = run_gbdraw_circular(gbk, tmp_path, name, config["args"])
-        else:
-            gbk_files = [find_input(g) for g in config["gbk"]]
-            if not all(gbk_files):
-                pytest.skip(f"Some input files not found: {config['gbk']}")
-
-            blast_files = None
-            if "blast" in config:
-                blast_files = [find_input(b) for b in config["blast"]]
-                if not all(blast_files):
-                    pytest.skip(f"BLAST files not found: {config['blast']}")
-
-            output_svg = run_gbdraw_linear(gbk_files, tmp_path, name, config["args"], blast_files)
+        output_svg = _render_case(
+            name, config, tmp_path, find_test_input, gbdraw_runner
+        )
 
         # Replace only after generation succeeds, without exposing a partial fixture.
         ref_path = REFERENCE_DIR / f"{name}.svg"
@@ -279,30 +235,19 @@ class TestOutputComparison:
     """
 
     @pytest.mark.parametrize("name,config", TEST_CASES.items())
-    def test_compare_output(self, name, config, tmp_path):
+    def test_compare_output(
+        self, name, config, tmp_path, find_test_input, gbdraw_runner
+    ):
         """Compare current output against reference."""
         ref_path = REFERENCE_DIR / f"{name}.svg"
         if not ref_path.exists():
-            pytest.skip(f"Reference file not found: {ref_path}. Run TestGenerateReferences first.")
+            pytest.skip(
+                f"Reference file not found: {ref_path}. Run TestGenerateReferences first."
+            )
 
-        if config["type"] == "circular":
-            gbk = find_input(config["gbk"])
-            if not gbk:
-                pytest.skip(f"Input file {config['gbk']} not found")
-
-            output_svg = run_gbdraw_circular(gbk, tmp_path, name, config["args"])
-        else:
-            gbk_files = [find_input(g) for g in config["gbk"]]
-            if not all(gbk_files):
-                pytest.skip(f"Some input files not found: {config['gbk']}")
-
-            blast_files = None
-            if "blast" in config:
-                blast_files = [find_input(b) for b in config["blast"]]
-                if not all(blast_files):
-                    pytest.skip(f"BLAST files not found: {config['blast']}")
-
-            output_svg = run_gbdraw_linear(gbk_files, tmp_path, name, config["args"], blast_files)
+        output_svg = _render_case(
+            name, config, tmp_path, find_test_input, gbdraw_runner
+        )
 
         # Compare with reference
         result = compare_svgs(
@@ -330,26 +275,30 @@ class TestQuickValidation:
     These tests don't compare against references, just verify output is valid SVG.
     """
 
-    def test_circular_produces_svg(self, tmp_path):
+    def test_circular_produces_svg(self, tmp_path, find_test_input, gbdraw_runner):
         """Verify circular command produces valid SVG."""
-        gbk = find_input("MjeNMV.gb")
-        if not gbk:
-            pytest.skip("MjeNMV.gb not found")
-
-        output = run_gbdraw_circular(gbk, tmp_path, "test", ["--legend", "none"])
+        output = _render_case(
+            "test",
+            {"type": "circular", "gbk": "MjeNMV.gb", "args": ["--legend", "none"]},
+            tmp_path,
+            find_test_input,
+            gbdraw_runner,
+        )
 
         content = output.read_text()
         assert "<svg" in content
         assert "</svg>" in content
         assert "xmlns" in content
 
-    def test_linear_produces_svg(self, tmp_path):
+    def test_linear_produces_svg(self, tmp_path, find_test_input, gbdraw_runner):
         """Verify linear command produces valid SVG."""
-        gbk = find_input("MjeNMV.gb")
-        if not gbk:
-            pytest.skip("MjeNMV.gb not found")
-
-        output = run_gbdraw_linear([gbk], tmp_path, "test", ["--legend", "none"])
+        output = _render_case(
+            "test",
+            {"type": "linear", "gbk": ["MjeNMV.gb"], "args": ["--legend", "none"]},
+            tmp_path,
+            find_test_input,
+            gbdraw_runner,
+        )
 
         content = output.read_text()
         assert "<svg" in content

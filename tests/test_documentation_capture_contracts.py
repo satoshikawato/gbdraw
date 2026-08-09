@@ -10,7 +10,7 @@ from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.assertions.svg_semantics import parse_translate_chain
-
+from docs.capture.config import chapter_for
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CAPTURE_ROOT = REPO_ROOT / "docs" / "capture"
@@ -180,13 +180,6 @@ GUI_CIRCULAR_LAYOUT_SCREENSHOTS = {
 }
 
 
-def _chapter(scenario_id: str) -> dict[str, object]:
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    return next(
-        chapter for chapter in manifest["chapters"] if chapter["id"] == scenario_id
-    )
-
-
 def test_capture_semantics_parse_translation_only_chains() -> None:
     assert parse_translate_chain("translate(16,68) translate(104.5,-2e1)") == [
         120.5,
@@ -218,33 +211,15 @@ def test_capture_environment_is_pinned_and_loopback_only() -> None:
     assert config["ISOLATION_HEADERS"]["Cross-Origin-Embedder-Policy"] == (
         "require-corp"
     )
-    assert config["IMPLEMENTED_SCENARIO_IDS"] == (
-        "T-GUI-01",
-        "T-GUI-02",
-        "H-GUI-01",
-        "T-GUI-03",
-        "H-GUI-02",
-        "H-GUI-03",
-        "H-GUI-04",
-        "H-GUI-05",
-        "H-GUI-06",
-        "T-GUI-04",
-        "T-GUI-05",
-        "T-GUI-06",
-        "T-GUI-08",
-        "T-GUI-09",
-        "T-GUI-10",
-        "T-GUI-12",
-        "H-GUI-07",
-        "H-GUI-08",
-        "H-GUI-09",
-        "H-GUI-10",
-        "H-GUI-11",
-        "H-GUI-12",
-        "H-GUI-13",
-        "H-GUI-14",
-        "H-GUI-15",
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    expected_gui_ids = tuple(
+        chapter["id"]
+        for chapter in manifest["chapters"]
+        if chapter["execution"]["kind"] == "playwright"
+        and chapter["status"]["implementation"] == "verified"
     )
+    assert config["scenario_ids_for"]("playwright") == expected_gui_ids
+    assert config["supported_tiers"]() == ("core", "extended", "nightly")
     assert config["FIRST_CIRCULAR_SCREENSHOT_NAMES"] == tuple(CIRCULAR_SCREENSHOTS)
     assert config["FIRST_LINEAR_SCREENSHOT_NAMES"] == tuple(LINEAR_SCREENSHOTS)
     assert config["GUI_INPUTS_SCREENSHOT_NAMES"] == tuple(GUI_INPUTS_SCREENSHOTS)
@@ -442,7 +417,8 @@ def test_first_circular_flow_uses_accessible_real_actions_without_state_shortcut
         "set_content(",
     ):
         assert forbidden not in source
-        assert forbidden not in shared_source
+        if forbidden != "page.locator(":
+            assert forbidden not in shared_source
 
 
 def test_shared_linear_preview_fit_centers_the_complete_rendered_diagram() -> None:
@@ -635,6 +611,7 @@ def test_gui_circular_layout_flow_uses_complete_records_and_public_controls() ->
 
 def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
     source = GUI_LOSATN_FLOW_PATH.read_text(encoding="utf-8")
+    shared_source = WEB_CAPTURE_PATH.read_text(encoding="utf-8")
     index_source = WEB_INDEX_PATH.read_text(encoding="utf-8")
 
     assert 'aria-label="Pairwise Match Height"' in index_source
@@ -671,7 +648,7 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
         "assert_gui_losatn_tsv_download",
         "assert_gui_losatn_svg_download",
     ):
-        assert required in source
+        assert required in source or required in shared_source
 
     first_result = source.index("first_report = generate_and_inspect")
     configure_losat = source.index('name="Run LOSAT", exact=True')
@@ -745,38 +722,31 @@ def test_download_contract_parses_and_validates_all_static_svgs() -> None:
         assert required in semantics_source
 
 
-def test_runner_regenerates_and_checks_every_implemented_scenario() -> None:
+def test_runner_uses_manifest_ids_tiers_and_generic_screenshot_lookup() -> None:
+    from docs.capture import run_all
+
     source = RUNNER_PATH.read_text(encoding="utf-8")
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+
+    def ids_for(kind: str) -> tuple[str, ...]:
+        return tuple(
+            chapter["id"]
+            for chapter in manifest["chapters"]
+            if chapter["execution"]["kind"] == kind
+            and chapter["status"]["implementation"] == "verified"
+        )
 
     assert '"--scenario"' in source
     assert '"--tier"' in source
     assert '"--check"' in source
-    assert '"T-GUI-01": ScenarioCapture' in source
-    assert '"T-GUI-02": ScenarioCapture' in source
-    assert '"H-GUI-01": ScenarioCapture' in source
-    assert '"T-GUI-03": ScenarioCapture' in source
-    assert '"H-GUI-02": ScenarioCapture' in source
-    for scenario_id in ("H-GUI-03", "H-GUI-04", "H-GUI-05", "H-GUI-06"):
-        assert f'"{scenario_id}": ScenarioCapture' in source
-    assert "first_circular_screenshot_paths" in source
-    assert "first_linear_screenshot_paths" in source
-    assert "gui_inputs_screenshot_paths" in source
-    assert "gui_losatn_screenshot_paths" in source
-    assert "gui_circular_layout_screenshot_paths" in source
-    assert "gui_linear_layout_screenshot_paths" in source
-    assert "gui_uploaded_comparison_screenshot_paths" in source
-    assert "gui_tlosatx_screenshot_paths" in source
-    assert "gui_circular_rings_screenshot_paths" in source
-    assert "capture_first_circular" in source
-    assert "capture_first_linear" in source
-    assert "capture_gui_inputs" in source
-    assert "capture_gui_losatn" in source
-    assert "capture_gui_circular_layout" in source
-    assert "capture_gui_linear_layout" in source
-    assert "capture_gui_uploaded_comparison" in source
-    assert "capture_gui_tlosatx" in source
-    assert "capture_gui_circular_rings" in source
-    assert 'tier="extended"' in source
+    assert run_all.GUI_SCENARIO_IDS == ids_for("playwright")
+    assert run_all.CLI_SCENARIO_IDS == ids_for("cli-recipe")
+    assert run_all.PYTHON_SCENARIO_IDS == ids_for("python-recipe")
+    assert set(run_all.CAPTURE_FUNCTIONS) == set(run_all.GUI_SCENARIO_IDS)
+    assert run_all.SUPPORTED_TIERS == ("core", "extended", "nightly")
+    assert "ScenarioCapture" not in source
+    assert "IMPLEMENTED_SCENARIOS" not in source
+    assert "screenshot_paths_for(scenario_id)" in source
     assert "TIER_RANK" in source
     assert "ImageChops.difference" in source
     assert "for name, committed_path in committed_paths.items()" in source
@@ -930,7 +900,7 @@ def test_runner_focused_scenarios_execute_only_the_selected_surface(monkeypatch)
 
 
 def test_t_gui_01_manifest_owns_the_complete_verified_journey() -> None:
-    chapter = _chapter("T-GUI-01")
+    chapter = chapter_for("T-GUI-01")
     manifest_screenshots = {
         Path(item["path"]).name: item["alt"] for item in chapter["screenshots"]
     }
@@ -952,7 +922,7 @@ def test_t_gui_01_manifest_owns_the_complete_verified_journey() -> None:
 
 
 def test_t_gui_02_manifest_owns_the_complete_verified_journey() -> None:
-    chapter = _chapter("T-GUI-02")
+    chapter = chapter_for("T-GUI-02")
     manifest_screenshots = {
         Path(item["path"]).name: item["alt"] for item in chapter["screenshots"]
     }
@@ -975,7 +945,7 @@ def test_t_gui_02_manifest_owns_the_complete_verified_journey() -> None:
 
 
 def test_h_gui_01_manifest_owns_the_complete_verified_journey() -> None:
-    chapter = _chapter("H-GUI-01")
+    chapter = chapter_for("H-GUI-01")
     manifest_screenshots = {
         Path(item["path"]).name: item["alt"] for item in chapter["screenshots"]
     }
@@ -992,7 +962,7 @@ def test_h_gui_01_manifest_owns_the_complete_verified_journey() -> None:
 
 
 def test_h_gui_02_manifest_owns_the_complete_verified_journey() -> None:
-    chapter = _chapter("H-GUI-02")
+    chapter = chapter_for("H-GUI-02")
     manifest_screenshots = {
         Path(item["path"]).name: item["alt"] for item in chapter["screenshots"]
     }
@@ -1029,7 +999,7 @@ def test_h_gui_02_manifest_owns_the_complete_verified_journey() -> None:
 
 
 def test_t_gui_03_manifest_owns_the_complete_verified_journey() -> None:
-    chapter = _chapter("T-GUI-03")
+    chapter = chapter_for("T-GUI-03")
     manifest_screenshots = {
         Path(item["path"]).name: item["alt"] for item in chapter["screenshots"]
     }

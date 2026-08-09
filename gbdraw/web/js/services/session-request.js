@@ -81,6 +81,13 @@ import {
   isResourceBackedCanonicalComparison,
   mapResourceBackedCanonicalComparison
 } from './canonical-comparisons.js';
+import {
+  base64ToBytes,
+  bytesToBase64,
+  bytesToText,
+  textToBase64,
+  textToBytes
+} from './file-content-cache.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 5;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
@@ -295,16 +302,6 @@ const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
   }
 };
 
-const textToBase64 = (text) => {
-  const bytes = new TextEncoder().encode(String(text));
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-  return btoa(binary);
-};
-
 const normalizeResourceName = (resourceId, name) => {
   const basename = String(name || 'resource.dat').replace(/\\/g, '/').split('/').pop();
   const safe = basename.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '');
@@ -353,7 +350,7 @@ const createResourceBuilder = () => {
   const addText = (resourceId, kind, name, text) => {
     if (resources[resourceId]) return resourceId;
     const normalized = String(text || '');
-    const bytes = new TextEncoder().encode(normalized);
+    const bytes = textToBytes(normalized);
     resources[resourceId] = {
       kind,
       name: normalizeResourceName(resourceId, name),
@@ -369,7 +366,7 @@ const createResourceBuilder = () => {
   const addJson = (resourceId, kind, name, value) => {
     if (resources[resourceId]) return resourceId;
     const normalized = JSON.stringify(value);
-    const bytes = new TextEncoder().encode(normalized);
+    const bytes = textToBytes(normalized);
     resources[resourceId] = {
       kind,
       name: normalizeResourceName(resourceId, name),
@@ -2266,14 +2263,13 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
   if (typeof entry.data !== 'string') {
     throw new Error(`Canonical resource ${resourceId} has no text payload.`);
   }
-  let binary;
+  let bytes;
   try {
-    binary = atob(entry.data);
+    bytes = base64ToBytes(entry.data);
   } catch (error) {
     throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`, { cause: error });
   }
-  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-  return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  return bytesToText(bytes, { fatal: true });
 };
 
 const resourceTextFromRef = (resources, ref) => (
@@ -2515,22 +2511,30 @@ const combineCircularGenbankResources = (resources, records, originalName = '') 
 
   const files = resourceIds.map((resourceId) => resourceAsLegacyFile(resources, resourceId));
   if (files.length === 1) return files[0];
-  const binary = files
-    .map((file) => {
-      if (file.encoding && file.encoding !== 'base64') {
-        throw new Error(`Unsupported canonical resource encoding: ${file.encoding}`);
-      }
-      const decoded = atob(String(file.data || ''));
-      return decoded.endsWith('\n') ? decoded : `${decoded}\n`;
-    })
-    .join('');
+  const chunks = files.map((file) => {
+    if (file.encoding && file.encoding !== 'base64') {
+      throw new Error(`Unsupported canonical resource encoding: ${file.encoding}`);
+    }
+    const decoded = base64ToBytes(file.data);
+    if (decoded[decoded.length - 1] === 0x0A) return decoded;
+    const terminated = new Uint8Array(decoded.length + 1);
+    terminated.set(decoded);
+    terminated[decoded.length] = 0x0A;
+    return terminated;
+  });
+  const bytes = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.length, 0));
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  });
   return {
     name: normalizeOriginalResourceName(originalName) || 'canonical-circular-records.gb',
     type: 'text/plain',
-    size: binary.length,
+    size: bytes.length,
     lastModified: Math.max(0, ...files.map((file) => Number(file.lastModified) || 0)),
     encoding: 'base64',
-    data: btoa(binary)
+    data: bytesToBase64(bytes)
   };
 };
 

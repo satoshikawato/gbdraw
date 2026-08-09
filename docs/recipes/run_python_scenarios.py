@@ -43,6 +43,7 @@ if __package__:
     from ._scenario_support import (
         PUBLISHED_IMAGE_ROOT,
         RecipeContractError,
+        assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
         copy_declared_inputs,
         extract_executable_block,
@@ -56,6 +57,7 @@ else:
     from _scenario_support import (
         PUBLISHED_IMAGE_ROOT,
         RecipeContractError,
+        assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
         copy_declared_inputs,
         extract_executable_block,
@@ -237,53 +239,6 @@ def _validate_scenario(
         raise RecipeContractError(f"No Python validator for {scenario_id}.")
 
 
-def _assert_gallery_bgc_definitions(
-    root: ElementTree.Element, *, scenario_id: str
-) -> None:
-    definition_groups = [
-        element
-        for element in root.iter()
-        if element.attrib.get("data-gbdraw-role") == "record-definition"
-    ]
-    translations = [
-        parse_translate_chain(group.attrib.get("transform", ""))
-        for group in definition_groups
-    ]
-    if len(definition_groups) != 5 or any(item is None for item in translations):
-        raise RecipeContractError(f"{scenario_id} definition groups are incomplete.")
-    x_positions = [translation[0] for translation in translations if translation]
-    if max(x_positions) - min(x_positions) > 1e-6:
-        raise RecipeContractError(
-            f"{scenario_id} definitions are not locked to one left column."
-        )
-
-    expected = {
-        "name": (20.0, "bold", "black"),
-        "subtitle": (20.0, "normal", "black"),
-        "accession": (20.0, "normal", "#7b7c7d"),
-        "length": (20.0, "normal", "#7b7c7d"),
-    }
-    for group in definition_groups:
-        lines = {
-            element.attrib.get("data-definition-line-kind", ""): (
-                float(element.attrib.get("font-size", "0")),
-                element.attrib.get("font-weight", ""),
-                element.attrib.get("fill", "").lower(),
-            )
-            for element in group.iter()
-            if element.attrib.get("data-definition-line-kind")
-        }
-        anchors = {
-            element.attrib.get("text-anchor", "")
-            for element in group.iter()
-            if element.attrib.get("data-definition-line-kind")
-        }
-        if lines != expected or anchors != {"start"}:
-            raise RecipeContractError(
-                f"{scenario_id} definition typography differs from the Gallery."
-            )
-
-
 def _validate_migrated_tutorial(
     chapter: dict[str, object],
     *,
@@ -334,7 +289,7 @@ def _validate_migrated_tutorial(
         _assert_losatn_matches(chapter, output_path=output_path)
     elif scenario_id == "T-PY-05":
         root = ElementTree.parse(output_path).getroot()
-        _assert_gallery_bgc_definitions(root, scenario_id="T-PY-05")
+        assert_gallery_bgc_definitions(root, scenario_id="T-PY-05")
         matches = [
             element
             for element in root.iter()

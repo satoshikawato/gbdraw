@@ -1,5 +1,4 @@
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
-import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import {
   adoptCanonicalRenderArtifacts,
@@ -28,6 +27,7 @@ import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
+import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
@@ -941,7 +941,6 @@ export const createAppSetup = () => {
     state,
     getPyodide,
     ensurePyodide: pyodideManager.initPyodide,
-    debugLog,
     history
   });
   const svgActions = createSvgStyles({
@@ -1746,7 +1745,7 @@ export const createAppSetup = () => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
-  const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions, history });
+  const legendLayout = createLegendLayout({ state, legendActions, svgActions, history });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
@@ -1771,6 +1770,8 @@ export const createAppSetup = () => {
     ),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
+    buildGeneratedArtifactSnapshot: historySnapshots.buildGeneratedArtifactSnapshot,
+    applyGeneratedArtifactSnapshot: historySnapshots.applyGeneratedArtifactSnapshot,
     resetPreviewViewport,
     validateAnnotationTargets: ({ loadComparison }) => {
       const catalog = getAnnotationRecordCatalog(loadComparison);
@@ -1792,7 +1793,6 @@ export const createAppSetup = () => {
     watch,
     nextTick,
     onMounted,
-    debugLog,
     legendActions,
     svgActions,
     featureActions,
@@ -2111,29 +2111,11 @@ export const createAppSetup = () => {
   const runInfoHasCliHelperFiles = computed(() =>
     Array.isArray(lastRunInfo.value?.helperFiles) && lastRunInfo.value.helperFiles.length > 0
   );
-  const copyTextFallback = (text) => {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand('copy');
-    } finally {
-      textarea.remove();
-    }
-  };
   const copyRunCommand = async () => {
     const command = String(lastRunInfo.value?.command || '');
     if (!command) return;
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(command);
-      } else {
-        copyTextFallback(command);
-      }
+      await copyTextToClipboard(command);
       runInfoCopyStatus.value = 'Copied';
       setTimeout(() => {
         if (runInfoCopyStatus.value === 'Copied') runInfoCopyStatus.value = '';
@@ -2636,28 +2618,6 @@ export const createAppSetup = () => {
     const strand = feat.strand ? ` (${feat.strand})` : '';
     return `${startPos}..${endPos}${strand}`;
   });
-
-  const copyText = async (text) => {
-    const value = String(text ?? '');
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return;
-    }
-
-    const textarea = document.createElement('textarea');
-    textarea.value = value;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    textarea.style.top = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand('copy');
-    } finally {
-      document.body.removeChild(textarea);
-    }
-  };
 
   const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
     const value = String(text ?? '');
@@ -3411,7 +3371,7 @@ export const createAppSetup = () => {
     selectPairwiseBlockOrthogroup,
     openPairwiseFeatureRow,
     clickedFeatureLocation,
-    copyText,
+      copyText: copyTextToClipboard,
     downloadText,
     canUseClickedOrthogroupActions,
     clickedOrthogroupDetail,

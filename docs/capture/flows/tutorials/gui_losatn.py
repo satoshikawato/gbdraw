@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from playwright.sync_api import BrowserType, Locator, Page, expect
+from playwright.sync_api import BrowserType, expect
 
 from assertions.downloads import (
     EXPECTED_GUI_LOSATN_SVG,
@@ -38,6 +38,7 @@ from flows.web_capture import (
     capture_screenshot,
     fit_complete_linear_preview,
     generate_and_inspect,
+    linear_pair,
     open_browser_capture,
     wait_for_worker,
 )
@@ -51,23 +52,6 @@ class CaptureResult:
     download: dict[str, Any]
     tsv_download: dict[str, Any]
     popup: dict[str, str]
-
-
-def _linear_pair(page: Page, query_index: int, subject_index: int) -> Locator:
-    endpoint_uids = []
-    for index in (query_index, subject_index):
-        record = page.get_by_role(
-            "group", name=f"Linear sequence {index}", exact=True
-        )
-        uid = record.get_attribute("data-linear-record-uid")
-        if not uid:
-            raise AssertionError(f"Linear sequence {index} has no stable record UID")
-        endpoint_uids.append(uid)
-    pair = page.locator(
-        f'fieldset[data-edge-key="{endpoint_uids[0]}->{endpoint_uids[1]}"]'
-    )
-    expect(pair).to_have_count(1)
-    return pair
 
 
 def _assert_match_popup(page: Any) -> dict[str, str]:
@@ -200,7 +184,7 @@ def capture_gui_losatn(
         )
         output_prefix.fill("lambda-de3-losatn")
         expect(output_prefix).to_have_value("lambda-de3-losatn")
-        pair = _linear_pair(page, 1, 2)
+        pair = linear_pair(page, 1, 2)
         raw_filename = pair.get_by_role(
             "textbox", name="Raw LOSAT filename for #1 to #2", exact=True
         )

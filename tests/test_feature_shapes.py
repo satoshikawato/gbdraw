@@ -468,19 +468,16 @@ def test_circular_multipart_feature_connector_shares_feature_id() -> None:
     assert connector_paths[0].attrib.get("id") == f"{feature_id}__line1"
 
 
-def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_circular_cli_feature_shape_forwards(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stub_typed_request_export,
+) -> None:
     record = _build_test_record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
 
     def fake_assemble(*_args, **kwargs):
         captured["feature_shapes"] = kwargs["options"].feature_shapes

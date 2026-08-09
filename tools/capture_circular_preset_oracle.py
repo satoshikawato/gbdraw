@@ -144,8 +144,6 @@ def capture_case(
         canvas_config=canvas_config,
         slots=radial_plan.slots,
         feature_dict=_feature_dict(record, cfg),
-        show_features=True,
-        show_ticks=True,
         preferred_anchor_slot_ids=radial_plan.preferred_anchor_slot_ids,
         depth_config=depth_config,
     )

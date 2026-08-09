@@ -104,13 +104,54 @@ const {
   resolveLinearComparisonPlan
 } = await import('../../gbdraw/web/js/app/linear-comparisons.js');
 const {
+  applyEditorStateData,
+  applyFeatureStateData,
+  applyOrthogroupStateData,
+  applyResultsData,
+  applyRunStateData,
+  applyUiStateData,
+  buildEditorStateData,
+  buildFeatureStateData,
+  buildOrthogroupStateData,
+  buildRunStateData,
+  buildUiStateData,
   serializeActiveRenderFiles,
+  serializeResults,
   SESSION_VERSION
 } = await import('../../gbdraw/web/js/services/config.js');
+const { createHistoryFileStore } = await import(
+  '../../gbdraw/web/js/services/history-files.js'
+);
+const { createHistorySnapshotService } = await import(
+  '../../gbdraw/web/js/services/history-snapshot.js'
+);
 const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
-const { state } = await import('../../gbdraw/web/js/state.js');
+const { normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
+
+const artifactSnapshots = createHistorySnapshotService({
+  state,
+  fileStore: createHistoryFileStore(),
+  nextTick: window.Vue.nextTick,
+  normalizeLinearSeqList,
+  buildUiStateData,
+  applyUiStateData,
+  buildFeatureStateData,
+  applyFeatureStateData,
+  buildEditorStateData,
+  applyEditorStateData,
+  buildOrthogroupStateData,
+  applyOrthogroupStateData,
+  serializeResults,
+  applyResultsData,
+  buildRunStateData,
+  applyRunStateData
+});
+const generatedArtifactSnapshotOptions = {
+  buildGeneratedArtifactSnapshot: artifactSnapshots.buildGeneratedArtifactSnapshot,
+  applyGeneratedArtifactSnapshot: artifactSnapshots.applyGeneratedArtifactSnapshot
+};
 
 const result = (name, marker) => ({
   name,
@@ -228,7 +269,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   };
   let adoptedArtifacts = 0;
   let failArtifactAdoption = false;
-  const runner = createRunAnalysis({
+  let cancelDuringCandidate = false;
+  let runner;
+  runner = createRunAnalysis({
+    ...generatedArtifactSnapshotOptions,
     state,
     getPyodide: () => null,
     ensurePyodide: async () => {
@@ -251,12 +295,16 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       catalog,
       featureColorOverrides,
       featureStrokeOverrides
-    }) => ({
-      results: structuredClone(results),
-      featureState: featureStateFromCatalog(catalog),
-      featureColorOverrides: structuredClone(featureColorOverrides),
-      featureStrokeOverrides: structuredClone(featureStrokeOverrides)
-    }),
+    }) => {
+      const candidate = {
+        results: structuredClone(results),
+        featureState: featureStateFromCatalog(catalog),
+        featureColorOverrides: structuredClone(featureColorOverrides),
+        featureStrokeOverrides: structuredClone(featureStrokeOverrides)
+      };
+      if (cancelDuringCandidate) runner.cancelRunAnalysis();
+      return candidate;
+    },
     resetPreviewViewport: ({ pan = null } = {}) => {
       state.canvasPan.x = Number(pan?.x) || 0;
       state.canvasPan.y = Number(pan?.y) || 0;
@@ -319,11 +367,22 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.zoom.value, 1.7);
   assert.deepEqual(state.canvasPan, { x: 31, y: -12 });
 
+  const canceledState = committedFeatureState();
+  const canceledResultIdentity = state.results.value;
+  const canceledResult = result('canceled.svg', 'canceled');
+  workerResponses.push(response(canceledResult, validCatalog(canceledResult.name)));
+  cancelDuringCandidate = true;
+  assert.deepEqual(await runner.runAnalysis(), { status: 'canceled' });
+  cancelDuringCandidate = false;
+  assert.deepEqual(committedFeatureState(), canceledState);
+  assert.equal(state.results.value, canceledResultIdentity);
+  assert.equal(state.processingStatus.value, 'Canceled.');
+
   assert.equal(ensurePyodideCalls, 0);
   assert.equal(activePrimaryReads, 1);
   assert.equal(inactiveFileReads, 0);
   assert.equal(adoptedArtifacts, 1);
-  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 4);
+  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 5);
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
   state.form.multi_record_canvas = true;
@@ -584,6 +643,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   };
 
   const runner = createRunAnalysis({
+    ...generatedArtifactSnapshotOptions,
     state,
     getPyodide: () => null,
     ensurePyodide: async () => {

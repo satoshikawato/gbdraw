@@ -13,6 +13,7 @@ from svgwrite import Drawing
 
 import gbdraw.analysis as analysis
 import gbdraw.analysis.collinearity as collinearity
+import gbdraw.analysis.protein_colinearity as protein_collinearity
 import gbdraw.api.diagram as diagram_api
 import gbdraw.cli_utils as cli_utils
 import gbdraw.cli_utils.common as cli_common
@@ -63,6 +64,34 @@ def test_unused_native_collinearity_wrapper_is_removed() -> None:
     assert not hasattr(analysis, "build_native_collinearity_blocks")
     assert "build_native_collinearity_blocks" not in collinearity.__all__
     assert "build_native_collinearity_blocks" not in analysis.__all__
+
+
+def test_test_only_collinearity_and_legacy_membership_surfaces_are_removed() -> None:
+    assert importlib.util.find_spec("gbdraw.io.collinearity") is None
+
+    removed_collinearity_names = {
+        "build_orthogroup_collinearity_anchors",
+        "collapse_nearby_duplicate_anchors",
+        "deduplicate_unit_pair_anchors",
+        "protein_hits_to_collinearity_anchors",
+        "select_collinearity_anchor_hits",
+    }
+    assert removed_collinearity_names.isdisjoint(collinearity.__all__)
+    assert all(not hasattr(collinearity, name) for name in removed_collinearity_names)
+
+    removed_membership_names = {
+        "EvidenceIndex",
+        "build_orthogroups_from_protein_hits",
+        "build_pair_evidence_index",
+        "build_protein_colinearity_comparisons",
+        "cap_hits_per_query",
+        "expand_orthogroup_membership_from_evidence",
+    }
+    assert removed_membership_names.isdisjoint(protein_collinearity.__all__)
+    assert all(
+        not hasattr(protein_collinearity, name)
+        for name in removed_membership_names
+    )
 
 
 def test_unused_session_compatibility_wrapper_is_removed() -> None:

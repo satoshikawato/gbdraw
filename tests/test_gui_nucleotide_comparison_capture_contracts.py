@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import json
 from pathlib import Path
 
 from Bio import SeqIO
 from PIL import Image
 
+from docs.capture.config import chapter_for
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
@@ -24,7 +24,7 @@ COMPARISON_FLOW_PATH = (
     / "how_to"
     / "nucleotide_comparisons.py"
 )
-MANIFEST_PATH = REPO_ROOT / "docs" / "scenarios" / "manifest.json"
+WEB_CAPTURE_PATH = REPO_ROOT / "docs" / "capture" / "flows" / "web_capture.py"
 FAQ_PATH = REPO_ROOT / "docs" / "FAQ.md"
 
 PAGES = {
@@ -55,13 +55,6 @@ SCREENSHOT_NAMES = {
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _chapter(scenario_id: str) -> dict[str, object]:
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    return next(
-        chapter for chapter in manifest["chapters"] if chapter["id"] == scenario_id
-    )
 
 
 def _blast_rows(path: Path) -> list[list[str]]:
@@ -183,6 +176,7 @@ def test_circular_ring_flow_uses_four_complete_natural_mitochondria() -> None:
 def test_h_gui_03_to_06_flows_use_visible_controls_without_state_injection() -> None:
     layout = LAYOUT_FLOW_PATH.read_text(encoding="utf-8")
     comparisons = COMPARISON_FLOW_PATH.read_text(encoding="utf-8")
+    shared = WEB_CAPTURE_PATH.read_text(encoding="utf-8")
     for fragment in (
         'get_by_role("button", name="Linear", exact=True)',
         'get_by_test_id("linear-genbank-1").set_input_files',
@@ -216,7 +210,7 @@ def test_h_gui_03_to_06_flows_use_visible_controls_without_state_injection() -> 
         "page.expect_file_chooser",
         "page.expect_download",
     ):
-        assert fragment in comparisons
+        assert fragment in comparisons or fragment in shared
 
     for source in (layout, comparisons):
         for forbidden in (
@@ -307,7 +301,7 @@ def test_nucleotide_pages_and_manifest_use_the_executable_scenarios() -> None:
     }
     for scenario_id, page_path in PAGES.items():
         page = page_path.read_text(encoding="utf-8")
-        chapter = _chapter(scenario_id)
+        chapter = chapter_for(scenario_id)
         assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
         assert tuple(
             Path(screenshot["path"]).name for screenshot in chapter["screenshots"]
@@ -315,9 +309,9 @@ def test_nucleotide_pages_and_manifest_use_the_executable_scenarios() -> None:
         for value in expected_values[scenario_id]:
             assert value in page
 
-    h3 = _chapter("H-GUI-03")
+    h3 = chapter_for("H-GUI-03")
     assert set(h3["fixtures"]) == {"lambda", "de3"}
-    h6 = _chapter("H-GUI-06")
+    h6 = chapter_for("H-GUI-06")
     assert set(h6["fixtures"]) == {
         "human-mitochondrion",
         "metazoan-mitochondria-four",

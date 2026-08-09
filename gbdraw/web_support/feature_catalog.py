@@ -12,16 +12,19 @@ from typing import Any
 from gbdraw.exceptions import GbdrawError
 from gbdraw.render.interactive_svg import (
     InteractiveSvgContext,
+    _add_class_token,
     _collect_rendered_features,
     _compact_wire_value,
+    _element_match_id_status,
     _feature_payloads,
     _feature_record_index_status,
     _feature_rendered_id_status,
     _feature_source_index_status,
+    _feature_stable_id,
     _feature_stable_id_status,
     _first_text,
-    _match_payloads,
-    _sequence_sources_for_matches,
+    _is_match_candidate,
+    _normalize_string_array,
 )
 
 FEATURE_CATALOG_SCHEMA = 3
@@ -87,6 +90,187 @@ def _sequence(value: object | None) -> list[object]:
 
 def _text(value: object | None) -> str:
     return _first_text(value)
+
+
+_MATCH_ATTRIBUTES = {
+    "query_record_index": "data-query-record-index",
+    "subject_record_index": "data-subject-record-index",
+    "qstart": "data-qstart",
+    "qend": "data-qend",
+    "sstart": "data-sstart",
+    "send": "data-send",
+    "identity": "data-identity",
+    "alignment_length": "data-alignment-length",
+    "evalue": "data-evalue",
+    "bitscore": "data-bitscore",
+    "mismatches": "data-mismatches",
+    "gap_opens": "data-gap-opens",
+    "source_index": "data-source-index",
+    "track_index": "data-track-index",
+    "track_label": "data-track-label",
+    "reference_side": "data-reference-side",
+    "reference_record_id": "data-reference-record-id",
+    "block_kind": "data-collinearity-block-kind",
+    "group_scope": "data-group-scope",
+    "collinear_group_scope": "data-collinear-group-scope",
+    "group_kind": "data-group-kind",
+    "block_color_mode": "data-collinearity-color-mode",
+    "block_score": "data-collinearity-block-score",
+    "block_evalue": "data-collinearity-block-evalue",
+    "anchor_index": "data-collinearity-anchor-index",
+    "anchor_count": "data-collinearity-anchor-count",
+    "query_feature_svg_id": "data-query-feature-svg-id",
+    "subject_feature_svg_id": "data-subject-feature-svg-id",
+    "query_stable_feature_svg_id": "data-query-stable-feature-svg-id",
+    "subject_stable_feature_svg_id": "data-subject-stable-feature-svg-id",
+    "query_feature_index": "data-query-feature-index",
+    "subject_feature_index": "data-subject-feature-index",
+    "query_protein_id": "data-query-protein-id",
+    "subject_protein_id": "data-subject-protein-id",
+    "query_locus_id": "data-query-locus-id",
+    "subject_locus_id": "data-subject-locus-id",
+    "query_display_name": "data-query-display-name",
+    "subject_display_name": "data-subject-display-name",
+}
+
+
+def _match_kind(element: ET.Element) -> str:
+    value = _text(element.get("data-match-kind")).lower()
+    if value in {"pairwise", "orthogroup", "collinear", "homology"}:
+        return value
+    if element.get("data-collinearity-block-id"):
+        return "collinear"
+    if element.get("data-orthogroup-id"):
+        return "orthogroup"
+    return "pairwise"
+
+
+def _metadata_values(value: object | None) -> list[str]:
+    return list(
+        dict.fromkeys(
+            part.strip() for part in _text(value).split(";") if part.strip()
+        )
+    )
+
+
+def _match_payload(element: ET.Element, index: int) -> dict[str, object]:
+    match_id, valid = _element_match_id_status(element)
+    if not valid:
+        raise GbdrawError("Rendered match contains conflicting match ID aliases.")
+    match_id = match_id or f"match_{index + 1}"
+    element.set("data-gbdraw-match-id", match_id)
+    element.set("data-gbdraw-pairwise-match-id", match_id)
+    payload: dict[str, object] = {
+        "id": match_id,
+        "match_kind": _match_kind(element),
+        "orthogroup_ids": _metadata_values(element.get("data-orthogroup-id")),
+        "collinearity_block_id": _text(element.get("data-collinearity-block-id")),
+        "fill": _first_text(element.get("fill"), "#94a3b8"),
+        "query_record_id": _first_text(
+            element.get("data-query-record-id"), element.get("data-query")
+        ),
+        "subject_record_id": _first_text(
+            element.get("data-subject-record-id"), element.get("data-subject")
+        ),
+        "orientation": _first_text(
+            element.get("data-collinearity-orientation"),
+            element.get("data-orientation"),
+        ),
+    }
+    payload.update(
+        {
+            field: _text(element.get(attribute))
+            for field, attribute in _MATCH_ATTRIBUTES.items()
+        }
+    )
+    return dict(_compact_wire_value(payload) or {})
+
+
+def _match_payloads(
+    root: ET.Element,
+    features: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    rendered_features = {
+        _text(feature.get("svg_id")): feature
+        for feature in features
+        if _text(feature.get("svg_id"))
+    }
+    payloads: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for element in root.iter():
+        if not _is_match_candidate(element):
+            continue
+        payload = _match_payload(element, len(payloads))
+        match_id = _text(payload.get("id"))
+        if not match_id or match_id in seen:
+            raise GbdrawError("Rendered SVG contains invalid or duplicate match IDs.")
+        seen.add(match_id)
+        for role in ("query", "subject"):
+            rendered = rendered_features.get(
+                _text(payload.get(f"{role}_feature_svg_id"))
+            )
+            if rendered is None:
+                continue
+            payload.setdefault(f"{role}_record_index", rendered.get("record_idx"))
+            payload.setdefault(
+                f"{role}_stable_feature_svg_id", _feature_stable_id(rendered)
+            )
+            payload.setdefault(f"{role}_feature_index", rendered.get("feature_index"))
+        payloads.append(dict(_compact_wire_value(payload) or {}))
+        element.set("data-gbdraw-interactive-match", "true")
+        _add_class_token(element, "gbdraw-interactive-pairwise-match")
+    return payloads
+
+
+def _sequence_sources_for_matches(
+    matches: Sequence[Mapping[str, object]],
+    sources: Sequence[Mapping[str, object]],
+) -> list[Mapping[str, object]]:
+    if not matches:
+        return []
+    linear_indexes: set[int] = set()
+    circular_record_ids: set[str] = set()
+    comparison_source_indexes: set[int] = set()
+    for match in matches:
+        if _text(match.get("match_kind")) == "homology":
+            reference_side = _text(match.get("reference_side"))
+            circular_record_ids.add(_text(match.get(f"{reference_side}_record_id")))
+            try:
+                comparison_source_indexes.add(int(str(match.get("source_index"))))
+            except (TypeError, ValueError):
+                pass
+            continue
+        for role in ("query", "subject"):
+            try:
+                linear_indexes.add(int(str(match.get(f"{role}_record_index"))))
+            except (TypeError, ValueError):
+                pass
+
+    selected: list[Mapping[str, object]] = []
+    for source in sources:
+        origin = _text(source.get("origin"))
+        try:
+            if (
+                origin == "linear-record"
+                and int(str(source.get("recordIndex"))) in linear_indexes
+            ):
+                selected.append(source)
+            elif (
+                origin == "homology-comparison"
+                and int(str(source.get("sourceIndex")))
+                in comparison_source_indexes
+            ):
+                selected.append(source)
+        except (TypeError, ValueError):
+            continue
+        if origin == "circular-reference":
+            aliases = {
+                _text(source.get("recordId")),
+                *_normalize_string_array(source.get("aliases")),
+            }
+            if aliases & circular_record_ids:
+                selected.append(source)
+    return selected
 
 
 def _text_alias_status(
@@ -724,7 +908,7 @@ def _normalized_rendered_features(
 
 
 def _normalized_orthogroups(
-    context: InteractiveSvgContext,
+    orthogroups: Sequence[Mapping[str, object]],
     record_keys: Sequence[str],
     biological_index: _BiologicalFeatureIndex,
     presentation_by_id: Mapping[str, tuple[str, str]] | None = None,
@@ -738,7 +922,7 @@ def _normalized_orthogroups(
         ("confidence", ("confidence",)),
         ("assignmentReason", ("assignmentReason", "assignment_reason")),
     )
-    for group in context.orthogroups:
+    for group in orthogroups:
         if not isinstance(group, Mapping):
             continue
         group_id, group_id_valid = _text_alias_status(
@@ -1446,7 +1630,38 @@ def build_feature_catalog_item(
         record_keys,
         biological_index,
     )
-    raw_matches = _match_payloads(root, rendered_payloads, context.orthogroups)
+    raw_matches = _match_payloads(root, rendered_payloads)
+    orthogroups = list(context.orthogroups)
+    known_group_ids: set[str] = set()
+    for group in orthogroups:
+        if isinstance(group, Mapping):
+            group_id, _ = _text_alias_status(
+                group,
+                ("id", "orthogroupId", "orthogroup_id"),
+            )
+            known_group_ids.add(group_id)
+    for match in raw_matches:
+        if (
+            _text(match.get("match_kind")) != "orthogroup"
+            or "collinear_group_scope" in match
+        ):
+            continue
+        group_scope = _text(match.pop("group_scope", None))
+        group_kind = _text(match.pop("group_kind", None))
+        if not group_scope and not group_kind:
+            continue
+        if group_scope not in {"cross_record", "record_local"} or group_kind != "orthogroup":
+            raise GbdrawError(
+                "Orthogroup comparison metadata has an invalid membership scope."
+            )
+        for group_id in _sequence(match.get("orthogroup_ids")):
+            normalized_group_id = _text(group_id)
+            if not normalized_group_id or normalized_group_id in known_group_ids:
+                continue
+            orthogroups.append(
+                {"id": normalized_group_id, "scope": group_scope, "members": []}
+            )
+            known_group_ids.add(normalized_group_id)
     presentation_by_id = _orthogroup_presentation_by_id(raw_matches)
     sequence_sources = _deduplicated_sequence_sources(raw_matches, context)
     _reference_reconstructible_nucleotide_sequences(
@@ -1455,7 +1670,7 @@ def build_feature_catalog_item(
         sequence_sources,
     )
     normalized_orthogroups = _normalized_orthogroups(
-        context,
+        orthogroups,
         record_keys,
         biological_index,
         presentation_by_id,

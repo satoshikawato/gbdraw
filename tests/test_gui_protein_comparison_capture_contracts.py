@@ -10,13 +10,14 @@ from pathlib import Path
 from Bio import SeqIO
 from PIL import Image
 
+from docs.capture.config import chapter_for
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 BGC_ROOT = WEB_ROOT / "tutorial-data" / "aminoglycoside-bgc-five"
-MANIFEST_PATH = REPO_ROOT / "docs" / "scenarios" / "manifest.json"
 FIXTURE_MANIFEST_PATH = WEB_ROOT / "tutorial-data" / "manifest.json"
 COMMON_FLOW_PATH = REPO_ROOT / "docs" / "capture" / "flows" / "bgc_losatp.py"
+WEB_CAPTURE_PATH = REPO_ROOT / "docs" / "capture" / "flows" / "web_capture.py"
 TUTORIAL_FLOW_PATH = (
     REPO_ROOT
     / "docs"
@@ -214,13 +215,6 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _chapter(scenario_id: str) -> dict[str, object]:
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    return next(
-        chapter for chapter in manifest["chapters"] if chapter["id"] == scenario_id
-    )
-
-
 def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
@@ -326,6 +320,7 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
     tutorial = TUTORIAL_FLOW_PATH.read_text(encoding="utf-8")
     how_to = HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
     common = COMMON_FLOW_PATH.read_text(encoding="utf-8")
+    shared = WEB_CAPTURE_PATH.read_text(encoding="utf-8")
 
     assert tutorial.count('mode="orthogroup"') == 1
     assert 'mode="collinear"' not in tutorial
@@ -363,7 +358,7 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
         "page.expect_download",
         "download.save_as",
     ):
-        assert fragment in common
+        assert fragment in common or fragment in shared
 
     presentation = _module_literal(COMMON_FLOW_PATH, "BGC_RECORD_PRESENTATION")
     assert [entry[2] for entry in presentation] == [False, False, False, False, True]
@@ -409,7 +404,7 @@ def test_bgc_flow_pins_gallery_presentation_and_losatp_values() -> None:
         'page.get_by_label("Collinear minimum block genes", exact=True).fill("2")',
         'page.get_by_label("Collinear evidence scope", exact=True).select_option',
         '"orientation_identity"',
-        'first_pair = _linear_pair(page, 1, 2)',
+        'first_pair = linear_pair(page, 1, 2)',
         'name="Raw LOSAT filename for #1 to #2", exact=True',
         'name="Save Raw LOSAT TSV for #1 to #2", exact=True',
     ):
@@ -608,7 +603,7 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
     }
     for scenario_id in ("T-GUI-04", "H-GUI-07"):
         page_path = PAGES[scenario_id]
-        chapter = _chapter(scenario_id)
+        chapter = chapter_for(scenario_id)
         page = page_path.read_text(encoding="utf-8")
         assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
         assert chapter["fixtures"] == ["aminoglycoside-bgc-five"]
@@ -654,14 +649,14 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
     assert "Raw LOSAT results" not in tutorial
     assert "without setting regions" in " ".join(groups.split())
     assert "Turn off **Separate Strands**" in groups
-    assert _chapter("T-GUI-04")["settings"]["separate_strands"] is False
-    assert _chapter("H-GUI-07")["settings"]["separate_strands"] is False
+    assert chapter_for("T-GUI-04")["settings"]["separate_strands"] is False
+    assert chapter_for("H-GUI-07")["settings"]["separate_strands"] is False
     assert "separate_strands=False" in TUTORIAL_FLOW_PATH.read_text(encoding="utf-8")
     assert "separate_strands=False" in HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
     assert "23\ngroups, and 77 links" in groups
 
     gallery_collinear = PAGES["T-GUI-08"].read_text(encoding="utf-8")
-    gallery_chapter = _chapter("T-GUI-08")
+    gallery_chapter = chapter_for("T-GUI-08")
     assert gallery_chapter["settings"]["comparison_scope"] == "adjacent"
     assert tuple(
         Path(screenshot["path"]).name
@@ -735,7 +730,7 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
 
     collinear_path = PAGES["H-GUI-08"]
     collinear = collinear_path.read_text(encoding="utf-8")
-    chapter = _chapter("H-GUI-08")
+    chapter = chapter_for("H-GUI-08")
     assert chapter["destination"] == str(collinear_path.relative_to(REPO_ROOT))
     assert chapter["fixtures"] == ["hepatoplasmataceae-five"]
     assert chapter["settings"] == {

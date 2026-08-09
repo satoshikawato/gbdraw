@@ -42,14 +42,7 @@ def normalize_format_token(value: object) -> str:
 def dedupe_formats(formats: Iterable[str]) -> list[str]:
     """Return formats in first-seen order with duplicates removed."""
 
-    result: list[str] = []
-    seen: set[str] = set()
-    for fmt in formats:
-        if fmt in seen:
-            continue
-        seen.add(fmt)
-        result.append(fmt)
-    return result
+    return list(dict.fromkeys(formats))
 
 
 def parse_format_string(

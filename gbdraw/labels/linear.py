@@ -79,7 +79,6 @@ def _find_lowest_available_track_indexed(
     track_indexes: dict[str, IntervalIndex],
     label_by_id: dict[int, dict],
     label: dict,
-    bucket_size: float,
 ) -> int:
     """Find the lowest non-overlapping external label track using index candidates."""
     label_interval = _linear_label_interval(label)
@@ -619,7 +618,6 @@ def prepare_label_list_linear(
                 external_track_indexes,
                 external_label_by_id,
                 label_entry,
-                external_bucket_size,
             )
             label_entry["track_id"] = f"track_{best_track}"
             track_dict[f"track_{best_track}"].append(label_entry)

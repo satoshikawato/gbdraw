@@ -82,7 +82,7 @@ import {
   resolveLinearComparisonPlan
 } from '../app/linear-comparisons.js';
 import { buildSessionResources as assembleSessionResources } from './session-resources.js';
-import { bytesToBase64, readFileBytes } from './file-content-cache.js';
+import { base64ToBytes, bytesToBase64, readFileBytes } from './file-content-cache.js';
 import { normalizeLogicalResults } from './result-normalization.js';
 import {
   featureStateFromCatalog,
@@ -103,9 +103,9 @@ import {
 import {
   compressSessionData,
   confirmLargeSessionBlob,
-  downloadSessionBlob,
   readSessionText
 } from './session-file.js';
+import { downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
 import {
@@ -1010,8 +1010,10 @@ const replacePlainObject = (target, source) => {
   });
 };
 
-export const applyEditorStateData = (editorState = {}) => {
-  const normalized = normalizeEditorStateData(editorState);
+export const applyEditorStateData = (editorState = {}, { trusted = false } = {}) => {
+  const normalized = trusted
+    ? cloneJsonData(editorState)
+    : normalizeEditorStateData(editorState);
 
   state.legendEntries.value = normalized.legend.entries;
   state.deletedLegendEntries.value = normalized.legend.deletedEntries;
@@ -2091,16 +2093,6 @@ const restorePaletteStateFromSession = (ui = {}) => {
   }
 };
 
-const base64ToUint8 = (base64) => {
-  const binary = atob(base64);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-};
-
 const serializeFile = async (file) => {
   if (!file) return null;
   const bytes = await readFileBytes(file);
@@ -2138,7 +2130,7 @@ const deserializeFile = (entry) => {
     });
   }
   if (typeof entry.data !== 'string') return null;
-  const bytes = base64ToUint8(entry.data);
+  const bytes = base64ToBytes(entry.data);
   return new File([bytes], entry.name || 'file', {
     type: entry.type || 'application/octet-stream',
     lastModified: entry.lastModified ?? Date.now()
@@ -3570,7 +3562,7 @@ export const exportSession = async (titleOverride = null) => {
   if (!confirmLargeSessionBlob(compressed)) {
     return { status: 'canceled', compressedSize: compressed.size };
   }
-  downloadSessionBlob(compressed, sessionFilename);
+  downloadBlob(compressed, sessionFilename);
   lastSessionFilename = sessionFilename;
   return { status: 'saved', blob: compressed, filename: sessionFilename };
 };

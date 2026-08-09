@@ -278,41 +278,6 @@ def get_circular_tick_label_radius_bounds(
     return max(0.0, min_radius), max(0.0, max_radius)
 
 
-def get_circular_tick_label_radius_profile(
-    total_len: int,
-    track_type: str,
-    strandedness: bool,
-    font_size: float,
-    font_family: str,
-    dpi: int,
-    manual_interval: int | None = None,
-    tick_track_channel_override: str | None = None,
-) -> tuple[float, float] | None:
-    """Return the legacy large-label radius ratio and radial text extent."""
-    tick_large, _ = get_circular_tick_intervals(total_len, manual_interval=manual_interval)
-    if tick_large <= 0:
-        return None
-
-    ticks_large_nonzero = [tick for tick in range(0, total_len, tick_large) if tick != 0]
-    if not ticks_large_nonzero:
-        return None
-
-    track_channel = _resolve_tick_track_channel(
-        total_len,
-        tick_track_channel_override=tick_track_channel_override,
-    )
-    ratio_table = _tick_label_ratio_table(track_channel, track_type, strandedness)
-    label_radius_ratio, _ = ratio_table["large"]
-
-    max_extent_px = 0.0
-    for tick in ticks_large_nonzero:
-        label_text = _format_tick_label_text(tick, total_len)
-        _, bbox_height_px = calculate_bbox_dimensions(label_text, font_family, font_size, dpi)
-        max_extent_px = max(max_extent_px, float(bbox_height_px) / 4.0)
-
-    return float(label_radius_ratio), max(0.0, max_extent_px)
-
-
 def _raw_tick_label_base_radius(
     *,
     center_radius_px: float,
@@ -716,7 +681,6 @@ __all__ = [
     "CircularTickLabelGeometry",
     "get_circular_tick_intervals",
     "get_circular_tick_label_radius_bounds",
-    "get_circular_tick_label_radius_profile",
     "get_circular_tick_path_radius_bounds",
     "get_circular_tick_path_ratio_bounds",
     "generate_circular_tick_labels",

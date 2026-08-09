@@ -58,10 +58,10 @@ import { serializeFeatureVisibilityRules } from './feature-visibility.js';
 import {
   normalizeDefinitionLineStyleState
 } from './definition-line-style-state.js';
-import { downloadZipFile } from '../utils/zip.js';
+import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
-import { downloadTextFile } from '../services/text-download.js';
+import { downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
@@ -795,6 +795,8 @@ export const createRunAnalysis = ({
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
+  buildGeneratedArtifactSnapshot,
+  applyGeneratedArtifactSnapshot,
   resetPreviewViewport,
   validateAnnotationTargets = null,
   losatExecutor = runLosatPairsParallel,
@@ -819,18 +821,10 @@ export const createRunAnalysis = ({
     canvasPan,
     skipCaptureBaseConfig,
     skipPositionReapply,
-    pairwiseMatchFactors,
     matchSequenceRegistry,
-    addedLegendCaptions,
-    fileLegendCaptions,
     featureColorOverrides,
     featureVisibilityRules,
     featureStrokeOverrides,
-    legendEntries,
-    deletedLegendEntries,
-    legendColorOverrides,
-    originalLegendOrder,
-    originalLegendColors,
     selectedPalette,
     currentColors,
     paletteDefinitions,
@@ -887,11 +881,7 @@ export const createRunAnalysis = ({
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
-    selectedFeatureIds,
-    selectedFeatureAnchorId,
-    featureSelectionStatus,
     editableLabels,
-    clickedLabel,
     labelTextScopeDialog,
     labelTextFeatureOverrides,
     canonicalLabelOverrideRows,
@@ -902,6 +892,12 @@ export const createRunAnalysis = ({
     labelReflowProcessing,
     labelReflowLastError
   } = state;
+  if (
+    typeof buildGeneratedArtifactSnapshot !== 'function'
+    || typeof applyGeneratedArtifactSnapshot !== 'function'
+  ) {
+    throw new Error('createRunAnalysis requires generated artifact snapshot handlers.');
+  }
   const executeLosatJobs = (...args) => {
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     return (typeof override === 'function' ? override : losatExecutor)(...args);
@@ -966,7 +962,7 @@ export const createRunAnalysis = ({
       );
       if (!proceed) return;
     }
-    downloadZipFile(latestCliHelperArchiveName, latestCliHelperFiles);
+    downloadBlob(createZipBlob(latestCliHelperFiles), latestCliHelperArchiveName);
   };
 
   const extractCircularTrackSlotError = (err) => {
@@ -1606,52 +1602,20 @@ export const createRunAnalysis = ({
     const manualCancelSnapshot = isReflow
       ? null
       : {
-          results: Array.isArray(results.value) ? results.value.map((entry) => ({ ...entry })) : [],
+          artifact: buildGeneratedArtifactSnapshot(),
+          resultIdentity: results.value,
           trackSlotResolvedGeometry: cloneJsonValue(trackSlotResolvedGeometry.value || null, null),
-          selectedResultIndex: selectedResultIndex.value,
           resultGenerationKey: resultGenerationKey?.value ?? 0,
           resultPanelTab: resultPanelTab.value,
-          lastRunInfo: cloneJsonValue(lastRunInfo.value, null),
           errorLog: cloneJsonValue(errorLog.value, null),
           latestCliHelperFiles: cloneJsonValue(latestCliHelperFiles, []),
           latestCliHelperArchiveName,
-          zoom: zoom.value,
-          canvasPan: {
-            x: Number(canvasPan?.x) || 0,
-            y: Number(canvasPan?.y) || 0
-          },
-          pairwiseMatchFactors: { ...(pairwiseMatchFactors.value || {}) },
           matchSequenceSources: matchSequenceRegistry?.values?.() || [],
-          addedLegendCaptions: new Set(addedLegendCaptions.value || []),
-          fileLegendCaptions: new Set(fileLegendCaptions.value || []),
-          featureColorOverrides: cloneJsonValue(featureColorOverrides, {}),
-          featureStrokeOverrides: cloneJsonValue(featureStrokeOverrides, {}),
-          legendEntries: cloneJsonValue(legendEntries.value || [], []),
-          deletedLegendEntries: cloneJsonValue(deletedLegendEntries.value || [], []),
-          legendColorOverrides: cloneJsonValue(legendColorOverrides, {}),
-          originalLegendOrder: cloneJsonValue(originalLegendOrder.value || [], []),
-          originalLegendColors: cloneJsonValue(originalLegendColors.value || {}, {}),
-          appliedPaletteName: appliedPaletteName.value,
-          appliedPaletteColors: cloneJsonValue(appliedPaletteColors.value || {}, {}),
-          pendingPaletteName: pendingPaletteName.value,
-          pendingPaletteColors: cloneJsonValue(pendingPaletteColors.value || {}, {}),
-          extractedFeatures: cloneJsonValue(extractedFeatures.value || [], []),
-          biologicalFeatures: biologicalFeatures
-            ? cloneJsonValue(biologicalFeatures.value || [], [])
-            : null,
-          featureCatalog: cloneJsonValue(featureCatalog?.value, null),
-          featureSelectorSafetyScope: cloneJsonValue(featureSelectorSafetyScope.value || [], []),
-          selectedFeatureIds: new Set(selectedFeatureIds?.value || []),
-          selectedFeatureAnchorId: selectedFeatureAnchorId?.value || '',
-          featureSelectionStatus: featureSelectionStatus?.value || '',
           editableLabels: cloneJsonValue(editableLabels.value || [], []),
-          clickedLabel: cloneJsonValue(clickedLabel.value, null),
           labelTextScopeDialog: cloneJsonValue(labelTextScopeDialog, {}),
           featureEditorStatus: cloneJsonValue(featureEditorStatus || {}, {}),
           featureExtractionPending: featureExtractionPending.value,
           featureExtractionError: featureExtractionError.value,
-          featureRecordIds: cloneJsonValue(featureRecordIds.value || [], []),
-          selectedFeatureRecordIdx: selectedFeatureRecordIdx.value,
           labelOverrideBuildWarning: labelOverrideBuildWarning.value,
           proteinIdentityManifest: proteinIdentityManifest.value,
           legacyProteinRawCandidates: legacyProteinRawCandidates.value,
@@ -1659,135 +1623,29 @@ export const createRunAnalysis = ({
           losatCache: Array.from(losatCache.value || new Map()),
           losatDerivedCache: Array.from(losatDerivedCache.value || new Map()),
           losatCacheInfo: losatCacheInfo.value,
-          orthogroups: orthogroups.value,
           collinearGroups: collinearGroups.value,
-          featureOrthogroupIndex: featureOrthogroupIndex.value,
-          selectedOrthogroupAlignmentFeature: selectedOrthogroupAlignmentFeature.value,
-          selectedOrthogroupId: selectedOrthogroupId.value,
-          generatedLegendPosition: generatedLegendPosition.value,
-          generatedMode: generatedMode.value,
-          generatedMultiRecordCanvas: generatedMultiRecordCanvas.value,
-          generatedCircularPlotTitlePosition: generatedCircularPlotTitlePosition.value,
-          orthogroupNameOverrides: cloneJsonValue(orthogroupNameOverrides, {}),
-          orthogroupDescriptionOverrides: cloneJsonValue(
-            orthogroupDescriptionOverrides,
-            {}
-          ),
           losatTelemetry: cloneJsonValue(
             globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__,
             null
           )
         };
-    const restoreManualMigrationSnapshot = () => {
-      if (!manualCancelSnapshot) return;
-      proteinIdentityManifest.value = manualCancelSnapshot.proteinIdentityManifest;
-      legacyProteinRawCandidates.value = manualCancelSnapshot.legacyProteinRawCandidates;
-      legacyProteinDerivedEvidence.value = manualCancelSnapshot.legacyProteinDerivedEvidence;
-      losatCache.value = new Map(manualCancelSnapshot.losatCache);
-      losatDerivedCache.value = new Map(manualCancelSnapshot.losatDerivedCache);
-      losatCacheInfo.value = manualCancelSnapshot.losatCacheInfo;
-      orthogroups.value = manualCancelSnapshot.orthogroups;
-      collinearGroups.value = manualCancelSnapshot.collinearGroups;
-      featureOrthogroupIndex.value = manualCancelSnapshot.featureOrthogroupIndex;
-      extractedFeatures.value = cloneJsonValue(manualCancelSnapshot.extractedFeatures, []);
-      if (biologicalFeatures) {
-        biologicalFeatures.value = manualCancelSnapshot.biologicalFeatures || [];
-      }
-      selectedOrthogroupAlignmentFeature.value =
-        manualCancelSnapshot.selectedOrthogroupAlignmentFeature;
-      selectedOrthogroupId.value = manualCancelSnapshot.selectedOrthogroupId;
-      Object.keys(orthogroupNameOverrides).forEach((key) => delete orthogroupNameOverrides[key]);
-      Object.assign(
-        orthogroupNameOverrides,
-        cloneJsonValue(manualCancelSnapshot.orthogroupNameOverrides, {})
-      );
-      Object.keys(orthogroupDescriptionOverrides)
-        .forEach((key) => delete orthogroupDescriptionOverrides[key]);
-      Object.assign(
-        orthogroupDescriptionOverrides,
-        cloneJsonValue(manualCancelSnapshot.orthogroupDescriptionOverrides, {})
-      );
-      globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = cloneJsonValue(
-        manualCancelSnapshot.losatTelemetry,
-        null
-      );
-    };
     const restoreManualCancelSnapshot = () => {
       if (!manualCancelSnapshot) return;
-      const currentResults = Array.isArray(results.value) ? results.value : [];
-      const snapshotResults = manualCancelSnapshot.results;
-      const resultsUnchanged = (
-        currentResults.length === snapshotResults.length
-        && currentResults.every((entry, index) => {
-          const snapshotEntry = snapshotResults[index];
-          if (entry === snapshotEntry) return true;
-          if (!entry || !snapshotEntry) return entry === snapshotEntry;
-          const keys = new Set([
-            ...Object.keys(entry),
-            ...Object.keys(snapshotEntry)
-          ]);
-          return Array.from(keys).every((key) => entry[key] === snapshotEntry[key]);
-        })
-      );
-      if (!resultsUnchanged) {
-        skipCaptureBaseConfig.value = true;
-        skipPositionReapply.value = true;
-        results.value = snapshotResults;
-      }
+      applyGeneratedArtifactSnapshot(manualCancelSnapshot.artifact);
+      results.value = manualCancelSnapshot.resultIdentity;
       trackSlotResolvedGeometry.value = manualCancelSnapshot.trackSlotResolvedGeometry;
-      selectedResultIndex.value = Math.max(
-        0,
-        Math.min(manualCancelSnapshot.selectedResultIndex, Math.max(0, manualCancelSnapshot.results.length - 1))
-      );
-      zoom.value = manualCancelSnapshot.zoom;
-      if (canvasPan) {
-        canvasPan.x = manualCancelSnapshot.canvasPan.x;
-        canvasPan.y = manualCancelSnapshot.canvasPan.y;
-      }
       if (typeof resetPreviewViewport === 'function') {
-        resetPreviewViewport({ pan: manualCancelSnapshot.canvasPan });
+        resetPreviewViewport({ pan: manualCancelSnapshot.artifact.ui?.canvasPan });
       }
       if (resultGenerationKey) {
         resultGenerationKey.value = manualCancelSnapshot.resultGenerationKey;
       }
       resultPanelTab.value = manualCancelSnapshot.resultPanelTab;
-      lastRunInfo.value = cloneJsonValue(manualCancelSnapshot.lastRunInfo, null);
       errorLog.value = cloneJsonValue(manualCancelSnapshot.errorLog, null);
       latestCliHelperFiles = cloneJsonValue(manualCancelSnapshot.latestCliHelperFiles, []);
       latestCliHelperArchiveName = manualCancelSnapshot.latestCliHelperArchiveName;
-      pairwiseMatchFactors.value = { ...manualCancelSnapshot.pairwiseMatchFactors };
       matchSequenceRegistry?.reset?.(manualCancelSnapshot.matchSequenceSources);
-      addedLegendCaptions.value = new Set(manualCancelSnapshot.addedLegendCaptions);
-      fileLegendCaptions.value = new Set(manualCancelSnapshot.fileLegendCaptions);
-      Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
-      Object.assign(featureColorOverrides, cloneJsonValue(manualCancelSnapshot.featureColorOverrides, {}));
-      Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
-      Object.assign(featureStrokeOverrides, cloneJsonValue(manualCancelSnapshot.featureStrokeOverrides, {}));
-      legendEntries.value = cloneJsonValue(manualCancelSnapshot.legendEntries, []);
-      deletedLegendEntries.value = cloneJsonValue(manualCancelSnapshot.deletedLegendEntries, []);
-      Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
-      Object.assign(legendColorOverrides, cloneJsonValue(manualCancelSnapshot.legendColorOverrides, {}));
-      originalLegendOrder.value = cloneJsonValue(manualCancelSnapshot.originalLegendOrder, []);
-      originalLegendColors.value = cloneJsonValue(manualCancelSnapshot.originalLegendColors, {});
-      appliedPaletteName.value = manualCancelSnapshot.appliedPaletteName;
-      appliedPaletteColors.value = cloneJsonValue(manualCancelSnapshot.appliedPaletteColors, {});
-      pendingPaletteName.value = manualCancelSnapshot.pendingPaletteName;
-      pendingPaletteColors.value = cloneJsonValue(manualCancelSnapshot.pendingPaletteColors, {});
-      featureSelectorSafetyScope.value = cloneJsonValue(manualCancelSnapshot.featureSelectorSafetyScope, []);
-      if (featureCatalog) {
-        featureCatalog.value = cloneJsonValue(manualCancelSnapshot.featureCatalog, null);
-      }
-      if (selectedFeatureIds) {
-        selectedFeatureIds.value = new Set(manualCancelSnapshot.selectedFeatureIds);
-      }
-      if (selectedFeatureAnchorId) {
-        selectedFeatureAnchorId.value = manualCancelSnapshot.selectedFeatureAnchorId;
-      }
-      if (featureSelectionStatus) {
-        featureSelectionStatus.value = manualCancelSnapshot.featureSelectionStatus;
-      }
       editableLabels.value = cloneJsonValue(manualCancelSnapshot.editableLabels, []);
-      clickedLabel.value = cloneJsonValue(manualCancelSnapshot.clickedLabel, null);
       Object.assign(
         labelTextScopeDialog,
         cloneJsonValue(manualCancelSnapshot.labelTextScopeDialog, {})
@@ -1795,15 +1653,18 @@ export const createRunAnalysis = ({
       setFeatureEditorStatus(cloneJsonValue(manualCancelSnapshot.featureEditorStatus, {}));
       featureExtractionPending.value = manualCancelSnapshot.featureExtractionPending;
       featureExtractionError.value = manualCancelSnapshot.featureExtractionError;
-      featureRecordIds.value = cloneJsonValue(manualCancelSnapshot.featureRecordIds, []);
-      selectedFeatureRecordIdx.value = manualCancelSnapshot.selectedFeatureRecordIdx;
       labelOverrideBuildWarning.value = manualCancelSnapshot.labelOverrideBuildWarning;
-      generatedLegendPosition.value = manualCancelSnapshot.generatedLegendPosition;
-      generatedMode.value = manualCancelSnapshot.generatedMode;
-      generatedMultiRecordCanvas.value = manualCancelSnapshot.generatedMultiRecordCanvas;
-      generatedCircularPlotTitlePosition.value =
-        manualCancelSnapshot.generatedCircularPlotTitlePosition;
-      restoreManualMigrationSnapshot();
+      proteinIdentityManifest.value = manualCancelSnapshot.proteinIdentityManifest;
+      legacyProteinRawCandidates.value = manualCancelSnapshot.legacyProteinRawCandidates;
+      legacyProteinDerivedEvidence.value = manualCancelSnapshot.legacyProteinDerivedEvidence;
+      losatCache.value = new Map(manualCancelSnapshot.losatCache);
+      losatDerivedCache.value = new Map(manualCancelSnapshot.losatDerivedCache);
+      losatCacheInfo.value = manualCancelSnapshot.losatCacheInfo;
+      collinearGroups.value = manualCancelSnapshot.collinearGroups;
+      globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = cloneJsonValue(
+        manualCancelSnapshot.losatTelemetry,
+        null
+      );
     };
     const finishCanceledManualRun = () => {
       restoreManualCancelSnapshot();
@@ -4070,7 +3931,7 @@ export const createRunAnalysis = ({
               featureColorOverrides,
               featureStrokeOverrides,
               manualSpecificRules,
-              legacyFeatures: manualCancelSnapshot?.extractedFeatures || []
+              legacyFeatures: manualCancelSnapshot?.artifact?.features?.extractedFeatures || []
             })
           )
         : null;

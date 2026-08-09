@@ -222,16 +222,15 @@ Package configuration, test markers, coverage settings.
 Tests compare generated SVG against `tests/reference_outputs/` files.
 
 ### Test Helpers (tests/conftest.py)
-- `GbdrawRunner` - Helper class for running gbdraw commands in tests
-- `get_test_input_path()` - Find test input files across directories
-- `get_reference_output_path()` - Find reference SVG files
-- `temp_output_dir` fixture - Creates temporary directory for test outputs
+- `GbdrawRunner.run()` - Run either diagram subcommand with optional BLAST inputs
+- `find_test_input` fixture - Find test inputs across repository and optional local directories
+- `tmp_path` - Built-in pytest fixture for isolated test outputs
 
 ## CI/CD
 
 - **Python versions tested:** 3.10, 3.11, 3.12
 - **Lint job:** Uses Ruff 0.15.12 and blocks CI on lint failures
-- **CairoSVG job:** Separate test on Python 3.11 requiring system packages (`libcairo2-dev`, `libpango1.0-dev` on Ubuntu)
+- **CairoSVG:** The Python matrix installs the `dev` extra and required system packages (`libcairo2-dev`, `libpango1.0-dev` on Ubuntu)
 - **Slow tests:** Only run on push to main branch
 
 ## Dependencies

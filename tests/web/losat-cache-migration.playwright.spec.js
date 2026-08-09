@@ -1,15 +1,13 @@
 const { test, expect } = require('@playwright/test');
 const { createHash } = require('node:crypto');
 const {
-  createReadStream,
   existsSync,
   mkdtempSync,
   readFileSync,
   rmSync
 } = require('node:fs');
-const { createServer } = require('node:http');
 const { tmpdir } = require('node:os');
-const { extname, join, normalize, resolve, sep } = require('node:path');
+const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -27,21 +25,6 @@ const CURRENT_RENDER_REQUEST_SCHEMA = 5;
 const CURRENT_PROTEIN_RAW_SCHEMA = 4;
 const CURRENT_PROTEIN_DERIVED_SCHEMA = 3;
 
-const contentTypes = {
-  '.css': 'text/css; charset=utf-8',
-  '.data': 'application/octet-stream',
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.wasm': 'application/wasm',
-  '.whl': 'application/octet-stream',
-  '.woff2': 'font/woff2'
-};
-
-let server;
-let baseUrl;
 let sourceSession;
 let savedSessionCount = 0;
 let savedSessionDir;
@@ -768,37 +751,14 @@ test.beforeAll(async () => {
   expect(fixture.version).toBe(expected.sessionVersion);
   expect(fixture.renderRequest?.schema).toBe(expected.renderRequestSchema);
   expect(fixture.losatCache?.entries).toHaveLength(expected.storedRawEntries);
-  await new Promise((resolveServer, rejectServer) => {
-    server = createServer((request, response) => {
-      const url = new URL(request.url || '/', 'http://127.0.0.1');
-      const requested = normalize(decodeURIComponent(url.pathname))
-        .replace(/^(\.\.(?:\/|\\|$))+/, '');
-      const filePath = resolve(repoRoot, requested.replace(/^[/\\]+/, ''));
-      if ((!filePath.startsWith(`${repoRoot}${sep}`) && filePath !== repoRoot) || !existsSync(filePath)) {
-        response.writeHead(404);
-        response.end('Not found');
-        return;
-      }
-      response.writeHead(200, {
-        'Content-Type': contentTypes[extname(filePath)] || 'application/octet-stream'
-      });
-      createReadStream(filePath).pipe(response);
-    });
-    server.once('error', rejectServer);
-    server.listen(0, '127.0.0.1', () => {
-      baseUrl = `http://127.0.0.1:${server.address().port}`;
-      resolveServer();
-    });
-  });
 });
 
 test.afterAll(async () => {
-  await new Promise((resolveClose) => server.close(resolveClose));
   rmSync(savedSessionDir, { recursive: true, force: true });
 });
 
 test('SVG sanitizer preserves linear comparison row hooks', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, {
+  await page.goto('/gbdraw/web/index.html', {
     waitUntil: 'domcontentloaded'
   });
   const sanitized = await page.evaluate(async () => {
@@ -826,7 +786,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
     };
   });
 
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, fixturePath);
 

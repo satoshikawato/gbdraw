@@ -1,7 +1,6 @@
 const { test, expect } = require('@playwright/test');
-const { createReadStream, existsSync, readFileSync } = require('node:fs');
-const { createServer } = require('node:http');
-const { extname, join, normalize, resolve, sep } = require('node:path');
+const { readFileSync } = require('node:fs');
+const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -16,62 +15,8 @@ const postDragLegendCaption = [
 ].join(' ');
 const legendColor = '#336699';
 
-const contentTypes = {
-  '.css': 'text/css; charset=utf-8',
-  '.data': 'application/octet-stream',
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-  '.wasm': 'application/wasm',
-  '.whl': 'application/octet-stream',
-  '.woff2': 'font/woff2'
-};
-
-let server;
-let baseUrl;
-
-test.beforeAll(async () => {
-  await new Promise((resolveServer, rejectServer) => {
-    server = createServer((request, response) => {
-      const url = new URL(request.url || '/', 'http://127.0.0.1');
-      const requestedPath = normalize(decodeURIComponent(url.pathname))
-        .replace(/^(\.\.(?:\/|\\|$))+/, '');
-      const filePath = resolve(repoRoot, requestedPath.replace(/^[/\\]+/, ''));
-      if (!filePath.startsWith(`${repoRoot}${sep}`) && filePath !== repoRoot) {
-        response.writeHead(403);
-        response.end('Forbidden');
-        return;
-      }
-      const finalPath = filePath === repoRoot
-        ? join(repoRoot, 'gbdraw', 'web', 'index.html')
-        : filePath;
-      if (!existsSync(finalPath)) {
-        response.writeHead(404);
-        response.end('Not found');
-        return;
-      }
-      response.writeHead(200, {
-        'Content-Type': contentTypes[extname(finalPath)] || 'application/octet-stream'
-      });
-      createReadStream(finalPath).pipe(response);
-    });
-    server.once('error', rejectServer);
-    server.listen(0, '127.0.0.1', () => {
-      baseUrl = `http://127.0.0.1:${server.address().port}`;
-      resolveServer();
-    });
-  });
-});
-
-test.afterAll(async () => {
-  await new Promise((resolveClose) => server.close(resolveClose));
-});
-
 const openApp = async (page, { waitForRenderer = true } = {}) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   if (waitForRenderer) {
     await page.waitForFunction(
@@ -82,8 +27,8 @@ const openApp = async (page, { waitForRenderer = true } = {}) => {
   }
 };
 
-const blockExternalHttpRequests = async (page) => {
-  const appOrigin = new URL(baseUrl).origin;
+const blockExternalHttpRequests = async (page, baseURL) => {
+  const appOrigin = new URL(baseURL).origin;
   const externalRequests = [];
   await page.context().route(/^https?:\/\//, async (route) => {
     const url = route.request().url();
@@ -727,9 +672,9 @@ const expectRenamedEntry = (snapshot) => {
 };
 
 for (const mode of ['circular', 'linear']) {
-  test(`${mode} real render preserves composition edits through history, session, reset, and plain SVG export`, async ({ page }) => {
+  test(`${mode} real render preserves composition edits through history, session, reset, and plain SVG export`, async ({ page, baseURL }) => {
     test.setTimeout(600000);
-    const externalRequests = await blockExternalHttpRequests(page);
+    const externalRequests = await blockExternalHttpRequests(page, baseURL);
     const genbankText = readFileSync(genbankPath, 'utf8');
 
     await openApp(page);
@@ -855,9 +800,9 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
-test('real Circular render without a legend serializes diagram/title drags and Reset', async ({ page }) => {
+test('real Circular render without a legend serializes diagram/title drags and Reset', async ({ page, baseURL }) => {
   test.setTimeout(600000);
-  const externalRequests = await blockExternalHttpRequests(page);
+  const externalRequests = await blockExternalHttpRequests(page, baseURL);
   const genbankText = readFileSync(genbankPath, 'utf8');
 
   await openApp(page);

@@ -1140,7 +1140,7 @@ def test_render_request_passes_output_policy_and_returns_existing_paths(
     monkeypatch.setattr(
         request_render_module,
         "build_request_plan_diagram",
-        lambda _: prepared,
+        lambda _, **__: prepared,
     )
     monkeypatch.setattr(
         request_render_module,
@@ -1194,7 +1194,7 @@ def test_render_request_plain_svg_retains_catalog_context_only_when_opted_in(
     monkeypatch.setattr(
         request_render_module,
         "build_request_plan_diagram",
-        lambda _: prepared,
+        lambda _, **__: prepared,
     )
     monkeypatch.setattr(
         request_render_module,
@@ -1217,6 +1217,7 @@ def test_render_request_plain_svg_retains_catalog_context_only_when_opted_in(
 def test_render_request_plain_svg_skips_catalog_context_by_default(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    stub_typed_request_export,
 ) -> None:
     request = LinearDiagramRequest(
         records=(_memory_input("default-record"),),
@@ -1235,7 +1236,7 @@ def test_render_request_plain_svg_skips_catalog_context_by_default(
     monkeypatch.setattr(
         request_render_module,
         "build_request_plan_diagram",
-        lambda _: prepared,
+        lambda _, **__: prepared,
     )
     monkeypatch.setattr(
         request_render_module,
@@ -1244,12 +1245,6 @@ def test_render_request_plain_svg_skips_catalog_context_by_default(
             "plain SVG must not build feature context without an explicit opt-in"
         ),
     )
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, **_kwargs: [str(tmp_path / "default-diagram.svg")],
-    )
-
     result = render_request(request)
 
     assert result.interactive_context is None
@@ -1276,7 +1271,7 @@ def test_render_request_fails_when_interactive_metadata_generation_fails(
     monkeypatch.setattr(
         request_render_module,
         "build_request_plan_diagram",
-        lambda _: prepared,
+        lambda _, **__: prepared,
     )
 
     def fail_context(*_args, **_kwargs):

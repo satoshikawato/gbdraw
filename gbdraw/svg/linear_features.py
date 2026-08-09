@@ -205,29 +205,6 @@ def construct_arrow_path(
     return ["block", feature_path]
 
 
-def construct_arrowhead_path(
-    arrow_start: float,
-    arrow_end: float,
-    shoulder: float,
-    factors: list[float] | None,
-    normalized_feat_len: float,
-    normalized_arrow_length: float,
-    cds_height: float,
-    feature_y_positions: FeatureYPositions | None = None,
-) -> list[str]:
-    """Compatibility wrapper for the legacy five-vertex arrow builder."""
-    return construct_arrow_path(
-        arrow_start,
-        arrow_end,
-        shoulder,
-        factors,
-        normalized_feat_len,
-        normalized_arrow_length,
-        cds_height,
-        feature_y_positions=feature_y_positions,
-    )
-
-
 def _construct_narrow_arrow_path(
     arrow_start: float,
     arrow_end: float,
@@ -421,7 +398,6 @@ def create_arrow_shaft_path_linear(
 __all__ = [
     "calculate_normalized_arrow_length",
     "construct_arrow_path",
-    "construct_arrowhead_path",
     "create_arrow_path_linear",
     "create_arrow_shaft_path_linear",
     "create_arrowhead_path_linear",

@@ -26,6 +26,5 @@ directory; copy them from a Tutorial, How-to guide, or Recipe instead.
 Most files here are named after the source accession or fixture they were
 generated from (for example, `AP027078_tuckin_separate_strands_default.svg`).
 A file referenced from a current documentation page is regenerated when that
-page's recipe changes; a file not referenced from any current page is
-historical output kept for the commit history and may not reflect the
-current renderer.
+page's recipe changes. Other files remain only when a manifest or an asset
+owner still requires them; removed outputs remain available in Git history.

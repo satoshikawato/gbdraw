@@ -5,13 +5,12 @@ from typing import Iterable, List, Optional, Sequence, Set, Tuple
 
 from pandas import DataFrame
 
+from gbdraw.analysis.collinearity import normalize_collinearity_color_mode
 from gbdraw.core.color import (
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
     DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
 )
-
-
-_COLLINEARITY_COLOR_MODES = {"average_identity", "orientation", "orientation_identity"}
+from gbdraw.exceptions import ValidationError
 
 
 def _unique_legend_key(legend_table: dict, preferred: str) -> str:
@@ -24,12 +23,12 @@ def _unique_legend_key(legend_table: dict, preferred: str) -> str:
 
 
 def _normalize_collinearity_legend_color_mode(value: object) -> str | None:
-    normalized = str(value or "").strip().lower().replace("-", "_")
-    if normalized == "identity":
-        normalized = "average_identity"
-    if normalized in _COLLINEARITY_COLOR_MODES:
-        return normalized
-    return None
+    if not str(value or "").strip():
+        return None
+    try:
+        return normalize_collinearity_color_mode(str(value))
+    except ValidationError:
+        return None
 
 
 def collect_comparison_collinearity_color_modes(

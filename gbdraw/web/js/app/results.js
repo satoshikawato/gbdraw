@@ -1,12 +1,12 @@
 import { parseTransform } from './legend-layout/transform-utils.js';
 import { COMPOSITION_ROLE_ATTRIBUTE } from './legend-layout/composition-actions.js';
 import { COMPARISON_LEGEND_SELECTOR } from './legend/utils.js';
-import { closestRecordGroup, isMultiRecordCanvasSvg } from './record-groups.js';
+import { isMultiRecordCanvasSvg } from './record-groups.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 
 const RECORD_DEFINITION_SELECTOR = 'g[data-gbdraw-role="record-definition"]';
 
-export const findRecordDefinitionGroup = (svg, entry = {}) => {
+const findRecordDefinitionGroup = (svg, entry = {}) => {
   const rawRecordIndex = entry?.record_index ?? entry?.recordIndex;
   const hasRecordIndex =
     rawRecordIndex !== null &&
@@ -28,7 +28,7 @@ export const findRecordDefinitionGroup = (svg, entry = {}) => {
   return definitionGroupId ? svg?.getElementById?.(definitionGroupId) || null : null;
 };
 
-export const preserveDefinitionGroupDomIdentity = (existingGroup, importedGroup) => {
+const preserveDefinitionGroupDomIdentity = (existingGroup, importedGroup) => {
   if (!existingGroup || !importedGroup) return importedGroup;
 
   const existingId = existingGroup.getAttribute?.('id');
@@ -46,19 +46,7 @@ export const preserveDefinitionGroupDomIdentity = (existingGroup, importedGroup)
   return importedGroup;
 };
 
-export const findSingleRecordDefinitionGroup = (svg) => {
-  const semanticMatch = Array.from(
-    svg?.querySelectorAll?.(RECORD_DEFINITION_SELECTOR) || []
-  ).find((group) => !closestRecordGroup(group));
-  if (semanticMatch) return semanticMatch;
-
-  return (
-    Array.from(svg?.querySelectorAll?.('g[id$="_definition"]') || [])
-      .find((group) => !closestRecordGroup(group)) || null
-  );
-};
-
-export const stageCircularDefinitionSource = async ({
+const stageCircularDefinitionSource = async ({
   inputType,
   inputFile,
   writeFileToFs,

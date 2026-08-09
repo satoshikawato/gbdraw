@@ -898,6 +898,43 @@ def test_feature_catalog_resolves_hidden_match_endpoints_by_source_identity() ->
     assert "subject_protein_id" not in match
 
 
+def test_feature_catalog_distinguishes_membership_and_presentation_scopes() -> None:
+    svg = """\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path data-gbdraw-match-id="orthogroup-match"
+        data-match-kind="orthogroup"
+        data-orthogroup-id="og-1"
+        data-group-kind="orthogroup"
+        data-group-scope="cross_record" />
+</svg>
+"""
+
+    item = build_feature_catalog_item(
+        svg,
+        InteractiveSvgContext(),
+        result_index=0,
+        result_name="orthogroup.svg",
+    )
+
+    assert item["orthogroups"] == [
+        {"id": "og-1", "scope": "cross_record", "members": []}
+    ]
+    assert item["comparisonMatches"][0]["orthogroup_ids"] == ["og-1"]
+    select_feature_catalog_item(
+        {"schema": 3, "items": [item]},
+        result_index=0,
+        result_name="orthogroup.svg",
+    )
+
+    with pytest.raises(GbdrawError, match="invalid membership scope"):
+        build_feature_catalog_item(
+            svg.replace("cross_record", "invalid"),
+            InteractiveSvgContext(),
+            result_index=0,
+            result_name="orthogroup.svg",
+        )
+
+
 def test_feature_catalog_derives_collinear_group_presentation_from_matches() -> None:
     biological_features = (
         {

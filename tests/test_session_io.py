@@ -1873,7 +1873,7 @@ def test_gui_session_replays_arrow_shape_and_geometry_flags(tmp_path: Path) -> N
     ("head_ratio", "shaft_ratio"),
     [("auto", "1"), ("1.25", "0.25")],
 )
-def test_cli_session_projects_arrow_shape_and_geometry_to_web_state(
+def test_cli_session_keeps_arrow_options_as_cli_provenance_only(
     mode: str,
     head_ratio: str,
     shaft_ratio: str,
@@ -1900,10 +1900,15 @@ def test_cli_session_projects_arrow_shape_and_geometry_to_web_state(
         canonical_request=_canonical_request(mode),
     )
 
-    adv = payload["config"]["adv"]
-    assert adv["feature_shapes"] == {"CDS": "arrow"}
-    assert adv["arrow_head_length_ratio"] == head_ratio
-    assert adv["arrow_shaft_width_ratio"] == shaft_ratio
+    assert payload["config"] == {"adv": {}}
+    assert payload["cliInvocation"]["args"][-6:] == [
+        "--feature_shape",
+        "CDS=arrow",
+        "--arrow_head_length_ratio",
+        head_ratio,
+        "--arrow_shaft_width_ratio",
+        shaft_ratio,
+    ]
 
 
 @pytest.mark.parametrize(
@@ -2650,7 +2655,7 @@ def test_gui_only_linear_session_restores_top_level_losatp_keys(tmp_path: Path) 
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
-def test_cli_session_projects_hidden_scale_to_web_and_canonical_state(
+def test_cli_session_keeps_hidden_scale_in_canonical_request(
     mode: str,
 ) -> None:
     args = ["--gbk", "input.gb", "--hide_scale"]
@@ -2680,18 +2685,15 @@ def test_cli_session_projects_hidden_scale_to_web_and_canonical_state(
         ),
     )
 
-    assert payload["config"]["form"]["show_scale"] is False
+    assert payload["config"] == {"adv": {}}
+    assert payload["cliInvocation"]["args"] == args
     assert (
         payload["renderRequest"]["diagramOptions"]["config"]["objects"]["scale"][
             "show"
         ]
         is False
     )
-    if mode == "linear":
-        assert payload["config"]["form"]["linear_ruler_on_axis"] is False
-
-
-def test_cli_session_config_includes_lossless_cli_options() -> None:
+def test_cli_session_keeps_lossless_cli_provenance_out_of_web_config() -> None:
     args = (
         "-f",
         "interactive_svg",
@@ -2742,49 +2744,9 @@ def test_cli_session_config_includes_lossless_cli_options() -> None:
         canonical_request=_canonical_request("linear"),
     )
 
-    config = payload["config"]
     assert payload["cliInvocation"]["renderFormats"] == ["interactive_svg"]
-    stored_args = payload["cliInvocation"]["args"]
-    assert not {
-        "--depth_tick_interval",
-        "--feature_table",
-        "--collinear_max_gene_gap",
-        "--pairwise-match-style",
-        "--save-session",
-        "--session-output",
-        "on_feature",
-        "spreadout",
-        "tuckin",
-        "sqrt",
-    }.intersection(stored_args)
-    assert config["form"]["prefix"] == "out"
-    assert config["form"]["align_center"] is True
-    assert config["form"]["separate_strands"] is True
-    assert config["form"]["show_scale"] is True
-    assert config["form"]["scale_style"] == "ruler"
-    assert config["form"]["show_gc"] is True
-    assert config["form"]["show_skew"] is True
-    assert config["form"]["show_labels_linear"] == "orthogroup_top"
-    assert config["adv"]["pairwise_match_style"] == "curve"
-    assert config["adv"]["depth_large_tick_interval"] == "4"
-    assert "depth_tick_interval" not in config["adv"]
-    assert config["palette"] == "ajisai"
-    assert "blastSource" not in config
-    assert "blastSource" not in config["adv"]
-    assert config["losatProgram"] == "blastp"
-    assert config["losat"]["threadsPerJob"] == "32"
-    assert config["losat"]["blastp"]["mode"] == "orthogroup"
-    assert config["losat"]["blastp"]["collinearMaxUnitGap"] == "3"
-    assert "collinearMaxGeneGap" not in config["losat"]["blastp"]
-    assert "collinearBlockMergeGap" not in config["losat"]["blastp"]
-    assert "collinearSingletonMergeGap" not in config["losat"]["blastp"]
-    assert config["cliOptions"]["rawArgs"] == list(args)
-    assert config["cliOptions"]["byKey"]["protein_blastp_mode"] == ["orthogroup"]
-    assert config["cliOptions"]["byKey"]["losatp_threads"] == ["32"]
-    assert config["cliOptions"]["byKey"]["palette"] == ["ajisai"]
-    assert config["cliOptions"]["byKey"]["gbk"] == [
-        ["AP027078.gb", "AP027131.gb", "AP027133.gb", "AP027132.gb", "NZ_CP006932.gb"]
-    ]
+    assert payload["cliInvocation"]["args"] == list(args)
+    assert payload["config"] == {"adv": {}}
 
 
 def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
@@ -2821,26 +2783,6 @@ def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
             output_prefix="out",
             render_formats=("svg",),
             cli_invocation_args=args,
-            linear_record_metadata=(
-                {
-                    "loaded_index": 0,
-                    "source_index": 0,
-                    "source_loaded_index": 0,
-                    "source_loaded_count": 1,
-                    "record_id": "RecA",
-                    "source_file": "a.gb",
-                    "source_basename": "a.gb",
-                },
-                {
-                    "loaded_index": 1,
-                    "source_index": 1,
-                    "source_loaded_index": 0,
-                    "source_loaded_count": 1,
-                    "record_id": "RecB",
-                    "source_file": "b.gb",
-                    "source_basename": "b.gb",
-                },
-            ),
         ),
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={
@@ -2857,9 +2799,9 @@ def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
     assert "files" not in payload
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert payload["resources"]
-    assert payload["orthogroupState"]["selectedOrthogroupAlignmentFeature"] == "target_feature"
-    assert "linearRecordLayout" not in payload["config"]
-    assert "linearComparisonPlan" not in payload["config"]
+    assert payload["orthogroupState"] == {}
+    assert payload["config"] == {"adv": {}}
+    assert payload["cliInvocation"]["args"] == list(args)
 
 
 def test_current_cli_session_writer_omits_legacy_ambiguous_linear_files() -> None:
@@ -2881,26 +2823,6 @@ def test_current_cli_session_writer_omits_legacy_ambiguous_linear_files() -> Non
             output_prefix="out",
             render_formats=("svg",),
             cli_invocation_args=args,
-            linear_record_metadata=(
-                {
-                    "loaded_index": 0,
-                    "source_index": 0,
-                    "source_loaded_index": 0,
-                    "source_loaded_count": 2,
-                    "record_id": "RecA",
-                    "source_file": "multi.gb",
-                    "source_basename": "multi.gb",
-                },
-                {
-                    "loaded_index": 1,
-                    "source_index": 0,
-                    "source_loaded_index": 1,
-                    "source_loaded_count": 2,
-                    "record_id": "RecB",
-                    "source_file": "multi.gb",
-                    "source_basename": "multi.gb",
-                },
-            ),
         ),
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={

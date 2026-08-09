@@ -3,12 +3,11 @@ import { createDiagramDragActions } from './legend-layout/diagram-drag.js';
 import { createLegendRepositionActions } from './legend-layout/reposition-actions.js';
 import { resetCompositionUserDeltas } from './legend-layout/composition-actions.js';
 
-export const createLegendLayout = ({ state, debugLog, legendActions, svgActions, history = null }) => {
-  const diagramActions = createDiagramDragActions({ state, debugLog, history });
+export const createLegendLayout = ({ state, legendActions, svgActions, history = null }) => {
+  const diagramActions = createDiagramDragActions({ state, history });
   const canvasActions = createLegendCanvasActions({ state });
   const repositionActions = createLegendRepositionActions({
     state,
-    debugLog,
     legendActions,
     svgActions,
     diagramActions

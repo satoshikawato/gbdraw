@@ -59,6 +59,9 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+desktop.ini
+/missing_inputs.json
+/_reproduced/missing_inputs.json
 
 # --- Secrets ---
 *.pem

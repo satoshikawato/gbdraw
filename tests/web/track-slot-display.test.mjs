@@ -119,6 +119,55 @@ test('falls back to slot index for older geometry without slot IDs', () => {
   );
 });
 
+test('Linear placement actions preserve the Axis boundary and row sides', () => {
+  const state = {
+    adv: {
+      nt: 'GC',
+      linear_track_slots_enabled: true,
+      linear_track_slots_axis_index: 1,
+      linear_track_slots: [
+        { id: 'gc_content', renderer: 'dinucleotide_content', side: 'above', params: { nt: 'GC' } },
+        { id: 'features', renderer: 'features', side: 'overlay', params: {} },
+        { id: 'gc_skew', renderer: 'dinucleotide_skew', side: 'below', params: { nt: 'GC' } }
+      ]
+    },
+    form: {
+      linear_track_layout: 'middle',
+      show_depth: false,
+      show_gc: true,
+      show_skew: true
+    },
+    linearSeqs: []
+  };
+  const editor = createLinearTrackSlotEditor({ state });
+  const order = () => state.adv.linear_track_slots.map((slot) => slot.id);
+  const sides = () => state.adv.linear_track_slots.map((slot) => slot.side);
+
+  assert.equal(editor.canMoveLinearTrackSlot(0, 1), false);
+  editor.moveLinearTrackSlot(0, 1);
+  assert.deepEqual(order(), ['gc_content', 'features', 'gc_skew']);
+
+  editor.moveLinearTrackSlotAbove(2);
+  assert.deepEqual(order(), ['gc_content', 'gc_skew', 'features']);
+  assert.equal(state.adv.linear_track_slots_axis_index, 2);
+  assert.deepEqual(sides(), ['above', 'above', 'overlay']);
+
+  editor.moveLinearTrackSlotBelow(0);
+  assert.deepEqual(order(), ['gc_skew', 'features', 'gc_content']);
+  assert.equal(state.adv.linear_track_slots_axis_index, 1);
+  assert.deepEqual(sides(), ['above', 'overlay', 'below']);
+
+  let feature = state.adv.linear_track_slots.find((slot) => slot.id === 'features');
+  editor.updateLinearTrackSlotPlacement(feature, 'below');
+  feature = state.adv.linear_track_slots.find((slot) => slot.id === 'features');
+  assert.equal(feature.side, 'below');
+  editor.updateLinearTrackSlotPlacement(feature, 'overlay');
+  assert.equal(
+    state.adv.linear_track_slots.find((slot) => slot.id === 'features').side,
+    'overlay'
+  );
+});
+
 test('Linear editor requests resolved geometry with each public slot ID', () => {
   const linearSlots = [
     {

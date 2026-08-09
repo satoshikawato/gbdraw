@@ -3,9 +3,9 @@ import { gunzipSync } from 'node:zlib';
 
 const {
   compressSessionData,
-  confirmLargeSessionBlob,
-  downloadSessionBlob
+  confirmLargeSessionBlob
 } = await import('../../gbdraw/web/js/services/session-file.js');
+const { downloadBlob } = await import('../../gbdraw/web/js/services/text-download.js');
 
 const payload = {
   format: 'gbdraw-session',
@@ -65,7 +65,7 @@ globalThis.document = {
   })
 };
 try {
-  downloadSessionBlob(blob, 'exact-session.json.gz');
+  downloadBlob(blob, 'exact-session.json.gz');
   assert.equal(downloadedBlob, blob, 'the measured gzip Blob is downloaded without copying');
   assert.equal(downloadedName, 'exact-session.json.gz');
   assert.equal(clicked, true);

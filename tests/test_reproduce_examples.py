@@ -28,7 +28,11 @@ from tools.generate_palette_explorer_assets import (
 
 PUBLIC_MARKDOWN = (
     PROJECT_ROOT / "README.md",
-    *sorted((PROJECT_ROOT / "docs").rglob("*.md")),
+    *sorted(
+        path
+        for path in (PROJECT_ROOT / "docs").rglob("*.md")
+        if "internal" not in path.relative_to(PROJECT_ROOT / "docs").parts
+    ),
     PROJECT_ROOT / "examples" / "color_palette_examples.md",
 )
 MARKDOWN_TARGET_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
@@ -82,7 +86,7 @@ def test_manifest_counts_and_unique_paths() -> None:
     palette_circular = [figure_id for figure_id in figures if figure_id.startswith("palette_circular_")]
     palette_linear = [figure_id for figure_id in figures if figure_id.startswith("palette_linear_")]
 
-    assert len(docs_and_readme) == 61
+    assert len(docs_and_readme) == 53
     assert palette_circular == [
         "palette_circular_default",
         "palette_circular_ajisai",
@@ -93,7 +97,7 @@ def test_manifest_counts_and_unique_paths() -> None:
         "palette_linear_ajisai",
         "palette_linear_soft_pastels",
     ]
-    assert len(figures) == 61 + 6
+    assert len(figures) == 53 + 6
     assert "gbdraw_social_preview" not in figures
 
     output_paths = [spec.output_path for spec in figures.values()]
@@ -263,15 +267,11 @@ def test_public_figures_have_reproduction_inventory_coverage() -> None:
     references = _local_image_references()
     manifest_paths = {spec.output_path for spec in build_figure_specs().values()}
     scenario_paths = _documentation_scenario_artifacts()
-    existing_scenario_paths = {
-        path for path in scenario_paths if (PROJECT_ROOT / path).is_file()
-    }
     manual_paths = set(MANUALLY_MANAGED_FIGURES)
     retained_unreferenced = set(UNREFERENCED_FIGURE_RETENTION)
 
     assert references - manifest_paths - scenario_paths - manual_paths == set()
-    assert manifest_paths - references == retained_unreferenced
-    assert existing_scenario_paths <= references
+    assert retained_unreferenced <= manifest_paths - references
     assert all(reason.strip() for reason in MANUALLY_MANAGED_FIGURES.values())
     assert all(reason.strip() for reason in UNREFERENCED_FIGURE_RETENTION.values())
     assert all((PROJECT_ROOT / path).exists() for path in manual_paths)

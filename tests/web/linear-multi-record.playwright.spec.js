@@ -1,22 +1,8 @@
 const { test, expect } = require('@playwright/test');
-const { createReadStream, existsSync, readFileSync } = require('node:fs');
-const { createServer } = require('node:http');
-const { extname, join, normalize, resolve, sep } = require('node:path');
+const { readFileSync } = require('node:fs');
+const { join, resolve } = require('node:path');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
-const contentTypes = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.wasm': 'application/wasm',
-  '.whl': 'application/octet-stream'
-};
-
-let server;
-let baseUrl;
 
 const makeComparisonGenbank = (recordId, base = 'atg') => {
   const sequence = base.repeat(100);
@@ -111,36 +97,8 @@ const installDiagramRequestObserver = async (page) => {
   });
 };
 
-test.beforeAll(async () => {
-  await new Promise((resolveServer, rejectServer) => {
-    server = createServer((request, response) => {
-      const url = new URL(request.url || '/', 'http://127.0.0.1');
-      const requestedPath = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.(?:\/|\\|$))+/, '');
-      const filePath = resolve(repoRoot, requestedPath.replace(/^[/\\]+/, ''));
-      if ((!filePath.startsWith(`${repoRoot}${sep}`) && filePath !== repoRoot) || !existsSync(filePath)) {
-        response.writeHead(404);
-        response.end('Not found');
-        return;
-      }
-      response.writeHead(200, {
-        'Content-Type': contentTypes[extname(filePath)] || 'application/octet-stream'
-      });
-      createReadStream(filePath).pipe(response);
-    });
-    server.once('error', rejectServer);
-    server.listen(0, '127.0.0.1', () => {
-      baseUrl = `http://127.0.0.1:${server.address().port}`;
-      resolveServer();
-    });
-  });
-});
-
-test.afterAll(async () => {
-  await new Promise((resolveClose) => server.close(resolveClose));
-});
-
 test('Pairwise match popup selects the active SVG match until closed', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   await page.evaluate(() => {
@@ -171,7 +129,7 @@ test('Pairwise match popup selects the active SVG match until closed', async ({ 
 });
 
 test('Linear record rows and N-to-M comparison batches remain keyed by sequence uid', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const setup = await page.evaluate(() => {
@@ -275,7 +233,7 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
 
 test('Linear comparison timeline follows default DOM and keyboard order at narrow width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const uids = await page.evaluate(() => {
@@ -351,7 +309,7 @@ test('Linear comparison timeline follows default DOM and keyboard order at narro
 });
 
 test('Linear region controls do not overlap at supported sidebar widths', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
 
@@ -429,7 +387,7 @@ test('Linear region controls do not overlap at supported sidebar widths', async 
 });
 
 test('Advanced pair setup focuses Add and repairs an unplaced draft in its boundary', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const uids = await page.evaluate(() => {
@@ -492,7 +450,7 @@ test('Advanced pair setup focuses Add and repairs an unplaced draft in its bound
 });
 
 test('Comparison card actions target the active owner of duplicate directional drafts', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const [uidA, uidB] = await page.evaluate(() => {
@@ -561,7 +519,7 @@ test('Comparison card actions target the active owner of duplicate directional d
 test('Normalize Record Lengths rejects a shared Linear row and remains recoverable', async ({ page }) => {
   test.setTimeout(300000);
   await installDiagramRequestObserver(page);
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const sharedRowUids = await page.evaluate((records) => {
     const app = window.__GBDRAW_APP__;
@@ -647,7 +605,7 @@ test('No comparison completes a real render without touching dormant comparison 
       throw new Error('No comparison must not execute LOSAT.');
     };
   });
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const dormantEdgeKey = await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
@@ -804,7 +762,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       }));
     };
   });
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const [uidA, uidB, uidC] = await page.evaluate((records) => {
     const app = window.__GBDRAW_APP__;
@@ -1128,7 +1086,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
 test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ page }) => {
   test.setTimeout(180000);
   page.on('dialog', (dialog) => dialog.accept());
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const imported = await page.evaluate(async () => {
@@ -1177,7 +1135,7 @@ test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ pa
 });
 
 test('Candidate render post-processing sanitizes and reapplies stable styles before commit', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const outcome = await page.evaluate(async () => {
@@ -1309,7 +1267,7 @@ ${origin}
 `;
   };
 
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   await page.evaluate(({ firstRecord, secondRecord }) => {
@@ -1652,7 +1610,7 @@ ${origin}
 });
 
 test('Region annotations expose and persist an explicit target-record selection', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const genbank = `LOCUS       RecA                      10 bp    DNA     linear   UNA 01-JAN-2000
@@ -1716,7 +1674,7 @@ ORIGIN
 });
 
 test('Region annotation IDs accept continuous typing without losing focus', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   await page.evaluate(() => {
@@ -1739,7 +1697,7 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
 });
 
 test('GFF annotation targets follow FASTA record order', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const gff = `##gff-version 3

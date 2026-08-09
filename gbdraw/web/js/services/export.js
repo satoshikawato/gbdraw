@@ -3,6 +3,7 @@ import { setDpiInPng } from '../utils/png.js';
 import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';
 import { enrichSvgWithStandaloneInteractivity, stripEditorOnlyCursorStyles } from './standalone-interactivity.js';
 import { ensureSvgDefs, stripTransientPreviewState } from './svg-serialization.js';
+import { downloadBlob } from './text-download.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -250,13 +251,7 @@ const prepareSvgForPdf = (svg) => {
 
 const downloadSvgString = (svgString, filename) => {
   if (!svgString) return;
-  const blob = new Blob([svgString], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(new Blob([svgString], { type: 'image/svg+xml' }), filename);
 };
 
 export const downloadSVG = () => {
@@ -291,15 +286,7 @@ export const downloadPNG = () => {
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(async (pngBlob) => {
       const fixedBlob = await setDpiInPng(pngBlob, dpi);
-      const downloadUrl = URL.createObjectURL(fixedBlob);
-      const link = document.createElement('a');
-      link.download = getDownloadName('png');
-      link.href = downloadUrl;
-      link.addEventListener('click', (event) => {
-        event.stopPropagation();
-      }, { once: true });
-      link.click();
-      URL.revokeObjectURL(downloadUrl);
+      downloadBlob(fixedBlob, getDownloadName('png'));
       URL.revokeObjectURL(url);
     }, 'image/png');
   };

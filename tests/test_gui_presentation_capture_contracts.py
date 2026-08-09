@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import json
 from pathlib import Path
 
 from Bio import SeqIO
 from PIL import Image
 
+from docs.capture.config import chapter_for
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLOW_PATH = (
     REPO_ROOT / "docs" / "capture" / "flows" / "how_to" / "presentation.py"
 )
-MANIFEST_PATH = REPO_ROOT / "docs" / "scenarios" / "manifest.json"
 INDEX_PATH = REPO_ROOT / "gbdraw" / "web" / "index.html"
 FIXTURE_ROOT = (
     REPO_ROOT / "gbdraw" / "web" / "tutorial-data" / "human-mitochondrion"
@@ -72,13 +71,6 @@ SCREENSHOTS = {
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _chapter(scenario_id: str) -> dict[str, object]:
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    return next(
-        chapter for chapter in manifest["chapters"] if chapter["id"] == scenario_id
-    )
 
 
 def test_presentation_flows_use_one_complete_natural_mitochondrial_record() -> None:
@@ -227,7 +219,7 @@ def test_presentation_pages_match_scenarios_and_executable_values() -> None:
         ("H-GUI-11", STYLE_PAGE),
         ("H-GUI-12", PRESENTATION_PAGE),
     ):
-        chapter = _chapter(scenario_id)
+        chapter = chapter_for(scenario_id)
         assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
         assert tuple(
             REPO_ROOT / screenshot["path"] for screenshot in chapter["screenshots"]

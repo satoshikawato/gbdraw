@@ -5,14 +5,14 @@ import {
 } from '../feature-utils.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 
-export const RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([
+const RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([
   'qualifier-key',
   'qualifier-value',
   'nucleotide',
   'amino-acid'
 ]);
 
-export const FEATURE_SEARCH_FIELD_DEFINITIONS = Object.freeze([
+const FEATURE_SEARCH_FIELD_DEFINITIONS = Object.freeze([
   { id: 'all', label: 'All' },
   { id: 'label', label: 'Label' },
   { id: 'type', label: 'Feature type' },
@@ -60,7 +60,7 @@ const prepareSearchItem = (item) => ({
   alphabet: String(item?.alphabet || '')
 });
 
-export const NUCLEOTIDE_IUPAC = Object.freeze({
+const NUCLEOTIDE_IUPAC = Object.freeze({
   A: 'A',
   C: 'C',
   G: 'G',
@@ -80,7 +80,7 @@ export const NUCLEOTIDE_IUPAC = Object.freeze({
   '-': '-'
 });
 
-export const AMINO_ACID_IUPAC = Object.freeze({
+const AMINO_ACID_IUPAC = Object.freeze({
   A: 'A',
   C: 'C',
   D: 'D',
@@ -136,7 +136,7 @@ const charSetsIntersect = (left, right) => {
 const escapeRegExpText = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const escapeRegExpClassChar = (value) => String(value).replace(/[\\\]\[\^-]/g, '\\$&');
 
-export const buildIupacQueryPattern = (query, alphabet) => {
+const buildIupacQueryPattern = (query, alphabet) => {
   const map = getIupacAlphabet(alphabet);
   const normalized = String(query || '').replace(/\s+/g, '').toUpperCase();
   if (!map || !normalized) return null;
@@ -183,13 +183,13 @@ const appendSearchItems = (items, label, value, options = {}) => {
   });
 };
 
-export const getFeatureQualifiers = (feature) => (
+const getFeatureQualifiers = (feature) => (
   feature?.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
     ? feature.qualifiers
     : {}
 );
 
-export const resolveFeatureAminoAcidSequence = (feature) => {
+const resolveFeatureAminoAcidSequence = (feature) => {
   const direct = String(feature?.amino_acid_sequence || feature?.aminoAcidSequence || '').trim();
   if (direct) return direct;
   const qualifiers = getFeatureQualifiers(feature);
@@ -327,7 +327,7 @@ const getOrthogroupSearchItems = (feature, orthogroupsById) => {
   return items;
 };
 
-export const featureSearchItems = (
+const featureSearchItems = (
   feature,
   field,
   qualifierKey,
@@ -399,7 +399,7 @@ export const featureSearchItems = (
   return items;
 };
 
-export const compileFeatureSearchMatcher = (query, useRegex) => {
+const compileFeatureSearchMatcher = (query, useRegex) => {
   const trimmedQuery = String(query || '').trim();
   if (!trimmedQuery) {
     return { active: false, error: '', match: () => '', test: () => false };
@@ -467,21 +467,6 @@ export const compileFeatureSearchMatcher = (query, useRegex) => {
     },
     test: (values) => values.some((value) => normalizeSearchText(value).includes(needle))
   };
-};
-
-export const featureSearchMatches = (feature, matcher, field, qualifierKey, options = {}) => {
-  if (!matcher?.active || matcher.error) return [];
-  return featureSearchItems(feature, field, qualifierKey, options)
-    .map((item) => {
-      const matchedText = matcher.match ? matcher.match(item.value, item.alphabet) : '';
-      if (!matchedText) return null;
-      return {
-        label: item.label,
-        value: String(item.value),
-        match: matchedText
-      };
-    })
-    .filter(Boolean);
 };
 
 const preparedItemsForField = (feature, field, popupMode, orthogroupsById) => (
@@ -626,7 +611,7 @@ export const runFeatureSearch = ({
 
 const collapseWhitespace = (value) => String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
 
-export const searchMatchSnippet = (value, matchText) => {
+const searchMatchSnippet = (value, matchText) => {
   const text = collapseWhitespace(value);
   const match = collapseWhitespace(matchText);
   if (!text) return '';

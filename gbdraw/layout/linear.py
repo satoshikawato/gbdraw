@@ -184,14 +184,6 @@ class CollisionBand:
         for name, value in values.items():
             object.__setattr__(self, name, value)
 
-    @property
-    def width(self) -> float:
-        return self.x_end - self.x_start
-
-    @property
-    def vertical_band(self) -> VerticalBand:
-        return VerticalBand(self.top_y, self.bottom_y)
-
     def translate(self, *, x: float = 0.0, y: float = 0.0) -> CollisionBand:
         offset_x = float(x)
         offset_y = float(y)

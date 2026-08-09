@@ -10,6 +10,7 @@ await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
 await mkdir(join(tempDir, 'app', 'feature-search'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'utils'), { recursive: true });
 
 const copyModule = async (sourceRelative, targetRelative) => {
   await writeFile(
@@ -37,13 +38,14 @@ await copyModule(
 );
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
+await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
 const standaloneSource = await readFile(
   join(repoRoot, 'gbdraw/web/js/services/standalone-interactivity.js'),
   'utf8'
 );
 await writeFile(
   join(tempDir, 'services', 'standalone-interactivity.js'),
-  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneMatchPayloads, buildStandaloneOrthogroupPayloads, createStandaloneBiologicalFeatureResolver, getStandaloneFeatureOrthogroupEntry, getStandaloneOrthogroupPayload, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
+  `${standaloneSource}\nexport { buildStandaloneBiologicalFeaturePayloads, buildStandaloneOrthogroupPayloads, createStandaloneBiologicalFeatureResolver, getStandaloneFeatureOrthogroupEntry, selectStandaloneCatalogItem, selectStandaloneSequenceSources };\n`,
   'utf8'
 );
 await writeFile(join(tempDir, 'app', 'feature-editor-svg-actions.js'), `
@@ -70,6 +72,7 @@ globalThis.window = {
     computed: (getter) => ({ get value() { return getter(); } })
   }
 };
+globalThis.isSecureContext = true;
 let copiedText = '';
 Object.defineProperty(globalThis, 'navigator', {
   configurable: true,
@@ -105,7 +108,6 @@ const {
   buildStandaloneOrthogroupPayloads,
   createStandaloneBiologicalFeatureResolver,
   getStandaloneFeatureOrthogroupEntry,
-  getStandaloneOrthogroupPayload,
   selectStandaloneCatalogItem,
   selectStandaloneSequenceSources
 } = await import(
@@ -922,46 +924,6 @@ assert.equal(
   ),
   standaloneCanonicalEntry
 );
-const endpointFeatures = new Map([
-  ['rendered-zero_record_1', standaloneRecordZero],
-  ['rendered-one_record_2', standaloneRecordOne]
-]);
-const endpointGroupZero = {
-  id: 'endpoint-group-zero',
-  members: [{
-    recordIndex: 0,
-    stableFeatureSvgId: 'shared-stable',
-    renderedFeatureSvgId: 'rendered-zero_record_1'
-  }]
-};
-const endpointGroupOne = {
-  id: 'endpoint-group-one',
-  members: [{
-    recordIndex: 1,
-    stableFeatureSvgId: 'shared-stable',
-    renderedFeatureSvgId: 'rendered-one_record_2'
-  }]
-};
-assert.equal(
-  getStandaloneOrthogroupPayload(
-    [endpointGroupZero, endpointGroupOne],
-    '',
-    'rendered-one_record_2',
-    '',
-    endpointFeatures
-  ),
-  endpointGroupOne
-);
-assert.equal(
-  getStandaloneOrthogroupPayload(
-    [endpointGroupZero, endpointGroupOne],
-    '',
-    'shared-stable',
-    '',
-    endpointFeatures
-  ),
-  null
-);
 const catalogSelectionItem = { resultIndex: 0, resultName: 'result-zero' };
 assert.equal(
   selectStandaloneCatalogItem({
@@ -1026,29 +988,6 @@ assert.deepEqual(
     [linearSequenceSource]
   ),
   []
-);
-assert.equal(
-  getStandaloneOrthogroupPayload(
-    [
-      { ...endpointGroupZero, id: 'duplicate-group' },
-      { ...endpointGroupOne, id: 'duplicate-group' }
-    ],
-    'duplicate-group',
-    '',
-    '',
-    endpointFeatures
-  ),
-  null
-);
-assert.equal(
-  getStandaloneOrthogroupPayload(
-    [endpointGroupOne, { ...endpointGroupOne, id: 'endpoint-group-one-copy' }],
-    '',
-    'rendered-one_record_2',
-    '',
-    endpointFeatures
-  ),
-  null
 );
 for (const unresolved of [
   { fileIdx: 0, stable_svg_id: 'shared-stable' },
@@ -1202,6 +1141,37 @@ assert.match(
   orthogroupSearchResult.matchDetails['reversed-display-stable-id_record_3'][0].value,
   /og_1/
 );
+
+const searchableFeature = {
+  svg_id: 'searchable-feature',
+  displayLabel: 'Edited beta subunit',
+  recordId: 'NC_000913.3',
+  type: 'CDS',
+  location_parts: [{ display: 'join(11..40, 80..120)' }],
+  qualifiers: {
+    product: ['DNA-directed RNA polymerase subunit beta'],
+    note: ['core enzyme'],
+    translation: ['MPEPTIDE']
+  },
+  nucleotideSequence: 'ATGGCN'
+};
+const search = (query, field = 'all', popupMode = 'rich') => runFeatureSearch({
+  features: [searchableFeature],
+  renderedFeatureIds: new Set(['searchable-feature']),
+  query,
+  field,
+  popupMode
+});
+for (const [query, field] of [
+  ['polymerase', 'all'],
+  ['NC_000913.3', 'record-id'],
+  ['join(11..40, 80..120)', 'location'],
+  ['ATGGNN', 'nucleotide'],
+  ['MPEPTIDE', 'amino-acid']
+]) {
+  assert.deepEqual(search(query, field).matches, ['searchable-feature']);
+}
+assert.deepEqual(search('core enzyme', 'all', 'simple').matches, []);
 
 const publicProteinOnlyFeature = { protein_id: 'CAG34720.1', fileIdx: 2 };
 assert.equal(

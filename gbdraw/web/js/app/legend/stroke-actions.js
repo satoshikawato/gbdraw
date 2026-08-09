@@ -7,7 +7,7 @@ import {
   migrateLegacyFeatureOverrides
 } from '../../services/feature-override-identity.js';
 
-export const createLegendStrokeActions = ({ state, debugLog }) => {
+export const createLegendStrokeActions = ({ state }) => {
   const {
     extractedFeatures,
     legendEntries,
@@ -355,16 +355,10 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    const legendOverrideCount = Object.keys(legendStrokeOverrides).length;
-    const featureOverrideCount = Object.keys(featureStrokeOverrides).length;
-    if (legendOverrideCount === 0 && featureOverrideCount === 0) {
-      debugLog('No stroke overrides to reapply');
-      return;
-    }
-
-    debugLog(
-      `Reapplying ${legendOverrideCount} legend stroke override(s) and ${featureOverrideCount} feature stroke override(s) to new SVG`
-    );
+    if (
+      Object.keys(legendStrokeOverrides).length === 0 &&
+      Object.keys(featureStrokeOverrides).length === 0
+    ) return;
     migrateLegacyFeatureOverrides(featureStrokeOverrides, extractedFeatures.value);
 
     let totalUpdated = 0;
@@ -412,7 +406,6 @@ export const createLegendStrokeActions = ({ state, debugLog }) => {
       if (resultIdx >= 0 && results.value.length > resultIdx) {
         results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
       }
-      debugLog(`Reapplied stroke overrides to ${totalUpdated} elements`);
     }
   };
 

@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import csv
 import hashlib
-import json
 from pathlib import Path
 
 from Bio import SeqIO
 from PIL import Image
 
+from docs.capture.config import chapter_for
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLOW_PATH = REPO_ROOT / "docs" / "capture" / "flows" / "how_to" / "tracks.py"
-MANIFEST_PATH = REPO_ROOT / "docs" / "scenarios" / "manifest.json"
 INDEX_PATH = REPO_ROOT / "gbdraw" / "web" / "index.html"
 DEPTH_ROOT = REPO_ROOT / "gbdraw" / "web" / "tutorial-data" / "depth-1kb"
 TOBACCO_ROOT = (
@@ -45,13 +44,6 @@ SCREENSHOTS = {
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _chapter(scenario_id: str) -> dict[str, object]:
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    return next(
-        chapter for chapter in manifest["chapters"] if chapter["id"] == scenario_id
-    )
 
 
 def test_quantitative_capture_uses_one_complete_record_and_607_real_bins() -> None:
@@ -196,7 +188,7 @@ def test_track_pages_match_the_approved_manifest_and_executable_values() -> None
         ("H-GUI-09", QUANTITATIVE_PAGE),
         ("H-GUI-10", ANNOTATION_PAGE),
     ):
-        chapter = _chapter(scenario_id)
+        chapter = chapter_for(scenario_id)
         assert chapter["destination"] == str(page_path.relative_to(REPO_ROOT))
         assert chapter["execution"]["path"] == (
             "docs/capture/flows/how_to/tracks.py"

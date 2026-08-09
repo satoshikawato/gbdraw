@@ -41,6 +41,7 @@ from .definition_line_styles import (
 )
 from .analysis.collinearity import (
     LosslessCollinearityParameters,
+    normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
 )
 from .analysis.protein_colinearity import (
@@ -50,6 +51,7 @@ from .analysis.protein_colinearity import (
     is_protein_losat_cache_entry,
 )
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from .config.models.objects import normalize_pairwise_match_style
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
 from .mode_profiles import ComparisonThresholds, LINEAR_MODE_PROFILE
@@ -98,95 +100,6 @@ from .render.track_slot_metadata import (
 )
 from .render.output_paths import commit_staged_output_file, preflight_output_paths
 from .session_io import load_session, session_to_cli_args
-
-
-def _linear_session_record_metadata(
-    records: Sequence[object],
-    input_paths: Sequence[str],
-) -> tuple[Mapping[str, object], ...]:
-    source_indices: list[int] = []
-    for record_index, record in enumerate(records):
-        source_indices.append(
-            _linear_record_source_index(
-                record,
-                input_paths,
-                fallback_index=record_index if len(records) == len(input_paths) else None,
-            )
-        )
-    source_counts: dict[int, int] = {}
-    for source_index in source_indices:
-        if source_index >= 0:
-            source_counts[source_index] = source_counts.get(source_index, 0) + 1
-    source_seen: dict[int, int] = {}
-    metadata: list[Mapping[str, object]] = []
-    for loaded_index, (record, source_index) in enumerate(zip(records, source_indices)):
-        source_loaded_index = source_seen.get(source_index, 0)
-        if source_index >= 0:
-            source_seen[source_index] = source_loaded_index + 1
-        annotations = getattr(record, "annotations", {}) or {}
-        source_file = str(
-            annotations.get("gbdraw_source_file")
-            or (input_paths[source_index] if 0 <= source_index < len(input_paths) else "")
-        )
-        source_basename = str(
-            annotations.get("gbdraw_source_basename")
-            or (Path(source_file).name if source_file else "")
-        )
-        metadata.append(
-            {
-                "loaded_index": loaded_index,
-                "source_index": source_index,
-                "source_loaded_index": source_loaded_index,
-                "source_loaded_count": source_counts.get(source_index, 0),
-                "record_id": str(getattr(record, "id", "") or ""),
-                "source_file": source_file,
-                "source_basename": source_basename,
-            }
-        )
-    return tuple(metadata)
-
-
-def _linear_record_source_index(
-    record: object,
-    input_paths: Sequence[str],
-    *,
-    fallback_index: int | None,
-) -> int:
-    annotations = getattr(record, "annotations", {}) or {}
-    provenance_index = annotations.get("gbdraw_input_index")
-    if (
-        isinstance(provenance_index, int)
-        and not isinstance(provenance_index, bool)
-        and 0 <= provenance_index < len(input_paths)
-    ):
-        return provenance_index
-    source_file = str(annotations.get("gbdraw_source_file") or "")
-    source_basename = str(annotations.get("gbdraw_source_basename") or "")
-    if source_file:
-        for index, path in enumerate(input_paths):
-            if source_file == str(path):
-                return index
-        try:
-            resolved_source = str(Path(source_file).resolve())
-        except OSError:
-            resolved_source = ""
-        if resolved_source:
-            for index, path in enumerate(input_paths):
-                try:
-                    if resolved_source == str(Path(path).resolve()):
-                        return index
-                except OSError:
-                    continue
-    candidates = {source_basename, Path(source_file).name if source_file else ""}
-    basenames: dict[str, list[int]] = {}
-    for index, path in enumerate(input_paths):
-        basenames.setdefault(Path(str(path)).name, []).append(index)
-    for candidate in candidates:
-        if candidate and len(basenames.get(candidate, [])) == 1:
-            return basenames[candidate][0]
-    if fallback_index is not None and 0 <= fallback_index < len(input_paths):
-        return fallback_index
-    return -1
 
 
 def _parse_optional_positive_int(value: str) -> int | None:
@@ -254,21 +167,17 @@ def _parse_linear_track_axis_gap(value: str) -> float | None:
 
 
 def _parse_pairwise_match_style(value: str) -> str:
-    normalized = str(value).strip().lower()
-    if normalized not in {"ribbon", "curve"}:
-        raise argparse.ArgumentTypeError("pairwise_match_style must be one of: ribbon, curve")
-    return normalized
+    try:
+        return normalize_pairwise_match_style(value)
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _parse_collinear_color_mode(value: str) -> str:
-    normalized = str(value).strip().lower().replace("-", "_")
-    if normalized == "identity":
-        normalized = "average_identity"
-    if normalized not in {"average_identity", "orientation", "orientation_identity"}:
-        raise argparse.ArgumentTypeError(
-            "collinear_color_mode must be one of: average_identity, orientation, orientation_identity"
-        )
-    return normalized
+    try:
+        return normalize_collinearity_color_mode(value)
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _parse_collinear_search_scope(value: str) -> str:
@@ -1576,11 +1485,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         )
     canvas = render_result.drawing
     interactive_context = render_result.interactive_context
-    linear_record_metadata = _linear_session_record_metadata(
-        render_result.records,
-        record_manifest.source_paths,
-    )
-
     rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)
     track_slot_geometry_records = collect_track_slot_geometry_records(
         canvas,
@@ -1609,7 +1513,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         protein_identity_manifest=render_result.protein_identity_manifest,
         legacy_protein_raw_candidates=legacy_protein_raw_candidates,
         legacy_protein_derived_evidence=legacy_protein_derived_evidence,
-        linear_record_metadata=linear_record_metadata,
         run_metadata=build_track_slot_geometry_run_metadata(
             mode="linear",
             records=track_slot_geometry_records,

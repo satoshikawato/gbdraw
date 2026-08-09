@@ -651,7 +651,9 @@ def test_prepare_legend_table_plain_gene_entry_uses_default_fallback_color() -> 
 
 
 def test_circular_cli_feature_visibility_table_is_forwarded(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _make_record()
     feature_table_df = _visibility_df([["*", "*", "gene", "^geneA$", "off"]])
@@ -659,13 +661,6 @@ def test_circular_cli_feature_visibility_table_is_forwarded(
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
     monkeypatch.setattr(
         request_render_module,
         "read_feature_visibility_file",
@@ -745,7 +740,9 @@ def test_linear_cli_feature_visibility_table_is_forwarded(
 
 
 def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_table_given(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _make_record()
     captured: dict[str, Any] = {}
@@ -757,13 +754,6 @@ def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_tab
 
     monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
     monkeypatch.setattr(
         request_render_module,
         "read_feature_visibility_file",
