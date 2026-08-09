@@ -28,6 +28,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Set up Node.js
+        if: matrix.python-version == '3.11'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Install system dependencies for CairoSVG
         run: |
           sudo apt-get update
@@ -41,6 +47,14 @@ jobs:
       - name: Prepare browser wheel
         run: |
           python tools/prepare_browser_wheel.py
+
+      - name: Run Web JavaScript tests
+        if: matrix.python-version == '3.11'
+        run: |
+          node --test tests/web/*.test.mjs
+          node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz
+          node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json
+          node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz
 
       - name: Run fast tests
         run: |

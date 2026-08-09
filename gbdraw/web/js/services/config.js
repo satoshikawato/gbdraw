@@ -3668,24 +3668,6 @@ export const importSession = async (e, options = {}) => {
       canonicalSession ? projectionResult.restoredFiles : data.files
     );
     reconcileDepthTrackStateAfterSessionFiles();
-    const hasAuthoritativeCatalogSequenceSources =
-      sourceSessionVersion === SESSION_VERSION &&
-      data.editorState?.featureCatalog?.schema === 3;
-    let restoredFileSequenceSources = [];
-    if (!hasAuthoritativeCatalogSequenceSources) {
-      try {
-        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
-          mode: state.mode.value,
-          cInputType: state.cInputType.value,
-          lInputType: state.lInputType.value,
-          files: state.files,
-          linearSeqs: state.linearSeqs,
-          circularConservation: state.circularConservation
-        });
-      } catch (sequenceError) {
-        console.warn('Session loaded, but match sequence recovery failed.', sequenceError);
-      }
-    }
     if (canonicalSession) {
       applyLosatCache(
         projectionResult.artifactState.losatCache?.entries,
@@ -3775,6 +3757,44 @@ export const importSession = async (e, options = {}) => {
     const catalogSequenceSources = sourceSessionVersion === SESSION_VERSION
       ? (currentCatalogFeatureState?.sequenceSources || [])
       : [];
+    const primarySequenceOrigin = state.mode.value === 'linear'
+      ? 'linear-record'
+      : 'circular-reference';
+    const canonicalRecordCount = Array.isArray(data.renderRequest?.records)
+      ? data.renderRequest.records.length
+      : 0;
+    const circularComparisonFiles = state.circularConservation?.source === 'upload'
+      ? state.files?.c_conservation_sequence_sources
+      : state.files?.c_conservation_fastas;
+    const catalogComparisonIndexes = new Set(
+      catalogSequenceSources
+        .filter((source) => source?.origin === 'homology-comparison')
+        .map((source) => source?.sourceIndex)
+        .filter(Number.isInteger)
+    );
+    const missingCatalogSequenceSources = sourceSessionVersion !== SESSION_VERSION
+      || catalogSequenceSources.filter(
+        (source) => source?.origin === primarySequenceOrigin
+      ).length < canonicalRecordCount || (
+      state.mode.value === 'circular'
+      && (circularComparisonFiles || []).filter(Boolean).length
+        > catalogComparisonIndexes.size
+    );
+    let restoredFileSequenceSources = [];
+    if (missingCatalogSequenceSources) {
+      try {
+        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
+          mode: state.mode.value,
+          cInputType: state.cInputType.value,
+          lInputType: state.lInputType.value,
+          files: state.files,
+          linearSeqs: state.linearSeqs,
+          circularConservation: state.circularConservation
+        });
+      } catch (sequenceError) {
+        console.warn('Session loaded, but match sequence recovery failed.', sequenceError);
+      }
+    }
     state.matchSequenceRegistry?.reset?.([
       ...catalogSequenceSources,
       ...restoredFileSequenceSources

@@ -335,7 +335,7 @@ def render_session(
         raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
 
 
-def build_session_document(
+def _build_session_document_from_resolved_request(
     request: DiagramRequest,
     *,
     title: str | None = None,
@@ -343,20 +343,15 @@ def build_session_document(
     adjunct: Mapping[str, Any] | None = None,
     web_file_inventory: Mapping[str, Any] | None = None,
 ) -> SessionDocument:
-    """Build a current-version document from one typed request.
-
-    ``adjunct`` may contain Web/editor artifacts such as ``ui`` or ``results``;
-    it cannot replace canonical envelope fields.
-    """
+    """Build a current document without resolving an already-rendered request."""
 
     from gbdraw.session_request_codec import (
         CanonicalRequestCodecError,
         encode_canonical_request,
     )
-    from gbdraw.api.request_render import resolve_request
 
     try:
-        encoded = encode_canonical_request(resolve_request(request))
+        encoded = encode_canonical_request(request)
         resources = {
             resource.resource_id: _serialize_canonical_resource(resource)
             for resource in encoded.resources
@@ -397,6 +392,57 @@ def build_session_document(
     return SessionDocument(data)
 
 
+def build_session_document(
+    request: DiagramRequest,
+    *,
+    title: str | None = None,
+    created_at: datetime | None = None,
+    adjunct: Mapping[str, Any] | None = None,
+    web_file_inventory: Mapping[str, Any] | None = None,
+) -> SessionDocument:
+    """Build a current-version document from one typed request.
+
+    ``adjunct`` may contain Web/editor artifacts such as ``ui`` or ``results``;
+    it cannot replace canonical envelope fields.
+    """
+
+    from gbdraw.api.request_render import resolve_request
+
+    try:
+        resolved_request = resolve_request(request)
+    except ValidationError as exc:
+        raise SessionConversionError(str(exc)) from exc
+    return _build_session_document_from_resolved_request(
+        resolved_request,
+        title=title,
+        created_at=created_at,
+        adjunct=adjunct,
+        web_file_inventory=web_file_inventory,
+    )
+
+
+def _write_session_document(
+    path: str | Path,
+    document: SessionDocument,
+    *,
+    overwrite: bool,
+) -> SessionDocument:
+    """Write one built session document through a staged commit."""
+
+    try:
+        output_path = Path(path)
+        preflight_output_paths((output_path,), overwrite=True)
+        if (output_path.exists() or output_path.is_symlink()) and not overwrite:
+            raise ValidationError(
+                f"Session output already exists: {output_path}. "
+                "Pass overwrite=True to replace it."
+            )
+        write_session_json(path, document._data, overwrite=overwrite)
+    except ValidationError as exc:
+        raise SessionFormatError(str(exc)) from exc
+    return document
+
+
 def save_session_document(
     path: str | Path,
     request: DiagramRequest,
@@ -416,18 +462,7 @@ def save_session_document(
         adjunct=adjunct,
         web_file_inventory=web_file_inventory,
     )
-    try:
-        output_path = Path(path)
-        preflight_output_paths((output_path,), overwrite=True)
-        if (output_path.exists() or output_path.is_symlink()) and not overwrite:
-            raise ValidationError(
-                f"Session output already exists: {output_path}. "
-                "Pass overwrite=True to replace it."
-            )
-        write_session_json(path, document._data, overwrite=overwrite)
-    except ValidationError as exc:
-        raise SessionFormatError(str(exc)) from exc
-    return document
+    return _write_session_document(path, document, overwrite=overwrite)
 
 
 def with_request_output(

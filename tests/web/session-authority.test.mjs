@@ -27,13 +27,18 @@ assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
   'proteinIdentityManifest', 'renderRequest', 'resources',
   'results', 'runMetadata', 'title', 'ui', 'version', 'webFiles'
 ].sort());
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.renderRequest, 'canonical-render');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.resources, 'resource');
+assert.equal(SESSION_TOP_LEVEL_AUTHORITY.webFiles, 'resource-binding');
 
 const session = {
   format: 'gbdraw-session', version: 39, createdAt: 'now', title: 'Canonical',
   renderRequest: {}, resources: {}, webFiles: {}, config: {}, files: {},
   ui: {
     mode: 'linear', legend: 'left', linearPlotTitlePosition: 'top', zoom: 1.5,
-    canvasPan: { x: 3, y: 4 }, generatedLegendPosition: 'right', downloadDpi: 300
+    canvasPan: { x: 3, y: 4 }, generatedLegendPosition: 'right', downloadDpi: 300,
+    appliedPaletteName: 'orchid', appliedPaletteColors: { CDS: '#123456' },
+    pendingPaletteName: 'mint', pendingPaletteColors: { CDS: '#abcdef' }
   },
   features: {
     extractedFeatures: [{ id: 'f1' }], featureColorOverrides: { f1: '#ffffff' },
@@ -301,7 +306,11 @@ assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
   linearPlotTitlePosition: 'top',
   zoom: 1.5,
   canvasPan: { x: 3, y: 4 },
-  downloadDpi: 300
+  downloadDpi: 300,
+  appliedPaletteName: 'orchid',
+  appliedPaletteColors: { CDS: '#123456' },
+  pendingPaletteName: 'mint',
+  pendingPaletteColors: { CDS: '#abcdef' }
 });
 const layoutPreferences = {
   circular: {

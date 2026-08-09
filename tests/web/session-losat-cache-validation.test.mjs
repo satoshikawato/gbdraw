@@ -503,6 +503,48 @@ ORIGIN
     aliases: ['CATALOG.1', 'CATALOG'],
     sourceIndex: null
   }]);
+
+  const secondGenbank = genbank
+    .replaceAll('CATALOG', 'SECOND')
+    .replace('aaccggtt', 'ttggccaa');
+  const incompletePayload = structuredClone(payload);
+  incompletePayload.renderRequest.records.push({
+    ...structuredClone(renderRequest.records[0]),
+    recordKey: 'second-record',
+    source: { kind: 'genbank', resourceId: 'second-record' }
+  });
+  incompletePayload.resources['second-record'] = canonicalResource(
+    'genbank',
+    'second-primary.gbk',
+    secondGenbank
+  );
+  incompletePayload.webFiles.bindings.linearSeqs.push({
+    ...structuredClone(incompletePayload.webFiles.bindings.linearSeqs[0]),
+    uid: 'second-record',
+    gb: {
+      resourceId: 'second-record',
+      name: 'second-primary.gbk',
+      type: 'application/genbank',
+      lastModified: 8
+    }
+  });
+  incompletePayload.editorState.featureCatalog.items[0].recordKeys.push(
+    'second-record'
+  );
+  restoredPrimaryTextReads = 0;
+  const incompleteResult = await importSession({
+    target: {
+      files: [new Blob([JSON.stringify(incompletePayload)], { type: 'application/json' })],
+      value: 'selected'
+    }
+  });
+
+  assert.equal(incompleteResult.status, 'ok');
+  assert.equal(restoredPrimaryTextReads, 2);
+  assert.deepEqual(
+    state.matchSequenceRegistry.values().map((source) => source.recordId),
+    ['CATALOG.1', 'SECOND.1']
+  );
 });
 
 test('fresh Circular LOSAT resources become session-owned live files', async () => {

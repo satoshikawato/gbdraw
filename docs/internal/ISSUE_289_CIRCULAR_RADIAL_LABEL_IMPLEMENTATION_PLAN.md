@@ -1,6 +1,7 @@
 # Issue #289 Circular Radial Label Implementation Plan
 
 - 作成日: 2026-07-16
+- 文書区分: 内部実装計画
 - 対象 Issue: [#289 Label arrangement for circular mode: radial arrangement](https://github.com/satoshikawato/gbdraw/issues/289)
 - 対象: Circular mode の feature label 生成、配置、描画、canvas、CLI、Python API、session、Web UI、全出力形式
 - 状態: 計画

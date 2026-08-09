@@ -158,6 +158,11 @@ divergentSession.ui.layoutPreferences = {
   },
   linear: { legend: 'bottom', plotTitlePosition: 'bottom' }
 };
+divergentSession.ui.paletteInstantPreviewEnabled = false;
+divergentSession.ui.appliedPaletteName = 'orchid';
+divergentSession.ui.appliedPaletteColors = { CDS: '#123456' };
+divergentSession.ui.pendingPaletteName = 'mint';
+divergentSession.ui.pendingPaletteColors = { CDS: '#abcdef' };
 const importEvent = {
   target: {
     files: [new Blob([JSON.stringify(divergentSession)], { type: 'application/json' })],
@@ -177,6 +182,10 @@ assert.equal(
 );
 assert.equal(state.adv.plot_title_position, 'bottom');
 assert.equal(state.generatedLegendPosition.value, 'right');
+assert.equal(state.appliedPaletteName.value, 'orchid');
+assert.equal(state.appliedPaletteColors.value.CDS, '#123456');
+assert.equal(state.pendingPaletteName.value, 'mint');
+assert.equal(state.pendingPaletteColors.value.CDS, '#abcdef');
 assert.deepEqual(state.layoutPreferences.linear, {
   legend: 'bottom',
   plotTitlePosition: 'bottom'

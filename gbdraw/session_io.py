@@ -2203,6 +2203,7 @@ def build_session_json(
     legacy_protein_raw_candidates: Sequence[Mapping[str, Any]] | None = None,
     legacy_protein_derived_evidence: Sequence[Mapping[str, Any]] | None = None,
     canonical_request: DiagramRequest | None = None,
+    _canonical_request_is_resolved: bool = False,
 ) -> dict[str, Any]:
     """Build a GUI-loadable session JSON payload from a CLI run."""
 
@@ -2297,12 +2298,21 @@ def build_session_json(
         "generatedBy": "gbdraw",
     }
     if canonical_request is not None:
-        from .session import build_session_document
+        from .session import (
+            _build_session_document_from_resolved_request,
+            build_session_document,
+        )
 
-        canonical = build_session_document(
+        build_document = (
+            _build_session_document_from_resolved_request
+            if _canonical_request_is_resolved
+            else build_session_document
+        )
+        canonical_document = build_document(
             canonical_request,
             created_at=generated_at,
-        ).to_dict()
+        )
+        canonical = canonical_document.to_dict()
         payload["renderRequest"] = canonical["renderRequest"]
         payload["resources"] = canonical["resources"]
     else:

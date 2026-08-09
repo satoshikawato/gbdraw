@@ -1604,6 +1604,8 @@ export const createRunAnalysis = ({
       : {
           artifact: buildGeneratedArtifactSnapshot(),
           resultIdentity: results.value,
+          extractedFeatureIdentity: extractedFeatures.value,
+          biologicalFeatureIdentity: biologicalFeatures?.value,
           trackSlotResolvedGeometry: cloneJsonValue(trackSlotResolvedGeometry.value || null, null),
           resultGenerationKey: resultGenerationKey?.value ?? 0,
           resultPanelTab: resultPanelTab.value,
@@ -1633,6 +1635,10 @@ export const createRunAnalysis = ({
       if (!manualCancelSnapshot) return;
       applyGeneratedArtifactSnapshot(manualCancelSnapshot.artifact);
       results.value = manualCancelSnapshot.resultIdentity;
+      extractedFeatures.value = manualCancelSnapshot.extractedFeatureIdentity;
+      if (biologicalFeatures) {
+        biologicalFeatures.value = manualCancelSnapshot.biologicalFeatureIdentity;
+      }
       trackSlotResolvedGeometry.value = manualCancelSnapshot.trackSlotResolvedGeometry;
       if (typeof resetPreviewViewport === 'function') {
         resetPreviewViewport({ pan: manualCancelSnapshot.artifact.ui?.canvasPan });

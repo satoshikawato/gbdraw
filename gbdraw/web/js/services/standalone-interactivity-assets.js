@@ -1301,7 +1301,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return endpoint ? [endpoint] : [];
   }
 
-  function clearCatalogMatchEndpoint(expanded, role) {
+  function clearCatalogMatchEndpoint(expanded, role, preserveRecordIdentity) {
     [
       '_feature_svg_id', 'FeatureSvgId',
       '_rendered_feature_svg_id', 'RenderedFeatureSvgId',
@@ -1313,6 +1313,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       '_record_id', 'RecordId',
       'FeatureReferences'
     ].forEach(function (suffix) {
+      if (
+        preserveRecordIdentity
+        && ['_record_index', 'RecordIndex', '_record_id', 'RecordId'].indexOf(suffix) >= 0
+      ) return;
       delete expanded[role + suffix];
     });
   }
@@ -1537,7 +1541,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         );
         expanded['_gbdraw_' + role + '_endpoint_resolved'] = Boolean(endpoints.length);
         if (!endpoints.length) {
-          clearCatalogMatchEndpoint(expanded, role);
+          clearCatalogMatchEndpoint(
+            expanded,
+            role,
+            String(expanded.match_kind || '') === 'homology'
+          );
           return;
         }
         var endpoint = endpoints[0];
@@ -4901,14 +4909,15 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function resolveEmbeddedMatchSource(match, role) {
+    var kind = String(match && match.match_kind || 'pairwise');
     if (
       match
       && match._gbdraw_catalog_endpoint_contract === true
+      && kind !== 'homology'
       && !resolvedCatalogMatchFeature(match, role)
     ) {
       return { source: null, reason: 'Match feature endpoint identity is invalid.' };
     }
-    var kind = String(match && match.match_kind || 'pairwise');
     var recordIdIdentity = consistentTextIdentity(
       match,
       [role + '_record_id', role + 'RecordId']

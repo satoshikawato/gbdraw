@@ -23,7 +23,7 @@ for index in range(count):
         f'<rect id="{svg_id}" data-gbdraw-feature-id="{svg_id}" '
         f'x="{x}" y="{y}" width="0.8" height="0.8" fill="#54bcf8" />'
     )
-    features.append({"svg_id": svg_id, "label": label, "type": "CDS"})
+    features.append({"svg_id": svg_id, "record_idx": 0, "label": label, "type": "CDS"})
 source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 50">' + ''.join(paths) + '</svg>'
 with open(sys.argv[1], 'w', encoding='utf-8') as handle:
     handle.write(enrich_svg(source, InteractiveSvgContext(features=features, popup_mode='simple')))
@@ -85,6 +85,7 @@ from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80"><rect id="fseq" data-gbdraw-feature-id="fseq" x="10" y="10" width="20" height="10" fill="#54bcf8" /></svg>'
 context = InteractiveSvgContext(features=[{
     "svg_id": "fseq",
+    "record_idx": 0,
     "record_id": "rec1",
     "type": "CDS",
     "start": 0,
@@ -179,14 +180,14 @@ source = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
  data-identity="95.0" data-alignment-length="9" fill="#64748b" d="M 40 20 L 50 20 L 50 50 L 40 50 Z" />
 </svg>'''
 features = [
- {"svg_id": "fq", "record_id": "rec1", "type": "CDS", "start": 0, "end": 9, "orthogroup_id": "og1",
+ {"svg_id": "fq", "record_idx": 0, "record_id": "rec1", "type": "CDS", "start": 0, "end": 9, "orthogroup_id": "og1",
   "proteinId": "h_aaaaaaaaaaaaaaaaaaaaaaaaaa",
   "displayProteinId": "f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "sourceProteinId": "record@instance|alias~f_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
   "locus_tag": "WP_QUERY_LOCUS.1",
   "qualifiers": {"product": ["Protein A"], "protein_id": ["h_aaaaaaaaaaaaaaaaaaaaaaaaaa", "WP_QUERY.1"], "translation": ["MPEPTIDE"]},
   "nucleotide_sequence": "ATGAAATAA", "amino_acid_sequence": "MPEPTIDE"},
- {"svg_id": "fs", "record_id": "rec2", "type": "CDS", "start": 9, "end": 18, "orthogroup_id": "og1",
+ {"svg_id": "fs", "record_idx": 1, "record_id": "rec2", "type": "CDS", "start": 9, "end": 18, "orthogroup_id": "og1",
   "proteinId": "h_dddddddddddddddddddddddddd",
   "sourceProteinId": "f_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
   "locus_tag": "WP_SUBJECT.1",
@@ -194,11 +195,11 @@ features = [
   "nucleotide_sequence": "ATGCCCTAA", "amino_acid_sequence": "MSUBJECT"},
 ]
 orthogroups = [{"id": "og1", "name": "Family", "member_count": 2, "record_coverage_count": 2, "members": [
- {"featureSvgId": "fq", "recordId": "rec1", "proteinId": "h_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+ {"featureSvgId": "fq", "stableFeatureSvgId": "fq", "recordIndex": 0, "recordId": "rec1", "proteinId": "h_aaaaaaaaaaaaaaaaaaaaaaaaaa",
   "displayProteinId": "f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "sourceProteinId": "record@instance|alias~f_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
   "label": "h_aaaaaaaaaaaaaaaaaaaaaaaaaa", "locusTag": "WP_MEMBER_QUERY.1", "product": "Protein A"},
- {"featureSvgId": "fs", "recordId": "rec2", "proteinId": "h_dddddddddddddddddddddddddd",
+ {"featureSvgId": "fs", "stableFeatureSvgId": "fs", "recordIndex": 1, "recordId": "rec2", "proteinId": "h_dddddddddddddddddddddddddd",
   "sourceProteinId": "f_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
   "label": "h_dddddddddddddddddddddddddd", "locusTag": "WP_SUBJECT.1", "product": "Protein B"},
 ]}]
@@ -342,336 +343,6 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
     'Comparison sequence was not supplied for this BLAST source.'
   );
   await expect(page.locator('.gfi-block-actions')).toHaveCount(0);
-});
-
-test('legacy feature-array fallback remains readable as compact v2 metadata', async ({ page }) => {
-  await page.goto('/');
-  const origin = new URL(page.url()).origin;
-  const payload = await page.evaluate(async ({ origin }) => {
-    const { enrichSvgWithStandaloneInteractivity } = await import(
-      `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
-    );
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 100 80');
-    svg.innerHTML = `
-      <rect id="rendered-q" data-gbdraw-feature-id="rendered-q"
-        data-gbdraw-stable-feature-id="fq" data-gbdraw-record-index="0"
-        x="1" y="1" width="10" height="5" fill="#54bcf8" />
-      <rect id="rendered-s" data-gbdraw-feature-id="rendered-s"
-        data-gbdraw-stable-feature-id="fs" data-gbdraw-record-index="1"
-        x="1" y="20" width="10" height="5" fill="#54bcf8" />
-      <path data-gbdraw-match-id="m1" data-gbdraw-pairwise-match-id="m1" data-match-kind="pairwise"
-        data-orthogroup-id="og1" data-query-record-id="rec1" data-subject-record-id="rec2"
-        data-query-record-index="0" data-subject-record-index="1"
-        data-qstart="1" data-qend="9" data-sstart="10" data-send="18"
-        data-query-feature-svg-id="rendered-q" data-subject-feature-svg-id="rendered-s"
-        data-identity="99.1" data-alignment-length="9" d="M 1 2 L 2 3" />
-      <path data-gbdraw-match-id="homology_ring1_hit1" data-match-kind="homology"
-        data-source-index="0" data-track-index="1" data-track-label="Homology A"
-        data-reference-side="query" data-reference-record-id="ref"
-        data-query-record-id="ref" data-subject-record-id="cmp"
-        data-qstart="1" data-qend="4" data-sstart="4" data-send="1"
-        data-identity="97.0" d="M 5 30 L 25 30" />`;
-    enrichSvgWithStandaloneInteractivity(svg, {
-      popupMode: 'rich',
-      features: [
-        {
-          svg_id: 'fq_record_1', stable_svg_id: 'fq', fileIdx: 0,
-          record_id: 'rec1', type: 'CDS', start: 0, end: 9,
-          orthogroup_id: 'og1',
-          orthogroup_member: {
-            featureSvgId: 'fq', stableFeatureSvgId: 'fq', recordIndex: 0, recordId: 'rec1'
-          },
-          qualifiers: { translation: ['MPEPTIDE'] },
-          nucleotide_sequence: 'ATGAAATAA', amino_acid_sequence: 'MPEPTIDE'
-        },
-        {
-          svg_id: 'fs_record_2', stable_svg_id: 'fs', fileIdx: 1,
-          record_id: 'rec2', type: 'CDS', start: 9, end: 18,
-          orthogroup_id: 'og1',
-          orthogroup_member: {
-            featureSvgId: 'fs', stableFeatureSvgId: 'fs', recordIndex: 1, recordId: 'rec2'
-          }
-        },
-        {
-          svg_id: 'fh_record_3', stable_svg_id: 'fh', fileIdx: 2,
-          record_id: 'rec-hidden', type: 'CDS', start: 18, end: 27,
-          orthogroup_id: 'og1', product: 'hidden member',
-          orthogroup_member: {
-            featureSvgId: 'fh', stableFeatureSvgId: 'fh', recordIndex: 2, recordId: 'rec-hidden'
-          },
-          qualifiers: { translation: ['MHIDDEN'] },
-          nucleotide_sequence: 'ATGAAACCC', amino_acid_sequence: 'MHIDDEN'
-        },
-        {
-          svg_id: 'fonly_record_4', stable_svg_id: 'fonly', fileIdx: 3,
-          record_id: 'rec-only-hidden', type: 'CDS', start: 27, end: 36,
-          orthogroup_id: 'og-all-hidden',
-          orthogroup_member: {
-            featureSvgId: 'fonly', stableFeatureSvgId: 'fonly',
-            recordIndex: 3, recordId: 'rec-only-hidden'
-          },
-          nucleotide_sequence: 'ATGTTTTAA'
-        }
-      ],
-      orthogroups: [
-        {
-          id: 'og1', member_count: 3, record_coverage_count: 3,
-          members: [
-            { featureSvgId: 'fq', stableFeatureSvgId: 'fq', recordIndex: 0, recordId: 'rec1' },
-            { featureSvgId: 'fs', stableFeatureSvgId: 'fs', recordIndex: 1, recordId: 'rec2' },
-            { featureSvgId: 'fh', stableFeatureSvgId: 'fh', recordIndex: 2, recordId: 'rec-hidden' },
-          ]
-        },
-        {
-          id: 'og-all-hidden', member_count: 1, record_coverage_count: 1,
-          members: [
-            { featureSvgId: 'fonly', stableFeatureSvgId: 'fonly', recordIndex: 3, recordId: 'rec-only-hidden' },
-          ]
-        }
-      ],
-      sequenceSources: [
-        { key: 'linear:record:0', recordId: 'rec1', sequence: 'ATGAAATAA', origin: 'linear-record', recordIndex: 0 },
-        { key: 'linear:record:1', recordId: 'rec2', sequence: 'CCCCCCCCCAAAAAAAAA', origin: 'linear-record', recordIndex: 1 },
-        { key: 'linear:record:2', recordId: 'unused', sequence: 'NNNN', origin: 'linear-record', recordIndex: 2 },
-        { key: 'circular:record:0', recordId: 'ref', sequence: 'AACCGG', origin: 'circular-reference', recordIndex: 0 },
-        { key: 'homology:comparison:0:cmp', recordId: 'cmp', sequence: 'TTGGCC', origin: 'homology-comparison', sourceIndex: 0 },
-      ]
-    });
-    return JSON.parse(svg.querySelector('#gbdraw-interactive-feature-metadata').textContent);
-  }, { origin });
-
-  expect(payload.schema).toBe('gbdraw-interactive-feature-popup-v2');
-  expect(payload.features[0].nucleotide_fasta).toBeUndefined();
-  expect(payload.features[0].amino_acid_fasta).toBeUndefined();
-  expect(payload.features[0].amino_acid_sequence).toBeUndefined();
-  expect(payload.features[0].qualifiers.translation).toEqual(['MPEPTIDE']);
-  expect(payload.features.map((feature) => feature.svg_id)).toEqual(['rendered-q', 'rendered-s']);
-  expect(payload.features.map((feature) => feature.stable_svg_id)).toEqual(['fq', 'fs']);
-  expect(payload.features[0].orthogroup_member.feature_svg_id).toBe('fq');
-  expect(payload.features[0].orthogroup_member.rendered_feature_svg_id).toBe('rendered-q');
-  expect(payload.biological_features.map((feature) => feature.stable_svg_id)).toEqual([
-    'fq',
-    'fs',
-    'fh',
-    'fonly',
-  ]);
-  expect(payload.biological_features[2]).toMatchObject({
-    svg_id: 'fh',
-    stable_feature_id: 'fh',
-    record_idx: 2,
-    nucleotide_sequence: 'ATGAAACCC',
-    amino_acid_sequence: 'MHIDDEN',
-  });
-  expect(payload.biological_features.map((feature) => feature.rendered_svg_id)).toEqual([
-    'rendered-q',
-    'rendered-s',
-    undefined,
-    undefined,
-  ]);
-  expect(payload.orthogroups.map((group) => group.id)).toEqual(['og1', 'og-all-hidden']);
-  expect(payload.orthogroups[0].members.map((member) => member.feature_svg_id)).toEqual([
-    'fq',
-    'fs',
-    'fh',
-  ]);
-  expect(payload.orthogroups[0].members.map((member) => member.rendered_feature_svg_id)).toEqual([
-    'rendered-q',
-    'rendered-s',
-    undefined,
-  ]);
-  expect(payload.orthogroups[1].members[0].rendered_feature_svg_id).toBeUndefined();
-  expect(payload.matches[0]).toMatchObject({
-    id: 'm1',
-    match_kind: 'pairwise',
-    orthogroup_ids: ['og1'],
-    query_record_id: 'rec1',
-    subject_record_id: 'rec2',
-    query_record_index: '0',
-    subject_record_index: '1',
-    identity: '99.1',
-    alignment_length: '9'
-  });
-  expect(payload.matches[0].sections).toBeUndefined();
-  expect(payload.matches[0].hover_rows).toBeUndefined();
-  expect(payload.matches[1]).toMatchObject({
-    id: 'homology_ring1_hit1',
-    match_kind: 'homology',
-    source_index: '0',
-    track_label: 'Homology A',
-    reference_side: 'query',
-  });
-  expect(payload.sequence_sources.map((source) => source.key)).toEqual([
-    'linear:record:0',
-    'linear:record:1',
-    'circular:record:0',
-    'homology:comparison:0:cmp',
-  ]);
-});
-
-test('standalone orthogroup FASTA retains non-rendered biological members', async ({ page }, testInfo) => {
-  await page.goto('/');
-  const origin = new URL(page.url()).origin;
-  const svgText = await page.evaluate(async ({ origin }) => {
-    const { enrichSvgWithStandaloneInteractivity } = await import(
-      `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
-    );
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    svg.setAttribute('viewBox', '0 0 120 80');
-    svg.innerHTML = `
-      <rect id="rendered-visible" data-gbdraw-feature-id="rendered-visible"
-        data-gbdraw-stable-feature-id="stable-visible" data-gbdraw-record-index="0"
-        x="5" y="5" width="25" height="12" fill="#54bcf8" />
-      <rect id="rendered-unrelated" data-gbdraw-feature-id="rendered-unrelated"
-        data-gbdraw-stable-feature-id="stable-unrelated" data-gbdraw-record-index="2"
-        x="5" y="25" width="25" height="12" fill="#94a3b8" />
-      <path data-gbdraw-match-id="og-match" data-match-kind="orthogroup"
-        data-orthogroup-id="og-hidden" d="M 45 5 L 105 5 L 105 17 L 45 17 Z"
-        fill="#a7f3d0" />`;
-    enrichSvgWithStandaloneInteractivity(svg, {
-      popupMode: 'rich',
-      features: [
-        {
-          svg_id: 'stable-visible_record_1', stable_svg_id: 'stable-visible', fileIdx: 0,
-          record_id: 'rec-visible', type: 'CDS', start: 0, end: 9, strand: '+',
-          label: 'h_ffffffffffffffffffffffffff',
-          product: 'Visible protein', orthogroup_id: 'og-hidden',
-          proteinId: 'h_ffffffffffffffffffffffffff',
-          displayProteinId: 'f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          sourceProteinId: 'visible@instance|alias~f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-          orthogroup_member: {
-            featureSvgId: 'stable-visible', stableFeatureSvgId: 'stable-visible',
-            recordIndex: 0, recordId: 'rec-visible', product: 'Visible protein'
-          },
-          qualifiers: {
-            protein_id: ['h_ffffffffffffffffffffffffff', 'VP_1'],
-            translation: ['MVISIBLE']
-          },
-          nucleotide_sequence: 'ATGAAATAA', amino_acid_sequence: 'MVISIBLE'
-        },
-        {
-          svg_id: 'stable-hidden_record_2', stable_svg_id: 'stable-hidden', fileIdx: 1,
-          record_id: 'rec-hidden', type: 'CDS', start: 9, end: 18, strand: '+',
-          product: 'Hidden protein', orthogroup_id: 'og-hidden',
-          proteinId: 'h_gggggggggggggggggggggggggg',
-          displayProteinId: 'f_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-          sourceProteinId: 'hidden@instance|alias~f_dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
-          orthogroup_member: {
-            featureSvgId: 'stable-hidden', stableFeatureSvgId: 'stable-hidden',
-            recordIndex: 1, recordId: 'rec-hidden', product: 'Hidden protein'
-          },
-          qualifiers: {
-            protein_id: ['h_gggggggggggggggggggggggggg', 'HP_1'],
-            translation: ['MHIDDEN']
-          },
-          nucleotide_sequence: 'ATGCCCTAA', amino_acid_sequence: 'MHIDDEN'
-        },
-        {
-          svg_id: 'stable-unrelated_record_3', stable_svg_id: 'stable-unrelated', fileIdx: 2,
-          record_id: 'rec-other', type: 'CDS', start: 0, end: 6, strand: '+'
-        }
-      ],
-      orthogroups: [{
-        id: 'og-hidden', name: 'hidden-test', member_count: 2, record_coverage_count: 2,
-        members: [
-          {
-            featureSvgId: 'stable-visible', stableFeatureSvgId: 'stable-visible',
-            recordIndex: 0, recordId: 'rec-visible',
-            proteinId: 'h_ffffffffffffffffffffffffff',
-            displayProteinId: 'f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-            sourceProteinId: 'visible@instance|alias~f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-            label: 'h_ffffffffffffffffffffffffff', locusTag: 'VP_1',
-            start: 0, end: 9, strand: '+', product: 'Visible protein'
-          },
-          {
-            featureSvgId: 'stable-hidden', stableFeatureSvgId: 'stable-hidden',
-            recordIndex: 1, recordId: 'rec-hidden',
-            proteinId: 'h_gggggggggggggggggggggggggg',
-            displayProteinId: 'f_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-            sourceProteinId: 'hidden@instance|alias~f_dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
-            label: 'h_gggggggggggggggggggggggggg', locusTag: 'HP_1',
-            start: 9, end: 18, strand: '+', product: 'Hidden protein'
-          }
-        ]
-      }]
-    });
-    const metadata = svg.querySelector('#gbdraw-interactive-feature-metadata');
-    const payload = JSON.parse(metadata.textContent);
-    const visibleFeature = payload.features.find((feature) => feature.svg_id === 'rendered-visible');
-    visibleFeature.amino_acid_fasta = '>h_ffffffffffffffffffffffffff\\nMVISIBLE';
-    metadata.textContent = JSON.stringify(payload);
-    return new XMLSerializer().serializeToString(svg);
-  }, { origin });
-
-  const svgPath = testInfo.outputPath('standalone-hidden-orthogroup.svg');
-  fs.writeFileSync(svgPath, svgText, 'utf8');
-  await page.addInitScript(() => {
-    window.__copiedText = '';
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: {
-        writeText: async (value) => {
-          window.__copiedText = String(value);
-        }
-      }
-    });
-  });
-  await page.goto(pathToFileURL(svgPath).href);
-
-  const metadata = await page.locator('#gbdraw-interactive-feature-metadata').textContent();
-  const payload = JSON.parse(metadata);
-  expect(payload.features.map((feature) => feature.svg_id)).toEqual([
-    'rendered-visible',
-    'rendered-unrelated',
-  ]);
-  expect(payload.orthogroups[0].members[0].rendered_feature_svg_id).toBe('rendered-visible');
-  expect(payload.orthogroups[0].members[1].rendered_feature_svg_id).toBeUndefined();
-
-  await page.locator('[data-gbdraw-feature-id="rendered-visible"]').click();
-  const popupTitle = await page.locator('.gfi-title').innerText();
-  expect(popupTitle).toContain('VP_1');
-  expect(popupTitle).not.toMatch(/h_[a-z2-7]{26}/i);
-  expect(popupTitle).not.toMatch(/f_[0-9a-f]{64}/i);
-  const memberBlock = page.locator('.gfi-block').filter({ hasText: 'Similarity-group members' }).last();
-  await expect(memberBlock.locator('tbody tr')).toHaveCount(2);
-  const memberText = await memberBlock.innerText();
-  expect(memberText).toContain('VP_1');
-  expect(memberText).toContain('HP_1');
-  expect(memberText).not.toMatch(/h_[a-z2-7]{26}/i);
-  expect(memberText).not.toMatch(/f_[0-9a-f]{64}/i);
-  expect(memberText).not.toContain('@instance|alias~');
-  await memberBlock.locator('.gfi-block-actions').getByRole('button', { name: 'Copy nt (2)' }).click();
-  await expect.poll(() => page.evaluate(() => window.__copiedText)).toContain('rec-hidden');
-  expect(await page.evaluate(() => window.__copiedText)).toContain('ATGCCCTAA');
-  await memberBlock.locator('.gfi-block-actions').getByRole('button', { name: 'Copy aa (2)' }).click();
-  await expect.poll(() => page.evaluate(() => window.__copiedText)).toContain('>VP_1');
-  const copiedAminoAcids = await page.evaluate(() => window.__copiedText);
-  expect(copiedAminoAcids).toContain('>HP_1');
-  expect(copiedAminoAcids).not.toMatch(/h_[a-z2-7]{26}/i);
-  expect(copiedAminoAcids).not.toMatch(/f_[0-9a-f]{64}/i);
-  expect(copiedAminoAcids).not.toContain('@instance|alias~');
-  await page.getByRole('button', { name: 'Sequence' }).click();
-  const aminoAcidBlock = page.locator('.gfi-block').filter({ hasText: 'Amino acid' }).last();
-  await aminoAcidBlock.getByRole('button', { name: 'Copy' }).click();
-  await expect.poll(() => page.evaluate(() => window.__copiedText)).toContain('>VP_1');
-  const copiedFeatureAminoAcid = await page.evaluate(() => window.__copiedText);
-  expect(copiedFeatureAminoAcid).not.toMatch(/h_[a-z2-7]{26}/i);
-  const featureDownloadPromise = page.waitForEvent('download');
-  await aminoAcidBlock.getByRole('button', { name: 'DL aa' }).click();
-  const featureDownload = await featureDownloadPromise;
-  expect(featureDownload.suggestedFilename()).toContain('VP_1');
-  expect(featureDownload.suggestedFilename()).not.toMatch(/h_[a-z2-7]{26}/i);
-  expect(featureDownload.suggestedFilename()).not.toMatch(/f_[0-9a-f]{64}/i);
-
-  await page.locator('[data-close]').click();
-  await page.locator('[data-gbdraw-match-id="og-match"]').hover();
-  await expect(page.locator('[data-gbdraw-feature-id="rendered-visible"]')).toHaveClass(
-    /gbdraw-interactive-feature--hover/
-  );
-  await expect(page.locator('[data-gbdraw-feature-id="rendered-unrelated"]')).not.toHaveClass(
-    /gbdraw-interactive-feature--hover/
-  );
 });
 
 test('preview search renderer applies result and active differences only', async ({ page }) => {

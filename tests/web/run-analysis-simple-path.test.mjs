@@ -327,6 +327,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.biologicalFeatures.value.length, 1);
 
   const committedState = committedFeatureState();
+  const committedExtractedFeatureIdentity = state.extractedFeatures.value;
+  const committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
 
   workerResponses.push(response(result('missing.svg', 'missing'), undefined));
   assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
@@ -364,6 +366,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     /forced late canonical artifact adoption failure/
   );
   assert.deepEqual(committedFeatureState(), lateFailureState);
+  assert.equal(state.extractedFeatures.value, committedExtractedFeatureIdentity);
+  assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
   assert.equal(state.zoom.value, 1.7);
   assert.deepEqual(state.canvasPan, { x: 31, y: -12 });
 
@@ -376,6 +380,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   cancelDuringCandidate = false;
   assert.deepEqual(committedFeatureState(), canceledState);
   assert.equal(state.results.value, canceledResultIdentity);
+  assert.equal(state.extractedFeatures.value, committedExtractedFeatureIdentity);
+  assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
   assert.equal(state.processingStatus.value, 'Canceled.');
 
   assert.equal(ensurePyodideCalls, 0);

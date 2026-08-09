@@ -95,48 +95,6 @@ GALLERY_LOSAT_CACHE_SESSION_FILES = {
     "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
 }
 GALLERY_LOSAT_DERIVED_CACHE_SESSION_FILES: set[str] = set()
-WEB_NODE_TEST_CASES = {
-    "run-info": ("tests/web/run-info.test.mjs",),
-    "definition-line-style-state": ("tests/web/definition-line-style-state.test.mjs",),
-    "feature-shapes": ("tests/web/feature-shapes.test.mjs",),
-    "runtime-capabilities": ("tests/web/runtime-capabilities.test.mjs",),
-    "pyodide-startup": ("tests/web/pyodide-startup.test.mjs",),
-    "session-request": ("tests/web/session-request.test.mjs",),
-    "session-definition-rehydration": (
-        "tests/web/session-definition-rehydration.test.mjs",
-    ),
-    "gallery-session-migration": ("tests/web/gallery-session-migration.test.mjs",),
-    "session-losat-cache-validation": (
-        "tests/web/session-losat-cache-validation.test.mjs",
-    ),
-    "losat-cache": ("tests/web/losat-cache.test.mjs",),
-    "run-analysis-derived-cache": ("tests/web/run-analysis-derived-cache.test.mjs",),
-    "losat-settings": ("tests/web/losat-settings.test.mjs",),
-    "file-imports": ("tests/web/file-imports.test.mjs",),
-    "feature-color-actions": ("tests/web/feature-color-actions.test.mjs",),
-    "feature-visibility": ("tests/web/feature-visibility.test.mjs",),
-    "feature-selector": ("tests/web/feature-selector.test.mjs",),
-    "preview-runtime": ("tests/web/preview-runtime.test.mjs",),
-    "session-feature-metadata": ("tests/web/session-feature-metadata.test.mjs",),
-    "feature-display-boundaries": ("tests/web/feature-display-boundaries.test.mjs",),
-    "color-utils": ("tests/web/color-utils.test.mjs",),
-    "circular-track-slots": ("tests/web/circular-track-slots.test.mjs",),
-    "track-slot-display": ("tests/web/track-slot-display.test.mjs",),
-    "orthogroups-stable-identity": ("tests/web/orthogroups-stable-identity.test.mjs",),
-    "cloudflare-worker": ("tests/web/cloudflare-worker.test.mjs",),
-    **{
-        f"session-request-{Path(session_name).name.removesuffix('.gz')}": (
-            "tests/web/session-request.test.mjs",
-            "--project-session",
-            str(GALLERY_ROOT / "sessions" / session_name),
-        )
-        for session_name in (
-            "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
-            "tobacco-chloroplast.gbdraw-session.json",
-            "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-        )
-    },
-}
 
 
 def _load_verify_module():
@@ -336,19 +294,6 @@ def test_index_links_to_hosted_interactive_gallery() -> None:
     assert match is not None
     assert 'target="_blank"' in match.group("attrs")
     assert 'rel="noopener noreferrer"' in match.group("attrs")
-
-
-@pytest.mark.parametrize(
-    "node_args",
-    WEB_NODE_TEST_CASES.values(),
-    ids=WEB_NODE_TEST_CASES,
-)
-def test_web_javascript_behavior(node_args: tuple[str, ...]) -> None:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node is not available")
-
-    subprocess.run([node, *node_args], check=True, cwd=REPO_ROOT)
 
 
 def test_public_web_html_entrypoints_are_not_gitignored() -> None:

@@ -359,6 +359,25 @@ for (const conflictingEndpointIdentity of [
   assert.equal(unresolvedEndpoint.query_feature_svg_id, undefined);
   assert.equal(unresolvedEndpoint.query_record_index, undefined);
 }
+const endpointlessCatalogHomology = catalogRuntime.expandCatalogItem({
+  ...embeddedCatalogItem,
+  comparisonMatches: [{
+    id: 'homology-1',
+    match_kind: 'homology',
+    reference_side: 'query',
+    query_record_id: 'reference',
+    subject_record_id: 'comparison',
+    source_index: 0,
+    qstart: 1,
+    qend: 4,
+    sstart: 4,
+    send: 1
+  }]
+}, 'rich').matches[0];
+assert.equal(endpointlessCatalogHomology._gbdraw_query_endpoint_resolved, false);
+assert.equal(endpointlessCatalogHomology.query_record_id, 'reference');
+assert.equal(endpointlessCatalogHomology.subject_record_id, 'comparison');
+assert.equal(endpointlessCatalogHomology.query_feature_svg_id, undefined);
 const catalogEndpointRuntime = new Function('featuresById', 'sequenceSources', `
   ${[
     'catalogFeatureKey',
@@ -1548,6 +1567,38 @@ assert.equal(
     query_record_id: 'record-a'
   }, 'query').source,
   null
+);
+const embeddedHomologyReference = {
+  origin: 'circular-reference',
+  recordIndex: 0,
+  recordId: 'reference',
+  sequence: 'AACCGGTT'
+};
+const embeddedHomologyComparison = {
+  origin: 'homology-comparison',
+  sourceIndex: 0,
+  recordId: 'comparison',
+  sequence: 'TTGCAACC'
+};
+embeddedMatchSourceResolver = createEmbeddedMatchSourceResolver([
+  embeddedHomologyReference,
+  embeddedHomologyComparison
+]);
+const endpointlessHomologyMatch = {
+  match_kind: 'homology',
+  _gbdraw_catalog_endpoint_contract: true,
+  reference_side: 'query',
+  query_record_id: 'reference',
+  subject_record_id: 'comparison',
+  source_index: 0
+};
+assert.equal(
+  embeddedMatchSourceResolver(endpointlessHomologyMatch, 'query').source,
+  embeddedHomologyReference
+);
+assert.equal(
+  embeddedMatchSourceResolver(endpointlessHomologyMatch, 'subject').source,
+  embeddedHomologyComparison
 );
 
 const scopedFeature = {};

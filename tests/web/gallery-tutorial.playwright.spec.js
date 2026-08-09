@@ -437,7 +437,8 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     { text: 'BGC0000713.gbk', overflowWrap: 'normal', lineCount: 1 }
   ]);
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(16);
+  await expect(mediaImages).toHaveCount(17);
+  await expect(tutorialPanel.locator('img[src$="manual-03-03-first-comparison-boundary.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-03-track-layout-middle.webp"]')).toHaveCount(1);

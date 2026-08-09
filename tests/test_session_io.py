@@ -45,7 +45,9 @@ from gbdraw.api.requests import (
     CircularDiagramRequest,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCardinality,
     RecordInput,
+    RecordPresentation,
 )
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
@@ -436,8 +438,16 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
                 "id": "og_1",
                 "member_count": 2,
                 "members": [
-                    {"featureSvgId": "feature-1", "proteinId": "protein-1"},
-                    {"featureSvgId": "feature-2", "proteinId": "protein-2"},
+                    {
+                        "recordIndex": 0,
+                        "stableFeatureSvgId": "feature-1",
+                        "proteinId": "protein-1",
+                    },
+                    {
+                        "recordIndex": 1,
+                        "stableFeatureSvgId": "feature-2",
+                        "proteinId": "protein-2",
+                    },
                 ],
             },
         ),
@@ -1231,6 +1241,42 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
         promoted["config"]["losat"]["blastp"]["collinearMaxUnitGap"]
         == 2
     )
+
+
+def test_current_writer_resolves_noncanonical_request_before_encoding() -> None:
+    record = SeqRecord(
+        Seq("ATGC"),
+        id="record",
+        annotations={"molecule_type": "DNA"},
+    )
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(
+                source=InMemoryRecordSource(record),
+                cardinality=RecordCardinality.ALL,
+                presentation=RecordPresentation(reverse_complement=True),
+            ),
+        ),
+    )
+
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="linear",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={"linearSeqs": []},
+        generated_at=datetime(2026, 7, 21),
+        canonical_request=request,
+    )
+
+    assert [record["recordKey"] for record in payload["renderRequest"]["records"]] == [
+        "record-1"
+    ]
+    assert payload["renderRequest"]["records"][0]["presentation"][
+        "reverseComplement"
+    ] is False
 
 
 def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
