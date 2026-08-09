@@ -1069,7 +1069,7 @@ def test_circular_tutorial_follows_steps_and_defers_related_links() -> None:
     tutorial = CIRCULAR_TUTORIAL_PATH.read_text(encoding="utf-8")
     headings = [
         "## What you'll need",
-        "## Step 1: Load the bundled mitochondrial genome",
+        "## Step 1: Load the NCBI mitochondrial genome",
         "## Step 2: Generate the first diagram",
         "## Step 3: Add a publication label",
         "## Step 4: Make the feature map easier to read",
@@ -1112,7 +1112,7 @@ def test_linear_tutorial_shows_the_step_two_result_and_defers_related_links() ->
     tutorial = LINEAR_TUTORIAL_PATH.read_text(encoding="utf-8")
     headings = [
         "## What you'll need",
-        "## Step 1: Load the bundled Lambda genome",
+        "## Step 1: Load the NCBI Lambda genome",
         "## Step 2: Generate the first diagram",
         "## Step 3: Add concise labels and a ruler",
         "## Step 4: Regenerate and export the SVG",
@@ -1323,13 +1323,17 @@ def test_all_committed_gui_screenshots_match_the_display_contract() -> None:
 
 def test_capture_readme_records_versions_regeneration_and_download_checks() -> None:
     readme = README_PATH.read_text(encoding="utf-8")
+    normalized_readme = " ".join(readme.split())
 
     assert "Python Playwright 1.61.0" in readme
     assert "Node Playwright 1.61.1" in readme
     assert "Chrome for Testing 149.0.7827.55" in readme
     assert "Playwright Chromium revision v1228" in readme
     assert "writes every manifest-owned screenshot" in readme
-    assert "each file is checked for its name, structure, biological endpoints" in readme
+    assert (
+        "each file is checked for its name, structure, biological endpoints"
+        in normalized_readme
+    )
     assert "--scenario T-GUI-01" in readme
     assert "--scenario T-GUI-02" in readme
     assert "--scenario H-GUI-01" in readme

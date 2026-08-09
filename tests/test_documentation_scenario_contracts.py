@@ -36,7 +36,7 @@ SCREENSHOT_BUDGETS = {
     "T-GUI-04": 6,
     "T-GUI-05": 5,
     "T-GUI-06": 5,
-    "T-GUI-08": 5,
+    "T-GUI-08": 6,
     "T-GUI-09": 6,
     "T-GUI-10": 2,
     "T-GUI-12": 2,

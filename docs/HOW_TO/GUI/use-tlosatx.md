@@ -8,15 +8,20 @@ with fixed serial settings, then saves the raw evidence and the diagram.
 
 ## Before you start
 
-Download the bundled complete records:
+Download each record from NCBI in **GenBank (full)** format and save it with
+the filename shown here.
 
-- [`NC_001416.gb`](../../../gbdraw/web/tutorial-data/lambda/NC_001416.gb),
-  `NC_001416.1`, 48,502 bp.
-- [`NC_042057.1.gb`](../../../gbdraw/web/tutorial-data/de3/NC_042057.1.gb),
-  `NC_042057.1`, 42,925 bp.
+| Record | Authoritative download | Save as | Expected length |
+|---|---|---|---:|
+| Lambda `NC_001416.1` | [NCBI record](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1) | `NC_001416.gb` | 48,502 bp |
+| DE3 `NC_042057.1` | [NCBI record](https://www.ncbi.nlm.nih.gov/nuccore/NC_042057.1) | `NC_042057.1.gb` | 42,925 bp |
 
-The frozen reference output is
-[`lambda-de3.tlosatx.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.tlosatx.tsv).
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for NCBI browser
+download and accession checks.
+
+The optional [support reference
+output](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.tlosatx.tsv)
+is named `lambda-de3.tlosatx.tsv`.
 It contains 397 rows from LOSAT 0.1.0 running in the browser (WASM); two
 separate serial runs produced byte-identical results.
 

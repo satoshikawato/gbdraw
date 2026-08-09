@@ -1,4 +1,4 @@
-[Home](../../DOCS.md) | [Tutorials](../README.md) | [Python API](../../REFERENCE/python-api.md)
+[Home](../../DOCS.md) | [Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [Python API](../../REFERENCE/python-api.md)
 
 # Build a quantitative genome map from Python
 
@@ -13,10 +13,34 @@ GC content, and GC skew in the same explicit slot stack as the CLI tutorial.
 
 ## What you'll need
 
-Place `AP027133.gb` and `AP027133.DRR394922.depth-1kb.tsv` in an empty working
-directory.
+| Kind | Filename | What to do |
+| --- | --- | --- |
+| Download | `AP027133.gb` ([NCBI Revision History snapshot for AP027133.1](https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027133.1&sat=3&satkey=69902298)) | Download the complete GenBank record and save it as `AP027133.gb`. |
+| Download | [`AP027133.DRR394922.depth-1kb.tsv`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.depth-1kb.tsv) | Save the supplied depth table with this exact filename. |
+| Create | `quantitative_genome_map.py` | Save the complete Python program from Step 2 with this filename. |
+| Generated | `quantitative_genome_map.svg` | The program writes this SVG. |
+| Reference result | [`quantitative_genome_map.svg`](../../images/t-py-11/quantitative_genome_map.svg) | Compare your Generated SVG with this versioned result. |
 
-## Step 1: Save and run the program
+Install gbdraw in the active Python environment before starting. The depth TSV
+contains 607 arithmetic means from consecutive 1 kbp bins.
+
+## Step 1: Prepare the working directory
+
+Create and enter an empty directory:
+
+```bash
+mkdir gbdraw-python-quantitative-map
+cd gbdraw-python-quantitative-map
+```
+
+Acquire the sequence from its authoritative accession link and download the
+supplied depth table. Save both with the exact filenames shown. See [Get the
+tutorial files](../../GETTING_TUTORIAL_DATA.md) for browser, `curl`, and
+PowerShell instructions for authoritative sequence acquisition.
+
+## Step 2: Save and run the Python program
+
+Save the following complete program as `quantitative_genome_map.py`:
 
 <!-- executable:T-PY-11:start -->
 ```python
@@ -113,8 +137,36 @@ print(f"Saved {saved_path}")
 ```
 <!-- executable:T-PY-11:end -->
 
-Open `quantitative_genome_map.svg`. It should plot all 607 depth values on a
-0x–80x axis, GC content on a 10%–55% axis, and the signed GC-skew fills, in
-the same five-slot order as the CLI figure.
+Before running it, your working directory should contain:
+
+```text
+gbdraw-python-quantitative-map/
+├── AP027133.gb
+├── AP027133.DRR394922.depth-1kb.tsv
+└── quantitative_genome_map.py
+```
+
+### Run the program
+
+```bash
+python quantitative_genome_map.py
+```
+
+Expected output: the program prints `Saved quantitative_genome_map.svg` and
+writes the Generated SVG in the current directory.
+
+## Step 3: Inspect the quantitative tracks
+
+Open the Generated `quantitative_genome_map.svg`. It should plot all 607 depth
+values on a 0x–80x axis, GC content on a 10%–55% axis, and the signed GC-skew
+fills in the same five-slot order as the CLI figure.
 
 ![AP027133.1 depth, GC content, and GC skew from Python](../../images/t-py-11/quantitative_genome_map.svg)
+
+The image above is the Reference result. Compare the record definition, track
+order, axes, tick labels, colors, and legend with your SVG.
+
+## Next steps
+
+- [Add tracks, annotations, colors, and labels](../../HOW_TO/PYTHON/add-tracks-annotations-colors-and-labels.md)
+- [Review depth TSV schemas](../../REFERENCE/input-formats-and-tsv-schemas.md)

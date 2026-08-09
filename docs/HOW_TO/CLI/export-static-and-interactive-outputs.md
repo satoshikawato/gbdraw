@@ -11,9 +11,15 @@ interactive SVG, PNG, PDF, EPS, and PS derivatives with predictable names.
   succeeds. SVG and interactive SVG do not require CairoSVG; PNG, PDF, EPS,
   and PS do.
 - Start in an empty working directory.
-- Copy [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
-  and [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
-  into it.
+- Download the complete `NC_012920.1` GenBank record from
+  [NCBI EFetch](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text)
+  and save it as `HmmtDNA.gbk`.
+- Copy the repository support table
+  [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
+  into the same directory.
+
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and accession-check procedure.
 
 ## Export every CLI format
 

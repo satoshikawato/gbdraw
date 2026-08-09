@@ -1,4 +1,4 @@
-[Home](../../DOCS.md) | [Tutorials](../README.md) | [Python API](../../REFERENCE/python-api.md) | [GUI version](../GUI/build-an-annotated-chloroplast-map.md)
+[Home](../../DOCS.md) | [Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [Python API](../../REFERENCE/python-api.md) | [GUI version](../GUI/build-an-annotated-chloroplast-map.md)
 
 # Recreate the Gallery chloroplast map from Python
 
@@ -23,20 +23,37 @@ options that can be reviewed and rerun.
 
 ## What you'll need
 
-Copy these files from
-`gbdraw/web/tutorial-data/tobacco-plastome-regions/` into an empty working
-directory:
-
-- `NC_001879.gbk`
-- `nicotiana-tabacum-regions.tsv`
-- `chloroplast_specific_table.tsv`
-- `qualifier_priority.tsv`
+| Kind | Filename | What to do |
+| --- | --- | --- |
+| Download | `NC_001879.gbk` ([NCBI accession NC_001879.2](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2)) | Download the complete tobacco plastome GenBank record and save it as `NC_001879.gbk`. |
+| Download | [`nicotiana-tabacum-regions.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv) | Save the supplied region table with this exact filename. |
+| Download | [`chloroplast_specific_table.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/chloroplast_specific_table.tsv) | Save the supplied feature color table with this exact filename. |
+| Download | [`qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/qualifier_priority.tsv) | Save the supplied label rule with this exact filename. |
+| Create | `annotated_chloroplast.py` | Save the complete Python program from Step 2 with this filename. |
+| Generated | `python_annotated_chloroplast.svg` | The program writes this SVG. |
+| Reference result | [`python_annotated_chloroplast.svg`](../../images/t-py-02/python_annotated_chloroplast.svg) | Compare your Generated SVG with this versioned result. |
 
 The GenBank file contains the complete 155,943 bp `NC_001879.2` plastome. The
 three TSV files own the structural-region annotations, functional feature
 colors, and CDS label priority.
 
-## Step 1: Save the Python program
+Install gbdraw in the active Python environment before starting.
+
+## Step 1: Prepare the working directory
+
+Create and enter an empty directory:
+
+```bash
+mkdir gbdraw-python-chloroplast
+cd gbdraw-python-chloroplast
+```
+
+Acquire the sequence from its authoritative accession link and download the
+three supplied support tables. Save every file with the exact filename shown.
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for browser,
+`curl`, and PowerShell instructions for authoritative sequence acquisition.
+
+## Step 2: Save and run the Python program
 
 Save the following program as `annotated_chloroplast.py` beside the four input
 files:
@@ -155,23 +172,44 @@ The first slot splits forward- and reverse-strand features around the axis.
 The second places all four structural regions in one inner annotation lane.
 The third adds GC content without adding coordinate ticks or a skew ring.
 
-## Step 2: Run the program
+Before running it, your working directory should contain:
+
+```text
+gbdraw-python-chloroplast/
+├── NC_001879.gbk
+├── nicotiana-tabacum-regions.tsv
+├── chloroplast_specific_table.tsv
+├── qualifier_priority.tsv
+└── annotated_chloroplast.py
+```
+
+### Run the program
 
 ```bash
 python annotated_chloroplast.py
 ```
 
-The program prints `Saved python_annotated_chloroplast.svg`.
+Expected output: the program prints
+`Saved python_annotated_chloroplast.svg` and writes the Generated SVG in the
+current directory.
 
 ## Step 3: Inspect the result
 
-Open `python_annotated_chloroplast.svg`. Confirm the complete
+Open the Generated `python_annotated_chloroplast.svg`. Confirm the complete
 `NC_001879.2` record, 147 logical features, radial gene labels, all four
 structural-region brackets, GC content, and the functional-color legend.
 There should be no coordinate-tick or GC-skew track.
 
 ![Gallery-style tobacco plastome drawn from the Python API](../../images/t-py-02/python_annotated_chloroplast.svg)
 
+The image above is the Reference result. Your SVG should have the same record,
+feature colors, label placement, region brackets, track order, and legend.
+
 The documentation runner executes the literal program above in a clean
 directory and checks the typed options, slot geometry, feature and annotation
 identities, visible labels, and equality of the file, text, and byte outputs.
+
+## Next steps
+
+- [Add tracks, annotations, colors, and labels](../../HOW_TO/PYTHON/add-tracks-annotations-colors-and-labels.md)
+- [Review track and annotation schemas](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)

@@ -50,7 +50,6 @@ def test_onboarding_pages_match_their_approved_manifest_entries() -> None:
         assert output_name in _section(source, "Step 2")
         assert "tests/test_inputs" not in source
         assert "http://" not in source
-        assert "https://" not in source
         assert (PUBLISHED_IMAGE_ROOT / scenario_id.lower() / output_name).is_file()
 
 

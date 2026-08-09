@@ -15,14 +15,19 @@ for the Gallery-aligned five-record comparison.
 - Use a Linux x86_64 gbdraw installation that contains the bundled LOSAT 0.1.0
   runtime.
 - Start in an empty working directory.
-- Copy all five GenBank files from the packaged
-  [`aminoglycoside-bgc-five` fixture](../../../gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708.gbk):
-  `BGC0000708.gbk`, `BGC0000709.gbk`, `BGC0000711.gbk`,
-  `BGC0000712.gbk`, and `BGC0000713.gbk`.
+- Download the five versioned MIBiG GenBank records, preserving these local
+  names:
+  - [`BGC0000708.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk);
+  - [`BGC0000709.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000709.5/BGC0000709.gbk);
+  - [`BGC0000711.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000711.5/BGC0000711.gbk);
+  - [`BGC0000712.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000712.5/BGC0000712.gbk);
+  - [`BGC0000713.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk).
+
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and record-identity procedure.
 
 These are five separate complete MIBiG records in the fixed order shown above.
-Their lengths, 155 displayed CDS features, provenance, and checksums are in the
-[fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json).
+Together they contain the 155 CDS features used by this workflow.
 
 ## Run Pairwise mode and save its raw rows
 

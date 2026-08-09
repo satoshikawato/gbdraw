@@ -13,8 +13,18 @@ Combine measured sequencing depth with GC content and GC skew on the complete
 
 ## What you'll need
 
-- [`AP027133.gb`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.gb)
-- [`AP027133.DRR394922.depth-1kb.tsv`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.depth-1kb.tsv)
+Starting state: open a fresh gbdraw web app page with no session loaded and no
+files selected.
+
+Use the filenames below when you download or save each file. See [Get the
+tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser download steps and
+the meaning of each file type.
+
+| File | File type | Purpose |
+| --- | --- | --- |
+| [`AP027133.gb` — NCBI `AP027133.1` Revision History snapshot](https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027133.1&sat=3&satkey=69902298) | Authoritative download | Complete GenBank record; save as `AP027133.gb` |
+| [`AP027133.DRR394922.depth-1kb.tsv`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.depth-1kb.tsv) | Support download | Sequencing-depth means at 1 kbp intervals |
+| `quantitative_genome_map.svg` | Generated | Finished static diagram saved in Step 4 |
 
 The depth table contains 607 consecutive 1 kbp means with values from 12.446x
 to 74.546x.

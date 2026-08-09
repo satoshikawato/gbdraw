@@ -2,7 +2,12 @@
 
 # Python how-to guides
 
-These guides execute their literal Python snippets against the public tutorial fixtures. Use the [Python API reference](../../REFERENCE/python-api.md) or [Typed request reference](../../REFERENCE/typed-requests.md) for signatures and validation rules.
+These guides execute their literal Python snippets against original sequence
+records identified by authoritative accessions and explicitly linked support
+files. Use [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for NCBI
+download instructions, the [Python API reference](../../REFERENCE/python-api.md)
+for public functions, or the [Typed request
+reference](../../REFERENCE/typed-requests.md) for request contracts.
 
 - [How to draw Circular and multi-record diagrams from Python](draw-circular-and-multi-record-diagrams.md)
 - [How to draw Linear diagrams and comparisons from Python](draw-linear-diagrams-and-comparisons.md)

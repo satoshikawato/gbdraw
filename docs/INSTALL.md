@@ -1,4 +1,4 @@
-[Documentation home](./DOCS.md) | **Installation** | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Explanation](./EXPLANATION/README.md) | [Reference](./REFERENCE/README.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | **Installation** | [Start here](./TUTORIALS/README.md) | [Task guides](./HOW_TO/README.md) | [Concepts & decisions](./EXPLANATION/README.md) | [Technical reference](./REFERENCE/README.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
 
 [< Back to Home](./DOCS.md) | [Go to Quickstart >](./QUICKSTART.md)
 
@@ -105,4 +105,4 @@ gbdraw gui
 
 [< Back to Home](./DOCS.md) | [Go to Quickstart >](./QUICKSTART.md)
 
-[Documentation home](./DOCS.md) | **Installation** | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Explanation](./EXPLANATION/README.md) | [Reference](./REFERENCE/README.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | **Installation** | [Start here](./TUTORIALS/README.md) | [Task guides](./HOW_TO/README.md) | [Concepts & decisions](./EXPLANATION/README.md) | [Technical reference](./REFERENCE/README.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)

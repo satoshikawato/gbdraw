@@ -13,7 +13,7 @@
     },
     "extended": {
       "maxUncompressedBytes": 16777216,
-      "actualUncompressedBytes": 7848360,
+      "actualUncompressedBytes": 7848956,
       "fileCount": 20
     }
   },
@@ -1070,13 +1070,24 @@
       ],
       "provenance": {
         "sourceName": "DDBJ/NCBI Nucleotide",
-        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027133.1",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027133.1?report=girevhist",
         "retrievedOn": null,
         "retrievalDateStatus": "unknown-legacy",
         "repositoryAddedOn": "2026-02-06",
         "repositoryAddedCommit": "e6e87174",
         "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.",
-        "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the public tutorial fixture set."
+        "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the public tutorial fixture set.",
+        "mirrorVerification": {
+          "authoritativeRequestUrl": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027133.1&sat=3&satkey=69902298",
+          "accession": "AP027133.1",
+          "format": "GenBank (full), text",
+          "verifiedOn": "2026-08-09T06:22:18Z",
+          "sourceSizeBytes": 1344094,
+          "sourceSha256": "913af50dd9d37cc2107be5e46484b885c5d586fb414b4b501380fc8f17a659d6",
+          "mirrorSizeBytes": 1344094,
+          "mirrorSha256": "913af50dd9d37cc2107be5e46484b885c5d586fb414b4b501380fc8f17a659d6",
+          "comparisonResult": "byte-identical"
+        }
       },
       "derivation": null,
       "scenarioIds": ["T-CLI-05", "T-CLI-10", "T-GUI-08", "T-GUI-12", "T-PY-07", "T-PY-11", "H-GUI-08", "H-GUI-09", "H-CLI-02", "H-CLI-09", "H-PY-03"]
@@ -1953,7 +1964,27 @@
       "sha256": "2b7f3fe01757416ed09a34c95c5d326269519f7323ff272e2950e8d6617a87c7",
       "packageTier": "extended",
       "records": [{"id": "AP027078.1", "accession": "AP027078", "sequenceVersion": 1, "organism": "Candidatus Tyloplasma litorale", "description": "MAG: Candidatus Tyloplasma litorale Fukuoka2020 DNA, complete genome", "topology": "circular", "length": 615622, "sequenceSha256": "5f479286e8965f7d6c3b957e83b7abbf0cab5a0e073dc39a5f888fc193d7a7b9", "featureCount": 1127, "displayedFeatureCount": 530, "cdsCount": 530, "cdsStrandCounts": {"positive": 259, "negative": 271, "unknown": 0}}],
-      "provenance": {"sourceName": "DDBJ/NCBI Nucleotide", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027078.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
+      "provenance": {
+        "sourceName": "DDBJ/NCBI Nucleotide",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027078.1?report=girevhist",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.",
+        "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set.",
+        "mirrorVerification": {
+          "authoritativeRequestUrl": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027078.1&sat=3&satkey=69902295",
+          "accession": "AP027078.1",
+          "format": "GenBank (full), text",
+          "verifiedOn": "2026-08-09T06:22:18Z",
+          "sourceSizeBytes": 1344275,
+          "sourceSha256": "2b7f3fe01757416ed09a34c95c5d326269519f7323ff272e2950e8d6617a87c7",
+          "mirrorSizeBytes": 1344275,
+          "mirrorSha256": "2b7f3fe01757416ed09a34c95c5d326269519f7323ff272e2950e8d6617a87c7",
+          "comparisonResult": "byte-identical"
+        }
+      },
       "derivation": null,
       "scenarioIds": ["T-GUI-08", "T-CLI-10", "T-PY-07", "H-GUI-08"]
     },
@@ -1967,7 +1998,27 @@
       "sha256": "4281dfd61d963e1264823ef8edef97f6072f567e443f650a97629bd683fba6da",
       "packageTier": "extended",
       "records": [{"id": "AP027131.1", "accession": "AP027131", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma vulgare", "description": "MAG: Candidatus Hepatoplasma vulgare Av-JP DNA, complete genome", "topology": "circular", "length": 662108, "sequenceSha256": "96d069bd35c78c09d06cf16663f91ff6da91fcccc538420b2cdbccfbd58fef9e", "featureCount": 1252, "displayedFeatureCount": 595, "cdsCount": 595, "cdsStrandCounts": {"positive": 335, "negative": 260, "unknown": 0}}],
-      "provenance": {"sourceName": "DDBJ/NCBI Nucleotide", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027131.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
+      "provenance": {
+        "sourceName": "DDBJ/NCBI Nucleotide",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027131.1?report=girevhist",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.",
+        "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set.",
+        "mirrorVerification": {
+          "authoritativeRequestUrl": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027131.1&sat=3&satkey=69902296",
+          "accession": "AP027131.1",
+          "format": "GenBank (full), text",
+          "verifiedOn": "2026-08-09T06:22:18Z",
+          "sourceSizeBytes": 1455315,
+          "sourceSha256": "4281dfd61d963e1264823ef8edef97f6072f567e443f650a97629bd683fba6da",
+          "mirrorSizeBytes": 1455315,
+          "mirrorSha256": "4281dfd61d963e1264823ef8edef97f6072f567e443f650a97629bd683fba6da",
+          "comparisonResult": "byte-identical"
+        }
+      },
       "derivation": null,
       "scenarioIds": ["T-GUI-08", "T-CLI-10", "T-PY-07", "H-GUI-08"]
     },
@@ -1981,7 +2032,27 @@
       "sha256": "b251675fb9dc1853851204da0dff8b3dc7b46110292798e9a5792582383e3903",
       "packageTier": "extended",
       "records": [{"id": "AP027132.1", "accession": "AP027132", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma crinochetorum", "description": "MAG: Candidatus Hepatoplasma crinochetorum Tokyo2021 DNA, complete genome", "topology": "circular", "length": 643039, "sequenceSha256": "4eb16c23b766cc0ffa6e6dab0c0c96f5a22d0e074db61c735af4761fafad3c8b", "featureCount": 1210, "displayedFeatureCount": 573, "cdsCount": 573, "cdsStrandCounts": {"positive": 274, "negative": 299, "unknown": 0}}],
-      "provenance": {"sourceName": "DDBJ/NCBI Nucleotide", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027132.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
+      "provenance": {
+        "sourceName": "DDBJ/NCBI Nucleotide",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027132.1?report=girevhist",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.",
+        "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set.",
+        "mirrorVerification": {
+          "authoritativeRequestUrl": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027132.1&sat=3&satkey=69902297",
+          "accession": "AP027132.1",
+          "format": "GenBank (full), text",
+          "verifiedOn": "2026-08-09T06:22:18Z",
+          "sourceSizeBytes": 1419813,
+          "sourceSha256": "b251675fb9dc1853851204da0dff8b3dc7b46110292798e9a5792582383e3903",
+          "mirrorSizeBytes": 1419813,
+          "mirrorSha256": "b251675fb9dc1853851204da0dff8b3dc7b46110292798e9a5792582383e3903",
+          "comparisonResult": "byte-identical"
+        }
+      },
       "derivation": null,
       "scenarioIds": ["T-GUI-08", "T-CLI-10", "T-PY-07", "H-GUI-08"]
     },
@@ -1991,11 +2062,31 @@
       "role": "raw",
       "mediaType": "text/plain",
       "inputType": "genbank",
-      "sizeBytes": 1683899,
-      "sha256": "eb5fb6a24771a4b28cede43fcca0cf6c9029bb1106fb0ddfd835cc501e016f5a",
+      "sizeBytes": 1684495,
+      "sha256": "c92f2df6b5b1eb911d2569af758677cae91e64af4af67e47b5ec0d2c866361a8",
       "packageTier": "extended",
       "records": [{"id": "NZ_CP006932.1", "accession": "NZ_CP006932", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma crinochetorum Av", "description": "Candidatus Hepatoplasma crinochetorum Av chromosome, complete genome", "topology": "circular", "length": 657101, "sequenceSha256": "785e6afc80d9b3a316f20e7d60706cd610d6158be68934420598cbda203571b1", "featureCount": 1246, "displayedFeatureCount": 588, "cdsCount": 588, "cdsStrandCounts": {"positive": 281, "negative": 307, "unknown": 0}}],
-      "provenance": {"sourceName": "NCBI Nucleotide (RefSeq)", "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NZ_CP006932.1", "retrievedOn": null, "retrievalDateStatus": "unknown-legacy", "repositoryAddedOn": "2026-08-04", "repositoryAddedCommit": null, "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.", "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set."},
+      "provenance": {
+        "sourceName": "NCBI Nucleotide Revision History (RefSeq)",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NZ_CP006932.1?report=girevhist",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.",
+        "filenameNormalization": "Saved without byte changes from the pinned NCBI Revision History request as NZ_CP006932.gb.",
+        "mirrorVerification": {
+          "authoritativeRequestUrl": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=NZ_CP006932.1&sat=60&satkey=39275474",
+          "accession": "NZ_CP006932.1",
+          "format": "GenBank (full), text",
+          "verifiedOn": "2026-08-09T06:03:23Z",
+          "sourceSizeBytes": 1684495,
+          "sourceSha256": "c92f2df6b5b1eb911d2569af758677cae91e64af4af67e47b5ec0d2c866361a8",
+          "mirrorSizeBytes": 1684495,
+          "mirrorSha256": "c92f2df6b5b1eb911d2569af758677cae91e64af4af67e47b5ec0d2c866361a8",
+          "comparisonResult": "byte-identical"
+        }
+      },
       "derivation": null,
       "scenarioIds": ["T-GUI-08", "T-CLI-10", "T-PY-07", "H-GUI-08"]
     },

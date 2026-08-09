@@ -39,9 +39,10 @@ def capture_gui_losatp_tutorial_collinear(
             "plain": "02-first-diagram.png",
             "settings": "03-collinear-settings.png",
             "result": "04-collinear-result.png",
+            "detail": "04-collinear-detail.png",
             "popup": "05-block-popup.png",
         },
-        starting_project="gallery-collinear",
+        evidence_scope="adjacent",
     )
 
 

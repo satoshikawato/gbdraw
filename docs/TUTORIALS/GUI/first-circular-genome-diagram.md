@@ -11,7 +11,9 @@
 All three workflows build the same labeled human mitochondrial figure. Only
 the interface changes.
 
-Create a labeled Circular SVG from the bundled human mitochondrial GenBank record. You will generate a working diagram in Step 2, then add the publication label and external feature labels before exporting it.
+Create a labeled Circular SVG from the accession-pinned human mitochondrial
+GenBank record. You will generate a working diagram in Step 2, then add the
+publication label and external feature labels before exporting it.
 
 ![Finished circular human mitochondrial genome diagram with external labels and a right legend](../../images/t-gui-01/04-finished-diagram.png)
 
@@ -19,11 +21,20 @@ Create a labeled Circular SVG from the bundled human mitochondrial GenBank recor
 
 ## What you'll need
 
-- The gbdraw web app
-- The bundled `gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk` file
-- The bundled `gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv` label rule
+Starting state: open a fresh gbdraw web app page with no session loaded and no
+files selected.
 
-## Step 1: Load the bundled mitochondrial genome
+Use the filenames below when you download or save each file. See [Get the
+tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser download steps and
+the meaning of each file type.
+
+| File | File type | Purpose |
+| --- | --- | --- |
+| [`HmmtDNA.gbk` — NCBI `NC_012920.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1) | Authoritative download | Complete human mitochondrial GenBank record; save as `HmmtDNA.gbk` |
+| [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv) | Support download | CDS label-priority rule |
+| `human_mitochondrion.svg` | Generated | Finished static diagram saved in Step 5 |
+
+## Step 1: Load the NCBI mitochondrial genome
 
 Select **Circular** at the top of the app and keep **GenBank** selected under **Input Genomes**. In **GenBank/DDBJ File**, choose `HmmtDNA.gbk`.
 

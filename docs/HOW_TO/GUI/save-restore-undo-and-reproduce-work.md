@@ -10,9 +10,11 @@ fresh browser context.
 
 ## Create the state you want to preserve
 
-Upload
-[`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
-as a Circular GenBank input. Set **Output Prefix** to `reproducible_work`,
+Download [NCBI record
+`NC_012920.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1) as **GenBank
+(full)**, save it as `HmmtDNA.gbk`, and upload it as a Circular GenBank input.
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser
+download and accession checks. Set **Output Prefix** to `reproducible_work`,
 **Species** to `<i>Homo sapiens</i>`, **Track Preset** to **Middle**, enable
 **Separate Strands**, keep GC content and skew visible, put the legend on the
 right, and choose external labels. Select **Generate Diagram**.

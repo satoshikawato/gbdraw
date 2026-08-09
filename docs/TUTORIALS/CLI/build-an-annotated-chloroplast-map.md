@@ -1,4 +1,4 @@
-[Home](../../DOCS.md) | [Tutorials](../README.md) | [CLI reference](../../REFERENCE/command-line.md)
+[Home](../../DOCS.md) | [Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [CLI reference](../../REFERENCE/command-line.md)
 
 # Recreate the Gallery chloroplast map from the command line
 
@@ -8,25 +8,69 @@
 | --- | --- | --- |
 | [Web-app workflow](../GUI/build-an-annotated-chloroplast-map.md) | **This page** | [Python workflow](../PYTHON/build-an-annotated-chloroplast-map.md) |
 
-All three workflows use the same complete tobacco plastome, tables, visual
-settings, and track geometry. Only the interface changes.
+All three workflows produce the same complete tobacco plastome map. Only the
+interface changes.
 
 This command-line workflow reproduces the Interactive SVG Gallery chloroplast
 map with functional gene colors, radial labels on both strands, one inner
 LSC/IRb/SSC/IRa bracket lane, GC content, and an upper-left legend.
 
-## What you'll need
+## Files used in this Tutorial
 
-Copy these files from
-`gbdraw/web/tutorial-data/tobacco-plastome-regions/` into an empty working
-directory:
+| Kind | Filename | What to do |
+| --- | --- | --- |
+| Download | [`NC_001879.gbk`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001879.2&rettype=gbwithparts&retmode=text) | Download NCBI accession [`NC_001879.2`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2) in full GenBank format and save it as `NC_001879.gbk`. |
+| Download | [`nicotiana-tabacum-regions.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv) | Save this repository-hosted region table with the exact filename. |
+| Download | [`chloroplast_specific_table.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/chloroplast_specific_table.tsv) | Save this repository-hosted feature color table with the exact filename. |
+| Download | [`qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/qualifier_priority.tsv) | Save this repository-hosted label rule with the exact filename. |
+| Generated | `cli_annotated_chloroplast.svg` | The command writes this SVG. |
+| Reference result | [`cli_annotated_chloroplast.svg`](../../images/t-cli-06/cli_annotated_chloroplast.svg) | Compare your generated SVG with this versioned result. |
 
-- `NC_001879.gbk`
-- `nicotiana-tabacum-regions.tsv`
-- `chloroplast_specific_table.tsv`
-- `qualifier_priority.tsv`
+This Tutorial has no Create files.
 
-## Step 1: Run the documented command
+## Step 1: Prepare the working directory
+
+Create and enter an empty directory:
+
+```bash
+mkdir gbdraw-cli-chloroplast
+cd gbdraw-cli-chloroplast
+```
+
+The sequence link downloads accession `NC_001879.2` directly from NCBI in full
+GenBank format. The other links are repository-hosted support tables; select
+**Download raw file** for those. Save every file with the exact name in the
+table. See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for
+browser, PowerShell, and identity-check instructions.
+
+On macOS, Linux, or WSL, run:
+
+```bash
+ncbi_efetch="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+gbdraw_data_base="https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data"
+curl -L "${ncbi_efetch}?db=nuccore&id=NC_001879.2&rettype=gbwithparts&retmode=text" -o NC_001879.gbk
+curl -L "$gbdraw_data_base/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv" -o nicotiana-tabacum-regions.tsv
+curl -L "$gbdraw_data_base/tobacco-plastome-regions/chloroplast_specific_table.tsv" -o chloroplast_specific_table.tsv
+curl -L "$gbdraw_data_base/tobacco-plastome-regions/qualifier_priority.tsv" -o qualifier_priority.tsv
+```
+
+Confirm that the source record reports `VERSION     NC_001879.2`:
+
+```bash
+grep '^VERSION' NC_001879.gbk
+```
+
+The working directory should now contain:
+
+```text
+gbdraw-cli-chloroplast/
+├── NC_001879.gbk
+├── nicotiana-tabacum-regions.tsv
+├── chloroplast_specific_table.tsv
+└── qualifier_priority.tsv
+```
+
+## Step 2: Run the documented command
 
 <!-- executable:T-CLI-06:start -->
 ```bash
@@ -61,11 +105,14 @@ gbdraw circular \
 ```
 <!-- executable:T-CLI-06:end -->
 
+Expected output: gbdraw writes the Generated
+`cli_annotated_chloroplast.svg` in the working directory.
+
 The explicit slots are the same three-slot stack used by the GUI and Python
 workflows. Because no tick or skew slot is declared, neither appears in the
 finished figure.
 
-## Step 2: Inspect the result
+## Step 3: Inspect the result
 
 Open `cli_annotated_chloroplast.svg`. Confirm `NC_001879.2`, 147 logical
 features, radial labels, all four structural-region brackets, GC content, and
@@ -73,6 +120,14 @@ the functional-color legend.
 
 ![Gallery-style tobacco plastome drawn from the command line](../../images/t-cli-06/cli_annotated_chloroplast.svg)
 
+The image above is the Reference result. Your SVG should have the same complete
+record, structural-region brackets, track order, labels, and functional colors.
+
 The recipe runner executes the literal command above in a clean directory and
 checks the complete record, feature count, annotation identities, three-slot
 order, labels, colors, and parity with the Python API rendering.
+
+## Next steps
+
+- [Add region annotations and track slots](../../HOW_TO/CLI/add-region-annotations-and-track-slots.md)
+- [Review track and annotation schemas](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)

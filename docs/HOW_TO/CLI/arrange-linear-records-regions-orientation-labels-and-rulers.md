@@ -10,18 +10,26 @@ BGC records intact and reverses the display orientation of one record.
 
 - Install gbdraw so that `gbdraw -h` succeeds.
 - Start in an empty working directory.
-- Copy these packaged files into it:
-  - [`NC_001416.gb`](../../../gbdraw/web/tutorial-data/lambda/NC_001416.gb);
-  - [`BGC0000708.gbk`](../../../gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708.gbk);
-  - [`BGC0000713.gbk`](../../../gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000713.gbk);
-  - [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv).
+- Download these complete records from their authoritative sources, preserving
+  the exact local names shown:
+  - [`NC_001416.1` from NCBI EFetch](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001416.1&rettype=gbwithparts&retmode=text)
+    as `NC_001416.gb`;
+  - [`BGC0000708` from MIBiG 5](https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk)
+    as `BGC0000708.gbk`;
+  - [`BGC0000713` from MIBiG 5](https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk)
+    as `BGC0000713.gbk`.
+- Copy the repository support table
+  [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
+  into the same directory.
+
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and accession-check procedure.
 
 The GenBank files contain three separate natural records. None was produced by
 splitting another sequence. The Lambda source remains the complete 48,502 bp
 `NC_001416.1` record even though the finished figure displays one coordinate
 range. `BGC0000708` is a complete 40,579 bp record, and `BGC0000713` is a
-complete 31,892 bp record. The [fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json)
-records the source and checksum for every input.
+complete 31,892 bp record.
 
 ## Run the complete layout recipe
 
@@ -64,7 +72,7 @@ gbdraw linear \
 
 Each `--record_id` selects the named record from its corresponding input file.
 `--region NC_001416.1:5001-35500` displays bases 5,001 through 35,500 without
-changing the packaged source. The first ruler therefore runs from 5 kbp to
+changing the downloaded source. The first ruler therefore runs from 5 kbp to
 30 kbp and the definition reports `5001-35500`.
 
 Use a region when the biological question concerns that interval. If the whole

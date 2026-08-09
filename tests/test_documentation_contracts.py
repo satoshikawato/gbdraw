@@ -12,7 +12,10 @@ from gbdraw.session_request_codec import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RELEASE_NOTES = REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0b0.md"
-SESSION_COMPATIBILITY = REPO_ROOT / "docs" / "SESSION_COMPATIBILITY.md"
+SESSION_COMPATIBILITY = (
+    REPO_ROOT / "docs" / "REFERENCE" / "session-and-request-compatibility.md"
+)
+COMPATIBILITY_HISTORY = REPO_ROOT / "docs" / "SESSION_COMPATIBILITY.md"
 BROWSER_ACCEPTANCE = REPO_ROOT / "tests" / "run_losat_cache_browser_acceptance.py"
 CURRENT_TASK_DOCS = (
     "docs/CLI_Reference.md",
@@ -45,7 +48,7 @@ def test_session_compatibility_table_matches_implementation() -> None:
     request_row = re.search(
         r"^\| Canonical `renderRequest` \| (\d+) \| ([^|]+) \|$",
         text,
-        re.MULTILINE,
+        re.MULTILINE | re.IGNORECASE,
     )
 
     assert session_row is not None
@@ -97,11 +100,31 @@ def test_current_task_docs_delegate_persisted_format_details_to_one_authority() 
         for detail in forbidden_details:
             assert detail not in text, f"{relative_path} repeats {detail}"
 
-    authority = (REPO_ROOT / "docs/SESSION_COMPATIBILITY.md").read_text(
-        encoding="utf-8"
-    )
+    authority = COMPATIBILITY_HISTORY.read_text(encoding="utf-8")
     for detail in forbidden_details:
         assert detail in authority
+
+
+def test_current_compatibility_reference_and_history_have_distinct_roles() -> None:
+    current = SESSION_COMPATIBILITY.read_text(encoding="utf-8")
+    history = COMPATIBILITY_HISTORY.read_text(encoding="utf-8")
+
+    assert "this page is the current support authority" in current
+    assert "# Session and request compatibility history" in history
+    assert "canonical owner of current support" in history
+    assert "This page is the current compatibility reference" not in history
+
+
+def test_generated_cli_inventory_delegates_current_semantics() -> None:
+    inventory = (REPO_ROOT / "docs/CLI_Reference.md").read_text(encoding="utf-8")
+    semantics = (REPO_ROOT / "docs/REFERENCE/command-line.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "# Generated command-line option inventory" in inventory
+    assert "[command-line reference](./REFERENCE/command-line.md)" in inventory
+    assert "canonical owner of current CLI semantics" in inventory
+    assert "This page is the canonical owner of current command semantics" in semantics
 
 
 def test_python_api_describes_its_four_output_forms() -> None:

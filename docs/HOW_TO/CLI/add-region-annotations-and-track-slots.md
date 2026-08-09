@@ -10,10 +10,16 @@ slot order, side, width, and axis placement visible in the command.
 
 - Install gbdraw so that `gbdraw circular -h` succeeds.
 - Start in an empty working directory.
-- Copy all four files from the
-  [`tobacco-plastome-regions`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/NC_001879.gbk)
-  fixture: `NC_001879.gbk`, `nicotiana-tabacum-regions.tsv`,
-  `modified_default_colors.tsv`, and `qualifier_priority.tsv`.
+- Download the complete `NC_001879.2` GenBank record from
+  [NCBI EFetch](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001879.2&rettype=gbwithparts&retmode=text)
+  and save it as `NC_001879.gbk`.
+- Copy these repository support tables into the same directory:
+  [`nicotiana-tabacum-regions.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv),
+  [`modified_default_colors.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/modified_default_colors.tsv),
+  and [`qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/qualifier_priority.tsv).
+
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and accession-check procedure.
 
 The GenBank file is the complete 155,943 bp circular `NC_001879.2` plastome.
 The annotation table contains one `plastome_regions` set with `lsc`, `irb`,

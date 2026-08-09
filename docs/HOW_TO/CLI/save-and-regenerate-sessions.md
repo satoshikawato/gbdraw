@@ -11,9 +11,17 @@ proved that the existing diagram is protected by default.
 
 - Install gbdraw so that `gbdraw circular -h` succeeds.
 - Start in an empty working directory.
-- Copy [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
-  and [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
-  into it.
+- Download the complete `NC_012920.1` GenBank record from
+  [NCBI EFetch](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text)
+  and save it as `HmmtDNA.gbk`.
+- Copy the repository support table
+  [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
+  into the same directory.
+
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and accession-check procedure. The session replay below
+uses only `cli_session.json`, which the first command creates from that source
+record; it never loads a prebuilt session.
 
 The source file contains the complete 16,569 bp circular human mitochondrial
 record. A session embeds its input resources, settings, canonical render

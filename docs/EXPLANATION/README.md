@@ -1,8 +1,12 @@
-[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [How-to guides](../HOW_TO/README.md) | [Reference](../REFERENCE/README.md)
+[Documentation home](../DOCS.md) | [Start here](../TUTORIALS/README.md) | [Task guides](../HOW_TO/README.md) | **Concepts & decisions** | [Technical reference](../REFERENCE/README.md)
 
-# Explanation
+# Concepts & decisions
 
-Use these pages when you need to choose an approach or understand why two gbdraw workflows behave differently.
+These are Explanation pages. Use them when you need to choose an approach,
+understand why two workflows behave differently, or weigh trade-offs. They do
+not own runnable procedures or exact option inventories; those live in
+[Task guides](../HOW_TO/README.md) and
+[Technical reference](../REFERENCE/README.md).
 
 - [Choose Circular or Linear](choose-circular-or-linear.md)
 - [Choose the GUI, CLI, or Python interface](choose-gui-cli-or-python.md)

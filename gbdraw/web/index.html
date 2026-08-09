@@ -1646,14 +1646,14 @@
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
                                     <div class="grid grid-cols-2 gap-2 items-end">
-                                        <div>
+                                        <div class="min-w-0">
                                             <label class="text-[9px] block">Record (optional)</label>
                                             <select
                                                 v-model="seq.region_record_id"
                                                 :disabled="linearRecordSelectorDisabled(seq)"
                                                 :data-record-selector-uid="seq.uid"
                                                 :aria-label="`Record selector for sequence ${idx + 1}`"
-                                                class="form-select px-1 py-0.5 text-xs disabled:bg-slate-100 disabled:text-slate-500"
+                                                class="form-select w-full max-w-full min-w-0 px-1 py-0.5 text-xs disabled:bg-slate-100 disabled:text-slate-500"
                                             >
                                                 <option
                                                     v-for="option in linearRecordOptions(seq)"
@@ -1668,7 +1668,7 @@
                                                 {{ linearRecordSelectorWarning(seq) }}
                                             </p>
                                         </div>
-                                        <label class="flex items-center gap-2 text-[10px] text-slate-600 pb-1">
+                                        <label class="flex min-w-0 items-center gap-2 text-[10px] text-slate-600 pb-1">
                                             <input type="checkbox" v-model="seq.region_reverse" :aria-label="`Reverse complement for sequence ${idx + 1}`" class="form-checkbox"> Reverse complement
                                         </label>
                                     </div>
@@ -4919,7 +4919,11 @@
                                 <i class="ph ph-x"></i>
                             </button>
                         </div>
-                        <div class="pairwise-match-popup-body custom-scrollbar" data-nodrag="true">
+                        <div class="pairwise-match-popup-body custom-scrollbar"
+                             role="region"
+                             aria-label="Pairwise match details content"
+                             tabindex="0"
+                             data-nodrag="true">
                             <div v-if="clickedPairwiseMatch.sequenceBundle"
                                  class="pairwise-match-popup-section">
                                 <div class="pairwise-match-popup-section-title">{{ clickedPairwiseMatch.sequenceTitle }}</div>

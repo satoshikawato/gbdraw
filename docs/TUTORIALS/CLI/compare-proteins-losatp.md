@@ -1,4 +1,4 @@
-[Documentation home](../../DOCS.md) | [All Tutorials](../README.md) | [Comparison reference](../../REFERENCE/comparison-programs-thresholds-and-results.md)
+[Documentation home](../../DOCS.md) | [All Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [Comparison reference](../../REFERENCE/comparison-programs-thresholds-and-results.md)
 
 # Create protein Similarity groups with LOSATP from the command line
 
@@ -12,10 +12,71 @@ This recipe compares five complete aminoglycoside biosynthetic gene clusters,
 builds the same 23 Similarity groups as the browser Tutorial, and aligns the
 records to the group containing `CAG38695.1` (`og_1`).
 
-## Step 1: Prepare the inputs
+## Files used in this Tutorial
 
-Copy the five BGC GenBank files, the two color tables, and
-`cds_gene_qualifier_priority.tsv` into an empty directory.
+| Kind | Filename | What to do |
+| --- | --- | --- |
+| Download | [`BGC0000708.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk) | Download MIBiG entry `BGC0000708.5` and save it as `BGC0000708.gbk`. |
+| Download | [`BGC0000709.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000709.5/BGC0000709.gbk) | Download MIBiG entry `BGC0000709.5` and save it as `BGC0000709.gbk`. |
+| Download | [`BGC0000711.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000711.5/BGC0000711.gbk) | Download MIBiG entry `BGC0000711.5` and save it as `BGC0000711.gbk`. |
+| Download | [`BGC0000712.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000712.5/BGC0000712.gbk) | Download MIBiG entry `BGC0000712.5` and save it as `BGC0000712.gbk`. |
+| Download | [`BGC0000713.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk) | Download MIBiG entry `BGC0000713.5` and save it as `BGC0000713.gbk`. |
+| Download | [`BGC0000708-BGC0000713_default_colors.tsv`](../../../gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708-BGC0000713_default_colors.tsv) | Save this repository-hosted base color table with the exact filename. |
+| Download | [`BGC0000708-BGC0000713_specific_colors.tsv`](../../../gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708-BGC0000713_specific_colors.tsv) | Save this repository-hosted feature color table with the exact filename. |
+| Download | [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv) | Save this repository-hosted label rule as `cds_gene_qualifier_priority.tsv`. |
+| Generated | `bgc_losatp_groups.svg` | The command writes this SVG after running LOSATP. |
+| Reference result | [`bgc_losatp_groups.svg`](../../images/t-cli-08/bgc_losatp_groups.svg) | Compare your generated SVG with this versioned result. |
+
+This Tutorial has no Create files.
+
+## Step 1: Prepare the working directory
+
+Create and enter an empty directory:
+
+```bash
+mkdir gbdraw-cli-losatp-groups
+cd gbdraw-cli-losatp-groups
+```
+
+The five sequence links download the versioned BGC entries directly from
+MIBiG. The other links are repository-hosted support tables; select **Download
+raw file** for those. Save every file with the exact name in the table. See
+[Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for browser,
+PowerShell, and identity-check instructions.
+
+On macOS, Linux, or WSL, run:
+
+```bash
+gbdraw_data_base="https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data"
+curl -L "https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk" -o BGC0000708.gbk
+curl -L "https://mibig.secondarymetabolites.org/repository/BGC0000709.5/BGC0000709.gbk" -o BGC0000709.gbk
+curl -L "https://mibig.secondarymetabolites.org/repository/BGC0000711.5/BGC0000711.gbk" -o BGC0000711.gbk
+curl -L "https://mibig.secondarymetabolites.org/repository/BGC0000712.5/BGC0000712.gbk" -o BGC0000712.gbk
+curl -L "https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk" -o BGC0000713.gbk
+curl -L "$gbdraw_data_base/aminoglycoside-bgc-five/BGC0000708-BGC0000713_default_colors.tsv" -o BGC0000708-BGC0000713_default_colors.tsv
+curl -L "$gbdraw_data_base/aminoglycoside-bgc-five/BGC0000708-BGC0000713_specific_colors.tsv" -o BGC0000708-BGC0000713_specific_colors.tsv
+curl -L "$gbdraw_data_base/shared/cds_gene_qualifier_priority.tsv" -o cds_gene_qualifier_priority.tsv
+```
+
+Confirm that the five downloaded records report the expected BGC accessions:
+
+```bash
+grep -H '^VERSION' BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk
+```
+
+The working directory should now contain:
+
+```text
+gbdraw-cli-losatp-groups/
+├── BGC0000708.gbk
+├── BGC0000709.gbk
+├── BGC0000711.gbk
+├── BGC0000712.gbk
+├── BGC0000713.gbk
+├── BGC0000708-BGC0000713_default_colors.tsv
+├── BGC0000708-BGC0000713_specific_colors.tsv
+└── cds_gene_qualifier_priority.tsv
+```
 
 ## Step 2: Run LOSATP and draw the figure
 
@@ -74,11 +135,19 @@ gbdraw linear \
 ```
 <!-- executable:T-CLI-08:end -->
 
-The bundled LOSAT runtime performs four adjacent searches and writes
-`bgc_losatp_groups.svg`.
+Expected output: the bundled LOSAT runtime performs four adjacent searches and
+writes the Generated `bgc_losatp_groups.svg` in the working directory.
+
+Open `bgc_losatp_groups.svg` and compare its record order and link layout with
+the image below.
 
 ![Five BGC records aligned to Similarity group og_1](../../images/t-cli-08/bgc_losatp_groups.svg)
 
-The search produces 232 raw rows, reduced to 23 Similarity groups and 77
-adjacent links; the fifth record stays reversed, matching the browser
-Tutorial's alignment.
+The image above is the Reference result. Verify 232 raw rows, 23 Similarity
+groups, and 77 adjacent links. The fifth record should remain reversed, matching
+the browser Tutorial's alignment.
+
+## Next steps
+
+- [Create protein Similarity groups for another CLI project](../../HOW_TO/CLI/create-protein-similarity-groups.md)
+- [Choose a genome-comparison method](../../EXPLANATION/choose-a-genome-comparison-method.md)

@@ -9,12 +9,16 @@ split.
 
 ## Before you start
 
-Use these bundled files:
+Download the sequence from NCBI and the pre-aggregated depth series from the
+repository:
 
-- [`AP027133.gb`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.gb) — one
-  complete circular record, 606,194 bp.
-- [`AP027133.DRR394922.depth-1kb.tsv`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.depth-1kb.tsv)
-  — 607 consecutive non-overlapping depth bins for `AP027133.1`.
+| Input | Acquisition | Save as | Purpose |
+|---|---|---|---|
+| Genome `AP027133.1` | [Official NCBI Revision History snapshot](https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027133.1&sat=3&satkey=69902298), **GenBank (full)** | `AP027133.gb` | Complete circular record, 606,194 bp |
+| DRR394922 mean depth | [Support download](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.depth-1kb.tsv) | `AP027133.DRR394922.depth-1kb.tsv` | 607 consecutive non-overlapping depth bins |
+
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser
+download and file identity checks.
 
 Only the quantitative measurements are reduced. Each TSV value is the
 arithmetic mean of the original per-base integer depths in that 1 kbp bin. The

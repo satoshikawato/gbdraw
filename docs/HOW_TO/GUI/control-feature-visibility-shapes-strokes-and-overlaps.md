@@ -9,11 +9,14 @@ not load a prepared session or turn a partial linear region into a circle.
 
 ## Before you start
 
-Use the bundled
-[`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk).
-It contains one complete circular *Homo sapiens* mitochondrial record.
+Open the authoritative [NCBI `NC_012920.1`
+record](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1), download it as
+**GenBank (full)**, and save it as `HmmtDNA.gbk`. It contains one complete
+circular *Homo sapiens* mitochondrial record. See [Get the tutorial
+inputs](../../GETTING_TUTORIAL_DATA.md) for browser download and accession
+checks.
 
-The same three rules used below are frozen in
+The same three rules used below are available as the support download
 [`HmmtDNA_feature_visibility.tsv`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA_feature_visibility.tsv).
 For this GUI workflow, add them with the visible controls so each field and
 action can be reviewed before generation.

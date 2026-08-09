@@ -1,8 +1,12 @@
-[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Reference](./REFERENCE/README.md) | **CLI Reference (generated)** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [How-to guides](./HOW_TO/README.md) | [Command semantics](./REFERENCE/command-line.md) | **Generated option inventory** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
 
-# Command-Line Reference
+# Generated command-line option inventory
 
-This reference mirrors the current command help from `python -m gbdraw.cli` and lists the available options and defaults.
+This generated inventory mirrors the current command help from
+`python -m gbdraw.cli` and lists every available option and default. For
+curated command behavior, input boundaries, and error semantics, use the
+[command-line reference](./REFERENCE/command-line.md); that page is the
+canonical owner of current CLI semantics.
 
 Every diagram run writes a base `.svg` and any additional requested formats.
 Both commands validate that complete target set before rendering and refuse to

@@ -88,6 +88,7 @@ def capture_gui_losatp_collinear(
         screenshot_names={
             "settings": "collinear-settings.png",
             "result": "collinear-result.png",
+            "detail": "collinear-detail.png",
             "popup": "block-popup.png",
         },
     )

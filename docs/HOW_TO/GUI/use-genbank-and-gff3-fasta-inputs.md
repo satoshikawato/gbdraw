@@ -2,17 +2,23 @@
 
 # How to use GenBank and GFF3 + FASTA inputs
 
-Use either one annotated GenBank file or one matched GFF3 and FASTA pair for a Linear diagram. This guide runs both paths with the complete bundled Lambda record so their results can be checked against the same biological source.
+Use either one annotated GenBank file or one matched GFF3 and FASTA pair for a
+Linear diagram. Both paths use the complete Lambda record `NC_001416.1`, so
+their results can be checked against the same biological source.
 
 ## Before you start
 
-The files are bundled with gbdraw:
+Download the two sequence files from the authoritative NCBI record. The GFF3
+annotation is repository support data derived from the same complete record.
 
-- GenBank: `gbdraw/web/tutorial-data/lambda/NC_001416.gb`
-- GFF3: `gbdraw/web/tutorial-data/lambda-gff3/NC_001416.gff3`
-- FASTA: `gbdraw/web/tutorial-data/lambda-gff3/NC_001416.fna`
+| Input | Acquisition | Format | Save as |
+|---|---|---|---|
+| Annotated sequence | [NCBI `NC_001416.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1) | GenBank (full) | `NC_001416.gb` |
+| Annotation | [Support download](../../../gbdraw/web/tutorial-data/lambda-gff3/NC_001416.gff3) | GFF3 | `NC_001416.gff3` |
+| Sequence for the GFF3 path | [NCBI `NC_001416.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1) | FASTA | `NC_001416.fna` |
 
-All three represent the complete `NC_001416.1` record. The GFF3 and FASTA files are a whole-record derivative of the GenBank source; they do not crop or split the 48,502 bp sequence.
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser
+download and accession checks. All three files represent the complete `NC_001416.1` record and do not crop or split the 48,502 bp sequence.
 
 ## Use the GenBank input
 

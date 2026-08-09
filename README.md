@@ -32,13 +32,13 @@
 
 | Guide | Description |
 | --- | --- |
-| [Start with the web app](./docs/TUTORIALS/GUI/first-circular-genome-diagram.md) | Create and export a first circular genome diagram in the browser. |
-| [Full documentation](./docs/DOCS.md) | Main entry point for the published docs set. |
+| [Start here](./docs/TUTORIALS/README.md) | Learn the complete workflow from downloading the inputs to checking a first Circular or Linear figure. |
+| [Full documentation](./docs/DOCS.md) | Choose a guide by what you want to learn, do, understand, or look up. |
 | [Installation](./docs/INSTALL.md) | Hosted app, Bioconda, and local development installation. |
-| [Tutorials](./docs/TUTORIALS/README.md) | Complete first results for the web app, command line, and Python. |
-| [How-to guides](./docs/HOW_TO/README.md) | Focused procedures for inputs, layout, comparisons, tracks, styling, sessions, and export. |
-| [Explanation](./docs/EXPLANATION/README.md) | Choose a layout, interface, comparison method, or publication workflow. |
-| [Reference](./docs/REFERENCE/README.md) | Controls, options, schemas, APIs, compatibility, outputs, and fixture provenance. |
+| [Task guides](./docs/HOW_TO/README.md) | Adapt inputs, layout, comparisons, tracks, styling, sessions, and export to your own work. |
+| [Get the tutorial inputs](./docs/GETTING_TUTORIAL_DATA.md) | Download accession-pinned sequences from their databases and preserve the documented filenames. |
+| [Concepts & decisions](./docs/EXPLANATION/README.md) | Understand and choose a layout, interface, comparison method, or publication workflow. |
+| [Technical reference](./docs/REFERENCE/README.md) | Look up controls, options, schemas, APIs, compatibility, outputs, and source provenance. |
 | [Changelog](./CHANGELOG.md) | What changed, by version. |
 | [Contributing](./CONTRIBUTING.md) | Report a bug, set up a development environment, and submit a pull request. |
 | [Gallery](./docs/GALLERY.md) | Example plots and commands. |

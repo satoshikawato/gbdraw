@@ -8,14 +8,17 @@ It does not rerun LOSAT.
 
 ## Before you start
 
-Use these bundled files:
+Download both sequence records from NCBI in **GenBank (full)** format. The TSV
+is repository support data generated from those complete records.
 
-- [`NC_001416.gb`](../../../gbdraw/web/tutorial-data/lambda/NC_001416.gb),
-  complete Lambda `NC_001416.1`, 48,502 bp.
-- [`NC_042057.1.gb`](../../../gbdraw/web/tutorial-data/de3/NC_042057.1.gb),
-  complete DE3 `NC_042057.1`, 42,925 bp.
-- [`lambda-de3.tlosatx.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.tlosatx.tsv),
-  397 frozen TLOSATX outfmt 6 rows with Lambda as query and DE3 as subject.
+| Input | Acquisition | Save as | Purpose |
+|---|---|---|---|
+| Lambda `NC_001416.1` | [Authoritative NCBI record](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1) | `NC_001416.gb` | Complete 48,502 bp query record |
+| DE3 `NC_042057.1` | [Authoritative NCBI record](https://www.ncbi.nlm.nih.gov/nuccore/NC_042057.1) | `NC_042057.1.gb` | Complete 42,925 bp subject record |
+| TLOSATX evidence | [Support download](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.tlosatx.tsv) | `lambda-de3.tlosatx.tsv` | 397 outfmt 6 rows |
+
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for NCBI browser
+download and file identity checks.
 
 Every row in the TSV uses those two accessions. The source records are not
 cropped, split, or relabeled.
@@ -65,8 +68,9 @@ alignment length, E-value, and bit score from the uploaded TSV.
   again.
 - **The edge points the wrong way:** keep Lambda as sequence 1 and DE3 as
   sequence 2. The frozen table uses that direction.
-- **The subject accession is not `NC_042057.1`:** use the bundled Lambda and
-  DE3 evidence so the table endpoints match the uploaded records.
+- **The subject accession is not `NC_042057.1`:** download the exact versioned
+  Lambda and DE3 records above so the support table endpoints match the
+  uploaded records.
 
 ## Related guides
 

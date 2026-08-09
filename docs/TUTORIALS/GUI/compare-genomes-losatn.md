@@ -16,12 +16,28 @@ Compare the complete Lambda and DE3 phage genomes with browser LOSATN. You will 
 
 ## What you'll need
 
-- The gbdraw web app
-- `gbdraw/web/tutorial-data/lambda/NC_001416.gb`
-- `gbdraw/web/tutorial-data/de3/NC_042057.1.gb`
-- `gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv`
+Starting state: open a fresh gbdraw web app page with no session loaded and no
+files selected.
 
-The two GenBank files are the browser inputs. The bundled TSV is the frozen reference output your own run should match; you will produce it yourself in Step 4 rather than uploading it.
+Use the filenames below when you download or save each file. See [Get the
+tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser download steps and
+the meaning of each file type.
+
+| File | File type | Purpose |
+| --- | --- | --- |
+| [`NC_001416.gb` — NCBI `NC_001416.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1) | Authoritative download | Complete Lambda GenBank record; save as `NC_001416.gb` |
+| [`NC_042057.1.gb` — NCBI `NC_042057.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_042057.1) | Authoritative download | Complete DE3 GenBank record; save as `NC_042057.1.gb` |
+| [`lambda-de3.losatn.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv) | Reference result | Frozen six-row result used only to check the new browser run |
+| `lambda-de3.losatn.tsv` | Generated | Raw LOSATN evidence saved in Step 4 |
+| `lambda-de3-losatn.svg` | Generated | Finished static diagram saved in Step 4 |
+
+The two authoritative GenBank files are the browser inputs. The repository TSV
+is a frozen reference output your own run should match; you will produce it
+yourself in Step 4 rather than uploading it.
+
+If you download the reference result, keep it in a separate comparison folder:
+the reference result and your generated TSV intentionally have the same exact
+filename, `lambda-de3.losatn.tsv`.
 
 ## Step 1: Load both complete genomes
 

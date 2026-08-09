@@ -9,12 +9,13 @@ embedded resources, and confirm that a wrong-mode field is rejected.
 
 - Install gbdraw in a Python 3.10 or newer environment.
 - Start in an empty working directory.
-- Copy [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
-  into that directory. Its SHA-256 is
-  `7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f`.
+- Download the complete GenBank record for [NCBI accession
+  NC_012920.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1) and save it in
+  that directory as `HmmtDNA.gbk`.
 
-The [fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json) is the
-checksum and biological-metadata source.
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for NCBI browser,
+`curl`, and PowerShell download steps. Confirm that the downloaded record ID is
+`NC_012920.1` before continuing.
 
 ## Build, render, save, and replay the request
 

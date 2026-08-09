@@ -10,15 +10,28 @@ and one shared alignment target.
 
 - Use a Linux x86_64 gbdraw installation containing bundled LOSAT 0.1.0.
 - Start in an empty working directory.
-- Copy all five GenBank files and both color tables from the
-  [`aminoglycoside-bgc-five` fixture](../../../gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708.gbk).
+- Download the five versioned MIBiG GenBank records, preserving these local
+  names:
+  - [`BGC0000708.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk);
+  - [`BGC0000709.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000709.5/BGC0000709.gbk);
+  - [`BGC0000711.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000711.5/BGC0000711.gbk);
+  - [`BGC0000712.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000712.5/BGC0000712.gbk);
+  - [`BGC0000713.gbk`](https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk).
+- Copy the repository support tables
+  [`BGC0000708-BGC0000713_default_colors.tsv`](../../../gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708-BGC0000713_default_colors.tsv)
+  and
+  [`BGC0000708-BGC0000713_specific_colors.tsv`](../../../gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708-BGC0000713_specific_colors.tsv)
+  into the same directory.
 - Copy [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
   into the same directory.
 
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and record-identity procedure.
+
 The five inputs are complete `BGC0000708`, `BGC0000709`, `BGC0000711`,
 `BGC0000712`, and `BGC0000713` records, not fragments made from one source.
-The [fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json) records
-their fixed order, lengths, 155 displayed CDS features, and checksums.
+Keep them in the order shown above; together they contain 155 displayed CDS
+features.
 
 ## Build and align the Similarity groups
 

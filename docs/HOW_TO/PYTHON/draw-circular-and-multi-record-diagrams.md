@@ -9,25 +9,28 @@ whole mitochondrial genomes. The saved files match the SVG bytes returned in mem
 
 - Install gbdraw in a Python 3.10 or newer environment.
 - Start in an empty working directory.
-- Copy these public fixtures into that directory:
-  - [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk),
-    SHA-256 `7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f`;
-  - [`NC_002333.2.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_002333.2.gb),
-    SHA-256 `94ab35da6f81abc2595fcd425c23585ed78d9396b5143918d9d1025d8a4d2140`;
-  - [`NC_024511.2.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_024511.2.gb),
-    SHA-256 `79fa36199682961919c4a11f3a8fc50c9e598e68b867eb25e847bce1aa1c4229`;
-  - [`NC_001328.1.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_001328.1.gb),
-    SHA-256 `8de5f7cf3686f493ee5b8068dba39b31c5d02e70d997063f65ed19d0fa859a59`;
+- Download these complete GenBank records from NCBI and save them with the
+  exact local filenames shown:
+  - `HmmtDNA.gbk` from [NCBI accession
+    NC_012920.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1);
+  - `NC_002333.2.gb` from [NCBI accession
+    NC_002333.2](https://www.ncbi.nlm.nih.gov/nuccore/NC_002333.2);
+  - `NC_024511.2.gb` from [NCBI accession
+    NC_024511.2](https://www.ncbi.nlm.nih.gov/nuccore/NC_024511.2);
+  - `NC_001328.1.gb` from [NCBI accession
+    NC_001328.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_001328.1).
+- Download the supplied label rule into the same directory:
   - [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv),
     SHA-256 `1d3c787c5768b52191cc7e8a325cd00fdc4b1e9b495d37e580c3a69dec21b87a`.
 
-The [fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json) is the
-checksum and provenance source. The grid uses four complete, naturally circular
-metazoan mitochondrial genomes: human, zebrafish, fruit fly, and nematode.
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for NCBI browser,
+`curl`, and PowerShell download steps. The grid uses four complete, naturally
+circular metazoan mitochondrial genomes: human, zebrafish, fruit fly, and
+nematode.
 
 ## Draw and save both diagrams
 
-Save this program as `draw_circular_records.py` beside the fixture files:
+Save this program as `draw_circular_records.py` beside the five input files:
 
 <!-- executable:H-PY-01:start -->
 ```python
@@ -156,7 +159,7 @@ equality across `to_svg()`, `to_bytes()`, and `save()`.
 - `Output file already exists`: use an empty directory or remove the old output
   after confirming that it is no longer needed. `Diagram.save()` does not
   overwrite by default.
-- The grid contains fewer than four records: confirm that all four fixture files
+- The grid contains fewer than four records: confirm that all four GenBank files
   are present and that their filenames are unchanged.
 
 See the [Python API reference](../../REFERENCE/python-api.md) for the drawing and

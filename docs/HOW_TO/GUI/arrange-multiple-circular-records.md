@@ -9,22 +9,19 @@ turn a linear region into a circle.
 
 ## Before you start
 
-The browser journey uses these records in this order:
+Download the four records from NCBI in **GenBank (full)** format. Keep this
+order and use the exact save names below.
 
-| Row | Organism | RefSeq | Length | Source topology |
-|---:|---|---|---:|---|
-| 1 | *Homo sapiens* | `NC_012920.1` | 16,569 bp | Circular |
-| 1 | *Danio rerio* | `NC_002333.2` | 16,596 bp | Circular |
-| 2 | *Drosophila melanogaster* | `NC_024511.2` | 19,524 bp | Circular |
-| 2 | *Caenorhabditis elegans* | `NC_001328.1` | 13,794 bp | Circular |
+| Row | Organism | Authoritative record | Save as | Length | Source topology |
+|---:|---|---|---|---:|---|
+| 1 | *Homo sapiens* | [NCBI `NC_012920.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1) | `HmmtDNA.gbk` | 16,569 bp | Circular |
+| 1 | *Danio rerio* | [NCBI `NC_002333.2`](https://www.ncbi.nlm.nih.gov/nuccore/NC_002333.2) | `NC_002333.2.gb` | 16,596 bp | Circular |
+| 2 | *Drosophila melanogaster* | [NCBI `NC_024511.2`](https://www.ncbi.nlm.nih.gov/nuccore/NC_024511.2) | `NC_024511.2.gb` | 19,524 bp | Circular |
+| 2 | *Caenorhabditis elegans* | [NCBI `NC_001328.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001328.1) | `NC_001328.1.gb` | 13,794 bp | Circular |
 
-The frozen files are
-[`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk),
-[`NC_002333.2.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_002333.2.gb),
-[`NC_024511.2.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_024511.2.gb),
-and
-[`NC_001328.1.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_001328.1.gb).
-Each file contains one complete record annotated as circular.
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser
+download and accession checks. Each file must contain one complete record
+annotated as circular.
 
 The Circular uploader accepts one GenBank container, so combine the four
 downloaded files into a single file named `complete_metazoan_mitochondria.gb`
@@ -73,6 +70,10 @@ Open **Title & Legend**, set **Plot Title** to
 name in its own circle.
 
 Open **Labels** and use these values:
+
+Download
+[`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
+as the repository support file named `cds_gene_qualifier_priority.tsv`.
 
 | Control | Value |
 |---|---|

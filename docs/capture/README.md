@@ -2,9 +2,25 @@
 
 This directory contains the implemented executable browser journeys listed in `config.py`. `run_all.py` is the cross-surface documentation orchestrator: it runs those GUI journeys and directly calls the canonical CLI and Python recipe APIs in `docs/recipes/`. It does not reimplement recipes or launch nested runner subprocesses.
 
-For GUI scenarios, the runner starts the packaged web app on `127.0.0.1`, uploads the bundled inputs through visible controls, writes every manifest-owned screenshot, and validates the downloaded diagrams and evidence files.
+For GUI scenarios, the runner starts the packaged web app on `127.0.0.1`,
+uploads accession- and checksum-verified frozen test copies through visible
+controls, writes every manifest-owned screenshot, and validates the downloaded
+diagrams and evidence files. Those frozen copies are an offline regression
+mechanism; public documentation directs readers to the authoritative sequence
+databases.
 
-Each scenario uses a fresh browser context and blocks every request that does not target its temporary loopback server. The flows do not seed browser storage, change biological record boundaries, or contact a remote service. T-GUI-08 and H-GUI-08 deliberately load the frozen Hepatoplasmataceae All-vs-all project so they can verify that Collinear reduction reuses its complete 25-entry LOSATP cache. H-GUI-14 reloads only the current-format session downloaded earlier in the same raw-input journey, and it does so in a fresh context. Multi-record Circular examples contain unchanged complete natural records. Lambda comparisons use complete Lambda and DE3 genomes. Protein Similarity-group examples use five complete linear BGC records; the Collinear examples use five complete Hepatoplasmataceae genomes. The download buttons are clicked through the UI; each file is checked for its name, structure, biological endpoints, and static-SVG safety where applicable.
+Each scenario uses a fresh browser context and blocks every request that does
+not target its temporary loopback server. The flows do not seed browser
+storage, change biological record boundaries, or contact a remote service.
+T-GUI-08 and H-GUI-08 upload all five Hepatoplasmataceae records and execute
+their LOSATP Collinear searches from an empty cache. H-GUI-14 reloads only the
+current-format session downloaded earlier in the same raw-input journey, and
+it does so in a fresh context. Multi-record Circular examples contain
+unchanged complete natural records. Lambda comparisons use complete Lambda and
+DE3 genomes. Protein Similarity-group examples use five complete linear BGC
+records; the Collinear examples use five complete Hepatoplasmataceae genomes.
+The download buttons are clicked through the UI; each file is checked for its
+name, structure, biological endpoints, and static-SVG safety where applicable.
 
 ## Environment
 

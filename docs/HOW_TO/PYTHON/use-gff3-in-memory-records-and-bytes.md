@@ -9,21 +9,24 @@ exact SVG bytes returned by each `Diagram`.
 
 - Install gbdraw and Biopython in a Python 3.10 or newer environment.
 - Start in an empty working directory.
-- Copy these public fixtures into that directory:
+- Download the supplied GFF3 support file into that directory:
   - [`NC_001416.gff3`](../../../gbdraw/web/tutorial-data/lambda-gff3/NC_001416.gff3),
-    SHA-256 `d53e05de87933104cd26111bca42006cce9b5e903fb5b187740f963b3a2098cb`;
-  - [`NC_001416.fna`](../../../gbdraw/web/tutorial-data/lambda-gff3/NC_001416.fna),
-    SHA-256 `80897a7ee6b8aaffbab5442e0daad292592ac74701dbdf35af4b400ae0770ef3`;
-  - [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk),
-    SHA-256 `7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f`.
+    SHA-256 `d53e05de87933104cd26111bca42006cce9b5e903fb5b187740f963b3a2098cb`.
+- Download the complete FASTA record for [NCBI accession
+  NC_001416.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1) and save it as
+  `NC_001416.fna`.
+- Download the complete GenBank record for [NCBI accession
+  NC_012920.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1) and save it as
+  `HmmtDNA.gbk`.
 
-The [fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json) records
-their checksums and derivation. The Lambda pair contains one complete 48,502 bp
-record. It is not cropped or divided into artificial contigs.
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for NCBI browser,
+`curl`, and PowerShell download steps, including the FASTA format choice. The
+Lambda GFF3 and accession-matched FASTA describe one complete 48,502 bp record.
+It is not cropped or divided into artificial contigs.
 
 ## Load paths and an in-memory file object
 
-Save this program as `draw_from_python_sources.py` beside the fixture files:
+Save this program as `draw_from_python_sources.py` beside the three input files:
 
 <!-- executable:H-PY-04:start -->
 ```python
@@ -108,7 +111,8 @@ drawing function.
 - `GFF3 and FASTA inputs must contain the same number of paths`: supply one FASTA
   path for each GFF3 path.
 - `No matching FASTA record found for GFF record NC_001416.1`: keep the same
-  sequence ID in the GFF3 and FASTA files. The packaged pair already agrees.
+  sequence ID in the GFF3 and FASTA files. The linked GFF3 and the
+  accession-matched NCBI FASTA agree.
 - `StringIO` parsing fails: read GenBank text as UTF-8 and pass `"genbank"` to
   `SeqIO.read()`.
 

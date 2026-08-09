@@ -16,8 +16,21 @@ browser context.
 
 ## What you'll need
 
-- The gbdraw web app
-- `gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk`
+Starting state: open a fresh gbdraw web app page with no session loaded and no
+files selected. Step 6 starts from a second fresh page and then changes it to a
+loaded-session state.
+
+Use the filenames below when you download or save each file. See [Get the
+tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser download steps and
+the meaning of each file type.
+
+| File | File type | Purpose |
+| --- | --- | --- |
+| [`HmmtDNA.gbk` — NCBI `NC_012920.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1) | Authoritative download | Complete human mitochondrial GenBank record; save as `HmmtDNA.gbk` |
+| [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv) | Support download | CDS `gene` label priority |
+| `interactive_human_mitochondrion.interactive.svg` | Generated | Offline Interactive SVG saved in Step 3 |
+| `interactive_handoff.gbdraw-session.json.gz` | Generated | Project session saved in Step 5 and loaded in Step 6 |
+| `restored_interactive_figure.svg` | Generated | Static SVG regenerated from the loaded session in Step 6 |
 
 ## Step 1: Load the record
 
@@ -29,8 +42,9 @@ Prefix** to `interactive_human_mitochondrion`.
 ## Step 2: Generate the finished map
 
 Set Species to `<i>Homo sapiens</i>`, use the Middle track preset, separate the
-strands, keep GC content and GC skew, place labels outside, and put the legend
-on the right. Select **Generate Diagram**.
+strands, keep GC content and GC skew, and place labels outside. Under
+**Labels**, load `cds_gene_qualifier_priority.tsv` as **Priority File (TSV)**.
+Put the legend on the right, then select **Generate Diagram**.
 
 ![Finished human mitochondrial map before interactive export](../../images/t-gui-09/02-first-diagram.png)
 
@@ -71,8 +85,9 @@ compatible render request needed to continue editing.
 
 ## Step 6: Reproduce the figure in a fresh context
 
-Open a fresh gbdraw page, select **Load Session**, and choose the saved session.
-After the result is restored, change **Output Prefix** to
+Open a fresh gbdraw page with no files selected, select **Load Session**, and
+choose `interactive_handoff.gbdraw-session.json.gz`. The app is now in the
+loaded-session state. After the result is restored, change **Output Prefix** to
 `restored_interactive_figure`, select **Generate Diagram**, and export **SVG**.
 
 The saved file is `restored_interactive_figure.svg`. Its record, feature IDs,

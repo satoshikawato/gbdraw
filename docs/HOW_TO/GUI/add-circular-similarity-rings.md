@@ -10,27 +10,20 @@ circle.
 
 ## Before you start
 
-This guide uses these four RefSeq records:
+Download the displayed record from NCBI as **GenBank (full)**. Download each
+comparison record as **FASTA** because **Run LOSAT** accepts FASTA files for
+the three rings.
 
-| Role | Organism | RefSeq | Length | Topology |
-|---|---|---|---:|---|
-| Displayed reference | *Homo sapiens* | `NC_012920.1` | 16,569 bp | Circular |
-| Ring 1 | *Danio rerio* | `NC_002333.2` | 16,596 bp | Circular |
-| Ring 2 | *Drosophila melanogaster* | `NC_024511.2` | 19,524 bp | Circular |
-| Ring 3 | *Caenorhabditis elegans* | `NC_001328.1` | 13,794 bp | Circular |
+| Role | Organism | Authoritative record | Format | Save as | Length | Topology |
+|---|---|---|---|---|---:|---|
+| Displayed reference | *Homo sapiens* | [NCBI `NC_012920.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1) | GenBank (full) | `HmmtDNA.gbk` | 16,569 bp | Circular |
+| Ring 1 | *Danio rerio* | [NCBI `NC_002333.2`](https://www.ncbi.nlm.nih.gov/nuccore/NC_002333.2) | FASTA | `NC_002333.2.fna` | 16,596 bp | Circular |
+| Ring 2 | *Drosophila melanogaster* | [NCBI `NC_024511.2`](https://www.ncbi.nlm.nih.gov/nuccore/NC_024511.2) | FASTA | `NC_024511.2.fna` | 19,524 bp | Circular |
+| Ring 3 | *Caenorhabditis elegans* | [NCBI `NC_001328.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001328.1) | FASTA | `NC_001328.1.fna` | 13,794 bp | Circular |
 
-The packaged records are
-[`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk),
-[`NC_002333.2.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_002333.2.gb),
-[`NC_024511.2.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_024511.2.gb),
-and
-[`NC_001328.1.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_001328.1.gb).
-
-**Run LOSAT** accepts comparison FASTA files. The three bundled ring FASTA
-files are the last three GenBank records above, exported as one whole-record
-FASTA entry each with the same accession, length, and sequence. When
-preparing your own files, export the complete record; do not trim it or
-split it into mock contigs.
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser
+download and accession checks. Each comparison FASTA must contain the complete
+record. Do not trim it or split it into mock contigs.
 
 ## Load the complete circular reference
 
@@ -52,11 +45,11 @@ Open **Pairwise Comparisons**, select **Run LOSAT**, and choose **TLOSATX**.
 Set the reference gencode to `2`, then add the three complete comparison FASTA
 files in this order:
 
-| Ring | Label | Subject gencode |
-|---:|---|---:|
-| 1 | `Danio rerio (NC_002333.2)` | `2` |
-| 2 | `Drosophila melanogaster (NC_024511.2)` | `5` |
-| 3 | `Caenorhabditis elegans (NC_001328.1)` | `5` |
+| Ring | File | Label | Subject gencode |
+|---:|---|---|---:|
+| 1 | `NC_002333.2.fna` | `Danio rerio (NC_002333.2)` | `2` |
+| 2 | `NC_024511.2.fna` | `Drosophila melanogaster (NC_024511.2)` | `5` |
+| 3 | `NC_001328.1.fna` | `Caenorhabditis elegans (NC_001328.1)` | `5` |
 
 Keep the three automatically assigned series colors. They are distinct and
 remain tied to the documented ring order.
@@ -90,9 +83,10 @@ within the displayed human reference (1–16,569).
 
 Select one colored HSP to open **Homology ring match**. The popup shows both
 record IDs, aligned coordinates, orientation, identity, and alignment length.
-Use the combined **FASTA** button to download both nucleotide spans as
-`comparison_spans.fasta`; it should contain two non-empty records, one for
-each side of the match.
+Use the combined **FASTA** button. The browser downloads
+`<match-id>_both.fna`, where `<match-id>` is the match ID in the popup. Rename
+the file to `comparison_spans.fasta`; it should contain two non-empty records,
+one for each side of the match.
 
 ![Similarity-ring HSP details popup](../../images/h-gui-06/hsp-popup.png)
 

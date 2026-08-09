@@ -11,15 +11,23 @@ record being shown.
 
 - Install gbdraw so that `gbdraw -h` succeeds.
 - Start in an empty working directory.
-- Copy the packaged [`NC_001416.gb`](../../../gbdraw/web/tutorial-data/lambda/NC_001416.gb),
-  [`NC_001416.gff3`](../../../gbdraw/web/tutorial-data/lambda-gff3/NC_001416.gff3),
-  and [`NC_001416.fna`](../../../gbdraw/web/tutorial-data/lambda-gff3/NC_001416.fna)
-  files into it.
+- Download accession `NC_001416.1` from NCBI EFetch twice:
+  - save the
+    [complete GenBank flat file](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001416.1&rettype=gbwithparts&retmode=text)
+    as `NC_001416.gb`;
+  - save the
+    [complete FASTA sequence](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001416.1&rettype=fasta&retmode=text)
+    as `NC_001416.fna`.
+- Copy the repository support annotation
+  [`NC_001416.gff3`](../../../gbdraw/web/tutorial-data/lambda-gff3/NC_001416.gff3)
+  into the same directory.
+
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and accession-check procedure.
 
 All three files represent the whole `NC_001416.1` sequence. The GFF3 and FASTA
-files were derived reproducibly from the GenBank record without cropping or
-splitting it. Their checksums and biological counts are recorded in the
-[tutorial fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json).
+files were derived from the same versioned record without cropping or
+splitting it.
 
 ## Draw the GenBank or DDBJ flat file
 

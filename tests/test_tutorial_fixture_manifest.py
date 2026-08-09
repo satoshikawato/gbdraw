@@ -5,7 +5,7 @@ import json
 import subprocess
 import sys
 from collections import Counter
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -279,6 +279,55 @@ def test_hepatoplasmataceae_fixture_supports_gallery_collinear_tutorial() -> Non
         "parallel_runs": "auto",
         "threads_per_run": "auto",
     }
+
+
+def test_hepatoplasmataceae_capture_mirrors_have_byte_verification() -> None:
+    manifest = _load_manifest()
+    fixture = manifest["fixtures"]["hepatoplasmataceae-five"]
+    files = manifest["files"]
+    expected_requests = {
+        "hepatoplasmataceae-ap027078-genbank": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027078.1&sat=3&satkey=69902295",
+        "hepatoplasmataceae-ap027131-genbank": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027131.1&sat=3&satkey=69902296",
+        "ap027133-genbank": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027133.1&sat=3&satkey=69902298",
+        "hepatoplasmataceae-ap027132-genbank": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027132.1&sat=3&satkey=69902297",
+        "hepatoplasmataceae-nz-cp006932-genbank": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=NZ_CP006932.1&sat=60&satkey=39275474",
+    }
+    file_ids = [*fixture["fileIds"], *fixture["fileReferences"]]
+
+    assert set(file_ids) == set(expected_requests)
+    for file_id in file_ids:
+        metadata = files[file_id]
+        provenance = metadata["provenance"]
+        verification = provenance["mirrorVerification"]
+        path = FIXTURE_ROOT / metadata["relativePath"]
+        mirror_bytes = path.read_bytes()
+
+        assert set(verification) == {
+            "authoritativeRequestUrl",
+            "accession",
+            "format",
+            "verifiedOn",
+            "sourceSizeBytes",
+            "sourceSha256",
+            "mirrorSizeBytes",
+            "mirrorSha256",
+            "comparisonResult",
+        }
+        assert verification["authoritativeRequestUrl"] == expected_requests[file_id]
+        assert verification["accession"] == metadata["records"][0]["id"]
+        assert verification["format"] == "GenBank (full), text"
+        verified_at = datetime.fromisoformat(
+            verification["verifiedOn"].replace("Z", "+00:00")
+        )
+        assert verified_at.tzinfo == timezone.utc
+        assert verified_at <= datetime.now(timezone.utc)
+        assert verification["sourceSizeBytes"] == metadata["sizeBytes"]
+        assert verification["sourceSha256"] == metadata["sha256"]
+        assert verification["mirrorSizeBytes"] == len(mirror_bytes)
+        assert verification["mirrorSha256"] == _sha256(mirror_bytes)
+        assert verification["comparisonResult"] == "byte-identical"
+        assert provenance["retrievedOn"] is None
+        assert provenance["retrievalDateStatus"] == "unknown-legacy"
 
 
 def test_bgc_pair_is_not_assigned_to_nucleotide_comparison_scenarios() -> None:

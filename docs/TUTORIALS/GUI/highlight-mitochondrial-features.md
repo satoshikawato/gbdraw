@@ -14,9 +14,24 @@ GenBank file remains unchanged.
 
 ## What you'll need
 
-- [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
-- [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
-- Four small TSV files created from the blocks below
+Starting state: open a fresh gbdraw web app page with no session loaded and no
+files selected.
+
+Use the filenames below when you download, create, or save each file. See [Get
+the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser download steps
+and the meaning of each file type.
+
+| File | File type | Purpose |
+| --- | --- | --- |
+| [`HmmtDNA.gbk` — NCBI `NC_012920.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1) | Authoritative download | Complete human mitochondrial GenBank record; save as `HmmtDNA.gbk` |
+| [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv) | Support download | CDS label-priority rule |
+| `presentation_colors.tsv` | Create | Functional feature-color rules |
+| `presentation_labels.tsv` | Create | Feature-label whitelist |
+| `presentation_label_overrides.tsv` | Create | Two replacement rRNA labels applied in the editor |
+| `mitochondrial_regions.tsv` | Create | Origin-spanning D-loop annotation |
+| `mitochondrial_features_highlighted.svg` | Generated | Finished static diagram saved in Step 4 |
+
+Create the four user-authored TSV files from the exact blocks below.
 
 Save `presentation_colors.tsv`:
 

@@ -11,10 +11,16 @@ overlaps, and fixes stroke geometry.
 
 - Install gbdraw so that `gbdraw circular -h` succeeds.
 - Start in an empty working directory and create a `tables` directory.
-- Copy [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk),
-  [`HmmtDNA_feature_visibility.tsv`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA_feature_visibility.tsv),
+- Download the complete `NC_012920.1` GenBank record from
+  [NCBI EFetch](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text)
+  and save it as `HmmtDNA.gbk`.
+- Copy the repository support tables
+  [`HmmtDNA_feature_visibility.tsv`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA_feature_visibility.tsv)
   and [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
-  into it.
+  into the working directory.
+
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and accession-check procedure.
 
 The source is the complete circular 16,569 bp `NC_012920.1` record.
 

@@ -5,7 +5,7 @@
     "status": "approved",
     "date": "2026-08-04",
     "basis": "The user requested completion of every remaining cross-surface Tutorial migration",
-    "notes": "This parity plan extends the approved tutorial-coverage expansion without changing the fixture budgets or the completed documentation-renovation architecture."
+    "notes": "This parity plan extends the approved tutorial-coverage expansion without changing the fixture budgets or the completed documentation-renovation architecture. Its 33/84 census is historical; after removal of the redundant Majanivirus project, this manifest is authoritative at 10 projects, 30 Tutorial variants, and 81 chapters."
   },
   "package_budgets": {
     "core_uncompressed_bytes": 1048576,
@@ -330,13 +330,14 @@
       "canonical_for": [],
       "fixtures": ["hepatoplasmataceae-five"],
       "settings": {"mode": "linear", "program": "losatp", "protein_mode": "collinear", "minimum_anchors": 1, "comparison_scope": "adjacent", "scheduling": "auto", "total_threads": "safe", "parallel_runs": "auto", "threads_per_run": "auto"},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_collinear.py", "tier": "extended", "expected_outputs": ["losatp_collinear.svg", "collinear_members.fasta"], "assertions": ["first_result_step=2", "starting_mode=collinear", "starting_adjacent_cache_entries=13", "visible_pair_count=4", "raw_search_reused=true", "block_count_positive=true", "orientations_verified=true", "identity_color_mode=orientation_identity", "popup.has_block_coordinates=true", "fasta.envelope_sequences=true"]},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/tutorials/gui_losatp_collinear.py", "tier": "extended", "expected_outputs": ["losatp_collinear.svg", "collinear_members.fasta"], "assertions": ["first_result_step=2", "starting_mode=no_comparison", "source_record_upload_count=5", "source_record_revisions=ncbi-pinned-all-five", "losatp_executed_from_uploaded_sequences=true", "initial_cache_entries=0", "input_frame.boundary_4_to_5_visible=true", "baseline_definition_zoom=80%", "baseline_definition_records_visible=5", "losat_total_pairs=13", "cache_hits=0", "cache_misses=13", "worker_jobs=13", "visible_pair_count=4", "svg.collinear_matches=500", "orientations_verified=true", "identity_color_mode=orientation_identity", "detail_match_inside_preview=true", "popup.selected_match_class=true", "popup.scrolled_to_details=true", "popup.has_block_coordinates=true", "fasta.envelope_sequences=true"]},
       "screenshots": [
-        {"path": "docs/images/t-gui-08/01-input-ready.png", "reason": "Confirm the five records restored from the Gallery Collinear project.", "alt": "Five annotated Hepatoplasmataceae genomes restored in LOSATP Collinear mode"},
-        {"path": "docs/images/t-gui-08/02-first-diagram.png", "reason": "Show the restored Collinear result before adjusting presentation settings.", "alt": "Restored Hepatoplasmataceae LOSATP Collinear diagram"},
+        {"path": "docs/images/t-gui-08/01-input-ready.png", "reason": "Confirm the fourth-to-fifth boundary at the end of the five-record upload stack.", "alt": "Final two Hepatoplasmataceae inputs showing the fourth-to-fifth display boundary"},
+        {"path": "docs/images/t-gui-08/02-first-diagram.png", "reason": "Show all five accession-and-length definitions in a readable 80% left-side baseline view.", "alt": "Five Hepatoplasmataceae record IDs and lengths at 80% before LOSATP"},
         {"path": "docs/images/t-gui-08/03-collinear-settings.png", "reason": "Record the adjacent evidence, anchor, and presentation settings.", "alt": "LOSATP Collinear settings using adjacent Hepatoplasmataceae record pairs"},
-        {"path": "docs/images/t-gui-08/04-collinear-result.png", "reason": "Verify conserved-order blocks and orientation colors.", "alt": "Hepatoplasmataceae diagram with LOSATP Collinear blocks"},
-        {"path": "docs/images/t-gui-08/05-block-popup.png", "reason": "Show block coordinates and envelope export.", "alt": "LOSATP Collinear block popup with anchors and envelope FASTA export"}
+        {"path": "docs/images/t-gui-08/04-collinear-result.png", "reason": "Verify 500 freshly computed match elements and orientation colors.", "alt": "Fresh LOSATP Collinear result across five Hepatoplasmataceae records"},
+        {"path": "docs/images/t-gui-08/04-collinear-detail.png", "reason": "Show Pairwise match 1 wholly inside Result Preview at 80% zoom.", "alt": "Pairwise match 1 visible inside the 80% Collinear Result Preview"},
+        {"path": "docs/images/t-gui-08/05-block-popup.png", "reason": "Show the selected ribbon beside the nonoverlapping popup and its Both spans FASTA action.", "alt": "Selected Collinear ribbon beside a nonoverlapping query and subject span popup"}
       ],
       "sources": [],
       "destination": "docs/TUTORIALS/GUI/compare-proteins-losatp-collinear.md",
@@ -891,12 +892,13 @@
       "capabilities": ["comparison.losatp-collinear", "output.fasta-data"],
       "canonical_for": ["comparison.losatp-collinear", "output.fasta-data"],
       "fixtures": ["hepatoplasmataceae-five"],
-      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "collinear", "scheduling": "threaded", "threads": 32, "evidence_scope": "all", "track_preset": "middle", "separate_strands": true},
-      "execution": {"kind": "playwright", "path": "docs/capture/flows/how_to/comparisons.py", "tier": "extended", "expected_outputs": ["hepatoplasmataceae_collinear.svg", "collinear_members.fasta"], "assertions": ["whole_record_count=5", "displayed_features=2994", "all_source_topologies=circular", "all_records_are_complete=true", "evidence_scope=all", "cache_hits=25", "cache_misses=0", "worker_jobs=0", "adjacent_display_pairs=true", "orientation_match=true", "color_mode=orientation_identity", "span_fasta_records=2"]},
+      "settings": {"mode": "linear", "program": "losatp", "protein_mode": "collinear", "scheduling": "threaded", "total_threads": 32, "parallel_runs": 4, "threads_per_run": 8, "evidence_scope": "all", "track_preset": "middle", "separate_strands": true},
+      "execution": {"kind": "playwright", "path": "docs/capture/flows/how_to/comparisons.py", "tier": "extended", "expected_outputs": ["hepatoplasmataceae_collinear.svg", "collinear_members.fasta"], "assertions": ["whole_record_count=5", "displayed_features=2994", "all_source_topologies=circular", "all_records_are_complete=true", "source_record_upload_count=5", "source_record_revisions=ncbi-pinned-all-five", "initial_cache_entries=0", "evidence_scope=all", "total_threads=32", "parallel_runs=4", "threads_per_run=8", "runtime_plan=4x8", "losat_total_pairs=25", "cache_hits=0", "cache_misses=25", "worker_jobs=25", "svg.collinear_matches=500", "adjacent_display_pairs=true", "orientation_match=true", "color_mode=orientation_identity", "detail_match_inside_preview=true", "popup.selected_match_class=true", "popup.scrolled_to_details=true", "span_fasta_records=2"]},
       "screenshots": [
         {"path": "docs/images/h-gui-08/collinear-settings.png", "reason": "Record all-record evidence scope and orientation color mode.", "alt": "LOSATP Collinear controls using all Hepatoplasmataceae record pairs"},
         {"path": "docs/images/h-gui-08/collinear-result.png", "reason": "Verify ordered blocks across the five complete genomes.", "alt": "Five complete Hepatoplasmataceae genomes connected by collinear protein-match blocks"},
-        {"path": "docs/images/h-gui-08/block-popup.png", "reason": "Show anchors and envelope sequences for one block.", "alt": "Hepatoplasmataceae Collinear block details popup"}
+        {"path": "docs/images/h-gui-08/collinear-detail.png", "reason": "Show Pairwise match 1 wholly inside Result Preview at 80% zoom.", "alt": "Pairwise match 1 visible inside the Hepatoplasmataceae Collinear Result Preview"},
+        {"path": "docs/images/h-gui-08/block-popup.png", "reason": "Show the selected ribbon beside the nonoverlapping popup and its Both spans FASTA action.", "alt": "Selected Hepatoplasmataceae Collinear ribbon beside a nonoverlapping span popup"}
       ],
       "sources": [],
       "destination": "docs/HOW_TO/GUI/draw-collinear-protein-blocks.md",

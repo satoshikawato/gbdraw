@@ -9,14 +9,17 @@ not cropped or split.
 
 ## Before you start
 
-Use these bundled files:
+Download the sequence from NCBI and the two gbdraw-specific rule tables from
+the repository:
 
-- [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
-  — one complete circular *Homo sapiens* mitochondrial record.
-- [`modified_default_colors.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/modified_default_colors.tsv)
-  — default colors for CDS, rRNA, tRNA, and other feature types.
-- [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
-  — selects the `gene` qualifier for CDS label text.
+| Input | Acquisition | Save as | Purpose |
+|---|---|---|---|
+| Human mitochondrion `NC_012920.1` | [Authoritative NCBI record](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1), **GenBank (full)** | `HmmtDNA.gbk` | Complete circular sequence and annotation |
+| Default colors | [Support download](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/modified_default_colors.tsv) | `modified_default_colors.tsv` | Colors for CDS, rRNA, tRNA, and other feature types |
+| CDS label priority | [Support download](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv) | `cds_gene_qualifier_priority.tsv` | Selects the `gene` qualifier for CDS label text |
+
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser
+download and file identity checks.
 
 The qualifier-priority file is deliberately separate from the color table. It
 contains `CDS` and `gene`, so labels such as `COX1` and `ATP6` are used instead

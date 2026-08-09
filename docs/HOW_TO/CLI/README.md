@@ -2,7 +2,14 @@
 
 # Command-line how-to guides
 
-These guides run their documented commands from a clean temporary directory. Use the [Command-line reference](../../REFERENCE/command-line.md) for the complete option inventory.
+These guides run their documented commands from a clean temporary directory.
+Obtain every sequence record from its accession-pinned NCBI or MIBiG source;
+the repository links in these guides are only for support files such as tables
+and annotations. See
+[Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the download and
+identity-check procedure. Use the
+[Command-line reference](../../REFERENCE/command-line.md) for the complete
+option inventory.
 
 - [How to use GenBank, DDBJ, GFF3, and FASTA inputs](use-genbank-ddbj-gff3-and-fasta.md)
 - [How to use record, comparison, conservation, annotation, and track tables](use-input-tables.md)

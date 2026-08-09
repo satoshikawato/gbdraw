@@ -4,6 +4,13 @@ Date: 2026-08-04
 Status: complete  
 Scope: the nine projects listed as migration backlog in `docs/scenarios/manifest.json`
 
+> **Current-census note (2026-08-09):** this file records the parity migration
+> as it stood when completed. The redundant Majanivirus table-driven project
+> was subsequently removed. The current manifest is authoritative and contains
+> 10 projects, 30 Tutorial variants, and 81 chapters overall; references below
+> to T-GUI-11, T-PY-10, 33 Tutorials, or 84 chapters are historical completion
+> evidence, not the present navigation contract.
+
 ## Objective
 
 Complete the GUI, CLI, and Python API variants for every existing Tutorial

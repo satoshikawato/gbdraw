@@ -1,4 +1,4 @@
-[Home](../../DOCS.md) | [Tutorials](../README.md) | [Python API](../../REFERENCE/python-api.md)
+[Home](../../DOCS.md) | [Tutorials](../README.md) | [Get tutorial files](../../GETTING_TUTORIAL_DATA.md) | [Python API](../../REFERENCE/python-api.md)
 
 # Highlight mitochondrial features from Python
 
@@ -13,10 +13,35 @@ the public Python API without changing the GenBank record.
 
 ## What you'll need
 
-Place `HmmtDNA.gbk` and `cds_gene_qualifier_priority.tsv` in an empty working
-directory.
+| Kind | Filename | What to do |
+| --- | --- | --- |
+| Download | `HmmtDNA.gbk` ([NCBI accession NC_012920.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1)) | Download the complete GenBank record and save it as `HmmtDNA.gbk`. |
+| Download | [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv) | Save the supplied label rule as `cds_gene_qualifier_priority.tsv`. |
+| Create | `highlight_mitochondrial_features.py` | Save the complete Python program from Step 2 with this filename. |
+| Generated | `mitochondrial_features_highlighted.svg` | The program writes this SVG. |
+| Reference result | [`mitochondrial_features_highlighted.svg`](../../images/t-py-09/mitochondrial_features_highlighted.svg) | Compare your Generated SVG with this versioned result. |
 
-## Step 1: Save and run the program
+Install gbdraw in the active Python environment before starting. The program
+creates the color, label, and D-loop tables in memory, so you do not need to
+create separate TSV files.
+
+## Step 1: Prepare the working directory
+
+Create and enter an empty directory:
+
+```bash
+mkdir gbdraw-python-mitochondrial-features
+cd gbdraw-python-mitochondrial-features
+```
+
+Acquire the sequence from its authoritative accession link and download the
+supplied label rule. Save both with the exact filenames shown. See [Get the
+tutorial files](../../GETTING_TUTORIAL_DATA.md) for browser, `curl`, and
+PowerShell instructions for authoritative sequence acquisition.
+
+## Step 2: Save and run the Python program
+
+Save the following complete program as `highlight_mitochondrial_features.py`:
 
 <!-- executable:T-PY-09:start -->
 ```python
@@ -145,9 +170,38 @@ print(f"Saved {saved_path}")
 ```
 <!-- executable:T-PY-09:end -->
 
-Open `mitochondrial_features_highlighted.svg`. It should keep all 37 features,
-use gene names for CDS labels, show the two renamed rRNA labels, retain the five
-functional legend colors and the arrow and rectangle shapes, and include one
-origin-spanning D-loop bracket.
+Before running it, your working directory should contain:
+
+```text
+gbdraw-python-mitochondrial-features/
+├── HmmtDNA.gbk
+├── cds_gene_qualifier_priority.tsv
+└── highlight_mitochondrial_features.py
+```
+
+### Run the program
+
+```bash
+python highlight_mitochondrial_features.py
+```
+
+Expected output: the program prints
+`Saved mitochondrial_features_highlighted.svg` and writes the Generated SVG in
+the current directory.
+
+## Step 3: Inspect the result
+
+Open the Generated `mitochondrial_features_highlighted.svg`. It should keep all
+37 features, use gene names for CDS labels, show the two renamed rRNA labels,
+retain the five functional legend colors and the arrow and rectangle shapes,
+and include one origin-spanning D-loop bracket.
 
 ![Highlighted human mitochondrial features from Python](../../images/t-py-09/mitochondrial_features_highlighted.svg)
+
+The image above is the Reference result. Compare its labels, colors, shapes,
+strokes, legend, and D-loop bracket with your SVG.
+
+## Next steps
+
+- [Add tracks, annotations, colors, and labels](../../HOW_TO/PYTHON/add-tracks-annotations-colors-and-labels.md)
+- [Review feature-rule and label schemas](../../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)

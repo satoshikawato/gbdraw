@@ -8,12 +8,16 @@ as submitted, while DE3 is reverse complemented across its full 42,925 bp.
 
 ## Before you start
 
-Download the bundled files:
+Download both records from NCBI. On each record page, select **Send to**,
+**File**, and **GenBank (full)**, then use the exact save name below.
 
-- [`NC_001416.gb`](../../../gbdraw/web/tutorial-data/lambda/NC_001416.gb),
-  Enterobacteria phage lambda `NC_001416.1`, 48,502 bp, complete and linear.
-- [`NC_042057.1.gb`](../../../gbdraw/web/tutorial-data/de3/NC_042057.1.gb),
-  Enterobacteria phage DE3 `NC_042057.1`, 42,925 bp, complete and linear.
+| Record | Authoritative download | Save as | Expected length |
+|---|---|---|---:|
+| Enterobacteria phage lambda | [NCBI `NC_001416.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1) | `NC_001416.gb` | 48,502 bp |
+| Enterobacteria phage DE3 | [NCBI `NC_042057.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_042057.1) | `NC_042057.1.gb` | 42,925 bp |
+
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for the complete
+browser download and accession check.
 
 Do not split either genome into mock contigs. The Start and End values below
 cover every nucleotide in each source record.

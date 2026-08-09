@@ -10,9 +10,15 @@ track order, numeric ranges, axes, ticks, colors, and legend labels.
 
 - Install gbdraw with its standard plotting dependencies.
 - Start in an empty working directory.
-- Copy [`AP027133.gb`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.gb)
-  and [`AP027133.DRR394922.depth-1kb.tsv`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.depth-1kb.tsv)
-  into it.
+- Download the complete `AP027133.1` GenBank record from
+  [NCBI EFetch](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027133.1&rettype=gbwithparts&retmode=text)
+  and save it as `AP027133.gb`.
+- Copy the repository support table
+  [`AP027133.DRR394922.depth-1kb.tsv`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.depth-1kb.tsv)
+  into the same directory.
+
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and accession-check procedure.
 
 The GenBank file is the complete 606,194 bp circular `AP027133.1` record. The
 TSV contains 607 arithmetic means from consecutive 1 kbp bins of DRR394922

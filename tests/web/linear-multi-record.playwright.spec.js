@@ -139,6 +139,37 @@ test.afterAll(async () => {
   await new Promise((resolveClose) => server.close(resolveClose));
 });
 
+test('Pairwise match popup selects the active SVG match until closed', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.results.splice(0, app.results.length, {
+      name: 'pairwise-selection.svg',
+      content: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
+        <path data-gbdraw-pairwise-match-id="match-1" data-match-kind="pairwise"
+          data-query-record-id="query" data-subject-record-id="subject"
+          data-qstart="1" data-qend="20" data-sstart="5" data-send="24"
+          fill="#94a3b8" d="M 10 20 L 40 20 L 45 60 L 15 60 Z" />
+      </svg>`
+    });
+    app.selectedResultIndex = 0;
+  });
+
+  const match = page.getByRole('button', { name: 'Pairwise match 1', exact: true });
+  await expect(match).toBeVisible();
+  await match.press('Enter');
+
+  await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toBeVisible();
+  await expect(match).toHaveClass(/\bgbdraw-match-selected\b/);
+
+  await page.getByRole('button', { name: 'Close match popup' }).click();
+  await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toHaveCount(0);
+  await expect(match).not.toHaveClass(/\bgbdraw-match-selected\b/);
+});
+
 test('Linear record rows and N-to-M comparison batches remain keyed by sequence uid', async ({ page }) => {
   await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
@@ -317,6 +348,84 @@ test('Linear comparison timeline follows default DOM and keyboard order at narro
   });
   expect(overflow.paneScrollWidth).toBeLessThanOrEqual(overflow.paneClientWidth + 1);
   expect(overflow.timelineScrollWidth).toBeLessThanOrEqual(overflow.timelineClientWidth + 1);
+});
+
+test('Linear region controls do not overlap at supported sidebar widths', async ({ page }) => {
+  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+
+  const recordSelector = page.getByRole('combobox', {
+    name: 'Record selector for sequence 1', exact: true
+  });
+  const reverseComplement = page.getByRole('checkbox', {
+    name: 'Reverse complement for sequence 1', exact: true
+  });
+  await expect(recordSelector).toBeVisible();
+  await expect(reverseComplement).toBeVisible();
+
+  for (const width of [320, 240]) {
+    await page.evaluate((sidebarWidth) => {
+      window.__GBDRAW_APP__.sidebarWidth = sidebarWidth;
+    }, width);
+    await expect.poll(
+      () => page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth)
+    ).toBe(width);
+
+    const [selectorGeometry, reverseGeometry] = await Promise.all([
+      recordSelector.evaluate((select) => {
+        const cell = select.parentElement;
+        const grid = cell?.parentElement;
+        const bounds = (element) => {
+          const rect = element?.getBoundingClientRect();
+          return rect ? {
+            x: rect.x, y: rect.y, width: rect.width, height: rect.height
+          } : null;
+        };
+        return { control: bounds(select), cell: bounds(cell), grid: bounds(grid) };
+      }),
+      reverseComplement.evaluate((checkbox) => {
+        let label = checkbox.parentElement;
+        while (label && String(label.tagName || '').toLowerCase() !== 'label') {
+          label = label.parentElement;
+        }
+        const rect = label?.getBoundingClientRect();
+        return {
+          label: rect ? {
+            x: rect.x, y: rect.y, width: rect.width, height: rect.height
+          } : null,
+          clientWidth: label?.clientWidth || 0,
+          scrollWidth: label?.scrollWidth || 0
+        };
+      })
+    ]);
+    const selectorBox = selectorGeometry.control;
+    const selectorCellBox = selectorGeometry.cell;
+    const gridBox = selectorGeometry.grid;
+    const reverseBox = reverseGeometry.label;
+    expect(selectorBox).not.toBeNull();
+    expect(selectorCellBox).not.toBeNull();
+    expect(gridBox).not.toBeNull();
+    expect(reverseBox).not.toBeNull();
+    const intersects = (
+      selectorBox.x < reverseBox.x + reverseBox.width
+      && selectorBox.x + selectorBox.width > reverseBox.x
+      && selectorBox.y < reverseBox.y + reverseBox.height
+      && selectorBox.y + selectorBox.height > reverseBox.y
+    );
+    expect(intersects, `Region controls overlap at ${width}px`).toBe(false);
+    expect(selectorBox.x).toBeGreaterThanOrEqual(selectorCellBox.x - 1);
+    expect(selectorBox.x + selectorBox.width).toBeLessThanOrEqual(
+      selectorCellBox.x + selectorCellBox.width + 1
+    );
+    expect(reverseGeometry.scrollWidth).toBeLessThanOrEqual(
+      reverseGeometry.clientWidth + 1
+    );
+    expect(selectorCellBox.x).toBeGreaterThanOrEqual(gridBox.x - 1);
+    expect(reverseBox.x + reverseBox.width).toBeLessThanOrEqual(
+      gridBox.x + gridBox.width + 1
+    );
+  }
 });
 
 test('Advanced pair setup focuses Add and repairs an unplaced draft in its boundary', async ({ page }) => {

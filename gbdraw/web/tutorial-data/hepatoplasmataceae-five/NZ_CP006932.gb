@@ -673,7 +673,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="DHH family phosphoesterase"
+                     /product="GGDEF domain-containing protein"
                      /protein_id="WP_025208444.1"
                      /translation="MKKQKYLEWLNIIGLVLILILVIIMIALQDYIVILLSIAFLILF
                      IFFIVDIIYYFYTGFINEQKISKLIPDIESQIERNFKYGYLIYDENDRIIFISNYLSL
@@ -1251,6 +1251,7 @@ FEATURES             Location/Qualifiers
      CDS             54889..55554
                      /locus_tag="X271_RS03065"
                      /old_locus_tag="X271_00050"
+                     /EC_number="2.7.7.2"
                      /inference="COORDINATES: protein motif:HMM:NF013621.6"
                      /GO_function="GO:0003824 - catalytic activity [Evidence
                      IEA]"
@@ -1260,8 +1261,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="adenylyltransferase/cytidyltransferase family
-                     protein"
+                     /product="FAD synthase family protein"
                      /protein_id="WP_128571616.1"
                      /translation="MEKKTPNKYNICLTYGTFDMFHFGHLSLLLRCKNQCNQLIVGVA
                      TDKYNKFKNKESFQSENQRFNFINMLPFVDKTIYEHNFSTQWKKDYKKYKANAIIMGD
@@ -1335,6 +1335,7 @@ FEATURES             Location/Qualifiers
      CDS             58537..58965
                      /locus_tag="X271_RS00265"
                      /old_locus_tag="X271_00054"
+                     /EC_number="2.7.7.2"
                      /inference="COORDINATES: protein motif:HMM:NF013621.6"
                      /GO_function="GO:0003824 - catalytic activity [Evidence
                      IEA]"
@@ -1344,8 +1345,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="adenylyltransferase/cytidyltransferase family
-                     protein"
+                     /product="FAD synthase family protein"
                      /protein_id="WP_025208472.1"
                      /translation="MKKYKNCITYGTFDLFHYGHKRLFKRIDKYCENLIVAISTDQFN
                      KLKNKKAFDNYIVRSENVLNCSPTIKKVIKEVNWEQKIEDVKKYKIDCFIMGSDWKGK
@@ -1848,7 +1848,8 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="RNA polymerase sigma factor sigma-70 region 4
+                     domain-containing protein"
                      /protein_id="WP_025208492.1"
                      /translation="MKDVFYYKKNGLSFLFAKKINENWDKNKKILYLHLNYNLSFNSI
                      AQEFGLTKERIRQILLEFVSAFSKDEKIKFFNNFYVKRKKFRYISKLFNQELRLYKEK
@@ -2792,12 +2793,13 @@ FEATURES             Location/Qualifiers
      CDS             120854..121477
                      /locus_tag="X271_RS03085"
                      /old_locus_tag="X271_00120"
+                     /EC_number="2.7.1.21"
                      /inference="COORDINATES: protein motif:HMM:NF012487.6"
                      /note="Derived by automated computational analysis using
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="thymidine kinase"
                      /protein_id="WP_025208530.1"
                      /translation="MKANSNLYLYYGPMFSGKSKKLIEVYNSLKEKKIIFKPKIDTRG
                      KNFVISRDGGKVEAIPLKNIKEVYKYLENIDIEDIFFDEMFMLEGDINIVIDDLLLKN
@@ -3342,7 +3344,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="S8 family serine peptidase"
+                     /product="S8/S53 family peptidase"
                      /protein_id="WP_025208551.1"
                      /translation="MEKIMSNIYKIKIPIDNIEKIFGKGGSEDLNESELKKIKKILIS
                      LLEKIKLNDEYLYINFNRFPSKSLSFDKLFLEFLEFPGFAYFRKNFNLEKMLIGRRYK
@@ -4726,12 +4728,13 @@ FEATURES             Location/Qualifiers
      CDS             197762..199648
                      /locus_tag="X271_RS00995"
                      /old_locus_tag="X271_00199"
+                     /EC_number="6.1.1.20"
                      /inference="COORDINATES: protein motif:HMM:NF036799.6"
                      /note="Derived by automated computational analysis using
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="phenylalanine--tRNA ligase subunit beta"
                      /protein_id="WP_420021767.1"
                      /translation="MAKVISCKKHPNADKLSLCKLETNNKEYQVVCGAKNIREGQTVI
                      HALPGSIINDHKLEVKKIRNVLSYGMVLSIEELLNLDKNIIDDQEKNNILVLDNRISL
@@ -5505,7 +5508,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="amino acid kinase family protein"
                      /protein_id="WP_128571626.1"
                      /translation="MIFLPQAIVDHNDLAFKNPTKPIGGFYSEQEAKKITKETGWKFI
                      EDAGRGYRRVVPSPKPITLMEKDLINKGLDAGFILIAGGGGAIATYKENDKYNMIDAV
@@ -5522,7 +5525,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="RCC1 domain-containing protein"
                      /protein_id="WP_025208640.1"
                      /translation="MKKNFIFSILLFLITSFSFKSFDLIFDNKNIIESLDQNVKVLDY
                      EMADSTAGVIVDTDSDYLGDTLYMWGLNSRGQIGDGTTTLATDPKMITPTDQTDWGGN
@@ -5715,7 +5718,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="ASCH domain-containing protein"
                      /protein_id="WP_025208648.1"
                      /translation="MKILMSIHQQHLENIKNNIKKYEFRKVEAKKLNEKEILLYVTFP
                      ISKIVGLIKIKNIYIDTPENIWKLTKKYAGINKEFYYNYYKNKAKAIAYEIEEFIEFK
@@ -6520,7 +6523,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="toprim domain-containing protein"
                      /protein_id="WP_025208677.1"
                      /translation="MQQLYIKTVTIHYLGPWIDNHFRFKKNNLIFGITEEEGNLDLID
                      ILRAIKDIRKFHKIDLKYLHQDLKKNIDFNYHKFLLKITYFNSKKETYIKINKNLKVD
@@ -6567,13 +6570,14 @@ FEATURES             Location/Qualifiers
      CDS             complement(305731..306816)
                      /locus_tag="X271_RS01350"
                      /old_locus_tag="X271_00275"
+                     /EC_number="3.1.-.-"
                      /inference="COORDINATES: ab initio
                      prediction:GeneMarkS-2+"
                      /note="Derived by automated computational analysis using
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="OLD family protein"
                      /protein_id="WP_025208679.1"
                      /translation="MEIILNQFYNNQRVKSENNILLIFGENNSGKTIFVNNFELLLKR
                      KTYHIFSDVQYEDTRDYLILNEEWELKKELNLQKKSYLFRFLTNNLIYFLEENNIDLI
@@ -7172,7 +7176,8 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="V-type ATP synthase subunit I domain-containing
+                     protein"
                      /protein_id="WP_025208701.1"
                      /translation="MSLKILTLNLMHSQTLGVDWQNVWENNMPLMIALIVLIFIFLLF
                      LTLLLIIFFKNRKLRNRIIKKKQTKSKLAGMEDEFSLNPKKEKKQKISKKERKKLEKT
@@ -7264,6 +7269,7 @@ FEATURES             Location/Qualifiers
      CDS             complement(343835..344152)
                      /locus_tag="X271_RS01490"
                      /old_locus_tag="X271_00302"
+                     /EC_number="3.4.22.-"
                      /inference="COORDINATES: protein motif:HMM:NF016233.6"
                      /note="Derived by automated computational analysis using
                      gene prediction method: Protein Homology."
@@ -7679,7 +7685,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="sugar phosphate isomerase family"
                      /protein_id="WP_128824172.1"
                      /translation="MKIIRSETNQILDIISTKVINIIKEKEDANLLITSEKELISLYQ
                      QIVNKYQNQIISFVQSKVFILSEYINSIQEKVDSLNKIIDNNLIKKIDIKQENFHFPK
@@ -8532,6 +8538,7 @@ FEATURES             Location/Qualifiers
      CDS             complement(389067..390050)
                      /locus_tag="X271_RS01755"
                      /old_locus_tag="X271_00356"
+                     /EC_number="6.3.1.20"
                      /inference="COORDINATES: protein motif:HMM:TIGR00545.1"
                      /note="Derived by automated computational analysis using
                      gene prediction method: Protein Homology."
@@ -8846,7 +8853,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="ABC transporter permease subunit"
+                     /product="phosphate ABC transporter permease"
                      /protein_id="WP_025208767.1"
                      /translation="MDKSIIYTQKKTAKKNRKKDSFYRSFLLILFLFTAFFIIFALVF
                      LIAASINGFVSHPEMSFSYFLFGNEYNPASELFAAGFMIVNTLLVSFFAILIAVPVSV
@@ -9098,8 +9105,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="nucleotidyltransferase domain-containing
-                     protein"
+                     /product="nucleotidyltransferase-like protein"
                      /protein_id="WP_025208777.1"
                      /translation="MINLSWSNESQNQNAKNIKDKIYEILKNEEITINFNSERKYNYK
                      LHIYLQGSYKKNIDLKDSDIDILVTVARLPHPNDLEFNDFLENKKWQENYKVGFADGN
@@ -9301,7 +9307,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="aquaporin"
+                     /product="MIP/aquaporin family protein"
                      /protein_id="WP_025208786.1"
                      /translation="MIFLFFIALSLGRFIEYEINSTRDLIPRIYNSLFKIPNKGKTNW
                      SYSFVPTIGPIIGSLLSTGLIWIII"
@@ -10349,7 +10355,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="RNA polymerase beta'' subunit family protein"
                      /protein_id="WP_025208831.1"
                      /translation="MTNKLNNSSFLKINNLAFRDKNFNLIINNFTLNIKKGEIHAFLS
                      DDREQLERLKWLFIDNLNENKKTEEFIFDQGERYSKANLLLNKNYSGKHTSYTNLFYK
@@ -10377,7 +10383,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="ABC transporter ATP-binding protein"
                      /protein_id="WP_025208832.1"
                      /translation="MKNDFIFTIKNYKHLDLKDQTKEIKYLDFAIKKNSYLGLLQVDN
                      DGFFANFFRIINKEESFKKINYSYITESNNFTFKKNFTIGKQVYLNLLLNFKFSKDLA
@@ -11106,7 +11112,8 @@ FEATURES             Location/Qualifiers
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="DnaD domain protein"
+                     /product="replication initiation and membrane attachment
+                     family protein"
                      /protein_id="WP_025208862.1"
                      /translation="MKKFKYNSSYKVHLNYSYAILIEPFFKYTYSLLLGKKGLFLFYF
                      LLAESENKLINNLFVPSARIADSLNLNQNELIEAFSVIEKLNLLNIYFDRIKNRYIYE
@@ -11305,7 +11312,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="AAA family ATPase"
+                     /product="SMC hinge domain-related protein"
                      /protein_id="WP_025208870.1"
                      /translation="MFLKKIELKGFKSFAFPTVIEFKKGLTVIVGPNGSGKSNINDAL
                      KWVLGESSKKTLRAKQTDDMIFSGSHTKEAASFAEVNLFFDNSNKLLEHEEDEIIITR
@@ -11683,13 +11690,14 @@ FEATURES             Location/Qualifiers
      CDS             complement(524633..525424)
                      /locus_tag="X271_RS02440"
                      /old_locus_tag="X271_00495"
+                     /EC_number="3.1.21.-"
                      /inference="COORDINATES: ab initio
                      prediction:GeneMarkS-2+"
                      /note="Derived by automated computational analysis using
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="TdeIII family type II restriction endonuclease"
                      /protein_id="WP_025208884.1"
                      /translation="MNLNQEKLEEIILSDINKIIKSKKDPKDFNKKIKNNKEKVHFLP
                      IEYRNLISYLQSLSITFGNFIEKLIRDIVKEDKKYNLSKLSGKKINGIISKAENDSIE
@@ -12825,7 +12833,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="DUF8370 family protein"
                      /protein_id="WP_025208932.1"
                      /translation="MTFLTQENLIVINEEIRYKYDLEIPPVFLYGNSDIKAFINLGEL
                      LSNEFDFDNKELKKLNAKKYFKISIEELINSPENKSEPKDWGFGYSKESKNGKASGSE
@@ -13584,7 +13592,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: Protein Homology."
                      /codon_start=1
                      /transl_table=4
-                     /product="hypothetical protein"
+                     /product="phosphohexomutase domain-containing protein"
                      /protein_id="WP_025208958.1"
                      /translation="MNKEYSEWLENLNIKEKLILKNLSEKKINEAFNHKLNFGTAGIR
                      AKRGLGPSFINKYVVAKYVKSYLLALFAIYGEKNVKESKILIFKDNRKDNLYFSTIAF
@@ -13785,7 +13793,7 @@ FEATURES             Location/Qualifiers
                      gene prediction method: GeneMarkS-2+."
                      /codon_start=1
                      /transl_table=4
-                     /product="reverse transcriptase-like protein"
+                     /product="ribonuclease H family protein"
                      /protein_id="WP_025208965.1"
                      /translation="MEKYELDNLIVEILKLLIDKENNGVTTLIYSDKLKFNNFIKEFK
                      NKAIDSNNDKSFDKLSNIKKLERIFEELDFESTIDLLKKIKKHIFSTKRLNNKNLENS

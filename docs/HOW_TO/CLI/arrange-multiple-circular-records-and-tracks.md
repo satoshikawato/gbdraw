@@ -11,23 +11,25 @@ records.
 
 - Install gbdraw so that `gbdraw -h` succeeds.
 - Start in an empty working directory.
-- Copy these packaged GenBank files into it:
-  - [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk),
-    human `NC_012920.1` (16,569 bp);
-  - [`NC_002333.2.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_002333.2.gb),
-    zebrafish `NC_002333.2` (16,596 bp);
-  - [`NC_024511.2.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_024511.2.gb),
-    fruit fly `NC_024511.2` (19,524 bp);
-  - [`NC_001328.1.gb`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_001328.1.gb),
-    nematode `NC_001328.1` (13,794 bp).
+- Download these accession-pinned GenBank records from NCBI EFetch, preserving
+  the exact local names shown:
+  - [`NC_012920.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text)
+    as `HmmtDNA.gbk` (human, 16,569 bp);
+  - [`NC_002333.2`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_002333.2&rettype=gbwithparts&retmode=text)
+    as `NC_002333.2.gb` (zebrafish, 16,596 bp);
+  - [`NC_024511.2`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_024511.2&rettype=gbwithparts&retmode=text)
+    as `NC_024511.2.gb` (fruit fly, 19,524 bp);
+  - [`NC_001328.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001328.1&rettype=gbwithparts&retmode=text)
+    as `NC_001328.1.gb` (nematode, 13,794 bp).
 - Copy the shared
   [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
   label rule into the same directory.
 
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and accession-check procedure.
+
 All four files are complete, naturally circular RefSeq mitochondrial records.
-No record is cropped, concatenated, or split. The
-[fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json) records
-their species, topology, length, checksum, and feature counts.
+No record is cropped, concatenated, or split.
 
 ## Put the four records in a 2x2 grid
 

@@ -9,22 +9,24 @@ complete records occupy separate Linear rows.
 
 - Install gbdraw in a Python 3.10 or newer environment.
 - Start in an empty working directory.
-- Copy these public fixtures into that directory:
-  - [`NC_001416.gb`](../../../gbdraw/web/tutorial-data/lambda/NC_001416.gb),
-    SHA-256 `4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7`;
-  - [`NC_042057.1.gb`](../../../gbdraw/web/tutorial-data/de3/NC_042057.1.gb),
-    SHA-256 `288eb87480f8fe6eab6246fe1fc4af78c85a6cb7e591c47fd7d7f0170c932e09`;
+- Download these complete GenBank records from NCBI and save them with the
+  exact local filenames shown:
+  - `NC_001416.gb` from [NCBI accession
+    NC_001416.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1);
+  - `NC_042057.1.gb` from [NCBI accession
+    NC_042057.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_042057.1).
+- Download the supplied comparison table into the same directory:
   - [`lambda-de3.losatn.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv),
     SHA-256 `703b0ac749669152a8e6d5fa6fb246cf5973cb1a3e0ca9db2f346ee33628317c`.
 
-The [fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json) records
-their provenance. Lambda (`NC_001416.1`, 48,502 bp) and DE3 (`NC_042057.1`,
-42,925 bp) are complete genomes. `lambda-de3.losatn.tsv` is the fixed six-row
-LOSATN result for that pair.
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for NCBI browser,
+`curl`, and PowerShell download steps. Lambda (`NC_001416.1`, 48,502 bp) and
+DE3 (`NC_042057.1`, 42,925 bp) are complete genomes.
+`lambda-de3.losatn.tsv` is the fixed six-row LOSATN result for that pair.
 
 ## Draw the comparison
 
-Save this program as `draw_linear_examples.py` beside the three fixture files:
+Save this program as `draw_linear_examples.py` beside the three input files:
 
 <!-- executable:H-PY-02:start -->
 ```python

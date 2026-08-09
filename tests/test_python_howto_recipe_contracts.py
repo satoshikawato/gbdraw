@@ -86,14 +86,14 @@ def test_python_howto_pages_match_their_approved_scenarios() -> None:
         assert "## Prerequisites" in source
         assert "## Verification" in source
         assert "## Troubleshooting" in source
-        assert "tutorial-data/manifest.json" in source
+        assert "../../GETTING_TUTORIAL_DATA.md" in source
         assert "../../REFERENCE/" in source
         assert "tests/test_inputs" not in source
         assert "lambda_two_contigs" not in source
         assert "lambda_left" not in source
         assert "lambda_right" not in source
         assert "http://" not in source
-        assert "https://" not in source
+        assert "https://" in source
 
         for output_name in chapter["execution"]["expected_outputs"]:
             assert output_name in source
@@ -102,13 +102,15 @@ def test_python_howto_pages_match_their_approved_scenarios() -> None:
     multi_record_source = (
         REPO_ROOT / str(chapters["H-PY-01"]["destination"])
     ).read_text(encoding="utf-8")
-    assert "four complete, naturally circular" in multi_record_source
+    assert "four complete, naturally circular" in " ".join(
+        multi_record_source.split()
+    )
     assert "linear region" not in multi_record_source
     assert "BGC0000708" not in multi_record_source
     assert "Gallery" not in multi_record_source
 
 
-def test_python_howtos_link_exact_public_fixture_checksums() -> None:
+def test_python_howtos_use_authoritative_sequences_and_pinned_support_files() -> None:
     fixture_manifest = json.loads(FIXTURE_MANIFEST.read_text(encoding="utf-8"))
     chapters = _chapters()
 
@@ -121,8 +123,21 @@ def test_python_howtos_link_exact_public_fixture_checksums() -> None:
             fixture_path = FIXTURE_ROOT / entry["relativePath"]
             payload = fixture_path.read_bytes()
 
-            assert entry["relativePath"] in source
-            assert entry["sha256"] in source
+            if entry["inputType"] in {"genbank", "fasta"}:
+                assert entry["relativePath"] not in source
+                provenance = entry["provenance"]
+                authoritative_urls = [provenance["sourceUrl"]]
+                verification = provenance.get("mirrorVerification")
+                if verification:
+                    authoritative_urls.append(
+                        verification["authoritativeRequestUrl"]
+                    )
+                assert any(url in source for url in authoritative_urls)
+                for record in entry.get("records", []):
+                    assert record["id"] in source
+            else:
+                assert entry["relativePath"] in source
+                assert entry["sha256"] in source
             assert len(payload) == entry["sizeBytes"]
             assert hashlib.sha256(payload).hexdigest() == entry["sha256"]
 

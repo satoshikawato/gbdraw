@@ -11,24 +11,32 @@ evidence; they do not start a LOSAT search.
 
 - Install gbdraw so that `gbdraw -h` succeeds.
 - Start in an empty working directory.
-- Copy these packaged files into it:
-  - [`NC_001416.gb`](../../../gbdraw/web/tutorial-data/lambda/NC_001416.gb);
-  - [`NC_042057.1.gb`](../../../gbdraw/web/tutorial-data/de3/NC_042057.1.gb);
+- Download these accession-pinned GenBank records from NCBI EFetch, preserving
+  the exact local names shown:
+  - [`NC_001416.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001416.1&rettype=gbwithparts&retmode=text)
+    as `NC_001416.gb`;
+  - [`NC_042057.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_042057.1&rettype=gbwithparts&retmode=text)
+    as `NC_042057.1.gb`;
+  - [`NC_012920.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text)
+    as `HmmtDNA.gbk`.
+- Copy these repository support files into the same directory:
   - [`lambda-de3.losatn.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv);
-  - [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk);
   - the three frozen TLOSATX tables in
     [`metazoan-mitochondria-comparison`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-comparison/danio-human.tlosatx.tsv);
   - [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv).
 
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and accession-check procedure.
+
 The inputs are the complete 48,502 bp Lambda `NC_001416.1` record and the
 complete 42,925 bp DE3 `NC_042057.1` record. The table contains six BLAST
 outfmt 6 rows produced by LOSATN 0.1.0 `megablast` in a serial, one-thread
-browser run. The [fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json)
-records the source checksums, search arguments, table checksums, and
-repeated-run qualification. The mtDNA tables use each non-human record from
-[`metazoan-mitochondria-four`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_002333.2.gb)
-as query and the complete human record as subject. The command reads the frozen
-tables, so those three query GenBank files need not be copied into the working
+browser run. The mtDNA tables use
+[`NC_002333.2`](https://www.ncbi.nlm.nih.gov/nuccore/NC_002333.2),
+[`NC_024511.2`](https://www.ncbi.nlm.nih.gov/nuccore/NC_024511.2), and
+[`NC_001328.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001328.1) as queries
+and the complete human record as subject. The command reads the frozen tables,
+so those three query GenBank records need not be downloaded into the working
 directory.
 
 ## Draw the Linear links and Circular rings

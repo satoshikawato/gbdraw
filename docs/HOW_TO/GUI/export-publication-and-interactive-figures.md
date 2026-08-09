@@ -9,9 +9,11 @@ and validates every real export action.
 
 ## Prepare the finished result
 
-Upload
-[`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
-as a Circular GenBank input. Set **Output Prefix** to
+Download [NCBI record
+`NC_012920.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1) as **GenBank
+(full)**, save it as `HmmtDNA.gbk`, and upload it as a Circular GenBank input.
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser
+download and accession checks. Set **Output Prefix** to
 `human_mitochondrion`, **Species** to `<i>Homo sapiens</i>`, **Track Preset** to
 **Middle**, and enable **Separate Strands**. Keep GC content and skew visible,
 use external labels, place the legend on the right, and choose **Generate

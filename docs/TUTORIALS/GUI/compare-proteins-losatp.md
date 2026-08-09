@@ -17,18 +17,33 @@ circular genomes.
 
 ## What you'll need
 
-Use the five files under
-`gbdraw/web/tutorial-data/aminoglycoside-bgc-five/` in this order:
+Starting state: open a fresh gbdraw web app page with no session loaded and no
+files selected.
 
-| Order | Record | Length | CDS |
-|---:|---|---:|---:|
-| 1 | `BGC0000708` | 40,579 bp | 30 |
-| 2 | `BGC0000709` | 50,466 bp | 38 |
-| 3 | `BGC0000711` | 30,837 bp | 21 |
-| 4 | `BGC0000712` | 48,169 bp | 40 |
-| 5 | `BGC0000713` | 31,892 bp | 26 |
+Download the five GenBank inputs from MIBiG in this order. See [Get the tutorial
+inputs](../../GETTING_TUTORIAL_DATA.md) for browser download steps and the
+meaning of each file type.
 
-Upload every file as a whole record and leave all optional Region fields blank.
+| Order | Downloaded input | Record ID | Length | CDS |
+|---:|---|---|---:|---:|
+| 1 | [`BGC0000708.gbk` — MIBiG `BGC0000708.5`](https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk) | `BGC0000708` | 40,579 bp | 30 |
+| 2 | [`BGC0000709.gbk` — MIBiG `BGC0000709.5`](https://mibig.secondarymetabolites.org/repository/BGC0000709.5/BGC0000709.gbk) | `BGC0000709` | 50,466 bp | 38 |
+| 3 | [`BGC0000711.gbk` — MIBiG `BGC0000711.5`](https://mibig.secondarymetabolites.org/repository/BGC0000711.5/BGC0000711.gbk) | `BGC0000711` | 30,837 bp | 21 |
+| 4 | [`BGC0000712.gbk` — MIBiG `BGC0000712.5`](https://mibig.secondarymetabolites.org/repository/BGC0000712.5/BGC0000712.gbk) | `BGC0000712` | 48,169 bp | 40 |
+| 5 | [`BGC0000713.gbk` — MIBiG `BGC0000713.5`](https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk) | `BGC0000713` | 31,892 bp | 26 |
+
+Download the three presentation inputs and save the two generated results with
+these exact filenames:
+
+| File | File type | Purpose |
+| --- | --- | --- |
+| [`BGC0000708-BGC0000713_default_colors.tsv`](../../../gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708-BGC0000713_default_colors.tsv) | Support download | Default CDS color override |
+| [`BGC0000708-BGC0000713_specific_colors.tsv`](../../../gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708-BGC0000713_specific_colors.tsv) | Support download | BGC gene-kind color rules |
+| [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv) | Support download | CDS `gene` label priority |
+| `bgc_losatp_groups.tsv` | Generated | Raw LOSATP evidence saved in Step 5 |
+| `bgc_losatp_groups.svg` | Generated | Aligned static diagram saved in Step 5 |
+
+Upload all five GenBank files as whole records. Keep the table order and leave all optional Region fields blank.
 Keep the first four records in their source orientation; turn on
 **Reverse complement** only for `BGC0000713` to reproduce the Gallery layout.
 
@@ -75,9 +90,10 @@ Match the Interactive SVG Gallery presentation with these display settings:
 | Control | Value |
 |---|---|
 | Palette | Orange |
-| Override File / Specific Table | Bundled BGC color tables |
+| Override File (-d) | `BGC0000708-BGC0000713_default_colors.tsv` |
+| Specific Table (-t) | `BGC0000708-BGC0000713_specific_colors.tsv` |
 | Show Labels | First record |
-| Priority File (TSV) | `CDS<TAB>gene` qualifier-priority table |
+| Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |
 | Label Font Size | `18` |
 | Label Placement / Rotation | Above feature / `45` |
 | Feature Height | `75` |

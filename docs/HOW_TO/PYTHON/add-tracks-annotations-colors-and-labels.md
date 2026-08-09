@@ -11,24 +11,26 @@ typed slot list controls the track order across all three panels.
 
 - Install gbdraw in a Python 3.10 or newer environment.
 - Start in an empty working directory.
-- Copy these public fixtures into that directory:
-  - [`AP027133.gb`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.gb),
-    SHA-256 `913af50dd9d37cc2107be5e46484b885c5d586fb414b4b501380fc8f17a659d6`;
+- Download these complete GenBank records from NCBI and save them with the
+  exact local filenames shown:
+  - `AP027133.gb` from the [NCBI Revision History snapshot for
+    AP027133.1](https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027133.1&sat=3&satkey=69902298);
+  - `NC_001879.gbk` from [NCBI accession
+    NC_001879.2](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2);
+  - `HmmtDNA.gbk` from [NCBI accession
+    NC_012920.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1).
+- Download these supplied support tables into the same directory:
   - [`AP027133.DRR394922.depth-1kb.tsv`](../../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.depth-1kb.tsv),
     SHA-256 `6f57cfd89a165ad97a162aa2f0b1f3b3ad21fb5638f4f9ac5cbd069badd6aab7`;
-  - [`NC_001879.gbk`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/NC_001879.gbk),
-    SHA-256 `25c5b39fd25d702c0a390fe5e7480eda0ccc1e4d6d7c388445b4686049412a24`;
   - [`nicotiana-tabacum-regions.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv),
     SHA-256 `3a85aed5145c88f93b4478d1901fab53714b9d47afc754d32cc9e5c0b8412b88`;
   - [`modified_default_colors.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/modified_default_colors.tsv),
     SHA-256 `e48654dfc5225c8c1eec251f773fc07892228dee906cb1e105e4d24cb5ae8bc1`;
   - [`qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/qualifier_priority.tsv),
-    SHA-256 `2f40dedf957041e3093a1d1a4dc8f6c2d1a0843ebf5367f0ae78f0e75769eaa1`;
-  - [`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk),
-    SHA-256 `7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f`.
+    SHA-256 `2f40dedf957041e3093a1d1a4dc8f6c2d1a0843ebf5367f0ae78f0e75769eaa1`.
 
-The [fixture manifest](../../../gbdraw/web/tutorial-data/manifest.json) records
-the provenance and biological metadata. `AP027133.1`, `NC_001879.2`, and
+See [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for NCBI browser,
+`curl`, and PowerShell download steps. `AP027133.1`, `NC_001879.2`, and
 `NC_012920.1` are complete records whose source topology is circular.
 
 The depth TSV already contains one arithmetic mean at each 1-based 1 kbp bin
@@ -37,7 +39,7 @@ those means a second time.
 
 ## Draw the figure
 
-Save this program as `draw_python_tracks.py` beside the seven fixture files:
+Save this program as `draw_python_tracks.py` beside the seven input files:
 
 <!-- executable:H-PY-03:start -->
 ```python

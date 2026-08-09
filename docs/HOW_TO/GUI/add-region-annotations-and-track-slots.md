@@ -9,12 +9,16 @@ turn a partial linear region into a circle.
 
 ## Before you start
 
-Use these bundled files:
+Download the plastome from NCBI and the gbdraw region table from the
+repository:
 
-- [`NC_001879.gbk`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/NC_001879.gbk)
-  — one complete circular plastome, 155,943 bp.
-- [`nicotiana-tabacum-regions.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv)
-  — four source-coordinate bracket annotations in one set.
+| Input | Acquisition | Save as | Purpose |
+|---|---|---|---|
+| Tobacco plastome `NC_001879.2` | [Authoritative NCBI record](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2), **GenBank (full)** | `NC_001879.gbk` | Complete circular plastome, 155,943 bp |
+| Region annotations | [Support download](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv) | `nicotiana-tabacum-regions.tsv` | Four source-coordinate bracket annotations |
+
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser
+download and file identity checks.
 
 The table has this frozen layout:
 

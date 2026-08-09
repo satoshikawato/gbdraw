@@ -1,0 +1,4 @@
+interface:
+  display_name: "Love Me, Love My Docs"
+  short_description: "Build reproducible manuals across product surfaces"
+  default_prompt: "Use $love-me-love-my-docs to build reproducible user documentation with executable evidence."

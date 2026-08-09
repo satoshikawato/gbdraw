@@ -4,6 +4,13 @@
 
 The task guides in this section use the hosted app and the local `gbdraw gui` application.
 
+Start each guide with sequence records downloaded by versioned accession from
+the named public database. Repository files are limited to support data such as
+rule tables, annotations, and precomputed comparison evidence. See [Get the
+tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser download and file
+identity checks. A guide reloads a session only when you created that session
+earlier in the same guide.
+
 ## Inputs
 
 - [How to use GenBank and GFF3 + FASTA inputs](./use-genbank-and-gff3-fasta-inputs.md)

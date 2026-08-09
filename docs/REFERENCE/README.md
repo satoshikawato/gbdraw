@@ -1,8 +1,11 @@
-[Documentation home](../DOCS.md) | [Tutorials](../TUTORIALS/README.md) | [How-to guides](../HOW_TO/README.md) | [Explanation](../EXPLANATION/README.md)
+[Documentation home](../DOCS.md) | [Start here](../TUTORIALS/README.md) | [Task guides](../HOW_TO/README.md) | [Concepts & decisions](../EXPLANATION/README.md) | **Technical reference**
 
-# Reference
+# Technical reference
 
-Reference pages describe supported inputs, controls, options, schemas, APIs, compatibility, and output contracts.
+Reference pages are lookup material for exact current facts: supported inputs,
+controls, options, schemas, APIs, compatibility, and output contracts. For a
+complete learning project use [Tutorials](../TUTORIALS/README.md); for a
+focused procedure use [Task guides](../HOW_TO/README.md).
 
 - [Web app reference](web-app.md)
 - [Command-line reference](command-line.md)

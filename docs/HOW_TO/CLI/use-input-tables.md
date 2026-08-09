@@ -10,13 +10,17 @@ independently and cover one table type each.
 
 - Install gbdraw so that `gbdraw -h` succeeds.
 - Start in an empty working directory and create a `tables` directory.
-- Copy the public fixture files named in each section into the working
-  directory. Keep the sequence files at the top level; the table examples use
-  `../` paths on purpose.
+- Download the accession-pinned sequence records named in each section into
+  the working directory. Keep the sequence files at the top level; the table
+  examples use `../` paths on purpose.
 - Copy the shared
   [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv)
   rule into the working directory.
 - Save every table as UTF-8 TSV with real tab characters.
+
+Use [Get the tutorial files](../../GETTING_TUTORIAL_DATA.md) for the
+authoritative-download and accession-check procedure. Repository links below
+provide only support tables and annotations, not sequence records.
 
 Relative paths in a table resolve from the directory containing that table,
 not from the shell's current directory. Unknown columns and incomplete rows
@@ -24,10 +28,19 @@ are rejected.
 
 ## 1. Place complete records with a records table
 
-Copy the four complete mitochondrial GenBank files from the
-[`human-mitochondrion`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
-and [`metazoan-mitochondria-four`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-four/NC_002333.2.gb)
-fixtures. Save this as `tables/records.tsv`:
+Download these complete mitochondrial GenBank records from NCBI EFetch,
+preserving the exact local names shown:
+
+- [`NC_012920.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text)
+  as `HmmtDNA.gbk`;
+- [`NC_002333.2`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_002333.2&rettype=gbwithparts&retmode=text)
+  as `NC_002333.2.gb`;
+- [`NC_024511.2`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_024511.2&rettype=gbwithparts&retmode=text)
+  as `NC_024511.2.gb`;
+- [`NC_001328.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001328.1&rettype=gbwithparts&retmode=text)
+  as `NC_001328.1.gb`.
+
+Save this as `tables/records.tsv`:
 
 ```tsv
 gbk	record_label	record_subtitle	record_id	order	row	column
@@ -43,9 +56,12 @@ controls input order, while `row` and `column` define the complete 2x2 grid.
 
 ## 2. Map prepared links with a comparisons table
 
-Copy complete Lambda [`NC_001416.gb`](../../../gbdraw/web/tutorial-data/lambda/NC_001416.gb),
-complete DE3 [`NC_042057.1.gb`](../../../gbdraw/web/tutorial-data/de3/NC_042057.1.gb),
-and [`lambda-de3.losatn.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv).
+Download complete Lambda
+[`NC_001416.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001416.1&rettype=gbwithparts&retmode=text)
+as `NC_001416.gb` and complete DE3
+[`NC_042057.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_042057.1&rettype=gbwithparts&retmode=text)
+as `NC_042057.1.gb`. Copy the repository support table
+[`lambda-de3.losatn.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv).
 Save this as `tables/comparisons.tsv`:
 
 ```tsv
@@ -59,7 +75,9 @@ cannot be combined with `--blast`.
 
 ## 3. Describe a Circular conservation ring
 
-Copy the three frozen TLOSATX tables from the
+Download complete human mitochondrial
+[`NC_012920.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text)
+as `HmmtDNA.gbk`. Copy the three frozen TLOSATX support tables from the
 [`metazoan-mitochondria-comparison`](../../../gbdraw/web/tutorial-data/metazoan-mitochondria-comparison/danio-human.tlosatx.tsv)
 fixture. Each table compares one complete mitochondrial genome with the
 complete human mitochondrial reference. Save this as
@@ -80,16 +98,21 @@ each table.
 
 ## 4. Load region annotations
 
-Copy the four files from the
-[`tobacco-plastome-regions`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/NC_001879.gbk)
-fixture. Its `nicotiana-tabacum-regions.tsv` table assigns LSC, IRb, SSC, and
-IRa brackets to the complete 155,943 bp `NC_001879.2` plastome. Annotation
-tables require `set_id`, `id`, and `mark`; each row then supplies exactly one
-coordinate or feature target.
+Download complete tobacco plastome
+[`NC_001879.2`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001879.2&rettype=gbwithparts&retmode=text)
+as `NC_001879.gbk`. Copy the repository support tables
+[`nicotiana-tabacum-regions.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv),
+[`modified_default_colors.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/modified_default_colors.tsv),
+and [`qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/qualifier_priority.tsv).
+The annotation table assigns LSC, IRb, SSC, and IRa brackets to the complete
+155,943 bp record. Annotation tables require `set_id`, `id`, and `mark`; each
+row then supplies exactly one coordinate or feature target.
 
 ## 5. Define Circular slots with a track table
 
-Copy `HmmtDNA.gbk` and
+Download complete human mitochondrial
+[`NC_012920.1`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text)
+as `HmmtDNA.gbk`, then copy the repository support table
 [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv).
 Save this as `tables/tracks.tsv`:
 

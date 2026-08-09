@@ -171,6 +171,7 @@ GUI_LOSATP_TUTORIAL_COLLINEAR_SCREENSHOT_NAMES = (
     "02-first-diagram.png",
     "03-collinear-settings.png",
     "04-collinear-result.png",
+    "04-collinear-detail.png",
     "05-block-popup.png",
 )
 GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES = (
@@ -197,6 +198,7 @@ GUI_LOSATP_GROUPS_HOW_TO_SCREENSHOT_NAMES = (
 GUI_LOSATP_COLLINEAR_SCREENSHOT_NAMES = (
     "collinear-settings.png",
     "collinear-result.png",
+    "collinear-detail.png",
     "block-popup.png",
 )
 GUI_QUANTITATIVE_TRACKS_SCREENSHOT_NAMES = (
@@ -442,8 +444,8 @@ GUI_HEPATOPLASMATACEAE_FIXTURES = (
         / "tutorial-data"
         / "hepatoplasmataceae-five"
         / "NZ_CP006932.gb",
-        1_683_899,
-        "eb5fb6a24771a4b28cede43fcca0cf6c9029bb1106fb0ddfd835cc501e016f5a",
+        1_684_495,
+        "c92f2df6b5b1eb911d2569af758677cae91e64af4af67e47b5ec0d2c866361a8",
         "NZ_CP006932.1",
         657_101,
         "Candidatus Hepatoplasma crinochetorum Av",

@@ -2422,7 +2422,7 @@ export const createAppSetup = () => {
     selectedPairwiseBlockOrthogroupId.value = '';
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return;
-    const matchId = String(match?.matchId || '').trim();
+    const matchId = String(match?.id || '').trim();
     svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((element) => {
       const elementMatchId = String(
         element.getAttribute('data-gbdraw-match-id') ||

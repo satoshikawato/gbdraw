@@ -21,13 +21,20 @@ presentation table.
 
 ## What you'll need
 
-Use these files from
-`gbdraw/web/tutorial-data/tobacco-plastome-regions/`:
+Starting state: open a fresh gbdraw web app page with no session loaded and no
+files selected.
 
-- `NC_001879.gbk`
-- `nicotiana-tabacum-regions.tsv`
-- `chloroplast_specific_table.tsv`
-- `qualifier_priority.tsv`
+Use the filenames below when you download or save each file. See [Get the
+tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser download steps and
+the meaning of each file type.
+
+| File | File type | Purpose |
+| --- | --- | --- |
+| [`NC_001879.gbk` — NCBI `NC_001879.2`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2) | Authoritative download | Complete tobacco plastome GenBank record; save as `NC_001879.gbk` |
+| [`nicotiana-tabacum-regions.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/nicotiana-tabacum-regions.tsv) | Support download | LSC, IRb, SSC, and IRa annotations |
+| [`chloroplast_specific_table.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/chloroplast_specific_table.tsv) | Support download | Chloroplast gene-family color rules |
+| [`qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/tobacco-plastome-regions/qualifier_priority.tsv) | Support download | CDS label-priority rules |
+| `annotated_chloroplast_map.svg` | Generated | Finished static diagram saved in Step 6 |
 
 The GenBank file is the complete 155,943 bp `NC_001879.2` record. The other
 files define structural regions, chloroplast gene-family colors, and CDS label

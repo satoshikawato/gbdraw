@@ -35,6 +35,7 @@ HEPATOPLASMA_FLOW_PATH = (
     / "flows"
     / "hepatoplasmataceae_losatp.py"
 )
+WEB_INDEX_PATH = WEB_ROOT / "index.html"
 GALLERY_SVG_PATH = (
     WEB_ROOT / "gallery" / "examples" / "BGC0000708-BGC0000713.svg"
 )
@@ -128,6 +129,30 @@ HEPATOPLASMATACEAE_RECORD_IDS = {
     "AP027132.1",
     "NZ_CP006932.1",
 }
+PINNED_NCBI_REVISION_URLS = {
+    "AP027078.1": (
+        "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file"
+        "&db=nuccore&report=gbwithparts&id=AP027078.1&sat=3&satkey=69902295"
+    ),
+    "AP027131.1": (
+        "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file"
+        "&db=nuccore&report=gbwithparts&id=AP027131.1&sat=3&satkey=69902296"
+    ),
+    "AP027133.1": (
+        "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file"
+        "&db=nuccore&report=gbwithparts&id=AP027133.1&sat=3&satkey=69902298"
+    ),
+    "AP027132.1": (
+        "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file"
+        "&db=nuccore&report=gbwithparts&id=AP027132.1&sat=3&satkey=69902297"
+    ),
+    "NZ_CP006932.1": (
+        "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file"
+        "&db=nuccore&report=gbwithparts&id=NZ_CP006932.1"
+        "&sat=60&satkey=39275474"
+    ),
+}
+PINNED_NCBI_REVISIONS_ASSERTION = "source_record_revisions=ncbi-pinned-all-five"
 PAGES = {
     "T-GUI-04": (
         REPO_ROOT / "docs" / "TUTORIALS" / "GUI" / "compare-proteins-losatp.md"
@@ -171,6 +196,7 @@ SCREENSHOT_NAMES = {
     "H-GUI-08": (
         "collinear-settings.png",
         "collinear-result.png",
+        "collinear-detail.png",
         "block-popup.png",
     ),
     "T-GUI-08": (
@@ -178,6 +204,7 @@ SCREENSHOT_NAMES = {
         "02-first-diagram.png",
         "03-collinear-settings.png",
         "04-collinear-result.png",
+        "04-collinear-detail.png",
         "05-block-popup.png",
     ),
 }
@@ -474,27 +501,78 @@ def test_gallery_svg_is_the_frozen_similarity_group_reference() -> None:
 def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> None:
     source = HEPATOPLASMA_FLOW_PATH.read_text(encoding="utf-8")
     wrapper = HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
+    index = WEB_INDEX_PATH.read_text(encoding="utf-8")
     for fragment in (
-        'page.locator(\'[data-capture="linear-blast-source"]\')',
+        '"group", name="Apply to all adjacent gaps", exact=True',
+        "_set_source_inputs(page)",
+        'page.get_by_test_id("linear-genbank-1").set_input_files',
+        'f"Record selector for sequence {index}"',
+        'not_to_contain_text("Loading records...")',
+        "_assert_input_capture_framing(page)",
+        'name="Comparison boundary from display row 4 to 5"',
+        "_assert_empty_cache(page)",
         'page.get_by_label("Collinear evidence scope", exact=True).select_option(',
-        'evidence_scope = "all" if starting_project == "all-vs-all" else "adjacent"',
-        "_assert_gallery_adjacent_search(page, session_keys=session_cache_keys)",
+        'if evidence_scope not in {"all", "adjacent"}',
+        'expected_jobs = 25 if evidence_scope == "all" else 13',
+        'threads.select_option("8" if evidence_scope == "all" else "auto")',
+        'parallel_runs.select_option("4")',
+        "ALL_RECORD_GENERATION_TIMEOUT_MS = 1_200_000",
+        'threading.get("pairWorkers") != 4',
+        'threading.get("threadsPerJob") != 8',
         'page.get_by_label("Track Layout", exact=True).select_option("middle")',
+        'fit_complete_linear_preview(page, target_zoom="40%")',
         '"Separate Strands"',
         'page.get_by_label("Collinear color mode", exact=True).select_option',
         '"orientation_identity"',
-        'telemetry.get("totalPairs") != 25',
-        'telemetry.get("cacheHits") != 25',
-        'telemetry.get("cacheMisses") != 0',
-        'telemetry.get("uniqueJobs") != 0',
+        'telemetry.get("totalPairs") != expected_jobs',
+        'telemetry.get("cacheHits") != 0',
+        'telemetry.get("cacheMisses") != expected_jobs',
+        'telemetry.get("uniqueJobs") != expected_jobs',
+        "len(matches) != EXPECTED_COLLINEAR_MATCH_ELEMENTS",
         'if endpoints != ADJACENT_PAIRS',
-        'download_dir, "collinear_members.fasta"',
+        'path = download_dir / "collinear_members.fasta"',
+        'r"comparison[0-9]+_match[0-9]+_both\\.fna"',
         'if len(records) != 2',
         'sequence not in source_sequences[source_id]',
+        'name="Pairwise match 1", exact=True',
+        'name="Zoom in", exact=True',
+        'expect(reset_zoom).to_contain_text("80%")',
+        "PREVIEW_INSET_PX = 12",
+        "candidate.getElementsByTagName('g')",
+        "group.dataset?.gbdrawRole === 'record-definition'",
+        "_prepare_plain_definition_detail(page)",
+        "_assert_record_definitions_inside_preview(result_preview)",
+        "_return_to_overview_zoom(page)",
+        "_blank_preview_drag_point(result_preview, delta_x=delta_x)",
+        "String(current.id || '').startsWith('f')",
+        'page.mouse.move(point["endX"], point["y"], steps=12)',
+        "_assert_match_inside_result_preview(result_preview, first_match)",
+        '_move_popup_opposite_match(page, popup, first_match)',
+        'if not _box_is_inside(moved_popup_box, viewport)',
+        'if _boxes_overlap(moved_popup_box, match_box)',
+        'expect(fasta_buttons).to_have_count(3)',
+        "_scroll_popup_to_collinearity_details(page, popup)",
+        'name="Pairwise match details content", exact=True',
+        'page.mouse.wheel(0, before["maxScroll"])',
+        "first_match.focus()",
+        'first_match.press("Enter")',
+        "expect(first_match).to_have_class(",
+        "gbdraw-match-selected",
+        'name="Close match popup", exact=True',
         'capture_hepatoplasmataceae_collinear(',
         'output_prefix="hepatoplasmataceae_collinear"',
     ):
         assert fragment in source + wrapper
+    assert 'aria-label="Pairwise match details content"' in index
+    assert 'role="region"' in index
+    assert source.count('"group", name="Apply to all adjacent gaps", exact=True') == 2
+    assert "Load Session" not in source
+    assert "page.locator(" not in source
+    assert "first_match.scroll_into_view_if_needed" not in source
+    assert "first_match.evaluate(" not in source
+    assert "page.get_by_text(" not in source
+    assert '[data-capture="linear-blast-source"]' not in source
+    assert '[data-match-kind="collinear"]' not in source
     assert (
         'get_by_role("radio", name="Run LOSAT", exact=True).first'
         not in source
@@ -574,7 +652,7 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
     assert "23 stable\ngroups and 77 displayed group links" in tutorial
     assert "comparison between sequence 1 and sequence 2" in tutorial
     assert "Raw LOSAT results" not in tutorial
-    assert "without\n   setting regions" in groups
+    assert "without setting regions" in " ".join(groups.split())
     assert "Turn off **Separate Strands**" in groups
     assert _chapter("T-GUI-04")["settings"]["separate_strands"] is False
     assert _chapter("H-GUI-07")["settings"]["separate_strands"] is False
@@ -589,8 +667,71 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
         Path(screenshot["path"]).name
         for screenshot in gallery_chapter["screenshots"]
     ) == SCREENSHOT_NAMES["T-GUI-08"]
-    assert "no Similarity-groups result is mixed" in gallery_collinear
-    assert "adjacent-pair Collinear" in gallery_collinear
+    assert {
+        "starting_mode=no_comparison",
+        "source_record_upload_count=5",
+        PINNED_NCBI_REVISIONS_ASSERTION,
+        "initial_cache_entries=0",
+        "input_frame.boundary_4_to_5_visible=true",
+        "baseline_definition_zoom=80%",
+        "baseline_definition_records_visible=5",
+        "losat_total_pairs=13",
+        "cache_hits=0",
+        "cache_misses=13",
+        "worker_jobs=13",
+        "svg.collinear_matches=500",
+        "detail_match_inside_preview=true",
+        "popup.selected_match_class=true",
+        "popup.scrolled_to_details=true",
+    } <= set(gallery_chapter["execution"]["assertions"])
+    assert "does not load a Gallery session" in gallery_collinear
+    assert "Evidence scope | Adjacent pairs" in gallery_collinear
+    assert "500 rendered Collinear match elements" in gallery_collinear
+    normalized_gallery_collinear = " ".join(gallery_collinear.split())
+    assert "six times to reach **40%**" in normalized_gallery_collinear
+    assert "four times to reach **80%**" in normalized_gallery_collinear
+    assert (
+        "Select **Reset zoom**, select **Zoom out** six times to reach **40%**, "
+        "then drag the preview horizontally until the complete diagram is centered."
+        in normalized_gallery_collinear
+    )
+    assert (
+        "complete left definition column is inside **Result Preview**"
+        in normalized_gallery_collinear
+    )
+    assert (
+        "Select **Zoom out** four times to return to **40%**"
+        in normalized_gallery_collinear
+    )
+    assert "Focus the first visible ribbon and press **Enter**" in (
+        normalized_gallery_collinear
+    )
+    assert "scroll within the popup" in normalized_gallery_collinear
+    gallery_baseline = gallery_chapter["screenshots"][1]
+    assert gallery_baseline["reason"] == (
+        "Show all five accession-and-length definitions in a readable 80% "
+        "left-side baseline view."
+    )
+    assert gallery_baseline["alt"] == (
+        "Five Hepatoplasmataceae record IDs and lengths at 80% before LOSATP"
+    )
+    gallery_detail = gallery_chapter["screenshots"][-2]
+    assert gallery_detail["reason"] == (
+        "Show Pairwise match 1 wholly inside Result Preview at 80% zoom."
+    )
+    assert gallery_detail["alt"] == (
+        "Pairwise match 1 visible inside the 80% Collinear Result Preview"
+    )
+    gallery_popup = gallery_chapter["screenshots"][-1]
+    assert gallery_popup["reason"] == (
+        "Show the selected ribbon beside the nonoverlapping popup and its Both "
+        "spans FASTA action."
+    )
+    assert gallery_popup["alt"] == (
+        "Selected Collinear ribbon beside a nonoverlapping query and subject "
+        "span popup"
+    )
+    assert "anchor" not in " ".join(gallery_popup.values()).casefold()
 
     collinear_path = PAGES["H-GUI-08"]
     collinear = collinear_path.read_text(encoding="utf-8")
@@ -602,7 +743,9 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
         "program": "losatp",
         "protein_mode": "collinear",
         "scheduling": "threaded",
-        "threads": 32,
+        "total_threads": 32,
+        "parallel_runs": 4,
+        "threads_per_run": 8,
         "evidence_scope": "all",
         "track_preset": "middle",
         "separate_strands": True,
@@ -612,13 +755,25 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
         "displayed_features=2994",
         "all_source_topologies=circular",
         "all_records_are_complete=true",
+        "source_record_upload_count=5",
+        PINNED_NCBI_REVISIONS_ASSERTION,
+        "initial_cache_entries=0",
         "evidence_scope=all",
-        "cache_hits=25",
-        "cache_misses=0",
-        "worker_jobs=0",
+        "total_threads=32",
+        "parallel_runs=4",
+        "threads_per_run=8",
+        "runtime_plan=4x8",
+        "losat_total_pairs=25",
+        "cache_hits=0",
+        "cache_misses=25",
+        "worker_jobs=25",
+        "svg.collinear_matches=500",
         "adjacent_display_pairs=true",
         "orientation_match=true",
         "color_mode=orientation_identity",
+        "detail_match_inside_preview=true",
+        "popup.selected_match_class=true",
+        "popup.scrolled_to_details=true",
         "span_fasta_records=2",
     } <= set(chapter["execution"]["assertions"])
     assert chapter["execution"]["expected_outputs"] == [
@@ -630,18 +785,56 @@ def test_protein_comparison_pages_and_manifest_state_the_complete_recipe() -> No
     ) == SCREENSHOT_NAMES["H-GUI-08"]
     for record_id in HEPATOPLASMATACEAE_RECORD_IDS:
         assert record_id in collinear
+    for page in (gallery_collinear, collinear):
+        for revision_url in PINNED_NCBI_REVISION_URLS.values():
+            assert revision_url in page
+        assert page.count("NCBI Revision History snapshot") >= 5
+        assert "All five links are official NCBI Revision History" in page
+        assert "`sat=3`" in page
+        for satkey in ("69902295", "69902296", "69902298", "69902297"):
+            assert f"`satkey={satkey}`" in page
+        assert "`sat=60`" in page
+        assert "`satkey=39275474`" in page
+        assert (
+            "do not substitute a repository copy or a Gallery session"
+            in " ".join(page.split())
+        )
+    normalized_collinear = " ".join(collinear.split())
     for value in (
         "Hepatoplasmataceae",
         "All records",
-        "25 directional and self LOSATP results",
-        "Middle",
+        "25 directional and self search jobs",
+        "Features on axis",
         "Separate Strands",
         "Ajisai",
         "40%",
         "hepatoplasmataceae_collinear.svg",
         "contain two non-empty nucleotide envelope sequences",
+        "four times to reach **80%**",
+        "Select **Zoom out** six times to reach **40%**",
+        "at least 32 logical processors",
+        "scroll within the popup",
+        "Drag the popup by its header",
     ):
-        assert value in collinear
+        assert value in normalized_collinear
+    how_to_detail = chapter["screenshots"][-2]
+    assert how_to_detail["reason"] == (
+        "Show Pairwise match 1 wholly inside Result Preview at 80% zoom."
+    )
+    assert how_to_detail["alt"] == (
+        "Pairwise match 1 visible inside the Hepatoplasmataceae Collinear "
+        "Result Preview"
+    )
+    how_to_popup = chapter["screenshots"][-1]
+    assert how_to_popup["reason"] == (
+        "Show the selected ribbon beside the nonoverlapping popup and its Both "
+        "spans FASTA action."
+    )
+    assert how_to_popup["alt"] == (
+        "Selected Hepatoplasmataceae Collinear ribbon beside a nonoverlapping "
+        "span popup"
+    )
+    assert "anchor" not in " ".join(how_to_popup.values()).casefold()
     for bgc_id in EXPECTED_RECORD_IDS:
         assert bgc_id not in collinear
 

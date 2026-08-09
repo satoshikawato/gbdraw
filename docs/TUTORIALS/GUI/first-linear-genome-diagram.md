@@ -8,7 +8,9 @@
 | --- | --- | --- |
 | **This page** | [Command-line workflow](../CLI/first-linear-genome-diagram.md) | [Python workflow](../PYTHON/first-linear-genome-diagram.md) |
 
-Create a labeled Linear SVG from the complete bundled Lambda phage GenBank record. You will generate a working map in Step 2, then add concise gene labels and a coordinate ruler before exporting it.
+Create a labeled Linear SVG from the complete, accession-pinned Lambda phage
+GenBank record. You will generate a working map in Step 2, then add concise
+gene labels and a coordinate ruler before exporting it.
 
 ![Finished linear Lambda genome diagram with labels and ruler](../../images/t-gui-02/04-finished-diagram.png)
 
@@ -16,13 +18,23 @@ Create a labeled Linear SVG from the complete bundled Lambda phage GenBank recor
 
 ## What you'll need
 
-- The gbdraw web app
-- The bundled `gbdraw/web/tutorial-data/lambda/NC_001416.gb` file
-- The bundled `gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv` label rule
+Starting state: open a fresh gbdraw web app page with no session loaded and no
+files selected.
 
-The label rule tells gbdraw to use short `gene` values for CDS labels. Both files are part of the fixed Tutorial fixture set.
+Use the filenames below when you download or save each file. See [Get the
+tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser download steps and
+the meaning of each file type.
 
-## Step 1: Load the bundled Lambda genome
+| File | File type | Purpose |
+| --- | --- | --- |
+| [`NC_001416.gb` — NCBI `NC_001416.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1) | Authoritative download | Complete Lambda GenBank record; save as `NC_001416.gb` |
+| [`cds_gene_qualifier_priority.tsv`](../../../gbdraw/web/tutorial-data/shared/cds_gene_qualifier_priority.tsv) | Support download | CDS label-priority rule |
+| `lambda_linear.svg` | Generated | Finished static diagram saved in Step 4 |
+
+The label rule tells gbdraw to use short `gene` values for CDS labels. The
+sequence comes from NCBI; the rule is repository-maintained support data.
+
+## Step 1: Load the NCBI Lambda genome
 
 Select **Linear** at the top of the app. Under **Input Genomes**, keep **GenBank** selected and choose **No comparison**. In the first **GenBank File** control, choose `NC_001416.gb`.
 

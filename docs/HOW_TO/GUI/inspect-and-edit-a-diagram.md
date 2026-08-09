@@ -11,9 +11,11 @@ group popups can also be inspected.
 
 ## Generate the finished mitochondrial diagram
 
-Upload
-[`HmmtDNA.gbk`](../../../gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk)
-as a Circular GenBank input. Set **Output Prefix** to `edited_diagram`,
+Download [NCBI record
+`NC_012920.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1) as **GenBank
+(full)**, save it as `HmmtDNA.gbk`, and upload it as a Circular GenBank input.
+See [Get the tutorial inputs](../../GETTING_TUTORIAL_DATA.md) for browser
+download and accession checks. Set **Output Prefix** to `edited_diagram`,
 **Species** to `<i>Homo sapiens</i>`, **Track Preset** to **Middle**, and turn on
 **Separate Strands**. Keep GC content and GC skew visible. Set **Legend
 Position** to **Right** and **Label Mode** to **Out**, then choose **Generate
@@ -74,10 +76,11 @@ a temporary, browser-only visual change.
 ## Inspect LOSATP match and Similarity group popups
 
 For protein evidence, follow [Create protein similarity groups with
-LOSATP](create-protein-similarity-groups.md) from its five raw BGC GenBank
-files. Use serial, one-thread LOSATP in **Similarity groups** mode. The expected
-result has 155 CDS features, 23 groups, and 77 links between adjacent records.
-There is no invented direct `BGC0000708` to `BGC0000713` edge.
+LOSATP](create-protein-similarity-groups.md) from its five authoritative MIBiG
+GenBank downloads. Use serial, one-thread LOSATP in **Similarity groups** mode.
+The expected result has 155 CDS features, 23 groups, and 77 links between
+adjacent records. There is no invented direct `BGC0000708` to `BGC0000713`
+edge.
 
 Click an `og_1` rendered link. The match popup identifies its Similarity group
 and lists the member evidence.
