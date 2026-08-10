@@ -97,6 +97,7 @@ import {
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
   normalizeLinearComparisonPlan,
+  plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan
 } from './linear-comparisons.js';
 import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
@@ -513,14 +514,13 @@ export const createAppSetup = () => {
   };
   const linearComparisonRecordLabel = (uid) => {
     const sequence = linearSeqs.find((entry) => entry.uid === uid);
-    const label = String(
+    return plainTextLinearRecordLabel(
       sequence?.definition ||
       sequence?.gb?.name ||
       sequence?.gff?.name ||
       sequence?.fasta?.name ||
       'Record'
-    ).replace(/<[^>]*>/g, '').trim();
-    return label || 'Record';
+    );
   };
   const focusLinearComparisonPair = async (edgeKey) => {
     await nextTick();

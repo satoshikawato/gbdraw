@@ -162,9 +162,6 @@ def _run_prepare_browser_wheel(*args: str) -> None:
 
 def ensure_prepared_browser_wheel():
     verify_module = _load_verify_module()
-    if importlib.util.find_spec("build") is None:
-        pytest.skip("python -m build is not available in this environment")
-
     try:
         browser_wheel_path = (
             verify_module.BUILD_SUPPORT.validate_browser_wheel_prepared()
@@ -859,11 +856,16 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     def fake_run(
         args: list[str], *, cwd: Path, env: dict[str, str], check: bool
     ) -> None:
-        calls.append("build")
+        calls.append("wheel")
         assert cwd == repo_root
         assert check is True
         assert env["GBDRAW_BUILDING_BROWSER_WHEEL"] == "1"
-        outdir = Path(args[args.index("--outdir") + 1])
+        assert args[:4] == [sys.executable, "-m", "pip", "wheel"]
+        assert "--no-deps" in args
+        assert "--no-cache-dir" in args
+        assert "--no-build-isolation" not in args
+        assert args[-1] == str(repo_root)
+        outdir = Path(args[args.index("--wheel-dir") + 1])
         outdir.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(outdir / expected_name, "w") as zf:
             zf.writestr("gbdraw/__init__.py", "")
@@ -891,7 +893,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     assert (web_root / expected_name).exists()
     assert calls == [
         "notices",
-        "build",
+        "wheel",
         ("config", {"wheel_name": expected_name, "cache_bust": "cache-token"}),
         "validate",
     ]
@@ -1173,12 +1175,15 @@ def test_conda_build_prepares_browser_wheel_before_install() -> None:
     build_sh = (REPO_ROOT / "recipe" / "build.sh").read_text(encoding="utf-8")
     meta_yaml = (REPO_ROOT / "recipe" / "meta.yaml").read_text(encoding="utf-8")
 
-    prepare_index = build_sh.index("$PYTHON tools/prepare_browser_wheel.py")
+    prepare_index = build_sh.index(
+        "$PYTHON tools/prepare_browser_wheel.py --no-build-isolation"
+    )
     install_index = build_sh.index(
         "$PYTHON -m pip install . --no-deps --ignore-installed -vv"
     )
     assert prepare_index < install_index
-    assert "python-build" in meta_yaml
+    assert "python-build" not in meta_yaml
+    assert re.search(r"^\s+- setuptools\s*$", meta_yaml, re.MULTILINE)
     assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
 
 

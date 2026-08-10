@@ -17,6 +17,16 @@ let comparisonCounter = 0;
 
 const cleanUid = (value) => String(value || '').trim();
 
+export const plainTextLinearRecordLabel = (value) => {
+  let label = String(value ?? '');
+  let previous;
+  do {
+    previous = label;
+    label = label.replace(/<[^<>]*>/g, '');
+  } while (label !== previous);
+  return label.replace(/[<>]/g, '').trim() || 'Record';
+};
+
 const normalizeMode = (value) => {
   const mode = String(value || '').trim().toLowerCase();
   return VALID_MODES.has(mode) ? mode : LINEAR_COMPARISON_MODES.ADJACENT;

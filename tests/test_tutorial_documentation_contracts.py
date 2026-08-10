@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +13,7 @@ TUTORIAL_INDEX = TUTORIAL_ROOT / "README.md"
 MANIFEST = DOCS_ROOT / "scenarios" / "manifest.json"
 TUTORIAL_DATA_MANIFEST = REPO_ROOT / "gbdraw" / "web" / "tutorial-data" / "manifest.json"
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[([^\]\n]+)\]\(([^)\n]+)\)")
+HTTP_URL_RE = re.compile(r"https?://[^\s<>\"'`]+", re.IGNORECASE)
 FIRST_H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 RETIRED_PUBLIC_DIRS = {"HOW" + "_TO", "EXPLANA" + "TION"}
 ACTIVE_INTERNAL_DOCS = (
@@ -22,6 +24,12 @@ ACTIVE_INTERNAL_DOCS = (
 
 def _markdown_links(path: Path) -> list[tuple[str, str]]:
     return MARKDOWN_LINK_RE.findall(path.read_text(encoding="utf-8"))
+
+
+def _has_url_host(source: str, hostname: str) -> bool:
+    return any(
+        urlsplit(url).hostname == hostname for url in HTTP_URL_RE.findall(source)
+    )
 
 
 def _local_target(source: Path, raw_target: str) -> Path | None:
@@ -58,6 +66,20 @@ def _public_docs() -> list[Path]:
             continue
         paths.append(path)
     return paths
+
+
+def test_url_host_matching_requires_exact_hostname() -> None:
+    assert _has_url_host(
+        "https://raw.githubusercontent.com/org/repo/main/sequence.gb",
+        "raw.githubusercontent.com",
+    )
+    deceptive_urls = (
+        "https://raw.githubusercontent.com.evil.example/sequence.gb",
+        "https://example.com/raw.githubusercontent.com/sequence.gb",
+        "https://raw.githubusercontent.com@evil.example/sequence.gb",
+    )
+    for url in deceptive_urls:
+        assert not _has_url_host(url, "raw.githubusercontent.com")
 
 
 def test_surface_indexes_list_each_canonical_tutorial_once_with_its_h1() -> None:
@@ -143,7 +165,7 @@ def test_procedural_docs_acquire_sequences_from_authoritative_sources() -> None:
                 if record_id not in source:
                     failures.append(f"{scenario_id}: missing accession {record_id}")
 
-        if "raw.githubusercontent.com" in source:
+        if _has_url_host(source, "raw.githubusercontent.com"):
             for file in sequence_files:
                 if str(file["relativePath"]) in source:
                     failures.append(

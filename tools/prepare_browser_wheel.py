@@ -21,7 +21,11 @@ def _load_build_support_module():
     return SimpleNamespace(**run_path(str(REPO_ROOT / "gbdraw" / "_build_support.py")))
 
 
-def prepare_browser_wheel(*, refresh_cache_bust: bool = False) -> int:
+def prepare_browser_wheel(
+    *,
+    refresh_cache_bust: bool = False,
+    build_isolation: bool = True,
+) -> int:
     build_support = _load_build_support_module()
     expected_name = build_support.expected_browser_wheel_name()
     build_support.refresh_open_source_notices()
@@ -43,16 +47,19 @@ def prepare_browser_wheel(*, refresh_cache_bust: bool = False) -> int:
 
             shutil.rmtree(REPO_ROOT / "build", ignore_errors=True)
 
+            wheel_command = [
+                sys.executable,
+                "-m",
+                "pip",
+                "wheel",
+                "--no-deps",
+                "--no-cache-dir",
+            ]
+            if not build_isolation:
+                wheel_command.append("--no-build-isolation")
+            wheel_command.extend(["--wheel-dir", str(outdir), str(REPO_ROOT)])
             subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "build",
-                    "--wheel",
-                    "--no-isolation",
-                    "--outdir",
-                    str(outdir),
-                ],
+                wheel_command,
                 cwd=REPO_ROOT,
                 env=env,
                 check=True,
@@ -97,8 +104,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Refresh GBDRAW_WHEEL_CACHE_BUST in gbdraw/web/js/config.js after preparing the wheel.",
     )
+    parser.add_argument(
+        "--no-build-isolation",
+        action="store_true",
+        help="Use build requirements already installed in the current environment.",
+    )
     args = parser.parse_args(argv)
-    return prepare_browser_wheel(refresh_cache_bust=args.refresh_cache_bust)
+    return prepare_browser_wheel(
+        refresh_cache_bust=args.refresh_cache_bust,
+        build_isolation=not args.no_build_isolation,
+    )
 
 
 if __name__ == "__main__":

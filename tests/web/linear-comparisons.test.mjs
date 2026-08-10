@@ -22,10 +22,16 @@ const {
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
   normalizeLinearComparisonPlan,
+  plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan,
   validateLinearComparisonEdges
 } = await import(pathToFileURL(join(tempRoot, 'linear-comparisons.js')));
+
+assert.equal(plainTextLinearRecordLabel('Alpha <em>beta</em>'), 'Alpha beta');
+assert.equal(plainTextLinearRecordLabel('Alpha <scr<script>ipt>'), 'Alpha');
+assert.equal(plainTextLinearRecordLabel('Alpha <script'), 'Alpha script');
+assert.equal(plainTextLinearRecordLabel('<b></b>'), 'Record');
 
 const file = (name) => ({ name });
 const sequences = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }, { uid: 'd' }];

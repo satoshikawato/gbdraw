@@ -1295,7 +1295,7 @@
     return endpoint ? [endpoint] : [];
   }
 
-  function clearCatalogMatchEndpoint(expanded, role) {
+  function clearCatalogMatchEndpoint(expanded, role, preserveRecordIdentity) {
     [
       '_feature_svg_id', 'FeatureSvgId',
       '_rendered_feature_svg_id', 'RenderedFeatureSvgId',
@@ -1307,6 +1307,10 @@
       '_record_id', 'RecordId',
       'FeatureReferences'
     ].forEach(function (suffix) {
+      if (
+        preserveRecordIdentity
+        &amp;&amp; ['_record_index', 'RecordIndex', '_record_id', 'RecordId'].indexOf(suffix) &gt;= 0
+      ) return;
       delete expanded[role + suffix];
     });
   }
@@ -1531,7 +1535,11 @@
         );
         expanded['_gbdraw_' + role + '_endpoint_resolved'] = Boolean(endpoints.length);
         if (!endpoints.length) {
-          clearCatalogMatchEndpoint(expanded, role);
+          clearCatalogMatchEndpoint(
+            expanded,
+            role,
+            String(expanded.match_kind || '') === 'homology'
+          );
           return;
         }
         var endpoint = endpoints[0];
@@ -4895,14 +4903,15 @@
   }
 
   function resolveEmbeddedMatchSource(match, role) {
+    var kind = String(match &amp;&amp; match.match_kind || 'pairwise');
     if (
       match
       &amp;&amp; match._gbdraw_catalog_endpoint_contract === true
+      &amp;&amp; kind !== 'homology'
       &amp;&amp; !resolvedCatalogMatchFeature(match, role)
     ) {
       return { source: null, reason: 'Match feature endpoint identity is invalid.' };
     }
-    var kind = String(match &amp;&amp; match.match_kind || 'pairwise');
     var recordIdIdentity = consistentTextIdentity(
       match,
       [role + '_record_id', role + 'RecordId']
