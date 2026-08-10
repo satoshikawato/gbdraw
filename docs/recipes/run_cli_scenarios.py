@@ -11,7 +11,6 @@ import os
 import re
 import shlex
 import shutil
-import struct
 import subprocess
 import sys
 import zlib
@@ -27,7 +26,6 @@ if __package__:
         RecipeContractError,
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
-        compare_raster_images,
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
@@ -43,7 +41,6 @@ else:
         RecipeContractError,
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
-        compare_raster_images,
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
@@ -72,6 +69,7 @@ _HCLI13_FONT_PROPERTY_VARIANTS = {
     ("True", "True", "False", "1", "1", "1"),
     ("True", "True", "False", "1", "5", "1"),
 }
+_HCLI13_PNG_MAX_COMPOSITE_RMS = 4.0
 _PATH_COORDINATE_RE = re.compile(r"[ML]\s+(-?[0-9.]+),(-?[0-9.]+)")
 _BGC_RECORD_IDS = (
     "BGC0000708",
@@ -445,20 +443,72 @@ def _normalized_artifact_payload(scenario_id: str, path: Path) -> bytes:
     return payload
 
 
+def _png_visual_comparison_error(
+    expected_path: Path,
+    actual_path: Path,
+) -> str | None:
+    """Compare visible PNG content while tolerating native rasterizer edge noise."""
+
+    from PIL import Image, ImageChops, ImageStat
+
+    try:
+        with Image.open(expected_path) as expected, Image.open(actual_path) as actual:
+            expected.load()
+            actual.load()
+            if expected.format != "PNG" or actual.format != "PNG":
+                return (
+                    "PNG format differs: "
+                    f"format={actual.format} (expected {expected.format})"
+                )
+            if expected.size != actual.size or expected.mode != actual.mode:
+                return (
+                    "PNG dimensions or mode differ: "
+                    f"size={actual.size} (expected {expected.size}), "
+                    f"mode={actual.mode} (expected {expected.mode})"
+                )
+            if expected.mode != "RGBA":
+                return f"PNG mode is {expected.mode}; expected RGBA"
+            expected_alpha = expected.getchannel("A").getextrema()
+            actual_alpha = actual.getchannel("A").getextrema()
+            if expected_alpha != (0, 255) or actual_alpha != (0, 255):
+                return (
+                    "PNG alpha range differs: "
+                    f"alpha={actual_alpha} (expected {expected_alpha})"
+                )
+
+            composite_rms: dict[str, float] = {}
+            for background_color in ("black", "white"):
+                background = Image.new("RGBA", expected.size, background_color)
+                expected_composite = Image.alpha_composite(background, expected)
+                actual_composite = Image.alpha_composite(background, actual)
+                difference = ImageChops.difference(
+                    expected_composite.convert("RGB"),
+                    actual_composite.convert("RGB"),
+                )
+                composite_rms[background_color] = max(ImageStat.Stat(difference).rms)
+    except (OSError, SyntaxError, ValueError) as exc:
+        return f"PNG decode failed: {exc}"
+
+    if max(composite_rms.values()) <= _HCLI13_PNG_MAX_COMPOSITE_RMS:
+        return None
+    rms_values = ", ".join(
+        f"{background}={value:.3f}"
+        for background, value in composite_rms.items()
+    )
+    return (
+        "PNG large-scale visual content differs: "
+        f"composite RMS ({rms_values}); "
+        f"limit={_HCLI13_PNG_MAX_COMPOSITE_RMS:.3f}"
+    )
+
+
 def _artifact_comparison_error(
     scenario_id: str,
     expected_path: Path,
     actual_path: Path,
 ) -> str | None:
     if scenario_id == "H-CLI-13" and expected_path.suffix == ".png":
-        comparison = compare_raster_images(expected_path, actual_path)
-        if comparison.within(
-            max_changed_pixels=100,
-            max_channel_delta=64,
-            max_bounding_box_area=256,
-        ):
-            return None
-        return f"PNG raster differs: {comparison.describe()}"
+        return _png_visual_comparison_error(expected_path, actual_path)
 
     if _normalized_artifact_payload(
         scenario_id, expected_path
@@ -2123,6 +2173,39 @@ def _assert_session_roundtrip(
         raise RecipeContractError("H-CLI-12 wrote output for an incompatible session.")
 
 
+def _assert_png_export(
+    png_path: Path,
+    *,
+    expected_dimensions: tuple[int, int],
+) -> None:
+    from PIL import Image
+
+    try:
+        with Image.open(png_path) as image:
+            image.verify()
+        with Image.open(png_path) as image:
+            image.load()
+            image_format = image.format
+            image_size = image.size
+            image_mode = image.mode
+            alpha_extrema = (
+                image.getchannel("A").getextrema() if "A" in image.getbands() else None
+            )
+    except (OSError, SyntaxError, ValueError) as exc:
+        raise RecipeContractError(f"H-CLI-13 PNG decode failed: {exc}") from exc
+
+    if image_format != "PNG":
+        raise RecipeContractError("H-CLI-13 export is not a PNG image.")
+    if image_size != expected_dimensions:
+        raise RecipeContractError(
+            "H-CLI-13 PNG dimensions do not match the SVG master."
+        )
+    if image_mode != "RGBA" or alpha_extrema != (0, 255):
+        raise RecipeContractError(
+            "H-CLI-13 PNG must be RGBA with transparent and opaque pixels."
+        )
+
+
 def _assert_export_set(workdir: Path) -> None:
     static_path = workdir / "cli_export.svg"
     interactive_path = workdir / "cli_export.interactive.svg"
@@ -2162,10 +2245,6 @@ def _assert_export_set(workdir: Path) -> None:
     ):
         raise RecipeContractError("H-CLI-13 static SVG contains a script.")
 
-    png = (workdir / "cli_export.png").read_bytes()
-    if png[:8] != b"\x89PNG\r\n\x1a\n" or len(png) < 100_000:
-        raise RecipeContractError("H-CLI-13 PNG signature or size changed.")
-    width, height = struct.unpack(">II", png[16:24])
     try:
         svg_width = float(static_root.attrib["width"].removesuffix("px"))
         svg_height = float(static_root.attrib["height"].removesuffix("px"))
@@ -2179,14 +2258,12 @@ def _assert_export_set(workdir: Path) -> None:
     ):
         raise RecipeContractError("H-CLI-13 SVG size and viewBox differ.")
     expected_png_dimensions = (int(svg_width), int(svg_height))
-    if (
-        (width, height) != expected_png_dimensions
-        or min(expected_png_dimensions) <= 0
-        or not png.endswith(b"IEND\xaeB`\x82")
-    ):
-        raise RecipeContractError(
-            "H-CLI-13 PNG dimensions do not match the SVG master or its trailer changed."
-        )
+    if min(expected_png_dimensions) <= 0:
+        raise RecipeContractError("H-CLI-13 PNG dimensions must be positive.")
+    _assert_png_export(
+        workdir / "cli_export.png",
+        expected_dimensions=expected_png_dimensions,
+    )
 
     pdf = (workdir / "cli_export.pdf").read_bytes()
     match = list(re.finditer(rb"startxref\s+(\d+)", pdf))

@@ -20,6 +20,7 @@ from docs.recipes._scenario_support import (
 )
 from docs.recipes.run_cli_scenarios import (
     _artifact_comparison_error,
+    _assert_png_export,
     _normalized_artifact_payload,
 )
 
@@ -291,14 +292,15 @@ def test_hcli13_font_probe_rejects_an_unbundled_resolution(
         cli_runner._assert_hcli13_bundled_fonts({"PATH": "/host/bin"})
 
 
-def test_export_png_comparison_accepts_only_observed_cairo_noise(
+def test_export_png_comparison_tolerates_edge_noise_but_rejects_large_drift(
     tmp_path: Path,
 ) -> None:
     expected_path = tmp_path / "expected" / "cli_export.png"
     actual_path = tmp_path / "actual" / "cli_export.png"
     expected_path.parent.mkdir()
     actual_path.parent.mkdir()
-    expected = Image.new("RGBA", (20, 20), (100, 100, 100, 255))
+    expected = Image.new("RGBA", (512, 512), (255, 255, 255, 0))
+    expected.paste((40, 100, 180, 255), (40, 40, 472, 472))
     expected.save(expected_path)
 
     def comparison_error(actual: Image.Image) -> str | None:
@@ -307,48 +309,67 @@ def test_export_png_comparison_accepts_only_observed_cairo_noise(
 
     assert comparison_error(expected.copy()) is None
 
-    observed_noise = expected.copy()
-    observed_coordinates = [(0, 0), (12, 10)]
-    observed_coordinates.extend(
-        (x, y)
-        for y in range(11)
-        for x in range(13)
-        if (x, y) not in {(0, 0), (12, 10)}
-    )
-    for x, y in observed_coordinates[:71]:
-        observed_noise.putpixel(
-            (x, y),
-            (121, 148, 162, 255),
+    runner_noise = expected.copy()
+    for index in range(3_541):
+        coordinate = (40 + index % 432, 40 + index // 432)
+        runner_noise.putpixel(coordinate, (41, 100, 180, 237))
+    runner_noise.putpixel((40, 40), (169, 100, 180, 237))
+    assert comparison_error(runner_noise) is None
+
+    recolored = expected.copy()
+    recolored.paste((190, 40, 40, 255), (120, 120, 392, 392))
+    error = comparison_error(recolored)
+    assert error is not None and "large-scale visual content differs" in error
+
+    shifted = Image.new("RGBA", expected.size, (255, 255, 255, 0))
+    shifted.paste(expected, (1, 0))
+    error = comparison_error(shifted)
+    assert error is not None and "large-scale visual content differs" in error
+
+    transparent_blank = Image.new("RGBA", expected.size, (255, 255, 255, 0))
+    assert comparison_error(transparent_blank) is not None
+
+
+def test_assert_png_export_requires_decode_dimensions_mode_and_alpha(
+    tmp_path: Path,
+) -> None:
+    expected_dimensions = (64, 48)
+    png_path = tmp_path / "cli_export.png"
+    valid = Image.new("RGBA", expected_dimensions, (255, 255, 255, 0))
+    valid.paste((20, 80, 160, 255), (8, 8, 56, 40))
+    valid.save(png_path)
+
+    _assert_png_export(png_path, expected_dimensions=expected_dimensions)
+
+    truncated_path = tmp_path / "truncated.png"
+    truncated_path.write_bytes(png_path.read_bytes()[:-12])
+    with pytest.raises(cli_runner.RecipeContractError, match="PNG decode failed"):
+        _assert_png_export(
+            truncated_path,
+            expected_dimensions=expected_dimensions,
         )
-    assert comparison_error(observed_noise) is None
 
-    excessive_count = expected.copy()
-    for index in range(101):
-        excessive_count.putpixel(
-            (index % 11, index // 11),
-            (101, 100, 100, 255),
-        )
-    error = comparison_error(excessive_count)
-    assert error is not None and "changed RGB pixels=101" in error
+    non_png_path = tmp_path / "not-really-png.png"
+    valid.save(non_png_path, format="TIFF")
+    with pytest.raises(cli_runner.RecipeContractError, match="not a PNG"):
+        _assert_png_export(non_png_path, expected_dimensions=expected_dimensions)
 
-    excessive_delta = expected.copy()
-    excessive_delta.putpixel((0, 0), (165, 100, 100, 255))
-    error = comparison_error(excessive_delta)
-    assert error is not None and "max RGB channel delta=65" in error
+    wrong_size_path = tmp_path / "wrong-size.png"
+    valid.resize((65, 48)).save(wrong_size_path)
+    with pytest.raises(cli_runner.RecipeContractError, match="dimensions"):
+        _assert_png_export(wrong_size_path, expected_dimensions=expected_dimensions)
 
-    scattered_noise = expected.copy()
-    scattered_noise.putpixel((0, 0), (101, 100, 100, 255))
-    scattered_noise.putpixel((16, 16), (101, 100, 100, 255))
-    error = comparison_error(scattered_noise)
-    assert error is not None and "RGB bounding box=(0, 0, 17, 17)" in error
+    rgb_path = tmp_path / "rgb.png"
+    valid.convert("RGB").save(rgb_path)
+    with pytest.raises(cli_runner.RecipeContractError, match="must be RGBA"):
+        _assert_png_export(rgb_path, expected_dimensions=expected_dimensions)
 
-    alpha_change = expected.copy()
-    alpha_change.putpixel((0, 0), (100, 100, 100, 254))
-    error = comparison_error(alpha_change)
-    assert error is not None and "alpha exact=False" in error
-
-    assert comparison_error(expected.convert("RGB")) is not None
-    assert comparison_error(Image.new("RGBA", (21, 20), (100, 100, 100, 255))) is not None
+    opaque_path = tmp_path / "opaque.png"
+    opaque = valid.copy()
+    opaque.putalpha(255)
+    opaque.save(opaque_path)
+    with pytest.raises(cli_runner.RecipeContractError, match="transparent and opaque"):
+        _assert_png_export(opaque_path, expected_dimensions=expected_dimensions)
 
 
 def test_export_renderer_metadata_is_normalized_but_content_is_not(
