@@ -327,12 +327,16 @@ const normalizeOriginalResourceName = (name) => {
 const createResourceBuilder = () => {
   const resources = {};
   const resourceOriginalNames = {};
+  const fileResourceIds = new Map();
 
   const addFile = (resourceId, kind, entry) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       throw new Error(`Canonical resource ${resourceId} is missing.`);
     }
     if (resources[resourceId]) return resourceId;
+    const kindResourceIds = fileResourceIds.get(kind) || new WeakMap();
+    const existingResourceId = kindResourceIds.get(entry);
+    if (existingResourceId) return existingResourceId;
     resources[resourceId] = {
       kind,
       name: normalizeResourceName(resourceId, entry.name),
@@ -342,6 +346,8 @@ const createResourceBuilder = () => {
       encoding: entry.encoding || 'base64',
       data: entry.data
     };
+    kindResourceIds.set(entry, resourceId);
+    fileResourceIds.set(kind, kindResourceIds);
     const originalName = normalizeOriginalResourceName(entry.name);
     if (originalName) resourceOriginalNames[resourceId] = originalName;
     return resourceId;

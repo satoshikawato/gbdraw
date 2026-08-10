@@ -2409,6 +2409,73 @@ const customDepthRequested = (mode, sourceState) => {
   );
 };
 
+export const materializeLinearRecordFiles = (
+  sequences,
+  catalog,
+  { layoutEnabled = false } = {}
+) => {
+  const sourceSequences = Array.isArray(sequences) ? sequences : [];
+  if (catalog == null) return sourceSequences;
+  if (catalog?.mode !== 'linear' || catalog?.status !== 'ready') {
+    const issue = Array.isArray(catalog?.issues) ? catalog.issues[0] : '';
+    throw new Error(issue || 'Linear record discovery is not ready.');
+  }
+  const records = Array.isArray(catalog.records) ? catalog.records : [];
+  if (records.length === 0) {
+    throw new Error('Linear record discovery did not find any records.');
+  }
+  const recordCountBySource = new Map();
+  records.forEach((record) => {
+    const sourceIndex = Number(record?.sourceIndex);
+    recordCountBySource.set(sourceIndex, (recordCountBySource.get(sourceIndex) || 0) + 1);
+  });
+  sourceSequences.forEach((source, sourceIndex) => {
+    const count = recordCountBySource.get(sourceIndex) || 0;
+    if (count === 0) {
+      throw new Error(`Sequence #${sourceIndex + 1}: no records were found.`);
+    }
+    if (count <= 1) return;
+    if (layoutEnabled) {
+      throw new Error(
+        'Arrange in rows requires one selected record per input file. ' +
+        'Turn it off or choose a Record for each multi-record file.'
+      );
+    }
+    const hasRegion = [source.region_start, source.region_end].some(
+      (value) => value !== null && value !== undefined && value !== ''
+    );
+    if (hasRegion) {
+      throw new Error(
+        `Sequence #${sourceIndex + 1}: choose a Record before setting a region on a multi-record file.`
+      );
+    }
+  });
+  const emittedBySource = new Map();
+  return records.map((record) => {
+    const sourceIndex = Number(record?.sourceIndex);
+    const localIndex = Number(record?.localIndex);
+    if (
+      !Number.isInteger(sourceIndex) || sourceIndex < 0 || !sourceSequences[sourceIndex] ||
+      !Number.isInteger(localIndex) || localIndex < 0
+    ) {
+      throw new Error('Linear record discovery returned an invalid source mapping.');
+    }
+    const source = sourceSequences[sourceIndex];
+    const sourceUid = String(source.uid || `linear-${sourceIndex + 1}`);
+    const expanded = recordCountBySource.get(sourceIndex) > 1;
+    const occurrence = emittedBySource.get(sourceIndex) || 0;
+    emittedBySource.set(sourceIndex, occurrence + 1);
+    return {
+      ...source,
+      uid: expanded ? `${sourceUid}::record-${localIndex + 1}` : sourceUid,
+      depth: Array.isArray(source.depth) ? [...source.depth] : source.depth,
+      definition: expanded && occurrence > 0 ? '' : source.definition,
+      record_subtitle: expanded && occurrence > 0 ? '' : source.record_subtitle,
+      region_record_id: `#${localIndex + 1}`
+    };
+  });
+};
+
 export const serializeActiveRenderFiles = async (
   mode = state.mode.value,
   sourceState = state,
@@ -2422,7 +2489,7 @@ export const serializeActiveRenderFiles = async (
     ? normalizeLinearSeqList(sourceState.linearSeqs)
     : [];
   const depthRequested = customDepthRequested(mode, sourceState);
-  const linearSeqs = await Promise.all(
+  const serializedLinearSeqs = await Promise.all(
     normalizedLinearSeqs.map(async (seq) => ({
       uid: seq.uid,
       gb: await serializeFile(seq.gb),
@@ -2438,8 +2505,22 @@ export const serializeActiveRenderFiles = async (
       region_reverse: !!seq.region_reverse
     }))
   );
-  const suppliedComparisonPlan = comparisonPlanOrOptions?.comparisonPlan
-    || comparisonPlanOrOptions;
+  const optionBag = comparisonPlanOrOptions
+    && typeof comparisonPlanOrOptions === 'object'
+    && (
+      Object.prototype.hasOwnProperty.call(comparisonPlanOrOptions, 'comparisonPlan') ||
+      Object.prototype.hasOwnProperty.call(comparisonPlanOrOptions, 'linearRecordCatalog')
+    )
+    ? comparisonPlanOrOptions
+    : null;
+  const suppliedComparisonPlan = optionBag
+    ? optionBag.comparisonPlan
+    : comparisonPlanOrOptions;
+  const linearSeqs = materializeLinearRecordFiles(
+    serializedLinearSeqs,
+    optionBag?.linearRecordCatalog ?? null,
+    { layoutEnabled: Boolean(sourceState.linearRecordLayoutEnabled?.value) }
+  );
   const resolvedComparisonPlan = mode === 'linear'
     ? suppliedComparisonPlan || resolveLinearComparisonPlan({
         plan: sourceState.linearComparisonPlan,
@@ -3393,7 +3474,10 @@ const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-f
   return plan;
 };
 
-export const exportSession = async (titleOverride = null) => {
+export const exportSession = async (
+  titleOverride = null,
+  { linearRecordCatalog = null } = {}
+) => {
   const resolvedTitle =
     typeof titleOverride === 'string'
       ? titleOverride.trim()
@@ -3464,7 +3548,10 @@ export const exportSession = async (titleOverride = null) => {
     const activeFiles = await serializeActiveRenderFiles(
       state.mode.value,
       state,
-      comparisonPlanSnapshot
+      {
+        comparisonPlan: comparisonPlanSnapshot,
+        linearRecordCatalog
+      }
     );
     committed = buildCanonicalRenderRequest({
       state,

@@ -73,7 +73,6 @@ import {
 } from './current-option-values.js';
 import { PAIRWISE_LEGEND_SELECTOR } from './legend/utils.js';
 import {
-  circularInputNeedsRecordDiscovery,
   discoverGffFastaRecords,
   discoverSequenceRecords
 } from './record-discovery.js';
@@ -799,6 +798,7 @@ export const createRunAnalysis = ({
   applyGeneratedArtifactSnapshot,
   resetPreviewViewport,
   validateAnnotationTargets = null,
+  prepareLinearRecordCatalog = null,
   losatExecutor = runLosatPairsParallel,
   prepareCandidateCommit = prepareCandidateRenderCommit
 }) => {
@@ -908,6 +908,7 @@ export const createRunAnalysis = ({
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let circularRecordRefreshGeneration = 0;
+  let activeCircularRecordRefresh = null;
   let activeLosatAbortController = null;
   let latestCliHelperFiles = [];
   let latestCliHelperArchiveName = 'out-cli-files.zip';
@@ -1394,10 +1395,7 @@ export const createRunAnalysis = ({
     });
   };
 
-  const refreshCircularRecordOrder = async ({
-    discoverRecords = true,
-    suppress = false
-  } = {}) => {
+  const runCircularRecordRefresh = async ({ suppress = false } = {}) => {
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(adv.multi_record_positions)) {
@@ -1408,26 +1406,25 @@ export const createRunAnalysis = ({
     const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
     const pairedFile = inputType === 'gff' ? files.c_fasta : null;
     const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
-    const shouldDiscoverRecords = discoverRecords !== false;
+    const hasActiveInput = mode.value === 'circular' && hasCompleteInput;
+    const canReadWithoutRuntime = typeof (
+      inputType === 'gff' ? pairedFile : primaryFile
+    )?.text === 'function';
     Object.assign(circularRecordDiscovery, {
-      status: hasCompleteInput && shouldDiscoverRecords ? 'loading' : 'idle',
+      status: hasActiveInput ? 'loading' : 'idle',
       error: '',
       inputType,
       primaryFile: primaryFile || null,
       pairedFile: pairedFile || null
     });
     if (
-      mode.value !== 'circular' ||
-      !hasCompleteInput ||
-      !shouldDiscoverRecords
+      !hasActiveInput
     ) {
       circularRecordList.value = [];
-      if (!hasCompleteInput || !shouldDiscoverRecords) {
-        adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
-      }
+      adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
       return;
     }
-    if (!pyodideReady.value || !pyodide) {
+    if ((!pyodideReady.value || !pyodide) && !canReadWithoutRuntime) {
       try {
         pyodide = await ensureHelperRuntime();
       } catch (error) {
@@ -1457,6 +1454,7 @@ export const createRunAnalysis = ({
         ? await discoverGffFastaRecords({
             gffFile: primaryFile,
             fastaFile: pairedFile,
+            readText: readFileText,
             pyodide,
             writeFileToFs,
             gffTemporaryPath: `/record-discovery-circular-${refreshGeneration}.gff`,
@@ -1465,6 +1463,7 @@ export const createRunAnalysis = ({
         : await discoverSequenceRecords({
             file: primaryFile,
             format: 'genbank',
+            readText: readFileText,
             pyodide,
             writeFileToFs,
             temporaryPath: `/record-discovery-circular-${refreshGeneration}.gb`
@@ -1503,6 +1502,32 @@ export const createRunAnalysis = ({
     }
   };
 
+  const refreshCircularRecordOrder = (options = {}) => {
+    const inputType = cInputType.value;
+    const fingerprint = [
+      Boolean(options.suppress || recordDiscoverySuppressed()),
+      mode.value,
+      inputType,
+      inputType === 'gff' ? files.c_gff : files.c_gb,
+      inputType === 'gff' ? files.c_fasta : null
+    ];
+    if (
+      activeCircularRecordRefresh &&
+      fingerprint.length === activeCircularRecordRefresh.fingerprint.length &&
+      fingerprint.every((value, index) => (
+        Object.is(value, activeCircularRecordRefresh.fingerprint[index])
+      ))
+    ) {
+      return activeCircularRecordRefresh.promise;
+    }
+    const entry = { fingerprint, promise: null };
+    entry.promise = runCircularRecordRefresh(options).finally(() => {
+      if (activeCircularRecordRefresh === entry) activeCircularRecordRefresh = null;
+    });
+    activeCircularRecordRefresh = entry;
+    return entry.promise;
+  };
+
   const runAnalysisInternal = async ({
     runMode = 'manual',
     requestId = 0,
@@ -1521,6 +1546,7 @@ export const createRunAnalysis = ({
           })
         )
       : null;
+    let linearRecordCatalog = null;
 
     const generationToken = ++latestGenerationToken;
     let keepProcessingStatus = false;
@@ -1541,20 +1567,58 @@ export const createRunAnalysis = ({
       !isReflow && typeof AbortController === 'function' ? new AbortController() : null;
     generationAbortSignal = generationAbortController?.signal || null;
     if (!isReflow) activeLosatAbortController = generationAbortController;
+    if (mode.value === 'linear' && typeof prepareLinearRecordCatalog === 'function') {
+      if (!isReflow) {
+        processing.value = true;
+        processingStatus.value = 'Reading input records...';
+      }
+      let prepared;
+      try {
+        prepared = await prepareLinearRecordCatalog(
+          activeComparisonPlanSnapshot?.hasComparisonIntent
+        );
+      } catch (error) {
+        prepared = {
+          catalog: null,
+          error: error?.message || 'Could not read records from the Linear input file(s).'
+        };
+      } finally {
+        if (!isReflow) {
+          processing.value = false;
+          processingStatus.value = '';
+        }
+      }
+      if (
+        !isReflow && (
+          generationAbortSignal?.aborted ||
+          generationCancelRequested.value ||
+          generationToken !== latestGenerationToken
+        )
+      ) {
+        if (activeLosatAbortController === generationAbortController) {
+          activeLosatAbortController = null;
+        }
+        generationCancelRequested.value = false;
+        return { status: 'canceled' };
+      }
+      if (prepared?.error) {
+        const message = String(prepared.error);
+        if (isReflow) labelReflowLastError.value = message;
+        else errorLog.value = formatJsError(new Error(message));
+        if (activeLosatAbortController === generationAbortController) {
+          activeLosatAbortController = null;
+        }
+        return { status: 'error' };
+      }
+      linearRecordCatalog = prepared?.catalog || null;
+    }
     if (!isReflow && mode.value === 'circular') {
       const inputType = cInputType.value;
       const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
       const pairedFile = inputType === 'gff' ? files.c_fasta : null;
       const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
-      const recordAwarePreflightNeeded = circularInputNeedsRecordDiscovery({
-        form,
-        adv,
-        files,
-        annotationSets
-      });
       if (
         hasCompleteInput &&
-        recordAwarePreflightNeeded &&
         !circularDiscoveryMatchesCurrentInput()
       ) {
         processing.value = true;
@@ -1741,7 +1805,15 @@ export const createRunAnalysis = ({
           throw new Error(activeComparisonPlanSnapshot.error);
         }
       }
-      let annotationLoadComparison = false;
+      const annotationLoadComparison = (
+        mode.value === 'linear' && activeComparisonPlanSnapshot?.hasComparisonIntent === true
+      );
+      if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
+        const annotationError = validateAnnotationTargets({
+          loadComparison: annotationLoadComparison
+        });
+        if (annotationError) throw new Error(annotationError);
+      }
       let regionSpecs = [];
       let recordSelectors = [];
       let reverseFlags = [];
@@ -2678,7 +2750,6 @@ export const createRunAnalysis = ({
           return null;
         };
 
-        let hasLinearComparisonData = comparisonResolution.hasComparisonIntent === true;
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
@@ -3640,7 +3711,6 @@ export const createRunAnalysis = ({
                   rows: Array.isArray(converted.rows) ? converted.rows : []
                 });
               }
-              hasLinearComparisonData = true;
             }
           } else {
             if (!convertNucleotideBlast) {
@@ -3680,7 +3750,6 @@ export const createRunAnalysis = ({
                 subjectRecordIndex: pair.subjectIndex,
                 text: converted.tsv || '',
               });
-              hasLinearComparisonData = true;
             }
           }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
@@ -3817,14 +3886,9 @@ export const createRunAnalysis = ({
           validateDepthStyleSettings();
           adv.depth_height = normalizePositiveNumberOrNull(adv.depth_height);
         }
-        annotationLoadComparison = hasLinearComparisonData;
       }
 
-      if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
-        const annotationError = validateAnnotationTargets({
-          loadComparison: mode.value === 'linear' ? annotationLoadComparison : false
-        });
-        if (annotationError) throw new Error(annotationError);
+      if (annotationSets.length > 0) {
         stageTextFile('/web_annotations.tsv', encodeAnnotationTable(annotationSets), {
           name: 'annotations.tsv',
           slot: 'generatedFiles.web_annotations'
@@ -3836,7 +3900,11 @@ export const createRunAnalysis = ({
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }
-      const serializedFiles = await serializeCanonicalFiles(activeComparisonPlanSnapshot);
+      const serializedFiles = await serializeCanonicalFiles(
+        activeComparisonPlanSnapshot,
+        linearRecordCatalog
+      );
+      throwIfGenerationCanceled();
       const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
         ...entry,
         fasta: serializedFiles.c_conservation_fastas?.[entry.sourceIndex] || null

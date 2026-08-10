@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
+const { gunzipSync } = require('node:zlib');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -739,6 +740,182 @@ test('No comparison completes a real render without touching dormant comparison 
   await expect(dormantPair.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #1 to #2'
   })).toBeDisabled();
+});
+
+test('Automatic Linear renders every record from one GenBank source and survives session reload', async ({ page }) => {
+  test.setTimeout(300000);
+  await installDiagramRequestObserver(page);
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.waitForFunction(
+    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    null,
+    { timeout: 180000 }
+  );
+
+  const sourceName = 'automatic-multi-record.gbk';
+  await page.evaluate(({ content, name }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    const source = new File(
+      [content], name, { type: 'text/plain', lastModified: 1 }
+    );
+    const nativeArrayBuffer = source.arrayBuffer.bind(source);
+    window.__GBDRAW_SOURCE_READS__ = 0;
+    source.arrayBuffer = () => {
+      window.__GBDRAW_SOURCE_READS__ += 1;
+      return nativeArrayBuffer();
+    };
+    app.setLinearSeqPrimaryFile(0, 'gb', source);
+    Object.assign(app.form, {
+      legend: 'none',
+      show_gc: false,
+      show_skew: false,
+      show_depth: false,
+      show_labels_linear: 'none'
+    });
+    app.setLinearComparisonGlobalAction('none');
+    app.sessionTitle = 'automatic-multi-record';
+  }, {
+    content: makeComparisonGenbank('AutomaticA', 'atg') +
+      makeComparisonGenbank('AutomaticB', 'gct'),
+    name: sourceName
+  });
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs[0]).length
+  ))).toBe(3);
+
+  await page.evaluate(() => {
+    window.__GBDRAW_AUTOMATIC_RUN__ = { done: false, result: null, error: '' };
+    window.__GBDRAW_APP__.runAnalysis().then((result) => {
+      Object.assign(window.__GBDRAW_AUTOMATIC_RUN__, { done: true, result });
+    }).catch((error) => {
+      Object.assign(window.__GBDRAW_AUTOMATIC_RUN__, {
+        done: true,
+        error: error?.message || String(error)
+      });
+    });
+  });
+  await page.waitForFunction(() => window.__GBDRAW_AUTOMATIC_RUN__?.done === true);
+  const generated = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const run = window.__GBDRAW_AUTOMATIC_RUN__;
+    if (run.error) throw new Error(run.error);
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    return {
+      result: run.result,
+      error: app.errorLog,
+      sourceReads: window.__GBDRAW_SOURCE_READS__,
+      cardCount: app.linearSeqs.length,
+      selector: app.linearSeqs[0].region_record_id,
+      grouping: request.grouping,
+      selectors: request.records.map((record) => record.selector),
+      sharedResourceCount: new Set(
+        request.records.map((record) => record.source.resourceId)
+      ).size
+    };
+  });
+  expect(generated).toEqual({
+    result: { status: 'ok' },
+    error: null,
+    sourceReads: 1,
+    cardCount: 1,
+    selector: '',
+    grouping: 'single',
+    selectors: [
+      { kind: 'recordIndex', index: 0 },
+      { kind: 'recordIndex', index: 1 }
+    ],
+    sharedResourceCount: 1
+  });
+
+  const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
+  expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
+    .toBe('saved');
+  const sessionPath = await (await sessionDownloadPromise).path();
+  const session = JSON.parse(gunzipSync(readFileSync(sessionPath)).toString('utf8'));
+  expect(session.webFiles.bindings.linearSeqs).toHaveLength(1);
+  expect(session.webFiles.bindings.linearSeqs[0].region_record_id).toBe('');
+  expect(session.renderRequest.records.map((record) => record.selector)).toEqual([
+    { kind: 'recordIndex', index: 0 },
+    { kind: 'recordIndex', index: 1 }
+  ]);
+  expect(new Set(
+    session.renderRequest.records.map((record) => record.source.resourceId)
+  ).size).toBe(1);
+
+  await page.addInitScript((recordSourceName) => {
+    const nativeArrayBuffer = File.prototype.arrayBuffer;
+    let releaseRecordRead;
+    const recordReadGate = new Promise((resolve) => { releaseRecordRead = resolve; });
+    window.__GBDRAW_RECORD_TEXT_READS__ = 0;
+    window.__GBDRAW_RELEASE_RECORD_TEXT__ = releaseRecordRead;
+    File.prototype.arrayBuffer = async function (...args) {
+      if (this.name !== recordSourceName) return nativeArrayBuffer.apply(this, args);
+      const { state } = await import('./js/state.js');
+      if (state.semanticFileWatchersSuppressed.value) {
+        return nativeArrayBuffer.apply(this, args);
+      }
+      window.__GBDRAW_RECORD_TEXT_READS__ += 1;
+      await recordReadGate;
+      return nativeArrayBuffer.apply(this, args);
+    };
+  }, sourceName);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.waitForFunction(
+    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    null,
+    { timeout: 180000 }
+  );
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+  await page.waitForFunction(() => window.__GBDRAW_RECORD_TEXT_READS__ === 1);
+
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.labelReflowForceRequestReason.value = 'multi-record-session-reflow';
+    state.labelReflowForceRequestSeq.value += 1;
+    await window.Vue.nextTick();
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_RECORD_TEXT_READS__)).toBe(1);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return [window.__GBDRAW_DIAGRAM_RUNS__.length, state.labelReflowLastError.value];
+  })).toEqual([0, null]);
+  await page.evaluate(() => window.__GBDRAW_RELEASE_RECORD_TEXT__());
+  await page.waitForFunction(() => window.__GBDRAW_DIAGRAM_RUNS__.length === 1);
+
+  const restored = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    return {
+      error: state.labelReflowLastError.value,
+      cardCount: app.linearSeqs.length,
+      selector: app.linearSeqs[0].region_record_id,
+      optionCount: app.linearRecordOptions(app.linearSeqs[0]).length,
+      selectors: request.records.map((record) => record.selector),
+      sharedResource: new Set(
+        request.records.map((record) => record.source.resourceId)
+      ).size
+    };
+  });
+  expect(restored).toEqual({
+    error: null,
+    cardCount: 1,
+    selector: '',
+    optionCount: 3,
+    selectors: [
+      { kind: 'recordIndex', index: 0 },
+      { kind: 'recordIndex', index: 1 }
+    ],
+    sharedResource: 1
+  });
 });
 
 test('Sparse upload and mixed selected renders keep snapshots and raw cache identity stable', async ({ page }) => {

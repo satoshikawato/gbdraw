@@ -246,6 +246,14 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   state.circularConservation.enabled = false;
   state.circularConservation.source = 'upload';
   state.annotationSets.splice(0);
+  state.circularRecordList.value = [{ selector: '#1', record_id: 'audit' }];
+  Object.assign(state.circularRecordDiscovery, {
+    status: 'ready',
+    error: '',
+    inputType: 'gb',
+    primaryFile: primary,
+    pairedFile: null
+  });
   state.linearSeqs.splice(0, state.linearSeqs.length, {
     uid: 'inactive-linear-row',
     gb: inactive,
@@ -413,6 +421,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     primaryFile: null,
     pairedFile: null
   });
+  const primaryText = primary.text.bind(primary);
+  Object.defineProperty(primary, 'text', { value: undefined, configurable: true });
   const workerRunCountBeforeDiscoveryFailure = workerMessages
     .filter(({ type }) => type === 'run')
     .length;
@@ -456,6 +466,20 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     workerRunCountBeforeDiscoveryFailure
   );
 
+  let releaseCoalescedDiscovery;
+  ensurePyodideImpl = () => new Promise((resolve) => {
+    releaseCoalescedDiscovery = resolve;
+  });
+  Object.assign(state.circularRecordDiscovery, {
+    status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
+  });
+  const firstCoalescedDiscovery = runner.refreshCircularRecordOrder();
+  const secondCoalescedDiscovery = runner.refreshCircularRecordOrder();
+  assert.equal(firstCoalescedDiscovery, secondCoalescedDiscovery);
+  assert.equal(ensurePyodideCalls, 3);
+  releaseCoalescedDiscovery();
+  await Promise.all([firstCoalescedDiscovery, secondCoalescedDiscovery]);
+
   state.form.multi_record_canvas = true;
   state.files.c_depth = null;
   state.adv.circular_track_slots_enabled = false;
@@ -473,7 +497,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     releaseDiscovery = resolve;
   });
   const canceledRun = runner.runAnalysis();
-  assert.equal(ensurePyodideCalls, 3);
+  assert.equal(ensurePyodideCalls, 4);
   await runner.cancelRunAnalysis();
   releaseDiscovery();
   assert.deepEqual(await canceledRun, { status: 'canceled' });
@@ -516,6 +540,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(state.circularRecordList.value, discoveryStateBeforeRollback.records);
   assert.deepEqual(state.adv.multi_record_positions, discoveryStateBeforeRollback.positions);
   assert.deepEqual(state.circularRecordDiscovery, discoveryStateBeforeRollback.discovery);
+  Object.defineProperty(primary, 'text', { value: primaryText, configurable: true });
   state.semanticFileWatchersSuppressed.value = false;
 });
 
@@ -641,7 +666,15 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   let pyodideWrites = 0;
   let losatCalls = 0;
   let annotationValidationCalls = 0;
+  let annotationValidationError = '';
+  let serializeCalls = 0;
   let serializedSnapshot = null;
+  let serializedRecordCatalog = null;
+  const preparedRecordCatalog = { mode: 'linear', status: 'ready', records: [] };
+  let prepareLinearRecordCatalogImpl = async () => ({
+    catalog: preparedRecordCatalog,
+    error: ''
+  });
   const previousLosatExecutor = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
   globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async () => {
     losatCalls += 1;
@@ -660,16 +693,19 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       pyodideWrites += 1;
       throw new Error('mode none must not stage LOSAT input through Pyodide');
     },
-    serializeCanonicalFiles: (snapshot) => {
+    serializeCanonicalFiles: (snapshot, recordCatalog) => {
+      serializeCalls += 1;
       serializedSnapshot = snapshot;
+      serializedRecordCatalog = recordCatalog;
       return serializeActiveRenderFiles(state.mode.value, state, snapshot);
     },
+    prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: ({ loadComparison }) => {
       annotationValidationCalls += 1;
       assert.equal(loadComparison, false);
-      return '';
+      return annotationValidationError;
     },
     prepareCandidateCommit: ({
       results,
@@ -709,6 +745,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const payload = workerRunMessages.at(-1).payload;
   assert.equal(workerRunMessages.length, workerRunCountBefore + 1);
   assert.equal(serializedSnapshot, comparisonPlanSnapshot);
+  assert.equal(serializedRecordCatalog, preparedRecordCatalog);
   assert.equal(ensurePyodideCalls, 0);
   assert.equal(pyodideWrites, 0);
   assert.equal(losatCalls, 0);
@@ -724,4 +761,49 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     )),
     false
   );
+
+  annotationValidationError = 'injected annotation target failure';
+  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
+  assert.match(state.errorLog.value?.summary || '', /injected annotation target failure/);
+  assert.equal(serializeCalls, 1, 'invalid annotations must fail before serialization');
+  assert.equal(
+    workerMessages.filter(({ type }) => type === 'run').length,
+    workerRunCountBefore + 1
+  );
+  annotationValidationError = '';
+
+  let releaseRecordCatalog;
+  prepareLinearRecordCatalogImpl = () => new Promise((resolve) => {
+    releaseRecordCatalog = resolve;
+  });
+  const committedResults = state.results.value;
+  const workerRunsBeforeCancel = workerMessages.filter(({ type }) => type === 'run').length;
+  const canceledRun = runner.runAnalysis(comparisonPlanSnapshot);
+  await Promise.resolve();
+  await runner.cancelRunAnalysis();
+  releaseRecordCatalog({ catalog: preparedRecordCatalog, error: '' });
+  assert.deepEqual(await canceledRun, { status: 'canceled' });
+  assert.equal(state.results.value, committedResults);
+  assert.equal(state.processing.value, false);
+  assert.equal(state.generationCancelRequested.value, false);
+  assert.equal(serializeCalls, 1);
+  assert.equal(
+    workerMessages.filter(({ type }) => type === 'run').length,
+    workerRunsBeforeCancel
+  );
+
+  prepareLinearRecordCatalogImpl = async () => {
+    throw new Error('injected record catalog failure');
+  };
+  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
+  assert.match(state.errorLog.value?.summary || '', /injected record catalog failure/);
+  assert.equal(state.processing.value, false);
+
+  prepareLinearRecordCatalogImpl = async () => ({
+    catalog: preparedRecordCatalog,
+    error: ''
+  });
+  const retryResult = result('linear-none-retry.svg', 'linear-none-retry');
+  workerResponses.push(response(retryResult, validCatalog(retryResult.name)));
+  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'ok' });
 });

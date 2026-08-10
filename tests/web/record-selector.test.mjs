@@ -19,40 +19,11 @@ const {
   formatRecordLength
 } = await import(pathToFileURL(join(tempRoot, 'linear-record-selector.js')));
 const {
-  circularInputNeedsRecordDiscovery,
   discoverGffFastaRecords,
   discoverSequenceRecords,
-  normalizeSequenceRecords
+  normalizeSequenceRecords,
+  parseSequenceRecordText
 } = await import(pathToFileURL(join(tempRoot, 'record-discovery.js')));
-
-const simpleCircularInput = {
-  form: { multi_record_canvas: false, show_depth: false },
-  adv: { circular_track_slots_enabled: false, circular_track_slots: [] },
-  files: { c_depth: null },
-  annotationSets: []
-};
-assert.equal(circularInputNeedsRecordDiscovery(simpleCircularInput), false);
-assert.equal(circularInputNeedsRecordDiscovery({
-  ...simpleCircularInput,
-  form: { ...simpleCircularInput.form, multi_record_canvas: true }
-}), true);
-assert.equal(circularInputNeedsRecordDiscovery({
-  ...simpleCircularInput,
-  form: { ...simpleCircularInput.form, show_depth: true },
-  files: { c_depth: [[{ name: 'depth.tsv' }]] }
-}), true);
-assert.equal(circularInputNeedsRecordDiscovery({
-  ...simpleCircularInput,
-  adv: {
-    circular_track_slots_enabled: true,
-    circular_track_slots: [{ renderer: 'depth', enabled: true }]
-  },
-  files: { c_depth: [[{ name: 'depth.tsv' }]] }
-}), true);
-assert.equal(circularInputNeedsRecordDiscovery({
-  ...simpleCircularInput,
-  annotationSets: [{ annotations: [{ start: 1, end: 2 }] }]
-}), true);
 
 assert.equal(formatRecordLength(4641652), '4,641,652 bp');
 assert.equal(formatRecordLength(null), 'length unavailable');
@@ -108,6 +79,25 @@ assert.deepEqual(normalizeSequenceRecords({
 ]);
 assert.throws(() => normalizeSequenceRecords({ records: [] }), /No records found/);
 assert.throws(() => normalizeSequenceRecords({ error: 'Unsupported format: embl' }), /Unsupported format/);
+
+assert.deepEqual(parseSequenceRecordText(`LOCUS       FIRST 12 bp DNA\nACCESSION   A1\nVERSION     A1.2\n//\nLOCUS       SECOND 7 bp DNA\nACCESSION   B1\n//\n`, 'genbank'), [
+  { selector: '#1', recordId: 'A1.2', recordLength: 12 },
+  { selector: '#2', recordId: 'B1', recordLength: 7 }
+]);
+assert.deepEqual(parseSequenceRecordText('>alpha note\nACGT\nAA\n>beta\nTTT\n', 'fasta'), [
+  { selector: '#1', recordId: 'alpha', recordLength: 6 },
+  { selector: '#2', recordId: 'beta', recordLength: 3 }
+]);
+let fastPathStagingCalls = 0;
+const fastDiscovered = await discoverSequenceRecords({
+  file: { text: async () => 'LOCUS       FAST 9 bp DNA\nVERSION     FAST.1\n//\n' },
+  format: 'genbank',
+  pyodide: null,
+  writeFileToFs: async () => { fastPathStagingCalls += 1; },
+  temporaryPath: '/unused.gb'
+});
+assert.equal(fastDiscovered[0].recordId, 'FAST.1');
+assert.equal(fastPathStagingCalls, 0);
 
 const stagedPaths = new Set();
 const unlinkedPaths = [];
@@ -285,7 +275,9 @@ const lazyController = createLinearRecordSelector({
     return [{ selector: '#1', recordId: 'Lazy', recordLength: 42 }];
   }
 });
-await lazyController.refresh();
+const lazyRefresh = lazyController.refresh();
+const duplicateLazyRefresh = lazyController.refresh();
+await Promise.all([lazyRefresh, duplicateLazyRefresh]);
 assert.equal(ensureRuntimeCalls, 1);
 assert.equal(lazyReaderCalls, 1);
 assert.equal(lazyController.optionsFor(lazyState.linearSeqs[0])[1].value, 'Lazy');

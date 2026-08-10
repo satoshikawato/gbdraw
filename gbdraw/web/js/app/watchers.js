@@ -17,7 +17,6 @@ import {
 } from './plot-title-position.js';
 import { resolveCircularLayoutPreference } from './layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
-import { circularInputNeedsRecordDiscovery } from './record-discovery.js';
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE
@@ -645,26 +644,14 @@ export const setupWatchers = ({
       cInputType.value,
       files.c_gb,
       files.c_gff,
-      files.c_fasta,
-      (
-        mode.value === 'circular' &&
-        circularInputNeedsRecordDiscovery({
-          form,
-          adv: state.adv,
-          files,
-          annotationSets: state.annotationSets
-        })
-      )
+      files.c_fasta
     ],
-    async ([, , , , , , discoverRecords]) => {
+    async () => {
       if (typeof refreshCircularRecordOrder !== 'function') return;
       await runRecordDiscoveryWatcher({
         rollbackInProgress: sessionImportRollbackInProgress,
         semanticWatchersSuppressed: semanticFileWatchersSuppressed,
-        refresh: ({ suppress }) => refreshCircularRecordOrder({
-          discoverRecords,
-          suppress
-        })
+        refresh: ({ suppress }) => refreshCircularRecordOrder({ suppress })
       });
     }
   );

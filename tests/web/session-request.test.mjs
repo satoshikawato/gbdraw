@@ -1658,6 +1658,49 @@ const linearFilesData = {
   ],
   linearComparisons: []
 };
+const materializedFilesData = {
+  linearSeqs: [0, 1].map((index) => ({
+    uid: `multi-source::record-${index + 1}`,
+    gb: genbank,
+    losat_gencode: 1,
+    region_record_id: `#${index + 1}`,
+    region_start: null,
+    region_end: null,
+    region_reverse: false
+  })),
+  linearComparisons: []
+};
+const materializedSnapshot = resolveLinearComparisonPlan({
+  plan: { mode: 'none', defaultSource: 'losat', edges: [] },
+  sequences: materializedFilesData.linearSeqs
+});
+const materializedCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: materializedFilesData,
+  comparisonPlanSnapshot: materializedSnapshot
+});
+assert.deepEqual(
+  materializedCanonical.renderRequest.records.map((record) => record.selector),
+  [
+    { kind: 'recordIndex', index: 0 },
+    { kind: 'recordIndex', index: 1 }
+  ]
+);
+assert.equal(
+  materializedCanonical.renderRequest.records[0].source.resourceId,
+  materializedCanonical.renderRequest.records[1].source.resourceId
+);
+assert.equal(
+  Object.values(materializedCanonical.resources).filter(
+    (resource) => resource.kind === 'genbank'
+  ).length,
+  1,
+  'materialized records must not duplicate the embedded GenBank resource'
+);
+assert.deepEqual(
+  materializedCanonical.webFiles.linearRecordMetadata.map((entry) => entry.recordKey),
+  ['multi-source::record-1', 'multi-source::record-2']
+);
 state.form.prefix = '';
 const linearDefaultCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.equal(linearDefaultCanonical.renderRequest.grouping, 'single');

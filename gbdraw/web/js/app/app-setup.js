@@ -26,6 +26,7 @@ import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
+import { readFileText } from '../services/file-content-cache.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -813,6 +814,7 @@ export const createAppSetup = () => {
         ? discoverGffFastaRecords({
             gffFile: primaryFile,
             fastaFile: pairedFile,
+            readText: readFileText,
             pyodide: getPyodide(),
             writeFileToFs: pyodideManager.writeFileToFs,
             gffTemporaryPath: `${temporaryPathPrefix}.gff`,
@@ -821,6 +823,7 @@ export const createAppSetup = () => {
         : discoverSequenceRecords({
             file: primaryFile,
             format: 'genbank',
+            readText: readFileText,
             pyodide: getPyodide(),
             writeFileToFs: pyodideManager.writeFileToFs,
             temporaryPath: `${temporaryPathPrefix}.gb`
@@ -1763,11 +1766,13 @@ export const createAppSetup = () => {
     getPyodide,
     ensurePyodide: pyodideManager.initPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
-    serializeCanonicalFiles: (comparisonPlanSnapshot) => serializeActiveRenderFiles(
-      state.mode.value,
-      state,
-      comparisonPlanSnapshot
+    serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog = null) => (
+      serializeActiveRenderFiles(state.mode.value, state, {
+        comparisonPlan: comparisonPlanSnapshot,
+        linearRecordCatalog
+      })
     ),
+    prepareLinearRecordCatalog,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
     buildGeneratedArtifactSnapshot: historySnapshots.buildGeneratedArtifactSnapshot,
@@ -2129,32 +2134,41 @@ export const createAppSetup = () => {
     }
   };
 
+  async function prepareLinearRecordCatalog(loadComparison = false) {
+    if (mode.value !== 'linear') return { catalog: null, error: '' };
+    const hasAutomaticSequence = linearSeqs.some((sequence) => {
+      if (String(sequence?.region_record_id || '').trim()) return false;
+      const primary = lInputType.value === 'gff' ? sequence?.gff : sequence?.gb;
+      return Boolean(primary && (lInputType.value !== 'gff' || sequence?.fasta));
+    });
+    const hasRegionAnnotations = annotationSets.some((set) => (
+      Array.isArray(set?.annotations) && set.annotations.length > 0
+    ));
+    if (!hasAutomaticSequence && !hasRegionAnnotations) {
+      return { catalog: null, error: '' };
+    }
+    let catalog = getAnnotationRecordCatalog(loadComparison);
+    if (catalog.status !== 'ready') {
+      try {
+        await linearRecordSelector.refresh();
+      } catch (error) {
+        console.warn('Failed to start Linear record discovery:', error);
+      }
+      catalog = getAnnotationRecordCatalog(loadComparison);
+    }
+    return catalog.status === 'ready'
+      ? { catalog, error: '' }
+      : {
+          catalog: null,
+          error: catalog.issues[0] || 'Could not read records from the Linear input file(s).'
+        };
+  }
+
   const runAnalysis = async () => history.runUndoable('Generate diagram', async () => {
     cancelDefinitionUpdate();
     const comparisonPlanSnapshot = mode.value === 'linear'
       ? linearComparisonResolution.value
       : null;
-    const annotationComparisonIntent = comparisonPlanSnapshot?.hasComparisonIntent ?? null;
-
-    const hasRegionAnnotations = annotationSets.some((set) => (
-      Array.isArray(set?.annotations) && set.annotations.length > 0
-    ));
-    if (hasRegionAnnotations) {
-      let catalog = getAnnotationRecordCatalog(annotationComparisonIntent);
-      if (catalog.status !== 'ready') {
-        if (mode.value === 'linear') await linearRecordSelector.refresh();
-        else await refreshCircularRecordOrder();
-        catalog = getAnnotationRecordCatalog(annotationComparisonIntent);
-      }
-      reconcileAnnotationRecordBindings(annotationSets, catalog);
-      const annotationTargetError = validateAnnotationRecordTargets(annotationSets, catalog);
-      if (annotationTargetError) {
-        errorLog.value = { summary: annotationTargetError, details: [] };
-        processing.value = false;
-        processingStatus.value = '';
-        return { status: 'error' };
-      }
-    }
 
     if (diagramGenerationWorkerError.value) {
       diagramGenerationWorkerReady.value = false;
@@ -2672,7 +2686,14 @@ export const createAppSetup = () => {
       sessionTitle.value = title;
     }
     try {
-      return await exportSession(title);
+      const comparisonPlanSnapshot = mode.value === 'linear'
+        ? linearComparisonResolution.value
+        : null;
+      const { catalog, error } = await prepareLinearRecordCatalog(
+        comparisonPlanSnapshot?.hasComparisonIntent
+      );
+      if (error) throw new Error(error);
+      return await exportSession(title, { linearRecordCatalog: catalog });
     } catch (error) {
       errorLog.value = normalizeUserFacingError(error);
       return { status: 'error' };
