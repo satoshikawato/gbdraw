@@ -1,0 +1,473 @@
+# CIテスト信頼性・実行時間改善計画
+
+- Status: pending
+- Date: 2026-08-10
+- Scope: PR #319で確認した成果物比較、Python recipe contract、重複する高コストテスト、GitHub ActionsのPR必須チェック
+- Rule: 実装はこの文書を実行する次セッションで行う。この文書の作成ではproduction code、test、workflow、生成成果物を変更しない。
+
+関連文書:
+
+- [PR 319 CI, Cloudflare, and CodeQL remediation plan](PR_319_CI_CLOUDFLARE_CODEQL_REMEDIATION_PLAN_2026-08-10.md)
+- [Documentation simplification implementation plan](DOCUMENTATION_SIMPLIFICATION_IMPLEMENTATION_PLAN_2026-08-09.md)
+- [Repository guidance](../../AGENTS.md)
+- [Project guidance](../../CLAUDE.md)
+- [Failing GitHub Actions run](https://github.com/satoshikawato/gbdraw/actions/runs/31349212637)
+
+## 1. 目的
+
+次の三点を同時に満たす。
+
+1. native Cairo差を公開成果物のstale判定と誤認しない。
+2. 各test moduleが所有するscenarioだけを実行し、重いTutorialやGallery検証を必要なPython versionで一度だけ実行する。
+3. PR必須チェックの実行開始から最後の必須チェック完了までを、通常時5分以内に収める。
+
+ここでいうPR feedback timeは、最初の必須jobの`run_started_at`から最後の必須jobの`completed_at`までとする。queue待ちは除外し、checkout、依存導入、browser/runtime準備は含める。
+
+目標値:
+
+- 連続5回のPR runの中央値: 5分以内
+- 同じ5回の最大値: 7分以内
+- rerunで成功したrunは達成根拠に数えない
+- `not slow` testのcoverageを落とさず、main向け`slow` gateも維持する
+
+5分を一度だけ下回ることではなく、再実行なしで安定して短いことを完了条件にする。
+
+## 2. 確認済みベースライン
+
+対象run: `31349212637`、head `561ef0d7efd12c0a40ac44d6cdd4d0b420035440`
+
+| Python | pytest時間 | 主な結果 |
+| --- | ---: | --- |
+| 3.10 | 1,399.23秒（23分19秒） | H-CLI-13失敗、Python recipesが180秒でtimeout |
+| 3.11 | 1,180.43秒（19分40秒） | 同上 |
+| 3.12 | 1,333.95秒（22分13秒） | 同上 |
+
+workflow全体のwall-clockは約24分40秒だった。三つのPython jobは並列だが、各jobが同じ`not slow` suiteを直列実行するため、最も遅いjobがPR feedback timeを決めている。
+
+Python 3.12 jobの主なfile別時間:
+
+| Test file | 時間 |
+| --- | ---: |
+| `tests/test_circular_label_placement.py` | 439.2秒 |
+| `tests/test_python_howto_recipe_contracts.py` | 180.4秒でtimeout |
+| `tests/test_refresh_gallery_sessions.py` | 125.5秒 |
+| `tests/test_gallery_session_semantics.py` | 88.3秒 |
+| `tests/test_reproduce_examples.py` | 69.7秒 |
+| `tests/test_linear_track_layout.py` | 69.0秒 |
+
+現在の`not slow`は軽量gateではない。`slow`で除外されるのは6件だけで、recipe、Gallery再構築、dense label corpus、browser assertionが通常のmatrixに入っている。
+
+### 2.1 H-CLI-13の原因
+
+`docs/recipes/_scenario_support.py::publish_output()`は、`--check`時に生成物と公開物をpayload完全一致で比較する。H-CLI-13のPNGには環境非依存の正規化がない。
+
+制御比較で次を確認した。
+
+- CI: native Cairo 1.18.0
+- 公開PNGを再現するlocal環境: native Cairo 1.18.4
+- CairoSVG 2.8.2/2.9.0を入れ替えても、native Cairoが同じなら結果は同じ
+- 1168×973 RGBAのうち異なるのは71 pixel
+- 差分は`x=885..897`、`y=622..632`の13×11領域
+- alphaは同一、最大RGB差は21/48/62
+
+したがって原因はPython version、hash seed、CairoSVG version、生成漏れではなく、native Cairoのアンチエイリアス差である。
+
+PNG判定を通した場合、PDFの`/Producer`とEPS/PSの`%%Creator`に残るCairo version差で次に失敗する。現行normalizerはCreationDateだけを除去している。
+
+### 2.2 Python recipe timeoutの原因
+
+`tests/test_python_howto_recipe_contracts.py`が宣言するownerは`H-PY-01`から`H-PY-05`だが、実行commandは`run_python_scenarios.py --all --check`である。
+
+`--all`の実体:
+
+- 15 scenarios
+- 21 outputs
+- `T-PY-01..09`（10なし）、`T-PY-11`、`H-PY-01..05`
+
+testが結果をassertするのは`T-PY-01`と`H-PY-01..05`だけで、残り9 Tutorialは実行するがassertしない。`T-PY-01`は`tests/test_onboarding_recipe_contracts.py`でも独立に実行される。
+
+同一interpreterでのlocal計測:
+
+| Scenario | 時間 | 主因 |
+| --- | ---: | --- |
+| `T-PY-07` | 66.53秒 | 13回の逐次LOSATP subprocessが58.71秒 |
+| `T-PY-05` | 13.86秒 | 25回のLOSATP search |
+| 残り13 scenarios | 約4.2秒 | 通常のparse/render/check |
+
+`H-PY-01..05`だけを既存のper-scenario subprocess形式で実行した場合は20.55秒で完了した。180秒を300秒へ増やすだけでは、owner外の処理と三versionでの重複を残す。
+
+### 2.3 dense label testの原因
+
+`tests/test_circular_label_placement.py`は、同じMjeNMV recordと同じinner-label設定から作る高コストなlabel layoutを複数testで再計算する。Python 3.12では同型のtestが一件約40秒を占める。さらに同じhelperを呼ぶ同値testが二件ある。
+
+production algorithmをCI専用に変える前に、test fixtureのownerと重複assertionを整理する必要がある。
+
+## 3. 守る契約と非目標
+
+### 守る契約
+
+- PRではcore compatibilityをPython 3.10、3.11、3.12で実行する。
+- recipe、Gallery、browserの重いacceptanceはPRではcanonical Python 3.11で一度実行し、mainまたはscheduled gateで3.10/3.12も実行してsupported-version coverageを維持する。
+- H-CLI-13はSVG、Interactive SVG、PNG、PDF、EPS、PSの六形式を実際に生成する。
+- 公開PNGの寸法、alpha、視覚内容に大きな差があれば失敗する。
+- Tutorial recipeは公開されたliteral codeをclean directoryで実行する。
+- LOSATPを使うTutorialはprecomputed resultへの置換やmockで済ませない。
+- browser、offline、session、Gallery、reference outputの既存契約を維持する。
+- `tests/reference_outputs/`は通常実装で更新しない。
+
+### 非目標
+
+- timeout値を上げて遅さを隠さない。
+- 重いtestへ`slow` markerを付けるだけでPR coverageから外さない。
+- Cairo 1.18.0でPNGを再生成し、Cairo 1.18.4側を失敗させない。
+- 5分達成のためにproductionのLOSATP回数や描画結果を変えない。
+- 新しいCI timing service、専用scheduler、独自test runnerを作らない。
+- 計測前にGallery/session cacheの汎用層を追加しない。
+
+## 4. 完了条件
+
+### 正しさ
+
+- Cairo 1.18.0と1.18.4で確認した狭いPNG差は許容し、寸法、alpha、広域差、大きなchannel差は拒否する。
+- PDF/EPS/PSはCreationDateとrenderer version以外の差を拒否する。
+- H-CLI-13の六形式すべてが最後まで検証される。
+- H-PY contractは`H-PY-01..05`だけを実行する。
+- Python Tutorial recipeは別ownerで一度ずつ検証される。
+
+### Coverage
+
+- 変更前の`pytest tests/ -m "not slow" --collect-only` node ID集合と、PR job全partitionの和集合が一致する。
+- partition間の意図しない重複を記録し、同じscenarioの重い再生成は一ownerにする。
+- PRで3.11だけを使うacceptance nodeは、mainまたはscheduled gateで3.10/3.12にも割り当てる。
+- main branchの`slow` testは従来どおり残す。
+
+### 時間
+
+- `test_python_howto_recipe_contracts.py`のrecipe regenerationはCIで60秒以内。
+- MjeNMV inner-label layoutの同一設定は一process内で一度だけ構築する。
+- 各PR必須jobはcold setup込み7分未満。
+- 連続5回のPR feedback time中央値が5分以内、最大が7分以内。
+
+## 5. Phase 0: baselineとpartition台帳を固定する
+
+Status: pending
+
+### 作業
+
+1. 実装開始時のHEAD、worktree差分、対象run IDを記録する。既存のdirty fileを変更対象へ混ぜない。
+2. 現在の全node ID、`not slow` node ID、file別時間を保存する。
+3. GitHub Actionsの各step開始・終了時刻、Python/Cairo/CairoSVG/Pillow versionを記録する。
+4. CI commandへ`--durations=30`を付け、遅いtest名を毎runで確認できるようにする。新しいreport scriptは作らない。
+5. 次のtest ownerを台帳化する。
+
+| Owner | 対象 |
+| --- | --- |
+| compatibility/core | recipe、Gallery、browser、slow以外 |
+| Python how-to recipes | `H-PY-01..05` |
+| Python Tutorial recipes | `T-PY-02..09`（10なし）、`T-PY-11` |
+| onboarding | `T-PY-01`と対応する初回CLI recipe |
+| CLI recipes/export | `T-CLI-*`、`H-CLI-*` |
+| Gallery/session | bundled Galleryのparse、rebuild、semantic parity |
+| browser | Chromiumを必要とするPython/Node/Playwright test |
+
+### Baseline commands
+
+```bash
+python -m pytest tests/ -m "not slow" --collect-only -q
+python -m pytest tests/ -m "not slow" -q --durations=30
+python docs/recipes/run_cli_scenarios.py --scenario H-CLI-13 --check
+python docs/recipes/run_python_scenarios.py --all --check
+```
+
+### 完了条件
+
+- test node IDの基準集合と、現在の重複ownerが記録されている。
+- 以後の時間短縮をtest件数の減少だけで説明できない状態になっている。
+
+## 6. Phase 1: H-CLI-13の環境非依存比較を修正する
+
+Status: pending
+
+### 対象
+
+- `docs/recipes/_scenario_support.py`
+- `docs/recipes/run_cli_scenarios.py`
+- `docs/capture/run_all.py`
+- `tests/test_cli_tables_tracks_sessions_exports_recipe_contracts.py`
+- `tests/test_documentation_capture_contracts.py`
+
+### 作業
+
+1. `docs/capture/run_all.py::_images_match()`のbounded raster比較を、recipeとcaptureが共有できる小さなhelperへ移す。二つの別実装を作らない。
+   Pillowは既存dev dependencyのまま、PNGを`--check`する時だけimportする。package runtime dependencyや`export` extraへ新しい依存を追加しない。
+2. RGBA画像はRGBとalphaを分けて比較する。`ImageChops.difference()`をRGBAのまま`getbbox()`へ渡すと、RGB差があってもdifference alphaが0のため見逃すケースを回帰testにする。
+3. H-CLI-13 PNGには次の全条件を要求する。
+   - width、height、mode一致
+   - alpha完全一致
+   - changed RGB pixelsが100以下
+   - 最大channel差が64以下
+   - 差分bounding box面積が256以下
+4. 上記thresholdはCairo 1.18.0/1.18.4の観測値だけを覆う初期値とする。別環境で超えた場合は値を無条件に広げず、差分画像とmetricsを確認する。
+5. `publish_output()`の比較callbackを、payload変換だけでなくexpected/actualのpairを判定できる形へ置き換える。既存callbackを残したまま第二経路を追加しない。
+6. PDFの`/Producer (cairo X.Y.Z...)`、EPS/PSの`%%Creator: cairo X.Y.Z`を正規化する。CreationDate以外のobject/stream/PostScript本文は従来どおり完全一致にする。
+7. 比較失敗時はchanged pixel数、最大channel差、bounding boxをerrorへ含める。
+
+### Test matrix
+
+- 同一RGB、同一RGBA: pass
+- 71 pixel、13×11、観測済み最大差以内、alpha同一: pass
+- 101 pixel: fail
+- channel差65: fail
+- 小数pixelが広域へ散る: fail
+- alpha差: fail
+- PDF/EPS/PSのrenderer version/dateだけが異なる: pass
+- PDF streamまたはPostScript本文が異なる: fail
+
+### 検証
+
+```bash
+python -m pytest \
+  tests/test_cli_tables_tracks_sessions_exports_recipe_contracts.py \
+  tests/test_documentation_capture_contracts.py -q
+python docs/recipes/run_cli_scenarios.py --scenario H-CLI-13 --check
+git diff --exit-code -- tests/reference_outputs/
+```
+
+### 中止条件
+
+- bounded比較がlabel、geometry、色、alphaの実変更を許容する場合は中止する。
+- 複数のnative Cairo差を安全に分離できない場合は、fuzzy thresholdを広げず、成果物生成用containerでnative stackを固定する別案へ切り替える。
+- PNGの再生成だけで完了にしない。
+
+## 7. Phase 2: Python recipeのownerを分離する
+
+Status: pending
+
+### 対象
+
+- `tests/test_python_howto_recipe_contracts.py`
+- `tests/test_onboarding_recipe_contracts.py`
+- Python Tutorial recipeの新しい単一owner test module
+- `docs/recipes/run_python_scenarios.py`（runner変更が必要な場合のみ）
+
+### 作業
+
+1. `test_python_evidence_recipes_regenerate_from_a_clean_external_context`は既存`SCENARIO_IDS`を使い、`H-PY-01..05`を`--scenario ... --check`で個別実行する。
+2. `T-PY-01`は既存onboarding testをownerとし、別moduleで再実行しない。
+3. 残るPython Tutorialをscenario単位にparametrizeする。失敗したscenarioがpytest node IDから分かる形にする。
+4. `T-PY-05`と`T-PY-07`へ`recipe_heavy` submarkerを付け、standard recipeと別jobへ割り当てられるようにする。
+5. `--all`は手動で全成果物を再生成するcommandとして残してよいが、H-PY owner testからは呼ばない。
+6. Tutorialのliteral code、clean-directory実行、成果物freshness、workdir cleanupを弱めない。
+
+### 検証
+
+```bash
+python -m pytest \
+  tests/test_python_howto_recipe_contracts.py \
+  tests/test_onboarding_recipe_contracts.py \
+  tests/test_python_tutorial_recipe_contracts.py \
+  -q --durations=30
+python docs/recipes/run_python_scenarios.py --all --check
+```
+
+### 完了条件
+
+- H-PY regeneration testがCIで60秒以内に終わる。
+- 15 Python scenariosが一ownerずつ実行される。
+- `T-PY-05`と`T-PY-07`以外の13 scenariosを重いjobへ混ぜない。
+- timeout値は変更されていない。
+
+## 8. Phase 3: 高コストtest fixtureの重複を除く
+
+Status: pending
+
+### 対象
+
+- `tests/test_circular_label_placement.py`
+- Phase 3後のprofileで30秒以上の重複が確認されたGallery/session testだけ
+
+### 作業
+
+1. MjeNMVの同一record、config、inner-label layoutをmodule-scoped fixtureで一度だけ作る。
+2. `y_overlap` call数も同じfixture構築時に取得し、counter用に同じlayoutをもう一度作らない。
+3. consumer testがlabel dictを変更する場合は、fixtureの共有値を変更せず必要なtestだけcopyする。
+4. 同じhelperを呼び、同じassertionを行う二つのinner-order testは一ownerへ統合する。
+5. outer-only、inner-enabled、middle/resolve-overlapsなどconfigが異なるlayoutは別fixtureのままにする。
+6. Phase 3後に再profileし、Gallery/sessionで同一sessionのparse/renderが30秒以上重複することが確認できた場合だけ既存pytest fixtureへ寄せる。汎用cache layerは作らない。
+
+### 検証
+
+```bash
+python -m pytest tests/test_circular_label_placement.py -q --durations=30
+python -m pytest \
+  tests/test_gallery_session_semantics.py \
+  tests/test_refresh_gallery_sessions.py \
+  tests/test_reproduce_examples.py \
+  -q --durations=30
+```
+
+### 完了条件
+
+- inner-enabled MjeNMV layoutの同一構築が一process一回である。
+- label-placement moduleがCIで180秒以内に終わる。
+- assertion coverageをfixture共有だけで減らしていない。
+
+## 9. Phase 4: PR CIを用途別に分割する
+
+Status: pending
+
+### Marker方針
+
+既存`slow`に加え、次のsuite owner markerだけを追加する。
+
+- `recipe`
+- `recipe_heavy`（`recipe`のsubset）
+- `gallery`
+- `browser`
+
+markerなしの`not slow` testはcoreとする。各testはcore、recipe、gallery、browserのうち一ownerだけを持つ。`recipe_heavy`はownerではなくrecipe内のrouting情報である。
+
+### 初期job topology
+
+| Job | Python | Selection | Runtime準備 | 目標 |
+| --- | --- | --- | --- | ---: |
+| `core` matrix | 3.10/3.11/3.12 | core、`not slow` | project/test depsのみ | 各4分以内 |
+| `recipes-standard` | 3.11 | `recipe and not recipe_heavy` | CairoSVG/native Cairo | 3分以内 |
+| `recipes-heavy` matrix | 3.11 | `T-PY-05`、`T-PY-07`を別runner | CairoSVG、LOSATP | 各4分以内 |
+| `gallery` | 3.11 | `gallery` | Galleryに必要なdeps | 4分以内 |
+| `browser` | 3.11 | 通常の`browser`とNode/Playwright | Node、Chromium、browser wheel | 5分以内 |
+| `losat-cache-browser-acceptance` | 3.11 | 既存の専用browser acceptance | Node、Chromium、browser wheel | 5分以内 |
+| `lint` | 3.11 | Ruff | Ruffのみ | 2分以内 |
+| `acceptance-supported-main` | 3.10/3.12 | `recipe or gallery or browser` | surfaceごとに必要なruntime | PR必須外、main/scheduled |
+| `slow-main` | supported matrix | `slow` | 必要なdeps | PR必須外、mainのみ |
+
+### 作業
+
+1. full `not slow` suiteを三versionで繰り返す現行`test` matrixを、上記partitionへ置き換える。
+2. Chromium、Node、browser wheel準備はbrowser jobだけで行う。
+3. `libcairo2-dev`はcompileが必要なjobへ限定する。CairoSVG実行だけならrunner既存のruntime libraryを使えるか確認し、不要な`apt-get update`を外す。
+4. `actions/setup-python`のpip cacheを有効にする。cache missでも7分上限を満たすことを確認する。
+5. 各pytest commandへ`--durations=30`を付ける。
+6. まずnative job partitionだけで計測する。core test時間が4分を超える場合に限り、`pytest-xdist`をdev dependencyへ追加し、core jobだけ`-n auto --dist loadfile`を試す。
+7. `recipe_heavy`は32-thread LOSATP同士を同一runnerで並列実行しない。native GitHub job matrixで別VMへ分ける。
+8. xdistでorder dependencyやresource contentionが出た場合は、そのfileをserial jobへ戻す。timeoutを広げない。
+9. PRで3.11だけを使うacceptance selectionを、mainまたはscheduled workflowでは3.10/3.12にも実行する。PR latency改善をsupported-version coverage削減として実装しない。
+
+### Coverage audit
+
+実装後にnode IDを保存し、次を機械的に比較する。
+
+```bash
+python -m pytest tests/ -m "not slow" --collect-only -q
+python -m pytest tests/ -m "not slow and not (recipe or gallery or browser)" --collect-only -q
+python -m pytest tests/ -m "recipe and not recipe_heavy" --collect-only -q
+python -m pytest tests/ -m "recipe_heavy" --collect-only -q
+python -m pytest tests/ -m "gallery" --collect-only -q
+python -m pytest tests/ -m "browser" --collect-only -q
+```
+
+partitionの和集合が最初の集合と一致しない場合、workflow変更は未完了とする。
+
+### 中止条件
+
+- 5分達成のためにtest nodeをPRから落とす必要がある場合は中止する。
+- xdist導入後にflaky failure、port競合、同一fixtureの破壊が出る場合は、plugin設定を増やさずnative shardへ戻す。
+- browser testをNode package不在だけでskipしない。必要ならPython Playwrightで同じbehaviorを検証する。
+
+## 10. Phase 5: broad gateとremote実測
+
+Status: pending
+
+### Local/focused gates
+
+```bash
+python -m pytest \
+  tests/test_cli_tables_tracks_sessions_exports_recipe_contracts.py \
+  tests/test_documentation_capture_contracts.py \
+  tests/test_python_howto_recipe_contracts.py \
+  tests/test_onboarding_recipe_contracts.py \
+  tests/test_python_tutorial_recipe_contracts.py \
+  tests/test_circular_label_placement.py \
+  -q --durations=30
+
+python docs/recipes/run_cli_scenarios.py --scenario H-CLI-13 --check
+python docs/recipes/run_python_scenarios.py --all --check
+
+python -m pytest tests/ -v --tb=short -m "not slow" --durations=30
+python -m pytest tests/test_output_comparison.py::TestOutputComparison -v
+ruff check gbdraw/
+git diff --exit-code -- tests/reference_outputs/
+```
+
+### Remote evidence
+
+1. PRへpushした最初のrunを記録する。失敗してもrerunせず原因を直す。
+2. 全必須jobがgreenになった後、意味のないcommitを追加せず、同じworkflowを`workflow_dispatch`で合計5回計測する。
+3. 各runについて次を記録する。
+   - run URLとhead SHA
+   - 最初のrequired job開始時刻
+   - 最後のrequired job完了時刻
+   - 各jobのsetup/test時間
+   - cache hit/miss
+   - top 30 durations
+4. 中央値5分、最大7分を満たさない場合、最遅jobの上位testかsetupだけを次の対象にする。job数を無条件に増やさない。
+
+pushと`workflow_dispatch`は外部状態を変更するため、実装セッションで明示的な許可を得てから行う。許可がない場合、Phase 5はremote evidence pendingのままにし、local結果だけで計画をcompletedにしない。
+
+### 完了条件
+
+- focused、full serial、partitioned CIの全gateがgreen。
+- reference SVG、公開recipe成果物、Gallery生成物に意図しないdiffがない。
+- 連続5回のremote evidenceが時間目標を満たす。
+- 計画のStatusと各Phase statusを観測結果に合わせて更新している。
+
+## 11. 変更範囲の見込み
+
+| 区分 | 主なfile | 意図 |
+| --- | --- | --- |
+| Documentation evidence support | `docs/recipes/_scenario_support.py`, `docs/recipes/run_cli_scenarios.py`, bounded image helper | native renderer差とstale artifactを分離 |
+| Recipe tests | Python how-to/onboarding/Tutorial recipe modules、CLI export contracts | scenario ownerを一意化 |
+| Performance tests | `tests/test_circular_label_placement.py` | 同一fixture再計算と同値testを除去 |
+| Test config | `pyproject.toml` | marker、必要な場合だけxdist |
+| CI | `.github/workflows/test.yml` | runtime別partitionと準備の限定 |
+| Generated artifacts | 原則なし | semantic output変更時だけauthoritative runnerで再生成 |
+
+production package `gbdraw/`の描画・LOSATP・session実装は、profileで別のproduction問題が証明されない限り変更対象にしない。
+
+## 12. リスクと対策
+
+| リスク | 対策 |
+| --- | --- |
+| PNG toleranceが実変更を隠す | 寸法・alpha完全一致、pixel数・channel差・bboxの三重上限、reject test |
+| Cairo metadata normalizerが本文差を消す | version/dateの狭いregexだけを対象にし、stream/本文差のnegative testを残す |
+| scenario分割でcoverageを落とす | collect-only node ID集合の和集合比較 |
+| fixture共有でtest間mutationが漏れる | shared valueをread-onlyにし、mutationするconsumerだけcopy |
+| xdistでorder dependencyが表面化する | core限定・計測後導入、問題fileはserial shardへ戻す |
+| heavy LOSATPのCPU oversubscription | T-PY-05/T-PY-07を別VMで実行し、同一runner並列を避ける |
+| cache hit時だけ5分を満たす | cache missを含む5回の最大値7分も条件にする |
+| job分割がworkflow保守を悪化させる | measured owner marker四種に限定し、独自sharding scriptを作らない |
+
+## 13. 実装時の進捗チェックリスト
+
+- [ ] Phase 0: baseline、node ID集合、owner台帳を記録
+- [ ] Phase 1: bounded PNG比較とPDF/EPS/PS normalizerを修正
+- [ ] Phase 2: H-PYとTutorial recipe ownerを分離
+- [ ] Phase 3: MjeNMV重複構築と同値testを除去
+- [ ] Phase 4: CI partitionとruntime準備を限定
+- [ ] Phase 5: focused/full/remote evidenceを取得
+- [ ] 連続5 runの中央値5分以内、最大7分以内
+- [ ] reference/generated artifact差分を個別レビュー
+- [ ] 計画statusとevidence logを更新
+
+## 14. Evidence log template
+
+| Phase | Command/run | Result | Duration | Remaining risk |
+| --- | --- | --- | ---: | --- |
+| 0 | baseline collection | pending | - | - |
+| 1 | H-CLI-13 cross-environment contract | pending | - | - |
+| 2 | Python recipe owners | pending | - | - |
+| 3 | label/Gallery profile | pending | - | - |
+| 4 | partition coverage audit | pending | - | - |
+| 5 | remote run 1–5 | pending | - | - |
+
+この計画を実装するセッションは`$execute-plan-with-evidence`を使用し、実測なしでPhaseをcompletedへ変更しない。
