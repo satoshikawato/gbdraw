@@ -59,11 +59,6 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Install recipe fonts
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fonts-liberation
-
       - name: Install recipe test dependencies
         run: python -m pip install -e ".[dev]"
 
@@ -199,12 +194,6 @@ jobs:
 
       - name: Install acceptance dependencies
         run: python -m pip install -e ".[dev]"
-
-      - name: Install recipe fonts
-        if: matrix.surface == 'recipe'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fonts-liberation
 
       - name: Install browser runtime
         if: matrix.surface == 'browser'

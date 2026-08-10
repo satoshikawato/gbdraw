@@ -5,6 +5,8 @@
 - Scope: PR #319で確認した成果物比較、Python recipe contract、重複する高コストテスト、GitHub ActionsのPR必須チェック
 - Execution: 2026-08-10にPhase 1-3とPhase 4のCI partitionを実装・ローカル検証した。最初のremote runでrecipe runtimeとT-PY-07 timeoutの前提違反が判明し、同日にローカル修正した。修正後のremote evidenceは未実施。
 
+**訂正 (2026-08-10):** 最新のremote logで、runnerを`ubuntu-24.04`へ変更しても同じrunner familyが選ばれ、`fonts-liberation`も導入済みで0 packageだったため、両変更はno-opだったことが確認された。ここでのH-CLI-13 PNG対策は[H-CLI-13 bundled-font raster implementation plan](HCLI13_BUNDLED_FONT_RASTER_IMPLEMENTATION_PLAN_2026-08-10.md)に置き換えられた。test partitionとruntime改善は引き続き有効だが、runner/font installをremedyまたは成功根拠として扱わない。
+
 関連文書:
 
 - [PR 319 CI, Cloudflare, and CodeQL remediation plan](PR_319_CI_CLOUDFLARE_CODEQL_REMEDIATION_PLAN_2026-08-10.md)

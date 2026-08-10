@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import zlib
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
 from PIL import Image
 
+from docs.recipes import run_cli_scenarios as cli_runner
 from docs.recipes._scenario_support import (
     PUBLISHED_IMAGE_ROOT,
     extract_executable_block,
@@ -173,6 +176,121 @@ def test_session_and_export_recipes_make_overwrite_and_formats_explicit() -> Non
     ]
 
 
+def test_hcli13_fontconfig_uses_default_rules_then_only_bundled_fonts() -> None:
+    root = ElementTree.parse(cli_runner._HCLI13_FONTCONFIG_PATH).getroot()
+    children = list(root)
+    local_names = [element.tag.rsplit("}", 1)[-1] for element in children]
+
+    include = children[local_names.index("include")]
+    font_dir = children[local_names.index("dir")]
+    cachedir = children[local_names.index("cachedir")]
+    assert include.attrib == {"ignore_missing": "no", "prefix": "default"}
+    assert include.text == "conf.d"
+    assert local_names.index("include") < local_names.index("reset-dirs")
+    assert local_names.index("reset-dirs") < local_names.index("dir")
+    assert font_dir.attrib == {"prefix": "relative"}
+    assert font_dir.text == "../../gbdraw/data"
+    assert cachedir.attrib == {"prefix": "xdg"}
+    assert cachedir.text == "gbdraw-fontconfig"
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux Fontconfig")
+def test_hcli13_fontconfig_resolves_only_bundled_fonts(tmp_path: Path) -> None:
+    inherited = os.environ.copy()
+    inherited.update(
+        {
+            "FONTCONFIG_FILE": "/hostile/fonts.conf",
+            "FONTCONFIG_PATH": "/hostile/fontconfig",
+            "FONTCONFIG_SYSROOT": "/hostile/sysroot",
+            "HOME": "/hostile/home",
+            "FC_DEBUG": "4096",
+            "FC_DBG_MATCH_FILTER": "family",
+            "XDG_CACHE_HOME": "/hostile/cache",
+            "XDG_CONFIG_HOME": "/hostile/config",
+        }
+    )
+    configured = cli_runner._hcli13_export_environment(
+        inherited,
+        runtime_root=tmp_path,
+    )
+
+    assert inherited["FONTCONFIG_FILE"] == "/hostile/fonts.conf"
+    assert configured["FONTCONFIG_FILE"] == str(
+        cli_runner._HCLI13_FONTCONFIG_PATH
+    )
+    assert configured["XDG_CACHE_HOME"] == str(tmp_path / "cache")
+    assert configured["XDG_CONFIG_HOME"] == str(tmp_path / "config")
+    for name in (
+        "FONTCONFIG_PATH",
+        "FONTCONFIG_SYSROOT",
+        "HOME",
+        "FC_DEBUG",
+        "FC_DBG_MATCH_FILTER",
+    ):
+        assert name not in configured
+
+    cli_runner._assert_hcli13_bundled_fonts(configured)
+    fc_list = shutil.which("fc-list", path=configured["PATH"])
+    assert fc_list is not None
+    result = subprocess.run(
+        [fc_list, "-f", "%{file}\\n"],
+        env=configured,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    resolved = {
+        Path(line).resolve() for line in result.stdout.splitlines() if line.strip()
+    }
+    expected = {path.resolve() for path in cli_runner._HCLI13_FONT_ROOT.glob("*.ttf")}
+    assert resolved == expected
+
+
+def test_hcli13_font_environment_leaves_non_linux_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli_runner.sys, "platform", "darwin")
+    inherited = {
+        "HOME": "/original/home",
+        "FONTCONFIG_FILE": "/original/fonts.conf",
+    }
+
+    configured = cli_runner._hcli13_export_environment(
+        inherited,
+        runtime_root=tmp_path / "unused",
+    )
+
+    assert configured == inherited
+    assert configured is not inherited
+    assert not (tmp_path / "unused").exists()
+
+
+def test_hcli13_font_probe_rejects_an_unbundled_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli_runner.sys, "platform", "linux")
+    monkeypatch.setattr(cli_runner.shutil, "which", lambda *_args, **_kwargs: "fc-match")
+    monkeypatch.setattr(
+        cli_runner.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=(
+                "/host/fonts/LiberationSans-Regular.ttf"
+                "\tTrue\tTrue\tFalse\t1\t1\t1\n"
+            ),
+            stderr="",
+        ),
+    )
+
+    with pytest.raises(cli_runner.RecipeContractError, match="resolved=/host/fonts"):
+        cli_runner._assert_hcli13_bundled_fonts({"PATH": "/host/bin"})
+
+
 def test_export_png_comparison_accepts_only_observed_cairo_noise(
     tmp_path: Path,
 ) -> None:
@@ -321,6 +439,18 @@ def test_recipe_regenerates_from_a_clean_external_directory(
         for value in (str(REPO_ROOT), environment.get("PYTHONPATH"))
         if value
     )
+    if scenario_id == "H-CLI-13":
+        environment.update(
+            {
+                "FONTCONFIG_FILE": "/hostile/fonts.conf",
+                "FONTCONFIG_PATH": "/hostile/fontconfig",
+                "FONTCONFIG_SYSROOT": "/hostile/sysroot",
+                "FC_DEBUG": "4096",
+                "FC_DBG_MATCH_FILTER": "family",
+                "XDG_CACHE_HOME": "/hostile/cache",
+                "XDG_CONFIG_HOME": "/hostile/config",
+            }
+        )
     result = subprocess.run(
         [
             sys.executable,

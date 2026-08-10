@@ -13,6 +13,7 @@ import shlex
 import shutil
 import struct
 import subprocess
+import sys
 import zlib
 from collections import Counter
 from contextlib import ExitStack
@@ -59,6 +60,18 @@ SCENARIO_IDS = verified_scenario_ids(
     expected_kind="cli-recipe",
     runner_path=RUNNER_PATH,
 )
+_HCLI13_FONTCONFIG_PATH = Path(__file__).with_name("h-cli-13-fonts.conf").resolve()
+_HCLI13_FONT_ROOT = Path(__file__).resolve().parents[2] / "gbdraw" / "data"
+_HCLI13_FONT_MATCHES = (
+    ("Liberation Sans:style=Regular", "LiberationSans-Regular.ttf"),
+    ("Liberation Sans:style=Bold", "LiberationSans-Bold.ttf"),
+    ("Liberation Sans:style=Italic", "LiberationSans-Italic.ttf"),
+    ("Liberation Sans:style=Bold Italic", "LiberationSans-BoldItalic.ttf"),
+)
+_HCLI13_FONT_PROPERTY_VARIANTS = {
+    ("True", "True", "False", "1", "1", "1"),
+    ("True", "True", "False", "1", "5", "1"),
+}
 _PATH_COORDINATE_RE = re.compile(r"[ML]\s+(-?[0-9.]+),(-?[0-9.]+)")
 _BGC_RECORD_IDS = (
     "BGC0000708",
@@ -452,6 +465,82 @@ def _artifact_comparison_error(
     ) == _normalized_artifact_payload(scenario_id, actual_path):
         return None
     return "normalized payload differs"
+
+
+def _hcli13_export_environment(
+    environment: dict[str, str],
+    *,
+    runtime_root: Path,
+) -> dict[str, str]:
+    """Return an isolated Linux Fontconfig environment for H-CLI-13."""
+
+    configured = environment.copy()
+    if not sys.platform.startswith("linux"):
+        return configured
+
+    for name in (
+        "FONTCONFIG_PATH",
+        "FONTCONFIG_SYSROOT",
+        "HOME",
+        "FC_DEBUG",
+        "FC_DBG_MATCH_FILTER",
+    ):
+        configured.pop(name, None)
+    cache_home = runtime_root / "cache"
+    config_home = runtime_root / "config"
+    cache_home.mkdir(parents=True, exist_ok=True)
+    config_home.mkdir(parents=True, exist_ok=True)
+    configured.update(
+        {
+            "FONTCONFIG_FILE": str(_HCLI13_FONTCONFIG_PATH),
+            "XDG_CACHE_HOME": str(cache_home),
+            "XDG_CONFIG_HOME": str(config_home),
+        }
+    )
+    return configured
+
+
+def _assert_hcli13_bundled_fonts(environment: dict[str, str]) -> None:
+    """Fail before rendering when Linux cannot resolve the bundled font faces."""
+
+    if not sys.platform.startswith("linux"):
+        return
+    if not _HCLI13_FONTCONFIG_PATH.is_file():
+        raise RecipeContractError(
+            f"H-CLI-13 Fontconfig file is missing: {_HCLI13_FONTCONFIG_PATH}"
+        )
+    executable = shutil.which("fc-match", path=environment.get("PATH"))
+    if executable is None:
+        raise RecipeContractError("H-CLI-13 requires fc-match on Linux.")
+
+    format_string = (
+        "%{file}\t%{antialias}\t%{hinting}\t%{autohint}\t"
+        "%{hintstyle}\t%{rgba}\t%{lcdfilter}\n"
+    )
+    for pattern, filename in _HCLI13_FONT_MATCHES:
+        result = subprocess.run(
+            [executable, pattern, "-f", format_string],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        fields = result.stdout.strip().split("\t")
+        expected_path = (_HCLI13_FONT_ROOT / filename).resolve()
+        resolved_path = Path(fields[0]).resolve() if fields and fields[0] else None
+        properties = tuple(fields[1:])
+        if (
+            result.returncode != 0
+            or resolved_path != expected_path
+            or properties not in _HCLI13_FONT_PROPERTY_VARIANTS
+        ):
+            raise RecipeContractError(
+                "H-CLI-13 Fontconfig isolation failed for "
+                f"{pattern}: resolved={resolved_path}, expected={expected_path}, "
+                f"properties={properties}, expected_property_variants="
+                f"{_HCLI13_FONT_PROPERTY_VARIANTS}, stderr={result.stderr.strip()}"
+            )
 
 
 def _assert_gff_id_mismatch_is_rejected(
@@ -2268,7 +2357,19 @@ def run_scenario(
     for command in commands:
         command[0] = executable
 
-    with TemporaryDirectory(prefix=f"gbdraw-{scenario_id.lower()}-") as temp_name:
+    with ExitStack() as stack:
+        temp_name = stack.enter_context(
+            TemporaryDirectory(prefix=f"gbdraw-{scenario_id.lower()}-")
+        )
+        fontconfig_runtime = (
+            Path(
+                stack.enter_context(
+                    TemporaryDirectory(prefix="gbdraw-h-cli-13-fontconfig-")
+                )
+            )
+            if scenario_id == "H-CLI-13" and sys.platform.startswith("linux")
+            else None
+        )
         workdir = Path(temp_name)
         copied_inputs, used_entries = copy_declared_inputs(
             chapter,
@@ -2278,6 +2379,12 @@ def run_scenario(
         copied_inputs.update(_materialize_generated_tables(scenario_id, workdir))
         environment = os.environ.copy()
         environment.update({"LC_ALL": "C.UTF-8", "PYTHONHASHSEED": "0", "TZ": "UTC"})
+        if fontconfig_runtime is not None:
+            environment = _hcli13_export_environment(
+                environment,
+                runtime_root=fontconfig_runtime,
+            )
+            _assert_hcli13_bundled_fonts(environment)
         session_first_svg: bytes | None = None
         for job_index, (command, output_names) in enumerate(command_jobs):
             if scenario_id == "H-CLI-12" and job_index == 1:
