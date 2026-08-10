@@ -56,7 +56,7 @@ def test_python_tutorial_recipe_regenerates_from_a_clean_external_context(
         env=environment,
         capture_output=True,
         text=True,
-        timeout=180,
+        timeout=300,
         check=False,
     )
 

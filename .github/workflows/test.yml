@@ -46,7 +46,7 @@ jobs:
 
   recipes-standard:
     name: Recipes standard (Python 3.11)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -59,8 +59,13 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
+      - name: Install recipe fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-liberation
+
       - name: Install recipe test dependencies
-        run: python -m pip install -e ".[export]" pytest pytest-timeout Pillow
+        run: python -m pip install -e ".[dev]"
 
       - name: Run standard recipe tests
         run: >-
@@ -167,7 +172,7 @@ jobs:
   acceptance-supported-main:
     name: ${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }})
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -194,6 +199,12 @@ jobs:
 
       - name: Install acceptance dependencies
         run: python -m pip install -e ".[dev]"
+
+      - name: Install recipe fonts
+        if: matrix.surface == 'recipe'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-liberation
 
       - name: Install browser runtime
         if: matrix.surface == 'browser'

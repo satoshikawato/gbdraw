@@ -1,9 +1,9 @@
 # CIテスト信頼性・実行時間改善計画
 
-- Status: in progress (Phase 1-3 complete; Phase 4 locally implemented; Phase 0 and Phase 5 remote evidence pending)
+- Status: in progress (Phase 1-3 complete; Phase 4 corrected after the first remote run; Phase 0 and Phase 5 remote evidence pending)
 - Date: 2026-08-10
 - Scope: PR #319で確認した成果物比較、Python recipe contract、重複する高コストテスト、GitHub ActionsのPR必須チェック
-- Execution: 2026-08-10にPhase 1-3とPhase 4のCI partitionを実装・ローカル検証した。remote evidenceは未実施。
+- Execution: 2026-08-10にPhase 1-3とPhase 4のCI partitionを実装・ローカル検証した。最初のremote runでrecipe runtimeとT-PY-07 timeoutの前提違反が判明し、同日にローカル修正した。修正後のremote evidenceは未実施。
 
 関連文書:
 
@@ -247,6 +247,8 @@ Status: completed
 
 Evidence: H-PY、onboarding、Tutorial ownerの対象21件が87.49秒で通過した。H-PY regenerationは5.34秒、全15 scenarioの手動`--all --check`も通過した。
 
+Remote correction: 最初のpartitioned runでは`T-PY-07`がGitHub-hosted runner上で180秒を超えた。owner外scenarioを含んでいた旧timeoutとは原因が異なり、owner分離後のheavy scenario自体が完走していなかったため、subprocess上限を300秒へ修正した。clean checkout相当のfocused pytestでは実LOSATPと500 Collinear matchesを維持したまま60.22秒で通過した。修正後のremote runtimeはPhase 5に残す。
+
 ### 対象
 
 - `tests/test_python_howto_recipe_contracts.py`
@@ -279,7 +281,7 @@ python docs/recipes/run_python_scenarios.py --all --check
 - H-PY regeneration testがCIで60秒以内に終わる。
 - 15 Python scenariosが一ownerずつ実行される。
 - `T-PY-05`と`T-PY-07`以外の13 scenariosを重いjobへ混ぜない。
-- timeout値は変更されていない。
+- heavy scenarioは300秒以内に完走し、15分のjob上限と実LOSATP契約を維持する。
 
 ## 8. Phase 3: 高コストtest fixtureの重複を除く
 
@@ -322,7 +324,7 @@ python -m pytest \
 
 ## 9. Phase 4: PR CIを用途別に分割する
 
-Status: locally implemented; remote runtime verification pending in Phase 5
+Status: locally corrected after the first remote run; remote runtime verification pending in Phase 5
 
 ### Marker方針
 
@@ -392,6 +394,10 @@ partitionの和集合が最初の集合と一致しない場合、workflow変更
 
 coreはserial計測が4分を超えたため計画どおり`pytest-xdist`をcoreだけへ追加した。Python compatibilityと無関係なdocumentation、capture、tutorial fixture contract 128件はrecipe acceptanceへ移し、PRではcanonical Pythonで一度だけ実行する。GitHub-hosted runnerのworker数を想定したlocal 4 worker coreは2,603 passed、17 skipped、213.09秒でgreen、Galleryは216.05秒、browser pytestは17.92秒、recipe standardは61.09秒で、test実行部分は各目標内だった。recipe standardのlocal結果は133 passed、46 failedで、失敗はすべて実装開始前から存在するworktreeのCRLF化によるfixture size/checksum差だった。clean checkoutでのrecipe green、setup込み時間、remote timingはPhase 5に残す。
 
+最初のremote runでは、`recipe`へ移したcapture contractが`docs.capture.run_all`経由でPlaywrightをimportする一方、`recipes-standard`が`.[export]`しか導入していないrouting不整合が6件を失敗させた。同じrunのH-CLI-13は、runnerにLiberation Sansがなく別fontへfallbackしたため、PNGが3,541 pixel、最大channel差129、広域bounding box、alpha差ありとなった。`recipes-standard`は既存`.[dev]` extraを使い、`fonts-liberation`を明示導入し、成果物比較環境を`ubuntu-24.04`へ固定した。main向けrecipe acceptanceにも同じfont準備とrunner固定を適用した。
+
+修正後は、以前失敗したPlaywright import 6件が2.60秒で通過した。clean checkout相当ではrecipe standard 179件が65.65秒、recipe heavy 2件が71.06秒で通過した。CIと同じCairoSVG 2.9.0、Pillow 12.3.0、native Cairo 1.18.0とLiberation Sansを使ったH-CLI-13は六形式すべて通過した。workflow YAMLもparse済みである。修正後のremote setup時間と必須check結果はPhase 5に残す。
+
 ### 中止条件
 
 - 5分達成のためにtest nodeをPRから落とす必要がある場合は中止する。
@@ -400,7 +406,7 @@ coreはserial計測が4分を超えたため計画どおり`pytest-xdist`をcore
 
 ## 10. Phase 5: broad gateとremote実測
 
-Status: pending
+Status: pending after the first failed remote run and local remediation
 
 ### Local/focused gates
 
@@ -489,9 +495,9 @@ production package `gbdraw/`の描画・LOSATP・session実装は、profileで�
 | --- | --- | --- | ---: | --- |
 | 0 | baseline collection | pending | - | - |
 | 1 | `pytest tests/test_cli_tables_tracks_sessions_exports_recipe_contracts.py tests/test_documentation_capture_contracts.py -q`; `run_cli_scenarios.py --scenario H-CLI-13 --check` | 42 passed; six formats verified | 16.60秒; 4.49秒 | remote Cairo 1.18.0実走はPhase 5で確認 |
-| 2 | `pytest tests/test_python_howto_recipe_contracts.py tests/test_onboarding_recipe_contracts.py tests/test_python_tutorial_recipe_contracts.py -q --durations=30`; `run_python_scenarios.py --all --check` | 21 passed; all 15 scenarios verified | 87.49秒; 約70秒 | CI partitionとsupported-version実走はPhase 4-5で確認 |
+| 2 | `pytest tests/test_python_howto_recipe_contracts.py tests/test_onboarding_recipe_contracts.py tests/test_python_tutorial_recipe_contracts.py -q --durations=30`; `run_python_scenarios.py --all --check`; clean focused `T-PY-07` | 21 passed; all 15 scenarios verified;実LOSATPと500 matchesを維持 | 87.49秒; 約70秒; 60.22秒 | 300秒上限でのremote再実走はPhase 5 |
 | 3 | `pytest tests/test_circular_label_placement.py -q --durations=30`; `pytest -m "gallery and not slow"` | 68 passed; 113 passed | 83.75秒; 216.05秒 | clean CIでのPython 3.11再測定はPhase 5 |
-| 4 | collect-only 6 partition; core xdist; recipe standard; browser pytest; Node direct suite | 2,927 non-slow nodesを重複・欠落なしで分割; core 2,603 passed/17 skipped; recipe 133 passed/46 CRLF failures; browser 13 passed; Node 62 passed | core 213.09秒（4 worker）; recipe 61.09秒; browser 17.92秒; Node 6.98秒 | clean checkoutのrecipe green、cold setup、5回remote timingはPhase 5 |
+| 4 | collect-only 6 partition; core xdist; clean recipe standard/heavy; browser pytest; Node direct suite; workflow YAML parse | 2,927 non-slow nodesを重複・欠落なしで分割; core 2,603 passed/17 skipped; recipe standard 179 passed; heavy 2 passed; browser 13 passed; Node 62 passed | core 213.09秒（4 worker）; recipe standard 65.65秒; heavy 71.06秒; browser 17.92秒; Node 6.98秒 | 修正後のcold setupとremote checkはPhase 5 |
 | 5 | remote run 1–5 | pending | - | - |
 
 この計画を実装するセッションは`$execute-plan-with-evidence`を使用し、実測なしでPhaseをcompletedへ変更しない。
