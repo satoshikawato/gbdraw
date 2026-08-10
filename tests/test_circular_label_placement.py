@@ -332,6 +332,31 @@ def _load_mjenmv_external_labels_without_blacklist() -> tuple[list[dict], int]:
     return external_labels, total_length
 
 
+@pytest.fixture(scope="module")
+def mjenmv_inner_tuckin_labels() -> tuple[list[dict], int, GbdrawConfig, int]:
+    y_overlap_calls = 0
+    original_y_overlap = circular_labels_module.y_overlap
+
+    def counting_y_overlap(*args, **kwargs):
+        nonlocal y_overlap_calls
+        y_overlap_calls += 1
+        return original_y_overlap(*args, **kwargs)
+
+    circular_labels_module.y_overlap = counting_y_overlap
+    try:
+        external_labels, total_length, cfg = _load_mjenmv_external_labels_with_config(
+            strandedness=True,
+            resolve_overlaps=False,
+            track_type="tuckin",
+            allow_inner_labels=True,
+            label_blacklist="",
+        )
+    finally:
+        circular_labels_module.y_overlap = original_y_overlap
+
+    return external_labels, total_length, cfg, y_overlap_calls
+
+
 @pytest.mark.parametrize(
     ("head_length_ratio", "shaft_width_ratio", "expected_short"),
     [(1.0, 1.0, False), (2.0, 1.0, True), ("auto", 0.5, True)],
@@ -1565,26 +1590,10 @@ def test_mjenmv_dense_labels_without_blacklist_have_no_outer_overlaps() -> None:
     assert _count_overlaps(external_labels, total_length) == 0
 
 
-def test_mjenmv_inner_dense_keeps_y_overlap_calls_under_regression_cap() -> None:
-    y_overlap_calls = 0
-    original_y_overlap = circular_labels_module.y_overlap
-
-    def counting_y_overlap(*args, **kwargs):
-        nonlocal y_overlap_calls
-        y_overlap_calls += 1
-        return original_y_overlap(*args, **kwargs)
-
-    circular_labels_module.y_overlap = counting_y_overlap
-    try:
-        external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
-            strandedness=True,
-            resolve_overlaps=False,
-            track_type="tuckin",
-            allow_inner_labels=True,
-            label_blacklist="",
-        )
-    finally:
-        circular_labels_module.y_overlap = original_y_overlap
+def test_mjenmv_inner_dense_keeps_y_overlap_calls_under_regression_cap(
+    mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
+) -> None:
+    external_labels, total_length, _, y_overlap_calls = mjenmv_inner_tuckin_labels
 
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert len(inner_labels) >= circular_labels_module.DENSE_INNER_RELAX_MIN_LABELS
@@ -1592,14 +1601,10 @@ def test_mjenmv_inner_dense_keeps_y_overlap_calls_under_regression_cap() -> None
     assert y_overlap_calls < 8000000
 
 
-def test_mjenmv_external_labels_with_inner_are_middle_sorted() -> None:
-    external_labels, _total_length, _ = _load_mjenmv_external_labels_with_config(
-        strandedness=True,
-        resolve_overlaps=False,
-        track_type="tuckin",
-        allow_inner_labels=True,
-        label_blacklist="",
-    )
+def test_mjenmv_external_labels_with_inner_are_middle_sorted(
+    mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
+) -> None:
+    external_labels, _total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
 
     assert external_labels
     assert any(label.get("is_inner") for label in external_labels)
@@ -1610,14 +1615,10 @@ def test_mjenmv_external_labels_with_inner_are_middle_sorted() -> None:
     )
 
 
-def test_mjenmv_inner_dense_wsv209_stays_near_wsv267_after_refine() -> None:
-    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
-        strandedness=True,
-        resolve_overlaps=False,
-        track_type="tuckin",
-        allow_inner_labels=True,
-        label_blacklist="",
-    )
+def test_mjenmv_inner_dense_wsv209_stays_near_wsv267_after_refine(
+    mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
+) -> None:
+    external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
     assert _count_overlaps(inner_labels, total_length) == 0
@@ -1631,14 +1632,10 @@ def test_mjenmv_inner_dense_wsv209_stays_near_wsv267_after_refine() -> None:
     assert angle_diff <= 40.0
 
 
-def test_mjenmv_inner_strict_rebalance_keeps_current_hemisphere_mismatch_cap() -> None:
-    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
-        strandedness=True,
-        resolve_overlaps=False,
-        track_type="tuckin",
-        allow_inner_labels=True,
-        label_blacklist="",
-    )
+def test_mjenmv_inner_strict_rebalance_keeps_current_hemisphere_mismatch_cap(
+    mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
+) -> None:
+    external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
     assert _count_overlaps(inner_labels, total_length) == 0
@@ -1647,14 +1644,10 @@ def test_mjenmv_inner_strict_rebalance_keeps_current_hemisphere_mismatch_cap() -
     assert mismatch_count <= 9
 
 
-def test_mjenmv_inner_strict_rebalance_resolves_wsv192_wsv136_min_gap_overlap() -> None:
-    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
-        strandedness=True,
-        resolve_overlaps=False,
-        track_type="tuckin",
-        allow_inner_labels=True,
-        label_blacklist="",
-    )
+def test_mjenmv_inner_strict_rebalance_resolves_wsv192_wsv136_min_gap_overlap(
+    mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
+) -> None:
+    external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
 
@@ -1672,14 +1665,10 @@ def test_mjenmv_inner_strict_rebalance_resolves_wsv192_wsv136_min_gap_overlap() 
     assert not overlap
 
 
-def _assert_mjenmv_inner_strict_keeps_current_inner_order_backtracking() -> None:
-    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
-        strandedness=True,
-        resolve_overlaps=False,
-        track_type="tuckin",
-        allow_inner_labels=True,
-        label_blacklist="",
-    )
+def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking(
+    mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
+) -> None:
+    external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = sorted(
         [label for label in external_labels if label.get("is_inner")],
         key=lambda label: float(label["middle"]),
@@ -1692,22 +1681,10 @@ def _assert_mjenmv_inner_strict_keeps_current_inner_order_backtracking() -> None
     assert min(deltas) == pytest.approx(-1.8091384182670334, abs=1e-6)
 
 
-def test_mjenmv_inner_strict_rebalance_keeps_current_inner_order_backtracking() -> None:
-    _assert_mjenmv_inner_strict_keeps_current_inner_order_backtracking()
-
-
-def test_mjenmv_inner_strict_no_overtake_keeps_current_inner_order_backtracking() -> None:
-    _assert_mjenmv_inner_strict_keeps_current_inner_order_backtracking()
-
-
-def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing() -> None:
-    external_labels, _total_length, _ = _load_mjenmv_external_labels_with_config(
-        strandedness=True,
-        resolve_overlaps=False,
-        track_type="tuckin",
-        allow_inner_labels=True,
-        label_blacklist="",
-    )
+def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
+    mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
+) -> None:
+    external_labels, _total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert inner_labels
 
@@ -1729,14 +1706,10 @@ def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing() -> None
     )
 
 
-def test_mjenmv_wsv209_uses_current_right_hemisphere_position() -> None:
-    external_labels, total_length, _ = _load_mjenmv_external_labels_with_config(
-        strandedness=True,
-        resolve_overlaps=False,
-        track_type="tuckin",
-        allow_inner_labels=True,
-        label_blacklist="",
-    )
+def test_mjenmv_wsv209_uses_current_right_hemisphere_position(
+    mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
+) -> None:
+    external_labels, total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
     inner_labels = sorted(
         [label for label in external_labels if label.get("is_inner")],
         key=lambda label: float(label["middle"]),

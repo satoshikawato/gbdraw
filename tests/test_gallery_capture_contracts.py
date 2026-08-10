@@ -21,6 +21,9 @@ from tools.capture_gallery_tutorial_screenshots import (
 )
 
 
+pytestmark = pytest.mark.gallery
+
+
 BASIC_EXAMPLES = {
     "HmmtDNA_basic_circular": {
         "operation_count": 6,

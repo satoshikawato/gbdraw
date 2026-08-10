@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 import hashlib
 from pathlib import Path
-import shutil
-import subprocess
 
 import pytest
 
 from gbdraw.session_io import load_session, write_session_json
 from tools.restore_wssv_gallery_fastas import (
-    REPO_ROOT,
     SESSION_PATH,
     WSSV_FASTA_SOURCES,
     restore_wssv_gallery_fastas,
     validate_embedded_wssv_fastas,
 )
+
+
+pytestmark = pytest.mark.gallery
 
 
 def _embedded_fastas(
@@ -59,8 +60,9 @@ def test_wssv_source_manifest_records_exact_identity_and_provenance() -> None:
 
 def test_wssv_fastas_survive_session_load_save_and_generator_rebuild(
     tmp_path: Path,
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
-    session = load_session(SESSION_PATH)
+    session = load_cached_gallery_session(SESSION_PATH)
     assert validate_embedded_wssv_fastas(session) == WSSV_FASTA_SOURCES
     expected = _embedded_fastas(session)
     assert tuple(row[3] for row in expected) == tuple(
@@ -80,14 +82,3 @@ def test_wssv_fastas_survive_session_load_save_and_generator_rebuild(
     round_tripped = load_session(round_trip_path)
     assert validate_embedded_wssv_fastas(round_tripped) == WSSV_FASTA_SOURCES
     assert _embedded_fastas(round_tripped) == expected
-
-
-def test_wssv_web_projection_rebuilds_all_popup_sequence_sources() -> None:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("Node.js is required for the Web session projection test")
-    subprocess.run(
-        [node, "tests/web/wssv-gallery-fastas.test.mjs"],
-        cwd=REPO_ROOT,
-        check=True,
-    )

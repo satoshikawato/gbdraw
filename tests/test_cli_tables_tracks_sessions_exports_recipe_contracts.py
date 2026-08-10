@@ -4,15 +4,24 @@ import json
 import os
 import subprocess
 import sys
+import zlib
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from docs.recipes._scenario_support import (
     PUBLISHED_IMAGE_ROOT,
     extract_executable_block,
     load_chapter,
 )
+from docs.recipes.run_cli_scenarios import (
+    _artifact_comparison_error,
+    _normalized_artifact_payload,
+)
+
+
+pytestmark = pytest.mark.recipe
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -162,6 +171,143 @@ def test_session_and_export_recipes_make_overwrite_and_formats_explicit() -> Non
         "cli_export.eps",
         "cli_export.ps",
     ]
+
+
+def test_export_png_comparison_accepts_only_observed_cairo_noise(
+    tmp_path: Path,
+) -> None:
+    expected_path = tmp_path / "expected" / "cli_export.png"
+    actual_path = tmp_path / "actual" / "cli_export.png"
+    expected_path.parent.mkdir()
+    actual_path.parent.mkdir()
+    expected = Image.new("RGBA", (20, 20), (100, 100, 100, 255))
+    expected.save(expected_path)
+
+    def comparison_error(actual: Image.Image) -> str | None:
+        actual.save(actual_path)
+        return _artifact_comparison_error("H-CLI-13", expected_path, actual_path)
+
+    assert comparison_error(expected.copy()) is None
+
+    observed_noise = expected.copy()
+    observed_coordinates = [(0, 0), (12, 10)]
+    observed_coordinates.extend(
+        (x, y)
+        for y in range(11)
+        for x in range(13)
+        if (x, y) not in {(0, 0), (12, 10)}
+    )
+    for x, y in observed_coordinates[:71]:
+        observed_noise.putpixel(
+            (x, y),
+            (121, 148, 162, 255),
+        )
+    assert comparison_error(observed_noise) is None
+
+    excessive_count = expected.copy()
+    for index in range(101):
+        excessive_count.putpixel(
+            (index % 11, index // 11),
+            (101, 100, 100, 255),
+        )
+    error = comparison_error(excessive_count)
+    assert error is not None and "changed RGB pixels=101" in error
+
+    excessive_delta = expected.copy()
+    excessive_delta.putpixel((0, 0), (165, 100, 100, 255))
+    error = comparison_error(excessive_delta)
+    assert error is not None and "max RGB channel delta=65" in error
+
+    scattered_noise = expected.copy()
+    scattered_noise.putpixel((0, 0), (101, 100, 100, 255))
+    scattered_noise.putpixel((16, 16), (101, 100, 100, 255))
+    error = comparison_error(scattered_noise)
+    assert error is not None and "RGB bounding box=(0, 0, 17, 17)" in error
+
+    alpha_change = expected.copy()
+    alpha_change.putpixel((0, 0), (100, 100, 100, 254))
+    error = comparison_error(alpha_change)
+    assert error is not None and "alpha exact=False" in error
+
+    assert comparison_error(expected.convert("RGB")) is not None
+    assert comparison_error(Image.new("RGBA", (21, 20), (100, 100, 100, 255))) is not None
+
+
+def test_export_renderer_metadata_is_normalized_but_content_is_not(
+    tmp_path: Path,
+) -> None:
+    expected_pdf = tmp_path / "expected.pdf"
+    actual_pdf = tmp_path / "actual.pdf"
+
+    def pdf_payload(version: str, date: str, content: str) -> bytes:
+        metadata = (
+            "1 0 obj\n"
+            f"<< /Producer (cairo {version} (https://cairographics.org))\n"
+            f"   /CreationDate (D:{date}Z)\n"
+            "   /Title (same) >>\n"
+            "endobj\n"
+        ).encode()
+        compressed = zlib.compress(content.encode())
+        return (
+            metadata
+            + b"2 0 obj\n<< /Length 3 0 R >>\nstream\n"
+            + compressed
+            + b"\nendstream\nendobj\n"
+            + f"3 0 obj\n{len(compressed)}\nendobj\n".encode()
+        )
+
+    expected_pdf.write_bytes(pdf_payload("1.18.4", "20260804000000", "same"))
+    actual_pdf.write_bytes(pdf_payload("1.18.0", "20260810000000", "same"))
+    assert _normalized_artifact_payload(
+        "H-CLI-13", expected_pdf
+    ) == _normalized_artifact_payload("H-CLI-13", actual_pdf)
+    assert _artifact_comparison_error(
+        "H-CLI-13", expected_pdf, actual_pdf
+    ) is None
+
+    actual_pdf.write_bytes(
+        actual_pdf.read_bytes().replace(b"cairographics.org", b"example.invalid")
+    )
+    assert _artifact_comparison_error(
+        "H-CLI-13", expected_pdf, actual_pdf
+    ) == "normalized payload differs"
+
+    actual_pdf.write_bytes(pdf_payload("1.18.0", "20260810000000", "changed"))
+    assert _artifact_comparison_error(
+        "H-CLI-13", expected_pdf, actual_pdf
+    ) == "normalized payload differs"
+
+    for suffix in (".eps", ".ps"):
+        expected_path = tmp_path / f"expected{suffix}"
+        actual_path = tmp_path / f"actual{suffix}"
+        expected_path.write_bytes(
+            b"%%Creator: cairo 1.18.4 (https://cairographics.org)\n"
+            b"%%CreationDate: Tue Aug  4 22:21:51 2026\n"
+            b"same body\n"
+        )
+        actual_path.write_bytes(
+            b"%%Creator: cairo 1.18.0 (https://cairographics.org)\n"
+            b"%%CreationDate: Mon Aug 10 04:43:20 2026\n"
+            b"same body\n"
+        )
+        assert _artifact_comparison_error(
+            "H-CLI-13", expected_path, actual_path
+        ) is None
+        actual_path.write_bytes(
+            actual_path.read_bytes().replace(
+                b"cairographics.org", b"example.invalid"
+            )
+        )
+        assert _artifact_comparison_error(
+            "H-CLI-13", expected_path, actual_path
+        ) == "normalized payload differs"
+        actual_path.write_bytes(
+            actual_path.read_bytes().replace(b"example.invalid", b"cairographics.org")
+        )
+        actual_path.write_bytes(actual_path.read_bytes().replace(b"same body", b"changed"))
+        assert _artifact_comparison_error(
+            "H-CLI-13", expected_path, actual_path
+        ) == "normalized payload differs"
 
 
 @pytest.mark.parametrize("scenario_id", SCENARIOS)

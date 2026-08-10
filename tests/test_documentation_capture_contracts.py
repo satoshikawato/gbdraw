@@ -6,11 +6,15 @@ import runpy
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pytest
 from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.assertions.svg_semantics import parse_translate_chain
 from docs.capture.config import chapter_for
+
+pytestmark = pytest.mark.recipe
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CAPTURE_ROOT = REPO_ROOT / "docs" / "capture"
@@ -737,6 +741,7 @@ def test_runner_uses_manifest_ids_tiers_and_generic_screenshot_lookup() -> None:
     assert "screenshot_paths_for(scenario_id)" in source
     assert "TIER_RANK" in source
     assert "ImageChops.difference" in source
+    assert "compare_raster_images" in source
     assert "for name, committed_path in committed_paths.items()" in source
     assert source.count("run_scenario as run_cli_scenario") == 1
     assert source.count("run_scenario as run_python_scenario") == 1
@@ -753,6 +758,7 @@ def test_screenshot_comparison_allows_only_bounded_raster_noise(tmp_path: Path) 
     excessive_delta_path = tmp_path / "excessive-delta.png"
     expected = Image.new("RGB", (120, 1), (100, 100, 100))
     expected.save(expected_path)
+    assert run_all._images_match(expected_path, expected_path)
 
     tolerated = expected.copy()
     for x in range(run_all.MAX_RASTER_NOISE_PIXELS):
@@ -772,6 +778,21 @@ def test_screenshot_comparison_allows_only_bounded_raster_noise(tmp_path: Path) 
     excessive_delta.putpixel((0, 0), (102, 100, 100))
     excessive_delta.save(excessive_delta_path)
     assert not run_all._images_match(expected_path, excessive_delta_path)
+
+    expected_rgba_path = tmp_path / "expected-rgba.png"
+    rgb_change_path = tmp_path / "rgb-change-rgba.png"
+    alpha_change_path = tmp_path / "alpha-change-rgba.png"
+    expected_rgba = Image.new("RGBA", (1, 1), (100, 100, 100, 255))
+    expected_rgba.save(expected_rgba_path)
+    assert run_all._images_match(expected_rgba_path, expected_rgba_path)
+    rgb_change = expected_rgba.copy()
+    rgb_change.putpixel((0, 0), (101, 100, 100, 255))
+    rgb_change.save(rgb_change_path)
+    assert run_all._images_match(expected_rgba_path, rgb_change_path)
+    alpha_change = expected_rgba.copy()
+    alpha_change.putpixel((0, 0), (100, 100, 100, 254))
+    alpha_change.save(alpha_change_path)
+    assert not run_all._images_match(expected_rgba_path, alpha_change_path)
 
 
 def test_complex_svg_screenshot_comparison_is_bounded_to_the_preview(

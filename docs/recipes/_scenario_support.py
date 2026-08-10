@@ -26,6 +26,111 @@ class RecipeContractError(RuntimeError):
     """A recorded recipe no longer satisfies its manifest contract."""
 
 
+@dataclass(frozen=True)
+class RasterComparison:
+    expected_size: tuple[int, int]
+    actual_size: tuple[int, int]
+    expected_mode: str
+    actual_mode: str
+    alpha_matches: bool
+    changed_pixels: int
+    max_channel_delta: int
+    bounding_box: tuple[int, int, int, int] | None
+
+    @property
+    def exact(self) -> bool:
+        return (
+            self.expected_size == self.actual_size
+            and self.expected_mode == self.actual_mode
+            and self.alpha_matches
+            and self.changed_pixels == 0
+        )
+
+    @property
+    def bounding_box_area(self) -> int:
+        if self.bounding_box is None:
+            return 0
+        left, top, right, bottom = self.bounding_box
+        return (right - left) * (bottom - top)
+
+    def within(
+        self,
+        *,
+        max_changed_pixels: int,
+        max_channel_delta: int,
+        max_bounding_box_area: int | None = None,
+    ) -> bool:
+        return (
+            self.expected_size == self.actual_size
+            and self.expected_mode == self.actual_mode
+            and self.alpha_matches
+            and self.changed_pixels <= max_changed_pixels
+            and self.max_channel_delta <= max_channel_delta
+            and (
+                max_bounding_box_area is None
+                or self.bounding_box_area <= max_bounding_box_area
+            )
+        )
+
+    def describe(self) -> str:
+        return (
+            f"size={self.actual_size} (expected {self.expected_size}), "
+            f"mode={self.actual_mode} (expected {self.expected_mode}), "
+            f"changed RGB pixels={self.changed_pixels}, "
+            f"max RGB channel delta={self.max_channel_delta}, "
+            f"RGB bounding box={self.bounding_box}, "
+            f"alpha exact={self.alpha_matches}"
+        )
+
+
+def compare_raster_images(expected_path: Path, actual_path: Path) -> RasterComparison:
+    """Measure RGB and alpha differences without hiding RGB changes in RGBA."""
+
+    from PIL import Image, ImageChops
+
+    with Image.open(expected_path) as expected, Image.open(actual_path) as actual:
+        expected_size = expected.size
+        actual_size = actual.size
+        expected_mode = expected.mode
+        actual_mode = actual.mode
+        if expected_size != actual_size or expected_mode != actual_mode:
+            return RasterComparison(
+                expected_size=expected_size,
+                actual_size=actual_size,
+                expected_mode=expected_mode,
+                actual_mode=actual_mode,
+                alpha_matches=False,
+                changed_pixels=0,
+                max_channel_delta=0,
+                bounding_box=None,
+            )
+
+        expected_rgb = expected.convert("RGB")
+        actual_rgb = actual.convert("RGB")
+        difference = ImageChops.difference(expected_rgb, actual_rgb)
+        extrema = difference.getextrema()
+        changed_pixels = sum(pixel != (0, 0, 0) for pixel in difference.getdata())
+        alpha_matches = True
+        if "A" in expected.getbands():
+            alpha_matches = (
+                ImageChops.difference(
+                    expected.getchannel("A"),
+                    actual.getchannel("A"),
+                ).getbbox()
+                is None
+            )
+        return RasterComparison(
+            expected_size=expected_size,
+            actual_size=actual_size,
+            expected_mode=expected_mode,
+            actual_mode=actual_mode,
+            alpha_matches=alpha_matches,
+            changed_pixels=changed_pixels,
+            max_channel_delta=max(high for _, high in extrema),
+            bounding_box=difference.getbbox(),
+        )
+
+
 def verified_scenario_ids(*, expected_kind: str, runner_path: str) -> tuple[str, ...]:
     """Return verified scenarios executed by one recipe runner."""
 
@@ -447,21 +552,29 @@ def publish_output(
     generated_path: Path,
     output_root: Path,
     check: bool,
-    comparison_payload: Callable[[Path], bytes] | None = None,
+    compare: Callable[[Path, Path], str | None] | None = None,
 ) -> Path:
     destination = output_root / chapter["id"].lower() / generated_path.name
     if check:
         if not destination.is_file():
             raise RecipeContractError(f"Published artifact is missing: {destination}")
-        read_payload = comparison_payload or Path.read_bytes
-        if read_payload(destination) != read_payload(generated_path):
+        mismatch = (
+            compare(destination, generated_path)
+            if compare is not None
+            else (
+                None
+                if destination.read_bytes() == generated_path.read_bytes()
+                else "payload differs"
+            )
+        )
+        if mismatch is not None:
             display_path = (
                 destination.relative_to(REPO_ROOT)
                 if destination.is_relative_to(REPO_ROOT)
                 else destination
             )
             raise RecipeContractError(
-                f"Published artifact is stale: {display_path}"
+                f"Published artifact is stale: {display_path} ({mismatch})"
             )
         return destination
 

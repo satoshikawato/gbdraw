@@ -7,10 +7,14 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
+import pytest
 from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.config import chapter_for
+
+pytestmark = pytest.mark.recipe
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"

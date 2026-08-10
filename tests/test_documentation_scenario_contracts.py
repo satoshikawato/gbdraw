@@ -7,7 +7,12 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from docs.recipes._scenario_support import parse_translate_chain
+
+
+pytestmark = pytest.mark.recipe
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

@@ -2930,27 +2930,6 @@ def test_circular_cli_rejects_invalid_tick_label_font_size(value: str) -> None:
     [
         ("--plot_title_position", "center"),
         ("--plot_title_position", "left"),
-    ],
-)
-def test_circular_cli_rejects_invalid_definition_layout_options(
-    option: str,
-    value: str,
-) -> None:
-    with pytest.raises(SystemExit):
-        circular_cli_module._get_args(
-            [
-                "--gbk",
-                "dummy.gb",
-                option,
-                value,
-            ]
-        )
-
-
-@pytest.mark.circular
-@pytest.mark.parametrize(
-    ("option", "value"),
-    [
         ("--definition_position", "bottom"),
         ("--multi_record_title_mode", "shared"),
         ("--multi_record_definition_mode", "shared"),
@@ -2958,7 +2937,7 @@ def test_circular_cli_rejects_invalid_definition_layout_options(
         ("--shared_definition_font_size", "30"),
     ],
 )
-def test_circular_cli_rejects_legacy_shared_definition_options(
+def test_circular_cli_rejects_unsupported_definition_layout_options(
     option: str,
     value: str,
 ) -> None:

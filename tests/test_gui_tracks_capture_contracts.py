@@ -4,10 +4,14 @@ import csv
 import hashlib
 from pathlib import Path
 
+import pytest
 from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.config import chapter_for
+
+pytestmark = pytest.mark.recipe
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FLOW_PATH = REPO_ROOT / "docs" / "capture" / "flows" / "how_to" / "tracks.py"

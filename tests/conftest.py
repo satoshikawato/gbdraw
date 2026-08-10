@@ -5,9 +5,13 @@ from __future__ import annotations
 import subprocess
 import sys
 from collections.abc import Callable
+from functools import cache
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pytest
+
+from gbdraw.session_io import load_session
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -57,6 +61,24 @@ def examples_dir() -> Path:
 @pytest.fixture(scope="session")
 def test_inputs_dir() -> Path:
     return TEST_INPUTS_DIR
+
+
+@pytest.fixture(scope="session")
+def load_cached_gallery_session() -> Callable[[Path], dict[str, object]]:
+    @cache
+    def load(path: Path) -> dict[str, object]:
+        return load_session(path)
+
+    return lambda path: load(path.resolve())
+
+
+@pytest.fixture(scope="session")
+def load_cached_svg_root() -> Callable[[Path], ET.Element]:
+    @cache
+    def load(path: Path) -> ET.Element:
+        return ET.parse(path).getroot()
+
+    return lambda path: load(path.resolve())
 
 
 @pytest.fixture(scope="session")

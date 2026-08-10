@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from xml.etree import ElementTree
 
+import pytest
 from Bio import SeqIO
 
 from docs.recipes._scenario_support import (
@@ -17,6 +18,9 @@ from docs.recipes._scenario_support import (
 )
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+
+
+pytestmark = pytest.mark.recipe
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -240,18 +244,23 @@ def test_python_evidence_recipes_regenerate_from_a_clean_external_context(
         else os.pathsep.join((str(REPO_ROOT), existing_pythonpath))
     )
 
-    result = subprocess.run(
-        [sys.executable, str(REPO_ROOT / RUNNER), "--all", "--check"],
-        cwd=tmp_path,
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    for scenario_id in ("T-PY-01", *SCENARIO_IDS):
+    for scenario_id in SCENARIO_IDS:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / RUNNER),
+                "--scenario",
+                scenario_id,
+                "--check",
+            ],
+            cwd=tmp_path,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
         assert f"{scenario_id}: verified" in result.stdout
     assert list(tmp_path.iterdir()) == []
 

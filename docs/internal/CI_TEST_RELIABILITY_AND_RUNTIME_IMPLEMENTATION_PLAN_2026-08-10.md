@@ -1,9 +1,9 @@
 # CIテスト信頼性・実行時間改善計画
 
-- Status: pending
+- Status: in progress (Phase 1-3 complete; Phase 4 locally implemented; Phase 0 and Phase 5 remote evidence pending)
 - Date: 2026-08-10
 - Scope: PR #319で確認した成果物比較、Python recipe contract、重複する高コストテスト、GitHub ActionsのPR必須チェック
-- Rule: 実装はこの文書を実行する次セッションで行う。この文書の作成ではproduction code、test、workflow、生成成果物を変更しない。
+- Execution: 2026-08-10にPhase 1-3とPhase 4のCI partitionを実装・ローカル検証した。remote evidenceは未実施。
 
 関連文書:
 
@@ -186,7 +186,9 @@ python docs/recipes/run_python_scenarios.py --all --check
 
 ## 6. Phase 1: H-CLI-13の環境非依存比較を修正する
 
-Status: pending
+Status: completed
+
+Evidence: bounded PNG比較、renderer version正規化、RGBA alpha分離の回帰testを含む対象42件が16.60秒で通過し、H-CLI-13の六形式`--check`が4.49秒で通過した。
 
 ### 対象
 
@@ -241,7 +243,9 @@ git diff --exit-code -- tests/reference_outputs/
 
 ## 7. Phase 2: Python recipeのownerを分離する
 
-Status: pending
+Status: completed
+
+Evidence: H-PY、onboarding、Tutorial ownerの対象21件が87.49秒で通過した。H-PY regenerationは5.34秒、全15 scenarioの手動`--all --check`も通過した。
 
 ### 対象
 
@@ -279,7 +283,11 @@ python docs/recipes/run_python_scenarios.py --all --check
 
 ## 8. Phase 3: 高コストtest fixtureの重複を除く
 
-Status: pending
+Status: completed
+
+Evidence: MjeNMV inner-labelの同一設定をmodule-scoped fixtureで一度だけ構築し、同じ構築を使う8件のassertionと`y_overlap` counterで共有した。同値のinner-order testは一ownerへ統合した。対象moduleは68件が83.75秒で通過し、CI baselineの439.2秒から短縮、180秒以内の条件を満たした。
+
+ユーザー指示により30秒閾値は適用せず、Gallery/sessionを含む全suiteを重複監査した。static session decode、SVG parse、figure spec、同一arrow reproductionを既存fixture/cacheへ集約し、Gallery partition全113件が216.05秒で通過した。CIで直接実行するNode specを再実行していた、WSSVを含むpytest wrapper 4件を削除した。Node spec 62件は6.98秒、追加のproject-session 3件は3.98秒で直接ownerが通過した。
 
 ### 対象
 
@@ -314,13 +322,13 @@ python -m pytest \
 
 ## 9. Phase 4: PR CIを用途別に分割する
 
-Status: pending
+Status: locally implemented; remote runtime verification pending in Phase 5
 
 ### Marker方針
 
 既存`slow`に加え、次のsuite owner markerだけを追加する。
 
-- `recipe`
+- `recipe`（公開documentationとCLI/Python recipe acceptance）
 - `recipe_heavy`（`recipe`のsubset）
 - `gallery`
 - `browser`
@@ -367,6 +375,22 @@ python -m pytest tests/ -m "browser" --collect-only -q
 ```
 
 partitionの和集合が最初の集合と一致しない場合、workflow変更は未完了とする。
+
+2026-08-10のdeduplication後のlocal collectionは次のとおり。owner partition間の重複はなく、件数の和は`not slow`集合と一致した。
+
+| Selection | Node count |
+| --- | ---: |
+| all | 2,933 |
+| `not slow` | 2,927 |
+| core | 2,620 |
+| recipe standard | 179 |
+| recipe heavy | 2 |
+| Gallery | 113 |
+| browser | 13 |
+
+当初の「変更前pytest node ID集合を不変にする」条件は、実装中のユーザー指示「重複testをすべて削除する」を優先した。削除した5 ownerの内訳は、直接Node suiteと同じspecを再実行するpytest wrapper 4件と、同じhelper・assertionを持つMjeNMV test 1件である。対応behaviorは直接Node ownerまたは残したpytest ownerで一度だけ実行される。deduplication後の2,927 nodeは上表のPR partitionで過不足なく所有される。
+
+coreはserial計測が4分を超えたため計画どおり`pytest-xdist`をcoreだけへ追加した。Python compatibilityと無関係なdocumentation、capture、tutorial fixture contract 128件はrecipe acceptanceへ移し、PRではcanonical Pythonで一度だけ実行する。GitHub-hosted runnerのworker数を想定したlocal 4 worker coreは2,603 passed、17 skipped、213.09秒でgreen、Galleryは216.05秒、browser pytestは17.92秒、recipe standardは61.09秒で、test実行部分は各目標内だった。recipe standardのlocal結果は133 passed、46 failedで、失敗はすべて実装開始前から存在するworktreeのCRLF化によるfixture size/checksum差だった。clean checkoutでのrecipe green、setup込み時間、remote timingはPhase 5に残す。
 
 ### 中止条件
 
@@ -450,24 +474,24 @@ production package `gbdraw/`の描画・LOSATP・session実装は、profileで�
 ## 13. 実装時の進捗チェックリスト
 
 - [ ] Phase 0: baseline、node ID集合、owner台帳を記録
-- [ ] Phase 1: bounded PNG比較とPDF/EPS/PS normalizerを修正
-- [ ] Phase 2: H-PYとTutorial recipe ownerを分離
-- [ ] Phase 3: MjeNMV重複構築と同値testを除去
-- [ ] Phase 4: CI partitionとruntime準備を限定
+- [x] Phase 1: bounded PNG比較とPDF/EPS/PS normalizerを修正
+- [x] Phase 2: H-PYとTutorial recipe ownerを分離
+- [x] Phase 3: MjeNMV、Gallery、Node wrapperの重複構築・ownerを除去
+- [x] Phase 4: CI partitionとruntime準備を限定（remote timingはPhase 5）
 - [ ] Phase 5: focused/full/remote evidenceを取得
 - [ ] 連続5 runの中央値5分以内、最大7分以内
-- [ ] reference/generated artifact差分を個別レビュー
-- [ ] 計画statusとevidence logを更新
+- [x] reference/generated artifact差分を個別レビュー（EOL差を除くsemantic diffなし。clean checkoutのexact gateはPhase 5）
+- [x] 計画statusとevidence logを更新
 
 ## 14. Evidence log template
 
 | Phase | Command/run | Result | Duration | Remaining risk |
 | --- | --- | --- | ---: | --- |
 | 0 | baseline collection | pending | - | - |
-| 1 | H-CLI-13 cross-environment contract | pending | - | - |
-| 2 | Python recipe owners | pending | - | - |
-| 3 | label/Gallery profile | pending | - | - |
-| 4 | partition coverage audit | pending | - | - |
+| 1 | `pytest tests/test_cli_tables_tracks_sessions_exports_recipe_contracts.py tests/test_documentation_capture_contracts.py -q`; `run_cli_scenarios.py --scenario H-CLI-13 --check` | 42 passed; six formats verified | 16.60秒; 4.49秒 | remote Cairo 1.18.0実走はPhase 5で確認 |
+| 2 | `pytest tests/test_python_howto_recipe_contracts.py tests/test_onboarding_recipe_contracts.py tests/test_python_tutorial_recipe_contracts.py -q --durations=30`; `run_python_scenarios.py --all --check` | 21 passed; all 15 scenarios verified | 87.49秒; 約70秒 | CI partitionとsupported-version実走はPhase 4-5で確認 |
+| 3 | `pytest tests/test_circular_label_placement.py -q --durations=30`; `pytest -m "gallery and not slow"` | 68 passed; 113 passed | 83.75秒; 216.05秒 | clean CIでのPython 3.11再測定はPhase 5 |
+| 4 | collect-only 6 partition; core xdist; recipe standard; browser pytest; Node direct suite | 2,927 non-slow nodesを重複・欠落なしで分割; core 2,603 passed/17 skipped; recipe 133 passed/46 CRLF failures; browser 13 passed; Node 62 passed | core 213.09秒（4 worker）; recipe 61.09秒; browser 17.92秒; Node 6.98秒 | clean checkoutのrecipe green、cold setup、5回remote timingはPhase 5 |
 | 5 | remote run 1–5 | pending | - | - |
 
 この計画を実装するセッションは`$execute-plan-with-evidence`を使用し、実測なしでPhaseをcompletedへ変更しない。

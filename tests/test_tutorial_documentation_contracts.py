@@ -5,6 +5,11 @@ import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import pytest
+
+
+pytestmark = pytest.mark.recipe
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCS_ROOT = REPO_ROOT / "docs"

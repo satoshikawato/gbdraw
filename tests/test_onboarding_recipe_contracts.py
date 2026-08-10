@@ -7,11 +7,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from docs.recipes._scenario_support import (
     PUBLISHED_IMAGE_ROOT,
     extract_executable_block,
     load_chapter,
 )
+
+
+pytestmark = pytest.mark.recipe
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

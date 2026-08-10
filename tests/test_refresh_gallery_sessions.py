@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from collections import Counter
+from collections.abc import Callable
 import gzip
 import json
 from pathlib import Path
@@ -77,6 +78,9 @@ from tools.refresh_gallery_sessions import (
     _validate_staged_gallery_session,
     _with_interactive_svg_format,
 )
+
+
+pytestmark = pytest.mark.gallery
 
 
 def test_gallery_refresh_syncs_legacy_legend_control_with_render_request() -> None:
@@ -650,9 +654,11 @@ def test_current_session_catalog_structure_rejects_duplicate_payloads(
         _validate_current_session_catalog_structure(session_path, session)
 
 
-def test_vibrio_gallery_session_retains_complete_compact_cache() -> None:
+def test_vibrio_gallery_session_retains_complete_compact_cache(
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
     path = _session_path("vibrio-harveyi-group-collinear")
-    session = load_session(path)
+    session = load_cached_gallery_session(path)
 
     _validate_staged_gallery_session(
         path,
@@ -679,7 +685,9 @@ def test_gallery_session_inventory_matches_files_and_examples() -> None:
     _validate_gallery_session_inventory()
 
 
-def test_all_bundled_sessions_use_current_request_and_artifact_schemas() -> None:
+def test_all_bundled_sessions_use_current_request_and_artifact_schemas(
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
     repo_root = Path(__file__).parents[1]
     paths = sorted(
         (repo_root / "gbdraw" / "web" / "gallery" / "sessions").glob(
@@ -694,7 +702,7 @@ def test_all_bundled_sessions_use_current_request_and_artifact_schemas() -> None
 
     assert len(paths) == 13
     for path in paths:
-        session = load_session(path)
+        session = load_cached_gallery_session(path)
         assert session["version"] == CURRENT_SESSION_VERSION, path
         assert session["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA, path
         assert (
@@ -717,11 +725,13 @@ def test_all_bundled_sessions_use_current_request_and_artifact_schemas() -> None
         ), path
 
 
-def test_bundled_gallery_sources_match_current_session_results() -> None:
+def test_bundled_gallery_sources_match_current_session_results(
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
     for example in EXAMPLES:
         if not example.sync_result_svg:
             continue
-        session = load_session(example.session_path)
+        session = load_cached_gallery_session(example.session_path)
         assert (
             example.source_svg_path.read_text(encoding="utf-8")
             == _session_result_svg(session, example)
@@ -1988,10 +1998,12 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
     expected_groups: int,
     expected_members: int,
     expected_hidden_members: int,
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+    load_cached_svg_root: Callable[[Path], ET.Element],
 ) -> None:
     example = next(item for item in EXAMPLES if item.id == example_id)
-    session = load_session(example.session_path)
-    root = ET.parse(example.gallery_svg_path).getroot()
+    session = load_cached_gallery_session(example.session_path)
+    root = load_cached_svg_root(example.gallery_svg_path)
     metadata = next(
         element
         for element in root.iter()

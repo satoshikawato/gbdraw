@@ -568,6 +568,7 @@ def test_definition_mixed_content_width_sums_style_aware_parts(
 
 
 @pytest.mark.linear
+@pytest.mark.browser
 @pytest.mark.parametrize(
     ("label", "font_weight"),
     [

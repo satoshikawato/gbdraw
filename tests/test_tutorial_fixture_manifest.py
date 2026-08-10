@@ -9,7 +9,11 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote
 
+import pytest
 from Bio import SeqIO
+
+pytestmark = pytest.mark.recipe
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"

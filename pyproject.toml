@@ -43,6 +43,7 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-timeout>=2.0",
+    "pytest-xdist>=3.6",
     "ruff==0.15.12",
     "setuptools>=61.0",
     "wheel",
@@ -76,6 +77,10 @@ markers = [
     "circular: marks tests for circular diagrams",
     "linear: marks tests for linear diagrams",
     "reference_generation: writes tracked SVG reference outputs when explicitly enabled",
+    "recipe: validates published documentation or executes a CLI or Python recipe",
+    "recipe_heavy: marks recipe tests with material LOSAT subprocess cost",
+    "gallery: validates bundled Gallery sessions, assets, and reproductions",
+    "browser: requires Node.js or a browser runtime",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

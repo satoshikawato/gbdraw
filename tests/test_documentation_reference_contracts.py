@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 import gbdraw
 from gbdraw.annotations.io import ANNOTATION_TABLE_COLUMNS
 from gbdraw.io.cli_tables import (
@@ -20,6 +22,9 @@ from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
 )
+
+
+pytestmark = pytest.mark.recipe
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

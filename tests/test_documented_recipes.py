@@ -5,6 +5,11 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+import pytest
+
+
+pytestmark = pytest.mark.recipe
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCS_ROOT = REPO_ROOT / "docs"

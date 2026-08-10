@@ -3,11 +3,15 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import pytest
 from Bio import SeqIO
 from PIL import Image
 
 from docs.capture.config import chapter_for
 from gbdraw.session_io import CURRENT_SESSION_VERSION
+
+pytestmark = pytest.mark.recipe
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CAPTURE_ROOT = REPO_ROOT / "docs" / "capture"

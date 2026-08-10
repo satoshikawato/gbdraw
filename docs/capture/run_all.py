@@ -26,6 +26,7 @@ from config import (  # noqa: E402
     screenshot_paths_for,
     supported_tiers,
 )
+from docs.recipes._scenario_support import compare_raster_images  # noqa: E402
 from docs.recipes.run_cli_scenarios import (  # noqa: E402
     run_scenario as run_cli_scenario,
 )
@@ -142,33 +143,35 @@ def _images_match(
     *,
     allow_complex_svg_raster_noise: bool = False,
 ) -> bool:
-    with Image.open(expected_path) as expected, Image.open(actual_path) as actual:
-        if expected.size != actual.size or expected.mode != actual.mode:
+    comparison = compare_raster_images(expected_path, actual_path)
+    if comparison.exact:
+        return True
+    if not comparison.alpha_matches:
+        return False
+    if comparison.max_channel_delta > MAX_RASTER_CHANNEL_DELTA:
+        if not allow_complex_svg_raster_noise:
             return False
-        difference = ImageChops.difference(expected, actual)
-        if difference.getbbox() is None:
-            return True
-
-        extrema = difference.getextrema()
-        if any(high > MAX_RASTER_CHANNEL_DELTA for _, high in extrema):
-            if not allow_complex_svg_raster_noise:
-                return False
-            bbox = difference.getbbox()
-            if (
-                bbox is None
-                or bbox[0] < 650
-                or bbox[1] < 100
-                or bbox[2] > 1430
-                or bbox[3] > 720
-            ):
-                return False
+        bbox = comparison.bounding_box
+        if (
+            bbox is None
+            or bbox[0] < 650
+            or bbox[1] < 100
+            or bbox[2] > 1430
+            or bbox[3] > 720
+        ):
+            return False
+        with Image.open(expected_path) as expected, Image.open(actual_path) as actual:
             reduced_size = (
                 max(1, expected.width // 4),
                 max(1, expected.height // 4),
             )
             reduced_difference = ImageChops.difference(
-                expected.resize(reduced_size, Image.Resampling.BILINEAR),
-                actual.resize(reduced_size, Image.Resampling.BILINEAR),
+                expected.convert("RGB").resize(
+                    reduced_size, Image.Resampling.BILINEAR
+                ),
+                actual.convert("RGB").resize(
+                    reduced_size, Image.Resampling.BILINEAR
+                ),
             )
             reduced_stats = ImageStat.Stat(reduced_difference)
             return (
@@ -176,10 +179,10 @@ def _images_match(
                 and all(mean <= 0.12 for mean in reduced_stats.mean)
                 and all(rms <= 1.6 for rms in reduced_stats.rms)
             )
-        changed_pixels = sum(
-            pixel != (0, 0, 0) for pixel in difference.getdata()
-        )
-        return changed_pixels <= MAX_RASTER_NOISE_PIXELS
+    return comparison.within(
+        max_changed_pixels=MAX_RASTER_NOISE_PIXELS,
+        max_channel_delta=MAX_RASTER_CHANNEL_DELTA,
+    )
 
 
 def _capture_scenario(

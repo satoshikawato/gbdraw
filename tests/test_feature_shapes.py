@@ -562,18 +562,8 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
 
 
 @pytest.mark.parametrize(
-    "cmd_args",
-    [
-        ["--gbk", "dummy.gb", "--feature_shape", "CDSarrow"],
-        ["--gbk", "dummy.gb", "--feature_shape", "=arrow"],
-        ["--gbk", "dummy.gb", "--feature_shape", "CDS=triangle"],
-    ],
+    "parser", [circular_cli_module._get_args, linear_cli_module._get_args]
 )
-def test_circular_cli_feature_shape_validation(cmd_args: list[str]) -> None:
-    with pytest.raises(SystemExit):
-        circular_cli_module._get_args(cmd_args)
-
-
 @pytest.mark.parametrize(
     "cmd_args",
     [
@@ -582,9 +572,9 @@ def test_circular_cli_feature_shape_validation(cmd_args: list[str]) -> None:
         ["--gbk", "dummy.gb", "--feature_shape", "CDS=triangle"],
     ],
 )
-def test_linear_cli_feature_shape_validation(cmd_args: list[str]) -> None:
+def test_cli_feature_shape_validation(parser, cmd_args: list[str]) -> None:
     with pytest.raises(SystemExit):
-        linear_cli_module._get_args(cmd_args)
+        parser(cmd_args)
 
 
 @pytest.mark.parametrize("parser", [circular_cli_module._get_args, linear_cli_module._get_args])

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 import gzip
 import hashlib
 import html
@@ -26,7 +27,6 @@ from gbdraw.session_io import (
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
     SUPPORTED_SESSION_VERSIONS,
-    load_session,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
@@ -214,6 +214,7 @@ def _assert_white_gallery_thumbnail(path: Path) -> None:
     assert average_luminance >= 245
 
 
+@pytest.mark.browser
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
     expected_wheel_name = "gbdraw-0.14.0b0-py3-none-any.whl"
@@ -224,6 +225,7 @@ def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module._assert_packaged_assets()
 
 
+@pytest.mark.browser
 def test_browser_wheel_excludes_hosted_web_assets() -> None:
     verify_module, browser_wheel_path = ensure_prepared_browser_wheel()
     with zipfile.ZipFile(browser_wheel_path) as zf:
@@ -279,6 +281,7 @@ def test_index_links_to_open_source_notices() -> None:
     assert "Open Source Notices" in index_html
 
 
+@pytest.mark.gallery
 def test_index_links_to_hosted_interactive_gallery() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "Interactive Gallery" in index_html
@@ -316,6 +319,7 @@ def test_public_web_html_entrypoints_are_not_gitignored() -> None:
             )
 
 
+@pytest.mark.gallery
 def test_gallery_csp_allows_same_origin_tutorial_media() -> None:
     gallery_index = (WEB_ROOT / "gallery" / "index.html").read_text(encoding="utf-8")
     assert "media-src 'self';" in gallery_index
@@ -394,6 +398,7 @@ def test_meta_csp_omits_frame_ancestors_header_only_directive() -> None:
     assert "frame-ancestors" not in gallery_html
 
 
+@pytest.mark.gallery
 def test_interactive_gallery_shell_is_sandboxed() -> None:
     gallery_html = (GALLERY_ROOT / "index.html").read_text(encoding="utf-8")
 
@@ -406,6 +411,7 @@ def test_interactive_gallery_shell_is_sandboxed() -> None:
     assert "allow-same-origin" not in gallery_html
 
 
+@pytest.mark.gallery
 def test_interactive_gallery_examples_are_wired() -> None:
     expected_ids = [
         "HmmtDNA_basic_circular",
@@ -613,6 +619,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
     assert collinear["command"].count("--losatp_threads") == 1
 
 
+@pytest.mark.gallery
 def test_runnable_gallery_support_downloads_exist() -> None:
     expected_local_downloads = {
         "HmmtDNA_ATskew": {"./files/HmmtDNA_qualifier_priority.tsv"},
@@ -653,13 +660,16 @@ def test_index_includes_preprint_citation() -> None:
     assert PREPRINT_DOI in index_html
 
 
-def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None:
+@pytest.mark.gallery
+def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
     observed_losat_cache_sessions = set()
     observed_losat_derived_cache_sessions = set()
 
     for session_name in GALLERY_SESSION_FILES:
         session_path = GALLERY_ROOT / "sessions" / session_name
-        session = load_session(session_path)
+        session = load_cached_gallery_session(session_path)
         results = session.get("results", [])
         editor_state = session.get("editorState", {})
         feature_catalog = editor_state.get("featureCatalog", {})
@@ -786,11 +796,12 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files() -> None
     )
 
 
-def test_tobacco_gallery_session_keeps_chloroplast_region_annotations() -> None:
-    session = json.loads(
-        (
-            GALLERY_ROOT / "sessions" / "tobacco-chloroplast.gbdraw-session.json"
-        ).read_text(encoding="utf-8")
+@pytest.mark.gallery
+def test_tobacco_gallery_session_keeps_chloroplast_region_annotations(
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
+    session = load_cached_gallery_session(
+        GALLERY_ROOT / "sessions" / "tobacco-chloroplast.gbdraw-session.json"
     )
     annotation_sets = (
         session.get("renderRequest", {})
@@ -819,8 +830,11 @@ def test_tobacco_gallery_session_keeps_chloroplast_region_annotations() -> None:
     ]
 
 
-def test_vnig_gallery_session_multirecord_positions_are_restoreable() -> None:
-    session = load_session(
+@pytest.mark.gallery
+def test_vnig_gallery_session_multirecord_positions_are_restoreable(
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
+    session = load_cached_gallery_session(
         GALLERY_ROOT / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
     )
     expected_positions = ["#1@1", "#2@1", "#3@2", "#4@2", "#5@2", "#6@2"]
@@ -899,6 +913,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     ]
 
 
+@pytest.mark.browser
 def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
     tmp_path: Path,
 ) -> None:
@@ -1437,6 +1452,7 @@ def test_built_sdist_contains_tutorial_data(tmp_path: Path) -> None:
 
 
 @pytest.mark.slow
+@pytest.mark.browser
 def test_offline_gui_smoke_test_covers_palette_preview_behavior() -> None:
     if importlib.util.find_spec("playwright") is None:
         pytest.skip("playwright is not available in this environment")

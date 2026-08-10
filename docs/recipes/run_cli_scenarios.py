@@ -26,6 +26,7 @@ if __package__:
         RecipeContractError,
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
+        compare_raster_images,
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
@@ -41,6 +42,7 @@ else:
         RecipeContractError,
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
+        compare_raster_images,
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
@@ -350,7 +352,7 @@ def _materialize_generated_tables(scenario_id: str, workdir: Path) -> set[str]:
     return generated
 
 
-def _artifact_comparison_payload(scenario_id: str, path: Path) -> bytes:
+def _normalized_artifact_payload(scenario_id: str, path: Path) -> bytes:
     payload = path.read_bytes()
     normalized_session_names = {
         "H-CLI-12": {"cli_session.json", "cli_session.json.gz"},
@@ -405,18 +407,51 @@ def _artifact_comparison_payload(scenario_id: str, path: Path) -> bytes:
                 b"/CreationDate (normalized)",
                 body,
             )
+            body = re.sub(
+                rb"(/Producer \(cairo )\d+(?:\.\d+)+(?=[ )])",
+                rb"\1normalized",
+                body,
+            )
             normalized_objects.append(
                 object_number + b" 0 obj\n" + body + b"\nendobj"
             )
         return b"\n".join(normalized_objects)
     if scenario_id == "H-CLI-13" and path.suffix in {".eps", ".ps"}:
-        return re.sub(
+        payload = re.sub(
             rb"^%%CreationDate:.*$",
             b"%%CreationDate: normalized",
             payload,
             flags=re.MULTILINE,
         )
+        return re.sub(
+            rb"^(%%Creator: cairo )\d+(?:\.\d+)+(?=[ )])",
+            rb"\1normalized",
+            payload,
+            flags=re.MULTILINE,
+        )
     return payload
+
+
+def _artifact_comparison_error(
+    scenario_id: str,
+    expected_path: Path,
+    actual_path: Path,
+) -> str | None:
+    if scenario_id == "H-CLI-13" and expected_path.suffix == ".png":
+        comparison = compare_raster_images(expected_path, actual_path)
+        if comparison.within(
+            max_changed_pixels=100,
+            max_channel_delta=64,
+            max_bounding_box_area=256,
+        ):
+            return None
+        return f"PNG raster differs: {comparison.describe()}"
+
+    if _normalized_artifact_payload(
+        scenario_id, expected_path
+    ) == _normalized_artifact_payload(scenario_id, actual_path):
+        return None
+    return "normalized payload differs"
 
 
 def _assert_gff_id_mismatch_is_rejected(
@@ -2435,9 +2470,10 @@ def run_scenario(
                 generated_path=workdir / output_name,
                 output_root=output_root,
                 check=check,
-                comparison_payload=lambda path: _artifact_comparison_payload(
+                compare=lambda expected_path, actual_path: _artifact_comparison_error(
                     scenario_id,
-                    path,
+                    expected_path,
+                    actual_path,
                 ),
             )
             for output_name in expected_outputs

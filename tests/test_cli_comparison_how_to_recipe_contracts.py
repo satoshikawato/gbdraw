@@ -16,6 +16,9 @@ from docs.recipes._scenario_support import (
 )
 
 
+pytestmark = pytest.mark.recipe
+
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNNER = "docs/recipes/run_cli_scenarios.py"
 SCENARIOS = ("H-CLI-05", "H-CLI-06", "H-CLI-07", "H-CLI-08")

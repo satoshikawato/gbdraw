@@ -3,11 +3,16 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from gbdraw.session_io import CURRENT_SESSION_VERSION, SUPPORTED_SESSION_VERSIONS
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
 )
+
+
+pytestmark = pytest.mark.recipe
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

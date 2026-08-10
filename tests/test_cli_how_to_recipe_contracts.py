@@ -8,12 +8,17 @@ import sys
 from pathlib import Path
 from xml.etree import ElementTree
 
+import pytest
+
 from docs.recipes._scenario_support import (
     PUBLISHED_IMAGE_ROOT,
     extract_executable_block,
     load_chapter,
 )
 from docs.recipes.run_cli_scenarios import _positions_form_documented_2x2_grid
+
+
+pytestmark = pytest.mark.recipe
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
