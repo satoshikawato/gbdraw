@@ -78,7 +78,6 @@ markers = [
     "linear: marks tests for linear diagrams",
     "reference_generation: writes tracked SVG reference outputs when explicitly enabled",
     "recipe: validates published documentation or executes a CLI or Python recipe",
-    "recipe_heavy: marks recipe tests with material LOSAT subprocess cost",
     "gallery: validates bundled Gallery sessions, assets, and reproductions",
     "browser: requires Node.js or a browser runtime",
 ]

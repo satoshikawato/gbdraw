@@ -65,36 +65,7 @@ jobs:
       - name: Run standard recipe tests
         run: >-
           python -m pytest tests/
-          -m "recipe and not recipe_heavy and not slow"
-          --durations=30
-
-  recipes-heavy:
-    name: Recipes heavy ${{ matrix.scenario }} (Python 3.11)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        scenario: ["T-PY-05", "T-PY-07"]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Install recipe test dependencies
-        run: python -m pip install -e ".[export]" pytest pytest-timeout Pillow
-
-      - name: Run heavy recipe
-        run: >-
-          python -m pytest
-          "tests/test_python_tutorial_recipe_contracts.py::test_python_tutorial_recipe_regenerates_from_a_clean_external_context[${{ matrix.scenario }}]"
-          -m "recipe_heavy and not slow"
+          -m "recipe and not slow"
           --durations=30
 
   gallery:

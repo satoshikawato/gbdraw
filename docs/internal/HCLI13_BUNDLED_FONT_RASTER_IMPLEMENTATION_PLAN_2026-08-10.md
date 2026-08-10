@@ -121,7 +121,7 @@ Status: completed locally
 
 - Run the focused test module.
 - Run H-CLI-13 from a clean checkout with `--check`.
-- Run the standard non-heavy recipe partition.
+- Run the recipe partition.
 - Confirm no public or reference artifact changed.
 
 ### Phase 4: verify on GitHub Actions
@@ -142,7 +142,7 @@ PATH=/home/kawato/micromamba/bin:$PATH \
   docs/recipes/run_cli_scenarios.py --scenario H-CLI-13 --check
 
 /home/kawato/micromamba/bin/python -m pytest \
-  tests/ -m "recipe and not recipe_heavy and not slow" -q
+  tests/ -m "recipe and not slow" -q
 
 git diff --exit-code -- \
   docs/images/h-cli-13/ \

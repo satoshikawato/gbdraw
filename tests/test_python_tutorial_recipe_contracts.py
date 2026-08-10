@@ -18,19 +18,15 @@ RUNNER = "docs/recipes/run_python_scenarios.py"
 TUTORIAL_SCENARIO_IDS = tuple(
     scenario_id
     for scenario_id in SCENARIO_IDS
-    if scenario_id.startswith("T-PY-") and scenario_id != "T-PY-01"
+    # Full-data LOSATP recipes remain available through the manual scenario runner.
+    if scenario_id.startswith("T-PY-")
+    and scenario_id not in {"T-PY-01", "T-PY-05", "T-PY-07"}
 )
-HEAVY_SCENARIO_IDS = {"T-PY-05", "T-PY-07"}
-
-
-def _scenario_parameter(scenario_id: str):
-    marks = [pytest.mark.recipe_heavy] if scenario_id in HEAVY_SCENARIO_IDS else []
-    return pytest.param(scenario_id, marks=marks)
 
 
 @pytest.mark.parametrize(
     "scenario_id",
-    [_scenario_parameter(scenario_id) for scenario_id in TUTORIAL_SCENARIO_IDS],
+    TUTORIAL_SCENARIO_IDS,
 )
 def test_python_tutorial_recipe_regenerates_from_a_clean_external_context(
     scenario_id: str,
@@ -56,7 +52,7 @@ def test_python_tutorial_recipe_regenerates_from_a_clean_external_context(
         env=environment,
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=180,
         check=False,
     )
 

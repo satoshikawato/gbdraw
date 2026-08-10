@@ -1,11 +1,13 @@
 # CIテスト信頼性・実行時間改善計画
 
-- Status: in progress (Phase 1-3 complete; Phase 4 corrected after the first remote run; Phase 0 and Phase 5 remote evidence pending)
+- Status: in progress (Phase 1-3 complete; Phase 4 corrected after two remote failures; Phase 0 and Phase 5 remote evidence pending)
 - Date: 2026-08-10
 - Scope: PR #319で確認した成果物比較、Python recipe contract、重複する高コストテスト、GitHub ActionsのPR必須チェック
-- Execution: 2026-08-10にPhase 1-3とPhase 4のCI partitionを実装・ローカル検証した。最初のremote runでrecipe runtimeとT-PY-07 timeoutの前提違反が判明し、同日にローカル修正した。修正後のremote evidenceは未実施。
+- Execution: 2026-08-10にPhase 1-3とPhase 4のCI partitionを実装・ローカル検証した。最初のremote run後にT-PY-07上限を300秒へ変更したが、次のremote runでも300秒でtimeoutした。2026-08-11のユーザー指示により、自動testとして固有の価値を持たないT-PY-05/T-PY-07の全量再生成と専用CI jobを削除した。修正後のremote evidenceは未実施。
 
 **訂正 (2026-08-10):** 最新のremote logで、runnerを`ubuntu-24.04`へ変更しても同じrunner familyが選ばれ、`fonts-liberation`も導入済みで0 packageだったため、両変更はno-opだったことが確認された。ここでのH-CLI-13 PNG対策は[H-CLI-13 bundled-font raster implementation plan](HCLI13_BUNDLED_FONT_RASTER_IMPLEMENTATION_PLAN_2026-08-10.md)に置き換えられた。test partitionとruntime改善は引き続き有効だが、runner/font installをremedyまたは成功根拠として扱わない。
+
+**訂正 (2026-08-11):** T-PY-05/T-PY-07は小型のLOSATP、orthogroup、collinearity testが所有する実装契約に、公開成果物の全量再生成を重ねていた。両scenarioは`docs/recipes/run_python_scenarios.py`による明示的な成果物検証として残すが、pytest collectionとPR workflowから外す。timeout延長や専用heavy marker/jobは維持しない。
 
 関連文書:
 
@@ -20,7 +22,7 @@
 次の三点を同時に満たす。
 
 1. native Cairo差を公開成果物のstale判定と誤認しない。
-2. 各test moduleが所有するscenarioだけを実行し、重いTutorialやGallery検証を必要なPython versionで一度だけ実行する。
+2. 各test moduleが固有に所有する契約だけを実行し、全量Tutorial成果物の再生成は明示的な手動検証へ分離する。
 3. PR必須チェックの実行開始から最後の必須チェック完了までを、通常時5分以内に収める。
 
 ここでいうPR feedback timeは、最初の必須jobの`run_started_at`から最後の必須jobの`completed_at`までとする。queue待ちは除外し、checkout、依存導入、browser/runtime準備は含める。
@@ -109,11 +111,11 @@ production algorithmをCI専用に変える前に、test fixtureのownerと重�
 ### 守る契約
 
 - PRではcore compatibilityをPython 3.10、3.11、3.12で実行する。
-- recipe、Gallery、browserの重いacceptanceはPRではcanonical Python 3.11で一度実行し、mainまたはscheduled gateで3.10/3.12も実行してsupported-version coverageを維持する。
+- recipe、Gallery、browserの必要なacceptanceはPRではcanonical Python 3.11で一度実行し、mainまたはscheduled gateで3.10/3.12も実行してsupported-version coverageを維持する。
 - H-CLI-13はSVG、Interactive SVG、PNG、PDF、EPS、PSの六形式を実際に生成する。
 - 公開PNGの寸法、alpha、視覚内容に大きな差があれば失敗する。
 - Tutorial recipeは公開されたliteral codeをclean directoryで実行する。
-- LOSATPを使うTutorialはprecomputed resultへの置換やmockで済ませない。
+- T-PY-05/T-PY-07の公開成果物を明示的に再検証する場合はprecomputed resultやmockで済ませず、手動scenario runnerで実LOSATPを実行する。
 - browser、offline、session、Gallery、reference outputの既存契約を維持する。
 - `tests/reference_outputs/`は通常実装で更新しない。
 
@@ -134,11 +136,11 @@ production algorithmをCI専用に変える前に、test fixtureのownerと重�
 - PDF/EPS/PSはCreationDateとrenderer version以外の差を拒否する。
 - H-CLI-13の六形式すべてが最後まで検証される。
 - H-PY contractは`H-PY-01..05`だけを実行する。
-- Python Tutorial recipeは別ownerで一度ずつ検証される。
+- 自動化するPython Tutorial recipeは別ownerで一度ずつ検証され、T-PY-05/T-PY-07は自動collectionへ含まれない。
 
 ### Coverage
 
-- 変更前の`pytest tests/ -m "not slow" --collect-only` node ID集合と、PR job全partitionの和集合が一致する。
+- 現在の`pytest tests/ -m "not slow" --collect-only` node ID集合と、PR job全partitionの和集合が一致する。
 - partition間の意図しない重複を記録し、同じscenarioの重い再生成は一ownerにする。
 - PRで3.11だけを使うacceptance nodeは、mainまたはscheduled gateで3.10/3.12にも割り当てる。
 - main branchの`slow` testは従来どおり残す。
@@ -166,7 +168,7 @@ Status: pending
 | --- | --- |
 | compatibility/core | recipe、Gallery、browser、slow以外 |
 | Python how-to recipes | `H-PY-01..05` |
-| Python Tutorial recipes | `T-PY-02..09`（10なし）、`T-PY-11` |
+| Python Tutorial recipes | `T-PY-02..04`、`T-PY-06`、`T-PY-08..09`、`T-PY-11`。T-PY-05/T-PY-07は手動成果物検証 |
 | onboarding | `T-PY-01`と対応する初回CLI recipe |
 | CLI recipes/export | `T-CLI-*`、`H-CLI-*` |
 | Gallery/session | bundled Galleryのparse、rebuild、semantic parity |
@@ -245,11 +247,11 @@ git diff --exit-code -- tests/reference_outputs/
 
 ## 7. Phase 2: Python recipeのownerを分離する
 
-Status: completed
+Status: completed, then corrected to remove non-essential full-data pytest owners
 
 Evidence: H-PY、onboarding、Tutorial ownerの対象21件が87.49秒で通過した。H-PY regenerationは5.34秒、全15 scenarioの手動`--all --check`も通過した。
 
-Remote correction: 最初のpartitioned runでは`T-PY-07`がGitHub-hosted runner上で180秒を超えた。owner外scenarioを含んでいた旧timeoutとは原因が異なり、owner分離後のheavy scenario自体が完走していなかったため、subprocess上限を300秒へ修正した。clean checkout相当のfocused pytestでは実LOSATPと500 Collinear matchesを維持したまま60.22秒で通過した。修正後のremote runtimeはPhase 5に残す。
+Remote correction: 最初のpartitioned runでは`T-PY-07`がGitHub-hosted runner上で180秒を超え、subprocess上限を300秒へ変更した。しかし次のremote runも300秒でtimeoutし、32 CPUのlocal 60.22秒を4 CPUのhosted runnerへ外挿した前提が誤りだった。T-PY-05/T-PY-07の実装契約は既存のfocused testが所有するため、両scenarioの全量再生成pytest ownerを削除し、timeoutは180秒へ戻した。
 
 ### 対象
 
@@ -262,10 +264,9 @@ Remote correction: 最初のpartitioned runでは`T-PY-07`がGitHub-hosted runne
 
 1. `test_python_evidence_recipes_regenerate_from_a_clean_external_context`は既存`SCENARIO_IDS`を使い、`H-PY-01..05`を`--scenario ... --check`で個別実行する。
 2. `T-PY-01`は既存onboarding testをownerとし、別moduleで再実行しない。
-3. 残るPython Tutorialをscenario単位にparametrizeする。失敗したscenarioがpytest node IDから分かる形にする。
-4. `T-PY-05`と`T-PY-07`へ`recipe_heavy` submarkerを付け、standard recipeと別jobへ割り当てられるようにする。
-5. `--all`は手動で全成果物を再生成するcommandとして残してよいが、H-PY owner testからは呼ばない。
-6. Tutorialのliteral code、clean-directory実行、成果物freshness、workdir cleanupを弱めない。
+3. T-PY-05/T-PY-07を除くPython Tutorialをscenario単位にparametrizeする。失敗したscenarioがpytest node IDから分かる形にする。
+4. T-PY-05/T-PY-07はpytest markerや専用jobを持たず、`--scenario`または`--all`による明示的な成果物検証だけにする。
+5. 自動化するTutorialのliteral code、clean-directory実行、成果物freshness、workdir cleanupを弱めない。
 
 ### 検証
 
@@ -275,15 +276,16 @@ python -m pytest \
   tests/test_onboarding_recipe_contracts.py \
   tests/test_python_tutorial_recipe_contracts.py \
   -q --durations=30
+# 公開成果物を明示的に再検証する場合だけ実行
 python docs/recipes/run_python_scenarios.py --all --check
 ```
 
 ### 完了条件
 
 - H-PY regeneration testがCIで60秒以内に終わる。
-- 15 Python scenariosが一ownerずつ実行される。
-- `T-PY-05`と`T-PY-07`以外の13 scenariosを重いjobへ混ぜない。
-- heavy scenarioは300秒以内に完走し、15分のjob上限と実LOSATP契約を維持する。
+- 13 Python scenariosが自動testで一ownerずつ実行される。
+- T-PY-05/T-PY-07はpytest collectionとPR workflowへ含まれない。
+- 手動runnerはT-PY-05/T-PY-07の実LOSATP成果物検証能力を維持する。
 
 ## 8. Phase 3: 高コストtest fixtureの重複を除く
 
@@ -326,26 +328,24 @@ python -m pytest \
 
 ## 9. Phase 4: PR CIを用途別に分割する
 
-Status: locally corrected after the first remote run; remote runtime verification pending in Phase 5
+Status: locally corrected after two remote failures; remote runtime verification pending in Phase 5
 
 ### Marker方針
 
 既存`slow`に加え、次のsuite owner markerだけを追加する。
 
 - `recipe`（公開documentationとCLI/Python recipe acceptance）
-- `recipe_heavy`（`recipe`のsubset）
 - `gallery`
 - `browser`
 
-markerなしの`not slow` testはcoreとする。各testはcore、recipe、gallery、browserのうち一ownerだけを持つ。`recipe_heavy`はownerではなくrecipe内のrouting情報である。
+markerなしの`not slow` testはcoreとする。各testはcore、recipe、gallery、browserのうち一ownerだけを持つ。
 
 ### 初期job topology
 
 | Job | Python | Selection | Runtime準備 | 目標 |
 | --- | --- | --- | --- | ---: |
 | `core` matrix | 3.10/3.11/3.12 | core、`not slow` | project/test depsのみ | 各4分以内 |
-| `recipes-standard` | 3.11 | `recipe and not recipe_heavy` | CairoSVG/native Cairo | 3分以内 |
-| `recipes-heavy` matrix | 3.11 | `T-PY-05`、`T-PY-07`を別runner | CairoSVG、LOSATP | 各4分以内 |
+| `recipes-standard` | 3.11 | `recipe and not slow` | CairoSVG/native Cairo | 3分以内 |
 | `gallery` | 3.11 | `gallery` | Galleryに必要なdeps | 4分以内 |
 | `browser` | 3.11 | 通常の`browser`とNode/Playwright | Node、Chromium、browser wheel | 5分以内 |
 | `losat-cache-browser-acceptance` | 3.11 | 既存の専用browser acceptance | Node、Chromium、browser wheel | 5分以内 |
@@ -361,9 +361,8 @@ markerなしの`not slow` testはcoreとする。各testはcore、recipe、galle
 4. `actions/setup-python`のpip cacheを有効にする。cache missでも7分上限を満たすことを確認する。
 5. 各pytest commandへ`--durations=30`を付ける。
 6. まずnative job partitionだけで計測する。core test時間が4分を超える場合に限り、`pytest-xdist`をdev dependencyへ追加し、core jobだけ`-n auto --dist loadfile`を試す。
-7. `recipe_heavy`は32-thread LOSATP同士を同一runnerで並列実行しない。native GitHub job matrixで別VMへ分ける。
-8. xdistでorder dependencyやresource contentionが出た場合は、そのfileをserial jobへ戻す。timeoutを広げない。
-9. PRで3.11だけを使うacceptance selectionを、mainまたはscheduled workflowでは3.10/3.12にも実行する。PR latency改善をsupported-version coverage削減として実装しない。
+7. xdistでorder dependencyやresource contentionが出た場合は、そのfileをserial jobへ戻す。timeoutを広げない。
+8. PRで3.11だけを使うacceptance selectionを、mainまたはscheduled workflowでは3.10/3.12にも実行する。PR latency改善をsupported-version coverage削減として実装しない。
 
 ### Coverage audit
 
@@ -372,8 +371,7 @@ markerなしの`not slow` testはcoreとする。各testはcore、recipe、galle
 ```bash
 python -m pytest tests/ -m "not slow" --collect-only -q
 python -m pytest tests/ -m "not slow and not (recipe or gallery or browser)" --collect-only -q
-python -m pytest tests/ -m "recipe and not recipe_heavy" --collect-only -q
-python -m pytest tests/ -m "recipe_heavy" --collect-only -q
+python -m pytest tests/ -m "recipe and not slow" --collect-only -q
 python -m pytest tests/ -m "gallery" --collect-only -q
 python -m pytest tests/ -m "browser" --collect-only -q
 ```
@@ -384,31 +382,30 @@ partitionの和集合が最初の集合と一致しない場合、workflow変更
 
 | Selection | Node count |
 | --- | ---: |
-| all | 2,933 |
-| `not slow` | 2,927 |
+| all | 2,936 |
+| `not slow` | 2,930 |
 | core | 2,620 |
-| recipe standard | 179 |
-| recipe heavy | 2 |
+| recipe standard | 184 |
 | Gallery | 113 |
 | browser | 13 |
 
-当初の「変更前pytest node ID集合を不変にする」条件は、実装中のユーザー指示「重複testをすべて削除する」を優先した。削除した5 ownerの内訳は、直接Node suiteと同じspecを再実行するpytest wrapper 4件と、同じhelper・assertionを持つMjeNMV test 1件である。対応behaviorは直接Node ownerまたは残したpytest ownerで一度だけ実行される。deduplication後の2,927 nodeは上表のPR partitionで過不足なく所有される。
+当初の「変更前pytest node ID集合を不変にする」条件は、実装中のユーザー指示「重複testをすべて削除する」を優先した。削除した7 ownerの内訳は、直接Node suiteと同じspecを再実行するpytest wrapper 4件、同じhelper・assertionを持つMjeNMV test 1件、focused実装testへ全量成果物再生成を重ねていたT-PY-05/T-PY-07の2件である。対応behaviorは直接Node owner、focused pytest owner、または明示的なmanual recipe runnerに残る。2026-08-11に再収集した2,930 non-slow nodesは上表のPR partitionで過不足なく所有される。
 
 coreはserial計測が4分を超えたため計画どおり`pytest-xdist`をcoreだけへ追加した。Python compatibilityと無関係なdocumentation、capture、tutorial fixture contract 128件はrecipe acceptanceへ移し、PRではcanonical Pythonで一度だけ実行する。GitHub-hosted runnerのworker数を想定したlocal 4 worker coreは2,603 passed、17 skipped、213.09秒でgreen、Galleryは216.05秒、browser pytestは17.92秒、recipe standardは61.09秒で、test実行部分は各目標内だった。recipe standardのlocal結果は133 passed、46 failedで、失敗はすべて実装開始前から存在するworktreeのCRLF化によるfixture size/checksum差だった。clean checkoutでのrecipe green、setup込み時間、remote timingはPhase 5に残す。
 
 最初のremote runでは、`recipe`へ移したcapture contractが`docs.capture.run_all`経由でPlaywrightをimportする一方、`recipes-standard`が`.[export]`しか導入していないrouting不整合が6件を失敗させた。同じrunのH-CLI-13は、runnerにLiberation Sansがなく別fontへfallbackしたため、PNGが3,541 pixel、最大channel差129、広域bounding box、alpha差ありとなった。`recipes-standard`は既存`.[dev]` extraを使い、`fonts-liberation`を明示導入し、成果物比較環境を`ubuntu-24.04`へ固定した。main向けrecipe acceptanceにも同じfont準備とrunner固定を適用した。
 
-修正後は、以前失敗したPlaywright import 6件が2.60秒で通過した。clean checkout相当ではrecipe standard 179件が65.65秒、recipe heavy 2件が71.06秒で通過した。CIと同じCairoSVG 2.9.0、Pillow 12.3.0、native Cairo 1.18.0とLiberation Sansを使ったH-CLI-13は六形式すべて通過した。workflow YAMLもparse済みである。修正後のremote setup時間と必須check結果はPhase 5に残す。
+修正後は、以前失敗したPlaywright import 6件が2.60秒で通過した。clean checkout相当ではrecipe standard 179件が65.65秒で通過した。一方、次のremote runでT-PY-07は300秒でも完走しなかったため、全量再生成2件と専用jobを削除した。CIと同じCairoSVG 2.9.0、Pillow 12.3.0、native Cairo 1.18.0とLiberation Sansを使ったH-CLI-13は六形式すべて通過した。workflow YAMLもparse済みである。削除後のremote setup時間と必須check結果はPhase 5に残す。
 
 ### 中止条件
 
-- 5分達成のためにtest nodeをPRから落とす必要がある場合は中止する。
+- focused testが所有していない固有behaviorをPRから落とす必要がある場合は中止する。
 - xdist導入後にflaky failure、port競合、同一fixtureの破壊が出る場合は、plugin設定を増やさずnative shardへ戻す。
 - browser testをNode package不在だけでskipしない。必要ならPython Playwrightで同じbehaviorを検証する。
 
 ## 10. Phase 5: broad gateとremote実測
 
-Status: pending after the first failed remote run and local remediation
+Status: pending after two failed remote runs and local remediation
 
 ### Local/focused gates
 
@@ -423,8 +420,6 @@ python -m pytest \
   -q --durations=30
 
 python docs/recipes/run_cli_scenarios.py --scenario H-CLI-13 --check
-python docs/recipes/run_python_scenarios.py --all --check
-
 python -m pytest tests/ -v --tb=short -m "not slow" --durations=30
 python -m pytest tests/test_output_comparison.py::TestOutputComparison -v
 ruff check gbdraw/
@@ -475,9 +470,9 @@ production package `gbdraw/`の描画・LOSATP・session実装は、profileで�
 | scenario分割でcoverageを落とす | collect-only node ID集合の和集合比較 |
 | fixture共有でtest間mutationが漏れる | shared valueをread-onlyにし、mutationするconsumerだけcopy |
 | xdistでorder dependencyが表面化する | core限定・計測後導入、問題fileはserial shardへ戻す |
-| heavy LOSATPのCPU oversubscription | T-PY-05/T-PY-07を別VMで実行し、同一runner並列を避ける |
+| full-data LOSATPのCPU oversubscription | T-PY-05/T-PY-07は自動testにせず、公開成果物を検証する明示的なmanual runnerだけで実行する |
 | cache hit時だけ5分を満たす | cache missを含む5回の最大値7分も条件にする |
-| job分割がworkflow保守を悪化させる | measured owner marker四種に限定し、独自sharding scriptを作らない |
+| job分割がworkflow保守を悪化させる | owner marker三種に限定し、独自sharding scriptを作らない |
 
 ## 13. 実装時の進捗チェックリスト
 
@@ -497,9 +492,9 @@ production package `gbdraw/`の描画・LOSATP・session実装は、profileで�
 | --- | --- | --- | ---: | --- |
 | 0 | baseline collection | pending | - | - |
 | 1 | `pytest tests/test_cli_tables_tracks_sessions_exports_recipe_contracts.py tests/test_documentation_capture_contracts.py -q`; `run_cli_scenarios.py --scenario H-CLI-13 --check` | 42 passed; six formats verified | 16.60秒; 4.49秒 | remote Cairo 1.18.0実走はPhase 5で確認 |
-| 2 | `pytest tests/test_python_howto_recipe_contracts.py tests/test_onboarding_recipe_contracts.py tests/test_python_tutorial_recipe_contracts.py -q --durations=30`; `run_python_scenarios.py --all --check`; clean focused `T-PY-07` | 21 passed; all 15 scenarios verified;実LOSATPと500 matchesを維持 | 87.49秒; 約70秒; 60.22秒 | 300秒上限でのremote再実走はPhase 5 |
+| 2 | `pytest tests/test_python_howto_recipe_contracts.py tests/test_onboarding_recipe_contracts.py tests/test_python_tutorial_recipe_contracts.py -q --durations=30`; historical `run_python_scenarios.py --all --check`; clean focused `T-PY-07` | historical all 15 scenarios verified;後続remoteでT-PY-07が300秒timeoutしたため全量pytest owner 2件を削除; 残したTutorial 7件はclean cloneで通過 | historical 87.49秒; local T-PY-07 60.22秒; remote T-PY-07 >300秒; retained 7件 8.42秒 | full-data 2件は公開成果物更新時のmanual runnerだけで検証する |
 | 3 | `pytest tests/test_circular_label_placement.py -q --durations=30`; `pytest -m "gallery and not slow"` | 68 passed; 113 passed | 83.75秒; 216.05秒 | clean CIでのPython 3.11再測定はPhase 5 |
-| 4 | collect-only 6 partition; core xdist; clean recipe standard/heavy; browser pytest; Node direct suite; workflow YAML parse | 2,927 non-slow nodesを重複・欠落なしで分割; core 2,603 passed/17 skipped; recipe standard 179 passed; heavy 2 passed; browser 13 passed; Node 62 passed | core 213.09秒（4 worker）; recipe standard 65.65秒; heavy 71.06秒; browser 17.92秒; Node 6.98秒 | 修正後のcold setupとremote checkはPhase 5 |
+| 4 | collect-only owner partition; core xdist; recipe standard; browser pytest; Node direct suite; workflow YAML parse | 2,930 non-slow nodesをcore 2,620、recipe 184、Gallery 113、browser 13へ重複・欠落なしで分割; heavy marker/jobを削除; workflow YAML parse通過; clean editable installでrecipe 184件通過 | recipe 92.92秒; focused LOSATP/orthogroup/collinearity 213 passed, 1 skipped in 3.52秒; prior core 213.09秒（4 worker）; browser 17.92秒; Node 6.98秒 | 削除後のremote checkはPhase 5 |
 | 5 | remote run 1–5 | pending | - | - |
 
 この計画を実装するセッションは`$execute-plan-with-evidence`を使用し、実測なしでPhaseをcompletedへ変更しない。
