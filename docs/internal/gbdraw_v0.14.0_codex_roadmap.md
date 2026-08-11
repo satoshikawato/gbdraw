@@ -926,11 +926,13 @@ evidence.
 
 ### H-final build and audit
 
-Run H-final in a newly created empty staging directory. The release tooling must
-make the following order fail closed:
+Run H-final from a clean detached checkout or verified source archive of the
+recorded candidate commit and use a newly created empty staging directory. A
+declared dirty tree is valid only for H1 rehearsal and cannot supply an RC or
+final artifact. The release tooling must make the following order fail closed:
 
-1. Record the candidate commit, intended tag, clean or declared worktree state,
-   and version/support manifest.
+1. Record the candidate commit, intended tag, proof of the clean candidate
+   source, and version/support manifest.
 2. Run `python tools/prepare_browser_wheel.py`, then
    `python tools/verify_gui_offline.py check-assets` before the outer build.
 3. Build into the fresh staging directory and require exactly one wheel and one
@@ -942,11 +944,13 @@ make the following order fail closed:
    source-tree copy as the hosted-bundle input.
 5. Run `twine check --strict`, `verify_gui_offline.py inspect-wheel`, the
    per-artifact inventory/budget audit, metadata/version checks, license/notice
-   checks, and local-path/credential/cache/debug scans against exact paths.
-6. Write an evidence manifest containing filenames, versions, intended index,
-   compressed/unpacked and category sizes, SHA-256 hashes, source commit,
-   intended tag, build commands, tool versions, and source-tree before/after
-   state.
+   checks, and local-path/credential/cache/debug scans against exact paths. The
+   auditor writes the sorted Web tree manifest and creates the canonical Web
+   archive exactly once.
+6. Write an evidence manifest containing the wheel, sdist, Web archive, and Web
+   tree manifest filenames and hashes, plus versions, intended index,
+   compressed/unpacked and category sizes, source commit, intended tag, build
+   commands, tool versions, and source-tree before/after state.
 
 The candidate fails if the build creates an undeclared tracked-source change.
 Only ignored generated browser-wheel/build outputs and explicitly declared
@@ -1040,10 +1044,11 @@ H-AC5 export/installed-GUI smokes on declared representative lanes.
   Circular and Linear results, replays a session, and exports while external
   network access is blocked.
 
-After an authorised RC upload, K must download the exact version from TestPyPI
-with dependencies resolved separately from production PyPI, verify its hash and
-index metadata, and run H-AC4 outside the checkout. K also records the staged
-hosted version/hash/privacy smoke. An unresolved failure blocks entry to
+After an authorised RC upload, K must download the accepted wheel and sdist
+from TestPyPI with dependencies resolved separately from production PyPI,
+verify both hashes and index metadata, and run H-AC4 against the wheel outside
+the checkout. K also records the staged hosted version/hash/privacy smoke. An
+unresolved failure blocks entry to
 J-Final.
 
 ### Deferred hardening
@@ -1466,7 +1471,9 @@ checkmark.
 
 Before candidate testing, record a release-support manifest containing:
 
-- candidate commit SHA and clean/declared worktree state;
+- candidate commit SHA and source state; a rehearsal may record a declared
+  tree, but every RC/final candidate must use a clean detached checkout or
+  verified source archive of that commit;
 - target package version and candidate stage;
 - retained and cut conditional features, especially overlap tolerance, preview
   fallback tuning, and analytics, plus the annotation shortcut's deferred status;
@@ -2092,7 +2099,7 @@ without a commit, command/job, environment, oracle, and result is not complete.
 
 ## Gate 0 — Scope, schema, and support freeze
 
-- [ ] Candidate commit and worktree state are recorded.
+- [ ] Candidate commit and source state are recorded; declared dirty state is rehearsal-only, and RC/final artifacts come from a clean detached checkout or verified source archive of that commit.
 - [ ] Retained/cut status is recorded for every conditional feature and matches code, tests, docs, and event identifiers.
 - [ ] Current and accepted session/request/cache/metadata/table versions are recorded by namespace.
 - [ ] The complete joint C/D writer version is evidence-allocated once; no branch-only partial version is supported or documented.

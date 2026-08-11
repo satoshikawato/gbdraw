@@ -243,6 +243,11 @@ H1で一つのrelease evidence generatorを実装し、candidateごとに
     "sdistMemberSha256": "...",
     "hostedSha256": "..."
   },
+  "webBundleIdentity": {
+    "archiveSha256": "...",
+    "treeManifestSha256": "...",
+    "treeHash": "..."
+  },
   "checks": [],
   "matrix": [],
   "qualificationOutputs": [],
