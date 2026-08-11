@@ -654,13 +654,13 @@ Depends on: Phase 1
 - planの各 recordにちょうど一つのtransformが対応する。
 - batch、resolve→plan、already-materialized short pathで値が消えない。
 
-### Phase 3: schema 6、session 41、Web writerを原子的に更新する
+### Phase 3: C+D schema 6、session 41、Web writerを原子的に更新する
 
 Status: pending
 
-Depends on: Phase 2
+Depends on: Phase 2、Work package D Phase 6A、およびDのCircular/Linear renderer gates。このPhaseはD Phase 6Bと同一のintegration boundaryであり、片方だけを実行・land・completeにしない。
 
-このPhaseはPython codecだけ、またはWeb constantsだけを先にlandしない。
+このPhaseはPython codecだけ、Web constantsだけ、Cのrecord-display fieldsだけ、またはDのplacement fieldsだけを先にlandしない。Dの実装計画は[`WORK_PACKAGE_D_MANUAL_FEATURE_PLACEMENT_IMPLEMENTATION_PLAN_2026-08-11.md`](./WORK_PACKAGE_D_MANUAL_FEATURE_PLACEMENT_IMPLEMENTATION_PLAN_2026-08-11.md)を参照する。
 
 #### Python canonical/session owner
 
@@ -681,15 +681,17 @@ Depends on: Phase 2
 #### 作業
 
 1. writer schemaを6、supported schemasを1/2/5/6へ更新する。
-2. record `display` exact encode/decodeとschema5 default projectionを追加する。
-3. grouping/top-level decodeを `schema >= 5` のformat-era predicateへ変える。
-4. current sessionを41、supportedを27–33/39/40/41へ更新する。
-5. current-authority behaviorを `version >= 40`、record-display draft availabilityを `version >= 41` で判定する。
-6. `< CURRENT_SESSION_VERSION` によるv40誤migrationを全件分類し、historical thresholdへ置換する。
-7. v40/schema5 load→save without Generateのpure promotionを実装する。
-8. Python writer、Web writer、session authority inventoryのversion/schemaを同期する。
-9. v40 main-era fixture、v41 current fixture、v39/v33 regression fixture、rejected 34–38を別々にtestする。
-10. version/schemaをhard-codeするdocumentation/capture/packaging testを更新する。
+2. Cのrecord `display` exact encode/decodeとschema5 default projectionを追加する。
+3. Dのnon-Auto `featurePlacements` exact sorted encode/decodeと、missing placement/toleranceのschema5 default projectionを追加する。
+4. Web draft placement mapとcanonical requestの双方向projectionを同じwriter changeへ含め、`editorState`を第二のauthorityにしない。
+5. grouping/top-level decodeを `schema >= 5` のformat-era predicateへ変える。
+6. current sessionを41、supportedを27–33/39/40/41へ更新する。
+7. current-authority behaviorを `version >= 40`、record-display/placement draft availabilityを `version >= 41` で判定する。
+8. `< CURRENT_SESSION_VERSION` によるv40誤migrationを全件分類し、historical thresholdへ置換する。
+9. v40/schema5 load→save without Generateのpure promotionを実装し、no shift、empty placement、tolerance 0をmaterializeする。
+10. Python writer、Web writer、session authority inventoryのversion/schemaを同期する。
+11. v40 main-era fixture、complete C+D v41 current fixture、v39/v33 regression fixture、rejected 34–38を別々にtestする。
+12. version/schemaをhard-codeするdocumentation/capture/packaging testを更新する。
 
 #### Required session matrix
 
@@ -707,9 +709,10 @@ Depends on: Phase 2
 #### Tests
 
 - schema6 exact fields、missing、unknown、wrong type、range
+- schema6 placement exact nested fields、sorted non-Auto projection、duplicate/unknown identity、schema5 empty default
 - schema5 single/grid/batch grouping positive control
 - schema1/2 positive、3/4 negative
-- Web request build/project round-trip
+- Web request build/project round-trip for both record display and feature placement
 - v40のrecord order、catalog、editor、layout、comparison、resource authority
 - load v40→Save before Generateがv41/schema6になる
 - current sessionにlegacy `files` があればv40/v41とも拒否
@@ -717,9 +720,10 @@ Depends on: Phase 2
 
 #### 完了条件
 
-- PythonとWeb writerが41/6で一致する。
+- PythonとWeb writerがcomplete C+D contractの41/6で一致する。
 - v40/schema5がlegacy誤判定されず、図とeditable authorityを維持する。
 - current writerからv41/schema5が生成されない。
+- C-onlyまたはD-onlyのv41/schema6 fixture/writerが存在せず、D Phase 6Bと同じevidence ledger entryを参照する。
 
 ### Phase 4: Circular consumerをshared transformへ移行する
 

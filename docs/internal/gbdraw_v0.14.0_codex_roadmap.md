@@ -110,7 +110,7 @@ Preview effect flags, debounce/scheduler state, revision tokens, and viewport sn
 ### 4.4 No hidden analysis reruns
 
 - A user edit may apply a proven-safe direct patch, schedule a renderer rebuild, mark analysis evidence stale, or combine those effects. These effects are not mutually exclusive classes.
-- Automatic renderer work clones the committed canonical request/resources and overlays only allowlisted render-safe intent from the triggering draft revision.
+- Automatic renderer work starts from an immutable snapshot of the committed canonical request/resources and overlays only allowlisted render-safe intent from the triggering draft revision. Clone mutable request/resource-index structures copy-on-write; do not deep-clone unchanged large resource payloads for each update.
 - The render-only entry point must not invoke LOSAT, rediscover inputs, resolve comparisons, inspect analysis caches, or mutate analysis evidence.
 - At most one renderer request is active and one replaceable latest draft is pending. Only the current draft revision may commit.
 - Analysis-invalidating changes show stale state and require an explicit analysis action.
@@ -316,6 +316,7 @@ Built-in `middle` presets normally resolve to the bidirectional cases above, but
 | Outward/Inward or Above/Below lane 1 | Apply the fixed lane | Reserve the fixed lane before placing Auto features |
 
 - Manual placement always wins over automatic ordering.
+- Conflict and Main-lane semantics use the resolved physical strand pool, not a raw strand string. Undefined-strand features remain in the nominal pool chosen by the existing layout policy.
 - `Auto` is represented by the absence of an override. Selecting Auto deletes the stored override and recomputes all derived lane assignments from fresh feature objects.
 - Do not persist a lane selected by the automatic allocator.
 - An explicit feature may overlap an Auto feature when `resolve_overlaps` is off. Two explicit features that request the same physical lane and exceed the active genomic-overlap tolerance are a conflicting request and must fail validation.
@@ -384,7 +385,7 @@ The automatic resolver must then displace B if necessary.
 
 ### Persistence and reproducibility
 
-- Store overrides by `(recordKey, biologicalFeatureId)` and retain source-index disambiguation for duplicate biological hashes.
+- Store overrides by `(recordKey, biologicalFeatureId)` and retain source-index disambiguation for duplicate biological hashes. Resolve the ID against the original source catalog, carry the resolved source index through the record-aligned render plan, and do not re-hash cropped or reverse-complemented coordinates in the renderer.
 - Preserve overrides across regeneration, colour edits, label edits, Circular rotation, reverse complement, record reordering, and session reopen. A feature retained by a crop keeps its source identity; a source-known feature currently outside the crop keeps a dormant override that can reactivate when the crop changes.
 - Include placement overrides in the canonical request/session.
 - Store only non-Auto overrides in a deterministic sorted array. Do not persist Web map keys, SVG DOM IDs, or resolved lane IDs.
@@ -472,7 +473,7 @@ The render-only path uses this fixed boundary:
 ```text
 latest render-safe draft revision
     +
-clone of committed canonical request/resources
+snapshot of committed canonical request + immutable resources
     ↓
 overlay allowlisted render fields at the canonical request boundary
     ↓
