@@ -817,11 +817,10 @@ Do not add:
 
 ## Work package H — PyPI release and packaging audit
 
-Implementation-plan prerequisite:
-`WORK_PACKAGE_H_PYPI_RELEASE_PACKAGING_AUDIT_IMPLEMENTATION_PLAN_2026-08-11.md`
-is not present at this planning checkpoint. The contract below remains the
-roadmap authority, but H1/H-final cannot start and J-RC cannot pass until that
-plan is created, reviewed, and linked.
+Implementation plan:
+[WORK_PACKAGE_H_PYPI_RELEASE_PACKAGING_AUDIT_IMPLEMENTATION_PLAN_2026-08-11.md](./WORK_PACKAGE_H_PYPI_RELEASE_PACKAGING_AUDIT_IMPLEMENTATION_PLAN_2026-08-11.md).
+The roadmap owns the release contract; the plan owns execution details and
+evidence status.
 
 ### Objective
 
@@ -937,9 +936,10 @@ make the following order fail closed:
 3. Build into the fresh staging directory and require exactly one wheel and one
    sdist. Do not use `dist/*.whl` or another wildcard that can select an older
    artifact.
-4. Prepare the deployable Web bundle through the repository-owned canonical
-   bundle command, using the exact browser-wheel bytes embedded in the accepted
-   outer wheel and the same candidate commit.
+4. Extract the nested browser wheel from the accepted outer wheel without
+   changing its bytes, then pass that staged file to the repository-owned
+   canonical bundle command. Do not use a separately rebuilt or mutable
+   source-tree copy as the hosted-bundle input.
 5. Run `twine check --strict`, `verify_gui_offline.py inspect-wheel`, the
    per-artifact inventory/budget audit, metadata/version checks, license/notice
    checks, and local-path/credential/cache/debug scans against exact paths.
@@ -960,18 +960,21 @@ it.
 ### Version and publication state machine
 
 H1 must replace hard-coded beta filenames in tests with the shared version
-owner where possible and enforce agreement among `pyproject.toml`,
-`gbdraw.version`, the embedded browser-wheel name and Web config,
-`CITATION.cff`, CHANGELOG/release notes, generated notices, distribution
-metadata, CLI output, and the intended tag in the release manifest.
+owner where possible and enforce agreement among `pyproject.toml`, including
+the final `Development Status` classifier, `gbdraw.version`, the embedded
+browser-wheel name and Web config, `recipe/meta.yaml`, `CITATION.cff`, the
+CHANGELOG heading and release-note filename/link, generated notices,
+distribution metadata, CLI output, and the intended tag in the release
+manifest. H validates source concordance; K retains ownership of any Bioconda
+publication action.
 
 Use these publication states:
 
 | Candidate | Allowed H action | Allowed K action after the matching J gate |
 |---|---|---|
 | Development or beta branch | Build, audit, and dry-run only | None |
-| `vX.Y.ZrcN` intended tag and matching prerelease metadata | Produce and certify an RC artifact set | Create the authorised tag, publish the accepted files to TestPyPI, and run staged smokes |
-| `vX.Y.Z` intended tag and matching final metadata | Produce and certify a final artifact set; reject any prerelease version | Create the authorised final tag and publish the accepted files to PyPI |
+| `vX.Y.ZrcN` intended tag and matching prerelease metadata | Produce and audit an RC artifact set for J certification | Create the authorised tag, publish the accepted files to TestPyPI, and run staged smokes |
+| `vX.Y.Z` intended tag and matching final metadata | Produce and audit a final artifact set for J certification; reject any prerelease version | Create the authorised final tag and publish the accepted files to PyPI |
 
 Before K creates a tag, J checks the intended tag recorded in the manifest.
 After tag creation, K verifies the actual tag, commit, version, and artifact
@@ -1328,11 +1331,6 @@ manual_feature_placement
 region_annotations
 custom_tracks
 depth_tracks
-losatn
-tlosatx
-losatp_pairwise
-losatp_similarity_groups
-losatp_collinear
 ```
 
 Before I2, give every retained identifier one exact eligibility predicate,
@@ -1340,6 +1338,14 @@ active predicate, genuine-dispatch owner, accepted-Result owner, safe classifier
 input, deduplication scope, and metric consumer. Omit an identifier rather than
 approximate any of those contracts. `record_display_start` is mode-neutral
 because Work package C applies in Circular and Linear mode.
+
+Defer LOSAT program/presentation identifiers from the `v0.14.0` analytics
+registry. Their truthful attempt boundary is the validated LOSAT-job dispatch,
+which occurs before renderer dispatch, and LOSAT failure therefore cannot share
+the renderer-owned denominator above without a separate outcome owner. Do not
+measure only the post-analysis survivors or compare that biased ratio with the
+retained renderer-owned features. This is an analytics scope cut only; it does
+not remove the LOSAT product work in Work package B.
 
 ### Data that must never be sent
 
@@ -1682,10 +1688,11 @@ The candidate passes only when:
 An authorised `v0.14.0rcN` tag and TestPyPI upload may occur through Work package
 K only after J-RC passes.
 
-K then downloads that exact RC from TestPyPI outside the checkout, resolves
-dependencies separately from production PyPI, verifies the version, artifact
-hash, and index metadata, and runs H-AC4. K also records the staged hosted
-version/hash/privacy smoke. An unresolved failure blocks J-Final entry.
+K then downloads the accepted RC wheel and sdist from TestPyPI outside the
+checkout, resolves dependencies separately from production PyPI, verifies both
+filenames and hashes plus the version and index metadata, and runs H-AC4 against
+the wheel. K also records the staged hosted version/hash/privacy smoke. An
+unresolved failure blocks J-Final entry.
 
 #### J-Final — final software-release gate
 
@@ -1779,9 +1786,11 @@ pending.
 ### Release sequence
 
 ```text
-complete work packages
+complete retained Work packages B–I and H1 readiness
     ↓
 scope / schema / support freeze
+    ↓
+A1 candidate synchronization (implementation-plan Phases 0–5)
     ↓
 H-final exact candidate artifacts
     ↓
@@ -1983,8 +1992,9 @@ Use the following order to reduce rework:
     - any accepted fix creates a new candidate and invalidates the affected evidence.
 14. **Final-version/A1 source transaction, H-final rerun, then J-Final**
     - apply the final version and synchronize its shipped documentation owners;
-    - rerun H-final and certify the resulting exact artifacts through version
-      concordance, full tests, clean-install, offline, and reproduction gates.
+    - rerun H-final, then have J-Final certify the resulting exact artifacts
+      through version concordance, full tests, clean-install, offline, and
+      reproduction gates.
 15. **K release actions — Authorised tag, publication, deployment, Bioconda, and archive**
     - publish only J-Final-certified artifacts and record observed URLs, hashes,
       hosted state, and the version DOI.
@@ -2197,7 +2207,7 @@ TestPyPI upload, or staged deployment through Work package K.
 ## J-Final — Final software-release qualification
 
 - [ ] Every post-RC change has a regression test, invalidated-evidence list, and complete affected/full-gate rerun.
-- [ ] The authorised RC's TestPyPI exact-download H-AC4 and staged hosted version/hash/privacy gates passed; no unresolved staging failure remains.
+- [ ] The authorised RC's TestPyPI wheel/sdist exact-download hashes, wheel H-AC4, and staged hosted version/hash/privacy gates passed; no unresolved staging failure remains.
 - [ ] The final-version commit passes package/intended-tag/version/schema/citation/release-note/Web-wheel concordance.
 - [ ] The exact final wheel, sdist, and Web bundle pass the complete artifact, clean-install, offline, and reproduction gates with new hashes.
 - [ ] The final support and compatibility manifests are unchanged or explicitly requalified.

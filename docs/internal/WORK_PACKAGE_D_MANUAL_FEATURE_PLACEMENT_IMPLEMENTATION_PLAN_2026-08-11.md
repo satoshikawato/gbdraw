@@ -710,7 +710,7 @@ Work:
 3. package-root Python exampleとtyped request exampleをliteral executionする。
 4. `NC_001879.gbk`などのmultipart fixtureでCircular/Linear QA artifactsを一時directoryへ生成し、readable scaleで目視する。
 5. existing `tests/reference_outputs/`をcomparison-onlyで確認する。default diffが発生した場合は原因を直し、manual geometryを理由に既存一式を再生成しない。
-6. 新しいpublic Gallery exampleは必須にしない。Work package Aのdocumentation regenerationがplacementを教えると決めた場合だけ、Gallery-quality sourceから生成する。
+6. 新しいpublic Gallery exampleは必須にしない。Work package A1のdocumentation regenerationがplacementを教えると決めた場合だけ、Gallery-quality sourceから生成する。
 7. production、test、docs、generated artifact diffを別々にreviewする。
 
 Documentation/CLI gate:

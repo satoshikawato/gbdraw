@@ -29,10 +29,11 @@ Roadmapが参照するA1 planはinitial audit時点では存在せず、J plan�
 Phase 0でその内容、entry gate、accepted baselineを再確認し、fileの存在だけをA1完了や
 J-RCの根拠に数えない。
 
-Roadmapが参照する
-`WORK_PACKAGE_H_PYPI_RELEASE_PACKAGING_AUDIT_IMPLEMENTATION_PLAN_2026-08-11.md`はfinal plan
-review時点で存在しない。後から追加された場合もPhase 0で内容とownershipを承認する。存在・
-承認されるまではH1/H-finalにexecutable ownerがなく、Phase 4–5とJ-RCを開始しない。
+[Work package H implementation plan](WORK_PACKAGE_H_PYPI_RELEASE_PACKAGING_AUDIT_IMPLEMENTATION_PLAN_2026-08-11.md)
+は packaging contract、candidate/publisher workflow、artifact auditor、H-final artifact
+production の実装 owner である。J は Phase 0 でその current baseline と evidence contract を
+確認し、H が作った exact artifact を consumer/certifier として扱う。J は並行する release
+workflow または artifact auditor を新設しない。
 
 この文書はWork package Jを実行可能なrelease gateへ分解する。文書作成時点では
 production code、test、workflow、fixture、generated artifact、version、tag、外部release
@@ -195,7 +196,11 @@ version-only/docs-only変更もsdist/Web bundleを変えるためJ-Final artifac
 
 A1はfeature freeze後にprovisional wheelでdocumentationを同期する。H-finalはその変更後の
 exact artifactをbuildする。J-RCがexact artifactに対してrecipe/documentation gateを再実行
-する。live URL/tag/DOIはKの外部action後にA1 closeoutで置換し、K-Publicationへ渡す。
+する。J-RCのprerequisiteはA1 Phase 0–5のcandidate-synchronization milestoneであり、
+post-publication Phase 7を含むA1全体のcompleteではない。Kの外部action後、A1はlive
+URL/tag/DOIを検証し、inventory済みのpublication-only ownerだけを更新して
+K-Publicationへ渡す。shipped ownerの変更が必要ならpatch candidateとしてA1/H-final/Jを
+再実行する。
 
 ### D12. Final software releaseとscholarly publicationを分ける
 
@@ -219,27 +224,40 @@ preprint/manuscript bundleを認定する。journal submissionをsoftware releas
 
 ### 5.2 Machine-readable workflow artifact
 
-H1で一つのrelease evidence generatorまたはworkflow-owned stepを実装し、candidateごとに
-`release-evidence.json`をCI artifactとして保存する。最低限のschemaは次とする。
+H1で一つのrelease evidence generatorを実装し、candidateごとに
+`release-evidence.json`をCI artifactとして保存する。H plan Section 12.1のversioned schemaが
+唯一のownerであり、Jはfieldをrenameした別schemaを作らない。J固有のtraceability fieldは
+同じschema versionのreviewed extensionとして追加する。最低限のshapeは次とする。
 
 ```json
 {
-  "candidate": {"commit": "...", "version": "...", "intended_tag": "...", "scope_id": "..."},
+  "schemaVersion": 1,
+  "candidate": {"commit": "...", "version": "...", "intendedTag": "...", "scopeId": "..."},
+  "support": {},
   "schemas": {},
-  "artifacts": [],
-  "artifact_relationships": [],
+  "releaseArtifacts": [],
+  "browserWheelIdentity": {
+    "preparedSha256": "...",
+    "outerMemberSha256": "...",
+    "extractedSha256": "...",
+    "sdistMemberSha256": "...",
+    "hostedSha256": "..."
+  },
+  "checks": [],
   "matrix": [],
+  "qualificationOutputs": [],
   "test_reports": [],
   "reproduction": [],
-  "defects": []
+  "defects": [],
+  "sourceState": {}
 }
 ```
 
 artifact entryはfilename、target、version、size、SHA-256、wheel tag、source SHA、build job、
 inspection resultを持つ。Repository-tracked public fixtureはstable fixture ID、relative path、hashで
 参照してよいが、runtimeで読み込んだsequence、file content、user由来identifierはevidenceへ
-入れない。Artifact relationshipはprepared browser wheel、outer nested member、hosted bundle
-memberのexpected/observed hash relationを記録する。
+入れない。Browser-wheel identityはprepared file、outer nested member、そのstaged extraction、
+sdist member、hosted bundle memberのexpected/observed hash relationを記録する。
 
 ### 5.3 Requirements traceability
 
@@ -267,7 +285,7 @@ Jはexternal actionを実行しないが、Section 12.2にK action ledgerのtemp
 |---|---|---|
 | Roadmap/ledger | `docs/internal/gbdraw_v0.14.0_codex_roadmap.md`, this plan | Gate status, evidence, invalidation, J-to-K handoff and K action template |
 | General CI | `.github/workflows/test.yml` | Keep PR/main partitions; expose complete evidence and correct timeouts/skip reporting |
-| Release workflow | new `.github/workflows/release.yml` | Build once, artifact matrix, protected TestPyPI/PyPI jobs, minimal permissions |
+| Release workflow | H-owned new `.github/workflows/package_candidate.yml` and `.github/workflows/publish_pypi.yml` | J consumes the build-once evidence, certifies the exact artifacts, and does not create a parallel workflow |
 | Production Web deploy | `.github/workflows/deploy_web.yml`, `tools/stamp_web_build.py`, `tools/prepare_cloudflare_pages.py` | Consume/identify accepted release artifact; no unrelated `main` build as release evidence |
 | Browser matrix | `playwright.config.js`, `package.json`, `package-lock.json` | General suite gate, reports/traces, frozen browser projects |
 | Package metadata | `pyproject.toml`, `setup.py`, `MANIFEST.in`, `gbdraw/_build_support.py` | Truthful universal wheel and isolated artifact inventory |
@@ -279,7 +297,7 @@ Jはexternal actionを実行しないが、Section 12.2にK action ledgerのtemp
 | Public contracts | `tests/test_public_contract.py`, `tests/fixtures/public_contract.json` | Extend one owner to `gbdraw.api`; do not add a parallel snapshot system |
 | Web acceptance | existing focused Node/Playwright specs plus one release acceptance spec only if cross-package flow has no owner | Avoid one giant duplicate UI test |
 | Offline/security | `tools/verify_gui_offline.py`, `tests/test_web_packaging.py`, Web sanitization/session tests | Installed/extracted artifact, blocked network, repeat/cancel, mobile, canary |
-| Artifact evidence | new `tools/verify_release_artifacts.py` only if workflow shell cannot provide one cross-platform owner | Inspect exact paths, metadata, content, hash, JSON evidence; never publish |
+| Artifact evidence | H-owned new `tools/audit_release_artifacts.py` | J consumes exact-path metadata/content/hash/JSON evidence and adds no second verifier |
 | Reproducibility | recipe runners, `docs/capture/run_all.py`, Gallery tools, `tools/reproduce_examples.py` | Clean artifact execution, missing-input disposition, visual evidence |
 
 新規helperは上表のownerを一つにする場合だけ追加する。release logicをworkflow、test、scriptへ
@@ -476,10 +494,13 @@ python -m pytest \
 Status: pending
 
 このphaseのworkflow実装はH1が所有し、Jはreadiness dry runとexact-artifact flowを認定する。
+J は H の workflow または auditor と同じ release logic を別名で実装しない。
 
 #### Workflow design
 
-`.github/workflows/release.yml`は次のjob graphを一つだけ持つ。
+H-owned `.github/workflows/package_candidate.yml` と
+`.github/workflows/publish_pypi.yml` は、責務と権限を分離しながら次の一つの logical job
+graph を実現する。
 
 ```text
 source + scope manifest
@@ -498,8 +519,8 @@ source + scope manifest
 2. `python tools/prepare_browser_wheel.py`を通常artifact build前に一度だけ実行し、そのexact
    pathとSHA-256をmanifestへ記録する。Outer wheel build後、canonical staged-bundle builderは
    accepted outer wheelのnested browser-wheel memberをextractして使い、browser wheelを再build
-   しない。Extracted member、prepared input、Web bundle memberのhashを照合し、outer wheel
-   substitutionをfailする。
+   しない。Extracted member、prepared input、sdist member、Web bundle memberのhashを照合し、
+   outer wheel substitutionをfailする。
 3. H-finalではtracked sourceへ`--refresh-cache-bust`を実行しない。H1でcanonical bundle
    builderをstaging-only stampへ変更し、accepted wheel hashまたはcommitから決まる
    deterministic tokenをstaged copyだけへ書く。tracked tokenをownerに残す場合はcandidate
@@ -529,15 +550,16 @@ tar tf <exact-sdist>
 python tools/verify_gui_offline.py inspect-wheel <exact-wheel>
 ```
 
-このgateはexact inventory、forbidden-file scan、browser-wheel three-way hash、category budgetも
-実行する。Workflow shellで重複なく表現できない場合だけSection 6のartifact verifierへ集約する。
+このgateはexact inventory、forbidden-file scan、prepared/outer/sdist/hosted の
+browser-wheel four-way hash、category budgetも実行する。検査は H-owned
+`tools/audit_release_artifacts.py` へ集約し、J用の並行 verifierを作らない。
 Checksum commandのplatform差はrelease evidence ownerで吸収し、shellごとに別manifestを作らない。
 
 #### Completion gate
 
 - matrix job logが同じwheel/sdist hashを示す。
-- prepared browser wheel、outer nested member、hosted bundle memberのhashが一致し、outer wheelを
-  browser assetとしてcopyしていない。
+- prepared browser wheel、outer nested member、そのstaged extraction、sdist member、hosted
+  bundle memberのhashが一致し、outer wheelをbrowser assetとしてcopyしていない。
 - wheel/sdist/Web bundleのinventory、license/notice、forbidden-file、frozen size budgetがpassする。
 - build job以外がcertified wheel、sdist、Web bundleを再buildしない。Exact sdist installが
   作るderived temporary wheelは別hashでqualification outputとして記録する。
@@ -649,7 +671,8 @@ Status: pending
 #### Entry gate
 
 - Gate 0 manifest frozen;
-- B–I/A1/H-final evidence complete;
+- B–I evidence、A1 Phase 0–5 candidate-synchronization milestone、H-final
+  exact-artifact evidence complete;
 - exact artifact hashes fixed;
 - no unowned mandatory requirement;
 - no unresolved P0/P1。
@@ -666,6 +689,12 @@ python -m pytest tests/ -m "browser and not slow" --durations=30
 python -m pytest tests/ -m "slow" --timeout=600 --durations=30
 python -m pytest tests/test_output_comparison.py::TestOutputComparison -v
 node --test tests/web/*.test.mjs
+node tests/web/session-request.test.mjs \
+  --project-session gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz
+node tests/web/session-request.test.mjs \
+  --project-session gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json
+node tests/web/session-request.test.mjs \
+  --project-session gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz
 npx playwright test --project=chromium --workers=1
 python tests/run_losat_cache_browser_acceptance.py
 ruff check gbdraw/
@@ -698,7 +727,10 @@ Status: pending
 1. RC/TestPyPI/staged smokeで見つかったdefectをP0/P1/P2へ分類する。
 2. accepted fixごとにregression testとinvalidated evidenceを記録する。
 3. new RCが必要ならPhase 8をnew candidate/hashで再実行する。
-4. final version、development classifier、release notes、citation、recipe、Web wheel/noticesを更新する。
+4. A1 D13のsingle-owner transactionを要求する。H ownerがfinal version/development
+   classifierを、A1がrelease notes/citation/public proseを、declared generatorが
+   recipe/Web wheel/noticesなどのderived fileを更新する。Jはそのtransactionを記録・認定し、
+   別のfinal-doc rewriteを所有しない。
 5. final-version commitからartifactを一度buildし、Phase 2–8のrequired gatesを新hashで再実行する。
 6. final release manifestとrollback/yank/patch procedureをKへ渡す。
 7. Section 12.2のK action ledgerへexpected commit/tag/hashとpost-action smokeを記入する。
