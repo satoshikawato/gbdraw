@@ -110,9 +110,9 @@ Preview effect flags, debounce/scheduler state, revision tokens, and viewport sn
 ### 4.4 No hidden analysis reruns
 
 - A user edit may apply a proven-safe direct patch, schedule a renderer rebuild, mark analysis evidence stale, or combine those effects. These effects are not mutually exclusive classes.
-- Automatic renderer work starts from an immutable snapshot of the committed canonical request/resources and overlays only allowlisted render-safe intent from the triggering draft revision. Clone mutable request/resource-index structures copy-on-write; do not deep-clone unchanged large resource payloads for each update.
+- Automatic renderer work starts from an immutable snapshot of the committed canonical request/resources and overlays only allowlisted render-safe intent from the triggering render revision. Clone mutable request/resource-index structures copy-on-write; do not deep-clone unchanged large resource payloads for each update.
 - The render-only entry point must not invoke LOSAT, rediscover inputs, resolve comparisons, inspect analysis caches, or mutate analysis evidence.
-- At most one renderer request is active and one replaceable latest draft is pending. Only the current draft revision may commit.
+- At most one shared diagram-worker job is active; renderer policy keeps one replaceable latest draft pending. A candidate may commit only when its render/lifecycle revisions and replayed direct-edit revision are current.
 - Analysis-invalidating changes show stale state and require an explicit analysis action.
 
 ### 4.5 Local-first privacy
@@ -126,40 +126,85 @@ Preview effect flags, debounce/scheduler state, revision tokens, and viewport sn
 
 # 5. Work packages
 
-## Work package A — Consolidate the `0.14` baseline and documentation branch
+## Work package A0 — Lock the integration baseline and documentation contract
 
 ### Objective
 
-Merge or otherwise reconcile `docs_renovation` with the final implementation baseline before release-candidate testing.
+Establish one auditable integration baseline before the remaining feature work proceeds. Record the branch relationship, current package and persisted-format contracts, documentation owners, executable-evidence inventory, and stable-input policy without pretending that the final `0.14` screenshots or release text can already be frozen.
+
+### Current status at the split
+
+Status: **in progress**.
+
+The 2026-08-11 audit at `docs_renovation` commit `6f14e2c4` found that local `main` was an exact ancestor and there was no two-sided Git divergence. The development branch had not been integrated back into `main`, the shared worktree was still changing, and the last observed `origin/main` state required a fresh fetch before any final reconciliation.
+
+The current `0.14.0b0`, session writer 40, and request schema 5 documentation agreed with the implementation at that audit point. The documentation architecture, 30 public tutorials, Gallery metadata, manifest-declared inputs, and executable capture/recipe harness were already strong. LF checkout policy and an `autocrlf` regression now protect tutorial fixture hashes. Known A0 gaps remain: README and installation-route wording must agree, unavailable PyPI publication must not be described as current, and the eventual A1 candidate baseline must be re-recorded after feature work stops.
 
 ### Required work
 
-- Resolve branch divergence deliberately; do not overwrite newer implementation changes with stale documentation assumptions.
-- Regenerate executable documentation outputs against the final `0.14` API and defaults.
-- Ensure all examples use stable, accession-pinned or repository-tracked inputs where appropriate.
-- Ensure the following documentation agrees:
-  - README;
-  - installation guide;
-  - quickstart;
-  - tutorials;
-  - Python API guide;
-  - CLI reference;
-  - session/request compatibility guide;
-  - release notes;
-  - Gallery tutorial metadata;
-  - citation instructions.
-- Remove statements that describe unreleased future features as current capabilities.
+- Fetch and inspect the relevant refs before reconciliation. Record the exact baseline commit and whether the integration branch contains, is contained by, or has diverged from the intended base.
+- Reconcile branch history deliberately. Do not overwrite newer implementation changes with stale documentation assumptions, and do not use a destructive rewrite of a shared branch as a shortcut.
+- Record the current package version, session writer and supported readers, request schema and accepted versions, table/resource schemas, and Gallery session/request inventory.
+- Keep the four public documentation owners—Tutorials, Technical documentation, FAQ, and Gallery—stable unless a distinct unanswered reader question requires an information-architecture change.
+- Maintain the manifest of executable scenarios and stable, accession-pinned or repository-tracked inputs. Enforce LF checkout for checksum-bound text fixtures on Windows, WSL, Linux, and macOS Git worktrees.
+- Correct current-baseline claims. In particular, distinguish a live installation route from a route planned for the final release and remove statements that present unreleased Work packages B–I as current behaviour.
+- Hand every feature-dependent reference, recipe, screenshot, Gallery artifact, release-note item, and citation closeout to A1 rather than regenerating it prematurely.
 
 ### Acceptance criteria
 
-- All documentation commands execute successfully in a clean environment.
-- All documented screenshots and generated figures are reproducible from the final code.
-- The package version, session version, request schema, and documented compatibility table agree.
-- The README accurately distinguishes hosted Web, Bioconda, PyPI, and source installs.
+- The baseline commit, ref relationship, dirty-tree boundary, package version, session version, request schema, and documentation inventory are recorded with commands or contract-test evidence.
+- Current public documentation does not advertise an unavailable installation route or an unimplemented feature as currently usable.
+- Manifest-declared inputs pass size and SHA-256 checks after a checkout simulated with `core.autocrlf=true`.
+- Current schema and compatibility documentation agree with the code at the recorded baseline.
+- A1 has an executable implementation plan with entry gates, owned files, regeneration commands, evidence requirements, invalidation rules, and a completion ledger.
 
 ### Scope stop
 
-Do not use documentation renovation as a reason to redesign unrelated interfaces after feature freeze.
+Do not regenerate the complete screenshot, figure, Gallery, or release-note set while rendering, persisted formats, packaging, or public controls are still changing. Do not use A0 to redesign the established documentation architecture.
+
+---
+
+## Work package A1 — Synchronize the final release documentation and evidence
+
+Implementation plan:
+[`WORK_PACKAGE_A1_FINAL_RELEASE_SYNCHRONIZATION_IMPLEMENTATION_PLAN_2026-08-11.md`](./WORK_PACKAGE_A1_FINAL_RELEASE_SYNCHRONIZATION_IMPLEMENTATION_PLAN_2026-08-11.md)
+
+### Objective
+
+After Work packages B–I are feature-complete, bind one exact release-candidate commit to its built distributions, public documentation, executable recipes, screenshots, Gallery assets, compatibility statements, release notes, and reproducibility evidence before Work package J certifies the release candidate.
+
+### Entry conditions
+
+- A0 is accepted against a recorded integration baseline.
+- Work packages B–I have frozen their release-facing behaviour, defaults, and public names.
+- Work packages C and D have one coordinated final request/session writer; no branch-only partial persisted format is being documented.
+- Work package H has produced auditable wheel and sdist candidates, and Work package I has frozen the privacy and analytics text/event contract.
+- The candidate tree is clean apart from explicitly inventoried release-documentation work.
+
+### Required work
+
+- Re-fetch and deliberately reconcile the final implementation and documentation histories. Record the exact candidate commit used for every A1 gate.
+- Build and install the candidate wheel in clean environments. Run the manifest-declared CLI and Python recipes against the installed artifact rather than substituting an editable checkout.
+- Regenerate CLI help, reference material, executable outputs, affected screenshots, Gallery sessions/assets/tutorial media, and release examples from the final code and declared inputs.
+- Synchronize README, installation guide, quickstart, tutorials, Python API guide, CLI reference, session/request compatibility guide, release notes, Gallery metadata, and citation instructions.
+- Describe Hosted Web, Bioconda, PyPI, and source installation according to their actual release state. Work package K owns publication, deployment, and final archive identifiers; A1 must not claim that those external actions have already happened.
+- Record the final commands, results, reviewed artifacts, deviations, and remaining external dependencies in the A1 evidence ledger.
+- Invalidate and rerun the affected A1 gates after any Work package J fix changes public behaviour, rendering, schemas, packaging, screenshots, or documented output.
+
+### Acceptance criteria
+
+- One recorded candidate commit identifies the source for the built artifacts and all documentation evidence.
+- The base wheel installs and imports in a clean environment; the export extra passes its documented smoke path; the complete manifest-declared CLI and Python recipe sets pass against the built wheel.
+- `docs/capture/run_all.py --tier nightly --check` passes against the candidate, including the long-running scenarios, and all changed public figures receive visual review.
+- Gallery sessions, generated SVGs, thumbnails, tutorial metadata, and operation media pass their generator-owned regeneration and strict validation gates.
+- The package version, session writer/readers, request schema/readers, CLI help, Python signatures, Gallery inventory, and compatibility documentation agree.
+- “All documentation commands” means all manifest-declared executable recipes, installation smokes, generated help/signature contracts, and applicable static checks. It does not require executing illustrative placeholder fences as if they were complete recipes.
+- README and installation documentation distinguish live, release-candidate, and planned Hosted Web, Bioconda, PyPI, and source routes without presenting an unavailable route as current.
+- The A1 evidence ledger is complete, the documentation diff contains no unexplained generated artifacts, and no A1-invalidating Work package J fix remains unverified.
+
+### Scope stop
+
+Do not reopen product design, create a fifth public documentation route, execute every illustrative code fence literally, mass-reacquire every legacy input without a provenance need, or run the full GUI capture on every ordinary pull request. Do not tag, publish, deploy, push, create a Zenodo record, or revise the external manuscript under A1; those actions remain in Work package K and require explicit authority.
 
 ---
 
@@ -455,6 +500,8 @@ invalidatesAnalysis
 
 The effects are independent. Label text, for example, can patch the mounted SVG immediately and also request a later geometry reconciliation. A field that has not been classified must fail closed: it does not enter automatic preview work and remains pending for an explicit Generate action.
 
+Track full normalized drawing intent separately from the render-safe and analysis projections. A manual-only or unknown edit must show `Changes pending`. Accepting a later allowlisted render must not clear that divergence or overlay the unadmitted field; only explicit Generate adopts the complete draft.
+
 #### Direct patch policy
 
 - Fill and stroke colour may patch existing semantic SVG targets immediately.
@@ -491,11 +538,11 @@ This path must call the renderer directly. It must not call the normal analysis 
 Input sequence changes, record endpoints, LOSAT program/task, genetic code affecting search, and raw-evidence search arguments invalidate analysis. Phase 1 pauses automatic geometry rendering while this state exists and displays:
 
 ```text
-Analysis settings changed. Search results are out of date.
-[Run LOSAT and update]
+Inputs or analysis settings changed. Preview data are out of date.
+[Generate and update]
 ```
 
-Proven-safe direct edits may still update the committed preview. Only the explicit Generate/LOSAT action can clear analysis-stale state.
+Use `Run LOSAT and update` instead when the active workflow requires new LOSAT evidence. Proven-safe direct edits may still update the committed preview. Only the explicit Generate/LOSAT action can clear analysis-stale state.
 
 ### Scheduler and worker contract
 
@@ -504,7 +551,10 @@ Proven-safe direct edits may still update the committed preview. Only the explic
 - Do not terminate and restart the diagram worker for ordinary superseded keystrokes.
 - Discard an obsolete response and render the latest pending draft next.
 - Manual Generate removes queued preview work and has priority for the next renderer slot.
+- `Update layout` bypasses debounce but uses the same no-analysis coordinator. One click dispatches the latest render-safe draft once, duplicate clicks coalesce, and analysis-stale state dispatches nothing.
 - Session import, Reset, mode change, result replacement, and disposal invalidate queued revisions through the same coordinator.
+- A direct-only edit does not erase an in-flight geometry request. Replay snapshots carry a direct-edit revision; if it changes during candidate staging, discard that candidate and queue the latest render-safe draft once.
+- Serialize renderer and feature-extraction work through one shared-worker lifecycle broker. Manual Cancel terminates only its owned active job, releases the slot promptly, and preserves unrelated queued work for worker recreation. Ordinary supersession does not terminate the worker.
 
 ### UI and status
 
@@ -514,7 +564,7 @@ Provide one control for automatic geometry updates:
 ☑ Auto-update layout
 ```
 
-Direct colour and other proven-safe patches remain immediate when this control is off. After the first successful manual Generate, the default is on unless a restored session records the user's preference. Session hydration itself must not trigger an automatic render.
+Direct colour and other proven-safe patches remain immediate when this control is off. Treat the preference as unset until the user changes it or a session restores it. After the first successful manual Generate, turn it on only when it is still unset; preserve an explicit or restored off choice. Omit the persisted preference key while it remains unset, and keep the preference out of figure-edit Undo history. Session hydration itself must not trigger an automatic render.
 
 When automatic layout updates are off and a render-safe draft is pending, show:
 
@@ -539,7 +589,9 @@ Do not use the full-page Generate processing overlay for automatic updates.
 
 - Keep the committed preview visible while an automatic candidate is pending.
 - Stage all fallible work before mutating live state.
+- Precompute base-config capture and composition metadata from the staged sanitized SVG; do not defer those parsers to a post-assignment watcher. If a remaining mount/binding step fails, roll back the complete logical transaction.
 - Commit Result list, selected Result, feature catalogue, extracted/biological feature state, render metadata, editor/selection bindings, and committed canonical request/resources as one logical transaction.
+- Before commit, reproject every admitted direct-edit family onto the candidate through its established semantic owner. This includes palette/default and per-feature fill, feature stroke, visibility, label text/visibility, and supported legend/composition/canvas transforms. A render-only update must not erase an earlier direct edit.
 - Restore selected objects by stable semantic identity and clear only identities absent from the candidate catalogue.
 - Preserve zoom and pan on automatic commit. Rebind and reposition the selected object when it still exists; do not run the unconditional manual-Generate viewport reset.
 - Failure, cancellation, stale completion, or supersession leaves the previous committed bundle, export authority, selection, and viewport unchanged.
@@ -561,6 +613,7 @@ Ignore the first render after worker initialisation when evaluating the live-upd
 - Per-record display start, manual placement, retained feature-overlap tolerance, and admitted label-layout reconciliation update after one 400 ms debounce burst.
 - With empty analysis caches and analysis executors configured to fail if called, a render-only update succeeds with zero LOSAT calls, cache probes, mutable input reads, or analysis-resource changes.
 - One render is active at a time; the latest pending draft wins and stale responses cannot commit.
+- A direct edit made during an in-flight geometry update survives in active and inactive Results; an outdated replay candidate cannot erase the edit or lose the pending geometry change.
 - A failed update preserves the previous Result, catalogue, metadata, selection, viewport, export, and committed canonical request/resources.
 - Automatic updates off perform no worker render; `Update layout` performs exactly one.
 - Analysis-stale state performs no automatic geometry render and requires explicit Generate/LOSAT action.
@@ -568,6 +621,7 @@ Ignore the first render after worker initialisation when evaluating the live-upd
 - Circular single/grid/batch and Linear preserve Result topology and inactive batch outputs.
 - Automatic commit preserves zoom/pan and stable selection.
 - The accepted candidate uses the shared SVG sanitization/commit boundary once and introduces no reference-output change by itself.
+- Render-only projection, canonical adoption, and current-history artifact refresh do not deep-clone unchanged large resource payloads for every accepted update.
 
 ---
 
@@ -720,6 +774,7 @@ Measure at least:
 - If a platform-specific LOSAT binary makes the wheel contract incorrect, remove that binary from the universal wheel and discover LOSAT externally.
 - If GUI assets are a demonstrated installation obstacle, plan a later `gbdraw-gui` companion package; do not block `v0.14.0` unless PyPI publication is impossible.
 - Do not rename the main distribution to `gbdraw-core`.
+- A wheel tagged `py3-none-any` and described as OS-independent must not contain a native executable that works on only one platform. Resolve the bundled LOSAT policy before the release matrix is declared complete.
 
 ### Release automation
 
@@ -727,13 +782,13 @@ Add a GitHub Actions publishing workflow using PyPI Trusted Publishing/OIDC.
 
 Expected release flow:
 
-1. Checkout the release tag.
-2. Run tests.
-3. Build wheel and sdist.
-4. Inspect or test artifact contents.
-5. Install built wheel into clean environments.
-6. Publish to TestPyPI for release-candidate validation.
-7. Publish the final tag to PyPI.
+1. Checkout the candidate commit or authorized release tag.
+2. Prepare generated browser inputs through repository-owned tools.
+3. Build one wheel and sdist set for that candidate.
+4. Inspect and install-test those exact files; do not rebuild separately in each matrix job.
+5. Record filenames, sizes, SHA-256 hashes, package contents, environment, and smoke-test results in the release evidence.
+6. After the Work package J candidate gate passes, publish an explicitly authorized release candidate to TestPyPI.
+7. After the Work package J final gate passes, publish the accepted final-tag artifacts to PyPI through a protected environment.
 
 ### Clean-install matrix
 
@@ -746,6 +801,12 @@ Validate:
 - macOS;
 - Windows.
 
+Run the complete Python suite on Linux for every supported Python version. Run
+clean built-artifact smoke tests on Linux, macOS, and Windows for every supported
+Python version unless the release-support manifest records and justifies a
+smaller matrix before `rc1`. Metadata, user documentation, and CI must describe
+the same support boundary.
+
 Smoke tests:
 
 - `import gbdraw`;
@@ -755,6 +816,22 @@ Smoke tests:
 - session save/replay;
 - local GUI launch if included;
 - optional PDF/PNG export with `[export]`.
+
+### Implementation and final-audit boundary
+
+Split this package into two execution points:
+
+- **H1 — packaging design and automation:** decide the distribution contents,
+  native LOSAT policy, version owners, and Trusted Publishing workflow early
+  enough to correct structural problems before feature freeze;
+- **H-final — exact artifact audit:** after Work package I and final documentation
+  have stopped changing shipped files, build and test the actual candidate
+  artifacts. H-final is one of the Work package J release gates.
+
+Work package H prepares automation and artifacts. Work package J certifies the
+candidate and records evidence. Work package K owns TestPyPI/PyPI publication,
+tagging, hosted deployment, archive creation, and other external actions, each
+only after explicit authorisation.
 
 ---
 
@@ -806,6 +883,26 @@ If declined:
 Provide a persistent `Privacy settings` entry for later changes.
 
 Local GUI, CLI, and Python remain telemetry-off by default.
+
+### Hosted-network and offline contract
+
+Before implementing analytics, reconcile the post-consent analytics mechanism
+with the Web application's same-origin, no-runtime-CDN, offline contract. Do not
+silently broaden the CSP or turn Google-hosted code into an application startup
+dependency.
+
+Freeze one of these outcomes before `rc1`:
+
+1. retain analytics with a documented, consent-gated network exception that is
+   absent from local GUI mode and whose load or network failure cannot impair any
+   application feature; or
+2. cut analytics from `v0.14.0`, remove its UI, code, CSP allowances, event
+   claims, and release-checklist requirements, and retain explicit absence tests.
+
+If analytics is retained, changing from allow to reject stops future analytics
+requests and clears application-owned consent/analytics state as documented.
+The packaged Web app must still reach ready state, generate, save, reopen, and
+export with external network access blocked.
 
 ### Exact user-facing copy
 
@@ -939,11 +1036,14 @@ Treat analytics as a consenting-user sample, not a census of all users.
 - No Google analytics request before consent.
 - No analytics request after rejection.
 - Consent can be changed later.
+- Revoking consent prevents subsequent analytics requests and applies the documented storage cleanup.
+- Analytics script or collection failure does not block application startup or any figure workflow.
 - Feature events are emitted after successful state transitions, not scattered button clicks.
 - Automatic preview success is emitted only after the current candidate commits; scheduler churn emits no result event.
 - Export events reflect the committed Result.
 - Error codes are sanitised enums.
 - Privacy documentation lists sent and unsent data.
+- Local/offline execution remains functional with analytics unavailable.
 
 ---
 
@@ -951,7 +1051,73 @@ Treat analytics as a consenting-user sample, not a census of all users.
 
 ### Objective
 
-Turn the feature-complete beta into a release candidate and final publication artifact.
+Freeze the agreed release scope and schemas, validate one exact candidate commit
+and its built artifacts against declared compatibility and support matrices,
+record auditable evidence, and promote only a passing baseline toward
+`v0.14.0`.
+
+Work package J prepares and certifies release candidates. It does not itself
+authorise a tag, package upload, hosted deployment, archive, or external
+publication. Those actions remain in Work package K.
+
+### Responsibility boundary
+
+Feature-owned tests must land with Work packages B–I. Do not defer their unit,
+rendering, request/session, or focused browser coverage until J. J owns:
+
+- the requirements-to-test traceability audit;
+- cross-package and cross-surface acceptance;
+- compatibility and public-contract certification;
+- the declared Python, OS, and browser support matrices;
+- exact built-artifact, offline, security, and reproducibility gates;
+- release-candidate evidence and final handoff to K.
+
+If a mandatory Work package B–I acceptance criterion has no named automated or
+reviewed evidence, J is blocked; it does not replace the missing test with a
+checkmark.
+
+### Gate 0 — scope, schema, and support freeze
+
+Before candidate testing, record a release-support manifest containing:
+
+- candidate commit SHA and clean/declared worktree state;
+- target package version and candidate stage;
+- retained and cut conditional features, especially overlap tolerance,
+  optional annotation shortcut, preview fallback tuning, and analytics;
+- current and accepted session, canonical request, cache, editor metadata,
+  table, and interactive-SVG schema versions;
+- supported native Python versions and operating systems;
+- supported browser engines, versions or policy, and tested desktop/mobile
+  profiles;
+- wheel, sdist, hosted bundle, documentation, session, and figure artifacts in
+  scope;
+- native LOSAT and external fallback policy;
+- analytics/offline network decision;
+- P2 waiver authority and release rollback/yank owner.
+
+For every retained conditional feature, all implementation, persistence,
+documentation, and replay tests are mandatory. For every cut feature, remove
+the shipped surface and claim and add absence tests. Do not leave a dormant
+unreleased schema field or hidden UI path.
+
+### Auditable evidence
+
+Maintain a gate table with, at minimum:
+
+| Field | Required content |
+|---|---|
+| Requirement | Stable roadmap/work-package acceptance ID |
+| Owner | Work package and production owner |
+| Execution | CI job or exact command |
+| Fixture | Input/session/table plus provenance and hash where applicable |
+| Environment | Commit, artifact, Python, OS, browser, tool versions |
+| Oracle | Exact semantic, structural, visual, privacy, or performance assertion |
+| Evidence | Job URL, log, report, screenshot, trace, artifact name, and hash |
+| Status | Pass, fail, or approved P2 waiver with issue and workaround |
+
+Unexpected skips, unexpected xfails, missing matrix jobs, hidden Playwright
+retries, or a manual rerun that alone turns red to green do not count as passing
+release evidence. Keep diagnostics outside tracked reference-output directories.
 
 ### Test layers
 
@@ -967,7 +1133,12 @@ Turn the feature-complete beta into a release candidate and final publication ar
 - proof that render-only execution cannot reach LOSAT, analysis caches, mutable input reads, or analysis-resource mutation;
 - request decoding;
 - session migration;
+- public `gbdraw` and `gbdraw.api` exports, signatures, dataclass fields/defaults,
+  aliases, and exception semantics;
+- CLI help/default/error contract;
 - packaging metadata;
+- version concordance across package, Web, session/request documentation,
+  citation metadata, recipe, wheel/sdist metadata, and release tag;
 - analytics event sanitisation.
 
 #### Rendering tests
@@ -976,8 +1147,11 @@ Turn the feature-complete beta into a release candidate and final publication ar
 - Circular and Linear manual placement, multipart/intron envelopes, labels, and canvas reservation;
 - unchanged default output with no overrides and tolerance 0;
 - annotation round-trip;
-- deterministic output where expected;
-- representative Circular and Linear figures.
+- deterministic output under a named normalization policy;
+- structural/semantic SVG comparisons for default-output contracts;
+- representative Circular and Linear publication figures rendered at readable
+  scale and visually reviewed from declared recipes;
+- no reference-output update without a reviewed rendering-contract change.
 
 #### Web tests
 
@@ -994,7 +1168,17 @@ Turn the feature-complete beta into a release candidate and final publication ar
 - invalid fixed-placement conflict with the last successful preview retained;
 - zoom controls;
 - privacy consent paths;
-- analytics no-op before/after rejection.
+- analytics no-op before consent, after rejection, and after revocation;
+- shared SVG sanitisation, CSP, malicious import/session rejection, and atomic
+  failure without replacing live state;
+- packaged-app cold startup and core workflow with external network blocked;
+- repeated worker use, cancellation, object-URL cleanup, and no biological-data
+  canary in network requests.
+
+The general Node Playwright suite is a release gate, not an optional local
+check. Run the complete supported Chromium project and the focused smoke matrix
+for every additional browser declared supported. A core workflow failure in a
+supported browser is not an "uncommon browser" P2.
 
 #### End-to-end acceptance tests
 
@@ -1002,31 +1186,125 @@ At minimum:
 
 1. Circular figure with labels, GC/skew, annotations, rotation, resolver-off manual inward/outward placement, and session replay.
 2. Linear multi-record figure with uploaded comparison, resolver-on Main/Auto precedence, and manual above/below placement.
-3. Linear LOSATP pairwise or collinearity workflow.
-4. Session save, close, reopen, render, and export.
-5. PyPI wheel install and SVG generation.
-6. Hosted app analytics allow and reject flows.
+3. Linear LOSATP pairwise workflow.
+4. Linear LOSATP Similarity-group and Collinear-block workflows; they may reuse
+   one deterministic input/session set but each presentation needs an explicit
+   oracle.
+5. Session save, close, reopen, render, and export through Web, CLI, and Python
+   where supported.
+6. Base wheel and sdist clean installs followed by import, CLI help, Circular
+   SVG, Linear SVG, session replay, and `pip check` outside the source tree.
+7. `[export]` clean install followed by representative PNG and PDF output.
+8. Packaged hosted/local Web startup, generation, session replay, and export
+   with runtime network blocked.
+9. Hosted analytics allow, reject, revoke, collector-failure, and forbidden-data
+   canary flows when analytics is retained; otherwise verify its complete
+   absence.
+
+Each flow must name its fixture, exact assertions, output inventory, timeout,
+and evidence. "Representative", "where supported", and "works" are not
+sufficient release oracles without the frozen support manifest.
 
 ### Compatibility rules
 
-- Recheck supported session versions and current writer version after the final schema decision.
+- Finalise the current writer only after the Work package C and D persisted
+  fields are complete. If schema 6/session 41 remain the agreed boundary, write
+  them once with both contracts; never land or retain a partial C-only or D-only
+  format.
 - Do not bump the session version for branch-only intermediate formats.
 - Do not create multiple unreleased schema versions during implementation.
 - Keep old persisted-data migration separate from fresh API acceptance.
-- Effect flags, debounce state, scheduler tokens, pending jobs, slow-pause state, and viewport snapshots are ephemeral runtime state. They must not create canonical request fields or cause a session-version bump. Persist only user-owned preview preference and semantic figure intent.
+- Track session, canonical request, raw/derived cache, identity manifest, editor
+  metadata, Web file bindings, annotation/placement tables, Gallery sessions,
+  and interactive SVG metadata as separate compatibility namespaces.
+- For every distinct supported migration branch, keep an authentic positive
+  fixture from first-parent `main` or a release tag, record its source commit,
+  original path, and decompressed hash, and assert its expected semantic
+  projection. Constructing a current document and changing only its version
+  number is not sufficient positive compatibility evidence.
+- Test current-writer load/save/reload, supported migration, future and retired
+  version rejection, malformed/truncated/resource-hash failure, and rollback
+  without partial live-state mutation.
+- Effect flags, debounce state, scheduler tokens, pending jobs, slow-pause state,
+  and transaction-only viewport snapshots are ephemeral runtime state. They
+  must not create canonical request fields or cause a session-version bump.
+- Do not conflate transaction viewport snapshots with existing user-owned Web
+  navigation state such as saved zoom or pan. Freeze and document the session
+  policy for that UI state; it never becomes canonical figure intent.
+- Persist only the established preview preference and semantic figure intent.
+  Keep one documented compatibility wire key for the renamed automatic-layout
+  preference and do not write superseded keys.
+
+### Support and artifact matrix
+
+- Run the complete Python/core suite on Linux for Python 3.10, 3.11, and 3.12.
+- Install-test the exact built artifacts on Linux, macOS, and Windows for the
+  frozen supported Python matrix.
+- Test base installation separately from `[export]`; the base lane must not
+  receive CairoSVG accidentally through development dependencies.
+- Build wheel, sdist, and deployable Web bundle once per candidate. Downstream
+  jobs download and test those exact files instead of rebuilding them.
+- Inspect package/archive contents, entry points, license/notices, native
+  executables, Wasm/browser assets, generated data, local paths, caches, debug
+  files, credentials, and unpublished datasets.
+- Record artifact filename, target, version, size, SHA-256, tested invocation,
+  fixture, expected result, and support status.
+- The production hosted deployment must identify the accepted release commit
+  and bundle hash. A later unrelated `main` build is not evidence for the tagged
+  release.
+- Reproduction claims require checksum-pinned, redistributable inputs and an
+  executable recipe or session from a clean archive of the candidate. Public
+  figures with unavailable inputs must be removed from the release
+  reproducibility claim or explicitly labelled non-reproducible.
+
+### Release gates
+
+#### J-RC — candidate gate
+
+The candidate passes only when:
+
+- Gate 0 scope, schema, compatibility, and support manifests are frozen;
+- every retained Work package B–I criterion has named evidence;
+- focused, full, rendering, Node, Playwright, offline, clean-install, and
+  documentation/reproduction gates pass against the candidate SHA/artifacts;
+- no P0/P1 issue remains open;
+- every deferred P2 has an owner-approved issue, impact, workaround, and release
+  note where user-visible;
+- the evidence manifest and artifact hashes are complete.
+
+An authorised `v0.14.0rcN` tag and TestPyPI upload may occur through Work package
+K only after J-RC passes.
+
+#### J-Final — final software-release gate
+
+Any change after an accepted release candidate requires a regression test and a
+new candidate or a complete rerun of the affected and full release gates. The
+final version-only/documentation commit is still a different candidate and must
+pass version concordance, artifact build/inspection, clean install, full tests,
+and reproduction gates.
+
+J-Final certifies the exact final commit and stored artifacts. Work package K
+then tags that same commit, publishes/deploys only the accepted files or bundle,
+performs post-publication smoke checks, and records final URLs and hashes. A
+failure before publication returns to J; a failure after publication follows
+the documented rollback, yank, or patch-release path.
 
 ### Release-blocking severity
 
-#### P0 — must fix
+#### P0 — stop candidate testing and release
 
 - data loss;
 - incorrect biological coordinates;
 - corrupted session;
 - security/privacy failure;
+- any analytics request before consent, after rejection, or after revocation;
+- biological content or forbidden metadata in a network request;
 - package cannot install/import;
 - exported figure materially incorrect.
 
-#### P1 — must fix before final release
+After publication, a P0 requires an immediate rollback/yank assessment.
+
+#### P1 — block promotion to final release
 
 - core workflow crash;
 - automatic preview reaches LOSAT, analysis-cache mutation, or mutable input/resource reconstruction;
@@ -1037,17 +1315,22 @@ At minimum:
 - rotation inconsistency across tracks;
 - manual placement or overlap tolerance cannot replay;
 - last good preview lost after failure;
-- consent rejection still contacts analytics;
+- a core workflow fails in a declared supported browser or operating system;
+- a required upload, Generate, save, export, or privacy control is inaccessible;
 - documented command does not work.
 
-#### P2 — fix if practical; otherwise document
+#### P2 — defer only by recorded approval
 
 - minor layout defect;
-- uncommon browser issue;
-- non-blocking accessibility defect;
+- issue outside the declared browser/support matrix;
+- genuinely non-blocking accessibility defect;
 - cosmetic inconsistency.
 
-After `rc1`, only P0/P1 and specifically approved P2 fixes should be merged.
+A P2 deferral requires maintainer approval, a tracked issue, user impact,
+workaround, and release-note decision. After `rc1`, merge only P0/P1 fixes and
+specifically approved P2 fixes. Every such change receives a regression test and
+reruns the declared candidate gates; no fix is promoted only because a local
+rerun passed.
 
 ---
 
@@ -1057,22 +1340,35 @@ After `rc1`, only P0/P1 and specifically approved P2 fixes should be merged.
 
 Use one exact software baseline for the package release, archived artifact, preprint revision, and journal submission.
 
+Work package K performs external actions only after the matching Work package J
+gate has passed and the maintainer has explicitly authorised the tag, upload,
+deployment, archive, or submission. Passing tests is not standing authority to
+publish.
+
 ### Release sequence
 
 ```text
 complete work packages
     ↓
-feature freeze
+scope / schema / support freeze
     ↓
-v0.14.0rc1
+H-final exact candidate artifacts
     ↓
-release-blocking fixes only
+J-RC candidate gate
     ↓
-v0.14.0 tag
+authorised v0.14.0rcN tag + TestPyPI + staged smoke
     ↓
-PyPI publication
+release-blocking fixes → new candidate → rerun J-RC
     ↓
-hosted Web deployment
+final-version candidate + J-Final gate
+    ↓
+v0.14.0 tag on the accepted commit
+    ↓
+PyPI publication of the accepted artifacts
+    ↓
+hosted Web deployment of the accepted bundle
+    ↓
+post-publication version / hash / workflow smoke
     ↓
 Bioconda update
     ↓
@@ -1082,6 +1378,26 @@ bioRxiv preprint v2
     ↓
 journal submission
 ```
+
+The release manifest binds the package tag, commit, session/request versions,
+wheel, sdist, hosted bundle, documentation recipes, and manuscript figures.
+Do not rebuild a different artifact between certification and publication. If a
+publishing service requires a rebuild, treat the output as a new artifact and
+rerun its inspection and smoke gates before promotion.
+
+### Publication gate
+
+After the final software release is live and verified:
+
+- archive the accepted tag and release artifacts and record the version DOI;
+- rerun manuscript-figure recipes from the archived baseline or verify their
+  recorded candidate evidence remains byte/semantically identical;
+- update preprint, manuscript, supplement, citation, and installation/support
+  tables to the archived version;
+- verify every capability claim has release evidence and every limitation or
+  P2 waiver is disclosed;
+- submit only after archive identifiers and exact reproduction instructions are
+  final.
 
 ### Preprint v2 positioning
 
@@ -1153,8 +1469,9 @@ Prepare a transparent statement for the cover letter and Methods/Acknowledgement
 
 Use the following order to reduce rework:
 
-1. **A — Baseline/documentation reconciliation**
-   - identify the final branch state and current schemas;
+1. **A0 — Integration-baseline and documentation-contract lock**
+   - record the integration branch relation, current schemas, documentation owners, executable-evidence inventory, and stable-input policy;
+   - correct current-baseline claims, including the distinction between live and planned installation routes;
    - do not regenerate all assets yet if rendering contracts will still change.
 2. **B — LOSAT/comparison UI cleanup**
    - largely independent of rendering geometry;
@@ -1178,8 +1495,9 @@ Use the following order to reduce rework:
    - build actual artifacts from the feature-complete code.
 9. **I — Analytics/privacy**
    - instrument stable feature identifiers and successful state transitions.
-10. **A — Final documentation regeneration**
-    - regenerate examples and screenshots against the final behaviour.
+10. **A1 — Final release documentation and evidence synchronization**
+    - lock one exact candidate commit and run the built-wheel, executable-recipe, final-capture, Gallery, compatibility, and release-document gates in the A1 implementation plan;
+    - regenerate examples and screenshots against the final behaviour, and invalidate affected evidence after any later release-blocking fix.
 11. **J — Full QA and release candidate**
 12. **K — Release, archive, preprint, and submission**
 
@@ -1261,6 +1579,7 @@ Do **not** cut:
 ## Session and API
 
 - [ ] The current writer version is finalised once and contains the complete Work package C record-display and Work package D placement/tolerance contract; no partial schema 6/session 41 writer exists.
+- [ ] The current session writer keeps one documented `ui.autoLabelReflow` compatibility key for the renamed automatic-layout preference, migrates historical palette state, and omits the retired Palette-toggle flag from new Web and Python/CLI output.
 - [ ] Supported older sessions still load according to documented policy.
 - [ ] Web, CLI, and Python describe equivalent display-start and placement intent.
 - [ ] Deterministic feature identity survives rotation, reverse complement, crop-retained transforms, dormant crop exclusion/reactivation, duplicate record IDs, and duplicate-hash disambiguation.
@@ -1286,10 +1605,13 @@ Do **not** cut:
 
 ## Documentation
 
+- [ ] A0 baseline evidence and the A1 final candidate commit are recorded.
 - [ ] README is current.
 - [ ] Installation matrix is current.
 - [ ] Quickstarts execute.
 - [ ] Tutorials execute.
+- [ ] All manifest-declared CLI/Python recipes pass against the built wheel.
+- [ ] The nightly documentation capture and strict Gallery validation gates pass against the A1 candidate.
 - [ ] Release notes are complete.
 - [ ] Session compatibility page is correct.
 - [ ] Paper figures reproduce from the release tag.
