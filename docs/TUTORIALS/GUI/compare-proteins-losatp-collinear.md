@@ -51,27 +51,29 @@ The workflow creates these files:
 
 ## Step 1: Upload the five source records
 
-Select **Linear**. Under **Input Genomes**, keep **GenBank** and **No
-comparison** selected.
+Select **Linear**. Under **Input Genomes**, keep **GenBank** selected and
+confirm the fresh **Current: No comparison** status below the record list.
 
 1. In the first **GenBank File** control, choose `AP027078.gb`.
-2. Select **Add sequence**, then choose `AP027131.gb` in the new row.
-3. Repeat **Add sequence** for `AP027133.gb`, `AP027132.gb`, and
+2. Select **Add sequence** in the **Input Genomes** header, then choose
+   `AP027131.gb` in the new card.
+3. Repeat the header **Add sequence** action for `AP027133.gb`, `AP027132.gb`, and
    `NZ_CP006932.gb`, in that order.
 
 Keep all optional regions empty so every row uses its complete record. Confirm
 that the five green file controls show the filenames in the same order as the
 source table.
 
-![Final two Hepatoplasmataceae inputs showing the fourth-to-fifth display boundary](../../images/t-gui-08/01-input-ready.png)
+![Final two Hepatoplasmataceae sequence uploaders](../../images/t-gui-08/01-input-ready.png)
 
-*The visible `#4 → #5` boundary and `DISPLAY ROW 5` confirm the end of the
-five-record stack: `AP027132.gb` precedes `NZ_CP006932.gb`.*
+*The fourth and fifth uploaders confirm the end of the input order:
+`AP027132.gb` precedes `NZ_CP006932.gb`. Pair boundaries are inspected later
+under **Selected pairs**.*
 
 ## Step 2: Generate the five-record baseline
 
-Select **Generate Diagram** while **No comparison** is still selected. The
-first Linear result contains 2,994 rendered feature elements. Select **Zoom
+Select **Generate Diagram** while the status remains **Current: No
+comparison**. The first Linear result contains 2,994 rendered feature elements. Select **Zoom
 out** six times to reach **40%**, then drag the preview horizontally until the
 complete diagram is centered. Use this overview to verify all five rows and the
 absence of ribbons.
@@ -90,25 +92,42 @@ settings in Step 3.
 
 ## Step 3: Configure LOSATP Collinear
 
-Select **Run LOSAT**, **LOSATP**, and **Collinear blocks**, then set:
+In **Comparison**, select **Run LOSAT** explicitly. Open **Selected pairs (4)**
+and find **Comparison boundary: display row 4 to 5**. Confirm that its pair
+connects sequence 4 (`AP027132.gb`) to sequence 5 (`NZ_CP006932.gb`), then
+close the disclosure.
 
-| Control | Value |
-| --- | --- |
-| Execution | Auto |
-| Total threads | Safe |
-| Parallel runs | Auto |
-| Threads per run | Auto |
-| blastp mode | Collinear blocks |
-| Max unit gap | `0` |
-| Min block genes | `1` |
-| Color mode | Orientation + identity |
-| Evidence scope | Adjacent pairs |
-| Diagonal drift | `0` |
-| Merge conflicts | `1` |
-| Bitscore / E-value | `50` / `0.01` |
-| Minimum identity / length | `0` / `0` |
-| Pairwise Match Style | Curve |
-| Output Prefix | `losatp_collinear` |
+Open **Settings**, choose the **LOSATP** button in **LOSAT Mode**, and choose
+**Pairwise matches** from the **LOSATP mode** menu. Under **Comparison appearance**, set **Match
+style** to **Curve**, then change **LOSATP mode** to **Collinear blocks** and
+set the primary search and filter values. The presentation switch preserves
+the Curve draft while hiding the appearance controls. Continue past
+**Generate Diagram**, open **Advanced comparison and layout**, and set the
+runtime and advanced Collinear values.
+
+Fresh and Reset Collinear settings default **Evidence scope** to **All
+records**. This Gallery reproduction intentionally changes it to **Adjacent
+pairs** to preserve the checked recipe and output.
+
+| Section | Control | Value |
+| --- | --- | --- |
+| Settings | LOSAT Mode | LOSATP |
+| Settings | LOSATP mode (appearance step) | Pairwise matches |
+| Settings / Comparison appearance | Match style | Curve |
+| Settings | LOSATP mode (final) | Collinear blocks |
+| Settings | Max unit gap | `0` |
+| Settings | Min block genes | `1` |
+| Settings | Color mode | Orientation + identity |
+| Settings | Evidence scope | Adjacent pairs |
+| Settings / Result filters | Bitscore / E-value | `50` / `0.01` |
+| Settings / Result filters | Minimum identity / length | `0` / `0` |
+| Advanced comparison and layout | Execution | Auto |
+| Advanced comparison and layout | Total threads | Safe |
+| Advanced comparison and layout | Parallel runs | Auto |
+| Advanced comparison and layout | Threads per run | Auto |
+| Advanced comparison and layout / Advanced collinear search | Diagonal drift | `0` |
+| Advanced comparison and layout / Advanced collinear search | Merge conflicts | `1` |
+| Basic | Output Prefix | `losatp_collinear` |
 
 Set **Track Layout** to **Features on axis**, center the records, separate
 strands, and show GC content, GC skew, and a coordinate ruler. Choose the
@@ -116,7 +135,7 @@ strands, and show GC content, GC skew, and a coordinate ruler. Choose the
 `LOSATP Collinear blocks across Hepatoplasmataceae` at the top, and put the
 legend on the right.
 
-![LOSATP Collinear controls using adjacent Hepatoplasmataceae pairs](../../images/t-gui-08/03-collinear-settings.png)
+![LOSATP selected with Collinear blocks and Adjacent pairs evidence](../../images/t-gui-08/03-collinear-settings.png)
 
 ## Step 4: Run LOSATP and generate the blocks
 

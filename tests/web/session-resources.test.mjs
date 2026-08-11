@@ -290,3 +290,57 @@ assert.ok(
     ([resourceId, resource]) => resource.name.startsWith(`${resourceId}-`)
   )
 );
+
+const dormantComparisonFile = makeFile(
+  'dormant-uploaded-comparison',
+  'dormant-comparison.tsv'
+);
+let dormantComparisonReads = 0;
+const dormantComparisonArrayBuffer = dormantComparisonFile.arrayBuffer.bind(
+  dormantComparisonFile
+);
+dormantComparisonFile.arrayBuffer = async () => {
+  dormantComparisonReads += 1;
+  return dormantComparisonArrayBuffer();
+};
+const dormantSaveState = {
+  ...state,
+  linearComparisonPlan: {
+    mode: 'none',
+    defaultSource: 'losat',
+    edges: [{
+      id: 'dormant-comparison-uid',
+      queryUid: 'linear-uid-1',
+      subjectUid: 'linear-uid-2',
+      included: false,
+      fileActive: false,
+      losatFilenameActive: false,
+      source: 'upload',
+      file: dormantComparisonFile,
+      losatFilename: 'retained.raw.tsv'
+    }]
+  }
+};
+const dormantCommitted = structuredClone(committed);
+dormantCommitted.renderRequest.mode = 'linear';
+dormantCommitted.renderRequest.comparisons = [];
+const dormantSaved = await buildSessionResources(
+  dormantSaveState,
+  dormantCommitted
+);
+assert.equal(
+  dormantComparisonReads,
+  1,
+  'Save Session reads an inactive comparison file so its editable binding survives'
+);
+assert.deepEqual(dormantSaved.renderRequest.comparisons, []);
+assert.equal(
+  dormantSaved.webFiles.bindings.linearComparisons[0].id,
+  'dormant-comparison-uid'
+);
+const dormantResourceId =
+  dormantSaved.webFiles.bindings.linearComparisons[0].file.resourceId;
+assert.equal(
+  Buffer.from(dormantSaved.resources[dormantResourceId].data, 'base64').toString('utf8'),
+  'dormant-uploaded-comparison'
+);

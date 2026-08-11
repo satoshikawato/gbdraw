@@ -120,8 +120,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-02-01-upload-row-label-context.webp",
-            "alt": "Linear GenBank input row 1 with MjeNMV.gb uploaded and its Organism / strain label in the same input card.",
-            "caption": "The first uploaded row shows MjeNMV.gb and its Organism / strain label in the Linear input card; repeat the remaining rows from the table."
+            "alt": "MjeNMV.gb record card with Record options open and its Organism / strain value visible.",
+            "caption": "Upload MjeNMV.gb, open Record options, enter its Organism / strain value, and repeat the remaining rows from the table."
           },
           "capture": {
             "source": "webapp",
@@ -130,11 +130,12 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const expected = ['MjeNMV.gb', 'MelaMJNV.gb', 'PemoMJNVA.gb', 'PeseMJNV.gb', 'PemoMJNVB.gb', 'LvMJNV.gb', 'TrcuMJNV.gb', 'MeenMJNV.gb', 'MejoMJNV.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Majanivirus GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = 'Marsupenaeus japonicus endogenous nimavirus'; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = Array.from(card?.querySelectorAll('div') || []).find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); if (!row) throw new Error('Majanivirus Linear input row 1 was not found.'); const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === 'Organism / strain (optional)' && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error('Majanivirus Organism / strain input was not found.'); input.dataset.capture = 'majanivirus-organism-input'; row.dataset.capture = 'majanivirus-record-row'; row.scrollIntoView({ block: 'center' });"
-              }
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['MjeNMV.gb', 'MelaMJNV.gb', 'PemoMJNVA.gb', 'PeseMJNV.gb', 'PemoMJNVB.gb', 'LvMJNV.gb', 'TrcuMJNV.gb', 'MeenMJNV.gb', 'MejoMJNV.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Majanivirus GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = 'Marsupenaeus japonicus endogenous nimavirus'; const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Majanivirus Linear input row 1 was not found.'); options.open = true; const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === 'Organism / strain (optional)' && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error('Majanivirus Organism / strain input was not found.'); input.dataset.capture = 'majanivirus-organism-input'; row.dataset.capture = 'majanivirus-record-row'; row.scrollIntoView({ block: 'center' });"
+              },
+              {"type": "evaluate", "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"}
             ],
             "selector": "[data-capture='majanivirus-record-row']",
-            "cropPadding": 14,
+            "cropPadding": {"top": 0, "right": 14, "bottom": 14, "left": 14},
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 9,
@@ -142,7 +143,7 @@
               "linearSeqs.0.definition": "Marsupenaeus japonicus endogenous nimavirus",
               "linearSeqs.8.gb.name": "MejoMJNV.gb"
             },
-            "visibleText": ["MjeNMV.gb", "Organism / strain (optional)"],
+            "visibleText": ["MjeNMV.gb", "Record options", "Organism / strain (optional)"],
             "visibleControls": [
               {"selector": "[data-capture='majanivirus-organism-input']", "value": "Marsupenaeus japonicus endogenous nimavirus"}
             ]
@@ -152,7 +153,7 @@
     },
     {
       "title": "Configure browser LOSAT",
-      "body": "Under Apply to all adjacent gaps, choose Run LOSAT and LOSATP, then set blastp mode to Similarity groups.",
+      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. Runtime controls are under Advanced comparison and layout.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -160,7 +161,8 @@
           ["Total threads", "Safe"],
           ["Parallel runs", "Auto"],
           ["Threads per run", "32 requested; capped by the Safe total-thread budget"],
-          ["blastp mode", "Similarity groups"],
+          ["LOSAT Mode", "LOSATP"],
+          ["LOSATP mode", "Similarity groups"],
           ["Bitscore", "100"],
           ["E-value", "1e-3"],
           ["Minimum Identity", "20"],
@@ -171,11 +173,11 @@
       "operations": [
         {
           "dataDependent": true,
-          "title": "Run LOSAT settings panel",
+          "title": "Comparison settings",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-01-open-pairwise.webp",
-            "alt": "Run LOSAT settings with LOSATP Similarity groups, Safe total threads, a requested maximum of 32 threads per run, and thresholds 100, 1e-3, 20, and 0.",
-            "caption": "Request up to 32 threads per run; the Safe total-thread budget caps the effective workers. Use thresholds 100 / 1e-3 / 20 / 0."
+            "alt": "Open Comparison Settings with Run LOSAT active, the LOSATP button pressed, LOSATP mode set to Similarity groups, and result filters 100, 1e-3, 20, and 0.",
+            "caption": "Choose Run LOSAT, press LOSATP, select Similarity groups, and set result filters 100 / 1e-3 / 20 / 0."
           },
           "capture": {
             "source": "webapp",
@@ -187,59 +189,130 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) { app.linearComparisonPlan.mode = 'adjacent'; app.linearComparisonPlan.defaultSource = 'losat'; app.losatProgram = 'blastp'; app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = '32'; app.losat.blastp.mode = 'orthogroup'; app.adv.min_bitscore = 100; app.adv.evalue = '1e-3'; app.adv.identity = 20; app.adv.alignment_length = 0; }"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.adv.min_bitscore = 100; app.adv.evalue = '1e-3'; app.adv.identity = 20; app.adv.alignment_length = 0;"
               }
             ],
-            "clipSelectors": ["[data-capture='linear-blast-source']", "[data-capture='linear-losat-settings']"],
-            "cropPadding": {
-              "top": 12,
-              "right": 12,
-              "bottom": 12,
-              "left": 12
-            },
-            "waitForSelector": "[data-capture='linear-losat-settings']",
+            "openDetails": ["Settings"],
+            "selector": "[data-linear-comparison-card]",
+            "cropPadding": 14,
+            "waitForSelector": "[data-linear-comparison-card]",
             "assertAppState": {
               "mode": "linear",
               "linearComparisonPlan.mode": "adjacent",
               "linearComparisonPlan.defaultSource": "losat",
               "losatProgram": "blastp",
               "losat.blastp.mode": "orthogroup",
-              "losat.executionMode": "auto",
-              "losat.totalThreadBudget": "safe",
-              "losat.threadsPerJob": "32",
               "adv.min_bitscore": 100,
               "adv.evalue": "1e-3",
               "adv.identity": 20,
               "adv.alignment_length": 0
             },
-            "visibleText": ["Apply to all adjacent gaps"],
+            "visibleText": ["Comparison", "Run LOSAT", "Current: Run LOSAT", "Settings", "Selected pairs (8)"],
             "visibleControls": [
-              {"label": "Run LOSAT", "checked": true},
-              {"label": "LOSATP", "checked": true}
+              {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
+              {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},
+              {"selector": "[data-linear-comparison-losat-mode-option='tblastx']", "pressed": false},
+              {"label": "LOSATP mode", "value": "Similarity groups"},
+              {"label": "Bitscore", "value": 100},
+              {"label": "E-value", "value": "1e-3"},
+              {"label": "Minimum identity", "value": 20},
+              {"label": "Minimum length", "value": 0}
             ]
           }
         },
         {
+          "dataDependent": true,
           "title": "LOSATP similarity groups mode",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-03-02-losatp-orthogroups.webp",
-            "alt": "LOSAT Settings panel with the blastp mode menu open and the Similarity groups option highlighted.",
-            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Similarity groups option."
+            "alt": "Comparison Settings showing all three LOSAT Mode buttons with LOSATP pressed and the LOSATP mode menu open with Similarity groups highlighted.",
+            "caption": "Press LOSATP, then open LOSATP mode and choose the highlighted Similarity groups option."
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
             "crop": "openSelect",
             "cropPadding": {
-              "top": 80,
-              "right": 80,
-              "bottom": 66,
-              "left": 80
+              "top": 68,
+              "right": 12,
+              "bottom": 20,
+              "left": 140
             },
+            "clipSelectors": ["[data-linear-comparison-losat-mode]"],
             "openSelect": {
               "selectedLabel": "Similarity groups",
-              "options": ["Similarity groups", "Collinear blocks", "Pairwise"],
-              "label": "blastp mode"
-            }
+              "options": ["Similarity groups", "Collinear blocks", "Pairwise matches"],
+              "label": "LOSATP mode",
+              "hideFollowingSiblings": true
+            },
+            "openDetails": ["Settings"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup');"
+              },
+              {"type": "wait", "ms": 300}
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "orthogroup"
+            },
+            "visibleControls": [
+              {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
+              {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},
+              {"selector": "[data-linear-comparison-losat-mode-option='tblastx']", "pressed": false},
+              {"label": "LOSATP mode", "value": "Similarity groups"}
+            ],
+            "visibleText": ["LOSAT Mode"]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "Runtime and reproducibility",
+          "media": {
+            "src": "./media/majanivirus_orthogroup/manual-03-03-runtime-reproducibility.webp",
+            "alt": "Runtime and reproducibility controls with Safe total threads and 32 requested threads per run.",
+            "caption": "Request 32 threads per run under Runtime and reproducibility; the Safe total-thread budget caps the effective worker count."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
+            "openDetails": ["Advanced comparison and layout"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = '32';"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+              },
+              {
+                "type": "evaluate",
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'majanivirus-runtime'; section.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='majanivirus-runtime']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losat.executionMode": "auto",
+              "losat.totalThreadBudget": "safe",
+              "losat.threadsPerJob": "32"
+            },
+            "visibleText": ["Runtime and reproducibility", "Parallel runs"],
+            "visibleControls": [
+              {"label": "Execution", "value": "auto"},
+              {"label": "Total threads", "value": "safe"},
+              {"label": "Threads per run", "value": "32"}
+            ]
           }
         }
       ]
@@ -254,8 +327,6 @@
           ["Align to Center", "On"],
           ["Separate Strands", "On"],
           ["Lock Definition Column", "On"],
-          ["Pairwise Match Style", "Curve"],
-          ["Pairwise Match Height", "25"],
           ["Show Length / Coordinates", "Off"],
           ["Definition Font Size", "18"],
           ["Legend Position", "Right"],
@@ -309,36 +380,6 @@
                 "script": "const app = window.__GBDRAW_APP__; if (app?.form) app.form.legend = 'right';"
               }
             ]
-          }
-        },
-        {
-          "title": "Pairwise match layout",
-          "media": {
-            "src": "./media/majanivirus_orthogroup/manual-04-03-pairwise-match.webp",
-            "alt": "Pairwise Match card with Curve selected and Pairwise Match Height set to 25.",
-            "caption": "Set Pairwise Match Style to Curve and Pairwise Match Height to 25."
-          },
-          "capture": {
-            "source": "webapp",
-            "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
-            "viewport": {
-              "width": 1600,
-              "height": 1100
-            },
-            "openDetails": ["Pairwise Match"],
-            "actions": [
-              {
-                "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app) { app.adv.pairwise_match_style = 'curve'; app.adv.comparison_height = 25; }"
-              }
-            ],
-            "cardTitle": "Pairwise Match",
-            "cropPadding": {
-              "top": 12,
-              "right": 12,
-              "bottom": 12,
-              "left": 12
-            }
           }
         }
       ]
@@ -561,7 +602,7 @@
     },
     {
       "title": "Expected ribbons are missing",
-      "body": "Check that protein blastp mode is Similarity groups, then compare the input order and the bit score, E-value, and identity thresholds with the tutorial tables."
+      "body": "Check that LOSAT Mode is LOSATP and LOSATP mode is Similarity groups, then compare the input order and the bit score, E-value, and identity thresholds with the tutorial tables."
     },
     {
       "title": "The rows do not match the Gallery figure",

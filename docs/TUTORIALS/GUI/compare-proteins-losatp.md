@@ -49,13 +49,13 @@ Keep the first four records in their source orientation; turn on
 
 ## Step 1: Load the five Linear records
 
-Select **Linear**, **GenBank**, and **No comparison**. Upload `BGC0000708.gbk`,
-then use **Add Seq** four times and upload the remaining files in the table
-order.
+Select **Linear** and **GenBank**. Confirm the fresh **Current: No comparison**
+status. Upload `BGC0000708.gbk`, then use **Add sequence** in the **Input
+Genomes** header four times and upload the remaining files in the table order.
 
-For the fifth row, `BGC0000713`, turn on **Reverse complement**. This changes
-only its display orientation; it does not crop, split, or alter the source
-record.
+For the fifth row, `BGC0000713`, open **Record options** and turn on **Reverse
+complement**. This changes only its display orientation; it does not crop,
+split, or alter the source record.
 
 ![Five annotated BGC records selected for protein comparison](../../images/t-gui-04/01-input-ready.png)
 
@@ -68,22 +68,30 @@ comparison ribbons.
 
 ## Step 3: Configure Similarity groups
 
-Select **Run LOSAT**, **LOSATP**, and **Similarity groups**. Use deterministic
-execution and filtering:
+In **Comparison**, select **Run LOSAT** explicitly. Open **Settings** and choose
+the **LOSATP** button in **LOSAT Mode**, then choose **Pairwise matches** from
+the **LOSATP mode** menu. Under **Comparison appearance**, set **Match style** to **Curve**, then
+change **LOSATP mode** to **Similarity groups** and enter the filter values.
+The presentation switch preserves the Curve draft even though Similarity
+groups hides the appearance controls. Continue past **Generate Diagram**, open
+**Advanced comparison and layout**, and set the deterministic runtime values.
 
-| Control | Value |
-|---|---|
-| Execution | Serial |
-| Total threads | `1` |
-| Parallel runs | `1 run` |
-| Threads per run | `1` |
-| Bitscore | `50` |
-| E-value | `0.01` |
-| Minimum identity | `30` |
-| Minimum length | `0` |
-| Pairwise Match Style | Curve |
-| Separate Strands | Off |
-| Output Prefix | `bgc_losatp_groups` |
+| Section | Control | Value |
+|---|---|---|
+| Settings | LOSAT Mode | LOSATP |
+| Settings | LOSATP mode (appearance step) | Pairwise matches |
+| Settings / Comparison appearance | Match style | Curve |
+| Settings | LOSATP mode (final) | Similarity groups |
+| Settings / Result filters | Bitscore | `50` |
+| Settings / Result filters | E-value | `0.01` |
+| Settings / Result filters | Minimum identity | `30` |
+| Settings / Result filters | Minimum length | `0` |
+| Advanced comparison and layout | Execution | Serial |
+| Advanced comparison and layout | Total threads | `1` |
+| Advanced comparison and layout | Parallel runs | `1 run` |
+| Advanced comparison and layout | Threads per run | `1` |
+| Layout | Separate Strands | Off |
+| Basic | Output Prefix | `bgc_losatp_groups` |
 
 Match the Interactive SVG Gallery presentation with these display settings:
 
@@ -112,12 +120,13 @@ Definition line sizes to `20`, choose **Bold** only for **Name / Species**, and
 leave the other lines at **Normal**. Fit the complete final preview at **40%**
 before capturing or exporting it.
 
-![LOSATP Similarity groups mode selected with deterministic settings](../../images/t-gui-04/03-losatp-settings.png)
+![LOSATP selected with Similarity groups and result filters](../../images/t-gui-04/03-losatp-settings.png)
 
 ## Step 4: Run LOSATP
 
 Select **Generate Diagram** again. The result contains 23 stable
-groups and 77 displayed group links. The four displayed endpoint pairs are
+groups and 77 displayed group links. Similarity groups uses all-vs-all search
+evidence across the five records, but the four displayed endpoint pairs are
 `0708→0709`, `0709→0711`, `0711→0712`, and `0712→0713`.
 
 There is no direct `BGC0000708→BGC0000713` ribbon. Proteins shared by the first
@@ -138,9 +147,10 @@ x-coordinate. This is the alignment used by the Interactive SVG Gallery.
 
 ![Five whole BGC records aligned to similarity group og_1](../../images/t-gui-04/05-comparison-result.png)
 
-In the comparison between sequence 1 and sequence 2, set **Raw LOSAT
-filename** to `bgc_losatp_groups.tsv` and select **Save Raw LOSAT TSV**. The
-file contains 232 twelve-column rows. Select **SVG** after alignment to save
+Open **Advanced comparison and layout** and find **Raw LOSAT results**. In the
+comparison between sequence 1 and sequence 2, set **Raw LOSAT filename** to
+`bgc_losatp_groups.tsv` and select **Save Raw LOSAT TSV**. The file contains
+232 twelve-column rows. Select **SVG** after alignment to save
 `bgc_losatp_groups.svg`.
 
 ## Step 6: Inspect a group

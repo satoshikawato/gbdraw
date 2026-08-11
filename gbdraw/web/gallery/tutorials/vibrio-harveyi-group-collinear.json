@@ -84,24 +84,37 @@
       "note": "The SB1 assembly contains two chromosomes plus plasmid p1. The other four assemblies contain two chromosomes each, so no replicon is omitted.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-02-01-record-row.webp",
-            "alt": "First Linear input row with the SB1 GBFF, NZ_CP125875.1 record selector, species definition, and strain subtitle visible.",
-            "caption": "The first row selects NZ_CP125875.1 and assigns the species definition and SB1 subtitle."
+            "alt": "First Vibrio record card with Record options open, NZ_CP125875.1 selected, species definition entered, and SB1 subtitle entered.",
+            "caption": "Upload the SB1 GBFF, open Record options, select NZ_CP125875.1, and enter the species and strain text."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
             "viewport": {"width": 1280, "height": 1000},
-            "openDetails": ["Input Genomes"],
             "actions": [
               {
                 "type": "evaluate",
-                                "script": "const app = window.__GBDRAW_APP__; if (!app || app.linearSeqs?.length !== 11) throw new Error('Expected 11 restored Linear records.'); const seq = app.linearSeqs[0]; if (!seq?.gb?.name?.endsWith('__GCF_030060435.1_ASM3006043v1_genomic.gbff') || seq?.region_record_id !== 'NZ_CP125875.1' || seq?.definition !== '<i>Vibrio harveyi</i>' || seq?.record_subtitle !== 'SB1') throw new Error('First restored record row does not match the tutorial.'); const card = [...document.querySelectorAll('.card')].find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = [...(card?.querySelectorAll('div') || [])].find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); if (!row) throw new Error('First Linear input row is unavailable.'); row.querySelectorAll('details').forEach((node) => node.style.display = 'none'); [...row.children].forEach((node) => { if (node.textContent?.includes('LOSAT (pair #1')) node.style.display = 'none'; }); row.setAttribute('data-capture-tutorial-record-row', 'true'); row.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; if (!app || app.linearSeqs?.length !== 11) throw new Error('Expected 11 restored Linear records.'); app.sidebarWidth = 480; const seq = app.linearSeqs[0]; if (!seq?.gb?.name?.includes('GCF_030060435.1_ASM3006043v1_genomic.gbff')) throw new Error('First restored GenBank file does not match the tutorial.'); seq.region_record_id = 'NZ_CP125875.1'; seq.definition = '<i>Vibrio harveyi</i>'; seq.record_subtitle = 'SB1'; const row = document.querySelector(`[data-linear-record-card=\"${seq.uid}\"]`); const options = row?.querySelector(`[data-linear-record-options=\"${seq.uid}\"]`); if (!row || !options) throw new Error('First Linear record card is unavailable.'); options.open = true; row.setAttribute('data-capture-tutorial-record-row', 'true'); row.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture-tutorial-record-row='true']",
-            "cropPadding": 12
+            "cropPadding": {"top": 0, "right": 12, "bottom": 12, "left": 12},
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.length": 11,
+              "linearSeqs.0.region_record_id": "NZ_CP125875.1",
+              "linearSeqs.0.definition": "<i>Vibrio harveyi</i>",
+              "linearSeqs.0.record_subtitle": "SB1"
+            },
+            "visibleText": ["Record options", "Organism / strain (optional)", "Subtitle / title (optional)", "Region (optional)"],
+            "visibleControls": [
+              {"selector": "select[aria-label='Record selector for sequence 1']", "value": "NZ_CP125875.1"},
+              {"selector": "input[aria-label='Definition for sequence 1']", "value": "<i>Vibrio harveyi</i>"},
+              {"selector": "input[aria-label='Subtitle / title for sequence 1']", "value": "SB1"}
+            ]
           }
         }
       ]
@@ -111,34 +124,50 @@
       "body": "Turn on Arrange in rows. Assign the row numbers from the replicon table, retain the listed input order for left-to-right columns, and set Record gap to 48 px.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-03-01-record-layout.webp",
-            "alt": "Linear Record Layout panel with Arrange in rows enabled and the first four replicons assigned to rows 1, 1, 1, and 2.",
-            "caption": "Assign the three SB1 replicons to row 1 and each remaining chromosome pair to one species row."
+            "alt": "Record Layout controls with Arrange in rows enabled and the first four replicons assigned to rows 1, 1, 1, and 2.",
+            "caption": "Open Advanced comparison and layout, then assign the three SB1 replicons to row 1 and each remaining chromosome pair to one species row."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1280, "height": 1000},
+            "viewport": {"width": 1280, "height": 1400},
+            "openDetails": ["Advanced comparison and layout"],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const inputs = [...document.querySelectorAll('input[aria-label=\"Linear record row\"]')]; const expected = '1,1,1,2,2,3,3,4,4,5,5'; if (inputs.map((node) => node.value).join(',') !== expected) throw new Error('Restored row assignments do not match the tutorial.'); const heading = [...document.querySelectorAll('div')].find((node) => node.textContent?.trim() === 'Record Layout'); const panel = heading?.parentElement?.parentElement; const rows = inputs.slice(0, 4).map((node) => node.parentElement); if (!heading || !panel || rows.some((row) => !row)) throw new Error('Record Layout controls are unavailable.'); heading.parentElement.setAttribute('data-capture-record-layout-heading', 'true'); rows.forEach((row, index) => row.setAttribute('data-capture-record-layout-row', String(index + 1))); const gap = [...panel.querySelectorAll('label')].find((node) => node.textContent?.includes('Record gap')); gap?.setAttribute('data-capture-record-layout-gap', 'true'); heading.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const inputs = [...document.querySelectorAll('input[aria-label^=\"Linear record row for sequence\"]')]; const expected = '1,1,1,2,2,3,3,4,4,5,5'; if (inputs.map((node) => node.value).join(',') !== expected) throw new Error('Restored row assignments do not match the tutorial.'); const heading = [...document.querySelectorAll('[data-linear-advanced-comparison] .linear-primary-label')].find((node) => node.textContent?.trim() === 'Record Layout'); const panel = heading?.parentElement; const rows = inputs.slice(0, 4).map((node) => node.parentElement); if (!heading || !panel || rows.some((row) => !row)) throw new Error('Record Layout controls are unavailable.'); heading.setAttribute('data-capture-record-layout-heading', 'true'); rows.forEach((row, index) => row.setAttribute('data-capture-record-layout-row', String(index + 1))); const gap = [...panel.querySelectorAll('label')].find((node) => node.textContent?.includes('Record gap')); gap?.setAttribute('data-capture-record-layout-gap', 'true'); heading.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": ["[data-capture-record-layout-heading='true']", "[data-capture-record-layout-row]", "[data-capture-record-layout-gap='true']"],
-            "cropPadding": 12
+            "cropPadding": 12,
+            "assertAppState": {
+              "mode": "linear",
+              "linearRecordLayoutEnabled": true,
+              "linearRecordGap": 48,
+              "linearRecordRows.length": 11
+            },
+            "visibleText": ["Record Layout", "Arrange in rows", "Record gap (px)"],
+            "visibleControls": [
+              {"label": "Arrange in rows", "checked": true},
+              {"selector": "input[aria-label='Linear record row for sequence 1']", "value": 1},
+              {"selector": "input[aria-label='Linear record row for sequence 4']", "value": 2},
+              {"label": "Record gap (px)", "value": 48}
+            ]
           }
         }
       ]
     },
     {
       "title": "Run LOSATP in Collinear blocks mode",
-      "body": "Under Apply to all adjacent gaps, select Run LOSAT and LOSATP. In LOSAT Settings, choose Collinear blocks and use adjacent pairs as evidence.",
+      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP and LOSATP mode to Collinear blocks, then use Adjacent pairs as evidence. Diagonal drift is under Advanced comparison and layout.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["blastp mode", "Collinear blocks"],
+          ["LOSAT Mode", "LOSATP"],
+          ["LOSATP mode", "Collinear blocks"],
           ["Max unit gap", "2"],
           ["Min block genes", "3"],
           ["Evidence scope", "Adjacent pairs"],
@@ -152,43 +181,143 @@
       "note": "With multi-record rows, Adjacent pairs searches every cross-record combination between neighboring rows. This layout evaluates 18 record pairs across four species boundaries; same-row and non-neighboring-row pairs are omitted.",
       "operations": [
         {
-          "genericMedia": true,
+          "dataDependent": true,
+          "title": "Run LOSAT for adjacent pairs",
           "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-04-01-collinear-reduction.webp",
-            "alt": "LOSAT Settings panel with the blastp mode menu open and Collinear blocks highlighted.",
-            "caption": "Choose Collinear blocks for blastp mode."
-          }
-        },
-        {
-          "genericMedia": true,
-          "media": {
-            "src": "./media/hepatoplasmataceae_collinear/manual-04-02-orientation-identity.webp",
-            "alt": "LOSAT Settings panel with the Color mode menu open and Orientation plus identity highlighted.",
-            "caption": "Choose Orientation + identity for Color mode."
+            "src": "./media/vibrio-harveyi-group-collinear/manual-04-00-run-adjacent-losat.webp",
+            "alt": "Comparison card with Run LOSAT active, Current: Run LOSAT status, closed Settings, and the Selected pairs disclosure.",
+            "caption": "Choose Run LOSAT to activate comparisons across adjacent display rows."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear');"
+              },
+              {"type": "wait", "ms": 300}
+            ],
+            "selector": "[data-linear-comparison-card]",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear"
+            },
+            "visibleText": ["Comparison", "Run LOSAT", "Current: Run LOSAT", "Settings", "Selected pairs"]
           }
         },
         {
           "dataDependent": true,
+          "title": "Collinear blocks LOSATP mode",
+          "media": {
+            "src": "./media/vibrio-harveyi-group-collinear/manual-04-01-search-method-collinear.webp",
+            "alt": "Vibrio Comparison Settings showing all three LOSAT Mode buttons with LOSATP pressed and the LOSATP mode menu open with Collinear blocks highlighted.",
+            "caption": "Press LOSATP, then open LOSATP mode and choose the highlighted Collinear blocks option."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
+            "crop": "openSelect",
+            "cropPadding": {"top": 68, "right": 12, "bottom": 20, "left": 140},
+            "clipSelectors": ["[data-linear-comparison-losat-mode]"],
+            "openSelect": {
+              "selectedLabel": "Collinear blocks",
+              "options": ["Similarity groups", "Collinear blocks", "Pairwise matches"],
+              "label": "LOSATP mode",
+              "hideFollowingSiblings": true
+            },
+            "openDetails": ["Settings"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear');"
+              },
+              {"type": "wait", "ms": 300}
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear"
+            },
+            "visibleControls": [
+              {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
+              {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},
+              {"selector": "[data-linear-comparison-losat-mode-option='tblastx']", "pressed": false},
+              {"label": "LOSATP mode", "value": "Collinear blocks"}
+            ],
+            "visibleText": ["LOSAT Mode"]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "Collinear color mode",
+          "media": {
+            "src": "./media/vibrio-harveyi-group-collinear/manual-04-02-color-mode-orientation-identity.webp",
+            "alt": "Vibrio Comparison Settings with the Color mode menu open and Orientation + identity highlighted.",
+            "caption": "Open Color mode in Settings and choose the highlighted Orientation + identity option."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
+            "crop": "openSelect",
+            "cropPadding": {"top": 24, "right": 80, "bottom": 20, "left": 80},
+            "openSelect": {
+              "selectedLabel": "Orientation + identity",
+              "options": ["Average identity", "Orientation", "Orientation + identity"],
+              "label": "Color mode"
+            },
+            "openDetails": ["Settings"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); app.losat.blastp.collinearColorMode = 'orientation_identity';"
+              }
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear",
+              "losat.blastp.collinearColorMode": "orientation_identity"
+            },
+            "visibleControls": [
+              {"label": "Color mode", "value": "Orientation + identity"}
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "Adjacent-pair evidence scope",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-04-03-adjacent-pairs.webp",
-            "alt": "LOSAT Settings panel with the Evidence scope menu open and Adjacent pairs highlighted.",
-            "caption": "Choose Adjacent pairs for Evidence scope."
+            "alt": "Vibrio Comparison Settings with the Evidence scope menu open and Adjacent pairs highlighted.",
+            "caption": "Open Evidence scope in Settings and choose the highlighted Adjacent pairs option."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
             "crop": "openSelect",
-            "cropPadding": {"top": 54, "right": 80, "bottom": 24, "left": 80},
+            "cropPadding": {"top": 20, "right": 80, "bottom": 0, "left": 80},
             "openSelect": {
               "selectedLabel": "Adjacent pairs",
               "options": ["Adjacent pairs", "All records"],
               "label": "Evidence scope"
             },
-            "openDetails": ["LOSAT Settings"],
+            "openDetails": ["Settings"],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.linearComparisonPlan.mode = 'adjacent'; app.linearComparisonPlan.defaultSource = 'losat'; const blastp = app.losat?.blastp; if (Number(blastp?.collinearMinAnchors) !== 3 || Number(blastp?.collinearMaxUnitGap) !== 2 || Number(blastp?.collinearMaxDiagonalDrift) !== 2 || blastp?.collinearColorMode !== 'orientation_identity' || blastp?.collinearSearchScope !== 'adjacent') throw new Error(`Restored collinear settings do not match the tutorial: ${JSON.stringify(blastp)}`);"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); const blastp = app.losat?.blastp; if (Number(blastp?.collinearMinAnchors) !== 3 || Number(blastp?.collinearMaxUnitGap) !== 2 || Number(blastp?.collinearMaxDiagonalDrift) !== 2 || blastp?.collinearColorMode !== 'orientation_identity' || blastp?.collinearSearchScope !== 'adjacent') throw new Error(`Restored collinear settings do not match the tutorial: ${JSON.stringify(blastp)}`);"
               }
             ],
             "assertAppState": {
@@ -204,6 +333,48 @@
                 "label": "Evidence scope",
                 "value": "Adjacent pairs"
               }
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "Advanced collinear search",
+          "media": {
+            "src": "./media/vibrio-harveyi-group-collinear/manual-04-04-advanced-collinear.webp",
+            "alt": "Vibrio Advanced collinear search controls with Diagonal drift set to 2.",
+            "caption": "Open Advanced comparison and layout and set Diagonal drift to 2 under Advanced collinear search."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
+            "openDetails": ["Advanced comparison and layout"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); app.losat.blastp.collinearMaxDiagonalDrift = 2;"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Advanced collinear search'))"
+              },
+              {
+                "type": "evaluate",
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Advanced collinear search')); if (!section) throw new Error('Advanced collinear search was not found.'); section.dataset.capture = 'vibrio-advanced-collinear'; section.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='vibrio-advanced-collinear']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losat.blastp.mode": "collinear",
+              "losat.blastp.collinearMaxDiagonalDrift": 2
+            },
+            "visibleText": ["Advanced collinear search", "Merge conflicts", "Paralog links per group"],
+            "visibleControls": [
+              {"label": "Diagonal drift", "value": 2}
             ]
           }
         }
@@ -413,7 +584,7 @@
     },
     {
       "title": "The block colors do not match the Gallery",
-      "body": "Set Color mode to Orientation + identity, Evidence scope to Adjacent pairs, and retain Collinear blocks as the blastp mode."
+      "body": "Set LOSAT Mode to LOSATP, LOSATP mode to Collinear blocks, Color mode to Orientation + identity, and Evidence scope to Adjacent pairs."
     },
     {
       "title": "The browser becomes unresponsive",

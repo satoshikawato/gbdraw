@@ -30,15 +30,20 @@ const readableFile = (name, text) => {
     reads: () => reads
   };
 };
-const unreadableFile = (name) => ({
-  name,
-  type: 'text/plain',
-  size: 1,
-  lastModified: 1,
-  arrayBuffer: async () => {
-    throw new Error(`inactive file was read: ${name}`);
-  }
-});
+const unreadableFile = (name) => {
+  let reads = 0;
+  return {
+    name,
+    type: 'text/plain',
+    size: 1,
+    lastModified: 1,
+    arrayBuffer: async () => {
+      reads += 1;
+      throw new Error(`inactive file was read: ${name}`);
+    },
+    reads: () => reads
+  };
+};
 
 const circularInput = readableFile('active.gb', 'LOCUS active');
 const retainedDepth = unreadableFile('retained-depth.tsv');
@@ -282,3 +287,5 @@ const noneSerialized = await serializeActiveRenderFiles(
 );
 assert.deepEqual(noneSerialized.linearComparisons, []);
 assert.deepEqual(noneSerialized.linearCanonicalComparisons, []);
+assert.equal(inactiveComparison.reads(), 0);
+assert.equal(inactiveCanonical.reads(), 0);

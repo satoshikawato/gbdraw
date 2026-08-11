@@ -40,6 +40,23 @@ class AuditInactiveFile extends AuditFile {
   }
 }
 
+class AuditCacheMap extends Map {
+  constructor(entries = []) {
+    super(entries);
+    this.probes = 0;
+  }
+
+  get(key) {
+    this.probes += 1;
+    return super.get(key);
+  }
+
+  has(key) {
+    this.probes += 1;
+    return super.has(key);
+  }
+}
+
 globalThis.File = AuditFile;
 
 const { EXPECTED_WEB_RUNTIME_CAPABILITIES } = await import(
@@ -616,6 +633,50 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     losatFilename: '',
     losatFilenameActive: false
   });
+  Object.assign(state.adv, {
+    comparison_height: 'dormant-invalid-height',
+    min_bitscore: 'dormant-invalid-bitscore',
+    evalue: 'dormant-invalid-evalue',
+    identity: 'dormant-invalid-identity',
+    alignment_length: 'dormant-invalid-alignment',
+    pairwise_match_style: 'dormant-invalid-style'
+  });
+  state.losatProgram.value = 'dormant-invalid-program';
+  Object.assign(state.losat, {
+    totalThreadBudget: 'dormant-invalid-budget',
+    threadsPerJob: 'dormant-invalid-threads',
+    parallelWorkers: 'dormant-invalid-workers'
+  });
+  Object.assign(state.losat.blastp, {
+    mode: 'dormant-invalid-presentation',
+    maxHits: 'dormant-invalid-max-hits',
+    orthogroupMembershipMode: 'dormant-invalid-membership',
+    orthogroupMemberMaxHits: 'dormant-invalid-member-hits',
+    collinearMinAnchors: 'dormant-invalid-anchors',
+    collinearMaxUnitGap: 'dormant-invalid-unit-gap',
+    collinearMaxDiagonalDrift: 'dormant-invalid-drift',
+    collinearMaxConflictsInMergeGap: 'dormant-invalid-conflicts',
+    collinearMaxParalogLinksPerOrthogroup: 'dormant-invalid-paralogs',
+    collinearColorMode: 'dormant-invalid-color',
+    collinearAnchorMode: 'dormant-invalid-anchor-mode',
+    collinearSearchScope: 'dormant-invalid-scope'
+  });
+  const dormantComparisonSettingsBefore = structuredClone({
+    adv: {
+      comparison_height: state.adv.comparison_height,
+      min_bitscore: state.adv.min_bitscore,
+      evalue: state.adv.evalue,
+      identity: state.adv.identity,
+      alignment_length: state.adv.alignment_length,
+      pairwise_match_style: state.adv.pairwise_match_style
+    },
+    losatProgram: state.losatProgram.value,
+    losat: state.losat
+  });
+  const dormantRawCache = new AuditCacheMap([['dormant-raw', { stale: true }]]);
+  const dormantDerivedCache = new AuditCacheMap([['dormant-derived', { stale: true }]]);
+  state.losatCache.value = dormantRawCache;
+  state.losatDerivedCache.value = dormantDerivedCache;
   state.files.linearCanonicalComparisons = [{
     kind: 'precomputed',
     edgeKey: 'linear-none-first->linear-none-second',
@@ -749,10 +810,47 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.equal(ensurePyodideCalls, 0);
   assert.equal(pyodideWrites, 0);
   assert.equal(losatCalls, 0);
+  assert.equal(dormantRawCache.probes, 0);
+  assert.equal(dormantDerivedCache.probes, 0);
   assert.equal(annotationValidationCalls, 1);
   assert.equal(activePrimaryReads, primaryReadsBefore + 3);
   assert.equal(inactiveFileReads, inactiveReadsBefore);
   assert.deepEqual(payload.request.comparisons, []);
+  assert.deepEqual({
+    adv: {
+      comparison_height: state.adv.comparison_height,
+      min_bitscore: state.adv.min_bitscore,
+      evalue: state.adv.evalue,
+      identity: state.adv.identity,
+      alignment_length: state.adv.alignment_length,
+      pairwise_match_style: state.adv.pairwise_match_style
+    },
+    losatProgram: state.losatProgram.value,
+    losat: state.losat
+  }, dormantComparisonSettingsBefore);
+  for (const field of [
+    'pairwiseMatchStyle',
+    'evalue',
+    'bitscore',
+    'identity',
+    'alignmentLength'
+  ]) {
+    assert.equal(Object.hasOwn(payload.request.diagramOptions, field), false);
+  }
+  assert.equal(
+    Object.hasOwn(
+      payload.request.diagramOptions.configOverrides,
+      'canvas.linear.comparison_height'
+    ),
+    false
+  );
+  assert.equal(
+    Object.hasOwn(
+      payload.request.diagramOptions.configOverrides,
+      'objects.blast_match.style'
+    ),
+    false
+  );
   assert.equal(payload.request.diagramOptions.annotations.sets[0].id, 'active-annotation');
   assert.equal(payload.request.diagramOptions.depthTracks.length, 1);
   assert.equal(

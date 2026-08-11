@@ -39,11 +39,16 @@ Tutorial](./TUTORIALS/GUI/first-linear-genome-diagram.md).
 
 Use an uploaded BLAST table when the search ran elsewhere or the evidence must
 stay fixed. LOSATN compares nucleotide sequence; TLOSATX is useful when coding
-similarity remains after nucleotide divergence. LOSATP Pairwise shows
-individual protein matches, Similarity groups show search-derived membership,
-and Collinear mode emphasizes compatible ordered anchors. Circular rings place
-retained evidence around one reference. Linear comparisons connect selected
-query and subject record endpoints.
+similarity remains after nucleotide divergence. In Linear **Settings**,
+the three **LOSAT Mode** buttons choose LOSATN, LOSATP, or TLOSATX. When LOSATP is selected,
+**LOSATP mode** chooses Similarity groups, Collinear blocks, or Pairwise
+matches. Pairwise matches show individual protein matches, Similarity groups
+show search-derived membership, and Collinear blocks emphasize compatible
+ordered anchors. Similarity groups always searches all loaded record pairs.
+Fresh Collinear settings also default to **All records**, while a saved
+**Adjacent pairs** scope remains explicit. Circular rings place retained
+evidence around one reference. Linear comparisons connect selected query and
+subject record endpoints.
 
 The [comparison capability
 matrix](./REFERENCE/comparison-programs-thresholds-and-results.md#capability-matrix)
@@ -145,9 +150,13 @@ section lists the empty-result cases.
 
 ### How do I draw several Linear records without comparing them in the web app?
 
-Choose **No comparison** under **Apply to all adjacent gaps**. Individual
-boundaries and **Advanced pair setup** can still define selected edges. See the
-[web comparison controls](./REFERENCE/web-app.md#comparison-surfaces) and
+Fresh Linear pages and **Reset Settings** start with **No comparison**. If a
+comparison is active, select **No comparison** in the **Comparison** command
+group. The three buttons there apply one choice to every adjacent pair; the
+separate **Current:** status reports the effective plan. Open **Selected pairs
+(N)** to inspect or edit a custom pair plan. Choosing **No comparison** keeps
+retained pair files and raw-result names inactive for later reuse. See the [web
+comparison controls](./REFERENCE/web-app.md#comparison-surfaces) and
 [selected-edge contract](./REFERENCE/comparison-programs-thresholds-and-results.md#selected-linear-edges).
 
 ### Why did gbdraw rerun LOSATP after I loaded a session?

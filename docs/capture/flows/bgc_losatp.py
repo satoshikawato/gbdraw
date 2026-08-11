@@ -26,8 +26,9 @@ from flows.web_capture import (
     capture_screenshot,
     fit_complete_linear_preview,
     generate_and_inspect,
-    linear_pair,
     open_browser_capture,
+    open_linear_comparison_disclosure,
+    select_linear_losat_mode,
     set_feature_search_visible,
     wait_for_worker,
 )
@@ -96,7 +97,7 @@ class BgcLosatpResult:
 def assert_bgc_fixtures() -> None:
     """Require five unchanged, whole, naturally linear BGC records."""
 
-    for path, size, digest, record_id, length in GUI_BGC_FIXTURES:
+    for path, size, digest, record_id, length, _organism in GUI_BGC_FIXTURES:
         assert_fixture_identity(path, expected_size=size, expected_sha256=digest)
         records = list(SeqIO.parse(path, "genbank"))
         if len(records) != 1:
@@ -117,16 +118,14 @@ def _set_bgc_inputs(page: Page) -> None:
     linear.click()
     expect(linear).to_have_attribute("aria-pressed", "true")
     page.get_by_role("radio", name="GenBank", exact=True).check()
-    global_source = page.locator('[data-capture="linear-blast-source"]')
-    expect(global_source).to_have_count(1)
-    no_comparison = global_source.get_by_role(
-        "radio", name="No comparison", exact=True
+    expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+        "Current: No comparison"
     )
-    no_comparison.check()
 
     add_sequence = page.get_by_role("button", name="Add sequence", exact=True)
+    expect(add_sequence).to_have_count(2)
     for _ in range(4):
-        add_sequence.click()
+        add_sequence.first.click()
     for index, fixture in enumerate(GUI_BGC_FIXTURES, start=1):
         page.get_by_test_id(f"linear-genbank-{index}").set_input_files(fixture[0])
 
@@ -141,6 +140,12 @@ def _set_bgc_inputs(page: Page) -> None:
         BGC_RECORD_PRESENTATION,
         start=1,
     ):
+        record_options = page.get_by_role(
+            "button",
+            name=f"Record options for sequence {index}",
+            exact=True,
+        )
+        record_options.click()
         definition_input = page.get_by_label(
             f"Definition for sequence {index}",
             exact=True,
@@ -162,6 +167,7 @@ def _set_bgc_inputs(page: Page) -> None:
             expect(reverse_control).to_be_checked()
         else:
             expect(reverse_control).not_to_be_checked()
+        record_options.click()
 
 
 def _set_gallery_quality_presentation(
@@ -280,58 +286,95 @@ def _set_gallery_quality_presentation(
         expect(lock_definition).to_be_checked()
 
 
-def _configure_losatp(page: Page, *, mode: str, output_prefix: str) -> None:
-    global_source = page.locator('[data-capture="linear-blast-source"]')
-    expect(global_source).to_have_count(1)
-    run_losat = global_source.get_by_role(
-        "radio", name="Run LOSAT", exact=True
+def _configure_losatp(
+    page: Page, *, mode: str, output_prefix: str
+) -> tuple[Any, Any]:
+    commands = page.get_by_role(
+        "group", name="Set all adjacent comparisons", exact=True
     )
-    run_losat.check()
-    expect(run_losat).to_be_checked()
-    losatp = page.get_by_role("radio", name="LOSATP", exact=True)
-    losatp.check()
-    expect(losatp).to_be_checked()
+    run_losat = commands.get_by_role(
+        "button", name="Run LOSAT for all adjacent pairs", exact=True
+    )
+    run_losat.click()
+    expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+        "Current: Run LOSAT for all adjacent pairs"
+    )
 
-    execution = page.get_by_role("combobox", name="LOSAT execution", exact=True)
+    settings = open_linear_comparison_disclosure(
+        page,
+        "settings",
+        "Comparison Settings",
+    )
+    select_linear_losat_mode(
+        settings,
+        label="LOSATP",
+        mode_key="blastp",
+    )
+    losatp_mode = settings.get_by_role(
+        "combobox", name="LOSATP mode", exact=True
+    )
+    losatp_mode.select_option("pairwise")
+    expect(losatp_mode).to_have_value("pairwise")
+    match_style = settings.get_by_label("Pairwise Match Style", exact=True)
+    match_style.select_option("curve")
+    expect(match_style).to_have_value("curve")
+    losatp_mode.select_option(mode)
+    expect(losatp_mode).to_have_value(mode)
+
+    settings.get_by_label(
+        "Linear comparison minimum bitscore", exact=True
+    ).fill("50")
+    settings.get_by_label(
+        "Linear comparison maximum e-value", exact=True
+    ).fill("0.01")
+    settings.get_by_label(
+        "Linear comparison minimum identity", exact=True
+    ).fill("30")
+    settings.get_by_label(
+        "Linear comparison minimum alignment length", exact=True
+    ).fill("0")
+
+    if mode == "collinear":
+        settings.get_by_label("Collinear max unit gap", exact=True).fill("1")
+        settings.get_by_label(
+            "Collinear minimum block genes", exact=True
+        ).fill("2")
+        settings.get_by_label("Collinear color mode", exact=True).select_option(
+            "orientation_identity"
+        )
+        settings.get_by_label(
+            "Collinear evidence scope", exact=True
+        ).select_option("adjacent")
+
+    advanced = open_linear_comparison_disclosure(
+        page,
+        "advanced",
+        "Advanced comparison and layout",
+    )
+    execution = advanced.get_by_role(
+        "combobox", name="LOSAT execution", exact=True
+    )
     execution.select_option("serial")
-    total_threads = page.get_by_role(
+    total_threads = advanced.get_by_role(
         "combobox", name="LOSAT total threads", exact=True
     )
     total_threads.select_option("1")
-    parallel_runs = page.get_by_role(
+    parallel_runs = advanced.get_by_role(
         "combobox", name="LOSAT parallel runs", exact=True
     )
     parallel_runs.select_option("1")
-    threads_per_run = page.get_by_role(
+    threads_per_run = advanced.get_by_role(
         "combobox", name="LOSAT threads per run", exact=True
     )
     if threads_per_run.is_enabled():
         threads_per_run.select_option("1")
 
-    blastp_mode = page.get_by_label("LOSATP blastp mode", exact=True)
-    blastp_mode.select_option(mode)
-    page.get_by_label("LOSATP minimum bitscore", exact=True).fill("50")
-    page.get_by_label("LOSATP maximum e-value", exact=True).fill("0.01")
-    page.get_by_label("LOSATP minimum identity", exact=True).fill("30")
-    page.get_by_label("LOSATP minimum alignment length", exact=True).fill("0")
-
     if mode == "collinear":
-        page.get_by_label("Collinear max unit gap", exact=True).fill("1")
-        page.get_by_label("Collinear minimum block genes", exact=True).fill("2")
-        page.get_by_label("Collinear color mode", exact=True).select_option(
-            "orientation_identity"
-        )
-        page.get_by_label("Collinear evidence scope", exact=True).select_option(
-            "adjacent"
-        )
-        page.get_by_label("Collinear diagonal drift", exact=True).fill("1")
-        page.get_by_label("Collinear merge conflicts", exact=True).fill("0")
+        advanced.get_by_label("Collinear diagonal drift", exact=True).fill("1")
+        advanced.get_by_label("Collinear merge conflicts", exact=True).fill("0")
 
-    pairwise = page.get_by_label("Pairwise Match", exact=True)
-    pairwise.click()
-    page.get_by_label("Pairwise Match Style", exact=True).select_option("curve")
-    pairwise.click()
     page.get_by_label("Output Prefix", exact=True).fill(output_prefix)
+    return settings, advanced
 
 
 def _inspect_popup(page: Page, *, mode: str) -> dict[str, Any]:
@@ -609,6 +652,12 @@ def capture_bgc_losatp(
             reverse_complement = page.get_by_label(
                 "Reverse complement for sequence 5", exact=True
             )
+            fifth_options = page.get_by_role(
+                "button",
+                name="Record options for sequence 5",
+                exact=True,
+            )
+            fifth_options.click()
             reverse_complement.evaluate(
                 "(element) => element.scrollIntoView({ block: 'center' })"
             )
@@ -619,6 +668,7 @@ def capture_bgc_losatp(
             screenshot_bytes[name] = capture_screenshot(
                 page, output_paths[name], "Linear"
             )
+            fifth_options.click()
 
         if include_plain_result:
             generate_and_inspect(
@@ -640,7 +690,7 @@ def capture_bgc_losatp(
             title=title,
             match_gallery_definitions=match_gallery_definitions,
         )
-        _configure_losatp(
+        settings, advanced = _configure_losatp(
             page,
             mode=mode,
             output_prefix=output_prefix,
@@ -689,6 +739,18 @@ def capture_bgc_losatp(
                     "Expected 23 stable LOSATP groups, "
                     f"found {group_count}: {group_debug!r}"
                 )
+            telemetry = page.evaluate(
+                "() => window.__GBDRAW_APP__?.lastRunInfo?.losatTelemetry || {}"
+            )
+            expected_jobs = len(GUI_BGC_FIXTURES) ** 2
+            if (
+                telemetry.get("totalPairs") != expected_jobs
+                or telemetry.get("uniqueJobs") != expected_jobs
+            ):
+                raise AssertionError(
+                    "Similarity groups did not use all-vs-all LOSATP evidence: "
+                    f"{telemetry!r}"
+                )
         else:
             group_count = len(
                 {
@@ -701,9 +763,23 @@ def capture_bgc_losatp(
         set_feature_search_visible(page, visible=False)
         fit_complete_linear_preview(page, target_zoom="40%")
         name = screenshot_names["settings"]
-        page.locator('[data-capture="linear-blast-source"]').evaluate(
-            "(element) => element.scrollIntoView({ block: 'start' })"
+        losat_mode_group = settings.get_by_role(
+            "group", name="LOSAT Mode", exact=True
         )
+        losat_mode_group.evaluate(
+            """
+            (element) => {
+              element.scrollIntoView({ block: 'center' });
+              let owner = element.parentElement;
+              while (owner) {
+                owner.scrollLeft = 0;
+                owner = owner.parentElement;
+              }
+              window.scrollTo(0, window.scrollY);
+            }
+            """
+        )
+        expect(losat_mode_group).to_be_in_viewport()
         screenshot_bytes[name] = capture_screenshot(
             page, output_paths[name], "Linear"
         )
@@ -732,22 +808,21 @@ def capture_bgc_losatp(
         else:
             fit_complete_linear_preview(page, target_zoom="40%")
         if scenario_id == "H-GUI-07":
-            result_pair = linear_pair(page, 1, 2)
-            result_pair.evaluate(
+            raw_result = advanced.locator('[data-linear-raw-result]').first
+            raw_result.evaluate(
                 "(element) => element.scrollIntoView({ block: 'center' })"
             )
-            expect(result_pair).to_contain_text("Raw result ready")
+            expect(raw_result).to_contain_text("Raw result ready")
         name = screenshot_names["result"]
         screenshot_bytes[name] = capture_screenshot(
             page, output_paths[name], "Linear"
         )
 
         if raw_tsv_name is not None:
-            first_pair = linear_pair(page, 1, 2)
-            raw_name = first_pair.get_by_role(
+            raw_name = advanced.get_by_role(
                 "textbox", name="Raw LOSAT filename for #1 to #2", exact=True
             )
-            raw_button = first_pair.get_by_role(
+            raw_button = advanced.get_by_role(
                 "button", name="Save Raw LOSAT TSV for #1 to #2", exact=True
             )
             expect(raw_button).to_be_enabled()

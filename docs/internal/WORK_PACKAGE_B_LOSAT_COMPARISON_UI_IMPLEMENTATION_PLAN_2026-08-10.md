@@ -1,9 +1,17 @@
 # Work package B: LOSAT・比較UIの実装計画
 
 - Date: 2026-08-10
-- Status: planned
+- Status: completed
 - Baseline: `docs_renovation` / `3d1d9d287cc9`
 - Source: `gbdraw v0.14.0 Release Roadmap and Codex Implementation Brief` の Work package B
+
+> User amendment (2026-08-11): LOSAT programとLOSATP presentationを一つの
+> search-method selectorへ平坦化する判断を置き換える。Linear `Settings`は
+> `LOSAT Mode`の3 button（LOSATN / LOSATP / TLOSATX）を表示し、LOSATP
+> 選択時だけ`LOSATP mode` menu（Similarity groups / Collinear blocks /
+> Pairwise matches）を表示する。既存の`losatProgram`と
+> `losat.blastp.mode`が引き続き意味状態のownerであり、新しいpersisted
+> fieldは追加しない。
 
 この文書は、Work package B「Clean up the LOSAT and comparison UI」を実装可能な作業単位へ分解した計画である。文書作成時点ではproduction code、test、Gallery artifactを変更していない。
 
@@ -95,21 +103,46 @@ Linearには`selected`とmixed-source planがあるため、この3つはstate�
 
 global actionを押したときだけ、active topologyを`none`または`adjacent`へ切り替える。edge draft、upload、custom filenameは削除しない。
 
-### D3. search methodは既存fieldのUI projection
+### D3. program buttonとLOSATP presentation menuは既存fieldの二段UI projection
 
-画面上は次のmethodを一つのselectorとして見せる。
+画面上はprogramを3つのbutton、LOSATP presentationを条件付きmenuとして見せる。
 
-| 表示値 | 既存stateへの写像 |
+| `LOSAT Mode` button | 既存stateへの写像 |
 | --- | --- |
 | `LOSATN` | `losatProgram = 'blastn'` |
+| `LOSATP` | `losatProgram = 'blastp'` |
 | `TLOSATX` | `losatProgram = 'tblastx'` |
-| `LOSATP Pairwise` | `losatProgram = 'blastp'`、`losat.blastp.mode = 'pairwise'` |
-| `Similarity groups` | `losatProgram = 'blastp'`、`losat.blastp.mode = 'orthogroup'` |
-| `Collinear blocks` | `losatProgram = 'blastp'`、`losat.blastp.mode = 'collinear'` |
 
-新しいpersisted enumは作らない。selector actionは上記2 fieldだけを変更し、inactive methodの設定値を初期化しない。`Collinear blocks`への切替時に`adv.pairwise_match_style`を直接`curve`へ書き換える現行side effectは削除し、保存済みappearanceを維持する。
+`LOSATP mode` menuは`LOSAT Mode = LOSATP`のときだけ表示する。
 
-selected/mixed planでLOSAT edgeがある場合、表示するmethodは`LOSATN`、`TLOSATX`、`LOSATP Pairwise`に限る。`Similarity groups`と`Collinear blocks`はall-adjacent LOSATのpresentationであり、selected topologyでは既存resolverが拒否する。UIはこの2 optionをdisabledにして理由と`Use all adjacent LOSAT` actionを示す。actionを押した場合だけtopologyをadjacentへ変更する。自動変換しない。
+| `LOSATP mode`の表示値 | 既存stateへの写像 |
+| --- | --- |
+| `Similarity groups` | `losat.blastp.mode = 'orthogroup'` |
+| `Collinear blocks` | `losat.blastp.mode = 'collinear'` |
+| `Pairwise matches` | `losat.blastp.mode = 'pairwise'` |
+
+新しいpersisted enumは作らない。`setLinearComparisonLosatMode`はbuttonからprogram、
+`setLinearComparisonLosatpMode`はLOSATP presentationだけを変更し、inactive
+modeの設定値を初期化しない。DOMのaccessible nameは`LOSAT Mode`と
+`LOSATP mode`、識別attributeは`data-linear-comparison-losat-mode`と
+`data-linear-comparison-losatp-mode`とする。`Collinear blocks`への切替時に
+`adv.pairwise_match_style`を直接`curve`へ書き換える現行side effectは削除し、
+保存済みappearanceを維持する。summaryはLOSATP選択時に
+`LOSATP · <presentation>`と表示する。
+
+selected/mixed planでLOSAT edgeがある場合、`LOSAT Mode`はLOSATN、LOSATP、
+TLOSATXを選べるが、LOSATPのpresentationは`Pairwise matches`だけを選べる。
+`Similarity groups`と`Collinear blocks`はall-adjacent LOSATのpresentationで
+あり、selected topologyでは既存resolverが拒否する。UIはこの2 optionを
+disabledにして理由と`Use all adjacent LOSAT` actionを示す。actionを押した
+場合だけtopologyをadjacentへ変更する。自動変換しない。
+
+Similarity groupsのsearch evidenceは既存run ownerどおり常にall-vs-allで、
+`collinearSearchScope`を参照せずscope selectorも表示しない。Collinear blocks
+だけが`collinearSearchScope`を使う。fresh factoryとReset profileの既定値は
+`all`へ変更するが、normalizer fallbackとsessionに明示保存された`adjacent`
+は維持する。既存Gallery sessionとchecked Gallery再現recipeは明示
+`Adjacent pairs`のままにし、新しいdefaultと混同しない。
 
 ### D4. disclosureは意味状態ではない
 
@@ -134,7 +167,8 @@ selected/mixed planでLOSAT edgeがある場合、表示するmethodは`LOSATN`�
 `linearComparisonResolution.errors`は`code`、`edgeId`、`edgeKey`を持つ。この既存構造だけをfocus routingに使う。
 
 - `missing-upload`は`Selected pairs`と対象edgeのuploaderへ対応させる。
-- `selected-losat-requires-pairwise`は`Settings`とsearch methodへ対応させる。
+- `selected-losat-requires-pairwise`は`Settings`と`LOSATP mode`へ対応させ、
+  structured focus keyは`losatp-mode`とする。
 - duplicate、missing UID、self、same-row、non-adjacentは`Selected pairs`と対象edge rowへ対応させる。
 
 `run-analysis.js`のplain error stringを文面で分類しない。TLOSATX gencodeなどstructured targetを持たないerrorは現行のcentral error logを維持する。別のerror型をWork package Bだけのために追加しない。
@@ -175,13 +209,13 @@ Advanced comparison and layout ▸
 | Active mode | 通常の`Settings`に表示するもの | 非表示またはadvancedへ移すもの |
 | --- | --- | --- |
 | `No comparison` | summaryのみ | 全LOSAT、upload、filter、appearance、runtime control |
-| `LOSATN` | search method、task、共通result filter、comparison appearance | protein、gencode、grouping、collinearity control |
-| `TLOSATX` | search method、共通result filter、active recordのgencode | blastn task、protein presentation control |
-| `LOSATP Pairwise` | search method、max hits、共通result filter、appearance | grouping、collinearity control |
-| `Similarity groups` | search method、groupingに必要なoption、共通result filter | pairwise max hits、collinearity control |
-| `Collinear blocks` | search method、min anchors、max gap、evidence scope、color mode、共通result filter | pairwise max hits。diagonal driftとmerge conflictはadvanced |
+| `LOSATN` | `LOSAT Mode`、`LOSATN task`、共通result filter、comparison appearance | `LOSATP mode`、protein、gencode、grouping、collinearity control |
+| `TLOSATX` | `LOSAT Mode`、共通result filter、active recordのgencode | `LOSATP mode`、blastn task、protein presentation control |
+| `LOSATP / Pairwise matches` | `LOSAT Mode`、`LOSATP mode`、max hits、共通result filter、appearance | grouping、collinearity control |
+| `LOSATP / Similarity groups` | `LOSAT Mode`、`LOSATP mode`、groupingに必要なoption、共通result filter。search evidenceは常にall-vs-all | evidence scope、pairwise max hits、collinearity control |
+| `LOSATP / Collinear blocks` | `LOSAT Mode`、`LOSATP mode`、min anchors、max gap、evidence scope（fresh/resetはAll records）、color mode、共通result filter | pairwise max hits。diagonal driftとmerge conflictはadvanced |
 | `Upload BLAST TSV` | active pairのfile readiness、共通result filter、appearance | LOSAT program、search implementation、LOSAT runtime control |
-| selected/mixed | LOSATN、TLOSATX、LOSATP Pairwise、共通filter、source内訳。file assignmentはpair section | Similarity groups、Collinear blocks。global radio風のselected表示 |
+| selected/mixed | `LOSAT Mode`の3 program、LOSATP `Pairwise matches`、共通filter、source内訳。file assignmentはpair section | LOSATP `Similarity groups`、`Collinear blocks`。global radio風のselected表示 |
 
 compact summaryはactiveな値から求める。default判定をする場合はmode-profileの既存defaultを参照し、UI moduleへ数値を複製しない。共有default ownerがないfieldは`Default filters`と推測せず、`E-value <= ...`など実値を短く表示する。
 
@@ -210,7 +244,7 @@ pair membership、source、batch action、custom endpointの編集は`Selected p
 | pair表示 | `linearComparisonTimeline` | planとrecord orderから導出 | 保存しない | edge UIDとrow topology | pair editor | collapsed sectionへ移す |
 | Linear UI summary | 新しいpure projection | plan、resolution、programから導出 | 保存しない | projection unit test | `index.html` | label、count、visibilityだけを返す |
 | disclosure open state | DOMの`<details>` | closed | 保存しない | browserのnative動作 | UIのみ | stateへ追加しない |
-| LOSAT method | `losatProgram`と`losat.blastp.mode` | 現行mode profile | session config | 既存normalizer | LOSAT job planner | 一つのsearch-method selectorへ投影 |
+| LOSAT program / presentation | `losatProgram`と`losat.blastp.mode` | 現行mode profile | session config | 既存normalizer | LOSAT job planner | 3つの`LOSAT Mode` buttonと条件付き`LOSATP mode` menuへ投影 |
 | filters / appearance | `adv`と`losat`の既存field | mode-profile default | session config | active intent/methodだけを既存normalizerへ渡す | requestとrenderer | visible ownerを一本化。noneではdormant値を変更しない |
 | Linear upload/raw draft | comparison edgeとsession resource binding | inactive可 | config metadataとresources | fileActive、losatFilenameActive | active edgeだけrequestへ | noneやmode切替で削除しない |
 | cache | 既存LOSAT cache | content/program/argument key | 既存session/cache契約 | cache validator | LOSAT executor | UIをadvancedへ移すだけ |
@@ -234,7 +268,7 @@ summary、accordion、buttonの押下表示はこの流れへ新しいauthority�
 
 ### Phase 0: baselineと変更境界を固定する
 
-Status: pending
+Status: completed
 
 #### 作業
 
@@ -264,7 +298,7 @@ pytest tests/test_web_ux_profile.py -q
 
 ### Phase 1: 明示的な比較intentを固定する
 
-Status: pending
+Status: completed
 
 #### 対象owner
 
@@ -299,7 +333,7 @@ Status: pending
 
 ### Phase 2: presentation-only projectionを切り出す
 
-Status: pending
+Status: completed
 
 #### 対象owner
 
@@ -316,7 +350,7 @@ projectionは次を返す。
 - current intent key: `none | losat | upload | custom`
 - topology labelとactive pair数
 - LOSAT/upload/mixedのsource内訳
-- active search method key
+- active LOSAT program keyとLOSATP presentation key
 - compact filter summary
 - retained inactive draft数
 - Settings、Selected pairs、Advancedに表示するsection key
@@ -324,14 +358,17 @@ projectionは次を返す。
 
 projectionはstateを変更せず、Fileを読み取らず、cache APIを呼ばない。labelのためにdomain resolverを再実装しない。pair数とsourceは`linearComparisonResolution`、draft数はnormalized plan、program表示は既存LOSAT stateから求める。focus targetはD7で列挙したresolver issue codeだけを扱う。
 
-search-method actionは既存fieldをまとめて変更する薄いmutationにする。mode switch時に`losat` objectを作り直さない。collinearへの切替もappearance draftを上書きしない。
+2つのmode actionは、それぞれ対応する既存fieldだけを変更する薄いmutationに
+する。program switch時に`losat` objectを作り直さず、LOSATPを選んだだけで
+保存済みpresentationを変更しない。collinearへの切替もappearance draftを
+上書きしない。
 
 #### Unit test
 
 - fresh none、adjacent LOSAT、adjacent upload、selected upload、selected mixedのsummary
 - recordが1件のadjacent LOSATで、選択intentとactive job 0を区別する表示
-- LOSATN、TLOSATX、LOSATP 3 presentationのvisibility matrix
-- selected/mixedではSimilarity groupsとCollinear blocksをactive methodにできず、明示actionだけがadjacentへ変える
+- LOSATN、LOSATP、TLOSATXのprogram visibilityと、LOSATPの3 presentationのvisibility matrix
+- selected/mixedではLOSATPのSimilarity groupsとCollinear blocksをactive presentationにできず、明示actionだけがadjacentへ変える
 - defaultとcustom filter summary
 - dormant draft countがactive pair countへ混ざらない
 - projection呼出し前後で入力objectが同一内容である
@@ -344,7 +381,7 @@ search-method actionは既存fieldをまとめて変更する薄いmutationに�
 
 ### Phase 3: DOM順とprogressive disclosureを変更する
 
-Status: pending
+Status: completed
 
 #### 対象owner
 
@@ -361,7 +398,7 @@ Status: pending
 4. `Record Layout`をprimary uploadより前から外し、`Advanced comparison and layout`へ移す。
 5. LOSAT runtime、thread、estimate、cache、raw filename、downloadを`Advanced and reproducibility`へ移す。
 6. fixed Generate barのDOM anchorをBasic figure settingsの後、Advanced controlsの前へ移す。表示位置と既存actionは変えない。
-7. active methodに関係するcontrolだけをDOMへ出す。CSSで見えなくするだけではなく、`v-if`でinactive controlをtab orderとvalidation対象から外す。
+7. active programとLOSATP presentationに関係するcontrolだけをDOMへ出す。CSSで見えなくするだけではなく、`v-if`でinactive controlをtab orderとvalidation対象から外す。
 8. Pairwise Match sectionにある共有filterとappearanceをcomparison Settingsへ移し、旧markupを削除する。
 9. primary labelは12から14 px相当とする。補助説明だけを10 px相当にする。既存sidebar幅でtruncateする内容には`title`または隣接summaryを付ける。
 
@@ -384,7 +421,7 @@ Status: pending
 
 ### Phase 4: state、session、requestの回帰testを追加する
 
-Status: pending
+Status: completed
 
 #### 対象test
 
@@ -410,11 +447,14 @@ Status: pending
 | pre-40 Web, layout disabled/absent | 従来どおりadjacent intentへ移行する |
 | pre-40 Web, enabled list/empty/explicit none | listはselected、emptyとnoneはnoneへ移行する |
 | pre-40 CLI-only replay | committed renderは維持し、synthetic Web planを作らず、次のWeb Generateはnone |
-| adjacent LOSATN -> Collinear -> LOSATN | 各methodのdraft値とpairwise appearanceを維持する |
+| adjacent LOSATN -> LOSATP / Collinear blocks -> LOSATN | 各program/presentationのdraft値とpairwise appearanceを維持する |
 | Generate/Update none with stale Linear file/cache/artifact | comparison file read、cache probe、Pyodide、LOSAT executor、active comparison resourceは0 |
 | Generate none with invalid height/dormant LOSAT values | Generateは成功し、height overrideをemitせず、dormant値は変更されない |
 | selected mixed plan | active edgeだけをrequestへ出し、summaryのsource内訳が一致する |
-| selected mixed + grouping/collinear | methodは選択不能。明示bulk action後だけadjacentへ変わる |
+| selected mixed + grouping/collinear | LOSATP presentationは選択不能。明示bulk action後だけadjacentへ変わる |
+| fresh/Reset Collinear scope | `all`を使う。normalizer fallbackは変更しない |
+| saved Collinear scope = adjacent | 明示保存値`adjacent`を復元する |
+| Similarity groups scope | 常にall-vs-all job expansionとなり、Collinear scope fieldを参照しない |
 | disclosure close/open | semantic stateとsession serializationが同一 |
 
 session round-trip testでは、open/closedをJSONへ追加していないことも確認する。Save Sessionはinactive file bytesを読み、既存resource inventoryと`webFiles.bindings.linearComparisons`へ保存してよい。Generate/Updateのactive canonical requestはそれを読まず、`comparisons: []`のままとする。この2つの境界を別testで確認する。
@@ -427,7 +467,7 @@ session round-trip testでは、open/closedをJSONへ追加していないこと
 
 ### Phase 5: browser UXとaccessibilityを検証する
 
-Status: pending
+Status: completed
 
 #### 対象test
 
@@ -438,9 +478,9 @@ Status: pending
 #### browser scenario
 
 1. 1280 x 720でfresh Linearを開き、最初のuploaderとheader `Add sequence`のbounding boxが設定paneのvisible area内にあることを確認する。
-2. 2件目を追加し、LOSAT Settingsがclosedのまま、最初のuploaderとheader `Add sequence`がvisible area内に残ることを確認する。2件目のrecord cardまでの間にcomparison detailが挿入されないことも確認する。
+2. 2件目を追加し、`Settings`がclosedのまま、最初のuploaderとheader `Add sequence`がvisible area内に残ることを確認する。2件目のrecord cardまでの間にcomparison detailが挿入されないことも確認する。
 3. Tab、Space、Enterだけで3 bulk actionと全summaryを操作する。focus-visibleが消えないことを確認する。button groupとcurrent-status elementのrole、accessible name、stateを別々にassertする。
-4. 各search methodで、表示対象controlと非表示対象controlのmatrixを確認する。
+4. 各`LOSAT Mode` buttonと、LOSATP選択時の各`LOSATP mode` optionで、表示対象controlと非表示対象controlのmatrixを確認する。
 5. selected/mixed sessionをloadし、summary、pair数、source内訳、bulk command group、current statusを確認する。
 6. Settingsを閉じたselected planでmissing uploadとnon-Pairwise LOSATPをGenerateし、error summary、details open、対象controlへのfocus移動を確認する。
 7. noneへ切り替えた後にGenerateし、dormant file/cacheが読まれないことをbrowser側counterで確認する。
@@ -465,7 +505,7 @@ npx playwright test tests/web/comparison-ui.playwright.spec.js
 
 ### Phase 6: user documentationとGalleryを更新する
 
-Status: pending
+Status: completed
 
 #### 対象
 
@@ -481,7 +521,7 @@ Status: pending
 
 #### 方針
 
-1. `Apply to all adjacent gaps`、`LOSAT Settings`、Linearの`Add Seq`に依存する手順とselectorを検索し、新しいlabelと操作順へ更新する。
+1. `Apply to all adjacent gaps`、`LOSAT Settings`、旧5択selector、Linearの`Add Seq`に依存する手順とselectorを検索し、`LOSAT Mode`と条件付き`LOSATP mode`を含む新しいlabelと操作順へ更新する。
 2. `No comparison`がfresh defaultであり、LOSATを実行するには`Run LOSAT`を明示選択することを書く。
 3. selected planでは3 buttonがbulk actionであり、現在のcustom pair stateはstatus、summary、pair sectionに表示されることを説明する。
 4. screenshotを手編集しない。`web-gallery-screenshot-maintenance` skillを使い、各tutorialのcapture recipeから実GUIを再撮影する。
@@ -503,6 +543,35 @@ npx playwright test tests/web/gallery-tutorial.playwright.spec.js --project=chro
 
 上記を基準に、Phase 0で特定した各affected Linear tutorialへJSON checkとcapture `--check`を実行する。bitmapを変更したtutorialはclean captureを実行し、caption、alt text、selected value、cropの読みやすさを目視確認する。
 
+#### Verification result (2026-08-11)
+
+Docsのaffected 6 scenarioを実GUIからclean captureし、26 PNGがすべて
+1440 x 900 RGBであることと、表示中の`LOSAT Mode` button、条件付きdropdown、
+scopeを原寸で目視した。T-GUI-03、H-GUI-05、T-GUI-04、H-GUI-07、
+T-GUI-08のfresh `--check`は5/5 passedだった。H-GUI-08はinitial clean runで
+All records 25 jobs、4 PNG、実SVG、FASTAを検証し、workspace copyとの
+SHA-256一致も確認した。再現確認の
+`TMPDIR=/tmp ALL_RECORD_GENERATION_TIMEOUT_MS=1800000 /home/kawato/micromamba/bin/python docs/capture/run_all.py --scenario H-GUI-08 --tier extended --check`
+は29分10秒後にhost performance timeoutとなった。境界は
+`capture_gui_losatp_collinear` → `capture_hepatoplasmataceae_collinear:991` →
+`generate_and_inspect` → `page.wait_for_function`で、例外は
+`Page.wait_for_function: Timeout 1800000ms exceeded.`だったため、成功済み
+clean runと画像・成果物検証を採用し、その時点では同じcheckを再試行しなかった。
+
+その後のGallery open-select画像で見つかったhelp iconとの衝突は、製品UIではなく
+capture helperが追加する合成outlineのownerだった。製品側へ一時追加した余白は
+戻し、outlineをcontrol内側へ収めた。対象5 WebPをDSF 3 / quality 95で再撮影し、
+原寸目視、6 tutorial strict check、Gallery capture contract 24/24、Gallery
+Playwright 24/24を確認した。製品geometryはbutton版Docs clean run時と同一に
+戻ったため、H-GUI-08を含む26 PNGは再撮影不要である。原因切り分け前の
+20分、30分、45分H-GUI-08試行は同じ`page.wait_for_function`境界でtimeoutし、
+部分出力を採用しなかった。
+
+capture contractはLF fixtureを保つclean mirrorで46/46 passedした。
+workspaceでは同じgateが37/46 passedで、9 failureはいずれも既存
+tutorial-dataのCRLF byte-size差だった。Gallery側はcapture contract 24/24と
+session regeneration 1/1を確認した。
+
 #### 完了条件
 
 - UIに存在しないlabelやDOM位置へ誘導する文書がない。
@@ -511,7 +580,7 @@ npx playwright test tests/web/gallery-tutorial.playwright.spec.js --project=chro
 
 ### Phase 7: 最終verificationとdiff audit
 
-Status: pending
+Status: completed
 
 #### Focused gate
 
@@ -541,6 +610,16 @@ Gallery screenshotを変更した場合は対象capture flowに加え、`tests/w
 3. documentation diffとgenerated screenshot diffを分けて確認する。
 4. `tests/reference_outputs/`が変更されていないことを確認する。UI変更だけでreference SVGを再生成しない。
 5. session version、request schema、Python signature、CLI helpに差分がないことを確認する。
+
+#### Verification result (2026-08-11)
+
+- `TMPDIR=/tmp PYTHON=/home/kawato/micromamba/bin/python node --test tests/web/*.test.mjs`は63/63 passed。
+- `tests/test_web_ux_profile.py`と`tests/test_api_session.py`は27/27 passed、`tests/test_session_io.py`は147/147 passed。
+- Comparison UI Playwrightは6/6、Linear multi-recordは16/16、Gallery tutorialは24/24、Gallery session regenerationは1/1 passed。
+- `tests/test_output_comparison.py::TestOutputComparison`は16/16 passedし、`tests/reference_outputs/`に意味差分はない。
+- broad Python gateは2907 passed、16 failed、17 skipped、6 deselectedだった。16 failureはH-CLI 13件、T-CLI 1件、H-PY 1件、T-PY 1件の既存CRLF artifact差であり、対象SVG/TSVへの`git diff --ignore-all-space --exit-code`は0だった。
+- Python API、CLI、`session_io.py`、Circular owner、reference SVGに意味差分はなく、request schema 5とsession version 40を維持した。
+- production、test、documentation、Gallery mediaの差分を分離して監査し、新しいstate owner、request field、migration、renderer差分を追加していない。
 
 #### 完了条件
 
@@ -575,12 +654,14 @@ Gallery screenshotを変更した場合は対象capture flowに加え、`tests/w
 - Linearのnoneはhidden comparison fieldをvalidate/normalizeせず、invalidなdormant heightで作図を止めない。
 - selected/mixed planでは3 bulk commandと`Current: Selected pairs` statusを区別して表示する。
 - selected/mixed planでSimilarity groupsまたはCollinear blocksを暗黙に選択しない。
+- `LOSAT Mode`の3 buttonはLOSATN、LOSATP、TLOSATXを選択し、`LOSATP mode` menuはLOSATP選択時だけSimilarity groups、Collinear blocks、Pairwise matchesを選択する。
+- Similarity groupsは常にall-vs-all evidenceを使い、Collinearのfresh/ResetはAll recordsを使う。保存済みAdjacent pairsはそのまま復元する。
 
 ### Accessibilityとerror
 
 - 3 action、summary、file input、pair actionをkeyboardだけで操作できる。
 - focus-visible、command group名、button名、current status、pair countが確認できる。
-- D7のstructured comparison issueはsummaryに出て、Generate時に該当sectionが開き対象controlへfocusが移る。
+- D7のstructured comparison issueはsummaryに出て、Generate時に該当sectionが開き、`selected-losat-requires-pairwise`は`LOSATP mode`へfocusが移る。
 
 ### Persistenceとsurface parity
 
@@ -636,14 +717,14 @@ Gallery screenshotを変更した場合は対象capture flowに加え、`tests/w
 
 | Phase | Status | 完了証拠 |
 | --- | --- | --- |
-| Phase 0: baselineと境界 | pending | 実装開始時に記録する |
-| Phase 1: 比較intent | pending | unit、session、runtime counter test |
-| Phase 2: UI projection | pending | pure helper unit test |
-| Phase 3: DOMとdisclosure | pending | static contractとbrowser DOM audit |
-| Phase 4: state/session/request | pending | Node test結果 |
-| Phase 5: browser UX | pending | 1280 x 720、390 x 844のPlaywright結果 |
-| Phase 6: docsとGallery | pending | capture log、media check、目視記録 |
-| Phase 7: final gate | pending | focused/broad gateとdiff audit |
+| Phase 0: baselineと境界 | completed | HEAD・dirty state・既存CRLF差分を分離し、1280 x 720 / 390 x 844の初期DOM・bbox・tab順を記録。baseline Node 11/11、session I/O 147/147 |
+| Phase 1: 比較intent | completed | fresh/reset none、inactive draft保持、runtime/file/cache/resource 0、current/legacy/CLI-only session境界をfocused Node testで確認 |
+| Phase 2: UI projection | completed | `comparison-ui.test.mjs`でpure projection、3 programとLOSATP 3 presentation、selected制約、summary、structured issue routingを確認 |
+| Phase 3: DOMとdisclosure | completed | static 6/6、browser UI 6/6。1280 x 720でAdd/uploader可視、390 x 844で横overflow 0、主要sectionとGenerateのoverlap 0 |
+| Phase 4: state/session/request | completed | Phase 1/2を含むfocused Node 10 files: 10/10 passed |
+| Phase 5: browser UX | completed | 新UI 6/6、既存focused 6/6、mixed/raw/cache/session 1/1、none browser counter 1/1。desktop/mobile bbox・keyboard・structured focusを確認 |
+| Phase 6: docsとGallery | completed | Docs 6 scenarioをclean captureし、26 PNGの1440 x 900 RGB・表示内容・SHAを確認。fresh check 5/5、H-GUI-08 initial clean 25 jobs/4 PNG/実SVG・FASTA passed、clean capture contract 46/46。Gallery 5 method WebPを最終capture annotationで再撮影し、capture contract 24/24、Playwright 24/24、session regeneration 1/1 |
+| Phase 7: final gate | completed | Node 63/63、Web UX/API 27/27、session I/O 147/147、output comparison 16/16。broad Python 2907 passed、16 EOL-only artifact failuresを意味差分0として分離し、schema/version/API/CLI/renderer/reference不変を確認 |
 
 ## 12. 完了時のhandoff
 

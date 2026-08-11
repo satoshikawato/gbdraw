@@ -2549,8 +2549,6 @@ export const createRunAnalysis = ({
         }
       } else {
         requireCurrentLinearTrackLayout(form.linear_track_layout);
-        const normalizedPairwiseMatchStyle = normalizePairwiseMatchStyle(adv.pairwise_match_style);
-        adv.pairwise_match_style = normalizedPairwiseMatchStyle;
         const useLinearTrackSlots = adv.linear_track_slots_enabled === true;
         let linearTrackSlots = [];
         let linearTrackSlotAxisIndex = null;
@@ -2605,74 +2603,123 @@ export const createRunAnalysis = ({
           adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
         }
         const comparisonResolution = activeComparisonPlanSnapshot;
+        const hasComparisonIntent = comparisonResolution.hasComparisonIntent === true;
         const useLosat = comparisonResolution.hasLosatIntent === true;
         const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
-        const blastpMode = normalizeBlastpMode(losat.blastp?.mode);
+        const blastpMode = useProteinBlastp
+          ? normalizeBlastpMode(losat.blastp?.mode)
+          : String(losat.blastp?.mode ?? '');
+        const usePairwiseBlastp = useProteinBlastp && blastpMode === 'pairwise';
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
-        adv.min_bitscore = normalizeBlastThresholdNumber(
-          adv.min_bitscore,
-          DEFAULT_LINEAR_BLAST_FILTERS.bitscore
-        );
-        adv.evalue = normalizeBlastThresholdText(adv.evalue, DEFAULT_LINEAR_BLAST_FILTERS.evalue);
-        adv.identity = normalizeBlastThresholdNumber(
-          adv.identity,
-          DEFAULT_LINEAR_BLAST_FILTERS.identity
-        );
-        adv.alignment_length = normalizeBlastThresholdNumber(
-          adv.alignment_length,
-          DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
-          { integer: true }
-        );
-        const blastpDisplayMaxHits = normalizeBlastThresholdNumber(
-          losat.blastp?.maxHits,
-          5,
-          { integer: true }
-        );
-        losat.blastp.mode = blastpMode;
-        losat.blastp.maxHits = Math.max(1, blastpDisplayMaxHits);
-        losat.blastp.candidateLimit = null;
-        losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(
-          losat.blastp?.orthogroupMembershipMode
-        );
-        losat.blastp.orthogroupMemberMaxHits = Math.max(
-          1,
-          normalizeBlastThresholdNumber(losat.blastp?.orthogroupMemberMaxHits, 5, { integer: true })
-        );
-        losat.blastp.collinearMinAnchors = Math.max(
-          1,
-          normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 1, { integer: true })
-        );
-        losat.blastp.collinearMaxUnitGap = Math.max(
-          0,
-          normalizeBlastThresholdNumber(losat.blastp?.collinearMaxUnitGap, 0, { integer: true })
-        );
-        losat.blastp.collinearMaxDiagonalDrift = Math.max(
-          0,
-          normalizeBlastThresholdNumber(losat.blastp?.collinearMaxDiagonalDrift, 0, { integer: true })
-        );
-        losat.blastp.collinearMaxConflictsInMergeGap = Math.max(
-          0,
-          normalizeBlastThresholdNumber(
-            losat.blastp?.collinearMaxConflictsInMergeGap,
-            1,
+        if (hasComparisonIntent) {
+          adv.pairwise_match_style = normalizePairwiseMatchStyle(adv.pairwise_match_style);
+          adv.min_bitscore = normalizeBlastThresholdNumber(
+            adv.min_bitscore,
+            DEFAULT_LINEAR_BLAST_FILTERS.bitscore
+          );
+          adv.evalue = normalizeBlastThresholdText(adv.evalue, DEFAULT_LINEAR_BLAST_FILTERS.evalue);
+          adv.identity = normalizeBlastThresholdNumber(
+            adv.identity,
+            DEFAULT_LINEAR_BLAST_FILTERS.identity
+          );
+          adv.alignment_length = normalizeBlastThresholdNumber(
+            adv.alignment_length,
+            DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
             { integer: true }
-          )
-        );
-        losat.blastp.collinearMaxParalogLinksPerOrthogroup = Math.max(
-          1,
-          normalizeBlastThresholdNumber(
-            losat.blastp?.collinearMaxParalogLinksPerOrthogroup,
-            2,
-            { integer: true }
-          )
-        );
-        losat.blastp.collinearColorMode = normalizeCollinearColorMode(losat.blastp?.collinearColorMode);
-        losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(losat.blastp?.collinearAnchorMode);
-        losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope);
-        const orthogroupMembershipMode = losat.blastp.orthogroupMembershipMode;
-        const orthogroupMemberMaxHits = Math.max(1, losat.blastp.orthogroupMemberMaxHits);
-        const collinearSearchScope = losat.blastp.collinearSearchScope;
+          );
+        }
+
+        const blastpMaxHits = usePairwiseBlastp
+          ? Math.max(1, normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true }))
+          : 5;
+        const orthogroupMembershipMode = useOrthogroupBlastp
+          ? normalizeOrthogroupMembershipMode(losat.blastp?.orthogroupMembershipMode)
+          : 'anchor_core_v1';
+        const orthogroupMemberMaxHits = useOrthogroupBlastp
+          ? Math.max(
+              1,
+              normalizeBlastThresholdNumber(losat.blastp?.orthogroupMemberMaxHits, 5, { integer: true })
+            )
+          : 5;
+        const collinearMinAnchors = useCollinearBlastp
+          ? Math.max(
+              1,
+              normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 1, { integer: true })
+            )
+          : 1;
+        const collinearMaxUnitGap = useCollinearBlastp
+          ? Math.max(
+              0,
+              normalizeBlastThresholdNumber(losat.blastp?.collinearMaxUnitGap, 0, { integer: true })
+            )
+          : 0;
+        const collinearMaxDiagonalDrift = useCollinearBlastp
+          ? Math.max(
+              0,
+              normalizeBlastThresholdNumber(
+                losat.blastp?.collinearMaxDiagonalDrift,
+                0,
+                { integer: true }
+              )
+            )
+          : 0;
+        const collinearMaxConflictsInMergeGap = useCollinearBlastp
+          ? Math.max(
+              0,
+              normalizeBlastThresholdNumber(
+                losat.blastp?.collinearMaxConflictsInMergeGap,
+                1,
+                { integer: true }
+              )
+            )
+          : 1;
+        const collinearMaxParalogLinksPerOrthogroup = useCollinearBlastp
+          ? Math.max(
+              1,
+              normalizeBlastThresholdNumber(
+                losat.blastp?.collinearMaxParalogLinksPerOrthogroup,
+                2,
+                { integer: true }
+              )
+            )
+          : 2;
+        const collinearColorMode = useCollinearBlastp
+          ? normalizeCollinearColorMode(losat.blastp?.collinearColorMode)
+          : 'orientation';
+        const rawCollinearUnitMode = String(
+          losat.blastp?.collinearUnitMode || ''
+        ).trim().toLowerCase();
+        const collinearUnitMode = useCollinearBlastp &&
+          ['auto', 'cds', 'locus'].includes(rawCollinearUnitMode)
+          ? rawCollinearUnitMode
+          : 'auto';
+        const collinearAnchorMode = useCollinearBlastp
+          ? normalizeCollinearAnchorMode(losat.blastp?.collinearAnchorMode)
+          : 'rbh';
+        const collinearSearchScope = useCollinearBlastp
+          ? normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope)
+          : 'adjacent';
+
+        if (useProteinBlastp) losat.blastp.mode = blastpMode;
+        if (usePairwiseBlastp) {
+          losat.blastp.maxHits = blastpMaxHits;
+          losat.blastp.candidateLimit = null;
+        } else if (useOrthogroupBlastp) {
+          losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
+          losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
+        } else if (useCollinearBlastp) {
+          losat.blastp.collinearMinAnchors = collinearMinAnchors;
+          losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
+          losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
+          losat.blastp.collinearMaxConflictsInMergeGap = collinearMaxConflictsInMergeGap;
+          losat.blastp.collinearMaxParalogLinksPerOrthogroup =
+            collinearMaxParalogLinksPerOrthogroup;
+          losat.blastp.collinearColorMode = collinearColorMode;
+          losat.blastp.collinearUnitMode = collinearUnitMode;
+          losat.blastp.collinearAnchorMode = collinearAnchorMode;
+          losat.blastp.collinearSearchScope = collinearSearchScope;
+        }
 
         const normalizedPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);
@@ -2705,9 +2752,11 @@ export const createRunAnalysis = ({
         adv.label_rendering = normalizedLabelRendering;
         const normalizedLinearLabelSpacing = normalizePositiveNumberOrNull(adv.linear_label_spacing);
         adv.linear_label_spacing = normalizedLinearLabelSpacing;
-        const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
-        if (comparisonHeight.status === 'invalid') {
-          throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+        if (hasComparisonIntent) {
+          const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
+          if (comparisonHeight.status === 'invalid') {
+            throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+          }
         }
 
         const viewTransformSpecs = [];
@@ -3188,7 +3237,7 @@ export const createRunAnalysis = ({
         const getBlastpCandidateLimit = () => {
           if (!useProteinBlastp) return null;
           if (useOrthogroupBlastp || useCollinearBlastp) return null;
-          return Math.max(1, losat.blastp.maxHits);
+          return blastpMaxHits;
         };
 
         const buildLosatArgs = (queryIdx, subjectIdx) => {
@@ -3594,19 +3643,19 @@ export const createRunAnalysis = ({
             if (useDerivedProteinPayloadCache) {
               const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
                 mode: blastpMode,
-                maxHits: Math.max(1, losat.blastp.maxHits),
+                maxHits: blastpMaxHits,
                 bitscore: adv.min_bitscore,
                 evalue: adv.evalue,
                 identity: adv.identity,
                 alignmentLength: adv.alignment_length,
-                collinearMinAnchors: losat.blastp.collinearMinAnchors,
-                collinearMaxUnitGap: losat.blastp.collinearMaxUnitGap,
+                collinearMinAnchors,
+                collinearMaxUnitGap,
                 collinearUnitMode: 'cds',
-                collinearColorMode: losat.blastp.collinearColorMode,
+                collinearColorMode,
                 collinearAnchorMode: 'rbh',
-                collinearMaxDiagonalDrift: losat.blastp.collinearMaxDiagonalDrift,
-                collinearMaxConflictsInMergeGap: losat.blastp.collinearMaxConflictsInMergeGap,
-                collinearMaxParalogLinksPerOrthogroup: losat.blastp.collinearMaxParalogLinksPerOrthogroup,
+                collinearMaxDiagonalDrift,
+                collinearMaxConflictsInMergeGap,
+                collinearMaxParalogLinksPerOrthogroup,
                 collinearSearchScope,
                 orthogroupMembershipMode,
                 orthogroupMemberMaxHits,
@@ -3634,19 +3683,19 @@ export const createRunAnalysis = ({
                 convertProteinBlast(
                   JSON.stringify({ records: recordPayloads, pairs: pairPayloads }),
                   blastpMode,
-                  Math.max(1, losat.blastp.maxHits),
+                  blastpMaxHits,
                   adv.min_bitscore,
                   adv.evalue,
                   adv.identity,
                   adv.alignment_length,
-                  losat.blastp.collinearMinAnchors,
-                  losat.blastp.collinearMaxUnitGap,
+                  collinearMinAnchors,
+                  collinearMaxUnitGap,
                   'cds',
-                  losat.blastp.collinearColorMode,
+                  collinearColorMode,
                   'rbh',
-                  losat.blastp.collinearMaxDiagonalDrift,
-                  losat.blastp.collinearMaxConflictsInMergeGap,
-                  losat.blastp.collinearMaxParalogLinksPerOrthogroup,
+                  collinearMaxDiagonalDrift,
+                  collinearMaxConflictsInMergeGap,
+                  collinearMaxParalogLinksPerOrthogroup,
                   collinearSearchScope,
                   orthogroupMembershipMode,
                   orthogroupMemberMaxHits

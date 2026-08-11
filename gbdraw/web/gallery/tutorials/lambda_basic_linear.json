@@ -66,7 +66,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const seq = app?.linearSeqs?.[0]; const file = seq?.gb; if (!file || app.linearSeqs.length !== 1) throw new Error('Lambda GenBank input was not restored.'); seq.gb = new File([file], 'NC_001416.gb', { type: file.type, lastModified: file.lastModified }); app.form.prefix = 'lambda_basic_linear'; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = Array.from(card?.querySelectorAll('div') || []).find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); const label = Array.from(row?.querySelectorAll('label') || []).find((node) => node.textContent.trim() === 'GenBank File'); const uploader = label?.parentElement?.parentElement; if (!badge || !uploader) throw new Error('Lambda Linear input row was not found.'); badge.dataset.capture = 'lambda-record-badge'; uploader.dataset.capture = 'lambda-genbank-upload'; uploader.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; const seq = app?.linearSeqs?.[0]; const file = seq?.gb; if (!file || app.linearSeqs.length !== 1) throw new Error('Lambda GenBank input was not restored.'); seq.gb = new File([file], 'NC_001416.gb', { type: file.type, lastModified: file.lastModified }); app.form.prefix = 'lambda_basic_linear'; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false; const row = document.querySelector(`[data-linear-record-card=\"${seq.uid}\"]`); const badge = Array.from(row?.querySelectorAll('div') || []).find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const label = Array.from(row?.querySelectorAll('label') || []).find((node) => node.textContent.trim() === 'GenBank File'); const uploader = label?.parentElement?.parentElement; if (!row || !badge || !uploader) throw new Error('Lambda Linear input row was not found.'); badge.dataset.capture = 'lambda-record-badge'; uploader.dataset.capture = 'lambda-genbank-upload'; uploader.scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "waitForFunction",
@@ -132,8 +132,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/lambda_basic_linear/manual-02-03-no-comparison.webp",
-            "alt": "Linear comparison choices with No comparison selected.",
-            "caption": "Select No comparison to generate the Linear diagram without running LOSAT."
+            "alt": "Comparison card with the No comparison command and Current: No comparison status.",
+            "caption": "Choose No comparison; the status reads Current: No comparison."
           },
           "capture": {
             "source": "webapp",
@@ -142,17 +142,20 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.linearComparisonPlan.mode = 'none'; app.linearComparisonPlan.defaultSource = 'losat';"
+                "script": "const app = window.__GBDRAW_APP__; app.setLinearComparisonGlobalAction('none');"
               }
             ],
-            "selector": "[data-capture='linear-blast-source']",
+            "selector": "[data-linear-comparison-card]",
             "cropPadding": 14,
             "assertAppState": {
               "mode": "linear",
               "linearComparisonPlan.mode": "none"
             },
-            "visibleControls": [
-              {"label": "No comparison", "checked": true}
+            "visibleText": [
+              "No comparison",
+              "Current: No comparison",
+              "Settings",
+              "Selected pairs (0)"
             ]
           }
         }

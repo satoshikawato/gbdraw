@@ -132,7 +132,7 @@ const resetLinearComparisonPlan = (state) => {
       fileActive: false,
       losatFilenameActive: false
     }));
-  plan.mode = 'adjacent';
+  plan.mode = 'none';
   plan.defaultSource = 'losat';
   if (!Array.isArray(plan.edges)) plan.edges = [];
   plan.edges.splice(0, plan.edges.length, ...retainedEdges);

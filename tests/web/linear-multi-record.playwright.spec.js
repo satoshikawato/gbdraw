@@ -40,6 +40,32 @@ const linearComparisonPair = (page, edgeKey) => (
   page.locator(`fieldset[data-edge-key="${edgeKey}"]`)
 );
 
+const linearSelectedPairs = (page) => (
+  page.locator('details[data-linear-comparison-disclosure="selected-pairs"]')
+);
+
+const openLinearSelectedPairs = async (page) => {
+  const details = linearSelectedPairs(page);
+  await expect(details).toHaveCount(1);
+  if (!await details.evaluate((element) => element.open)) {
+    await details.locator(':scope > summary').press('Enter');
+  }
+  await expect(details).toHaveAttribute('open', '');
+  return details;
+};
+
+const openLinearAdvancedComparison = async (page) => {
+  const details = page.locator(
+    'details[data-linear-comparison-disclosure="advanced"]'
+  );
+  await expect(details).toHaveCount(1);
+  if (!await details.evaluate((element) => element.open)) {
+    await details.locator(':scope > summary').press('Enter');
+  }
+  await expect(details).toHaveAttribute('open', '');
+  return details;
+};
+
 const expectExactEdgeKeys = async (container, expectedKeys) => {
   const pairs = container.locator('fieldset[data-edge-key]');
   await expect(pairs).toHaveCount(expectedKeys.length);
@@ -173,6 +199,10 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
   expect(setup.uniqueUids).toBe(4);
   expect(setup.canonicalComparisonCount).toBe(0);
   expect(setup.cacheInfo).toEqual(['circular-cache']);
+  const advancedComparison = page.locator(
+    'details[data-linear-comparison-disclosure="advanced"]'
+  );
+  await advancedComparison.locator(':scope > summary').press('Enter');
   await expect(page.getByRole('spinbutton', {
     name: /^Linear record row for sequence \d+$/
   })).toHaveCount(4);
@@ -180,6 +210,7 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
   await expect(page.locator('[data-linear-comparison-boundary]')).toHaveCount(1);
   await expectExactEdgeKeys(boundary, zippedEdgeKeys);
 
+  await openLinearSelectedPairs(page);
   const editedPair = linearComparisonPair(page, `${uidA}->${uidC}`);
   await editedPair.getByRole('radio', { name: 'Upload BLAST TSV' }).check();
   const materialized = await page.evaluate(() => ({
@@ -197,9 +228,6 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
     [`${uidB}->${uidD}`]: 'losat'
   });
 
-  const advancedPairSetup = page.getByText('Advanced pair setup', { exact: true });
-  await expect(advancedPairSetup).toBeVisible();
-  await advancedPairSetup.click();
   await page.getByRole('button', {
     name: 'All adjacent-row pairs (cross-product)', exact: true
   }).click();
@@ -217,23 +245,32 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
   expect(new Set(state.endpoints.map((pair) => pair.join('->'))).size).toBe(4);
 
   const globalComparisonControls = page.getByRole('group', {
-    name: 'Apply to all adjacent gaps'
+    name: 'Set all adjacent comparisons'
   });
-  await expect(globalComparisonControls.getByRole('radio', { name: 'No comparison' })).toBeVisible();
-  await expect(globalComparisonControls.getByRole('radio', { name: 'Run LOSAT' })).toBeVisible();
-  await expect(globalComparisonControls.getByRole('radio', { name: 'Upload BLAST TSV' })).toBeVisible();
-  await globalComparisonControls.getByRole('radio', { name: 'No comparison' }).check();
+  await expect(globalComparisonControls.getByRole('button', {
+    name: 'Set no comparison'
+  })).toBeVisible();
+  await expect(globalComparisonControls.getByRole('button', {
+    name: 'Run LOSAT for all adjacent pairs'
+  })).toBeVisible();
+  await expect(globalComparisonControls.getByRole('button', {
+    name: 'Use uploaded BLAST TSV for all adjacent pairs'
+  })).toBeVisible();
+  await globalComparisonControls.getByRole('button', {
+    name: 'Set no comparison'
+  }).click();
   const optedOut = await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.linearComparisonPlan.mode,
     retainedDrafts: window.__GBDRAW_APP__.linearComparisonPlan.edges.length,
     resolvedEdges: window.__GBDRAW_APP__.linearComparisonResolution.edges.length
   }));
   expect(optedOut).toEqual({ mode: 'none', retainedDrafts: 4, resolvedEdges: 0 });
-  await expect(page.locator('[data-capture="linear-losat-settings"]')).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'LOSAT Mode' })).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toHaveCount(0);
 });
 
-test('Linear comparison timeline follows default DOM and keyboard order at narrow width', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 900 });
+test('Linear records precede comparison pairs in DOM and keyboard order at narrow width', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
@@ -248,11 +285,10 @@ test('Linear comparison timeline follows default DOM and keyboard order at narro
     return app.linearSeqs.map((sequence) => sequence.uid);
   });
   const edgeKeys = uids.slice(0, -1).map((uid, index) => `${uid}->${uids[index + 1]}`);
-  const expectedTimelineTokens = [];
-  uids.forEach((uid, index) => {
-    expectedTimelineTokens.push(`record:${uid}`);
-    if (index < uids.length - 1) expectedTimelineTokens.push(`boundary:${index + 1}->${index + 2}`);
-  });
+  const expectedTimelineTokens = [
+    ...uids.map((uid) => `record:${uid}`),
+    ...uids.slice(0, -1).map((_, index) => `boundary:${index + 1}->${index + 2}`)
+  ];
 
   const rows = page.locator('[data-linear-display-row]');
   const boundaries = page.locator('[data-linear-comparison-boundary]');
@@ -276,10 +312,10 @@ test('Linear comparison timeline follows default DOM and keyboard order at narro
     await expectExactEdgeKeys(linearComparisonBoundary(page, index + 1, index + 2), [edgeKeys[index]]);
   }
 
-  await expect(page.getByText('Adjacent gaps', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Raw LOSAT results', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Selected pairs and retained drafts', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Advanced pair setup', { exact: true })).toBeVisible();
+  const recordList = page.locator('[data-linear-record-list]');
+  await expect(recordList.locator('[data-linear-comparison-boundary]')).toHaveCount(0);
+  await expect(recordList.locator('[data-edge-key]')).toHaveCount(0);
+  await expect(linearSelectedPairs(page)).not.toHaveAttribute('open', '');
 
   await focusLastTabStop(linearRecordCard(page, uids[0]));
   await page.keyboard.press('Tab');
@@ -287,32 +323,47 @@ test('Linear comparison timeline follows default DOM and keyboard order at narro
     edgeKey: document.activeElement?.closest('[data-edge-key]')?.dataset.edgeKey || '',
     recordUid: document.activeElement?.closest('[data-linear-record-card]')
       ?.dataset.linearRecordCard || ''
-  }))).toEqual({ edgeKey: edgeKeys[0], recordUid: '' });
-  await focusLastTabStop(linearComparisonPair(page, edgeKeys[0]));
-  await page.keyboard.press('Tab');
-  expect(await page.evaluate(() => ({
-    edgeKey: document.activeElement?.closest('[data-edge-key]')?.dataset.edgeKey || '',
-    recordUid: document.activeElement?.closest('[data-linear-record-card]')
-      ?.dataset.linearRecordCard || ''
-  }))).toEqual({ edgeKey: '', recordUid: uids[1] });
+  }))).toMatchObject({ edgeKey: '' });
+
+  await page.getByRole('button', { name: 'Add sequence' }).last().focus();
+  const focusTrail = [];
+  for (let step = 0; step < 5; step += 1) {
+    await page.keyboard.press('Tab');
+    focusTrail.push(await page.evaluate(() => ({
+      edgeKey: document.activeElement?.closest('[data-edge-key]')?.dataset.edgeKey || '',
+      command: document.activeElement?.getAttribute('aria-label') || ''
+    })));
+    if (focusTrail.at(-1).command === 'Set no comparison') break;
+  }
+  expect(focusTrail.some((entry) => entry.edgeKey)).toBe(false);
+  expect(focusTrail.at(-1).command).toBe('Set no comparison');
 
   const overflow = await page.locator('.settings-pane').evaluate((settingsPane) => {
-    const timeline = settingsPane.querySelector('[data-linear-comparison-timeline]');
+    const comparison = settingsPane.querySelector('[data-linear-comparison-card]');
     return {
       paneClientWidth: settingsPane.clientWidth,
       paneScrollWidth: settingsPane.scrollWidth,
-      timelineClientWidth: timeline?.clientWidth || 0,
-      timelineScrollWidth: timeline?.scrollWidth || 0
+      comparisonClientWidth: comparison?.clientWidth || 0,
+      comparisonScrollWidth: comparison?.scrollWidth || 0
     };
   });
   expect(overflow.paneScrollWidth).toBeLessThanOrEqual(overflow.paneClientWidth + 1);
-  expect(overflow.timelineScrollWidth).toBeLessThanOrEqual(overflow.timelineClientWidth + 1);
+  expect(overflow.comparisonScrollWidth).toBeLessThanOrEqual(
+    overflow.comparisonClientWidth + 1
+  );
 });
 
 test('Linear region controls do not overlap at supported sidebar widths', async ({ page }) => {
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
+
+  const recordOptions = page.locator('details[data-linear-record-options]').first();
+  await expect(recordOptions).toHaveCount(1);
+  if (!await recordOptions.evaluate((element) => element.open)) {
+    await recordOptions.locator(':scope > summary').press('Enter');
+  }
+  await expect(recordOptions).toHaveAttribute('open', '');
 
   const recordSelector = page.getByRole('combobox', {
     name: 'Record selector for sequence 1', exact: true
@@ -387,7 +438,7 @@ test('Linear region controls do not overlap at supported sidebar widths', async 
   }
 });
 
-test('Advanced pair setup focuses Add and repairs an unplaced draft in its boundary', async ({ page }) => {
+test('Selected pairs focuses Add and repairs an unplaced draft in its boundary', async ({ page }) => {
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
@@ -399,12 +450,12 @@ test('Advanced pair setup focuses Add and repairs an unplaced draft in its bound
     app.linearSeqs.forEach((sequence, index) => {
       sequence.definition = `Advanced record ${index + 1}`;
     });
-    app.setLinearComparisonGlobalAction('none');
+    app.setLinearComparisonGlobalAction('losat');
+    app.clearSelectedLinearComparisons();
     return app.linearSeqs.map((sequence) => sequence.uid);
   });
   const [uidA, uidB, uidC] = uids;
-  const advancedPairSetup = page.getByText('Advanced pair setup', { exact: true });
-  await advancedPairSetup.click();
+  await openLinearSelectedPairs(page);
   await page.getByRole('button', { name: 'Add', exact: true }).click();
 
   const addedPair = linearComparisonPair(page, `${uidA}->${uidB}`);
@@ -476,6 +527,7 @@ test('Comparison card actions target the active owner of duplicate directional d
     return [first.uid, second.uid];
   });
   const edgeKey = `${uidA}->${uidB}`;
+  await openLinearSelectedPairs(page);
   const pair = linearComparisonPair(page, edgeKey);
   await expect(pair).toBeVisible();
   expect(await page.evaluate((key) => {
@@ -690,8 +742,9 @@ test('No comparison completes a real render without touching dormant comparison 
     draft: [['dormant-none-edge', true, true, true, 'dormant-comparison.tsv', 'dormant-losat-name.tsv']],
     skipped: [0, 0, 0], cacheSize: 1, losatRuntimeUrls: [], comparisonSvgNodes: 0
   });
-  await expect(page.getByText('Raw LOSAT results', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Raw LOSAT results', { exact: true })).not.toBeVisible();
 
+  await openLinearSelectedPairs(page);
   const dormantPair = linearComparisonPair(page, dormantEdgeKey);
   await expect(dormantPair).toBeVisible();
   const dormantUpload = dormantPair.locator(
@@ -705,8 +758,11 @@ test('No comparison completes a real render without touching dormant comparison 
     name: 'Save Raw LOSAT TSV for #1 to #2'
   })).toHaveCount(0);
   await expect(dormantPair).toContainText('Retained, inactive BLAST TSV: dormant-comparison.tsv');
-  await expect(dormantPair).toContainText(
-    'Retained, inactive Raw LOSAT filename: dormant-losat-name.tsv'
+
+  await openLinearAdvancedComparison(page);
+  const dormantRawResult = page.locator(`[data-linear-raw-result="${dormantEdgeKey}"]`);
+  await expect(dormantRawResult).toContainText(
+    'Retained, inactive filename: dormant-losat-name.tsv'
   );
 
   await dormantPair.getByRole('button', { name: 'Reuse BLAST TSV for #1 to #2' }).click();
@@ -731,13 +787,13 @@ test('No comparison completes a real render without touching dormant comparison 
     return [edge.included, edge.fileActive, edge.file?.name, edge.losatFilename];
   })).toEqual([false, true, 'dormant-comparison.tsv', 'dormant-losat-name.tsv']);
 
-  await dormantPair.getByRole('button', {
+  await dormantRawResult.getByRole('button', {
     name: 'Reuse Raw LOSAT filename for #1 to #2'
   }).click();
-  await expect(dormantPair.getByRole('textbox', {
+  await expect(dormantRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #1 to #2'
   })).toHaveValue('dormant-losat-name.tsv');
-  await expect(dormantPair.getByRole('button', {
+  await expect(dormantRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #1 to #2'
   })).toBeDisabled();
 });
@@ -954,7 +1010,10 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       legend: 'bottom', show_gc: false, show_skew: false,
       show_depth: false, show_labels_linear: 'none'
     });
-    app.setLinearLosatProgram('blastn');
+    app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('collinear');
+    app.setLinearComparisonLosatMode('blastn');
     app.losat.executionMode = 'serial';
     const [first, second, third] = app.linearSeqs;
     const blastRow = 'MixedRecA\tMixedRecB\t100\t60\t0\t0\t1\t60\t1\t60\t1e-30\t150\n';
@@ -1008,9 +1067,6 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   });
   expect(independentReuse).toEqual([[true, false, 'upload'], [false, true, 'losat']]);
 
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.pyodideReady === true, null, {
-    timeout: 240000
-  });
   const selectedResolution = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const { buildPairwiseLosatJobSpecs, resolveLinearComparisonPlan } = await import(
@@ -1109,8 +1165,13 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   ], [
     [`${uidB}->${uidC}`, 1, 2, 0]
   ]]);
+  await openLinearSelectedPairs(page);
+  await openLinearAdvancedComparison(page);
   const uploadPair = linearComparisonPair(page, `${uidA}->${uidB}`);
   const losatPair = linearComparisonPair(page, `${uidB}->${uidC}`);
+  const losatRawResult = page.locator(
+    `[data-linear-raw-result="${uidB}->${uidC}"]`
+  );
   await expect(uploadPair).toBeVisible();
   await expect(losatPair).toBeVisible();
   expect(await uploadPair.evaluate((element) => (
@@ -1125,10 +1186,10 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     'input[type="file"][aria-label="BLAST TSV for #2 to #3"]'
   )).toHaveCount(1);
   await expect(uploadPair).toContainText('mixed-a-to-b.tsv');
-  await expect(losatPair.getByRole('textbox', {
+  await expect(losatRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #3 to #1'
   })).toHaveValue('selected-b-to-c.tsv');
-  await expect(losatPair.getByRole('button', {
+  await expect(losatRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #3 to #1'
   })).toBeEnabled();
 
@@ -1137,10 +1198,10 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     element.closest('[data-linear-comparison-boundary]')
       ?.dataset.linearComparisonBoundary
   ))).toBe('1->2');
-  await expect(losatPair.getByRole('textbox', {
+  await expect(losatRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #3 to #1'
   })).toHaveValue('selected-b-to-c.tsv');
-  await expect(losatPair.getByRole('button', {
+  await expect(losatRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #3 to #1'
   })).toBeEnabled();
 
@@ -1157,11 +1218,11 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   expect(movedWithinRow).toEqual([[uidA, uidC, uidB], [
     [`${uidB}->${uidC}`, 1, 2, 1]
   ]]);
-  await expect(losatPair.getByRole('button', {
+  await expect(losatRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #3 to #2'
   })).toBeEnabled();
   await page.evaluate((uid) => window.__GBDRAW_APP__.moveLinearRecordWithinRow(uid, 1), uidA);
-  await expect(losatPair.getByRole('button', {
+  await expect(losatRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #3 to #1'
   })).toBeEnabled();
 
@@ -1170,11 +1231,11 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     element.closest('[data-linear-comparison-boundary]')
       ?.dataset.linearComparisonBoundary
   ))).toBe('2->3');
-  await expect(losatPair.getByRole('button', {
+  await expect(losatRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #3 to #1'
   })).toBeEnabled();
   const rawBeforeRerunPromise = page.waitForEvent('download', { timeout: 120000 });
-  await losatPair.getByRole('button', {
+  await losatRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #3 to #1'
   }).click();
   const rawBeforeRerun = await rawBeforeRerunPromise;
@@ -1206,7 +1267,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   expect(cachedRun.cacheInfo).toEqual([[
     `${uidB}->${uidC}`, 2, 0, 'selected-b-to-c.tsv'
   ]]);
-  await expect(losatPair.getByRole('button', {
+  await expect(losatRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #3 to #1'
   })).toBeEnabled();
 
@@ -1234,23 +1295,56 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
         entry.edgeKey, entry.ordinal, entry.queryUid, entry.subjectUid,
         entry.queryIndex, entry.subjectIndex, entry.filename
       ]),
-      cacheSize: state.losatCache.value.size
+      cacheSize: state.losatCache.value.size,
+      ui: {
+        intent: app.linearComparisonUi.intentKey,
+        losatMode: app.linearComparisonUi.activeLosatModeKey,
+        losatpMode: app.linearComparisonUi.activeLosatpModeKey,
+        summary: app.linearComparisonUi.summaryText,
+        settings: app.linearComparisonUi.sectionKeys.settings
+      }
     };
   });
   expect(restored).toEqual({
     mode: 'selected',
     resolution: [[`${uidA}->${uidB}`, 1, 2], [`${uidB}->${uidC}`, 2, 0]],
     cache: [[`${uidB}->${uidC}`, 1, uidB, uidC, 2, 0, 'selected-b-to-c.tsv']],
-    cacheSize: 1
+    cacheSize: 1,
+    ui: {
+      intent: 'custom',
+      losatMode: 'blastn',
+      losatpMode: 'collinear',
+      summary: expect.stringContaining('LOSATN · 2 selected pairs · 1 LOSAT, 1 upload'),
+      settings: [
+        'losat-mode', 'blastn-task', 'upload-readiness',
+        'result-filters', 'comparison-appearance'
+      ]
+    }
   });
+  const restoredComparisonCard = page.locator('[data-linear-comparison-card]');
+  const restoredCommands = restoredComparisonCard.getByRole('group', {
+    name: 'Set all adjacent comparisons'
+  });
+  await expect(restoredCommands.getByRole('button')).toHaveCount(3);
+  await expect(restoredComparisonCard.getByRole('status')).toContainText(
+    'Current: Selected pairs (2; 1 LOSAT, 1 upload)'
+  );
+  await expect(restoredComparisonCard.getByText('Custom', { exact: true })).toBeVisible();
+  await expect(linearSelectedPairs(page).locator(':scope > summary')).toContainText(
+    'Selected pairs (2)'
+  );
+  await openLinearSelectedPairs(page);
+  await openLinearAdvancedComparison(page);
   const restoredUploadPair = linearComparisonPair(page, `${uidA}->${uidB}`);
-  const restoredLosatPair = linearComparisonPair(page, `${uidB}->${uidC}`);
+  const restoredLosatRawResult = page.locator(
+    `[data-linear-raw-result="${uidB}->${uidC}"]`
+  );
   await expect(restoredUploadPair).toContainText('mixed-a-to-b.tsv');
-  await expect(restoredLosatPair.getByRole('textbox', {
+  await expect(restoredLosatRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #3 to #1'
   })).toHaveValue('selected-b-to-c.tsv');
   const rawDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  await restoredLosatPair.getByRole('button', {
+  await restoredLosatRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #3 to #1'
   }).click();
   const rawDownload = await rawDownloadPromise;
@@ -1304,9 +1398,13 @@ test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ pa
       'record-4->record-5'
     ]
   });
-  const firstPair = linearComparisonPair(page, 'record-1->record-2');
-  await expect(firstPair).toContainText('Raw result ready');
-  await expect(firstPair.getByRole('button', {
+  await openLinearSelectedPairs(page);
+  await openLinearAdvancedComparison(page);
+  const firstRawResult = page.locator(
+    '[data-linear-raw-result="record-1->record-2"]'
+  );
+  await expect(firstRawResult).toContainText('Raw result ready');
+  await expect(firstRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #1 to #2'
   })).toBeEnabled();
 });
@@ -1469,12 +1567,6 @@ ${origin}
     firstRecord: makeGenbank('ColorRecA'),
     secondRecord: makeGenbank('ColorRecB')
   });
-  await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.pyodideReady === true,
-    null,
-    { timeout: 180000 }
-  );
-
   const firstRun = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();

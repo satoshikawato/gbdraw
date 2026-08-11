@@ -1351,18 +1351,34 @@ const CURRENT_WRITER_DRAFT_ADV_FIELDS = Object.freeze([
   'gc_content_width_circular',
   'gc_content_radius_circular',
   'gc_skew_width_circular',
-  'gc_skew_radius_circular'
+  'gc_skew_radius_circular',
+  'comparison_height',
+  'pairwise_match_style',
+  'min_bitscore',
+  'evalue',
+  'identity',
+  'alignment_length'
 ]);
 
 export const overlayCurrentWriterDraftConfig = (projectedConfig, storedConfig) => {
   const restored = cloneJsonData(projectedConfig);
-  if (!isPlainObject(storedConfig?.adv)) return restored;
-  if (!isPlainObject(restored.adv)) restored.adv = {};
-  CURRENT_WRITER_DRAFT_ADV_FIELDS.forEach((field) => {
-    if (Object.prototype.hasOwnProperty.call(storedConfig.adv, field)) {
-      restored.adv[field] = cloneJsonData(storedConfig.adv[field]);
+  if (!isPlainObject(storedConfig)) return restored;
+  if (isPlainObject(storedConfig.adv)) {
+    if (!isPlainObject(restored.adv)) restored.adv = {};
+    CURRENT_WRITER_DRAFT_ADV_FIELDS.forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(storedConfig.adv, field)) {
+        restored.adv[field] = cloneJsonData(storedConfig.adv[field]);
+      }
+    });
+  }
+  if (isPlainObject(storedConfig.linearComparisonPlan)) {
+    if (isPlainObject(storedConfig.losat)) {
+      restored.losat = cloneJsonData(storedConfig.losat);
     }
-  });
+    if (Object.prototype.hasOwnProperty.call(storedConfig, 'losatProgram')) {
+      restored.losatProgram = cloneJsonData(storedConfig.losatProgram);
+    }
+  }
   return restored;
 };
 

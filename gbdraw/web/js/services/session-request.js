@@ -77,6 +77,11 @@ import {
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
 import {
+  normalizeCollinearAnchorMode,
+  normalizeCollinearSearchScope,
+  normalizeOrthogroupMembershipMode
+} from '../app/losat-normalization.js';
+import {
   canonicalComparisonResourceKind,
   isResourceBackedCanonicalComparison,
   mapResourceBackedCanonicalComparison
@@ -542,7 +547,13 @@ const buildRecords = ({ state, filesData, resources }) => {
   }));
 };
 
-const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_depth) } = {}) => {
+const buildConfigOverrides = (
+  state,
+  {
+    depthRequested = Boolean(state.form.show_depth),
+    hasComparisonIntent = false
+  } = {}
+) => {
   const { form, adv } = state;
   const circular = state.mode.value === 'circular';
   const linearLabelPlacement = circular
@@ -551,8 +562,10 @@ const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_
   const linearTrackLayout = circular
     ? null
     : requireCurrentLinearTrackLayout(form.linear_track_layout);
-  const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
-  if (!circular && comparisonHeight.status === 'invalid') {
+  const comparisonHeight = !circular && hasComparisonIntent
+    ? classifyOptionalPositiveNumber(adv.comparison_height)
+    : null;
+  if (comparisonHeight?.status === 'invalid') {
     throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
   }
   const linearAxisManaged = state.modeProfileStateManager?.isManaged?.(
@@ -661,8 +674,13 @@ const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_
           [CONFIG_OVERRIDE_PATHS.linearTrackLayout]: linearTrackLayout,
           [CONFIG_OVERRIDE_PATHS.linearTrackAxisGap]: optionalNumber(adv.track_axis_gap),
           [CONFIG_OVERRIDE_PATHS.linearRulerOnAxis]: Boolean(form.linear_ruler_on_axis),
-          [CONFIG_OVERRIDE_PATHS.comparisonHeight]:
-            comparisonHeight.status === 'auto' ? null : comparisonHeight.value,
+          ...(hasComparisonIntent
+            ? {
+                [CONFIG_OVERRIDE_PATHS.comparisonHeight]:
+                  comparisonHeight.status === 'auto' ? null : comparisonHeight.value,
+                [CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle]: adv.pairwise_match_style
+              }
+            : {}),
           [CONFIG_OVERRIDE_PATHS.gcHeight]: optionalNumber(adv.gc_height),
           [CONFIG_OVERRIDE_PATHS.depthHeight]: optionalNumber(adv.depth_height),
           [CONFIG_OVERRIDE_PATHS.scaleStyle]: form.scale_style,
@@ -670,7 +688,6 @@ const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_
           [CONFIG_OVERRIDE_PATHS.scaleLabelColor]: adv.ruler_label_color || null,
           [CONFIG_OVERRIDE_PATHS.scaleStrokeWidth]:
             optionalNumber(adv.scale_stroke_width),
-          [CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle]: adv.pairwise_match_style,
           [CONFIG_OVERRIDE_PATHS.normalizeLength]: Boolean(form.normalize_length)
         })
   };
@@ -1121,6 +1138,28 @@ const buildTrackPlan = ({
 
 const generatedProteinSettings = (state, baseline = {}) => {
   const blastp = state.losat.blastp || {};
+  const positiveInteger = (value, fallback) => optionalPositiveInteger(value) ?? fallback;
+  const nonNegativeInteger = (value, fallback) => {
+    const numeric = optionalNumber(value);
+    return Number.isInteger(numeric) && numeric >= 0 ? numeric : fallback;
+  };
+  const rawCollinearityUnitMode = String(blastp.collinearUnitMode || '').trim().toLowerCase();
+  const collinearityUnitMode = ['auto', 'cds', 'locus'].includes(rawCollinearityUnitMode)
+    ? rawCollinearityUnitMode
+    : 'auto';
+  const rawCollinearityColorMode = String(
+    blastp.collinearColorMode || ''
+  ).trim().toLowerCase().replace(/-/g, '_');
+  const resolvedCollinearityColorMode = rawCollinearityColorMode === 'identity'
+    ? 'average_identity'
+    : rawCollinearityColorMode;
+  const collinearityColorMode = [
+    'average_identity',
+    'orientation',
+    'orientation_identity'
+  ].includes(resolvedCollinearityColorMode)
+    ? resolvedCollinearityColorMode
+    : 'orientation';
   const baselineCollinearity = baseline.collinearityParams &&
     typeof baseline.collinearityParams === 'object' &&
     !Array.isArray(baseline.collinearityParams)
@@ -1138,27 +1177,29 @@ const generatedProteinSettings = (state, baseline = {}) => {
       kind: baselineCollinearity.kind || 'lossless',
       parameters: {
         ...baselineParameters,
-        minAnchors: Number(blastp.collinearMinAnchors) || 1,
-        maxUnitGap: Number(blastp.collinearMaxUnitGap) || 0,
-        maxDiagonalDrift: Number(blastp.collinearMaxDiagonalDrift) || 0,
-        maxConflicts: Number(blastp.collinearMaxConflictsInMergeGap) || 0,
+        minAnchors: positiveInteger(blastp.collinearMinAnchors, 1),
+        maxUnitGap: nonNegativeInteger(blastp.collinearMaxUnitGap, 0),
+        maxDiagonalDrift: nonNegativeInteger(blastp.collinearMaxDiagonalDrift, 0),
+        maxConflicts: nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
         mergeOrientation: baselineParameters.mergeOrientation || 'either'
       }
     },
-    collinearityUnitMode: String(blastp.collinearUnitMode || 'auto'),
-    collinearityAnchorMode: String(blastp.collinearAnchorMode || 'rbh'),
-    collinearitySearchScope: String(blastp.collinearSearchScope || 'adjacent'),
-    collinearityColorMode: String(blastp.collinearColorMode || 'orientation'),
+    collinearityUnitMode,
+    collinearityAnchorMode: normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
+    collinearitySearchScope: normalizeCollinearSearchScope(blastp.collinearSearchScope),
+    collinearityColorMode,
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
     losatpThreads: optionalPositiveInteger(state.losat.threadsPerJob),
-    proteinBlastpMaxHits: Number(blastp.maxHits) || 5,
+    proteinBlastpMaxHits: positiveInteger(blastp.maxHits, 5),
     proteinBlastpCandidateLimit:
       baseline.proteinBlastpCandidateLimit ?? optionalPositiveInteger(blastp.candidateLimit),
-    orthogroupMembershipMode: String(blastp.orthogroupMembershipMode || 'anchor_core_v1'),
-    orthogroupMemberMaxHits: Number(blastp.orthogroupMemberMaxHits) || 5,
+    orthogroupMembershipMode: normalizeOrthogroupMembershipMode(
+      blastp.orthogroupMembershipMode
+    ),
+    orthogroupMemberMaxHits: positiveInteger(blastp.orthogroupMemberMaxHits, 5),
     collinearMaxParalogLinksPerOrthogroup:
-      Number(blastp.collinearMaxParalogLinksPerOrthogroup) || 2,
+      positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2),
     alignOrthogroupFeature:
       String(state.selectedOrthogroupAlignmentFeature.value || '').trim() || null
   };
@@ -1593,6 +1634,13 @@ export const buildCanonicalRenderRequest = ({
       'Turn Normalize off or assign each record to a separate row.'
     );
   }
+  const hasLinearComparisonIntent = (
+    state.mode.value === 'linear' &&
+    comparisonPlanSnapshot?.hasComparisonIntent === true
+  );
+  const comparisonOptionsRequested = (
+    state.mode.value === 'circular' || hasLinearComparisonIntent
+  );
   const resources = createResourceBuilder();
   const webFiles = {};
   const records = buildRecords({ state, filesData, resources });
@@ -1641,7 +1689,8 @@ export const buildCanonicalRenderRequest = ({
       );
   const diagramOptions = {
     configOverrides: buildConfigOverrides(state, {
-      depthRequested: trackPlan.depthRequested
+      depthRequested: trackPlan.depthRequested,
+      hasComparisonIntent: hasLinearComparisonIntent
     }),
     tracks: trackPlan.tracks,
     output: {
@@ -1660,10 +1709,14 @@ export const buildCanonicalRenderRequest = ({
     depthStep: optionalPositiveInteger(state.adv.depth_step_size),
     plotTitle: String(state.form.plot_title || '').trim() || null,
     plotTitleFontSize: optionalNumber(state.adv.plot_title_font_size),
-    evalue: Number(state.adv.evalue),
-    bitscore: Number(state.adv.min_bitscore),
-    identity: Number(state.adv.identity),
-    alignmentLength: Number(state.adv.alignment_length) || 0
+    ...(comparisonOptionsRequested
+      ? {
+          evalue: Number(state.adv.evalue),
+          bitscore: Number(state.adv.min_bitscore),
+          identity: Number(state.adv.identity),
+          alignmentLength: Number(state.adv.alignment_length) || 0
+        }
+      : {})
   };
   if (Array.isArray(state.annotationSets) && state.annotationSets.length > 0) {
     diagramOptions.annotations = annotationOptionsPayload(state.annotationSets);
@@ -1783,7 +1836,7 @@ export const buildCanonicalRenderRequest = ({
       );
       webFiles.conservationBlastSource = 'losat-cache';
     }
-  } else {
+  } else if (hasLinearComparisonIntent) {
     diagramOptions.pairwiseMatchStyle = String(state.adv.pairwise_match_style || 'ribbon');
   }
 

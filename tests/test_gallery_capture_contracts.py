@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import gzip
 import json
 from pathlib import Path
 
@@ -157,6 +158,36 @@ LINEAR_COMPARISON_PANEL_EXAMPLES = {
     "hepatoplasmataceae_orthogroup",
     "hepatoplasmataceae_collinear",
     "majanivirus_orthogroup",
+    "vibrio-harveyi-group-collinear",
+}
+
+
+LOSATP_MODE_CAPTURES = {
+    "BGC0000708-BGC0000713": {
+        "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
+        "selected": "Similarity groups",
+        "state": "orthogroup",
+    },
+    "hepatoplasmataceae_orthogroup": {
+        "src": "./media/hepatoplasmataceae_orthogroup/manual-04-01-orthogroups-mode.webp",
+        "selected": "Similarity groups",
+        "state": "orthogroup",
+    },
+    "hepatoplasmataceae_collinear": {
+        "src": "./media/hepatoplasmataceae_collinear/manual-04-01-collinear-reduction.webp",
+        "selected": "Collinear blocks",
+        "state": "collinear",
+    },
+    "majanivirus_orthogroup": {
+        "src": "./media/majanivirus_orthogroup/manual-03-02-losatp-orthogroups.webp",
+        "selected": "Similarity groups",
+        "state": "orthogroup",
+    },
+    "vibrio-harveyi-group-collinear": {
+        "src": "./media/vibrio-harveyi-group-collinear/manual-04-01-search-method-collinear.webp",
+        "selected": "Collinear blocks",
+        "state": "collinear",
+    },
 }
 
 
@@ -176,9 +207,21 @@ FIRST_COMPARISON_BOUNDARY_CAPTURE = {
         "Streptomyces lividus CBS 844.73",
         "#2",
         "Streptomyces fradiae ATCC 10745",
-        "Raw result ready",
-        "Save Raw LOSAT TSV",
+        "Run LOSAT",
     },
+}
+
+
+FIRST_RAW_RESULT_CAPTURE = {
+    "src": "./media/BGC0000708-BGC0000713/manual-03-04-first-raw-result.webp",
+    "selector": "[data-linear-raw-result='record-1->record-2']",
+    "viewport": {"width": 1600, "height": 1100},
+    "state": {
+        "mode": "linear",
+        "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
+        "linearComparisonResolution.edges.0.source": "losat",
+    },
+    "visible_text": {"Raw LOSAT filename", "Raw result", "Save Raw LOSAT TSV"},
 }
 
 
@@ -188,25 +231,91 @@ def _load_tutorial(sample: dict[str, object]) -> dict[str, object]:
     return json.loads(tutorial_path.read_text(encoding="utf-8"))
 
 
-def test_linear_comparison_panels_name_the_global_default_scope() -> None:
+def test_linear_comparison_panels_capture_the_command_and_current_status() -> None:
     for example_id in LINEAR_COMPARISON_PANEL_EXAMPLES:
         sample = load_ready_examples(example_id)[0]
         tutorial = _load_tutorial(sample)
         panel_operations = [
             operation
             for _, operation in iter_operation_contexts(sample, tutorial)
-            if operation.get("media", {}).get("src", "").endswith(
-                (
-                    "manual-03-01-open-pairwise.webp",
-                    "manual-03-01-browser-losat.webp",
-                )
-            )
+            if operation.get("capture", {}).get("selector")
+            == "[data-linear-comparison-card]"
+            and "Current: Run LOSAT"
+            in operation.get("capture", {}).get("visibleText", [])
         ]
 
         assert len(panel_operations) == 1
-        assert "Apply to all adjacent gaps" in panel_operations[0]["capture"][
-            "visibleText"
-        ]
+        capture = panel_operations[0]["capture"]
+        assert panel_operations[0]["dataDependent"] is True
+        assert capture["session"] == sample["session"]
+        assert {"Comparison", "Run LOSAT", "Current: Run LOSAT", "Settings"} <= set(
+            capture["visibleText"]
+        )
+        assert any(text.startswith("Selected pairs") for text in capture["visibleText"])
+        assert "setLinearComparisonGlobalAction('losat')" in " ".join(
+            action.get("script", "") for action in capture.get("actions", [])
+        )
+
+
+@pytest.mark.parametrize("example_id", LOSATP_MODE_CAPTURES)
+def test_losatp_mode_captures_show_both_levels(
+    example_id: str,
+) -> None:
+    expected = LOSATP_MODE_CAPTURES[example_id]
+    sample = load_ready_examples(example_id)[0]
+    tutorial = _load_tutorial(sample)
+    matches = [
+        operation
+        for _, operation in iter_operation_contexts(sample, tutorial)
+        if operation.get("media", {}).get("src") == expected["src"]
+    ]
+
+    assert len(matches) == 1
+    operation = matches[0]
+    capture = operation["capture"]
+    scripts = " ".join(
+        action.get("script", "") for action in capture.get("actions", [])
+    )
+    assert capture["crop"] == "openSelect"
+    assert capture["cropPadding"]["top"] >= 60
+    assert capture["openSelect"] == {
+        "selectedLabel": expected["selected"],
+        "options": ["Similarity groups", "Collinear blocks", "Pairwise matches"],
+        "label": "LOSATP mode",
+        "hideFollowingSiblings": True,
+    }
+    assert capture["clipSelectors"] == ["[data-linear-comparison-losat-mode]"]
+    assert capture["assertAppState"]["losatProgram"] == "blastp"
+    assert capture["assertAppState"]["losat.blastp.mode"] == expected["state"]
+    assert "setLinearComparisonLosatMode('blastp')" in scripts
+    assert f"setLinearComparisonLosatpMode('{expected['state']}')" in scripts
+    assert capture["visibleControls"] == [
+        {
+            "selector": "[data-linear-comparison-losat-mode-option='blastn']",
+            "pressed": False,
+        },
+        {
+            "selector": "[data-linear-comparison-losat-mode-option='blastp']",
+            "pressed": True,
+        },
+        {
+            "selector": "[data-linear-comparison-losat-mode-option='tblastx']",
+            "pressed": False,
+        },
+        {"label": "LOSATP mode", "value": expected["selected"]},
+    ]
+    assert capture["visibleText"] == ["LOSAT Mode"]
+    assert "LOSAT Mode" in operation["media"]["alt"]
+    assert "LOSATP mode" in operation["media"]["alt"]
+
+
+def test_linear_comparison_tutorials_do_not_use_the_retired_search_method_api() -> None:
+    for example_id in LINEAR_COMPARISON_PANEL_EXAMPLES:
+        sample = load_ready_examples(example_id)[0]
+        tutorial = _load_tutorial(sample)
+        serialized = json.dumps(tutorial)
+        assert "setLinearComparisonSearchMethod" not in serialized
+        assert '"label": "Search method"' not in serialized
 
 
 def test_first_linear_comparison_boundary_has_an_exact_capture_contract() -> None:
@@ -237,6 +346,7 @@ def test_first_linear_comparison_boundary_has_an_exact_capture_contract() -> Non
     }
     assert expected["state"].items() <= capture["assertAppState"].items()
     assert expected["visible_text"] <= set(capture["visibleText"])
+    assert capture["openDetails"] == ["Selected pairs"]
     assert capture["visibleControls"] == [
         {
             "selector": (
@@ -245,14 +355,70 @@ def test_first_linear_comparison_boundary_has_an_exact_capture_contract() -> Non
             ),
             "checked": True,
         },
+    ]
+
+
+def test_first_raw_result_has_an_exact_advanced_capture_contract() -> None:
+    sample = load_ready_examples("BGC0000708-BGC0000713")[0]
+    tutorial = _load_tutorial(sample)
+    expected = FIRST_RAW_RESULT_CAPTURE
+    matches = [
+        operation
+        for _, operation in iter_operation_contexts(sample, tutorial)
+        if operation.get("media", {}).get("src") == expected["src"]
+    ]
+
+    assert len(matches) == 1
+    operation = matches[0]
+    capture = operation["capture"]
+    assert operation["dataDependent"] is True
+    assert capture["source"] == "webapp"
+    assert capture["session"] == sample["session"]
+    assert capture["selector"] == expected["selector"]
+    assert capture["waitForSelector"] == expected["selector"]
+    assert capture["viewport"] == expected["viewport"]
+    assert capture["cropPadding"] == 14
+    assert capture["openDetails"] == ["Advanced comparison and layout"]
+    assert expected["state"].items() <= capture["assertAppState"].items()
+    assert expected["visible_text"] <= set(capture["visibleText"])
+    assert capture["visibleControls"] == [
         {
             "selector": (
-                "[data-edge-key='record-1->record-2'] "
+                "[data-linear-raw-result='record-1->record-2'] "
                 "input[aria-label='Raw LOSAT filename for #1 to #2']"
             ),
             "value": "",
-        },
+        }
     ]
+
+
+def test_vibrio_capture_activates_losat_without_changing_the_cli_only_session() -> None:
+    sample = load_ready_examples("vibrio-harveyi-group-collinear")[0]
+    session_path = resolve_gallery_reference(str(sample["session"]))
+    assert session_path is not None
+    with gzip.open(session_path, "rt", encoding="utf-8") as handle:
+        session = json.load(handle)
+    assert session["config"]["linearComparisonPlan"] == {
+        "mode": "none",
+        "defaultSource": "losat",
+        "edges": [],
+    }
+
+    tutorial = _load_tutorial(sample)
+    comparison_captures = [
+        operation["capture"]
+        for _, operation in iter_operation_contexts(sample, tutorial)
+        if operation.get("media", {}).get("src", "").startswith(
+            "./media/vibrio-harveyi-group-collinear/manual-04-"
+        )
+    ]
+    assert comparison_captures
+    for capture in comparison_captures:
+        scripts = " ".join(
+            action.get("script", "") for action in capture.get("actions", [])
+        )
+        assert "setLinearComparisonGlobalAction('losat')" in scripts
+        assert capture["assertAppState"]["linearComparisonPlan.mode"] == "adjacent"
 
 
 @pytest.mark.parametrize("example_id", LAYOUT_RESULT_CAPTURES)

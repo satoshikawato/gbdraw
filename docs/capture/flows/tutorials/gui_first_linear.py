@@ -82,9 +82,9 @@ def capture_first_linear(
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()
         expect(genbank).to_be_checked()
-        no_comparison = page.get_by_role("radio", name="No comparison", exact=True)
-        no_comparison.check()
-        expect(no_comparison).to_be_checked()
+        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+            "Current: No comparison"
+        )
 
         page.get_by_label("GenBank File", exact=True).set_input_files(
             FIRST_LINEAR_FIXTURE_PATH

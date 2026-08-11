@@ -36,13 +36,17 @@ sequence comes from NCBI; the rule is repository-maintained support data.
 
 ## Step 1: Load the NCBI Lambda genome
 
-Select **Linear** at the top of the app. Under **Input Genomes**, keep **GenBank** selected and choose **No comparison**. In the first **GenBank File** control, choose `NC_001416.gb`.
+Select **Linear** at the top of the app. A fresh Linear page starts with **No
+comparison**. Under **Input Genomes**, keep **GenBank** selected. The **GenBank
+File** uploader is the first control in **Sequence 1**; choose
+`NC_001416.gb`. Leave **Record options** closed.
 
 The uploader should show `NC_001416.gb` in green. Keep one input row only; this Tutorial uses the complete `NC_001416.1` record without cropping or splitting it.
 
 ![Linear GenBank input showing NC_001416.gb selected](../../images/t-gui-02/01-input-ready.png)
 
-*Confirm Linear, GenBank, and No comparison before generating. The first input row should name `NC_001416.gb`.*
+*Confirm Linear, GenBank, the `NC_001416.gb` upload, and the separate **Current:
+No comparison** status before generating.*
 
 ## Step 2: Generate the first diagram
 
@@ -54,7 +58,10 @@ Select **Generate Diagram** without changing the presentation settings. When pro
 
 ## Step 3: Add concise labels and a ruler
 
-Set the values below. The controls are under **Basic**, **Layout**, **Labels**, **Axis & Scale**, and **Title & Legend**.
+Set **Output Prefix** under **Basic**. **Generate Diagram** follows **Basic** in
+the DOM. Continue past it to the **Layout**, **Labels**, **Axis & Scale**, and
+**Title & Legend** sections for the remaining values below. Leave the closed
+**Advanced comparison and layout** disclosure unchanged.
 
 | Control | Value |
 | --- | --- |

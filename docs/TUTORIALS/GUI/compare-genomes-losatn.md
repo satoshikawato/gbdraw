@@ -41,10 +41,11 @@ filename, `lambda-de3.losatn.tsv`.
 
 ## Step 1: Load both complete genomes
 
-Select **Linear**. Under **Input Genomes**, keep **GenBank** and **No comparison** selected.
+Select **Linear**. A fresh Linear page reports **Current: No comparison** under
+the record list. Under **Input Genomes**, keep **GenBank** selected.
 
 1. In the first **GenBank File** control, choose `NC_001416.gb`.
-2. Select **Add Seq**.
+2. Select **Add sequence** in the **Input Genomes** header.
 3. In the second **GenBank File** control, choose `NC_042057.1.gb`.
 
 Keep Lambda first and DE3 second. Leave both **Region (optional)** sections unchanged so the inputs remain the complete `NC_001416.1` (48,502 bp) and `NC_042057.1` (42,925 bp) records.
@@ -63,22 +64,28 @@ Select **Generate Diagram**. The first result should contain two annotated recor
 
 ## Step 3: Configure LOSATN
 
-Return to **Input Genomes**, select **Run LOSAT**, and keep **LOSATN** selected. Set these values:
+In **Comparison**, select **Run LOSAT** explicitly. Open **Settings**, choose
+the **LOSATN** button in **LOSAT Mode**, and set **LOSATN task** and **Match height**. Open
+**Basic** and set **Output Prefix**. Finally, continue past **Generate
+Diagram**, open **Advanced comparison and layout**, and set the runtime and raw
+result values.
 
-| Control | Value |
-| --- | --- |
-| Execution | Serial |
-| Total threads | 1 |
-| Parallel runs | 1 run |
-| Threads per run | Fixed at 1 |
-| Task | `megablast` |
-| Pairwise Match Height | `120` |
-| Raw LOSAT filename | `lambda-de3.losatn.tsv` |
-| Output Prefix | `lambda-de3-losatn` |
+| Section | Control | Value |
+| --- | --- | --- |
+| Settings | LOSAT Mode | LOSATN |
+| Settings | LOSATN task | `megablast` |
+| Settings / Comparison appearance | Match height | `120` |
+| Basic | Output Prefix | `lambda-de3-losatn` |
+| Advanced comparison and layout | Execution | Serial |
+| Advanced comparison and layout | Total threads | 1 |
+| Advanced comparison and layout | Parallel runs | 1 run |
+| Advanced comparison and layout | Threads per run | Fixed at 1 |
+| Advanced comparison and layout / Raw LOSAT results | Raw LOSAT filename | `lambda-de3.losatn.tsv` |
 
-![LOSATN selected with deterministic single-thread settings](../../images/t-gui-03/03-losatn-settings.png)
+![LOSATN selected in LOSAT Mode with megablast and result filters](../../images/t-gui-03/03-losatn-settings.png)
 
-*Serial execution, one total thread, one run, and `megablast` produce the deterministic six-link result shown throughout this tutorial.*
+*The open Settings disclosure shows **LOSAT Mode: LOSATN**, `megablast`, the
+result filters, and **Match height: 120**.*
 
 ## Step 4: Run LOSATN and download the evidence
 
@@ -88,7 +95,10 @@ Select **Generate Diagram** again. LOSATN runs in the browser, and the result sh
 
 *The longest match covers 21,232 aligned bases at 99.981% identity.*
 
-In the comparison between sequence 1 and sequence 2, select **Save Raw LOSAT TSV**. The browser saves `lambda-de3.losatn.tsv`. Then select **SVG** in the **Result Preview** toolbar to save `lambda-de3-losatn.svg`.
+Open **Advanced comparison and layout** and find **Raw LOSAT results**. In the
+pair from sequence 1 to sequence 2, select **Save Raw LOSAT TSV**. The browser
+saves `lambda-de3.losatn.tsv`. Then select **SVG** in the **Result Preview**
+toolbar to save `lambda-de3-losatn.svg`.
 
 The TSV should contain six tab-separated rows. Every query interval falls within 1–48,502, and every subject interval falls within 1–42,925.
 

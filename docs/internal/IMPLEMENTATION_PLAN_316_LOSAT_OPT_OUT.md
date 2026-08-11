@@ -8,6 +8,24 @@ Issue:
 
 Status: planned
 
+> Superseded decision (2026-08-10): [Work package B](WORK_PACKAGE_B_LOSAT_COMPARISON_UI_IMPLEMENTATION_PLAN_2026-08-10.md)
+> replaces this plan's new-session and Reset default of `adjacent + losat`.
+> Fresh Linear state and **Reset Settings** now use `mode='none'`. Reset still
+> retains uploaded BLAST TSV files and custom raw-result names as inactive
+> drafts. The supported legacy-session migration rules and the normalizer's
+> invalid-input fallback are unchanged.
+>
+> User amendment (2026-08-11): the Work package B UI projects the existing
+> program through three `LOSAT Mode` buttons (LOSATN / LOSATP / TLOSATX) and,
+> when LOSATP is active, projects `losat.blastp.mode` through the `LOSATP mode`
+> menu (Similarity groups / Collinear blocks / Pairwise matches).
+> This does not add persisted state or change this plan's selected-pair
+> compatibility rules.
+> Similarity groups always uses all-vs-all search evidence and exposes no
+> evidence-scope control. Collinear blocks uses `collinearSearchScope`; its
+> fresh and Reset default is All records, while a saved explicit Adjacent
+> pairs value is restored unchanged.
+
 ## Current baseline and recorded decisions
 
 This plan is based on the current `0.14.0b1` branch in

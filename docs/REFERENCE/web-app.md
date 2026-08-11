@@ -39,10 +39,12 @@ local environment or prepared command-line evidence.
 | Linear | Ordered GenBank rows or matched GFF3 + FASTA rows | One Linear result with an independent comparison plan |
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear record card
-uses **GenBank File**; **Add Seq** has the accessible name **Add sequence**.
-A GenBank file may contain several biological records. GFF3 input requires the
-matching FASTA sequence and exact sequence-ID agreement. See [Input formats and
-TSV schemas](input-formats-and-tsv-schemas.md) for the file contract.
+starts with its **GenBank File** uploader, or its matched GFF3 and FASTA
+uploaders, followed by a closed **Record options** disclosure. **Add sequence**
+is visible in the **Input Genomes** header. A GenBank file may contain several
+biological records. GFF3 input requires the matching FASTA sequence and exact
+sequence-ID agreement. See [Input formats and TSV
+schemas](input-formats-and-tsv-schemas.md) for the file contract.
 
 ## Main workflow
 
@@ -55,6 +57,11 @@ TSV schemas](input-formats-and-tsv-schemas.md) for the file contract.
 Settings are committed to a result only after generation succeeds. The form
 may contain newer draft values than the visible result, so a session records
 the committed request together with supported editable state.
+
+For Linear diagrams, the DOM and keyboard order is **Input Genomes**,
+**Comparison**, **Basic**, **Generate Diagram**, then **Advanced comparison and
+layout**. The fixed Generate bar remains visible while its DOM anchor stays in
+that order.
 
 ## Circular multi-record canvas
 
@@ -112,33 +119,71 @@ biological coordinates.
 | Separate strands | On | On |
 | Legend | Left | Bottom |
 | Feature placement | Tuckin preset | Features on axis |
-| Comparison | No rings until configured | No comparison until a plan is selected |
+| Comparison | No rings until configured | No comparison until a command creates a plan |
 
 Loading a session restores its saved values instead of applying these
 defaults. Turning off **Use custom stack** preserves its draft slots. **Reset
 Settings** rebuilds settings from the browser defaults while retaining uploaded
-files and the current generated result.
+files and the current generated result. For Linear diagrams, Reset returns the
+active comparison plan to **No comparison** while keeping uploaded comparison
+files and custom raw-result names as inactive drafts.
 
 The custom-stack editor cannot add an `annotations` slot until an annotation
 table has been imported and an annotation set is available.
 
 ## Comparison surfaces
 
-The browser runs LOSATN, TLOSATX, and LOSATP. LOSATP has **Pairwise**,
-**Similarity groups**, and **Collinear blocks** modes. **Upload BLAST TSV**
-uses prepared BLAST-compatible rows for Linear links or Circular rings.
+The browser runs LOSATN, TLOSATX, and LOSATP. Linear **Comparison** follows the
+record list. Its **No comparison**, **Run LOSAT**, and **Upload BLAST TSV**
+buttons are bulk commands for all adjacent pairs, not radio options. A separate
+**Current:** status reports the effective plan. A selected or mixed plan shows
+**Current: Selected pairs (N; ...)** with a **Custom** badge instead of making
+one of the three commands look selected. Fresh Linear pages and **Reset
+Settings** use **No comparison**. Loading a saved Web session restores its
+saved comparison intent.
 
-For Linear input, **Apply to all adjacent gaps** sets **No comparison**, **Run
-LOSAT**, or **Upload BLAST TSV** across positional neighbors. Each comparison
-boundary can override that bulk choice. **Advanced pair setup** adds selected
-record pairs, including non-adjacent edges. An uploaded edge participates only
-when it has an active file; an omitted edge draws no link and starts no search.
+Select **Run LOSAT** explicitly to enable a browser search, then open the
+initially closed **Settings** disclosure. The three **LOSAT Mode** buttons
+select **LOSATN**, **LOSATP**, or **TLOSATX**. When **LOSATP** is active,
+the **LOSATP mode** menu selects
+**Similarity groups**, **Collinear blocks**, or **Pairwise matches**. Selected
+or mixed pair plans allow LOSATN, TLOSATX, and LOSATP Pairwise matches.
+Similarity groups and Collinear blocks require all-adjacent LOSAT; **Use all
+adjacent LOSAT** changes the topology only after an explicit selection.
 
-**LOSAT Mode** selects **LOSATN**, **LOSATP**, or **TLOSATX**. **Execution**
-selects **Auto (...)**, **Serial**, or **Threaded**. Threaded runs allocate
-**Total threads** through **Safe (...)**, **Available (...)**, or an explicit
-number, then expose **Parallel runs** and **Threads per run**. LOSATN **Task**
-is `megablast`, `blastn`, or `dc-megablast`.
+Open the initially closed **Selected pairs (N)** disclosure to change a pair's
+source, bind an uploaded table, omit a pair, or add a non-adjacent pair. Pair
+editors are not inserted between record cards. An uploaded edge participates
+only when it has an active file; an omitted edge draws no link and starts no
+search.
+
+**Settings** shows only controls used by the active LOSAT program and, for
+LOSATP, its presentation. LOSATN shows **LOSATN task**. TLOSATX keeps each record's
+active genetic code in that record's **Record options**. LOSATP **Pairwise
+matches** shows **Max hits per protein**; **Similarity groups** shows **Member
+hits per protein**; **Collinear blocks** shows its primary block, scope, and
+color controls. Shared result filters appear in the same disclosure. LOSATN,
+TLOSATX, LOSATP Pairwise matches, and uploaded evidence also show **Comparison
+appearance**, with **Match style** and **Match height**. Similarity groups and
+Collinear blocks keep those appearance drafts but hide the controls. To
+reproduce a Curve-based recipe from fresh state, select **LOSATP** under
+**LOSAT Mode**, choose **Pairwise matches** under **LOSATP mode**, set **Match
+style** to **Curve**, then choose the final LOSATP mode. Changing either mode
+control does not rewrite the saved style.
+
+Similarity groups always computes all-vs-all protein-search evidence across
+the loaded records; it has no evidence-scope selector. Collinear blocks uses
+**Evidence scope**. Fresh pages and **Reset Settings** default that control to
+**All records**. A session that explicitly saved **Adjacent pairs** restores
+that value. Evidence scope controls the search expansion, not which record
+pairs receive displayed links.
+
+**Advanced comparison and layout** is closed by default and appears after
+**Generate Diagram** in the DOM. It owns **Record Layout**, LOSAT
+**Execution**, thread allocation, cache controls, and advanced Collinear
+search details. Its **Raw LOSAT results** section groups each pair's filename,
+retained-artifact status, and **Save Raw LOSAT TSV** action. Closing any of
+these disclosures does not disable comparison work or discard its values.
 
 TLOSATX translates each sequence with its selected genetic code. In Linear
 mode, each card's **Gencode (this entry)** control, with accessible name
@@ -147,15 +192,12 @@ Circular mode, **Reference gencode** applies to the displayed subject. Each
 comparison-FASTA row's visible **Subject gencode** control applies to that
 comparison sequence, even though the search passes the sequence as its query.
 
-LOSATP **blastp mode** selects **Pairwise**, **Similarity groups**, or
-**Collinear blocks**. Pairwise presentation uses **Pairwise Match Style**
-(**Ribbon** or **Curve**) and **Pairwise Match Height**. Collinear settings
-include **Max unit gap**, **Min block genes**, **Diagonal drift**, **Merge
-conflicts**, **Evidence scope** (**Adjacent pairs** or **All records**), and
-**Color mode** (**Average identity**, **Orientation**, or **Orientation +
-identity**). The common filters are **Bitscore**, **E-value**, **Minimum
-Identity**, and **Minimum Length**; scientific meanings and limits belong to
-the comparison reference below.
+The common Linear filters are **Bitscore**, **E-value**, **Minimum identity**,
+and **Minimum length**. Collinear settings include **Max unit gap**, **Min
+block genes**, **Diagonal drift**, **Merge conflicts**, **Evidence scope**
+(**Adjacent pairs** or **All records**), and **Color mode** (**Average
+identity**, **Orientation**, or **Orientation + identity**). Scientific
+meanings and limits belong to the comparison reference below.
 
 Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST**.
 Uploaded evidence uses **BLAST outfmt 6/7 files** and **Reference side**
@@ -216,3 +258,10 @@ has the mode-qualified accessible name **Show Coordinate Scale (Circular)** or
 **Show Coordinate Scale (Linear)**. The visible annotation **Labels** toggle
 uses **Show annotation labels**. Mode buttons expose pressed state, file
 controls are labelled, and the preview is a named region.
+
+The Linear comparison command group is named **Set all adjacent comparisons**.
+Its buttons are named **Set no comparison**, **Run LOSAT for all adjacent
+pairs**, and **Use uploaded BLAST TSV for all adjacent pairs**. The buttons do
+not expose pressed state because they are commands. The separate current-plan
+status, native disclosure summaries, record uploaders, and pair actions remain
+keyboard reachable.

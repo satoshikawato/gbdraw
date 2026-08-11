@@ -1,6 +1,6 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-08-08
+Last updated: 2026-08-11
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
@@ -21,39 +21,40 @@ The four recaptures replace stale crops from the pre-checkbox Axis & Scale
 card. Final previews and thumbnails remain unchanged because coordinate scales
 remain visible by default.
 
-## Explicit Linear comparison plan (#316)
+## Linear comparison workflow (Work package B)
+
+This section supersedes the #316 comparison-panel and row-boundary entries. The
+saved sessions remain the operation data source. Capture actions may activate a
+comparison plan for the screenshot; they do not rewrite the session file.
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
-| `lambda_basic_linear` | `manual-02-03-no-comparison.webp` | Add | Exact Lambda session; Linear; **No comparison** selected; focused global comparison choices | Captured and visually verified (1008×300, DSF 3, quality 94) |
-| `BGC0000708-BGC0000713` | `manual-02-01-record-text-row.webp` | Recapture | Exact BGC session; row 1 GenBank, organism, and subtitle controls; omit the retired per-record LOSAT filename area | Recaptured and visually verified (1008×1263, DSF 3, quality 94) |
-| `BGC0000708-BGC0000713` | `manual-03-01-open-pairwise.webp` | Recapture | Exact BGC session; Linear; **Run LOSAT**; LOSATP; Similarity groups; thread and threshold values from the tutorial table | Recaptured and visually verified (1068×1791, DSF 3, quality 95) |
-| `hepatoplasmataceae_orthogroup` | `manual-02-01-upload-row-context.webp` | Recapture | Exact orthogroup session; row 1 GenBank and neighboring record controls; omit the retired per-record LOSAT filename area | Recaptured and visually verified (1008×1263, DSF 3, quality 94) |
-| `hepatoplasmataceae_orthogroup` | `manual-03-01-browser-losat.webp` | Recapture | Exact orthogroup session; Linear; **Run LOSAT**; LOSATP; comparison selector and LOSAT settings both visible | Recaptured and visually verified (996×1791, DSF 3, quality 95) |
-| `majanivirus_orthogroup` | `manual-02-01-upload-row-label-context.webp` | Recapture | Exact Majanivirus session; row 1 GenBank and organism label; omit the retired per-record LOSAT filename area | Recaptured and visually verified (1008×1263, DSF 3, quality 94) |
-| `majanivirus_orthogroup` | `manual-03-01-open-pairwise.webp` | Recapture | Exact Majanivirus session; `adjacent + losat`; LOSATP Similarity groups; requested 32 threads per run; tutorial thresholds | Recaptured and visually verified (996×1791, DSF 3, quality 95) |
-| `hepatoplasmataceae_collinear` | `manual-02-01-upload-row-context.webp` | Recapture | Exact collinear session; row 1 GenBank and neighboring record controls; omit the retired per-record LOSAT filename area | Recaptured and visually verified (1008×1263, DSF 3, quality 94) |
-| `hepatoplasmataceae_collinear` | `manual-03-01-open-pairwise.webp` | Replace | Convert the stale manual crop to a declarative exact-session capture with `adjacent + losat`, LOSATP, and Collinear blocks | Recaptured and visually verified (996×2166, DSF 3, quality 95) |
-| `vibrio-harveyi-group-collinear` | `manual-04-03-adjacent-pairs.webp` | Inspect | Exact Vibrio session; LOSATP Collinear blocks; Evidence scope **Adjacent pairs**; retain only if the new global selector stays outside the crop | Inspected; keep existing crop (840×483), which does not show the global selector |
+| `lambda_basic_linear` | `manual-02-03-no-comparison.webp` | Recapture | Exact Lambda session; **No comparison** command; **Current: No comparison** status; closed **Settings** and **Selected pairs (0)** | Captured at DSF 3; strict validation passed; visually accepted |
+| `BGC0000708-BGC0000713` | `manual-02-01-record-text-row.webp`, `manual-04-02-reverse-bgc0000713.webp` | Recapture | Exact BGC session; uploader before an open **Record options** disclosure; row-specific organism, subtitle, region, and reverse-complement controls | Captured at DSF 3; strict validation passed; visually accepted |
+| `BGC0000708-BGC0000713` | `manual-03-01-open-pairwise.webp`, `manual-03-02-select-losatp-orthogroups.webp` | Recapture | Exact BGC session; **Run LOSAT** command and current status; open **Settings**; all three **LOSAT Mode** buttons with **LOSATP** pressed; open **LOSATP mode** menu in UI order with **Similarity groups** selected; tutorial filters | Button UI captured at DSF 3; strict validation passed; visually accepted |
+| `BGC0000708-BGC0000713` | `manual-03-02-runtime-reproducibility.webp`, `manual-03-04-first-raw-result.webp` | Add | Open **Advanced comparison and layout**; capture **Runtime and reproducibility** separately from the first pair's raw filename, status, and download | Captured at DSF 3; strict validation passed; visually accepted |
+| `BGC0000708-BGC0000713` | `manual-03-03-first-comparison-boundary.webp` | Recapture | Open **Selected pairs (4)**; first `record-1->record-2` pair; LOSAT source and endpoint identities; no raw-result owner in this crop | Captured at DSF 3; strict validation passed; visually accepted |
+| `hepatoplasmataceae_orthogroup` | `manual-02-01-upload-row-context.webp` | Recapture | Exact orthogroup session; first uploader and open **Record options** disclosure | Captured at DSF 3; strict validation passed; visually accepted |
+| `hepatoplasmataceae_orthogroup` | `manual-03-01-browser-losat.webp`, `manual-04-01-orthogroups-mode.webp`, `manual-04-02-orthogroup-settings.webp` | Recapture | **Run LOSAT** command and status; open **Settings**; all three **LOSAT Mode** buttons with **LOSATP** pressed; open **LOSATP mode** menu in UI order with **Similarity groups** selected; tutorial filters | Button UI captured at DSF 3; strict validation passed; visually accepted |
+| `hepatoplasmataceae_orthogroup` | `manual-03-02-runtime-reproducibility.webp` | Add | Open **Advanced comparison and layout**; Auto execution, Safe total threads, and automatic run allocation | Captured at DSF 3; strict validation passed; visually accepted |
+| `hepatoplasmataceae_collinear` | `manual-02-01-upload-row-context.webp` | Recapture | Exact collinear session; first uploader and open **Record options** disclosure | Captured at DSF 3; strict validation passed; visually accepted |
+| `hepatoplasmataceae_collinear` | `manual-03-01-open-pairwise.webp`, `manual-04-01-collinear-reduction.webp`, `manual-04-02-orientation-identity.webp` | Recapture | **Run LOSAT** command and status; open **Settings**; all three **LOSAT Mode** buttons with **LOSATP** pressed; open **LOSATP mode** menu in UI order with **Collinear blocks** selected; **Color mode: Orientation + identity** | Button UI captured at DSF 3; strict validation passed; visually accepted |
+| `hepatoplasmataceae_collinear` | `manual-03-02-runtime-reproducibility.webp`, `manual-04-03-advanced-collinear.webp` | Add | Open **Advanced comparison and layout**; capture runtime and **Advanced collinear search** as separate operations | Captured at DSF 3; strict validation passed; visually accepted |
+| `majanivirus_orthogroup` | `manual-02-01-upload-row-label-context.webp` | Recapture | Exact Majanivirus session; first uploader and open **Record options** with organism text | Captured at DSF 3; strict validation passed; visually accepted |
+| `majanivirus_orthogroup` | `manual-03-01-open-pairwise.webp`, `manual-03-02-losatp-orthogroups.webp` | Recapture | **Run LOSAT** command and status; open **Settings**; all three **LOSAT Mode** buttons with **LOSATP** pressed; open **LOSATP mode** menu in UI order with **Similarity groups** selected; tutorial filters | Button UI captured at DSF 3; strict validation passed; visually accepted |
+| `majanivirus_orthogroup` | `manual-03-03-runtime-reproducibility.webp` | Add | Open **Advanced comparison and layout** for the requested thread count | Captured at DSF 3; strict validation passed; visually accepted |
+| `vibrio-harveyi-group-collinear` | `manual-02-01-record-row.webp`, `manual-03-01-record-layout.webp` | Recapture | Exact Vibrio session; open per-record **Record options** and top-level **Advanced comparison and layout > Record Layout** | Captured at DSF 3; strict validation passed; visually accepted |
+| `vibrio-harveyi-group-collinear` | `manual-04-00-run-adjacent-losat.webp`, `manual-04-01-search-method-collinear.webp`, `manual-04-02-color-mode-orientation-identity.webp`, `manual-04-03-adjacent-pairs.webp` | Add/recapture | Capture action only: activate all-adjacent LOSAT; command/status; all three **LOSAT Mode** buttons with **LOSATP** pressed; open **LOSATP mode** menu in UI order with **Collinear blocks** selected; color and evidence scope | Button UI captured at DSF 3; strict validation passed; visually accepted |
+| `vibrio-harveyi-group-collinear` | `manual-04-04-advanced-collinear.webp` | Add | Capture action only: activate all-adjacent LOSAT; open **Advanced comparison and layout > Advanced collinear search** | Captured at DSF 3; strict validation passed; visually accepted |
 
-The comparison-panel captures declare the exact saved session, comparison-plan
-state, LOSAT program, and visible selected controls. Record-upload crops no
-longer describe the retired per-record raw-result filename field.
-
-## Linear comparison row boundaries
-
-| Tutorial | Operation media | Decision | Required capture state | Status |
-| --- | --- | --- | --- | --- |
-| `BGC0000708-BGC0000713` | `manual-03-01-open-pairwise.webp` | Recapture | Exact BGC session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups; shared thread and threshold settings | Recaptured and visually verified (1068×1791, DSF 3, quality 95); full-example media check passed |
-| `BGC0000708-BGC0000713` | `manual-03-03-first-comparison-boundary.webp` | Add | Exact BGC session; first `record-1->record-2` boundary; LOSAT source; endpoint identities, raw filename, cache state, and raw TSV action inside the crop | Captured and visually verified (978×681, DSF 3, quality 95); full-example media check passed |
-| `hepatoplasmataceae_orthogroup` | `manual-03-01-browser-losat.webp` | Recapture | Exact orthogroup session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups | Recaptured and visually verified (996×1791, DSF 3, quality 95); full-example media check passed |
-| `hepatoplasmataceae_collinear` | `manual-03-01-open-pairwise.webp` | Recapture | Exact collinear session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Collinear blocks | Recaptured and visually verified (996×2166, DSF 3, quality 95); full-example media check passed |
-| `majanivirus_orthogroup` | `manual-03-01-open-pairwise.webp` | Recapture | Exact Majanivirus session; **Apply to all adjacent gaps**; **Run LOSAT**; LOSATP Similarity groups | Recaptured and visually verified (996×1791, DSF 3, quality 95); full-example media check passed |
-| `vibrio-harveyi-group-collinear` | `manual-04-03-adjacent-pairs.webp` | Keep | Tight **Evidence scope** dropdown crop; no global or pair-specific comparison controls | Inspected; current 840×483 crop remains truthful |
-
-The new BGC boundary operation is data-dependent. Its capture contract uses
-the BGC session, asserts the `record-1->record-2` edge and LOSAT source, and
-keeps the pair-specific raw filename and download action in the final crop.
+The Vibrio editable session stays CLI-only with
+`linearComparisonPlan.mode = none`. Every data-dependent comparison operation
+asserts `adjacent + losat` after its capture action. **LOSAT Mode** is a
+three-button group: LOSATN, LOSATP, and TLOSATX. When LOSATP is active,
+**LOSATP mode** lists Similarity groups, Collinear blocks, and Pairwise matches.
+Similarity groups always runs
+an all-vs-all protein search. The collinear tutorials retain their explicit
+saved **Adjacent pairs** evidence scope.
 
 ## Worked-example final previews
 

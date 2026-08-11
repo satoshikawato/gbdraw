@@ -491,7 +491,7 @@ def test_web_resolved_protein_writer_preserves_alignment_settings(
 
 @pytest.mark.parametrize("collinearity_value_kind", ("result", "blocks"))
 @pytest.mark.browser
-def test_python_typed_protein_results_round_trip_through_web_projection(
+def test_python_typed_protein_round_trip_with_explicit_adjacent_comparison(
     tmp_path: Path,
     collinearity_value_kind: str,
 ) -> None:
@@ -572,6 +572,7 @@ def test_python_typed_protein_results_round_trip_through_web_projection(
             "tests/web/session-request.test.mjs",
             "--round-trip-session",
             str(session_path),
+            "--activate-adjacent-comparison",
         ],
         check=True,
         capture_output=True,

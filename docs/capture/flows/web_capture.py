@@ -221,6 +221,43 @@ def linear_pair(page: Page, query_index: int, subject_index: int) -> Locator:
     return pair
 
 
+def open_linear_comparison_disclosure(
+    page: Page,
+    key: str,
+    accessible_name: str,
+) -> Locator:
+    """Open one Linear comparison disclosure through its public summary."""
+
+    details = page.locator(
+        f'details[data-linear-comparison-disclosure="{key}"]'
+    )
+    expect(details).to_have_count(1)
+    summary = details.get_by_role(
+        "button", name=accessible_name, exact=True
+    )
+    expect(summary).to_be_visible()
+    if details.get_attribute("open") is None:
+        summary.click()
+    expect(details).to_have_attribute("open", "")
+    return details
+
+
+def select_linear_losat_mode(
+    settings: Locator, *, label: str, mode_key: str
+) -> Locator:
+    """Select one native LOSAT Mode button and verify its projected state."""
+
+    group = settings.get_by_role("group", name="LOSAT Mode", exact=True)
+    expect(group).to_be_visible()
+    button = group.get_by_role("button", name=label, exact=True)
+    expect(button).to_have_attribute(
+        "data-linear-comparison-losat-mode-option", mode_key
+    )
+    button.click()
+    expect(button).to_have_attribute("aria-pressed", "true")
+    return button
+
+
 def generate_and_inspect(
     page: Page,
     inspect_svg: Callable[[Any], dict[str, Any]],

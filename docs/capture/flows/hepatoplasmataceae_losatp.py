@@ -30,6 +30,8 @@ from flows.web_capture import (
     fit_complete_linear_preview,
     generate_and_inspect,
     open_browser_capture,
+    open_linear_comparison_disclosure,
+    select_linear_losat_mode,
     set_feature_search_visible,
     wait_for_worker,
 )
@@ -98,22 +100,18 @@ def _set_source_inputs(page: Page) -> None:
     linear.click()
     expect(linear).to_have_attribute("aria-pressed", "true")
     page.get_by_role("radio", name="GenBank", exact=True).check()
-
-    global_source = page.get_by_role(
-        "group", name="Apply to all adjacent gaps", exact=True
+    expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+        "Current: No comparison"
     )
-    expect(global_source).to_have_count(1)
-    global_source.get_by_role(
-        "radio", name="No comparison", exact=True
-    ).check()
 
     first_fixture = GUI_HEPATOPLASMATACEAE_FIXTURES[0]
     page.get_by_test_id("linear-genbank-1").set_input_files(first_fixture[0])
     add_sequence = page.get_by_role("button", name="Add sequence", exact=True)
+    expect(add_sequence).to_have_count(2)
     for index, fixture in enumerate(
         GUI_HEPATOPLASMATACEAE_FIXTURES[1:], start=2
     ):
-        add_sequence.click()
+        add_sequence.first.click()
         page.get_by_test_id(f"linear-genbank-{index}").set_input_files(fixture[0])
 
     selected_files = page.get_by_role(
@@ -124,6 +122,12 @@ def _set_source_inputs(page: Page) -> None:
         expect(selected_files.nth(index)).to_contain_text(fixture[0].name)
 
     for index, fixture in enumerate(GUI_HEPATOPLASMATACEAE_FIXTURES, start=1):
+        record_options = page.get_by_role(
+            "button",
+            name=f"Record options for sequence {index}",
+            exact=True,
+        )
+        record_options.click()
         selector = page.get_by_label(
             f"Record selector for sequence {index}", exact=True
         )
@@ -148,6 +152,7 @@ def _set_source_inputs(page: Page) -> None:
                 f"Reverse complement for sequence {index}", exact=True
             )
         ).not_to_be_checked()
+        record_options.click()
 
 
 def _set_presentation(page: Page, *, title: str) -> None:
@@ -183,47 +188,100 @@ def _set_presentation(page: Page, *, title: str) -> None:
 
 def _configure_all_record_collinear(
     page: Page, *, output_prefix: str, evidence_scope: str = "all"
-) -> None:
-    global_source = page.get_by_role(
-        "group", name="Apply to all adjacent gaps", exact=True
+) -> tuple[Any, Any]:
+    commands = page.get_by_role(
+        "group", name="Set all adjacent comparisons", exact=True
     )
-    expect(global_source).to_have_count(1)
-    global_source.get_by_role("radio", name="Run LOSAT", exact=True).check()
-    page.get_by_role("radio", name="LOSATP", exact=True).check()
-    page.get_by_label("LOSAT execution", exact=True).select_option(
+    commands.get_by_role(
+        "button", name="Run LOSAT for all adjacent pairs", exact=True
+    ).click()
+    expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+        "Current: Run LOSAT for all adjacent pairs"
+    )
+
+    selected_pairs = open_linear_comparison_disclosure(
+        page,
+        "selected-pairs",
+        "Selected pairs",
+    )
+    final_boundary = selected_pairs.get_by_role(
+        "region",
+        name="Comparison boundary from display row 4 to 5",
+        exact=True,
+    )
+    expect(final_boundary).to_be_visible()
+    expect(final_boundary).to_contain_text("#4 → #5")
+    selected_pairs.get_by_role(
+        "button", name="Selected pairs", exact=True
+    ).click()
+
+    settings = open_linear_comparison_disclosure(
+        page,
+        "settings",
+        "Comparison Settings",
+    )
+    select_linear_losat_mode(
+        settings,
+        label="LOSATP",
+        mode_key="blastp",
+    )
+    losatp_mode = settings.get_by_role(
+        "combobox", name="LOSATP mode", exact=True
+    )
+    losatp_mode.select_option("pairwise")
+    expect(losatp_mode).to_have_value("pairwise")
+    match_style = settings.get_by_label("Pairwise Match Style", exact=True)
+    match_style.select_option("curve")
+    expect(match_style).to_have_value("curve")
+    losatp_mode.select_option("collinear")
+    expect(losatp_mode).to_have_value("collinear")
+
+    settings.get_by_label("Collinear max unit gap", exact=True).fill("0")
+    settings.get_by_label(
+        "Collinear minimum block genes", exact=True
+    ).fill("1")
+    settings.get_by_label("Collinear color mode", exact=True).select_option(
+        "orientation_identity"
+    )
+    settings.get_by_label("Collinear evidence scope", exact=True).select_option(
+        evidence_scope
+    )
+    settings.get_by_label(
+        "Linear comparison minimum bitscore", exact=True
+    ).fill("50")
+    settings.get_by_label(
+        "Linear comparison maximum e-value", exact=True
+    ).fill("0.01")
+    settings.get_by_label(
+        "Linear comparison minimum identity", exact=True
+    ).fill("0")
+    settings.get_by_label(
+        "Linear comparison minimum alignment length", exact=True
+    ).fill("0")
+
+    advanced = open_linear_comparison_disclosure(
+        page,
+        "advanced",
+        "Advanced comparison and layout",
+    )
+    advanced.get_by_label("LOSAT execution", exact=True).select_option(
         "threaded" if evidence_scope == "all" else "auto"
     )
-    total_threads = page.get_by_label("LOSAT total threads", exact=True)
+    total_threads = advanced.get_by_label("LOSAT total threads", exact=True)
     total_threads.select_option("32" if evidence_scope == "all" else "safe")
     expect(total_threads).to_have_value("32" if evidence_scope == "all" else "safe")
-    threads = page.get_by_label("LOSAT threads per run", exact=True)
+    threads = advanced.get_by_label("LOSAT threads per run", exact=True)
     if threads.is_enabled():
         threads.select_option("8" if evidence_scope == "all" else "auto")
-    parallel_runs = page.get_by_label("LOSAT parallel runs", exact=True)
+    parallel_runs = advanced.get_by_label("LOSAT parallel runs", exact=True)
     if evidence_scope == "all":
         parallel_runs.select_option("4")
     else:
         parallel_runs.select_option(index=0)
-    page.get_by_label("LOSATP blastp mode", exact=True).select_option("collinear")
-    page.get_by_label("Collinear max unit gap", exact=True).fill("0")
-    page.get_by_label("Collinear minimum block genes", exact=True).fill("1")
-    page.get_by_label("Collinear color mode", exact=True).select_option(
-        "orientation_identity"
-    )
-    page.get_by_label("Collinear evidence scope", exact=True).select_option(
-        evidence_scope
-    )
-    page.get_by_label("Collinear diagonal drift", exact=True).fill("0")
-    page.get_by_label("Collinear merge conflicts", exact=True).fill("1")
-    page.get_by_label("LOSATP minimum bitscore", exact=True).fill("50")
-    page.get_by_label("LOSATP maximum e-value", exact=True).fill("0.01")
-    page.get_by_label("LOSATP minimum identity", exact=True).fill("0")
-    page.get_by_label("LOSATP minimum alignment length", exact=True).fill("0")
-    pairwise = page.get_by_label("Pairwise Match", exact=True)
-    pairwise.click()
-    page.get_by_label("Pairwise Match Style", exact=True).select_option("curve")
-    pairwise.click()
+    advanced.get_by_label("Collinear diagonal drift", exact=True).fill("0")
+    advanced.get_by_label("Collinear merge conflicts", exact=True).fill("1")
     page.get_by_label("Output Prefix", exact=True).fill(output_prefix)
+    return settings, advanced
 
 
 def _assert_records(report: dict[str, Any]) -> None:
@@ -409,16 +467,12 @@ def _assert_input_capture_framing(page: Page) -> None:
     selected_files = page.get_by_role(
         "group", name="GenBank File selection", exact=True
     )
-    boundary = page.get_by_role(
-        "region",
-        name="Comparison boundary from display row 4 to 5",
-        exact=True,
-    )
     expect(selected_files).to_have_count(5)
-    expect(boundary).to_be_visible()
+    selected_files.nth(4).evaluate(
+        "(element) => element.scrollIntoView({ block: 'center' })"
+    )
 
     fourth_box = _require_bounding_box(selected_files.nth(3), "fourth input")
-    boundary_box = _require_bounding_box(boundary, "fourth-to-fifth boundary")
     fifth_box = _require_bounding_box(selected_files.nth(4), "fifth input")
     viewport = {
         "x": 0,
@@ -426,20 +480,13 @@ def _assert_input_capture_framing(page: Page) -> None:
         "width": VIEWPORT_WIDTH,
         "height": VIEWPORT_HEIGHT,
     }
-    for name, box in (
-        ("fourth input", fourth_box),
-        ("fourth-to-fifth boundary", boundary_box),
-        ("fifth input", fifth_box),
-    ):
+    for name, box in (("fourth input", fourth_box), ("fifth input", fifth_box)):
         if not _box_is_inside(box, viewport, tolerance=0):
             raise AssertionError(f"The input capture clips the {name}: {box!r}")
-    if not (
-        fourth_box["y"] + fourth_box["height"] <= boundary_box["y"]
-        and boundary_box["y"] + boundary_box["height"] <= fifth_box["y"]
-    ):
+    if fourth_box["y"] + fourth_box["height"] > fifth_box["y"]:
         raise AssertionError(
-            "The fourth input, fourth-to-fifth boundary, and fifth input are "
-            "not visibly ordered in the capture frame"
+            "The fourth and fifth input uploaders are not visibly ordered in "
+            "the capture frame"
         )
 
 
@@ -926,12 +973,14 @@ def capture_hepatoplasmataceae_collinear(
             _return_to_overview_zoom(page)
 
         _set_presentation(page, title=title)
-        _configure_all_record_collinear(
+        settings, advanced = _configure_all_record_collinear(
             page,
             output_prefix=output_prefix,
             evidence_scope=evidence_scope,
         )
-        page.get_by_label("Collinear evidence scope", exact=True).scroll_into_view_if_needed()
+        settings.get_by_role(
+            "group", name="LOSAT Mode", exact=True
+        ).scroll_into_view_if_needed()
         screenshots[screenshot_names["settings"]] = capture_screenshot(
             page, output_paths[screenshot_names["settings"]], "Linear"
         )

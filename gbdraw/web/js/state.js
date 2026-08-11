@@ -331,7 +331,7 @@ export const createDefaultLosat = () => ({
     collinearColorMode: 'orientation',
     collinearUnitMode: 'auto',
     collinearAnchorMode: 'rbh',
-    collinearSearchScope: 'adjacent'
+    collinearSearchScope: 'all'
   }
 });
 

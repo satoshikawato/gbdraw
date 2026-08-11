@@ -175,13 +175,19 @@ def test_h_gui_03_to_06_flows_use_visible_controls_without_state_injection() -> 
     ):
         assert fragment in layout
     for fragment in (
-        'page.locator(\'[data-capture="linear-blast-source"]\')',
+        'name="Set all adjacent comparisons", exact=True',
+        'name="Use uploaded BLAST TSV for all adjacent pairs"',
+        '"Comparison Settings"',
+        '"Selected pairs"',
+        '"Advanced comparison and layout"',
+        "select_linear_losat_mode(",
+        'label="TLOSATX"',
+        'mode_key="tblastx"',
         'fieldset[data-edge-key=',
         'get_attribute("data-linear-record-uid")',
         'name="Upload BLAST TSV", exact=True',
         '"BLAST TSV for #1 to #2", exact=True',
         '"BLAST TSV for #1 to #2 selection", exact=True',
-        'name="TLOSATX", exact=True',
         'name="LOSAT execution", exact=True',
         'name="Raw LOSAT filename for #1 to #2", exact=True',
         'name="Save Raw LOSAT TSV for #1 to #2", exact=True',
@@ -234,7 +240,21 @@ def test_nucleotide_capture_accessibility_labels_are_in_the_public_ui() -> None:
         "TLOSATX gencode for sequence ${idx + 1}",
         'aria-label="Linear comparison minimum alignment length"',
         'data-capture="linear-blast-source"',
-        "Apply to all adjacent gaps",
+        'aria-label="Set all adjacent comparisons"',
+        'aria-label="Set no comparison"',
+        'aria-label="Run LOSAT for all adjacent pairs"',
+        'aria-label="Use uploaded BLAST TSV for all adjacent pairs"',
+        'aria-label="Comparison Settings"',
+        'aria-label="LOSAT Mode"',
+        'data-linear-comparison-losat-mode',
+        'data-linear-comparison-losat-mode-option',
+        ':aria-pressed="modeOption.active"',
+        '@click="setLinearComparisonLosatMode(modeOption.key)"',
+        'LOSATN task',
+        'aria-label="LOSATP mode"',
+        'data-linear-comparison-losatp-mode',
+        'aria-label="Selected pairs"',
+        'aria-label="Advanced comparison and layout"',
         ':data-edge-key="pair.edgeKey"',
         'label="BLAST TSV"',
         ':data-input-aria-label="`BLAST TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"',
@@ -282,10 +302,13 @@ def test_nucleotide_manifest_records_the_executable_evidence() -> None:
     assert "de3" not in h6["fixtures"]
 
     faq = FAQ_PATH.read_text(encoding="utf-8")
-    assert "**Apply to all adjacent gaps**" in faq
-    assert "**Advanced pair setup**" in faq
+    assert "**Comparison** command" in faq
+    assert "**Current:** status" in faq
+    assert "**Selected pairs" in faq
+    assert "Fresh Linear pages and **Reset Settings** start with **No comparison**" in faq
+    assert "**Apply to all adjacent gaps**" not in faq
+    assert "**Advanced pair setup**" not in faq
     assert "**Adjacent gaps**" not in faq
-    assert "**Raw LOSAT results**" not in faq
 
 
 def test_nucleotide_screenshots_are_full_pinned_viewports() -> None:

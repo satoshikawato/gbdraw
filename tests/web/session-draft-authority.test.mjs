@@ -148,6 +148,46 @@ divergentSession.config.linearComparisonPlan = {
   defaultSource: 'losat',
   edges: []
 };
+divergentSession.config.losatProgram = 'tblastx';
+Object.assign(divergentSession.config.adv, {
+  comparison_height: 73,
+  min_bitscore: 123,
+  evalue: '1e-37',
+  identity: 88,
+  alignment_length: 456,
+  pairwise_match_style: 'ribbon'
+});
+Object.assign(divergentSession.config.losat.blastp, {
+  mode: 'collinear',
+  maxHits: 17,
+  collinearMinAnchors: 4,
+  collinearMaxUnitGap: 9,
+  collinearSearchScope: 'adjacent',
+  collinearColorMode: 'orientation_identity'
+});
+const dormantComparisonDraft = structuredClone({
+  losatProgram: divergentSession.config.losatProgram,
+  adv: {
+    comparison_height: divergentSession.config.adv.comparison_height,
+    min_bitscore: divergentSession.config.adv.min_bitscore,
+    evalue: divergentSession.config.adv.evalue,
+    identity: divergentSession.config.adv.identity,
+    alignment_length: divergentSession.config.adv.alignment_length,
+    pairwise_match_style: divergentSession.config.adv.pairwise_match_style
+  },
+  blastp: {
+    mode: divergentSession.config.losat.blastp.mode,
+    maxHits: divergentSession.config.losat.blastp.maxHits,
+    collinearMinAnchors:
+      divergentSession.config.losat.blastp.collinearMinAnchors,
+    collinearMaxUnitGap:
+      divergentSession.config.losat.blastp.collinearMaxUnitGap,
+    collinearSearchScope:
+      divergentSession.config.losat.blastp.collinearSearchScope,
+    collinearColorMode:
+      divergentSession.config.losat.blastp.collinearColorMode
+  }
+});
 divergentSession.renderRequest.diagramOptions.output.legend = 'right';
 divergentSession.config.form.legend = 'right';
 divergentSession.ui.generatedLegendPosition = 'right';
@@ -175,6 +215,25 @@ const imported = await importSession(importEvent);
 assert.equal(imported.status, 'ok');
 assert.equal(state.linearComparisonPlan.mode, 'none');
 assert.deepEqual(state.linearComparisonPlan.edges, []);
+assert.deepEqual({
+  losatProgram: state.losatProgram.value,
+  adv: {
+    comparison_height: state.adv.comparison_height,
+    min_bitscore: state.adv.min_bitscore,
+    evalue: state.adv.evalue,
+    identity: state.adv.identity,
+    alignment_length: state.adv.alignment_length,
+    pairwise_match_style: state.adv.pairwise_match_style
+  },
+  blastp: {
+    mode: state.losat.blastp.mode,
+    maxHits: state.losat.blastp.maxHits,
+    collinearMinAnchors: state.losat.blastp.collinearMinAnchors,
+    collinearMaxUnitGap: state.losat.blastp.collinearMaxUnitGap,
+    collinearSearchScope: state.losat.blastp.collinearSearchScope,
+    collinearColorMode: state.losat.blastp.collinearColorMode
+  }
+}, dormantComparisonDraft);
 assert.equal(
   state.form.legend,
   'bottom',
@@ -220,6 +279,38 @@ const importPayload = async (payload) => importSession({
     value: 'selected'
   }
 });
+
+for (const savedPlan of [{
+  mode: 'adjacent',
+  defaultSource: 'upload',
+  edges: []
+}, {
+  mode: 'selected',
+  defaultSource: 'losat',
+  edges: [{
+    id: 'saved-selected-edge',
+    queryUid: 'record-1',
+    subjectUid: 'record-2',
+    included: true,
+    fileActive: false,
+    losatFilenameActive: true,
+    source: 'losat',
+    losatFilename: 'saved-selected.raw.tsv'
+  }]
+}]) {
+  const savedPlanSession = structuredClone(divergentSession);
+  savedPlanSession.config.linearComparisonPlan = structuredClone(savedPlan);
+  const savedPlanImport = await importPayload(savedPlanSession);
+  assert.equal(savedPlanImport.status, 'ok');
+  assert.deepEqual(state.linearComparisonPlan, {
+    ...savedPlan,
+    edges: savedPlan.edges.map((edge) => ({ ...edge, file: null }))
+  });
+  assert.equal(
+    savedPlanImport.data.renderRequest.comparisons.length,
+    committedComparisonCount
+  );
+}
 
 const absentLayoutSession = withoutStoredLayoutPreferences();
 absentLayoutSession.ui.generatedLegendPosition = 'right';

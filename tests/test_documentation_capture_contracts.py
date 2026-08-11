@@ -154,7 +154,7 @@ GUI_LOSATN_SCREENSHOTS = {
     "01-input-ready.png": "Two complete GenBank records selected for a Linear diagram",
     "02-first-diagram.png": "Two complete records in a plain linear diagram",
     "03-losatn-settings.png": (
-        "LOSATN selected with deterministic single-thread settings"
+        "LOSATN selected in LOSAT Mode with megablast and result filters"
     ),
     "04-comparison-result.png": (
         "Linear genome comparison with nucleotide similarity links"
@@ -433,7 +433,8 @@ def test_first_linear_flow_uses_accessible_real_actions_without_state_shortcuts(
     for required in (
         'get_by_role("button", name="Linear", exact=True)',
         'get_by_role("radio", name="GenBank", exact=True)',
-        'name="No comparison", exact=True',
+        'get_by_role("status")',
+        '"Current: No comparison"',
         'get_by_label("GenBank File", exact=True).set_input_files',
         'get_by_label("Output Prefix", exact=True)',
         'get_by_label("Track Layout", exact=True)',
@@ -484,7 +485,8 @@ def test_gui_inputs_flow_uses_whole_files_real_actions_and_actual_error() -> Non
         'get_by_role("button", name="Linear", exact=True)',
         'get_by_role("radio", name="GenBank", exact=True)',
         'name="GFF3 + FASTA", exact=True',
-        'name="No comparison", exact=True',
+        'get_by_role("status")',
+        '"Current: No comparison"',
         'get_by_label("GenBank File", exact=True).set_input_files',
         'get_by_label("GFF3", exact=True).set_input_files',
         'get_by_label("FASTA", exact=True).set_input_files',
@@ -607,22 +609,26 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
 
     for required in (
         'get_by_role("button", name="Linear", exact=True)',
-        'page.locator(\'[data-capture="linear-blast-source"]\')',
-        'name="No comparison", exact=True',
-        'get_by_role("button", name="Add sequence", exact=True)',
+        'get_by_role("status")',
+        '"Current: No comparison"',
+        '"button", name="Add sequence", exact=True',
+        'expect(add_sequence).to_have_count(2)',
+        'add_sequence.first.click()',
         'get_by_test_id("linear-genbank-1").set_input_files',
         'get_by_test_id("linear-genbank-2").set_input_files',
-        'name="Run LOSAT", exact=True',
-        'get_by_role("radio", name="LOSATN", exact=True)',
+        'name="Set all adjacent comparisons", exact=True',
+        'name="Run LOSAT for all adjacent pairs", exact=True',
+        '"Comparison Settings"',
+        "select_linear_losat_mode(",
+        'label="LOSATN"',
+        'mode_key="blastn"',
+        '"Advanced comparison and layout"',
         'name="LOSAT execution", exact=True',
         'name="LOSAT total threads", exact=True',
         'name="LOSAT parallel runs", exact=True',
         'name="LOSAT threads per run", exact=True',
         'name="LOSATN task", exact=True',
-        'fieldset[data-edge-key=',
-        'get_attribute("data-linear-record-uid")',
         'name="Raw LOSAT filename for #1 to #2", exact=True',
-        'get_by_label("Pairwise Match", exact=True)',
         '"Pairwise Match Height", exact=True',
         'pairwise_match_height.fill("120")',
         'select_option("serial")',
@@ -640,7 +646,9 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
         assert required in source or required in shared_source
 
     first_result = source.index("first_report = generate_and_inspect")
-    configure_losat = source.index('name="Run LOSAT", exact=True')
+    configure_losat = source.index(
+        'name="Run LOSAT for all adjacent pairs", exact=True'
+    )
     final_result = source.index("final_report = generate_and_inspect")
     tsv_download = source.index(
         'name="Save Raw LOSAT TSV for #1 to #2", exact=True'
@@ -664,6 +672,9 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
         ').first',
         'name="Raw LOSAT filename", exact=True',
         'name="Save Raw LOSAT TSV", exact=True',
+        '[data-capture="linear-blast-source"]',
+        'get_by_role("radio", name="LOSATN"',
+        'get_by_label("Pairwise Match", exact=True)',
     ):
         assert forbidden not in source
     assert "tlosatx" not in source.lower()
@@ -1147,20 +1158,21 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
     for value in (
         "`NC_001416.1` (48,502 bp)",
         "`NC_042057.1` (42,925 bp)",
-        "| Execution | Serial |",
-        "| Total threads | 1 |",
-        "| Parallel runs | 1 run |",
-        "| Threads per run | Fixed at 1 |",
-        "| Task | `megablast` |",
-        "| Pairwise Match Height | `120` |",
+        "| Advanced comparison and layout | Execution | Serial |",
+        "| Advanced comparison and layout | Total threads | 1 |",
+        "| Advanced comparison and layout | Parallel runs | 1 run |",
+        "| Advanced comparison and layout | Threads per run | Fixed at 1 |",
+        "| Settings | LOSAT Mode | LOSATN |",
+        "| Settings | LOSATN task | `megablast` |",
+        "| Settings / Comparison appearance | Match height | `120` |",
         "`lambda-de3.losatn.tsv`",
         "`lambda-de3-losatn.svg`",
         "Lambda 1..21231 to DE3 20081..41311",
-        "comparison between sequence 1 and sequence 2",
+        "pair from sequence 1 to sequence 2",
     ):
         assert value in tutorial
 
-    assert "Raw LOSAT results" not in tutorial
+    assert "Raw LOSAT results" in tutorial
 
     next_steps = tutorial.index("## Next steps")
     for related_target in (

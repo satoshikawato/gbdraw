@@ -101,6 +101,11 @@ import {
   plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan
 } from './linear-comparisons.js';
+import {
+  projectLinearComparisonLosatModeSelection,
+  projectLinearComparisonLosatpModeSelection,
+  projectLinearComparisonUi
+} from './comparison-ui.js';
 import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import {
   conservationSourceDescriptors,
@@ -368,11 +373,15 @@ export const createAppSetup = () => {
     filteredFeatures
   } = state;
 
-  const comparisonHeightValidationError = computed(() => (
-    classifyOptionalPositiveNumber(adv.comparison_height).status === 'invalid'
+  const comparisonHeightValidationError = computed(() => {
+    if (
+      mode.value !== 'linear' ||
+      linearComparisonResolution.value?.hasComparisonIntent !== true
+    ) return '';
+    return classifyOptionalPositiveNumber(adv.comparison_height).status === 'invalid'
       ? 'Pairwise Match Height must be Auto or a positive finite number.'
-      : ''
-  ));
+      : '';
+  });
 
   const sameLinearComparisonEdge = (left, right) => (
     left?.id === right?.id &&
@@ -500,6 +509,19 @@ export const createAppSetup = () => {
     return linearComparisonPlan.defaultSource;
   });
 
+  const linearComparisonUi = computed(() => projectLinearComparisonUi({
+    plan: linearComparisonPlan,
+    resolution: linearComparisonResolution.value,
+    losatProgram: losatProgram.value,
+    blastpMode: losat.blastp?.mode,
+    filters: {
+      min_bitscore: adv.min_bitscore,
+      evalue: adv.evalue,
+      identity: adv.identity,
+      alignment_length: adv.alignment_length
+    }
+  }));
+
   const linearComparisonTimeline = computed(() => buildLinearComparisonTimeline({
     sequences: linearSeqs,
     layout: effectiveLinearComparisonLayout(),
@@ -523,11 +545,43 @@ export const createAppSetup = () => {
       'Record'
     );
   };
-  const focusLinearComparisonPair = async (edgeKey) => {
+  const openLinearComparisonDisclosure = async (disclosureKey) => {
+    if (!disclosureKey) return null;
+    const details = [...document.querySelectorAll('[data-linear-comparison-disclosure]')]
+      .find((element) => element.dataset.linearComparisonDisclosure === disclosureKey);
+    if (!details) return null;
+    details.open = true;
     await nextTick();
+    return details;
+  };
+  const focusLinearComparisonPair = async (edgeKey) => {
+    await openLinearComparisonDisclosure('selected-pairs');
     const container = [...document.querySelectorAll('[data-edge-key]')]
       .find((element) => element.dataset.edgeKey === edgeKey);
     container?.querySelector('input, select, button')?.focus();
+  };
+
+  const focusLinearComparisonIssue = async () => {
+    const target = linearComparisonUi.value.errorTargets[0];
+    if (!target) return false;
+    const details = await openLinearComparisonDisclosure(target.disclosureKey);
+    let container = details;
+    if (target.edgeKey) {
+      container = [...document.querySelectorAll('[data-edge-key]')]
+        .find((element) => element.dataset.edgeKey === target.edgeKey) || container;
+    }
+    if (target.edgeId && target.focusTargetKey === 'pair-row') {
+      container = [...document.querySelectorAll('[data-linear-unplaced-draft]')]
+        .find((element) => element.dataset.linearUnplacedDraft === target.edgeId) || container;
+    }
+    const marked = container?.querySelector(
+      `[data-comparison-focus="${target.focusTargetKey}"]`
+    );
+    const focusable = marked?.matches?.('input, select, button, [tabindex]')
+      ? marked
+      : marked?.querySelector?.('input, select, button, [tabindex]');
+    (focusable || container?.querySelector?.('input, select, button, [tabindex]'))?.focus();
+    return true;
   };
 
   const setLinearComparisonGlobalAction = (action) => {
@@ -544,12 +598,27 @@ export const createAppSetup = () => {
     });
   };
 
-  const setLinearLosatProgram = (program) => {
-    const normalized = String(program || '').trim().toLowerCase();
-    if (!['blastn', 'blastp', 'tblastx'].includes(normalized)) return;
-    if (losatProgram.value === normalized) return;
-    losatProgram.value = normalized;
+  const setLinearComparisonLosatMode = (modeKey) => {
+    const selection = projectLinearComparisonLosatModeSelection({ modeKey });
+    if (!selection.selectable || !selection.patch) return false;
+    const nextProgram = selection.patch.losatProgram;
+    if (losatProgram.value === nextProgram) return true;
+    losatProgram.value = nextProgram;
     invalidateLinearComparisonArtifacts();
+    return true;
+  };
+
+  const setLinearComparisonLosatpMode = (modeKey) => {
+    const selection = projectLinearComparisonLosatpModeSelection({
+      plan: linearComparisonPlan,
+      modeKey
+    });
+    if (!selection.selectable || !selection.patch) return false;
+    const nextBlastpMode = selection.patch.blastpMode;
+    if (losat.blastp?.mode === nextBlastpMode) return true;
+    losat.blastp.mode = nextBlastpMode;
+    invalidateLinearComparisonArtifacts();
+    return true;
   };
 
   const selectedPlanForEdit = () => {
@@ -2177,6 +2246,9 @@ export const createAppSetup = () => {
     }
 
     const result = await runGeneratedDiagramAnalysis(comparisonPlanSnapshot);
+    if (result?.status === 'error' && mode.value === 'linear') {
+      await focusLinearComparisonIssue();
+    }
     if (result?.status === 'ok') {
       featureSelection.clearFeatureSelection({ clearStatus: true });
     }
@@ -2940,7 +3012,6 @@ export const createAppSetup = () => {
     cInputType,
     lInputType,
     losatProgram,
-    setLinearLosatProgram,
     files,
     circularConservation,
     annotationSets,
@@ -3008,6 +3079,7 @@ export const createAppSetup = () => {
     linearComparisonPlan,
     linearComparisonResolution,
     linearComparisonGlobalAction,
+    linearComparisonUi,
     hasLinearComparisonIntent,
     hasActiveLinearLosatIntent,
     hasActiveLinearUploadIntent,
@@ -3020,6 +3092,8 @@ export const createAppSetup = () => {
     setLinearRecordRow,
     moveLinearRecordWithinRow,
     setLinearComparisonGlobalAction,
+    setLinearComparisonLosatMode,
+    setLinearComparisonLosatpMode,
     setLinearComparisonGapAction,
     addLinearComparison,
     omitLinearComparison,

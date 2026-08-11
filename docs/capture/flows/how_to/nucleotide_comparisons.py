@@ -49,6 +49,8 @@ from flows.web_capture import (
     generate_and_inspect,
     linear_pair,
     open_browser_capture,
+    open_linear_comparison_disclosure,
+    select_linear_losat_mode,
     wait_for_worker,
 )
 
@@ -231,7 +233,14 @@ def _load_complete_linear_inputs(page: Page) -> None:
     linear.click()
     expect(linear).to_have_attribute("aria-pressed", "true")
     page.get_by_role("radio", name="GenBank", exact=True).check()
-    page.get_by_role("button", name="Add sequence", exact=True).click()
+    expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+        "Current: No comparison"
+    )
+    add_sequence = page.get_by_role(
+        "button", name="Add sequence", exact=True
+    )
+    expect(add_sequence).to_have_count(2)
+    add_sequence.first.click()
     page.get_by_test_id("linear-genbank-1").set_input_files(FIRST_LINEAR_FIXTURE_PATH)
     page.get_by_test_id("linear-genbank-2").set_input_files(
         GUI_LOSATN_DE3_FIXTURE_PATH
@@ -251,8 +260,12 @@ def _load_complete_linear_inputs(page: Page) -> None:
 
 
 def _set_linear_comparison_filter(page: Page, minimum_length: int) -> None:
-    page.get_by_label("Pairwise Match", exact=True).click()
-    minimum = page.get_by_label(
+    settings = open_linear_comparison_disclosure(
+        page,
+        "settings",
+        "Comparison Settings",
+    )
+    minimum = settings.get_by_label(
         "Linear comparison minimum alignment length", exact=True
     )
     minimum.fill(str(minimum_length))
@@ -318,11 +331,32 @@ def capture_gui_uploaded_comparison(
         wait_for_worker(page)
         _load_complete_linear_inputs(page)
 
+        commands = page.get_by_role(
+            "group", name="Set all adjacent comparisons", exact=True
+        )
+        use_upload = commands.get_by_role(
+            "button",
+            name="Use uploaded BLAST TSV for all adjacent pairs",
+            exact=True,
+        )
+        use_upload.click()
+        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+            "Current: Upload BLAST TSV for all adjacent pairs"
+        )
+        open_linear_comparison_disclosure(
+            page,
+            "settings",
+            "Comparison Settings",
+        )
+        selected_pairs = open_linear_comparison_disclosure(
+            page,
+            "selected-pairs",
+            "Selected pairs",
+        )
         pair = linear_pair(page, 1, 2)
         edge_upload = pair.get_by_role(
             "radio", name="Upload BLAST TSV", exact=True
         )
-        edge_upload.check()
         expect(edge_upload).to_be_checked()
         blast_input = pair.get_by_label(
             "BLAST TSV for #1 to #2", exact=True
@@ -338,6 +372,7 @@ def capture_gui_uploaded_comparison(
         prefix.fill("uploaded_comparison")
         expect(prefix).to_have_value("uploaded_comparison")
         expect(edge_upload).to_be_checked()
+        selected_pairs.scroll_into_view_if_needed()
         blast_selection.scroll_into_view_if_needed()
         blast_selection.hover()
         page.mouse.wheel(0, 240)
@@ -404,45 +439,69 @@ def capture_gui_tlosatx(
         wait_for_worker(page)
         _load_complete_linear_inputs(page)
 
-        global_source = page.locator('[data-capture="linear-blast-source"]')
-        expect(global_source).to_have_count(1)
-        run_losat = global_source.get_by_role(
-            "radio", name="Run LOSAT", exact=True
+        commands = page.get_by_role(
+            "group", name="Set all adjacent comparisons", exact=True
         )
-        run_losat.check()
-        expect(run_losat).to_be_checked()
-        tlosatx = page.get_by_role("radio", name="TLOSATX", exact=True)
-        tlosatx.check()
-        expect(tlosatx).to_be_checked()
-        execution = page.get_by_role("combobox", name="LOSAT execution", exact=True)
-        execution.select_option("serial")
-        expect(execution).to_have_value("serial")
-        total_threads = page.get_by_role(
-            "combobox", name="LOSAT total threads", exact=True
+        run_losat = commands.get_by_role(
+            "button", name="Run LOSAT for all adjacent pairs", exact=True
         )
-        total_threads.select_option("1")
-        expect(total_threads).to_have_value("1")
-        parallel_runs = page.get_by_role(
-            "combobox", name="LOSAT parallel runs", exact=True
+        run_losat.click()
+        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+            "Current: Run LOSAT for all adjacent pairs"
         )
-        parallel_runs.select_option("1")
-        expect(parallel_runs).to_have_value("1")
-        threads_per_run = page.get_by_role(
-            "combobox", name="LOSAT threads per run", exact=True
+        settings = open_linear_comparison_disclosure(
+            page,
+            "settings",
+            "Comparison Settings",
         )
-        expect(threads_per_run).to_be_disabled()
+        select_linear_losat_mode(
+            settings,
+            label="TLOSATX",
+            mode_key="tblastx",
+        )
         for index in (1, 2):
+            record_options = page.get_by_role(
+                "button",
+                name=f"Record options for sequence {index}",
+                exact=True,
+            )
+            record_options.click()
             gencode = page.get_by_label(
                 f"TLOSATX gencode for sequence {index}", exact=True
             )
             gencode.fill("1")
             expect(gencode).to_have_value("1")
+            record_options.click()
+
+        advanced = open_linear_comparison_disclosure(
+            page,
+            "advanced",
+            "Advanced comparison and layout",
+        )
+        execution = advanced.get_by_role(
+            "combobox", name="LOSAT execution", exact=True
+        )
+        execution.select_option("serial")
+        expect(execution).to_have_value("serial")
+        total_threads = advanced.get_by_role(
+            "combobox", name="LOSAT total threads", exact=True
+        )
+        total_threads.select_option("1")
+        expect(total_threads).to_have_value("1")
+        parallel_runs = advanced.get_by_role(
+            "combobox", name="LOSAT parallel runs", exact=True
+        )
+        parallel_runs.select_option("1")
+        expect(parallel_runs).to_have_value("1")
+        threads_per_run = advanced.get_by_role(
+            "combobox", name="LOSAT threads per run", exact=True
+        )
+        expect(threads_per_run).to_be_disabled()
 
         prefix = page.get_by_label("Output Prefix", exact=True)
         prefix.fill("lambda-de3-tlosatx")
         expect(prefix).to_have_value("lambda-de3-tlosatx")
-        pair = linear_pair(page, 1, 2)
-        raw_filename = pair.get_by_role(
+        raw_filename = advanced.get_by_role(
             "textbox", name="Raw LOSAT filename for #1 to #2", exact=True
         )
         raw_filename.fill(EXPECTED_TLOSATX_TSV)
@@ -450,7 +509,9 @@ def capture_gui_tlosatx(
         expect(raw_filename).to_have_value(EXPECTED_TLOSATX_TSV)
         _set_linear_comparison_filter(page, 1_000)
 
-        tlosatx.scroll_into_view_if_needed()
+        settings.get_by_role(
+            "group", name="LOSAT Mode", exact=True
+        ).scroll_into_view_if_needed()
         screenshot_bytes["tlosatx-settings.png"] = capture_screenshot(
             page, output_paths["tlosatx-settings.png"], "Linear"
         )
@@ -465,7 +526,7 @@ def capture_gui_tlosatx(
             page, output_paths["tlosatx-result.png"], "Linear"
         )
 
-        tsv_button = pair.get_by_role(
+        tsv_button = advanced.get_by_role(
             "button", name="Save Raw LOSAT TSV for #1 to #2", exact=True
         )
         expect(tsv_button).to_be_enabled()

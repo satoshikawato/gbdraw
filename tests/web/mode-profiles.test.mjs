@@ -252,8 +252,13 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-const { createDefaultAdv, createDefaultForm, state } = await import(
+const { createDefaultAdv, createDefaultForm, createDefaultLosat, state } = await import(
   pathToFileURL(join(tempDir, 'js', 'state.js'))
+);
+assert.equal(
+  createDefaultLosat().blastp.collinearSearchScope,
+  'all',
+  'fresh Collinear LOSATP must search all record pairs by default'
 );
 assert.equal(Object.keys(state.form).includes('legend'), false);
 assert.equal(Object.keys(state.adv).includes('plot_title_position'), false);
@@ -403,6 +408,7 @@ assert.deepEqual(
       losatFilename: 'custom-subject.fna'
     }
   );
+  state.losat.blastp.collinearSearchScope = 'adjacent';
 
   resetSettings(state);
 
@@ -421,6 +427,11 @@ assert.deepEqual(
   assert.equal(state.adv.circular_track_slots_enabled, false);
   assert.equal(state.adv.linear_track_slots_enabled, false);
   assert.equal(state.form.show_scale, true);
+  assert.equal(
+    state.losat.blastp.collinearSearchScope,
+    'all',
+    'Reset must restore the fresh all-vs-all Collinear default'
+  );
   assert.deepEqual(
     state.adv.circular_track_slots,
     resetAdvDefaults.circular_track_slots
@@ -438,17 +449,19 @@ assert.deepEqual(
     resetAdvDefaults.linear_track_slots_axis_index
   );
   assert.equal(state.files.c_gb, retainedFile);
-  assert.equal(state.linearComparisonPlan.mode, 'adjacent');
+  assert.equal(state.linearComparisonPlan.mode, 'none');
   assert.equal(state.linearComparisonPlan.defaultSource, 'losat');
   assert.deepEqual(
     state.linearComparisonPlan.edges.map((edge) => edge.id),
     ['retained-file', 'retained-name']
   );
   assert.equal(state.linearComparisonPlan.edges[0].file, retainedComparisonFile);
+  assert.equal(state.linearComparisonPlan.edges[0].source, 'upload');
   assert.equal(state.linearComparisonPlan.edges[0].included, false);
   assert.equal(state.linearComparisonPlan.edges[0].fileActive, false);
   assert.equal(state.linearComparisonPlan.edges[0].losatFilenameActive, false);
   assert.equal(state.linearComparisonPlan.edges[1].losatFilename, 'custom-subject.fna');
+  assert.equal(state.linearComparisonPlan.edges[1].source, 'losat');
   assert.equal(state.linearComparisonPlan.edges[1].included, false);
   assert.equal(state.linearComparisonPlan.edges[1].fileActive, false);
   assert.equal(state.linearComparisonPlan.edges[1].losatFilenameActive, false);
@@ -466,6 +479,7 @@ assert.deepEqual(
   state.mode.value = 'linear';
   state.adv.identity = 77;
   state.form.show_scale = false;
+  state.losat.blastp.collinearSearchScope = 'adjacent';
   const savedConfig = structuredClone(buildConfigData());
 
   assert.equal(savedConfig.form.show_scale, false);
@@ -473,6 +487,7 @@ assert.deepEqual(
   assert.equal(savedConfig.modeProfiles.profiles.circular.managed.identity, false);
   assert.equal(savedConfig.modeProfiles.profiles.linear.values.identity, 77);
   assert.equal(savedConfig.modeProfiles.profiles.linear.managed.identity, false);
+  assert.equal(savedConfig.losat.blastp.collinearSearchScope, 'adjacent');
 
   Object.assign(state.adv, createDefaultAdv('linear'));
   state.modeProfileStateManager.reset('linear', state.adv);
@@ -480,6 +495,11 @@ assert.deepEqual(
   applyConfigData(savedConfig);
   assert.equal(state.form.show_scale, false);
   assert.equal(state.adv.identity, 77);
+  assert.equal(
+    state.losat.blastp.collinearSearchScope,
+    'adjacent',
+    'an explicit saved-session adjacent scope must survive current-reader loading'
+  );
   state.modeProfileStateManager.transition(state.adv, 'linear', 'circular');
   assert.equal(state.adv.identity, 88);
 
@@ -510,6 +530,7 @@ assert.deepEqual(
     migratedProfiles.profiles.circular.values,
     managedAdvStateForMode('circular')
   );
+
 }
 
 const { buildCanonicalRenderRequest } = await import(
@@ -545,18 +566,23 @@ for (const modeName of ['circular', 'linear']) {
   state.lInputType.value = 'gb';
   state.circularRecordList.value = [];
   state.linearRecordLayoutEnabled.value = false;
+  if (modeName === 'linear') {
+    state.linearComparisonPlan.mode = 'adjacent';
+    state.linearComparisonPlan.defaultSource = 'losat';
+    state.linearComparisonPlan.edges.splice(0);
+  }
 
   const filesData = modeName === 'circular'
     ? { c_gb: genbank, linearSeqs: [] }
     : {
-        linearSeqs: [{
-          uid: 'record-1',
+        linearSeqs: ['record-1', 'record-2'].map((uid) => ({
+          uid,
           gb: genbank,
           region_record_id: '',
           region_start: null,
           region_end: null,
           region_reverse: false
-        }],
+        })),
         linearComparisons: []
       };
   const comparisonPlanSnapshot = modeName === 'linear'
@@ -604,3 +630,46 @@ for (const modeName of ['circular', 'linear']) {
     );
   }
 }
+
+state.mode.value = 'linear';
+Object.assign(state.form, createDefaultForm());
+Object.assign(state.adv, createDefaultAdv('linear'));
+Object.assign(state.losat, createDefaultLosat());
+state.losatProgram.value = 'blastp';
+state.losat.blastp.mode = 'collinear';
+state.linearComparisonPlan.mode = 'adjacent';
+state.linearComparisonPlan.defaultSource = 'losat';
+state.linearComparisonPlan.edges.splice(0);
+const defaultCollinearRecords = ['record-1', 'record-2', 'record-3'].map((uid) => ({
+  uid,
+  gb: genbank,
+  region_record_id: '',
+  region_start: null,
+  region_end: null,
+  region_reverse: false
+}));
+const defaultCollinearSnapshot = resolveLinearComparisonPlan({
+  plan: state.linearComparisonPlan,
+  sequences: defaultCollinearRecords,
+  layout: [],
+  losatProgram: state.losatProgram.value,
+  blastpMode: state.losat.blastp.mode
+});
+const defaultCollinearRequest = buildCanonicalRenderRequest({
+  state,
+  filesData: {
+    linearSeqs: defaultCollinearRecords,
+    linearComparisons: [],
+    linearCanonicalComparisons: []
+  },
+  comparisonPlanSnapshot: defaultCollinearSnapshot
+}).renderRequest;
+const defaultCollinearComparison = defaultCollinearRequest.comparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+);
+assert.equal(defaultCollinearComparison.mode, 'collinear');
+assert.equal(
+  defaultCollinearComparison.settings.collinearitySearchScope,
+  'all',
+  'the fresh all-vs-all scope must reach the canonical Collinear request'
+);

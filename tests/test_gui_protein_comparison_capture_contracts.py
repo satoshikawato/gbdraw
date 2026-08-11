@@ -325,13 +325,14 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
 
     for fragment in (
         'get_by_role("button", name="Linear", exact=True)',
-        'page.locator(\'[data-capture="linear-blast-source"]\')',
-        'fieldset[data-edge-key=',
-        'get_attribute("data-linear-record-uid")',
         'get_by_role("radio", name="GenBank", exact=True)',
-        '"radio", name="No comparison", exact=True',
+        'get_by_role("status")',
+        '"Current: No comparison"',
         'get_by_role("button", name="Add sequence", exact=True)',
+        'expect(add_sequence).to_have_count(2)',
+        'add_sequence.first.click()',
         'get_by_test_id(f"linear-genbank-{index}").set_input_files',
+        'name=f"Record options for sequence {index}"',
         'f"Definition for sequence {index}"',
         'f"Subtitle / title for sequence {index}"',
         'f"Reverse complement for sequence {index}"',
@@ -339,9 +340,16 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
         'to_contain_text("BGC0000713.gbk")',
         '"Reverse complement for sequence 5", exact=True',
         "to_be_in_viewport()",
-        '"radio", name="Run LOSAT", exact=True',
-        'get_by_role("radio", name="LOSATP", exact=True)',
-        'get_by_label("LOSATP blastp mode", exact=True)',
+        'name="Set all adjacent comparisons", exact=True',
+        'name="Run LOSAT for all adjacent pairs", exact=True',
+        '"Comparison Settings"',
+        "select_linear_losat_mode(",
+        'label="LOSATP"',
+        'mode_key="blastp"',
+        'name="LOSATP mode", exact=True',
+        'losatp_mode.select_option("pairwise")',
+        'losatp_mode.select_option(mode)',
+        '"Advanced comparison and layout"',
         'name="Raw LOSAT filename for #1 to #2", exact=True',
         'name="Save Raw LOSAT TSV for #1 to #2", exact=True',
         'get_by_role("button", name="SVG", exact=True)',
@@ -366,6 +374,10 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
         ".downloadSVG(",
         "set_content(",
         "window.__GBDRAW_APP__ =",
+        '[data-capture="linear-blast-source"]',
+        'name="Apply to all adjacent gaps"',
+        'get_by_role("radio", name="LOSATP"',
+        'get_by_label("LOSATP blastp mode"',
     ):
         assert forbidden not in combined_source
 
@@ -382,19 +394,24 @@ def test_bgc_flow_pins_gallery_presentation_and_losatp_values() -> None:
         'axis_stroke_width.fill("5")',
         'fit_complete_linear_preview(page, target_zoom="40%")',
         'if scenario_id == "H-GUI-07"',
-        'expect(result_pair).to_contain_text("Raw result ready")',
+        'expect(raw_result).to_contain_text("Raw result ready")',
         'execution.select_option("serial")',
         'total_threads.select_option("1")',
         'parallel_runs.select_option("1")',
-        'page.get_by_label("LOSATP minimum bitscore", exact=True).fill("50")',
-        'page.get_by_label("LOSATP maximum e-value", exact=True).fill("0.01")',
-        'page.get_by_label("LOSATP minimum identity", exact=True).fill("30")',
-        'page.get_by_label("LOSATP minimum alignment length", exact=True).fill("0")',
-        'page.get_by_label("Collinear max unit gap", exact=True).fill("1")',
-        'page.get_by_label("Collinear minimum block genes", exact=True).fill("2")',
-        'page.get_by_label("Collinear evidence scope", exact=True).select_option',
+        '"Linear comparison minimum bitscore", exact=True',
+        '"Linear comparison maximum e-value", exact=True',
+        '"Linear comparison minimum identity", exact=True',
+        '"Linear comparison minimum alignment length", exact=True',
+        'settings.get_by_label("Collinear max unit gap", exact=True).fill("1")',
+        '"Collinear minimum block genes", exact=True',
+        '"Collinear evidence scope", exact=True',
         '"orientation_identity"',
-        'first_pair = linear_pair(page, 1, 2)',
+        'match_style.select_option("curve")',
+        'losatp_mode.select_option(mode)',
+        'expected_jobs = len(GUI_BGC_FIXTURES) ** 2',
+        'telemetry.get("totalPairs") != expected_jobs',
+        'telemetry.get("uniqueJobs") != expected_jobs',
+        "raw_result = advanced.locator('[data-linear-raw-result]').first",
         'name="Raw LOSAT filename for #1 to #2", exact=True',
         'name="Save Raw LOSAT TSV for #1 to #2", exact=True',
     ):
@@ -488,15 +505,30 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
     wrapper = HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
     index = WEB_INDEX_PATH.read_text(encoding="utf-8")
     for fragment in (
-        '"group", name="Apply to all adjacent gaps", exact=True',
+        'name="Set all adjacent comparisons", exact=True',
+        'name="Run LOSAT for all adjacent pairs", exact=True',
+        '"Current: No comparison"',
         "_set_source_inputs(page)",
         'page.get_by_test_id("linear-genbank-1").set_input_files',
+        'name=f"Record options for sequence {index}"',
         'f"Record selector for sequence {index}"',
         'not_to_contain_text("Loading records...")',
         "_assert_input_capture_framing(page)",
+        '"fourth input", fourth_box',
+        '"fifth input", fifth_box',
+        '"Selected pairs"',
         'name="Comparison boundary from display row 4 to 5"',
+        'expect(final_boundary).to_contain_text("#4 → #5")',
         "_assert_empty_cache(page)",
-        'page.get_by_label("Collinear evidence scope", exact=True).select_option(',
+        "select_linear_losat_mode(",
+        'label="LOSATP"',
+        'mode_key="blastp"',
+        'name="LOSATP mode", exact=True',
+        'losatp_mode.select_option("pairwise")',
+        'match_style.select_option("curve")',
+        'losatp_mode.select_option("collinear")',
+        'settings.get_by_label("Collinear evidence scope", exact=True).select_option(',
+        '"Advanced comparison and layout"',
         'if evidence_scope not in {"all", "adjacent"}',
         'expected_jobs = 25 if evidence_scope == "all" else 13',
         'threads.select_option("8" if evidence_scope == "all" else "auto")',
@@ -507,7 +539,7 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         'page.get_by_label("Track Layout", exact=True).select_option("middle")',
         'fit_complete_linear_preview(page, target_zoom="40%")',
         '"Separate Strands"',
-        'page.get_by_label("Collinear color mode", exact=True).select_option',
+        'settings.get_by_label("Collinear color mode", exact=True).select_option',
         '"orientation_identity"',
         'telemetry.get("totalPairs") != expected_jobs',
         'telemetry.get("cacheHits") != 0',
@@ -550,13 +582,16 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         assert fragment in source + wrapper
     assert 'aria-label="Pairwise match details content"' in index
     assert 'role="region"' in index
-    assert source.count('"group", name="Apply to all adjacent gaps", exact=True') == 2
+    assert source.count('name="Set all adjacent comparisons", exact=True') == 1
     assert "Load Session" not in source
     assert "page.locator(" not in source
     assert "first_match.scroll_into_view_if_needed" not in source
     assert "first_match.evaluate(" not in source
     assert "page.get_by_text(" not in source
     assert '[data-capture="linear-blast-source"]' not in source
+    assert 'name="Apply to all adjacent gaps"' not in source
+    assert 'get_by_role("radio", name="LOSATP"' not in source
+    assert 'get_by_label("LOSATP blastp mode"' not in source
     assert '[data-match-kind="collinear"]' not in source
     assert (
         'get_by_role("radio", name="Run LOSAT", exact=True).first'
@@ -639,9 +674,22 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     assert "| Separate Strands | Off |" in tutorial
     assert "23 stable\ngroups and 77 displayed group links" in tutorial
     assert "comparison between sequence 1 and sequence 2" in tutorial
-    assert "Raw LOSAT results" not in tutorial
+    assert "Raw LOSAT results" in tutorial
+    assert chapter_for("T-GUI-04")["screenshots"][2]["alt"] == (
+        "LOSATP selected with Similarity groups and result filters"
+    )
+    assert chapter_for("H-GUI-07")["screenshots"][0]["alt"] == (
+        "LOSATP selected with Similarity groups and result filters"
+    )
     assert chapter_for("T-GUI-04")["settings"]["separate_strands"] is False
     assert chapter_for("H-GUI-07")["settings"]["separate_strands"] is False
+    assert chapter_for("T-GUI-04")["settings"]["search_evidence_scope"] == "all"
+    assert chapter_for("H-GUI-07")["settings"]["search_evidence_scope"] == "all"
+    for scenario_id in ("T-GUI-04", "H-GUI-07"):
+        assert {
+            "search_evidence_scope=all",
+            "losat_total_pairs=25",
+        } <= set(chapter_for(scenario_id)["execution"]["assertions"])
     assert "separate_strands=False" in TUTORIAL_FLOW_PATH.read_text(encoding="utf-8")
     assert "separate_strands=False" in HOW_TO_FLOW_PATH.read_text(encoding="utf-8")
 
@@ -657,7 +705,8 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         "source_record_upload_count=5",
         PINNED_NCBI_REVISIONS_ASSERTION,
         "initial_cache_entries=0",
-        "input_frame.boundary_4_to_5_visible=true",
+        "input_frame.final_two_uploaders_visible=true",
+        "selected_pairs.boundary_4_to_5_verified=true",
         "baseline_definition_zoom=80%",
         "baseline_definition_records_visible=5",
         "losat_total_pairs=13",
@@ -671,6 +720,7 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     } <= set(gallery_chapter["execution"]["assertions"])
     assert "does not load a Gallery session" in gallery_collinear
     assert "Evidence scope | Adjacent pairs" in gallery_collinear
+    assert "Open **Selected pairs (4)**" in gallery_collinear
     assert "500 rendered Collinear match elements" in gallery_collinear
     normalized_gallery_collinear = " ".join(gallery_collinear.split())
     assert "six times to reach **40%**" in normalized_gallery_collinear
@@ -699,6 +749,16 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     )
     assert gallery_baseline["alt"] == (
         "Five Hepatoplasmataceae record IDs and lengths at 80% before LOSATP"
+    )
+    gallery_input = gallery_chapter["screenshots"][0]
+    assert gallery_input["reason"] == (
+        "Confirm the final two uploaders and the end of the five-record input order."
+    )
+    assert gallery_input["alt"] == (
+        "Final two Hepatoplasmataceae sequence uploaders"
+    )
+    assert gallery_chapter["screenshots"][2]["alt"] == (
+        "LOSATP selected with Collinear blocks and Adjacent pairs evidence"
     )
     gallery_detail = gallery_chapter["screenshots"][-2]
     assert gallery_detail["reason"] == (
@@ -767,6 +827,9 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     assert tuple(
         Path(screenshot["path"]).name for screenshot in chapter["screenshots"]
     ) == SCREENSHOT_NAMES["H-GUI-08"]
+    assert chapter["screenshots"][0]["alt"] == (
+        "LOSATP selected with Collinear blocks and All records evidence"
+    )
     for revision_url in PINNED_NCBI_REVISION_URLS.values():
         assert revision_url in gallery_collinear
     assert gallery_collinear.count("NCBI Revision History snapshot") >= 5

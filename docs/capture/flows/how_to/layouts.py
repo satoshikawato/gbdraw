@@ -45,6 +45,7 @@ from flows.web_capture import (
     fit_complete_linear_preview,
     generate_and_inspect,
     open_browser_capture,
+    open_linear_comparison_disclosure,
     set_feature_search_visible,
     wait_for_worker,
 )
@@ -494,8 +495,14 @@ def capture_gui_linear_layout(
         linear.click()
         expect(linear).to_have_attribute("aria-pressed", "true")
         page.get_by_role("radio", name="GenBank", exact=True).check()
-        page.get_by_role("radio", name="No comparison", exact=True).first.check()
-        page.get_by_role("button", name="Add sequence", exact=True).click()
+        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+            "Current: No comparison"
+        )
+        add_sequence = page.get_by_role(
+            "button", name="Add sequence", exact=True
+        )
+        expect(add_sequence).to_have_count(2)
+        add_sequence.first.click()
         page.get_by_test_id("linear-genbank-1").set_input_files(
             FIRST_LINEAR_FIXTURE_PATH
         )
@@ -508,6 +515,12 @@ def capture_gui_linear_layout(
             (2, "Enterobacteria phage DE3", 42_925, True),
         )
         for index, definition, length, reverse in definitions:
+            record_options = page.get_by_role(
+                "button",
+                name=f"Record options for sequence {index}",
+                exact=True,
+            )
+            record_options.click()
             definition_input = page.get_by_label(
                 f"Definition for sequence {index}", exact=True
             )
@@ -529,6 +542,13 @@ def capture_gui_linear_layout(
                 expect(reverse_control).to_be_checked()
             else:
                 expect(reverse_control).not_to_be_checked()
+            record_options.click()
+
+        open_linear_comparison_disclosure(
+            page,
+            "advanced",
+            "Advanced comparison and layout",
+        )
 
         arrange_rows = page.get_by_label(
             "Arrange linear records in rows", exact=True

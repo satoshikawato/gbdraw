@@ -50,7 +50,7 @@ export const linearComparisonEdgeKey = (queryUid, subjectUid) => (
 );
 
 export const createDefaultLinearComparisonPlan = () => ({
-  mode: LINEAR_COMPARISON_MODES.ADJACENT,
+  mode: LINEAR_COMPARISON_MODES.NONE,
   defaultSource: LINEAR_COMPARISON_SOURCES.LOSAT,
   edges: []
 });

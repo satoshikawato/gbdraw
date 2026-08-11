@@ -26,6 +26,25 @@ LOSATN or TLOSATX; use `--blast`, `--comparisons_table`, or
 LOSAT program families. Threaded browser search requires cross-origin
 isolation.
 
+For Linear browser searches, the three **LOSAT Mode** buttons select
+**LOSATN**, **LOSATP**, or **TLOSATX**. When LOSATP is active, the **LOSATP
+mode** menu selects **Similarity groups**, **Collinear blocks**, or **Pairwise
+matches**. LOSATN, TLOSATX, and LOSATP Pairwise matches can run on selected
+LOSAT edges. Similarity groups
+and Collinear blocks require an all-adjacent LOSAT plan because they expand
+evidence across the record set. Changing either mode control preserves inactive
+program, presentation, and appearance drafts. It does not set **Match style**
+as a side effect. When a Similarity-group or Collinear recipe requires
+**Curve** from fresh state, select LOSATP Pairwise matches, set that style,
+then select the final LOSATP mode.
+
+Similarity groups always uses all-vs-all search evidence across the loaded
+records and does not read the Collinear evidence-scope field. For Collinear
+blocks, fresh state and **Reset Settings** use **All records**; an explicitly
+saved **Adjacent pairs** value is restored from a session. Search evidence and
+display topology are separate, so an all-vs-all search can still draw links
+only between adjacent display rows.
+
 ## Filters and direction
 
 Display filters are e-value, bit score, identity, and alignment length. Values
@@ -57,12 +76,25 @@ row.
 
 ## Selected Linear edges
 
-The web app's **Apply to all adjacent gaps** control is a bulk choice for
-**No comparison**, **Run LOSAT**, or **Upload BLAST TSV**. An individual
-comparison boundary can replace that choice. **Advanced pair setup** adds an
-explicit selected pair, including a non-adjacent pair. Each included uploaded
-edge needs its own active file. An omitted edge contributes no evidence and
-does not reserve a search job.
+The Linear **Comparison** command group has **No comparison**, **Run LOSAT**,
+and **Upload BLAST TSV** buttons. Each button applies one choice to all
+positional adjacent pairs. These are bulk commands rather than a complete list
+of possible current states. The separate **Current:** status reports the
+resolved state; a selected or mixed plan appears as **Current: Selected pairs
+(N; ...)** with a **Custom** badge.
+
+Open **Selected pairs (N)** to change the source or uploaded file for one pair,
+omit a pair, or select **Add** and define an explicit non-adjacent pair. The
+pair sections are grouped there instead of appearing between record cards.
+Each included uploaded edge needs its own active file. An omitted edge
+contributes no evidence and does not reserve a search job. Retained inactive
+files and raw-result names do not reactivate an edge.
+
+A selected or mixed plan can use LOSATN, TLOSATX, or LOSATP Pairwise matches.
+When **LOSAT Mode** is LOSATP, its **Similarity groups** and **Collinear
+blocks** presentation options are disabled. Select **Use all adjacent LOSAT**
+to change to the compatible all-adjacent topology; opening or closing
+**Settings** does not change the plan.
 
 Search scope and display topology are separate. A Similarity group can include
 members from several records even when links are drawn only between adjacent

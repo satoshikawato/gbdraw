@@ -38,8 +38,9 @@ from flows.web_capture import (
     capture_screenshot,
     fit_complete_linear_preview,
     generate_and_inspect,
-    linear_pair,
     open_browser_capture,
+    open_linear_comparison_disclosure,
+    select_linear_losat_mode,
     wait_for_worker,
 )
 
@@ -114,15 +115,15 @@ def capture_gui_losatn(
         linear.click()
         expect(linear).to_have_attribute("aria-pressed", "true")
         page.get_by_role("radio", name="GenBank", exact=True).check()
-        global_source = page.locator('[data-capture="linear-blast-source"]')
-        expect(global_source).to_have_count(1)
-        no_comparison = global_source.get_by_role(
-            "radio", name="No comparison", exact=True
+        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+            "Current: No comparison"
         )
-        no_comparison.check()
-        expect(no_comparison).to_be_checked()
 
-        page.get_by_role("button", name="Add sequence", exact=True).click()
+        add_sequence = page.get_by_role(
+            "button", name="Add sequence", exact=True
+        )
+        expect(add_sequence).to_have_count(2)
+        add_sequence.first.click()
         page.get_by_test_id("linear-genbank-1").set_input_files(
             FIRST_LINEAR_FIXTURE_PATH
         )
@@ -147,62 +148,77 @@ def capture_gui_losatn(
             page, output_paths["02-first-diagram.png"], "Linear"
         )
 
-        run_losat = global_source.get_by_role(
-            "radio", name="Run LOSAT", exact=True
+        commands = page.get_by_role(
+            "group", name="Set all adjacent comparisons", exact=True
         )
-        run_losat.check()
-        expect(run_losat).to_be_checked()
-        losatn = page.get_by_role("radio", name="LOSATN", exact=True)
-        losatn.check()
-        expect(losatn).to_be_checked()
+        run_losat = commands.get_by_role(
+            "button", name="Run LOSAT for all adjacent pairs", exact=True
+        )
+        run_losat.click()
+        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
+            "Current: Run LOSAT for all adjacent pairs"
+        )
+        settings = open_linear_comparison_disclosure(
+            page,
+            "settings",
+            "Comparison Settings",
+        )
+        select_linear_losat_mode(
+            settings,
+            label="LOSATN",
+            mode_key="blastn",
+        )
 
-        execution = page.get_by_role(
-            "combobox", name="LOSAT execution", exact=True
-        )
-        execution.select_option("serial")
-        expect(execution).to_have_value("serial")
-        total_threads = page.get_by_role(
-            "combobox", name="LOSAT total threads", exact=True
-        )
-        total_threads.select_option("1")
-        expect(total_threads).to_have_value("1")
-        parallel_runs = page.get_by_role(
-            "combobox", name="LOSAT parallel runs", exact=True
-        )
-        parallel_runs.select_option("1")
-        expect(parallel_runs).to_have_value("1")
-        threads_per_run = page.get_by_role(
-            "combobox", name="LOSAT threads per run", exact=True
-        )
-        expect(threads_per_run).to_be_disabled()
-        task = page.get_by_role("combobox", name="LOSATN task", exact=True)
+        task = settings.get_by_role("combobox", name="LOSATN task", exact=True)
         task.select_option("megablast")
         expect(task).to_have_value("megablast")
+        pairwise_match_height = settings.get_by_label(
+            "Pairwise Match Height", exact=True
+        )
+        pairwise_match_height.fill("120")
+        pairwise_match_height.press("Tab")
+        expect(pairwise_match_height).to_have_value("120")
 
         output_prefix = page.get_by_role(
             "textbox", name="Output Prefix", exact=True
         )
         output_prefix.fill("lambda-de3-losatn")
         expect(output_prefix).to_have_value("lambda-de3-losatn")
-        pair = linear_pair(page, 1, 2)
-        raw_filename = pair.get_by_role(
+
+        advanced = open_linear_comparison_disclosure(
+            page,
+            "advanced",
+            "Advanced comparison and layout",
+        )
+
+        execution = advanced.get_by_role(
+            "combobox", name="LOSAT execution", exact=True
+        )
+        execution.select_option("serial")
+        expect(execution).to_have_value("serial")
+        total_threads = advanced.get_by_role(
+            "combobox", name="LOSAT total threads", exact=True
+        )
+        total_threads.select_option("1")
+        expect(total_threads).to_have_value("1")
+        parallel_runs = advanced.get_by_role(
+            "combobox", name="LOSAT parallel runs", exact=True
+        )
+        parallel_runs.select_option("1")
+        expect(parallel_runs).to_have_value("1")
+        threads_per_run = advanced.get_by_role(
+            "combobox", name="LOSAT threads per run", exact=True
+        )
+        expect(threads_per_run).to_be_disabled()
+        raw_filename = advanced.get_by_role(
             "textbox", name="Raw LOSAT filename for #1 to #2", exact=True
         )
         raw_filename.fill(EXPECTED_GUI_LOSATN_TSV)
         raw_filename.press("Tab")
         expect(raw_filename).to_have_value(EXPECTED_GUI_LOSATN_TSV)
-        pairwise_match = page.get_by_label("Pairwise Match", exact=True)
-        pairwise_match.click()
-        pairwise_match_height = page.get_by_label(
-            "Pairwise Match Height", exact=True
-        )
-        pairwise_match_height.fill("120")
-        pairwise_match_height.press("Tab")
-        expect(pairwise_match_height).to_have_value("120")
-        pairwise_match.click()
-        global_source.evaluate(
-            "(element) => element.scrollIntoView({ block: 'start' })"
-        )
+        settings.get_by_role(
+            "group", name="LOSAT Mode", exact=True
+        ).scroll_into_view_if_needed()
         screenshot_bytes["03-losatn-settings.png"] = capture_screenshot(
             page, output_paths["03-losatn-settings.png"], "Linear"
         )
@@ -215,7 +231,7 @@ def capture_gui_losatn(
             page, output_paths["04-comparison-result.png"], "Linear"
         )
 
-        tsv_button = pair.get_by_role(
+        tsv_button = advanced.get_by_role(
             "button", name="Save Raw LOSAT TSV for #1 to #2", exact=True
         )
         expect(tsv_button).to_be_enabled()

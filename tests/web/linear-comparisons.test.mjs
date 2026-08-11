@@ -45,7 +45,7 @@ const sparseRows = [
 ];
 
 assert.deepEqual(createDefaultLinearComparisonPlan(), {
-  mode: 'adjacent',
+  mode: 'none',
   defaultSource: 'losat',
   edges: []
 });
@@ -72,6 +72,11 @@ const normalized = normalizeLinearComparisonPlan({
 });
 assert.equal(normalized.mode, 'adjacent');
 assert.equal(normalized.defaultSource, 'losat');
+assert.equal(
+  normalizeLinearComparisonPlan({ defaultSource: 'upload', edges: [] }).mode,
+  'adjacent',
+  'a missing persisted mode keeps the legacy normalizer fallback'
+);
 assert.deepEqual(normalized.edges[0], {
   id: 'draft',
   queryUid: 'a',
@@ -349,11 +354,12 @@ for (const program of ['blastn', 'tblastx', 'blastp']) {
 }
 
 const timelinePairs = (timeline) => timeline.rows.flatMap((row) => row.boundaryAfter?.pairs || []);
+const adjacentLosatPlan = { mode: 'adjacent', defaultSource: 'losat', edges: [] };
 const defaultTwoTimeline = buildLinearComparisonTimeline({
   sequences: sequences.slice(0, 2),
-  plan: createDefaultLinearComparisonPlan(),
+  plan: adjacentLosatPlan,
   resolution: resolveLinearComparisonPlan({
-    plan: createDefaultLinearComparisonPlan(),
+    plan: adjacentLosatPlan,
     sequences: sequences.slice(0, 2)
   })
 });
@@ -379,7 +385,7 @@ assert.equal(timelinePairs(adjacentUploadTimeline)[0].source, 'upload');
 assert.equal(timelinePairs(adjacentUploadTimeline)[0].active, false);
 
 const fiveSequences = [...sequences, { uid: 'e' }];
-const defaultFivePlan = createDefaultLinearComparisonPlan();
+const defaultFivePlan = adjacentLosatPlan;
 const defaultFiveTimeline = buildLinearComparisonTimeline({
   sequences: fiveSequences,
   plan: defaultFivePlan,
@@ -393,9 +399,9 @@ assert.deepEqual(
 const zippedTimeline = buildLinearComparisonTimeline({
   sequences,
   layout: twoRows,
-  plan: createDefaultLinearComparisonPlan(),
+  plan: adjacentLosatPlan,
   resolution: resolveLinearComparisonPlan({
-    plan: createDefaultLinearComparisonPlan(),
+    plan: adjacentLosatPlan,
     sequences,
     layout: twoRows
   })
@@ -407,9 +413,9 @@ assert.deepEqual(zippedTimeline.rows[0].boundaryAfter.pairs.map((pair) => pair.e
 const sparseTimeline = buildLinearComparisonTimeline({
   sequences,
   layout: sparseRows,
-  plan: createDefaultLinearComparisonPlan(),
+  plan: adjacentLosatPlan,
   resolution: resolveLinearComparisonPlan({
-    plan: createDefaultLinearComparisonPlan(),
+    plan: adjacentLosatPlan,
     sequences,
     layout: sparseRows
   })

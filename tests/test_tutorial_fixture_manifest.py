@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 from collections import Counter
@@ -26,6 +27,65 @@ def _load_manifest() -> dict[str, object]:
 
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def test_git_attributes_keep_tutorial_fixture_bytes_stable(tmp_path: Path) -> None:
+    if shutil.which("git") is None or not (REPO_ROOT / ".git").exists():
+        pytest.skip("requires a Git checkout")
+
+    manifest = _load_manifest()
+    relative_paths = [
+        MANIFEST_PATH.relative_to(REPO_ROOT).as_posix(),
+        *(
+            (FIXTURE_ROOT / metadata["relativePath"])
+            .relative_to(REPO_ROOT)
+            .as_posix()
+            for metadata in manifest["files"].values()
+        ),
+    ]
+    result = subprocess.run(
+        ["git", "check-attr", "text", "eol", "--", *relative_paths],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    attributes: dict[str, dict[str, str]] = {}
+    for line in result.stdout.splitlines():
+        path, attribute, value = line.split(": ", maxsplit=2)
+        attributes.setdefault(path, {})[attribute] = value
+
+    assert set(attributes) == set(relative_paths)
+    for path in relative_paths:
+        assert attributes[path] == {"text": "auto", "eol": "lf"}, path
+
+    checkout_root = tmp_path / "checkout"
+    checkout_root.mkdir()
+    checkout_result = subprocess.run(
+        [
+            "git",
+            "-c",
+            "core.autocrlf=true",
+            "checkout-index",
+            "--force",
+            f"--prefix={checkout_root.as_posix()}/",
+            "--",
+            *relative_paths,
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert checkout_result.returncode == 0, checkout_result.stderr
+    for file_id, metadata in manifest["files"].items():
+        fixture_path = checkout_root / FIXTURE_ROOT.relative_to(REPO_ROOT)
+        payload = (fixture_path / metadata["relativePath"]).read_bytes()
+        assert len(payload) == metadata["sizeBytes"], file_id
+        assert _sha256(payload) == metadata["sha256"], file_id
 
 
 def _strand_counts(features) -> dict[str, int]:
