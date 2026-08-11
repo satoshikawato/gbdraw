@@ -28,6 +28,7 @@ from ...render.groups.linear import (  # type: ignore[reportMissingImports]
     DepthGroup,
     GcContentGroup,
     GcSkewGroup,
+    LinearFeatureDomIndex,
     PairWiseMatchGroup,
     SeqRecordGroup,
 )
@@ -50,8 +51,8 @@ def add_record_group(
     precalculated_labels: Optional[list],
     draw_features: bool = True,
     label_font_size: float | None = None,
-    orthogroup_label_member_ids: set[str] | None = None,
-    orthogroup_label_top_member_ids: set[str] | None = None,
+    orthogroup_label_member_ids: set[str | int] | None = None,
+    orthogroup_label_top_member_ids: set[str | int] | None = None,
     record_index: int = 0,
     record_count: int = 1,
     group_id: str | None = None,
@@ -370,40 +371,6 @@ def add_record_definition_group(
     return canvas
 
 
-def add_comparison_on_linear_canvas(
-    canvas: Drawing,
-    comparisons,
-    canvas_config: LinearCanvasConfigurator,
-    blast_config,
-    records: list,
-    comparison_offsets: list,
-    actual_comparison_heights: list,
-    record_offsets_x: dict[int, float] | None = None,
-) -> Drawing:
-    """Adds comparison groups at specified y-offsets with dynamic height."""
-    for comparison_count, comparison in enumerate(comparisons, start=1):
-        if comparison_count > len(comparison_offsets):
-            break
-
-        height = actual_comparison_heights[comparison_count - 1]
-        offset = comparison_offsets[comparison_count - 1]
-
-        match_group: Group = PairWiseMatchGroup(
-            canvas_config,
-            blast_config.sequence_length_dict,
-            comparison,
-            height,
-            comparison_count,
-            blast_config,
-            records,
-            record_offsets_x=record_offsets_x,
-        ).get_group()
-
-        match_group.translate(canvas_config.horizontal_offset, offset)
-        canvas.add(match_group)
-    return canvas
-
-
 def add_explicit_comparisons_on_linear_canvas(
     canvas: Drawing,
     comparisons: list[LinearComparison],
@@ -411,6 +378,7 @@ def add_explicit_comparisons_on_linear_canvas(
     blast_config,
     records: list[SeqRecord],
     placements: dict[int, LinearRecordPlacement],
+    feature_dom_index: LinearFeatureDomIndex | None = None,
 ) -> Drawing:
     """Draw comparisons using explicit endpoint placements."""
 
@@ -443,6 +411,7 @@ def add_explicit_comparisons_on_linear_canvas(
             subject_placement=subject,
             query_y=query_anchor - top_y,
             subject_y=subject_anchor - top_y,
+            feature_dom_index=feature_dom_index,
         ).get_group()
         match_group.translate(canvas_config.horizontal_offset, top_y)
         canvas.add(match_group)
@@ -453,7 +422,6 @@ def add_length_bar_on_linear_canvas(
     canvas: Drawing,
     canvas_config: LinearCanvasConfigurator,
     scale_group,
-    legend_group,
     offset_x: float = 0.0,
 ) -> Drawing:
     """Adds a length bar to the linear canvas."""
@@ -467,28 +435,12 @@ def add_length_bar_on_linear_canvas(
     return canvas
 
 
-def add_legends_on_linear_canvas(
-    canvas: Drawing,
-    canvas_config: LinearCanvasConfigurator,
-    legend_group,
-    legend_table,
-):
-    legend_group = legend_group.get_group()
-    offset_x = canvas_config.legend_offset_x
-    offset_y = canvas_config.legend_offset_y
-    legend_group.translate(offset_x, offset_y)
-    canvas.add(legend_group)
-    return canvas
-
-
 __all__ = [
     "add_record_group",
     "add_depth_group",
     "add_gc_content_group",
     "add_gc_skew_group",
     "add_record_definition_group",
-    "add_comparison_on_linear_canvas",
     "add_explicit_comparisons_on_linear_canvas",
     "add_length_bar_on_linear_canvas",
-    "add_legends_on_linear_canvas",
 ]

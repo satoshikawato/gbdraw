@@ -24,7 +24,7 @@ _SCALE_STYLES: tuple[ScaleStyle, ...] = ("bar", "ruler")
 ArrowHeadLengthRatio = Literal["auto"] | float
 
 
-def _normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:
+def normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:
     normalized = str(value if value is not None else "ribbon").strip().lower()
     if normalized not in _PAIRWISE_MATCH_STYLES:
         raise ValidationError("pairwise_match_style must be one of: ribbon, curve")
@@ -269,7 +269,7 @@ class ObjectsBlastMatchConfig:
             fill_opacity=float(d["fill_opacity"]),
             stroke_color=str(d["stroke_color"]),
             stroke_width=float(d["stroke_width"]),
-            style=_normalize_pairwise_match_style(d.get("style", "ribbon")),
+            style=normalize_pairwise_match_style(d.get("style", "ribbon")),
             curve_tension=_normalize_curve_tension(d.get("curve_tension", 0.5)),
         )
 
@@ -644,4 +644,5 @@ __all__ = [
     "ArrowHeadLengthRatio",
     "ObjectsConfig",
     "ObjectsFeaturesArrowGeometryConfig",
+    "normalize_pairwise_match_style",
 ]

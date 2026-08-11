@@ -1639,6 +1639,11 @@ assert.match(combinedCircularGenbank, /WEBTWO/);
 
 state.mode.value = 'linear';
 state.lInputType.value = 'gb';
+state.linearComparisonPlan = {
+  mode: 'adjacent',
+  defaultSource: 'losat',
+  edges: []
+};
 state.adv.comparison_height = 42.5;
 state.adv.linear_track_slots_axis_index = 2;
 const linearFilesData = {
@@ -1658,6 +1663,49 @@ const linearFilesData = {
   ],
   linearComparisons: []
 };
+const materializedFilesData = {
+  linearSeqs: [0, 1].map((index) => ({
+    uid: `multi-source::record-${index + 1}`,
+    gb: genbank,
+    losat_gencode: 1,
+    region_record_id: `#${index + 1}`,
+    region_start: null,
+    region_end: null,
+    region_reverse: false
+  })),
+  linearComparisons: []
+};
+const materializedSnapshot = resolveLinearComparisonPlan({
+  plan: { mode: 'none', defaultSource: 'losat', edges: [] },
+  sequences: materializedFilesData.linearSeqs
+});
+const materializedCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: materializedFilesData,
+  comparisonPlanSnapshot: materializedSnapshot
+});
+assert.deepEqual(
+  materializedCanonical.renderRequest.records.map((record) => record.selector),
+  [
+    { kind: 'recordIndex', index: 0 },
+    { kind: 'recordIndex', index: 1 }
+  ]
+);
+assert.equal(
+  materializedCanonical.renderRequest.records[0].source.resourceId,
+  materializedCanonical.renderRequest.records[1].source.resourceId
+);
+assert.equal(
+  Object.values(materializedCanonical.resources).filter(
+    (resource) => resource.kind === 'genbank'
+  ).length,
+  1,
+  'materialized records must not duplicate the embedded GenBank resource'
+);
+assert.deepEqual(
+  materializedCanonical.webFiles.linearRecordMetadata.map((entry) => entry.recordKey),
+  ['multi-source::record-1', 'multi-source::record-2']
+);
 state.form.prefix = '';
 const linearDefaultCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.equal(linearDefaultCanonical.renderRequest.grouping, 'single');
@@ -1979,6 +2027,50 @@ assert.equal(
   resolvedProteinTsv
 );
 assert.deepEqual(roundTripGenerated, resolvedProteinSettings);
+const selectedComparisonPlan = structuredClone(state.linearComparisonPlan);
+state.linearComparisonPlan = {
+  ...createDefaultLinearComparisonPlan(),
+  mode: 'adjacent'
+};
+state.losat.blastp.mode = 'collinear';
+const typedCollinearityResource = {
+  schema: 2,
+  kind: 'result',
+  value: { type: 'CollinearityResult', fields: {} }
+};
+const resolvedCollinearCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: linearFilesData,
+  resolvedComparisons: [{
+    kind: 'collinearityResult',
+    typedResource: typedCollinearityResource
+  }]
+});
+assert.deepEqual(
+  resolvedCollinearCanonical.renderRequest.comparisons.map(
+    (comparison) => comparison.kind
+  ),
+  ['collinearityResult', 'generatedProteinComparison']
+);
+const resolvedCollinearity = resolvedCollinearCanonical.renderRequest.comparisons[0];
+assert.equal(resolvedCollinearity.valueKind, 'result');
+assert.deepEqual(
+  JSON.parse(Buffer.from(
+    resolvedCollinearCanonical.resources[resolvedCollinearity.resourceId].data,
+    'base64'
+  ).toString('utf8')),
+  typedCollinearityResource
+);
+assert.equal(resolvedCollinearCanonical.renderRequest.comparisons[1].mode, 'none');
+assert.equal(
+  resolvedCollinearCanonical.renderRequest.comparisons.some(
+    (comparison) => comparison.kind === 'precomputedProteinComparison'
+  ),
+  false,
+  'Collinear rendering must use the full typed result instead of parallel pair tables'
+);
+state.losat.blastp.mode = 'pairwise';
+state.linearComparisonPlan = selectedComparisonPlan;
 const orthogroupResourceText = '{"schema":1,"valueKind":"orthogroupResult","value":{}}\n';
 const collinearityResourceText = '{"schema":1,"valueKind":"blocks","value":[]}\n';
 const resolvedWithMetadataCanonical = structuredClone(resolvedProteinCanonical);
@@ -2022,8 +2114,15 @@ resolvedWithMetadataCanonical.renderRequest.comparisons.splice(
 const resolvedWithMetadataProjection = projectCanonicalSessionRequest(
   resolvedWithMetadataCanonical
 );
+const resolvedWithFreshTableState = stateForCanonicalProjection(
+  resolvedWithMetadataProjection
+);
+resolvedWithFreshTableState.linearComparisonPlan = structuredClone(
+  selectedComparisonPlan
+);
+resolvedWithFreshTableState.losat.blastp.mode = 'pairwise';
 const resolvedWithFreshTable = buildCanonicalRenderRequest({
-  state: stateForCanonicalProjection(resolvedWithMetadataProjection),
+  state: resolvedWithFreshTableState,
   filesData: resolvedWithMetadataProjection.files,
   resolvedComparisons: [{
     kind: 'precomputedProteinComparison',
@@ -2115,6 +2214,11 @@ assert.ok(
 );
 const typedOptionState = stateForCanonicalProjection(typedOptionProjection);
 typedOptionState.losatProgram.value = 'blastn';
+typedOptionState.linearComparisonPlan = {
+  mode: 'adjacent',
+  defaultSource: 'losat',
+  edges: []
+};
 const typedOptionRoundTrip = buildCanonicalRenderRequest({
   state: typedOptionState,
   filesData: typedOptionProjection.files
@@ -2419,6 +2523,11 @@ assert.equal(explicitOverrideProjection.config.form.separate_strands, false);
 assert.equal(explicitOverrideProjection.config.form.align_center, false);
 assert.equal(explicitOverrideProjection.config.form.keep_definition_left_aligned, false);
 
+state.linearComparisonPlan = {
+  mode: 'adjacent',
+  defaultSource: 'losat',
+  edges: []
+};
 state.adv.comparison_height = null;
 const autoHeightCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.equal(
@@ -3618,8 +3727,39 @@ const noneSnapshot = resolveLinearComparisonPlan({
   losatProgram: 'blastp',
   blastpMode: 'pairwise'
 });
+const dormantComparisonContractState = {
+  ...comparisonContractState,
+  adv: {
+    ...comparisonContractState.adv,
+    comparison_height: 'dormant-invalid-height',
+    min_bitscore: 'dormant-invalid-bitscore',
+    evalue: 'dormant-invalid-evalue',
+    identity: 'dormant-invalid-identity',
+    alignment_length: 'dormant-invalid-alignment',
+    pairwise_match_style: 'dormant-invalid-style'
+  },
+  losatProgram: ref('dormant-invalid-program'),
+  losat: {
+    ...structuredClone(comparisonContractState.losat),
+    totalThreadBudget: 'dormant-invalid-budget',
+    threadsPerJob: 'dormant-invalid-threads',
+    parallelWorkers: 'dormant-invalid-workers',
+    blastp: {
+      ...structuredClone(comparisonContractState.losat.blastp),
+      mode: 'dormant-invalid-presentation',
+      maxHits: 'dormant-invalid-max-hits',
+      orthogroupMembershipMode: 'dormant-invalid-membership',
+      collinearMinAnchors: 'dormant-invalid-anchors'
+    }
+  }
+};
+const dormantRequestSettingsBefore = structuredClone({
+  adv: dormantComparisonContractState.adv,
+  losatProgram: dormantComparisonContractState.losatProgram.value,
+  losat: dormantComparisonContractState.losat
+});
 const noneCanonical = buildCanonicalRenderRequestRaw({
-  state: comparisonContractState,
+  state: dormantComparisonContractState,
   filesData: comparisonContractFiles,
   comparisonPlanSnapshot: noneSnapshot,
   resolvedComparisons: [{
@@ -3627,11 +3767,160 @@ const noneCanonical = buildCanonicalRenderRequestRaw({
   }]
 });
 assert.deepEqual(noneCanonical.renderRequest.comparisons, []);
+assert.deepEqual({
+  adv: dormantComparisonContractState.adv,
+  losatProgram: dormantComparisonContractState.losatProgram.value,
+  losat: dormantComparisonContractState.losat
+}, dormantRequestSettingsBefore);
+for (const field of [
+  'pairwiseMatchStyle',
+  'evalue',
+  'bitscore',
+  'identity',
+  'alignmentLength'
+]) {
+  assert.equal(
+    Object.hasOwn(noneCanonical.renderRequest.diagramOptions, field),
+    false
+  );
+}
+for (const path of [
+  'canvas.linear.comparison_height',
+  'objects.blast_match.style'
+]) {
+  assert.equal(
+    Object.hasOwn(
+      noneCanonical.renderRequest.diagramOptions.configOverrides,
+      path
+    ),
+    false
+  );
+}
 assert.equal(
   Object.keys(noneCanonical.resources).some((key) => key.startsWith('comparison-')),
   false,
   'none must not materialize dormant upload, canonical, or generated comparison resources'
 );
+
+const activeProteinPlan = {
+  mode: 'adjacent',
+  defaultSource: 'losat',
+  edges: []
+};
+const activeProteinFiles = {
+  linearSeqs: comparisonContractSequences,
+  linearComparisons: [],
+  linearCanonicalComparisons: []
+};
+const inactiveProteinDefaults = {
+  proteinBlastpMaxHits: 5,
+  orthogroupMembershipMode: 'anchor_core_v1',
+  orthogroupMemberMaxHits: 5,
+  collinearMinAnchors: 1,
+  collinearMaxUnitGap: 0,
+  collinearMaxDiagonalDrift: 0,
+  collinearMaxConflicts: 1,
+  collinearityUnitMode: 'auto',
+  collinearityAnchorMode: 'rbh',
+  collinearitySearchScope: 'adjacent',
+  collinearityColorMode: 'orientation'
+};
+const invalidDormantProteinSettings = {
+  maxHits: 'invalid-dormant-max-hits',
+  orthogroupMembershipMode: 'invalid-dormant-membership',
+  orthogroupMemberMaxHits: 0,
+  collinearMinAnchors: 0,
+  collinearMaxUnitGap: -1,
+  collinearMaxDiagonalDrift: 'invalid-dormant-drift',
+  collinearMaxConflictsInMergeGap: -1,
+  collinearUnitMode: 'invalid-dormant-unit',
+  collinearAnchorMode: 'invalid-dormant-anchor',
+  collinearSearchScope: 'invalid-dormant-scope',
+  collinearColorMode: 'invalid-dormant-color'
+};
+for (const { mode, activeSettings, expected } of [
+  {
+    mode: 'pairwise',
+    activeSettings: { maxHits: 13 },
+    expected: { ...inactiveProteinDefaults, proteinBlastpMaxHits: 13 }
+  },
+  {
+    mode: 'orthogroup',
+    activeSettings: {
+      orthogroupMembershipMode: 'anchor_core_v1',
+      orthogroupMemberMaxHits: 9
+    },
+    expected: {
+      ...inactiveProteinDefaults,
+      orthogroupMemberMaxHits: 9
+    }
+  },
+  {
+    mode: 'collinear',
+    activeSettings: {
+      collinearMinAnchors: 4,
+      collinearMaxUnitGap: 3,
+      collinearMaxDiagonalDrift: 2,
+      collinearMaxConflictsInMergeGap: 0,
+      collinearUnitMode: 'locus',
+      collinearAnchorMode: 'rbh',
+      collinearSearchScope: 'all',
+      collinearColorMode: 'orientation_identity'
+    },
+    expected: {
+      ...inactiveProteinDefaults,
+      collinearMinAnchors: 4,
+      collinearMaxUnitGap: 3,
+      collinearMaxDiagonalDrift: 2,
+      collinearMaxConflicts: 0,
+      collinearityUnitMode: 'locus',
+      collinearitySearchScope: 'all',
+      collinearityColorMode: 'orientation_identity'
+    }
+  }
+]) {
+  const activeProteinState = {
+    ...comparisonContractState,
+    losatProgram: ref('blastp'),
+    losat: {
+      ...structuredClone(comparisonContractState.losat),
+      threadsPerJob: 2,
+      blastp: { mode, ...invalidDormantProteinSettings, ...activeSettings }
+    },
+    linearComparisonPlan: structuredClone(activeProteinPlan)
+  };
+  const activeProteinStateBefore = structuredClone(activeProteinState.losat);
+  const activeProteinSnapshot = resolveLinearComparisonPlan({
+    plan: activeProteinPlan,
+    sequences: comparisonContractSequences,
+    losatProgram: 'blastp',
+    blastpMode: mode
+  });
+  const activeProteinCanonical = buildCanonicalRenderRequestRaw({
+    state: activeProteinState,
+    filesData: activeProteinFiles,
+    comparisonPlanSnapshot: activeProteinSnapshot
+  });
+  const generated = activeProteinCanonical.renderRequest.comparisons.find(
+    (comparison) => comparison.kind === 'generatedProteinComparison'
+  );
+  assert.equal(generated.mode, mode);
+  assert.deepEqual(activeProteinState.losat, activeProteinStateBefore);
+  assert.deepEqual({
+    proteinBlastpMaxHits: generated.settings.proteinBlastpMaxHits,
+    orthogroupMembershipMode: generated.settings.orthogroupMembershipMode,
+    orthogroupMemberMaxHits: generated.settings.orthogroupMemberMaxHits,
+    collinearMinAnchors: generated.settings.collinearityParams.parameters.minAnchors,
+    collinearMaxUnitGap: generated.settings.collinearityParams.parameters.maxUnitGap,
+    collinearMaxDiagonalDrift:
+      generated.settings.collinearityParams.parameters.maxDiagonalDrift,
+    collinearMaxConflicts: generated.settings.collinearityParams.parameters.maxConflicts,
+    collinearityUnitMode: generated.settings.collinearityUnitMode,
+    collinearityAnchorMode: generated.settings.collinearityAnchorMode,
+    collinearitySearchScope: generated.settings.collinearitySearchScope,
+    collinearityColorMode: generated.settings.collinearityColorMode
+  }, expected, `${mode} must canonicalize only the request copy of dormant settings`);
+}
 
 const emptySelectedSnapshot = resolveLinearComparisonPlan({
   plan: { mode: 'selected', defaultSource: 'losat', edges: [] },
@@ -3916,8 +4205,16 @@ if (roundTripSessionIndex >= 0) {
     legacyFiles: session.files || null,
     storedConfig: session.config || null
   });
+  const projectedState = stateForCanonicalProjection(sessionProjection);
+  if (process.argv.includes('--activate-adjacent-comparison')) {
+    projectedState.linearComparisonPlan = {
+      mode: 'adjacent',
+      defaultSource: 'losat',
+      edges: []
+    };
+  }
   console.log(JSON.stringify(buildCanonicalRenderRequest({
-    state: stateForCanonicalProjection(sessionProjection),
+    state: projectedState,
     filesData: sessionProjection.files
   })));
 } else if (process.argv.includes('--print-resolved-protein')) {

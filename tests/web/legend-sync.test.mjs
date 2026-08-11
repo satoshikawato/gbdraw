@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-legend-sync-'));
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'app'), join(tempRoot, 'app'), { recursive: true });
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services'), join(tempRoot, 'services'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 
 const {
@@ -23,7 +24,6 @@ const {
 } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'utils.js'))
 );
-
 assert.equal(SPECIFIC_COLOR_FILE_OWNER, 'specific-color-file');
 assert.deepEqual(parseTransformXY('translate(12.5,-3.25)'), { x: 12.5, y: -3.25 });
 assert.deepEqual(parseTransformXY('translate(.5 2e1)'), { x: 0.5, y: 20 });
@@ -43,8 +43,34 @@ const repositionSource = await readFile(
   join(tempRoot, 'app', 'legend-layout', 'reposition-actions.js'),
   'utf8'
 );
+const legendLayoutSource = await readFile(join(tempRoot, 'app', 'legend-layout.js'), 'utf8');
+const entryActionsSource = await readFile(
+  join(tempRoot, 'app', 'legend', 'entry-actions.js'),
+  'utf8'
+);
+const appSetupSource = await readFile(join(tempRoot, 'app', 'app-setup.js'), 'utf8');
+const watchersSource = await readFile(join(tempRoot, 'app', 'watchers.js'), 'utf8');
+const configSource = await readFile(join(tempRoot, 'services', 'config.js'), 'utf8');
 assert.match(svgStylesSource, /querySelectorAll\(PAIRWISE_LEGEND_SELECTOR\)/);
-assert.match(repositionSource, /querySelector\(PAIRWISE_LEGEND_SELECTOR\)/);
+assert.match(repositionSource, /applyCompositionEdit/);
+assert.match(repositionSource, /bindCompositionMetadata/);
+assert.doesNotMatch(repositionSource, /data-horizontal-viewbox|data-vertical-viewbox/);
+assert.doesNotMatch(repositionSource, /0\.025|0\.85|0\.875|0\.75/);
+assert.match(
+  legendLayoutSource,
+  /resetAllPositions[\s\S]+resetCompositionUserDeltas[\s\S]+persistCurrentSvg\(svg\)/
+);
+assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
+assert.ok((entryActionsSource.match(/onLegendGeometryChanged\(\);/g) || []).length >= 4);
+assert.match(
+  appSetupSource,
+  /setLegendGeometryChangedHandler\(legendLayout\.refreshLegendGeometry\)/
+);
+assert.match(
+  watchersSource,
+  /bind composition metadata[\s\S]+captureBaseConfig/
+);
+assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+state\.skipPositionReapply\.value = true;\s+applyResultsData/);
 
 const rules = [
   { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' },

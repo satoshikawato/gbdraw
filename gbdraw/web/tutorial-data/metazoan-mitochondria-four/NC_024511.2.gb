@@ -1,0 +1,1233 @@
+LOCUS       NC_024511              19524 bp    DNA     circular INV 03-APR-2023
+DEFINITION  Drosophila melanogaster mitochondrion, complete genome.
+ACCESSION   NC_024511
+VERSION     NC_024511.2
+DBLINK      BioProject: PRJNA927338
+            BioSample: SAMN02803731
+KEYWORDS    RefSeq.
+SOURCE      mitochondrion Drosophila melanogaster (fruit fly)
+  ORGANISM  Drosophila melanogaster
+            Eukaryota; Metazoa; Ecdysozoa; Arthropoda; Altocrustacea;
+            Allotriocarida; Hexapoda; Insecta; Pterygota; Neoptera; Eumetabola;
+            Endopterygota; Aparaglossata; Panorpida; Diptera; Brachycera;
+            Muscomorpha; Ephydroidea; Drosophilidae; Drosophila; Sophophora.
+REFERENCE   1  (bases 1 to 19524)
+  CONSRTM   NCBI Genome Project
+  TITLE     Direct Submission
+  JOURNAL   Submitted (24-JUL-2014) National Center for Biotechnology
+            Information, NIH, Bethesda, MD 20894, USA
+REFERENCE   2  (bases 1 to 19524)
+  AUTHORS   Wan,K. and Celniker,S.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (06-JUN-2014) Berkeley Drosophila Genome Project, Ernest
+            Orlando Lawrence Berkeley National Laboratory, 1 Cyclotron Road,
+            Mailstop 64-121, Berkeley, CA 94720, USA
+COMMENT     PROVISIONAL REFSEQ: This record has not yet been subject to final
+            NCBI review. The reference sequence is identical to KJ947872.
+            
+            On Aug 1, 2014 this sequence version replaced NC_024511.1.
+            
+            ##Assembly-Data-START##
+            Sequencing Technology :: Sanger dideoxy sequencing; PacBio
+            ##Assembly-Data-END##
+            COMPLETENESS: full length.
+FEATURES             Location/Qualifiers
+     source          1..19524
+                     /organism="Drosophila melanogaster"
+                     /organelle="mitochondrion"
+                     /mol_type="genomic DNA"
+                     /db_xref="taxon:7227"
+     gene            1..65
+                     /gene="trnI"
+                     /locus_tag="Dmel_CR34060"
+                     /gene_synonym="mt:tRNA:Ile-GAT"
+                     /nomenclature="Official Symbol: mt:tRNA:Ile-GAT | Name:
+                     mitochondrial transfer RNA:Isoleucine-GAT"
+                     /note="mitochondrial transfer RNA:Isoleucine-GAT;
+                     alternate names: mitochondrial isoleucine tRNA"
+                     /db_xref="FLYBASE:FBgn0013696"
+                     /db_xref="GeneID:19893563"
+     tRNA            1..65
+                     /gene="trnI"
+                     /locus_tag="Dmel_CR34060"
+                     /gene_synonym="mt:tRNA:Ile-GAT"
+                     /product="tRNA-Ile"
+                     /note="mt:tRNA:Ile-GAT-RA; Dmel\mt:tRNA:Ile-GAT-RA;
+                     CR34060-RA; Dmel\CR34060-RA"
+                     /db_xref="FLYBASE:FBtr0100854"
+                     /db_xref="FLYBASE:FBgn0013696"
+                     /db_xref="GeneID:19893563"
+     gene            complement(97..165)
+                     /gene="trnQ"
+                     /locus_tag="Dmel_CR34061"
+                     /gene_synonym="mt:tRNA:Gln-TTG"
+                     /nomenclature="Official Symbol: mt:tRNA:Gln-TTG | Name:
+                     mitochondrial transfer RNA:Glutamine-TTG"
+                     /note="mitochondrial transfer RNA:Glutamine-TTG; alternate
+                     names: glutamine tRNA; mitochondrial glutamine tRNA"
+                     /db_xref="FLYBASE:FBgn0013703"
+                     /db_xref="GeneID:19893527"
+     tRNA            complement(97..165)
+                     /gene="trnQ"
+                     /locus_tag="Dmel_CR34061"
+                     /gene_synonym="mt:tRNA:Gln-TTG"
+                     /product="tRNA-Gln"
+                     /note="mt:tRNA:Gln-TTG-RA; Dmel\mt:tRNA:Gln-TTG-RA;
+                     CR34061-RA; Dmel\CR34061-RA"
+                     /db_xref="FLYBASE:FBtr0100855"
+                     /db_xref="FLYBASE:FBgn0013703"
+                     /db_xref="GeneID:19893527"
+     gene            171..239
+                     /gene="trnM"
+                     /locus_tag="Dmel_CR34062"
+                     /gene_synonym="mt:tRNA:Met-CAT"
+                     /nomenclature="Official Symbol: mt:tRNA:Met-CAT | Name:
+                     mitochondrial transfer RNA:Methionine-CAT"
+                     /note="mitochondrial transfer RNA:Methionine-CAT;
+                     alternate names: mitochondrial methionine tRNA"
+                     /db_xref="FLYBASE:FBgn0013700"
+                     /db_xref="GeneID:19893528"
+     tRNA            171..239
+                     /gene="trnM"
+                     /locus_tag="Dmel_CR34062"
+                     /gene_synonym="mt:tRNA:Met-CAT"
+                     /product="tRNA-Met"
+                     /note="mt:tRNA:Met-CAT-RA; Dmel\mt:tRNA:Met-CAT-RA;
+                     CR34062-RA; Dmel\CR34062-RA"
+                     /db_xref="FLYBASE:FBtr0100856"
+                     /db_xref="FLYBASE:FBgn0013700"
+                     /db_xref="GeneID:19893528"
+     gene            240..1263
+                     /gene="ND2"
+                     /locus_tag="Dmel_CG34063"
+                     /gene_synonym="mt:ND2"
+                     /nomenclature="Official Symbol: mt:ND2 | Name:
+                     mitochondrial NADH-ubiquinone oxidoreductase chain 2"
+                     /note="mitochondrial NADH-ubiquinone oxidoreductase chain
+                     2"
+                     /db_xref="FLYBASE:FBgn0013680"
+                     /db_xref="GeneID:19893529"
+     CDS             240..1263
+                     /gene="ND2"
+                     /locus_tag="Dmel_CG34063"
+                     /gene_synonym="mt:ND2"
+                     /EC_number="7.1.1.2"
+                     /note="CG34063 gene product from transcript CG34063-RA;
+                     TAA stop codon is completed by the addition of 3' A
+                     residues to the mRNA"
+                     /codon_start=1
+                     /transl_except=(pos:1263,aa:TERM)
+                     /transl_table=5
+                     /product="NADH dehydrogenase subunit 2"
+                     /protein_id="YP_009047266.1"
+                     /db_xref="FLYBASE:FBpp0100175"
+                     /db_xref="FLYBASE:FBgn0013680"
+                     /db_xref="GeneID:19893529"
+                     /translation="MFNNSSKILFITIMIIGTLITVTSNSWLGAWMGLEINLLSFIPL
+                     LSDNNNLMSTEASLKYFLTQVLASTVLLFSSILLMLKNNMNNEINESFTSMIIMSALL
+                     LKSGAAPFHFWFPNMMEGLTWMNALMLMTWQKIAPLMLISYLNIKYLLLISVILSVII
+                     GAIGGLNQTSLRKLMAFSSINHLGWMLSSLMISESIWLIYFFFYSFLSFVLTFMFNIF
+                     KLFHLNQLFSWFVNSKILKFTLFMNFLSLGGLPPFLGFLPKWLVIQQLTLCNQYFMLT
+                     LMMMSTLITLFFYLRICYSAFMMNYFENNWIMKMNMNSINYNMYMIMTFFSIFGLFLI
+                     SLFYFMF"
+     gene            1264..1329
+                     /gene="trnW"
+                     /locus_tag="Dmel_CR34064"
+                     /gene_synonym="mt:tRNA:Trp-TCA"
+                     /nomenclature="Official Symbol: mt:tRNA:Trp-TCA | Name:
+                     mitochondrial transfer RNA:Tryptophan-TCA"
+                     /note="mitochondrial transfer RNA:Tryptophan-TCA;
+                     alternate names: mitochondrial tryptophan tRNA"
+                     /db_xref="FLYBASE:FBgn0013709"
+                     /db_xref="GeneID:19893530"
+     tRNA            1264..1329
+                     /gene="trnW"
+                     /locus_tag="Dmel_CR34064"
+                     /gene_synonym="mt:tRNA:Trp-TCA"
+                     /product="tRNA-Trp"
+                     /note="mt:tRNA:Trp-TCA-RA; Dmel\mt:tRNA:Trp-TCA-RA;
+                     CR34064-RA; Dmel\CR34064-RA"
+                     /db_xref="FLYBASE:FBtr0100858"
+                     /db_xref="FLYBASE:FBgn0013709"
+                     /db_xref="GeneID:19893530"
+     gene            complement(1322..1383)
+                     /gene="trnC"
+                     /locus_tag="Dmel_CR34065"
+                     /gene_synonym="mt:tRNA:Cys-GCA"
+                     /nomenclature="Official Symbol: mt:tRNA:Cys-GCA | Name:
+                     mitochondrial transfer RNA:Cysteine-GCA"
+                     /note="mitochondrial transfer RNA:Cysteine-GCA; alternate
+                     names: mitochondrial cysteine tRNA"
+                     /db_xref="FLYBASE:FBgn0013690"
+                     /db_xref="GeneID:19893531"
+     tRNA            complement(1322..1383)
+                     /gene="trnC"
+                     /locus_tag="Dmel_CR34065"
+                     /gene_synonym="mt:tRNA:Cys-GCA"
+                     /product="tRNA-Cys"
+                     /note="mt:tRNA:Cys-GCA-RA; Dmel\mt:tRNA:Cys-GCA-RA;
+                     CR34065-RA; Dmel\CR34065-RA"
+                     /db_xref="FLYBASE:FBtr0100859"
+                     /db_xref="FLYBASE:FBgn0013690"
+                     /db_xref="GeneID:19893531"
+     gene            complement(1403..1468)
+                     /gene="trnY"
+                     /locus_tag="Dmel_CR34066"
+                     /gene_synonym="mt:tRNA:Tyr-GTA"
+                     /nomenclature="Official Symbol: mt:tRNA:Tyr-GTA | Name:
+                     mitochondrial transfer RNA:Tyrosine-GTA"
+                     /note="mitochondrial transfer RNA:Tyrosine-GTA; alternate
+                     names: mitochondrial tyrosine tRNA"
+                     /db_xref="FLYBASE:FBgn0013710"
+                     /db_xref="GeneID:19893532"
+     tRNA            complement(1403..1468)
+                     /gene="trnY"
+                     /locus_tag="Dmel_CR34066"
+                     /gene_synonym="mt:tRNA:Tyr-GTA"
+                     /product="tRNA-Tyr"
+                     /note="mt:tRNA:Tyr-GTA-RA; Dmel\mt:tRNA:Tyr-GTA-RA;
+                     CR34066-RA; Dmel\CR34066-RA"
+                     /db_xref="FLYBASE:FBtr0100860"
+                     /db_xref="FLYBASE:FBgn0013710"
+                     /db_xref="GeneID:19893532"
+     gene            <1474..3009
+                     /gene="COX1"
+                     /locus_tag="Dmel_CG34067"
+                     /gene_synonym="mt:CoI"
+                     /nomenclature="Official Symbol: mt:CoI | Name:
+                     mitochondrial Cytochrome c oxidase subunit I"
+                     /note="mitochondrial Cytochrome c oxidase subunit I"
+                     /db_xref="FLYBASE:FBgn0013674"
+                     /db_xref="GeneID:19893533"
+     CDS             <1474..3009
+                     /gene="COX1"
+                     /locus_tag="Dmel_CG34067"
+                     /gene_synonym="mt:CoI"
+                     /EC_number="7.1.1.9"
+                     /note="CG34067 gene product from transcript CG34067-RA;
+                     start codon not determined"
+                     /codon_start=1
+                     /transl_table=5
+                     /product="cytochrome c oxidase subunit I"
+                     /protein_id="YP_009047267.1"
+                     /db_xref="FLYBASE:FBpp0100176"
+                     /db_xref="FLYBASE:FBgn0013674"
+                     /db_xref="GeneID:19893533"
+                     /translation="SRQWLFSTNHKDIGTLYFIFGAWAGMVGTSLSILIRAELGHPGA
+                     LIGDDQIYNVIVTAHAFIMIFFMVMPIMIGGFGNWLVPLMLGAPDMAFPRMNNMSFWL
+                     LPPALSLLLVSSMVENGAGTGWTVYPPLSAGIAHGGASVDLAIFSLHLAGISSILGAV
+                     NFITTVINMRSTGISLDRMPLFVWSVVITALLLLLSLPVLAGAITMLLTDRNLNTSFF
+                     DPAGGGDPILYQHLFWFFGHPEVYILILPGFGMISHIISQESGKKETFGSLGMIYAML
+                     AIGLLGFIVWAHHMFTVGMDVDTRAYFTSATMIIAVPTGIKIFSWLATLHGTQLSYSP
+                     AILWALGFVFLFTVGGLTGVVLANSSVDIILHDTYYVVAHFHYVLSMGAVFAIMAGFI
+                     HWYPLFTGLTLNNKWLKSHFIIMFIGVNLTFFPQHFLGLAGMPRRYSDYPDAYTTWNI
+                     VSTIGSTISLLGILFFFFIIWESLVSQRQVIYPIQLNSSIEWYQNTPPAEHSYSELPL
+                     LTN"
+     gene            3012..3077
+                     /gene="trnL1"
+                     /locus_tag="Dmel_CR34068"
+                     /gene_synonym="mt:tRNA:Leu-TAA"
+                     /nomenclature="Official Symbol: mt:tRNA:Leu-TAA | Name:
+                     mitochondrial transfer RNA:Leucine-TAA"
+                     /note="mitochondrial transfer RNA:Leucine-TAA; alternate
+                     names: mitochondrial leucine UUR tRNA"
+                     /db_xref="FLYBASE:FBgn0013699"
+                     /db_xref="GeneID:19893534"
+     tRNA            3012..3077
+                     /gene="trnL1"
+                     /locus_tag="Dmel_CR34068"
+                     /gene_synonym="mt:tRNA:Leu-TAA"
+                     /product="tRNA-Leu"
+                     /note="mt:tRNA:Leu-TAA-RA; Dmel\mt:tRNA:Leu-TAA-RA;
+                     CR34068-RA; Dmel\CR34068-RA"
+                     /db_xref="FLYBASE:FBtr0100862"
+                     /db_xref="FLYBASE:FBgn0013699"
+                     /db_xref="GeneID:19893534"
+     gene            3083..3767
+                     /gene="COX2"
+                     /locus_tag="Dmel_CG34069"
+                     /gene_synonym="mt:CoII"
+                     /nomenclature="Official Symbol: mt:CoII | Name:
+                     mitochondrial Cytochrome c oxidase subunit II"
+                     /note="mitochondrial Cytochrome c oxidase subunit II"
+                     /db_xref="FLYBASE:FBgn0013675"
+                     /db_xref="GeneID:19893535"
+     CDS             3083..3767
+                     /gene="COX2"
+                     /locus_tag="Dmel_CG34069"
+                     /gene_synonym="mt:CoII"
+                     /EC_number="7.1.1.9"
+                     /note="CG34069 gene product from transcript CG34069-RA;
+                     TAA stop codon is completed by the addition of 3' A
+                     residues to the mRNA"
+                     /codon_start=1
+                     /transl_except=(pos:3767,aa:TERM)
+                     /transl_table=5
+                     /product="cytochrome c oxidase subunit II"
+                     /protein_id="YP_009047268.1"
+                     /db_xref="FLYBASE:FBpp0100177"
+                     /db_xref="FLYBASE:FBgn0013675"
+                     /db_xref="GeneID:19893535"
+                     /translation="MSTWANLGLQDSASPLMEQLIFFHDHALLILVMITVLVGYLMFM
+                     LFFNNYVNRFLLHGQLIEMIWTILPAIILLFIALPSLRLLYLLDEINEPSVTLKSIGH
+                     QWYWSYEYSDFNNIEFDSYMIPTNELMTDGFRLLDVDNRVVLPMNSQIRILVTAADVI
+                     HSWTVPALGVKVDGTPGRLNQTNFFINRPGLFYGQCSEICGANHSFMPIVIESVPVNY
+                     FIKWISSNNS"
+     gene            3768..3838
+                     /gene="trnK"
+                     /locus_tag="Dmel_CR34070"
+                     /gene_synonym="mt:tRNA:Lys-CTT"
+                     /nomenclature="Official Symbol: mt:tRNA:Lys-CTT | Name:
+                     mitochondrial transfer RNA:Lysine-CTT"
+                     /note="mitochondrial transfer RNA:Lysine-CTT; alternate
+                     names: mitochondrial lysine tRNA"
+                     /db_xref="FLYBASE:FBgn0013697"
+                     /db_xref="GeneID:19893536"
+     tRNA            3768..3838
+                     /gene="trnK"
+                     /locus_tag="Dmel_CR34070"
+                     /gene_synonym="mt:tRNA:Lys-CTT"
+                     /product="tRNA-Lys"
+                     /note="mt:tRNA:Lys-CTT-RA; Dmel\mt:tRNA:Lys-CTT-RA;
+                     CR34070-RA; Dmel\CR34070-RA"
+                     /db_xref="FLYBASE:FBtr0100864"
+                     /db_xref="FLYBASE:FBgn0013697"
+                     /db_xref="GeneID:19893536"
+     gene            3840..3906
+                     /gene="trnD"
+                     /locus_tag="Dmel_CR34071"
+                     /gene_synonym="mt:tRNA:Asp-GTC"
+                     /nomenclature="Official Symbol: mt:tRNA:Asp-GTC | Name:
+                     mitochondrial transfer RNA:Aspartic acid-GTC"
+                     /note="mitochondrial transfer RNA:Aspartic acid-GTC;
+                     alternate names: mitochondrial aspartic acid tRNA"
+                     /db_xref="FLYBASE:FBgn0013691"
+                     /db_xref="GeneID:19893537"
+     tRNA            3840..3906
+                     /gene="trnD"
+                     /locus_tag="Dmel_CR34071"
+                     /gene_synonym="mt:tRNA:Asp-GTC"
+                     /product="tRNA-Asp"
+                     /note="mt:tRNA:Asp-GTC-RA; Dmel\mt:tRNA:Asp-GTC-RA;
+                     CR34071-RA; Dmel\CR34071-RA"
+                     /db_xref="FLYBASE:FBtr0100865"
+                     /db_xref="FLYBASE:FBgn0013691"
+                     /db_xref="GeneID:19893537"
+     gene            3907..4068
+                     /gene="ATP8"
+                     /locus_tag="Dmel_CG34072"
+                     /gene_synonym="mt:ATPase8"
+                     /nomenclature="Official Symbol: mt:ATPase8 | Name:
+                     mitochondrial ATPase subunit 8"
+                     /note="mitochondrial ATPase subunit 8"
+                     /db_xref="FLYBASE:FBgn0013673"
+                     /db_xref="GeneID:19893538"
+     CDS             3907..4068
+                     /gene="ATP8"
+                     /locus_tag="Dmel_CG34072"
+                     /gene_synonym="mt:ATPase8"
+                     /note="CG34072 gene product from transcript CG34072-RA"
+                     /codon_start=1
+                     /transl_table=5
+                     /product="ATP synthase F0 subunit 8"
+                     /protein_id="YP_009047269.1"
+                     /db_xref="FLYBASE:FBpp0100178"
+                     /db_xref="FLYBASE:FBgn0013673"
+                     /db_xref="GeneID:19893538"
+                     /translation="MPQMAPISWLLLFIIFSITFILFCSINYYSYMPNSPKSNELKNI
+                     NLNSMNWKW"
+     gene            4062..4736
+                     /gene="ATP6"
+                     /locus_tag="Dmel_CG34073"
+                     /gene_synonym="mt:ATPase6"
+                     /nomenclature="Official Symbol: mt:ATPase6 | Name:
+                     mitochondrial ATPase subunit 6"
+                     /note="mitochondrial ATPase subunit 6"
+                     /db_xref="FLYBASE:FBgn0013672"
+                     /db_xref="GeneID:19893539"
+     CDS             4062..4736
+                     /gene="ATP6"
+                     /locus_tag="Dmel_CG34073"
+                     /gene_synonym="mt:ATPase6"
+                     /EC_number="7.1.2.2"
+                     /EC_number="7.1.2.1"
+                     /note="CG34073 gene product from transcript CG34073-RB"
+                     /codon_start=1
+                     /transl_table=5
+                     /product="ATP synthase F0 subunit 6"
+                     /protein_id="YP_009047270.1"
+                     /db_xref="FLYBASE:FBpp0390630"
+                     /db_xref="FLYBASE:FBgn0013672"
+                     /db_xref="GeneID:19893539"
+                     /translation="MMTNLFSVFDPSAIFNFSLNWLSTFLGLLMIPSIYWLMPSRYNI
+                     MWNSILLTLHKEFKTLLGPSGHNGSTFIFISLFSLILFNNFMGLFPYIFTSTSHLTLT
+                     LSLALPLWLCFMLYGWINHTQHMFAHLVPQGTPAILMPFMVCIETISNIIRPGTLAVR
+                     LTANMIAGHLLLTLLGNTGPSMSYILVTFLLMAQIALLVLESAVAMIQSYVFAVLSTL
+                     YSSEVN"
+     gene            4736..5524
+                     /gene="COX3"
+                     /locus_tag="Dmel_CG34074"
+                     /gene_synonym="mt:CoIII"
+                     /nomenclature="Official Symbol: mt:CoIII | Name:
+                     mitochondrial Cytochrome c oxidase subunit III"
+                     /note="mitochondrial Cytochrome c oxidase subunit III"
+                     /db_xref="FLYBASE:FBgn0013676"
+                     /db_xref="GeneID:19893540"
+     CDS             4736..5524
+                     /gene="COX3"
+                     /locus_tag="Dmel_CG34074"
+                     /gene_synonym="mt:CoIII"
+                     /EC_number="7.1.1.9"
+                     /note="CG34074 gene product from transcript CG34074-RA"
+                     /codon_start=1
+                     /transl_table=5
+                     /product="cytochrome c oxidase subunit III"
+                     /protein_id="YP_009047271.1"
+                     /db_xref="FLYBASE:FBpp0100180"
+                     /db_xref="FLYBASE:FBgn0013676"
+                     /db_xref="GeneID:19893540"
+                     /translation="MSTHSNHPFHLVDYSPWPLTGAIGAMTTVSGMVKWFHQYDISLF
+                     VLGNIITILTVYQWWRDVSREGTYQGLHTYAVTIGLRWGMILFILSEVLFFVSFFWAF
+                     FHSSLSPAIELGASWPPMGIISFNPFQIPLLNTAILLASGVTVTWAHHSLMENNHSQT
+                     TQGLFFTVLLGIYFTILQAYEYIEAPFTIADSIYGSTFFMATGFHGIHVLIGTTFLLV
+                     CLLRHLNNHFSKNHHFGFEAAAWYWHFVDVVWLFLYITIYWWGG"
+     gene            5543..5607
+                     /gene="trnG"
+                     /locus_tag="Dmel_CR34075"
+                     /gene_synonym="mt:tRNA:Gly-TCC"
+                     /nomenclature="Official Symbol: mt:tRNA:Gly-TCC | Name:
+                     mitochondrial transfer RNA:Glycine-TCC"
+                     /note="mitochondrial transfer RNA:Glycine-TCC; alternate
+                     names: glycine tRNA; mitochondrial glycine tRNA"
+                     /db_xref="FLYBASE:FBgn0013694"
+                     /db_xref="GeneID:19893541"
+     tRNA            5543..5607
+                     /gene="trnG"
+                     /locus_tag="Dmel_CR34075"
+                     /gene_synonym="mt:tRNA:Gly-TCC"
+                     /product="tRNA-Gly"
+                     /note="mt:tRNA:Gly-TCC-RA; Dmel\mt:tRNA:Gly-TCC-RA;
+                     CR34075-RA; Dmel\CR34075-RA"
+                     /db_xref="FLYBASE:FBtr0100869"
+                     /db_xref="FLYBASE:FBgn0013694"
+                     /db_xref="GeneID:19893541"
+     gene            5608..5961
+                     /gene="ND3"
+                     /locus_tag="Dmel_CG34076"
+                     /gene_synonym="mt:ND3"
+                     /nomenclature="Official Symbol: mt:ND3 | Name:
+                     mitochondrial NADH-ubiquinone oxidoreductase chain 3"
+                     /note="mitochondrial NADH-ubiquinone oxidoreductase chain
+                     3"
+                     /db_xref="FLYBASE:FBgn0013681"
+                     /db_xref="GeneID:19893542"
+     CDS             5608..5961
+                     /gene="ND3"
+                     /locus_tag="Dmel_CG34076"
+                     /gene_synonym="mt:ND3"
+                     /EC_number="7.1.1.2"
+                     /note="CG34076 gene product from transcript CG34076-RA"
+                     /codon_start=1
+                     /transl_table=5
+                     /product="NADH dehydrogenase subunit 3"
+                     /protein_id="YP_009047272.1"
+                     /db_xref="FLYBASE:FBpp0100181"
+                     /db_xref="FLYBASE:FBgn0013681"
+                     /db_xref="GeneID:19893542"
+                     /translation="MFSIIFIALLILLITTIVMFLASILSKKALIDREKSSPFECGFD
+                     PKSSSRLPFSLRFFLITIIFLIFDVEIALILPMIIIMKYSNIMIWTITSIIFILILLI
+                     GLYHEWNQGMLNWSN"
+     gene            5983..6047
+                     /gene="trnA"
+                     /locus_tag="Dmel_CR34077"
+                     /gene_synonym="mt:tRNA:Ala-TGC"
+                     /nomenclature="Official Symbol: mt:tRNA:Ala-TGC | Name:
+                     mitochondrial transfer RNA:Alanine-TGC"
+                     /note="mitochondrial transfer RNA:Alanine-TGC; alternate
+                     names: alanine tRNA; mitochondrial alanine tRNA"
+                     /db_xref="FLYBASE:FBgn0013689"
+                     /db_xref="GeneID:19893543"
+     tRNA            5983..6047
+                     /gene="trnA"
+                     /locus_tag="Dmel_CR34077"
+                     /gene_synonym="mt:tRNA:Ala-TGC"
+                     /product="tRNA-Ala"
+                     /note="mt:tRNA:Ala-TGC-RA; Dmel\mt:tRNA:Ala-TGC-RA;
+                     CR34077-RA; Dmel\CR34077-RA"
+                     /db_xref="FLYBASE:FBtr0100871"
+                     /db_xref="FLYBASE:FBgn0013689"
+                     /db_xref="GeneID:19893543"
+     gene            6062..6125
+                     /gene="trnR"
+                     /locus_tag="Dmel_CR34078"
+                     /gene_synonym="mt:tRNA:Arg-TCG"
+                     /nomenclature="Official Symbol: mt:tRNA:Arg-TCG | Name:
+                     mitochondrial transfer RNA:Arginine-TCG"
+                     /note="mitochondrial transfer RNA:Arginine-TCG; alternate
+                     names: mitochondrial arginine tRNA"
+                     /db_xref="FLYBASE:FBgn0013704"
+                     /db_xref="GeneID:19893544"
+     tRNA            6062..6125
+                     /gene="trnR"
+                     /locus_tag="Dmel_CR34078"
+                     /gene_synonym="mt:tRNA:Arg-TCG"
+                     /product="tRNA-Arg"
+                     /note="mt:tRNA:Arg-TCG-RA; Dmel\mt:tRNA:Arg-TCG-RA;
+                     CR34078-RA; Dmel\CR34078-RA"
+                     /db_xref="FLYBASE:FBtr0100872"
+                     /db_xref="FLYBASE:FBgn0013704"
+                     /db_xref="GeneID:19893544"
+     gene            6126..6190
+                     /gene="trnN"
+                     /locus_tag="Dmel_CR34079"
+                     /gene_synonym="mt:tRNA:Asn-GTT"
+                     /nomenclature="Official Symbol: mt:tRNA:N | Name:
+                     mitochondrial asparagine tRNA"
+                     /note="mitochondrial transfer RNA:Asparagine-GTT;
+                     alternate names: mitochondrial asparagine tRNA"
+                     /db_xref="FLYBASE:FBgn0013701"
+                     /db_xref="GeneID:19893545"
+     tRNA            6126..6190
+                     /gene="trnN"
+                     /locus_tag="Dmel_CR34079"
+                     /gene_synonym="mt:tRNA:Asn-GTT"
+                     /product="tRNA-Asn"
+                     /note="mt:tRNA:Asn-GTT-RA; Dmel\mt:tRNA:Asn-GTT-RA;
+                     CR34079-RA; Dmel\CR34079-RA"
+                     /db_xref="FLYBASE:FBtr0100873"
+                     /db_xref="FLYBASE:FBgn0013701"
+                     /db_xref="GeneID:19893545"
+     gene            6191..6258
+                     /gene="trnS2"
+                     /locus_tag="Dmel_CR34080"
+                     /gene_synonym="mt:tRNA:Ser-GCT"
+                     /nomenclature="Official Symbol: mt:tRNA:Ser-GCT | Name:
+                     mitochondrial transfer RNA:Serine-GCT"
+                     /note="mitochondrial transfer RNA:Serine-GCT; alternate
+                     names: mitochondrial serine AGY tRNA"
+                     /db_xref="FLYBASE:FBgn0013705"
+                     /db_xref="GeneID:19893546"
+     tRNA            6191..6258
+                     /gene="trnS2"
+                     /locus_tag="Dmel_CR34080"
+                     /gene_synonym="mt:tRNA:Ser-GCT"
+                     /product="tRNA-Ser"
+                     /note="mt:tRNA:Ser-GCT-RA; Dmel\mt:tRNA:Ser-GCT-RA;
+                     CR34080-RA; Dmel\CR34080-RA"
+                     /db_xref="FLYBASE:FBtr0100874"
+                     /db_xref="FLYBASE:FBgn0013705"
+                     /db_xref="GeneID:19893546"
+     gene            6259..6325
+                     /gene="trnE"
+                     /locus_tag="Dmel_CR34081"
+                     /gene_synonym="mt:tRNA:Glu-TTC"
+                     /nomenclature="Official Symbol: mt:tRNA:Glu-TTC | Name:
+                     mitochondrial transfer RNA:Glutamic acid-TTC"
+                     /note="mitochondrial transfer RNA:Glutamic acid-TTC;
+                     alternate names: mitochondrial glutamic acid tRNA"
+                     /db_xref="FLYBASE:FBgn0013692"
+                     /db_xref="GeneID:19893547"
+     tRNA            6259..6325
+                     /gene="trnE"
+                     /locus_tag="Dmel_CR34081"
+                     /gene_synonym="mt:tRNA:Glu-TTC"
+                     /product="tRNA-Glu"
+                     /note="mt:tRNA:Glu-TTC-RA; Dmel\mt:tRNA:Glu-TTC-RA;
+                     CR34081-RA; Dmel\CR34081-RA"
+                     /db_xref="FLYBASE:FBtr0100875"
+                     /db_xref="FLYBASE:FBgn0013692"
+                     /db_xref="GeneID:19893547"
+     gene            complement(6344..6408)
+                     /gene="trnF"
+                     /locus_tag="Dmel_CR34082"
+                     /gene_synonym="mt:tRNA:Phe-GAA"
+                     /nomenclature="Official Symbol: mt:tRNA:Phe-GAA | Name:
+                     mitochondrial transfer RNA:Phenylalanine-GAA"
+                     /note="mitochondrial transfer RNA:Phenylalanine-GAA;
+                     alternate names: mitochondrial phenylalanine tRNA;
+                     phenylalanine tRNA"
+                     /db_xref="FLYBASE:FBgn0013693"
+                     /db_xref="GeneID:19893548"
+     tRNA            complement(6344..6408)
+                     /gene="trnF"
+                     /locus_tag="Dmel_CR34082"
+                     /gene_synonym="mt:tRNA:Phe-GAA"
+                     /product="tRNA-Phe"
+                     /note="mt:tRNA:Phe-GAA-RA; Dmel\mt:tRNA:Phe-GAA-RA;
+                     CR34082-RA; Dmel\CR34082-RA"
+                     /db_xref="FLYBASE:FBtr0100876"
+                     /db_xref="FLYBASE:FBgn0013693"
+                     /db_xref="GeneID:19893548"
+     gene            complement(6409..8125)
+                     /gene="ND5"
+                     /locus_tag="Dmel_CG34083"
+                     /gene_synonym="mt:ND5"
+                     /nomenclature="Official Symbol: mt:ND5 | Name:
+                     mitochondrial NADH-ubiquinone oxidoreductase chain 5"
+                     /note="mitochondrial NADH-ubiquinone oxidoreductase chain
+                     5"
+                     /db_xref="FLYBASE:FBgn0013684"
+                     /db_xref="GeneID:19893549"
+     CDS             complement(6409..8125)
+                     /gene="ND5"
+                     /locus_tag="Dmel_CG34083"
+                     /gene_synonym="mt:ND5"
+                     /EC_number="7.1.1.2"
+                     /note="CG34083 gene product from transcript CG34083-RB;
+                     TAA stop codon is completed by the addition of 3' A
+                     residues to the mRNA"
+                     /codon_start=1
+                     /transl_except=(pos:complement(6409),aa:TERM)
+                     /transl_table=5
+                     /product="NADH dehydrogenase subunit 5"
+                     /protein_id="YP_009047273.1"
+                     /db_xref="FLYBASE:FBpp0390633"
+                     /db_xref="FLYBASE:FBgn0013684"
+                     /db_xref="GeneID:19893549"
+                     /translation="MCSISFVNLISMSLSCFLLSLYFLLNDMIYFIEWELVSLNSMSI
+                     VMTFLFDWMSLLFMSFVLMISSLVIFYSKEYMMNDNHINRFIMLVLMFVLSMMLLIIS
+                     PNLISILLGWDGLGLVSYCLVIYFQNIKSYNAGMLTALSNRIGDVALLLSIAWMLNYG
+                     SWNYIFYLEIMQNEFEMLMIGSLVMLAAMTKSAQIPFSSWLPAAMAAPTPVSALVHSS
+                     TLVTAGVYLLIRFNIILSTSWLGQLMLLLSGLTMFMAGLGANFEFDLKKIIALSTLSQ
+                     LGLMMSILSMGFLKLAMFHLLTHALFKALLFMCAGAIIHNMNNSQDIRLMGGLSIHMP
+                     LTSACFNVSNLALCGMPFLAGFYSKDMILEIVSISNVNMFSFFLYYFSTGLTVSYSFR
+                     LVYYSMTGDLNCGSLNMLNDESWIMLRGMMGLLIMSIIGGSMLNWLIFPFPYMICLPI
+                     YMKLLTLFVCIVGGLFGYLISLSNLFFLNKSLFMYNLSTFLGSMWFMPYISTYGMIFY
+                     PLNYGQLVVKSFDQGWSEYFGGQHLYQKLSMYSKTLFLMHNNSLKIYLLLFVFWILIL
+                     LILLFL"
+     gene            complement(8141..8206)
+                     /gene="trnH"
+                     /locus_tag="Dmel_CR34084"
+                     /gene_synonym="mt:tRNA:His-GTG"
+                     /nomenclature="Official Symbol: mt:tRNA:His-GTG | Name:
+                     mitochondrial transfer RNA:Histidine-GTG"
+                     /note="mitochondrial transfer RNA:Histidine-GTG; alternate
+                     names: histidine tRNA; mitochondrial histidine tRNA"
+                     /db_xref="FLYBASE:FBgn0013695"
+                     /db_xref="GeneID:19893550"
+     tRNA            complement(8141..8206)
+                     /gene="trnH"
+                     /locus_tag="Dmel_CR34084"
+                     /gene_synonym="mt:tRNA:His-GTG"
+                     /product="tRNA-His"
+                     /note="mt:tRNA:His-GTG-RA; Dmel\mt:tRNA:His-GTG-RA;
+                     CR34084-RA; Dmel\CR34084-RA"
+                     /db_xref="FLYBASE:FBtr0100878"
+                     /db_xref="FLYBASE:FBgn0013695"
+                     /db_xref="GeneID:19893550"
+     gene            complement(8207..9545)
+                     /gene="ND4"
+                     /locus_tag="Dmel_CG34085"
+                     /gene_synonym="mt:ND4"
+                     /nomenclature="Official Symbol: mt:ND4 | Name:
+                     mitochondrial NADH-ubiquinone oxidoreductase chain 4"
+                     /note="mitochondrial NADH-ubiquinone oxidoreductase chain
+                     4"
+                     /db_xref="FLYBASE:FBgn0262952"
+                     /db_xref="GeneID:19893551"
+     CDS             complement(8207..9545)
+                     /gene="ND4"
+                     /locus_tag="Dmel_CG34085"
+                     /gene_synonym="mt:ND4"
+                     /EC_number="7.1.1.2"
+                     /note="CG34085 gene product from transcript CG34085-RB;
+                     TAA stop codon is completed by the addition of 3' A
+                     residues to the mRNA"
+                     /codon_start=1
+                     /transl_except=(pos:complement(8207),aa:TERM)
+                     /transl_table=5
+                     /product="NADH dehydrogenase subunit 4"
+                     /protein_id="YP_009047274.1"
+                     /db_xref="FLYBASE:FBpp0390632"
+                     /db_xref="FLYBASE:FBgn0262952"
+                     /db_xref="GeneID:19893551"
+                     /translation="MLKIIFFLLFLIPFCFINNMYWMVQIMMFFISFIFLLMNNFMNY
+                     WSEISYFLGCDMLSYGLILLSLWICSLMLLASEMINKHNNYKNLFLLNIIILLLLLIL
+                     TFSSMSLFMFYLFFESSLIPTLFLILGWGYQPERLQAGLYLLFYTLLVSLPMLIGIFY
+                     LMNKIGSMNFYLMNNFMFNYDLLYFCLLCAFLVKMPMFLVHLWLPKAHVEAPVSGSMI
+                     LAGIMLKLGGYGMLRVISFLQLMNLKYSFVWISISLVGGVLVSLVCLRQTDLKALIAY
+                     SSVAHMGIVLSGLLTMTYWGLCGSYTLMIAHGLCSSGLFCLANVSYERLGSRSMLINK
+                     GLLNFMPSMTLWWFLLSSANMAAPPTLNLLGEIYLLNSIVSWSWISMILLSFLSFFSA
+                     AYTLYLYSFSQHGKLFSGVYSFSSGKIREYLLMLLHWLPLNLLILKSESFMLWL"
+     gene            complement(9545..9835)
+                     /gene="ND4L"
+                     /locus_tag="Dmel_CG34086"
+                     /gene_synonym="mt:ND4L"
+                     /nomenclature="Official Symbol: mt:ND4L | Name:
+                     mitochondrial NADH-ubiquinone oxidoreductase chain 4L"
+                     /note="mitochondrial NADH-ubiquinone oxidoreductase chain
+                     4L"
+                     /db_xref="FLYBASE:FBgn0013683"
+                     /db_xref="GeneID:19893552"
+     CDS             complement(9545..9835)
+                     /gene="ND4L"
+                     /locus_tag="Dmel_CG34086"
+                     /gene_synonym="mt:ND4L"
+                     /EC_number="7.1.1.2"
+                     /note="CG34086 gene product from transcript CG34086-RA"
+                     /codon_start=1
+                     /transl_table=5
+                     /product="NADH dehydrogenase subunit 4L"
+                     /protein_id="YP_009047275.1"
+                     /db_xref="FLYBASE:FBpp0100184"
+                     /db_xref="FLYBASE:FBgn0013683"
+                     /db_xref="GeneID:19893552"
+                     /translation="MIMILYWSLPMILFILGLFCFVSNRKHLLSMLLSLEFIVLMLFF
+                     MLFIYLNMLNYESYFSMMFLTFSVCEGALGLSILVSMIRTHGNDYFQSFSIM"
+     gene            9838..9903
+                     /gene="trnT"
+                     /locus_tag="Dmel_CR34087"
+                     /gene_synonym="mt:tRNA:Thr-TGT"
+                     /nomenclature="Official Symbol: mt:tRNA:Thr-TGT | Name:
+                     mitochondrial transfer RNA:Threonine-TGT"
+                     /note="mitochondrial transfer RNA:Threonine-TGT; alternate
+                     names: mitochondrial threonine tRNA"
+                     /db_xref="FLYBASE:FBgn0013707"
+                     /db_xref="GeneID:19893553"
+     tRNA            9838..9903
+                     /gene="trnT"
+                     /locus_tag="Dmel_CR34087"
+                     /gene_synonym="mt:tRNA:Thr-TGT"
+                     /product="tRNA-Thr"
+                     /note="mt:tRNA:Thr-TGT-RA; Dmel\mt:tRNA:Thr-TGT-RA;
+                     CR34087-RA; Dmel\CR34087-RA"
+                     /db_xref="FLYBASE:FBtr0100881"
+                     /db_xref="FLYBASE:FBgn0013707"
+                     /db_xref="GeneID:19893553"
+     gene            complement(9904..9964)
+                     /gene="trnP"
+                     /locus_tag="Dmel_CR34088"
+                     /gene_synonym="mt:tRNA:Pro-TGG"
+                     /nomenclature="Official Symbol: mt:tRNA:Pro-TGG | Name:
+                     mitochondrial transfer RNA:Proline-TGG"
+                     /note="mitochondrial transfer RNA:Proline-TGG; alternate
+                     names: mitochondrial proline tRNA"
+                     /db_xref="FLYBASE:FBgn0013702"
+                     /db_xref="GeneID:19893554"
+     tRNA            complement(9904..9964)
+                     /gene="trnP"
+                     /locus_tag="Dmel_CR34088"
+                     /gene_synonym="mt:tRNA:Pro-TGG"
+                     /product="tRNA-Pro"
+                     /note="mt:tRNA:Pro-TGG-RA; Dmel\mt:tRNA:Pro-TGG-RA;
+                     CR34088-RA; Dmel\CR34088-RA"
+                     /db_xref="FLYBASE:FBtr0100882"
+                     /db_xref="FLYBASE:FBgn0013702"
+                     /db_xref="GeneID:19893554"
+     gene            9971..10495
+                     /gene="ND6"
+                     /locus_tag="Dmel_CG34089"
+                     /gene_synonym="mt:ND6"
+                     /nomenclature="Official Symbol: mt:ND6 | Name:
+                     mitochondrial NADH-ubiquinone oxidoreductase chain 6"
+                     /note="mitochondrial NADH-ubiquinone oxidoreductase chain
+                     6"
+                     /db_xref="FLYBASE:FBgn0013685"
+                     /db_xref="GeneID:19893555"
+     CDS             9971..10495
+                     /gene="ND6"
+                     /locus_tag="Dmel_CG34089"
+                     /gene_synonym="mt:ND6"
+                     /EC_number="7.1.1.2"
+                     /note="CG34089 gene product from transcript CG34089-RA"
+                     /codon_start=1
+                     /transl_table=5
+                     /product="NADH dehydrogenase subunit 6"
+                     /protein_id="YP_009047276.1"
+                     /db_xref="FLYBASE:FBpp0100185"
+                     /db_xref="FLYBASE:FBgn0013685"
+                     /db_xref="GeneID:19893555"
+                     /translation="MIQLMLYSLIITTSIIFLNMIHPLALGLTLLIQTIFVCLLTGLM
+                     TKSFWYSYILFLIFLGGMLVLFIYVTSLASNEMFNLSMKLTLFSSLILIFMLILSFIM
+                     DKTSSSLFLMNNDMQSIINMNSYFMENSLSLNKLYNFPTNFITILLMNYLLITLIVIV
+                     KITKLFKGPIRMMS"
+     gene            10499..11635
+                     /gene="CYTB"
+                     /locus_tag="Dmel_CG34090"
+                     /gene_synonym="mt:Cyt-b"
+                     /nomenclature="Official Symbol: mt:Cyt-b | Name:
+                     mitochondrial Cytochrome b"
+                     /note="mitochondrial Cytochrome b"
+                     /db_xref="FLYBASE:FBgn0013678"
+                     /db_xref="GeneID:19893556"
+     CDS             10499..11635
+                     /gene="CYTB"
+                     /locus_tag="Dmel_CG34090"
+                     /gene_synonym="mt:Cyt-b"
+                     /EC_number="7.1.1.8"
+                     /note="CG34090 gene product from transcript CG34090-RB"
+                     /codon_start=1
+                     /transl_table=5
+                     /product="cytochrome b"
+                     /protein_id="YP_009047277.1"
+                     /db_xref="FLYBASE:FBpp0390634"
+                     /db_xref="FLYBASE:FBgn0013678"
+                     /db_xref="GeneID:19893556"
+                     /translation="MNKPLRNSHPLFKIANNALVDLPAPINISSWWNFGSLLGLCLII
+                     QILTGLFLAMHYTADINLAFYSVNHICRDVNYGWLLRTLHANGASFFFICIYLHVGRG
+                     IYYGSYKFTPTWLIGVIILFLVMGTAFMGYVLPWGQMSFWGATVITNLLSAIPYLGMD
+                     LVQWLWGGFAVDNATLTRFFTFHFILPFIVLAMTMIHLLFLHQTGSNNPIGLNSNIDK
+                     IPFHPYFTFKDIVGFIVMIFILISLVLISPNLLGDPDNFIPANPLVTPAHIQPEWYFL
+                     FAYAILRSIPNKLGGVIALVLSIAILMILPFYNLSKFRGIQFYPINQVMFWSMLVTVI
+                     LLTWIGARPVEEPYVLIGQILTVVYFLYYLVNPLITKWWDNLLN"
+     gene            11638..11703
+                     /gene="trnS1"
+                     /locus_tag="Dmel_CR34091"
+                     /gene_synonym="mt:tRNA:Ser-TGA"
+                     /nomenclature="Official Symbol: mt:tRNA:Ser-TGA | Name:
+                     mitochondrial transfer RNA:Serine-TGA"
+                     /note="mitochondrial transfer RNA:Serine-TGA; alternate
+                     names: serine[UCN] tRNA; mitochondrial serine UCN tRNA"
+                     /db_xref="FLYBASE:FBgn0013706"
+                     /db_xref="GeneID:19893557"
+     tRNA            11638..11703
+                     /gene="trnS1"
+                     /locus_tag="Dmel_CR34091"
+                     /gene_synonym="mt:tRNA:Ser-TGA"
+                     /product="tRNA-Ser"
+                     /note="mt:tRNA:Ser-TGA-RA; Dmel\mt:tRNA:Ser-TGA-RA;
+                     CR34091-RA; Dmel\CR34091-RA"
+                     /db_xref="FLYBASE:FBtr0100885"
+                     /db_xref="FLYBASE:FBgn0013706"
+                     /db_xref="GeneID:19893557"
+     gene            complement(11721..12659)
+                     /gene="ND1"
+                     /locus_tag="Dmel_CG34092"
+                     /gene_synonym="mt:ND1"
+                     /nomenclature="Official Symbol: mt:ND1 | Name:
+                     mitochondrial NADH-ubiquinone oxidoreductase chain 1"
+                     /note="mitochondrial NADH-ubiquinone oxidoreductase chain
+                     1"
+                     /db_xref="FLYBASE:FBgn0013679"
+                     /db_xref="GeneID:19893558"
+     CDS             complement(11721..12659)
+                     /gene="ND1"
+                     /locus_tag="Dmel_CG34092"
+                     /gene_synonym="mt:ND1"
+                     /note="CG34092 gene product from transcript CG34092-RB"
+                     /codon_start=1
+                     /transl_table=5
+                     /product="NADH dehydrogenase subunit 1"
+                     /protein_id="YP_009047278.1"
+                     /db_xref="FLYBASE:FBpp0390631"
+                     /db_xref="FLYBASE:FBgn0013679"
+                     /db_xref="GeneID:19893558"
+                     /translation="MEFILSLIGSLLLIICVLVSVAFLTLLERKVLGYIQIRKGPNKV
+                     GLMGIPQPFCDAIKLFTKEQTYPLLSNYLSYYISPIFSLFLSLFVWMCMPFFVKLYSF
+                     NLGGLFFLCCTSLGVYTVMVAGWSSNSNYALLGGLRAVAQTISYEVSLALILLSFIFL
+                     IGSYNMIYFFFYQVYMWFLIILFPMALVWMSISLAETNRTPFDFAEGESELVSGFNVE
+                     YSSGGFALIFMAEYASILFMSMLFCVIFLGCDVFNLLFYMKLTFISFVFIWVRGTLPR
+                     FRYDKLMYLAWKCFLSFSLNYLLFFIGFKILLFSLL"
+     gene            complement(12670..12734)
+                     /gene="trnL2"
+                     /locus_tag="Dmel_CR34093"
+                     /gene_synonym="mt:tRNA:Leu-TAG"
+                     /nomenclature="Official Symbol: mt:tRNA:Leu-TAG | Name:
+                     mitochondrial transfer RNA:Leucine-TAG"
+                     /note="mitochondrial transfer RNA:Leucine-TAG; alternate
+                     names: mitochondrial leucine CUN tRNA; leucine[CUN] tRNA"
+                     /db_xref="FLYBASE:FBgn0013698"
+                     /db_xref="GeneID:19893559"
+     tRNA            complement(12670..12734)
+                     /gene="trnL2"
+                     /locus_tag="Dmel_CR34093"
+                     /gene_synonym="mt:tRNA:Leu-TAG"
+                     /product="tRNA-Leu"
+                     /note="mt:tRNA:Leu-TAG-RA; Dmel\mt:tRNA:Leu-TAG-RA;
+                     CR34093-RA; Dmel\CR34093-RA"
+                     /codon_recognized="CUN"
+                     /db_xref="FLYBASE:FBtr0100887"
+                     /db_xref="FLYBASE:FBgn0013698"
+                     /db_xref="GeneID:19893559"
+     gene            complement(12735..14058)
+                     /gene="lrRNA"
+                     /locus_tag="Dmel_CR34094"
+                     /gene_synonym="mt:lrRNA"
+                     /nomenclature="Official Symbol: mt:lrRNA | Name:
+                     mitochondrial large ribosomal RNA"
+                     /note="mitochondrial large ribosomal RNA; large subunit
+                     ribosomal RNA"
+                     /db_xref="FLYBASE:FBgn0013686"
+                     /db_xref="GeneID:19893560"
+     rRNA            complement(12735..14058)
+                     /gene="lrRNA"
+                     /locus_tag="Dmel_CR34094"
+                     /gene_synonym="mt:lrRNA"
+                     /product="16S ribosomal RNA"
+                     /note="mt:lrRNA-RA; Dmel\mt:lrRNA-RA; CR34094-RA;
+                     Dmel\CR34094-RA"
+                     /db_xref="FLYBASE:FBtr0100888"
+                     /db_xref="FLYBASE:FBgn0013686"
+                     /db_xref="GeneID:19893560"
+     gene            complement(14058..14130)
+                     /gene="trnV"
+                     /locus_tag="Dmel_CR34095"
+                     /gene_synonym="mt:tRNA:Val-TAC"
+                     /nomenclature="Official Symbol: mt:tRNA:Val-TAC | Name:
+                     mitochondrial transfer RNA:Valine-TAC"
+                     /note="mitochondrial transfer RNA:Valine-TAC; alternate
+                     names: valine tRNA; mitochondrial valine tRNA"
+                     /db_xref="FLYBASE:FBgn0013708"
+                     /db_xref="GeneID:19893561"
+     tRNA            complement(14058..14130)
+                     /gene="trnV"
+                     /locus_tag="Dmel_CR34095"
+                     /gene_synonym="mt:tRNA:Val-TAC"
+                     /product="tRNA-Val"
+                     /note="mt:tRNA:Val-TAC-RA; Dmel\mt:tRNA:Val-TAC-RA;
+                     CR34095-RA; Dmel\CR34095-RA"
+                     /db_xref="FLYBASE:FBtr0100889"
+                     /db_xref="FLYBASE:FBgn0013708"
+                     /db_xref="GeneID:19893561"
+     gene            complement(14131..14916)
+                     /gene="srRNA"
+                     /locus_tag="Dmel_CR34096"
+                     /gene_synonym="mt:srRNA"
+                     /nomenclature="Official Symbol: mt:srRNA | Name:
+                     mitochondrial small ribosomal RNA"
+                     /note="mitochondrial small ribosomal RNA; alternate names:
+                     small subunit rRNA; 12 s rRNA; small rRNA;
+                     anon-fast-evolving-2A4"
+                     /db_xref="FLYBASE:FBgn0013688"
+                     /db_xref="GeneID:19893562"
+     rRNA            complement(14131..14916)
+                     /gene="srRNA"
+                     /locus_tag="Dmel_CR34096"
+                     /gene_synonym="mt:srRNA"
+                     /product="12S ribosomal RNA"
+                     /note="small subunit ribosomal RNA"
+                     /db_xref="FLYBASE:FBtr0100890"
+                     /db_xref="FLYBASE:FBgn0013688"
+                     /db_xref="GeneID:19893562"
+     misc_feature    14917..19524
+                     /note="A+T region; control region"
+                     /db_xref="FLYBASE:FBgn0013687"
+ORIGIN      
+        1 aatgaattgc ctgataaaaa ggattacctt gatagggtaa atcatgcagt tttctgcatt
+       61 cattgactga tttatatatt atttataaag atgattttat atttaataga attaaactat
+      121 ttctaaaagt atcaaaaact tttgtgcatc atacaccaaa atatatttac aaaaagataa
+      181 gctaattaag ctactgggtt cataccccat ttataaaggt tataatcctt ttctttttaa
+      241 tttttaataa ttcgtcaaaa attttattta ttacaattat aattattggg acattaatta
+      301 cagttacatc taattcttgg ttaggagctt gaataggttt agaaattaat ttattatctt
+      361 ttatccccct attaagagat aataataatt taatatctac agaagcttct ttaaaatatt
+      421 ttttaaccca agttttagct tcaactgttt tattattttc ttcaatttta ttaatattaa
+      481 aaaataatat aaataatgaa attaatgaat cttttacatc cataattatt atatcagctt
+      541 tattattaaa aagtggagcc gctcctttcc atttttgatt tcctaatata atagaaggtt
+      601 taacatgaat aaatgcttta atattaataa cttgacaaaa aattgcacct ttaatattaa
+      661 tttcttatct taatattaaa tatttattat taattagagt aattttatca gttattattg
+      721 gagctattgg aggattaaat caaacttctt tacgaaaatt aatagcattt tcttcaatta
+      781 atcatttagg gtgaatatta agatctttaa taattagaga atcaatttga ttaatttatt
+      841 ttttttttta ttcattttta tcatttgtat taacatttat atttaatatt tttaaattat
+      901 ttcatttaaa tcaattattt tcttgatttg ttaatagaaa aattttgaaa tttacattat
+      961 ttataaattt tttatcatta ggaggattac ctccattttt aggattttta ccaaaatgac
+     1021 ttgtaattca acaattaaca ttatgtaatc aatattttat attaacactt ataataatat
+     1081 caactttaat tacattattt ttttatttac gaatttgtta ttccgctttt ataataaatt
+     1141 attttgaaaa taactgaatc ataaagataa atataaatag tattaattat aatatatata
+     1201 taattataac ttttttttca atttttggat tatttttaat ttctttattt tattttatat
+     1261 tttaaggctt taagttaata aaactaataa ccttcaaagc tataaataaa gaaatttctt
+     1321 taagccttag taaaacttac tccttcaaaa ttgcagtttg atatcattat tgactataag
+     1381 acctaattaa tttgtcctta tttgattaag aagaataaat cttatatata gatttacaat
+     1441 ctatcgccta aacttcagcc acttaatcaa taatcgcgac aatgattatt ttctacaaat
+     1501 cataaagata tcggaacttt atattttatt tttggagctt gagctggaat agttggaaca
+     1561 tctttaagaa ttttaattcg agctgaatta ggacatcctg gagcattaat tggagatgat
+     1621 caaatttata atgtaattgt aactgcacat gcttttatta taattttttt tatagttata
+     1681 cctattataa ttggtggatt tggaaattga ttagtgcctt taatattagg tgctcctgat
+     1741 atagcattcc cacgaataaa taatataaga ttttgacttc tacctcctgc tctttcttta
+     1801 ctattagtaa gtagaatagt tgaaaatgga gctgggacag gatgaactgt ttatccacct
+     1861 ctatccgctg gaattgctca tggtggagct tcagttgatt tagctatttt ttctctacat
+     1921 ttagcaggaa tttcttcaat tttaggagct gtaaatttta ttacaactgt aattaatata
+     1981 cgatcaacag gaatttcatt agatcgtata cctttatttg tttgatcagt agttattact
+     2041 gctttattat tattattatc acttccagta ctagcaggag ctattactat attattaaca
+     2101 gatcgaaatt taaatacatc attttttgac ccagcgggag gaggagatcc tattttatac
+     2161 caacatttat tttgattttt tggtcatcct gaagtttata ttttaatttt acctggattt
+     2221 ggaataattt ctcatattat tagacaagaa tcaggaaaaa aggaaacttt tggttctcta
+     2281 ggaataattt atgctatatt agctattgga ttattaggat ttattgtatg agctcatcat
+     2341 atatttaccg ttggaataga tgtagatact cgagcttatt ttacctcagc tactataatt
+     2401 attgcagttc ctactggaat taaaattttt agttgattag ctactttaca tggaactcaa
+     2461 ctttcttatt ctccagctat tttatgagct ttaggatttg tttttttatt tacagtagga
+     2521 ggattaacag gagttgtttt agctaattca tcagtagata ttattttaca tgatacttat
+     2581 tatgtagtag ctcattttca ttatgtttta tctataggag ctgtatttgc tattatagca
+     2641 ggttttattc actgataccc cttatttact ggattaacgt taaataataa atgattaaaa
+     2701 agtcatttca ttattatatt tattggagtt aatttaacat tttttcctca acatttttta
+     2761 ggattggctg gaatacctcg acgttattca gattacccag atgcttacac aacatgaaat
+     2821 attgtatcaa ctattggatc aactatttca ttattaggaa ttttattctt tttttttatt
+     2881 atttgagaaa gtttagtatc acaacgacaa gtaatttacc caattcaact aaattcatca
+     2941 attgaatgat accaaaatac tccaccagct gaacatagat attctgaatt accactttta
+     3001 acaaattaat ttctaatatg gcagattagt gcaatagatt taagctctat atataaagta
+     3061 ttttactttt attagaaaat aaatgtctac atgagctaat ttaggtttac aagatagagc
+     3121 ttctccttta atagaacaat taattttttt tcatgatcat gcattattaa ttttagtaat
+     3181 aattacagta ttggtgggat atttaatatt tatattattt tttaataatt atgtaaatcg
+     3241 atttctttta catggacaac ttattgaaat aatttgaact attttaccag caattatttt
+     3301 actatttatt gctcttcctt ctttacgttt actttattta ttagatgaaa ttaatgaacc
+     3361 atctgtaact ttaaaaagaa tcggccatca atgatattga agttacgaat attcagattt
+     3421 taataatatt gaatttgatt catatataat tccaacaaat gaattaataa ctgatggatt
+     3481 tcgattatta gatgttgata accgagtagt tttacccata aactcacaaa ttcgaatttt
+     3541 agtaacagct gctgatgtta ttcattcttg aacagtacct gctttaggag taaaagttga
+     3601 cggtacacct ggacgattaa atcaaactaa tttttttatt aatcgaccgg gtttatttta
+     3661 tggtcaatgt tcagaaatct gtggagctaa tcatagattt ataccgattg taattgaaag
+     3721 tgttcctgta aattacttta ttaaatgaat ttctagaaat aactcttcat tagatgactg
+     3781 aaagcaagta ctggtctctt aaaccattta atagtaaatt agcacttact tctaatgata
+     3841 aaaaattagt taaaatcata acattagtat gtcaaactaa aattattaaa taattaatat
+     3901 tttttaattc cacaaatagc acctattaga tgattattat tatttattat tttttctatt
+     3961 acatttattt tattttgttc tattaactat tattcttata taccaaattc acctaaatct
+     4021 aatgaattaa aaaatatcaa cttaaattca ataaattgaa aatgataaca aatttatttt
+     4081 ctgtattcga cccctcagct atttttaatt tttcacttaa ttgattaaga acatttttag
+     4141 gacttttaat aattccgtca atttattgat taataccttc tcgttacaat attatatgaa
+     4201 attcaatttt attaactctt cataaagaat ttaaaacttt attaggccca tcaggtcata
+     4261 atggatctac ttttattttt atttctttat tttcattaat tttatttaat aatttcatag
+     4321 gattatttcc atatattttt acaagaacaa gacatttaac tttaacttta tctttagctt
+     4381 tacctttatg attatgtttt atattatatg gatgaattaa tcatacacaa catatatttg
+     4441 ctcatttagt tcctcaagga acacccgcta ttcttatacc ttttatagta tgtattgaaa
+     4501 ctattagaaa tattattcga cctggaacat tagctgttcg attaactgct aatataattg
+     4561 ctggacattt attattaact cttttaggaa atacaggacc ttctatatct tatattttag
+     4621 taacattttt attaatagct caaattgctt tattagtatt agaatcagct gtagctataa
+     4681 ttcaatctta tgtgtttgct gtattaagaa ctttatattc tagagaagta aattaatgtc
+     4741 tacacactca aatcaccctt ttcatttagt ggattatagt ccatgaccat taacaggagc
+     4801 tatcggagct ataacaactg tatcaggtat agtaaaatga tttcatcaat atgatatttc
+     4861 attatttgta ttaggtaata ttattactat tttaactgta tatcaatgat gacgagatgt
+     4921 atcacgagaa ggaacatacc aaggattaca tacttatgca gtaactattg gtttacgatg
+     4981 aggaataatt ttatttattt tatcagaagt tttatttttt gtgagatttt tttgagcttt
+     5041 ttttcacaga agtttatcac ccgctattga attaggagca tcatgacctc ctataggaat
+     5101 tatctcattt aatccatttc aaattccttt attaaataca gctattttat tagcttcagg
+     5161 agttactgta acttgagccc accatagact tatagaaaat aatcattcac agactactca
+     5221 aggattattt tttacagttt tactaggaat ctattttaca attcttcaag cttatgaata
+     5281 tattgaagct ccatttacta ttgcagactc aatttatgga tcaacatttt ttatagcaac
+     5341 aggatttcac ggaattcatg tattaatcgg aacaactttt ttattagtat gtttactacg
+     5401 acatttaaat aatcacttct caaaaaatca tcattttggt tttgaagcag ctgcatgata
+     5461 ttgacatttt gtcgatgtag tttgattatt tttatatatc acaatttact gatgaggagg
+     5521 ataattatat tattaattaa atatctatat agtataaaag tatatttgac ttccaatcat
+     5581 aaggtctatt aattaatagt atagataatt ttttctatta tttttattgc tttattaatt
+     5641 ttactaatta caactattgt tatattttta gcttcaattt tatcaaaaaa agctttaatc
+     5701 gaccgagaaa aaagatcccc atttgaatgt ggatttgatc caaaatcttc atctcgatta
+     5761 ccattttctt tacgtttttt tttaattact attatttttt taatttttga tgtagagatt
+     5821 gcattaattc tacctataat tattattata aaatattcta atattataat ttgaacaatt
+     5881 acttcaatta tttttatttt aattttatta attggattat accatgaatg aaatcaagga
+     5941 atgttaaatt gatcaaacta atatatttat atatatatat atagggttgt agttaaatat
+     6001 aacatttgat ttgcattcaa aaagtattga atattcaatc taccttatta atttaataac
+     6061 tgaatatgaa gcgattgatt gcaattagtt tcgacctaat cttaggtaat tataccctta
+     6121 ttctttaatt gaagccaaaa agaggcatat cactgttaat gatataattg aattttaaat
+     6181 tccaattaag gaaatatgat gatcaagtaa aagctgctaa cttttttctt ttaatggtta
+     6241 aattccattt atatttctat ttatatagtt taaataaaac cttacatttt cattgtaata
+     6301 ataaaatctt atatttttat aaattactaa aattaattca ctatatccaa agatttaata
+     6361 atctccataa catcttcaat gtcaaactct agtataagct atttggatat aaaaataata
+     6421 aaattaataa aattaaaatt caaaatacaa ataataataa ataaattttc aaagaattat
+     6481 tatgtattaa aaataaagtt ttagaatata tagataattt ttgatataaa tgttgacctc
+     6541 caaaatattc tgatcaacct tgatcaaaac tttttacaac taattgacca taatttaaag
+     6601 gataaaaaat tataccataa gttctaatat aaggtataaa tcatatagac cctaaaaaag
+     6661 ttcttaaatt atatataaat aaagatttat ttaaaaaaaa taaatttctt aaagaaatta
+     6721 aatatccaaa taaaccccct acaatacata caaataatgt taacaatttt atataaatag
+     6781 gtaaacaaat tatataagga aaaggaaaaa tcaatcaatt taatattcta cctccaataa
+     6841 ttcttataat taataatcct attataccac ggagtataat tcaactttca tcatttaata
+     6901 tattcaatct accgcaattt aaatcaccgg ttattgaata ataaactaat cgaaatgaat
+     6961 aactaacagt taaacccgta gaaaaatagt ataaaaaaaa tgaaaacata ttaacatttc
+     7021 taattctaac aatttctaaa attatatcct tagaatagaa tccagctaaa aaaggtattc
+     7081 cacataaagc taaattagat acgttaaaac aagctgaagt taaaggtata tgaattctta
+     7141 acccccctat taaacgaata tcttgagaat tatttatatt atgaataata gccccagcac
+     7201 atataaacaa taatgcttta aataaagcat gagttaataa atgaaatata gctaatttta
+     7261 aaaatcctat agacaaaatt cttattatta aacctaattg acttaaagta gataaagcaa
+     7321 taattttttt taaatcaaat tcaaaattag ctcctaatcc agctataaat attgttaatc
+     7381 cagataataa taatattaat tgtcctaacc aagaagttct taagataata ttaaatcgaa
+     7441 ttaataaata tacaccagct gtaactaatg tagaagaatg aactaaagca gaaacaggtg
+     7501 taggagcagc tatagctgca ggtaaccaag aagaaaaagg aatctgagct cttttagtta
+     7561 tagcagctaa tattactaat cttccaatta ttaacatttc aaattcattt tgtataattt
+     7621 ctaaataaaa aatataattt catcttccat aatttaatat tcaagcaata gaaagaagta
+     7681 aagctacatc cccaattcga ttagataacg cagttaatat accagcatta taagatttaa
+     7741 tattttgaaa ataaattact aaacaataag aaacaagtcc taaaccatct caccctaata
+     7801 aaattctaat taaatttggt ctaataatta acaatattat tgataaaaca aatattaata
+     7861 ctaatataat gaatcgatta atatgattat catttattat gtattctttt ctataaaaaa
+     7921 tcactaaaga agaaattata agaacaaaag atataaataa taaacttatt caatcaaaaa
+     7981 gaaaagttat aacaattctt atagaattta aagaaactaa ttctcactca ataaaataaa
+     8041 tcatatcatt taacaaaaaa tataaactta ataaaaaaca tgataaactt atagaaatta
+     8101 aattaacaaa tctaattcta caaatagata aatatttcat gatttaaaat gaatattttc
+     8161 atatcactaa caccacaaat tagtattttt tttaaactat ttaaatataa tcataatata
+     8221 aatgattctc tttttaaaat taataaattt aaaggcaatc aatgtaacaa tattaataaa
+     8281 tattctcgaa ttttacctct tctaaatgaa tatactccag aaaataattt accatgctga
+     8341 ctaaaagaat ataaatataa agtataagca gctctaaaaa aagataaaaa agataataaa
+     8401 attatagaaa ttcaagatca agaaacaatt ctatttaata aataaatttc tcctaataaa
+     8461 tttaatgttg gaggagctgc tatattagct gatcttaata aaaatcatca taaagttatc
+     8521 gaaggtataa aatttaataa acctttatta attaatattc ttcgacttcc aagacgttca
+     8581 taagatacat tagctaaaca aaataaccca gaagaacata aaccatgagc aattattaat
+     8641 gtataagaac cacataaacc tcaataagtt atagttaaaa gtcctgatag aacaattcct
+     8701 atatgagcaa cagatgaata agcaattaaa gcctttaaat cagtttgacg taaacaaact
+     8761 aatctaacta atacacctcc tactaatcta attctaattc aaacaaatct atacttcaaa
+     8821 tttattaact gtaaaaaact aataactcgt aatattccat aacctcctaa ttttaatata
+     8881 atacctgcta aaattataga cccagaaact ggagcttcaa catgagcttt aggtaatcat
+     8941 aaatgaacta aaaatattgg tatttttact aaaaaggcac acaataaaca aaaatataat
+     9001 aaatcgtaat taaacataaa attatttatt aaataaaaat ttatagaacc aattttattt
+     9061 attaaataaa aaataccaat taatataggt aaagaaacta ataaagtata aaataataaa
+     9121 tataaaccag cttgtaaacg ttctggctga taacctcaac ctaaaattaa aaataatgta
+     9181 ggaattagtc ttctttcaaa aaataaataa aatataaata atcttattct tgaaaaagtt
+     9241 aaaatcaaca ataataataa aataataata tttaataaaa ataaattttt ataattatta
+     9301 tgtttattaa ttatttctct agctaataat attaatgaac aaattcataa acttaataaa
+     9361 attaatccat aagataatat atcacaacct aaaaaataag aaatttctga tcaataattt
+     9421 ataaaattat ttattaataa aaaaataaat ctaataaaaa atattataat ttgtaccatt
+     9481 caatatatat tattaataaa acaaaaagga attaaaaata ataaaaaaaa aataattttt
+     9541 aacattatat aattctaaaa gattgaaaat aatcattacc atgagtacga attatagaaa
+     9601 ctaaaattga taaacctaag gccccttcac atactctaaa tgtcaaaaat attattctaa
+     9661 aataactttc ataatttaat atatttaaat aaataaataa tataaaaaat aatattaaaa
+     9721 caataaattc taaacttaaa agtattgaaa gtaaatgttt ccgattagaa acaaaacaaa
+     9781 ataaccctaa aataaataaa attataggta aacttcaata taaaattata atcattagtt
+     9841 ttaatagttt aataaaaaca ttggtcttgt aaatcaaaaa taagattatt tcttttaaaa
+     9901 cttcaagaga aaagaaattt ctttttcatt aatccccaaa attaatattt taaataaact
+     9961 acctcttgaa attattcaat taatattata ttcattaatt attactactt ccattatttt
+    10021 tctaaatata attcatccat tagctttagg attaacttta ttaattcaaa caatttttgt
+    10081 atgtttacta actggattaa taactaaaag tttttgatat tcatatattt tatttttaat
+    10141 ttttttagga ggaatacttg tattatttat ttacgtaaca tctttagcct ctaatgaaat
+    10201 atttaattta tcaataaaat taactctatt ttcttcatta attttaattt ttatattaat
+    10261 tttatcattt attatagata aaacttcttc ttctttattt ttaataaata atgatataca
+    10321 atctattatt aatataaatt cttattttat agaaaattct ttatctttaa ataaattata
+    10381 taattttcct acaaatttta ttacaatttt attaataaat tatttattaa ttactttaat
+    10441 tgttattgta aaaattacaa aattatttaa aggacctatt cgaataatat cttaattaat
+    10501 gaataaacct ttacgaaatt cccatcctct atttaaaatt gccaataatg ctttagtaga
+    10561 tttaccagct ccaattaata tttcaagatg atgaaatttt ggatcattac ttggattatg
+    10621 tttaattatt caaattttaa ccggattatt tttagctata cattacacag ctgatattaa
+    10681 tctagctttc tatagtgtta atcatatttg tcgagacgtt aattatggtt gattattacg
+    10741 aactttacat gctaacggtg catcattttt ttttatttgt atttacttac atgtaggacg
+    10801 aggaatttat tacggttcat ataaatttac tccaacttga ttaattggag taattatttt
+    10861 atttttagta ataggaacag cttttatagg atacgtatta ccttgaggac aaatatcatt
+    10921 ttgaggagct actgtaatta ctaatttatt atcagctatc ccttacttag gtatagattt
+    10981 agttcaatga ttatgaggtg gatttgctgt tgataatgcc actttaactc gattttttac
+    11041 attccatttt attttacctt ttattgttct tgctataact ataattcatt tattattcct
+    11101 tcatcaaaca ggatctaata atcctatcgg attaaattct aatattgata aaattccttt
+    11161 tcatccttat tttacattta aagatattgt aggatttatt gtaataattt ttattttaat
+    11221 ttcattagta ttaattagac caaatttatt gggagaccct gataatttta ttccagcaaa
+    11281 tcctttagta acacctgccc atattcaacc agaatgatat tttttatttg cttatgctat
+    11341 tttacgatct attccaaata aattaggagg agttattgca ttagttttat caattgcaat
+    11401 tttaataatc cttccttttt ataatttaag aaaattccga gggattcaat tttatcctat
+    11461 taatcaagta atattctgat ctatattagt aacagtaatt ttattaactt gaattggagc
+    11521 tcgaccagtt gaagaacctt atgtattaat tggacaaatt ctaactgttg tatatttctt
+    11581 atattattta gtaaacccat taattacaaa atgatgagat aatttattaa attaaatagt
+    11641 taatgagctt gaataagcat atgttttgaa aacataagat agaatttaat tttctattaa
+    11701 cttttactaa aaaaaattca ctataataaa gaaaataata aaattttaaa cccaataaaa
+    11761 aataataaat aatttaaaga aaaagataaa aaacattttc aagctaaata tattaattta
+    11821 tcataacgaa atcgaggtaa agttcctcga actcaaataa aaacaaaaga aataaaagtt
+    11881 aattttatat aaaataataa attaaacaca tcacaaccta aaaaaataac gcaaaataat
+    11941 attcttataa ataaaattct cgcatattca gctataaaaa ttaaagcaaa accccctctt
+    12001 ctatattcta cattaaatcc tgaaactaat tctgattctc cttcagcaaa atcaaaagga
+    12061 gtccgattag tttcagctaa tgaaatagat attcaaacta aagctatagg aaataaaata
+    12121 attaaaaatc acatataaac ttgataaaaa aaaaaataaa ttatattata acttccaatt
+    12181 aaaaaaataa aagataataa aattaaagct aaactaactt cataagaaat agtctgagcc
+    12241 acagctcgca aacctcctaa taaagcataa ttagaattag acgaccaacc agctactata
+    12301 acagtataaa cccccaatct agtacaacat aaaaaaaata aaccccccaa attaaaagaa
+    12361 tataatttta caaaaaaagg tatacatatt caaacaaata atgataaaaa taaagaaaaa
+    12421 attggagaaa tataatatct taaataatta gataataaag gataagtttg ttcttttgta
+    12481 aataatttaa tcgcatcaca aaaaggttga ggaattccta ttaaaccaac tttattagga
+    12541 cctttacgaa tttgaatata tcctaaaact tttcgttcta ataaagttaa aaaagctaca
+    12601 cttactaata cacaaataat taataacaaa ctaccaatta atgacaaaat aaattctata
+    12661 taaaacaagt actatttgta ataaaaatca catatataaa ttctaaattt attgcactaa
+    12721 tctgccaaaa tagttttata ttaataatat tcttataaaa aatataatta ttttgatatt
+    12781 tggtcctttc gtactaaaat atcataattt tttaaagata gaaaccaacc tggcttacac
+    12841 cggtttgaac tcagatcatg taagaattta aaagtcgaac agacttaaaa tttgaacggc
+    12901 tacacccaaa attatatctt aatccaacat cgaggtcgca atctttttta tcgatatgaa
+    12961 ctctccaaaa aaattacgct gttatcccta aagtaactta attttttaat cattattaat
+    13021 ggatcaaata ttcataaatt tatgttttta aaaaattaaa agttttttaa attttaatat
+    13081 caccccaata aaatattttt atttattaaa atttaattaa tctatataat taaaataaaa
+    13141 aaaaatataa agatttatag ggtcttctcg tcttttaaat aaattttagc tttttgacta
+    13201 aaaaataaaa ttctataaaa attttaaatg aaacagttaa tatttcgtcc aaccattcat
+    13261 tccagccttc aattaaaaga ctaatgatta tgctaccttt gcacagtcaa aatactgcgg
+    13321 ccatttaaaa ttttcagtgg gcaggttaga ctttatatat aattcaaaaa gacatgtttt
+    13381 tgttaaacag gcgaatatta tttttgccga attctttatt taaacttttc atataaatta
+    13441 attttaacat tattatatac taattttatc attattactt aattttaata attaaaacta
+    13501 acattttaat aaataattaa aatttaataa ataatttaat ttataaaata aattataaca
+    13561 tattttttaa taattgctaa ttctaagcat atatttatta aatctattta atatttttaa
+    13621 aaatttattt tatagcttat cccataaaac attaaaatta taaattaatt aattaaataa
+    13681 ataattaagt aaatttataa tttctaaatt aaatttattt cttaaaaaac tagatacctt
+    13741 taaaaacgaa taacatttca tttctaatat aatattataa ataattttat cacattaact
+    13801 taaatattat attaactctt ttaaaatcga gaaaaataaa tatttatttt ttatttaata
+    13861 aacactgata cacaaggtac aataaattaa attttctttt aaaataaaat tttttcaaat
+    13921 tatttcaatt ttcttttaca atactaataa actattatta aaattatttt ttctttaaac
+    13981 aatactaaaa ctttaaattt tatagttatt tctaataatt ttttaaaaaa taataaaaat
+    14041 taataaataa aaactaactc aatttatatt gatttgcaca aaaatctttt caatgtaaat
+    14101 gaaatacttt acttaataag ctttaaattg tcattctaga tacactttcc agtacatcta
+    14161 ctatgttacg acttatctta ccttaataat aagagcgacg ggcgatgtgt acatatttta
+    14221 gagctaaaat caaattatta atctttataa ttttactact aaatccactt tcaaaaattt
+    14281 tttcataatt ttattcatat aaataaattt attgtaaccc attattactt aaatataagc
+    14341 tacaccttga tctgatataa atttttatta aaattattga atattattat tcttataaaa
+    14401 tattctgata acgacggtat ataaactgat tacaaattta agtaaggtcc atcgtggatt
+    14461 atcgattaaa aaacaggttc ctctagatag actaaaatac cgccaaattt tttaagtttc
+    14521 aagaacataa ctattactac tttagcaatt tatttacatt ttaaataata gggtatctaa
+    14581 tcctagtttt ttattaaaat tttttaacct caattacatt tttatataat aatttaaata
+    14641 taaaatttca cttaatatat ttaattttat tattattaat aaatttaatt taattaatac
+    14701 taaaaaaatt tatttgtatt aatggtataa ccgcgactgc tggcaccaat ttagtcaata
+    14761 cttttttata ttgctatttc taaatttctt taattaataa tattaattac tgcgaataaa
+    14821 ttttcatatt tattttttaa ataaatataa aatcacacaa aaatttacat ataaatcaaa
+    14881 ttaataacaa atttttaagc caaaataaaa ctttaaattt ttatttttga ttttttatta
+    14941 ttaattaaat attaataatt tttattaaaa taatttttta aagaaaaatt aaaattaatt
+    15001 ttaattaaat attaaaataa tttaatttta taataaaatt tttatcatat tataataata
+    15061 taaaaatttt ataaatttat tttttaaatt ttacaaaatt tttaaaattt ttattttttt
+    15121 taaaaaaaat aatttttaac aaaaaaaatt tttatcaaaa attaatataa aataaatttt
+    15181 aatttaaaaa ttaaaaattt taattttaca cttttttaaa aatatttttt tttaaaaaaa
+    15241 aaattttttt ttaaaaaaat ttttttttaa aaaaaattta aaaaattata gattaatttc
+    15301 ttttaaatga ctaaaaaaaa tttttttttt taagtatttt aaaacttttt ttttacaatt
+    15361 tttaaaaaaa tatataaata taaattttaa aaaaaatttt ttttttaaaa aaaatgaaaa
+    15421 ttatattata aaaatatttt ttttacaaaa atgaaaattt aatctattaa aaaaaattat
+    15481 taaaattttt ataaataaat aaaaaaagta ataaatttat taaaaatcaa tatatatata
+    15541 ataataaata atttgattat taattaaatt atacgaataa taaatataat aaataattta
+    15601 ttttaatcaa taaatctgaa ataattaatt atatacatat atatatatat gtaaataaat
+    15661 aaaaataaat ttattccccc tatttataaa tttattatat aattaaaact taaaaaatat
+    15721 tttttttaaa aaaatagttt attaaattat acttaataaa ctatttttat aataaattat
+    15781 tttataaata aaattattta aaataattaa taaaaatatt tttattgtaa taaaaattaa
+    15841 aaataatttt aaaaaaatta aatttatata tttatatata tatatatata atttttaatt
+    15901 ttcaattaaa ttatataaat ataataaaat aattttattt aatcactaaa tctgaaataa
+    15961 ttaattataa atatatatat atatatatat atatatatat atatataaat gaaaataaat
+    16021 ttattccccc tattcataaa tttattgtat aattaaaact taaaaaatat ttttttttaa
+    16081 aaaaaaatta tttattaaat tatacttaat aaactatttt tataataaat tattttataa
+    16141 ataaaattat tttaaataat taataaaaat atttttaata taataaaaat ttaaaatgat
+    16201 tttttataaa aattaaattc atatttatat atatatatat ataatttaat tttcaattaa
+    16261 attatataag tataataaaa taatttattt taatcactaa atctgaatta attaattgta
+    16321 tatatatata tatatataaa aaaaatgaaa ataaatttat tccccctatt cataaattta
+    16381 ttatataatt aaatcttaaa aagtattttt tttttaaaaa aaaattattt attaaattat
+    16441 acttaataaa ctatttttat aataaattat tttatgaata aaattattta aaataattta
+    16501 taaaaatatt tttaatataa tgaaaattta aaatgatttt ttattattaa ttaaattcat
+    16561 atatttacat atatatatat atatatatat atatatagat aatttaattt tcaattaaat
+    16621 tatataagta taataaaata atttatttta atcactaaat ctgaattaat taattgtatg
+    16681 tatatatata tatatatata taaaaaaatg aaaataaatt tattccccct attcataaat
+    16741 ttattatata attaaatctt aaaaagtatt tttttttaaa aaaaaaatta tttattaaat
+    16801 tatacttaat aaactatttt tataataaat tattttatga ataaaattat ttaaaataat
+    16861 taataaaaat atttttaata taatgaaaat ttaaaatgat tttttattat taattaaatt
+    16921 catatattta tatatatata tatatatata tatatagata atttaatttt caattaaatt
+    16981 atataagtat aataaaataa tttattttaa tcactaaatc tgaattaatt aattgtatgt
+    17041 atatatatat atatatatat atatatatat aaaaaatgaa aataaattta ttccccctat
+    17101 tcataaattt attatataat taaatcttaa aaagtatttt tttttaaaaa aaaattattt
+    17161 attaaattat acttaataaa ctatttttat aataaattat tttatgaata aaattattta
+    17221 aaataattaa taaaaattat atatatatat aaatgaaaat aatttttaaa ttttaataat
+    17281 aaataaattt aataattaat aattaaataa aatctattca ttattaatat ttaattaata
+    17341 ataaataaat ttaataacta ataattaaat aaaatttatt tattattaat atttaattaa
+    17401 taataaaaaa tcatcatttt tttttttttt ttttttattt aattaattat tatatattta
+    17461 taaatttata tattattcaa tatttataat atatatatat atatatatat ataaaaatta
+    17521 aattatttaa ataatttaat ataaattttt aaaaaatttc ttaaatgtat tatttttata
+    17581 aaaaatattt atataataaa attatttttt tttaaaaata aacaaaaaat ttttaataaa
+    17641 taaattttat aatgaaatat aatttattta ttttttattt ttttaaaaaa aatttaaaaa
+    17701 aaaataattt ttttttaaaa aaaaactata tactaattat aaattaatag atatttatat
+    17761 atatataaat atttaatata ttattatata tctaataatt taaataaaaa attttaaaat
+    17821 ttaaaaatgt agatataatt tataaaaatt tatattctca tatttattta ttattaattt
+    17881 aatttatata aataatataa taatttaatt aattattata tatttataaa tttatatatt
+    17941 attgaatatt tatataatat atatatatat atagaaaaat taaattattt aaataattta
+    18001 atataaattt ttaaaaaatt tcttaaatgt attattttta taaaaaatat ttatataata
+    18061 aaatcatttt tttttaaaaa taaacaaaaa atttttaata aataaatttt ataatgaaat
+    18121 ataatttatt tattttttat ttttttaaaa aaaaattttt taaaaaaaaa taattttttt
+    18181 tttaaaaaaa ctatatacta attataaatt aatagatatt tatatatata taaatattta
+    18241 atatattatt atatatctaa taatttaaat aaaaaatttt aaaatttaaa aatgtagata
+    18301 taatttataa aaatttatat tctcatattt atttattatt aatttaattt atataaataa
+    18361 tataataatt taattaatta ttatatattt ataaatttat atattattga atatttatat
+    18421 aatatatata tatatataga aaaattaaat tatttaaata atttaatata aatttttaaa
+    18481 aaatttctta aatgtattat ttttataaaa aatatttata taataaaatc atttttttta
+    18541 aaaataaaca aaaaattttt aataaataaa ttttataatg aaatataatt tatttatttt
+    18601 ttattttttt aaaaaaaatt ttttaaaaaa aaataatttt tttttaaaaa aactatatac
+    18661 taaatataaa ttaatagata tttatatata tataaatatt taatatatta ttatatatct
+    18721 aataatttaa ataaaaaatt ttaaaattta aaaatgtaga tataatttat aaaaatttat
+    18781 attctcatat ttatttatta ttaatttaat ttatataaat aatataataa tttaattaat
+    18841 tattatatat ttataaattt atatattatt gaatatttat ataatatata tatatatata
+    18901 gaaaaattaa attatttaaa taatttaata taaattttta aaaaatttct taaatgtatt
+    18961 atttttataa aaaatattta tataataaaa tcattttttt ttaaaaataa acaaaaaatt
+    19021 tttaataaat aaattttata atgaaatata atttatttat tttttatttt ttttaaaaaa
+    19081 aattttttaa aaaaaataat ttttttttaa aaaaactata tactaaatat aaattaatag
+    19141 atatttatat atatataaat atttaatata ttattatata tctaataatt taaataaaaa
+    19201 attttaaaat ttaaaaatgt agatataatt tataaaaatt tatattctca tatttattta
+    19261 ttattaattt aatttatata aataatataa taatttaatt aattattata tatttataaa
+    19321 tttatatatt attgaatatt tatatataat atatatatat atagaaaaat aaaattattt
+    19381 aaataatttt acataaaatt ttaaaaaatt tcttaaatgt attatttaat aaaaaattac
+    19441 tttttaaaaa aaataatttt aattttttaa aaaaaatagt aaataataaa aaaaaaaaaa
+    19501 aaaaaaaatg aaaattatat tatt
+//
+

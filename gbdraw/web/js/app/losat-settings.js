@@ -162,9 +162,15 @@ export const createLosatSettings = ({ state }) => {
     'By default, LOSAT can use up to half the number of cores available.'
   );
 
+  const hasValidLosatIntent = () => {
+    const resolution = linearComparisonResolution?.value || linearComparisonResolution || {};
+    return resolution.valid === true && resolution.hasLosatIntent === true;
+  };
+
   watch(
     losatTotalThreadBudgetOptions,
     (options) => {
+      if (!hasValidLosatIntent()) return;
       const raw = String(losat.totalThreadBudget || 'safe').trim().toLowerCase();
       if (['safe', 'available'].includes(raw)) return;
       const values = options.map((option) => option.value);
@@ -180,6 +186,7 @@ export const createLosatSettings = ({ state }) => {
   watch(
     losatPairWorkerOptions,
     (options) => {
+      if (!hasValidLosatIntent()) return;
       if (losat.parallelWorkers === undefined || losat.parallelWorkers === null) return;
       const values = options.map((option) => option.value);
       if (values.includes(String(losat.parallelWorkers))) return;

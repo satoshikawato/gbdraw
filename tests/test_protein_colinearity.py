@@ -31,10 +31,8 @@ from gbdraw.analysis.protein_colinearity import (
     build_protein_losat_pair_identity,
     build_protein_runtime_handle,
     build_web_losat_cache_key,
-    build_orthogroups_from_protein_hits,
     build_pairwise_protein_blastp_comparisons,
     build_rbh_orthogroup_protein_blastp_comparisons,
-    cap_hits_per_query,
     convert_pair_protein_hits_to_genomic_links,
     convert_protein_hits_to_genomic_links,
     extract_cds_proteins,
@@ -284,6 +282,60 @@ def test_current_protein_manifest_validator_rejects_authority_corruption(
         raise AssertionError(f"Unhandled corruption case: {corruption}")
 
     with pytest.raises(ValidationError, match=message):
+        validate_protein_identity_manifest(payload)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    "forbidden_key",
+    [
+        "viewFeatureSvgId",
+        "view_feature_svg_id",
+        "viewFeatureHashParts",
+        "view_feature_hash_parts",
+        "renderedFeatureSvgId",
+        "rendered_feature_svg_id",
+        "renderedSvgId",
+        "rendered_svg_id",
+        "Rendered-Feature-SVG-ID",
+        "queryViewFeatureSvgId",
+        "processed_view_feature_svg_id",
+        "subjectViewFeatureHashParts",
+        "queryRenderedFeatureSvgId",
+        "processed_rendered_svg_id",
+    ],
+)
+def test_protein_manifest_rejects_nested_rendered_view_identity(
+    forbidden_key: str,
+) -> None:
+    payload = copy.deepcopy(_current_protein_manifest_payload_for_validation())
+    record_analyses = payload["recordAnalyses"]
+    record_instances = payload["recordInstances"]
+    assert isinstance(record_analyses, dict)
+    assert isinstance(record_instances, dict)
+    binding = record_instances["row-1"]
+    assert isinstance(binding, dict)
+    feature_metadata = binding["featureMetadata"]
+    assert isinstance(feature_metadata, dict)
+    feature_id = next(iter(feature_metadata))
+    metadata = feature_metadata[feature_id]
+    assert isinstance(metadata, dict)
+    metadata["extension"] = {forbidden_key: "presentation-only"}
+
+    analysis_id = str(binding["recordAnalysisId"])
+    record_analysis = record_analyses[analysis_id]
+    assert isinstance(record_analysis, dict)
+    display_payload = protein_colinearity_module._display_binding_payload(
+        record_analysis_id=analysis_id,
+        record_source_id=str(record_analysis["recordSourceId"]),
+        record_instance_key="row-1",
+        feature_metadata=feature_metadata,
+    )
+    binding["displayBindingHash"] = protein_colinearity_module._identity_sha256(
+        display_payload
+    )
+
+    with pytest.raises(ValidationError, match="rendered-view identity"):
         validate_protein_identity_manifest(payload)
 
 
@@ -875,32 +927,6 @@ def test_extract_cds_proteins_handles_compound_location_span() -> None:
     assert protein.start == 0
     assert protein.end == 18
     assert protein.strand == 1
-
-
-@pytest.mark.linear
-def test_cap_hits_per_query_keeps_top_five_distinct_subjects() -> None:
-    rows = [
-        _hit_row("q1", "s1", bitscore=100),
-        _hit_row("q1", "s1", bitscore=90),
-        _hit_row("q1", "s2", bitscore=80),
-        _hit_row("q1", "s3", bitscore=70),
-        _hit_row("q1", "s4", bitscore=60),
-        _hit_row("q1", "s5", bitscore=50),
-        _hit_row("q1", "s6", bitscore=40),
-        _hit_row("q2", "s7", bitscore=10),
-    ]
-    hits = pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
-
-    capped = cap_hits_per_query(hits, max_hits=5)
-
-    assert capped[capped["query"] == "q1"]["subject"].tolist() == [
-        "s1",
-        "s2",
-        "s3",
-        "s4",
-        "s5",
-    ]
-    assert capped[capped["query"] == "q2"]["subject"].tolist() == ["s7"]
 
 
 @pytest.mark.linear
@@ -1988,6 +2014,158 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
 
 
 @pytest.mark.linear
+def test_linear_cli_writes_hydrated_raw_protein_evidence_and_honors_overwrite(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    records = [
+        _record(
+            "record_a",
+            features=[
+                _cds(
+                    0,
+                    9,
+                    qualifiers={
+                        "translation": ["MKT"],
+                        "protein_id": ["query protein"],
+                    },
+                )
+            ],
+        ),
+        _record(
+            "record_b",
+            features=[
+                _cds(
+                    9,
+                    18,
+                    qualifiers={
+                        "translation": ["MKT"],
+                        "protein_id": ["subject/protein"],
+                    },
+                )
+            ],
+        ),
+    ]
+    input_a = tmp_path / "a.gb"
+    input_b = tmp_path / "b.gb"
+    input_a.write_text("LOCUS       A\n", encoding="utf-8")
+    input_b.write_text("LOCUS       B\n", encoding="utf-8")
+    output_prefix = tmp_path / "out"
+    evidence_path = tmp_path / "raw-evidence.tsv"
+    records_by_path = {str(input_a): records[0], str(input_b): records[1]}
+
+    monkeypatch.setattr(
+        request_render_module,
+        "load_gbks",
+        lambda paths, **_kwargs: [records_by_path[str(path)] for path in paths],
+    )
+    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
+    monkeypatch.setattr(
+        request_render_module,
+        "read_feature_visibility_file",
+        lambda _path: None,
+    )
+    run_count = 0
+
+    def fake_losatp(query_fasta: str, subject_fasta: str, **kwargs) -> pd.DataFrame:
+        nonlocal run_count
+        run_count += 1
+        query_id = query_fasta.splitlines()[0][1:].split()[0]
+        subject_id = subject_fasta.splitlines()[0][1:].split()[0]
+        raw_text = (
+            f"{query_id}\t{subject_id}\t90\t3\t0\t0\t1\t3\t1\t3\t1e-20\t200\n"
+        )
+        callback = kwargs.get("raw_output_callback")
+        if callback is not None:
+            callback(raw_text)
+        return parse_losatp_outfmt6(raw_text)
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_losatp)
+    args = [
+        "--gbk",
+        str(input_a),
+        str(input_b),
+        "--protein_blastp_mode",
+        "pairwise",
+        "--protein_blastp_output",
+        str(evidence_path),
+        "-o",
+        str(output_prefix),
+        "-f",
+        "svg",
+    ]
+
+    linear_cli_module.linear_main(args)
+
+    evidence = evidence_path.read_text(encoding="utf-8")
+    rows = [line.split("\t") for line in evidence.splitlines() if not line.startswith("#")]
+    assert "# entry 1: record_a.record_b.losatp.tsv" in evidence
+    assert rows == [
+        [
+            "query%20protein",
+            "subject%2Fprotein",
+            "90",
+            "3",
+            "0",
+            "0",
+            "1",
+            "3",
+            "1",
+            "3",
+            "1e-20",
+            "200",
+        ]
+    ]
+    assert "h_" not in evidence
+    assert run_count == 1
+
+    with pytest.raises(ValidationError, match="already exist"):
+        linear_cli_module.linear_main(args)
+    assert run_count == 1
+
+    linear_cli_module.linear_main([*args, "--overwrite"])
+    assert run_count == 2
+
+
+@pytest.mark.linear
+def test_linear_cli_validates_raw_protein_output_option(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        linear_cli_module._get_args(["--help"])
+    assert "--protein_blastp_output TSV" in capsys.readouterr().out
+
+    with pytest.raises(SystemExit, match="2"):
+        linear_cli_module._get_args(
+            ["--gbk", "a.gb", "b.gb", "--protein_blastp_output", "raw.tsv"]
+        )
+    with pytest.raises(SystemExit, match="2"):
+        linear_cli_module._get_args(
+            [
+                "--gbk",
+                "a.gb",
+                "b.gb",
+                "--protein_blastp_mode",
+                "pairwise",
+                "--protein_blastp_output",
+                "raw.txt",
+            ]
+        )
+    parsed = linear_cli_module._get_args(
+        [
+            "--gbk",
+            "a.gb",
+            "b.gb",
+            "--protein_blastp_mode",
+            "pairwise",
+            "--protein_blastp_output",
+            "raw.tsv",
+        ]
+    )
+    assert parsed.protein_blastp_output == "raw.tsv"
+
+
+@pytest.mark.linear
 def test_pairwise_blastp_search_keeps_one_hsp_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     records = [
         _record("record_a", features=[_cds(0, 9)]),
@@ -2627,194 +2805,6 @@ def test_family_merge_display_edges_prefer_uncovered_alternative_links() -> None
 
 
 @pytest.mark.linear
-def test_build_orthogroups_suggests_names_from_cds_annotations() -> None:
-    records = [
-        _record(
-            "record_a",
-            features=[
-                _cds(
-                    0,
-                    9,
-                    qualifiers={
-                        "translation": ["MKT*"],
-                        "gene": ["rpoB"],
-                        "product": ["DNA-directed RNA polymerase beta subunit"],
-                    },
-                )
-            ],
-        ),
-        _record(
-            "record_b",
-            features=[
-                _cds(
-                    9,
-                    18,
-                    qualifiers={
-                        "translation": ["MKT*"],
-                        "gene": ["rpoB"],
-                        "product": ["DNA-directed RNA polymerase beta subunit"],
-                    },
-                )
-            ],
-        ),
-        _record(
-            "record_c",
-            features=[
-                _cds(
-                    18,
-                    27,
-                    qualifiers={
-                        "translation": ["MKT*"],
-                        "product": ["hypothetical protein"],
-                        "note": ["product: DNA-directed RNA polymerase beta subunit"],
-                    },
-                )
-            ],
-        ),
-    ]
-    extraction = extract_cds_proteins(records)
-    hits = pd.DataFrame.from_records(
-        [
-            _hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001"),
-            _hit_row("gbd_r0002_cds000001", "gbd_r0003_cds000001"),
-        ],
-        columns=COMPARISON_COLUMNS,
-    )
-
-    orthogroups = build_orthogroups_from_protein_hits(
-        [hits],
-        extraction.protein_map,
-    )
-
-    assert orthogroups.names_by_orthogroup_id["og_1"] == "rpoB"
-    assert orthogroups.confidence_by_orthogroup_id["og_1"] == "high"
-    assert orthogroups.descriptions_by_orthogroup_id["og_1"] == (
-        "Suggested from gene annotations in 2 of 3 records."
-    )
-    candidates = orthogroups.name_candidates_by_orthogroup_id["og_1"]
-    assert candidates[0].source == "gene"
-    assert candidates[0].record_coverage_count == 2
-    assert orthogroups.orthogroups["og_1"][0].product == "DNA-directed RNA polymerase beta subunit"
-
-
-@pytest.mark.linear
-def test_build_orthogroups_falls_back_to_id_for_annotation_provenance_notes() -> None:
-    provenance_note = "Derived by automated computational analysis using gene prediction method: GeneMarkS-2+"
-    records = [
-        _record(
-            "record_a",
-            features=[
-                _cds(
-                    0,
-                    9,
-                    qualifiers={
-                        "translation": ["MKT*"],
-                        "product": ["hypothetical protein"],
-                        "note": [provenance_note],
-                        "locus_tag": ["LOCUS_0001"],
-                    },
-                )
-            ],
-        ),
-        _record(
-            "record_b",
-            features=[
-                _cds(
-                    9,
-                    18,
-                    qualifiers={
-                        "translation": ["MKT*"],
-                        "product": ["hypothetical protein"],
-                        "note": [provenance_note],
-                        "locus_tag": ["LOCUS_0002"],
-                    },
-                )
-            ],
-        ),
-    ]
-    extraction = extract_cds_proteins(records)
-    hits = pd.DataFrame.from_records(
-        [_hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001")],
-        columns=COMPARISON_COLUMNS,
-    )
-
-    orthogroups = build_orthogroups_from_protein_hits(
-        [hits],
-        extraction.protein_map,
-    )
-
-    assert "og_1" not in orthogroups.names_by_orthogroup_id
-    assert orthogroups.confidence_by_orthogroup_id["og_1"] == "low"
-    assert orthogroups.descriptions_by_orthogroup_id["og_1"] == (
-        "No informative product/gene/note consensus was found."
-    )
-    candidates = orthogroups.name_candidates_by_orthogroup_id["og_1"]
-    assert candidates[0].source == "label"
-    assert provenance_note not in {candidate.text for candidate in candidates}
-
-
-@pytest.mark.linear
-def test_build_orthogroups_keeps_product_consensus_over_single_nonrepresentative_gene() -> None:
-    records = [
-        _record(
-            "record_a",
-            features=[
-                _cds(
-                    0,
-                    9,
-                    qualifiers={
-                        "translation": ["MKT*"],
-                        "product": ["DNA polymerase"],
-                    },
-                ),
-                _cds(
-                    9,
-                    18,
-                    qualifiers={
-                        "translation": ["MKT*"],
-                        "gene": ["polA"],
-                        "product": ["DNA polymerase"],
-                    },
-                ),
-            ],
-        ),
-        _record(
-            "record_b",
-            features=[
-                _cds(
-                    18,
-                    27,
-                    qualifiers={
-                        "translation": ["MKT*"],
-                        "product": ["DNA polymerase"],
-                    },
-                ),
-            ],
-        ),
-    ]
-    extraction = extract_cds_proteins(records)
-    hits = pd.DataFrame.from_records(
-        [
-            _hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001"),
-            _hit_row("gbd_r0001_cds000002", "gbd_r0002_cds000001"),
-        ],
-        columns=COMPARISON_COLUMNS,
-    )
-
-    orthogroups = build_orthogroups_from_protein_hits(
-        [hits],
-        extraction.protein_map,
-    )
-
-    assert orthogroups.names_by_orthogroup_id["og_1"] == "DNA polymerase"
-    candidates = orthogroups.name_candidates_by_orthogroup_id["og_1"]
-    assert candidates[0].source == "product"
-    assert candidates[0].record_coverage_count == 2
-    assert candidates[1].source == "gene"
-    assert candidates[1].representative_count == 0
-
-
-@pytest.mark.linear
 def test_convert_protein_hits_to_genomic_links_only_sets_matching_orthogroup_id() -> None:
     records = [
         _record("record_a", features=[_cds(0, 9)]),
@@ -2822,10 +2812,16 @@ def test_convert_protein_hits_to_genomic_links_only_sets_matching_orthogroup_id(
         _record("record_c", features=[_cds(18, 27)]),
     ]
     extraction = extract_cds_proteins(records)
-    orthogroup_edges = pd.DataFrame.from_records(
-        [_hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001")],
-        columns=COMPARISON_COLUMNS,
-    )
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [_hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001")],
+            columns=COMPARISON_COLUMNS,
+        ),
+        (1, 0): pd.DataFrame.from_records(
+            [_hit_row("gbd_r0002_cds000001", "gbd_r0001_cds000001")],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
     display_hits = pd.DataFrame.from_records(
         [
             _hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001"),
@@ -2833,10 +2829,11 @@ def test_convert_protein_hits_to_genomic_links_only_sets_matching_orthogroup_id(
         ],
         columns=COMPARISON_COLUMNS,
     )
-    orthogroups = build_orthogroups_from_protein_hits(
-        [orthogroup_edges],
+    orthogroups = select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
         extraction.protein_map,
-    )
+        record_count=len(records),
+    ).orthogroups
 
     converted = convert_protein_hits_to_genomic_links(
         display_hits,
@@ -3097,12 +3094,14 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
                 "recordId": "record_a",
                 "proteinMap": query_map,
                 "proteinCacheKey": "record-a-cache",
+                "viewTransform": {"length": 200, "reverse": False},
             },
             {
                 "recordIndex": 1,
                 "recordId": "record_b",
                 "proteinMap": subject_map,
                 "proteinCacheKey": "record-b-cache",
+                "viewTransform": {"length": 200, "reverse": True},
             },
         ],
         "pairs": [
@@ -3146,13 +3145,47 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    assert result["orthogroups"][0]["member_count"] == 3
-    assert result["orthogroups"][0]["name"] == "rpoB"
-    assert result["orthogroups"][0]["nameConfidence"] == "high"
-    assert result["orthogroups"][0]["nameCandidates"][0]["recordCoverageCount"] == 2
-    assert result["orthogroups"][0]["nameCandidates"][0]["source"] == "gene"
-    assert result["orthogroups"][0]["members"][0]["product"] == "DNA-directed RNA polymerase beta subunit"
+    assert result["orthogroupResult"]["schema"] == 2
+    assert result["orthogroupResult"]["kind"] == "orthogroupResult"
+    assert result["orthogroupResult"]["value"]["type"] == "OrthogroupResult"
+    typed_fields = result["orthogroupResult"]["value"]["fields"]
+    group_id = next(iter(typed_fields["orthogroups"]))
+    group_members = typed_fields["orthogroups"][group_id]
+    display_start, display_end, display_strand = namespace["_web_transform_cds_span"](
+        subject_map["b"]["start"],
+        subject_map["b"]["end"],
+        subject_map["b"]["strand"],
+        payload["records"][1]["viewTransform"],
+    )
+    display_feature_svg_id = namespace["_display_feature_svg_id_from_data"](
+        subject_map["b"],
+        display_start,
+        display_end,
+        display_strand,
+        payload["records"][1]["viewTransform"],
+    )
+    assert display_feature_svg_id != subject_map["b"]["feature_svg_id"]
+    assert len(group_members) == 3
+    assert typed_fields["namesByOrthogroupId"][group_id] == "rpoB"
+    assert typed_fields["confidenceByOrthogroupId"][group_id] == "high"
+    first_candidate = typed_fields["nameCandidatesByOrthogroupId"][group_id][0][
+        "fields"
+    ]
+    assert first_candidate["recordCoverageCount"] == 2
+    assert first_candidate["source"] == "gene"
+    assert group_members[0]["fields"]["product"] == (
+        "DNA-directed RNA polymerase beta subunit"
+    )
+    subject_member = next(
+        member["fields"]
+        for member in group_members
+        if member["fields"]["proteinId"] == "b"
+    )
+    assert subject_member["featureSvgId"] == "feature_b"
+    assert "orthogroups" not in result
     rows = result["pairs"][0]["rows"]
+    assert rows[0]["subject_feature_svg_id"] == "feature_b"
+    assert rows[0]["subject_view_feature_svg_id"] == display_feature_svg_id
     assert rows[0]["orthogroup_id"] == "og_1"
     assert rows[0]["edge_kind"] == "rbh"
     assert rows[1]["orthogroup_id"] == "og_1"
@@ -3211,46 +3244,6 @@ def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload() -> None:
 
 
 @pytest.mark.linear
-def test_build_orthogroups_selects_record_representatives_with_paralogs() -> None:
-    records = [
-        _record("record_a", features=[_cds(0, 30)]),
-        _record("record_b", features=[_cds(100, 130), _cds(200, 230)]),
-        _record("record_c", features=[_cds(400, 430)]),
-    ]
-    extraction = extract_cds_proteins(records)
-    hits_ab = pd.DataFrame.from_records(
-        [
-            _hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000001", bitscore=120, evalue=1e-20),
-            _hit_row("gbd_r0001_cds000001", "gbd_r0002_cds000002", bitscore=250, evalue=1e-30),
-        ],
-        columns=COMPARISON_COLUMNS,
-    )
-    hits_bc = pd.DataFrame.from_records(
-        [_hit_row("gbd_r0002_cds000001", "gbd_r0003_cds000001", bitscore=110, evalue=1e-10)],
-        columns=COMPARISON_COLUMNS,
-    )
-
-    orthogroups = build_orthogroups_from_protein_hits(
-        [hits_ab, hits_bc],
-        extraction.protein_map,
-    )
-
-    members = orthogroups.orthogroups["og_1"]
-    assert {member.protein_id for member in members} == {
-        "gbd_r0001_cds000001",
-        "gbd_r0002_cds000001",
-        "gbd_r0002_cds000002",
-        "gbd_r0003_cds000001",
-    }
-    record_b_reps = [
-        member.protein_id
-        for member in members
-        if member.record_index == 1 and member.representative
-    ]
-    assert record_b_reps == ["gbd_r0002_cds000002"]
-
-
-@pytest.mark.linear
 def test_orthogroup_alignment_offsets_align_selected_member_to_representatives() -> None:
     records = [
         _record("record_a", sequence="A" * 1000),
@@ -3291,6 +3284,88 @@ def test_orthogroup_alignment_offsets_align_selected_member_to_representatives()
 
     assert offsets[0] == pytest.approx(0.0)
     assert offsets[1] == pytest.approx(-300.0)
+
+
+@pytest.mark.linear
+def test_orthogroup_alignment_dedup_ignores_public_source_protein_id() -> None:
+    records = [
+        _record("record_a", sequence="A" * 1000),
+        _record("record_b", sequence="A" * 1000),
+    ]
+    rows = []
+    for source_protein_id, bitscore in (("public-a", 200), ("public-b", 150)):
+        rows.append(
+            {
+                **_hit_row("record_a", "record_b", bitscore=bitscore),
+                "qstart": 100,
+                "qend": 200,
+                "sstart": 400,
+                "send": 500,
+                "query_protein_id": f"runtime-{source_protein_id}",
+                "subject_protein_id": "runtime-b",
+                "query_source_protein_id": source_protein_id,
+                "subject_source_protein_id": "public-subject",
+                "query_record_index": 0,
+                "subject_record_index": 1,
+                "query_feature_index": 4,
+                "subject_feature_index": 7,
+                "query_feature_svg_id": "fanchor",
+                "subject_feature_svg_id": "fsubject",
+                "orthogroup_id": "og_1",
+                "query_orthogroup_representative": True,
+                "subject_orthogroup_representative": True,
+            }
+        )
+
+    offsets = calculate_orthogroup_alignment_offsets(
+        records,
+        [pd.DataFrame.from_records(rows)],
+        _orthogroup_alignment_canvas_config(),
+        "fanchor",
+    )
+
+    assert offsets[0] == pytest.approx(0.0)
+    assert offsets[1] == pytest.approx(-300.0)
+
+
+@pytest.mark.linear
+def test_orthogroup_alignment_rejects_conflicting_group_for_one_feature() -> None:
+    records = [
+        _record("record_a", sequence="A" * 1000),
+        _record("record_b", sequence="A" * 1000),
+    ]
+    rows = []
+    for orthogroup_id in ("og_1", "og_2"):
+        rows.append(
+            {
+                **_hit_row("record_a", "record_b", bitscore=200),
+                "qstart": 100,
+                "qend": 200,
+                "sstart": 400,
+                "send": 500,
+                "query_protein_id": "runtime-a",
+                "subject_protein_id": f"runtime-{orthogroup_id}",
+                "query_source_protein_id": "public-a",
+                "subject_source_protein_id": f"public-{orthogroup_id}",
+                "query_record_index": 0,
+                "subject_record_index": 1,
+                "query_feature_index": 4,
+                "subject_feature_index": 7 if orthogroup_id == "og_1" else 8,
+                "query_feature_svg_id": "fanchor",
+                "subject_feature_svg_id": f"fsubject-{orthogroup_id}",
+                "orthogroup_id": orthogroup_id,
+                "query_orthogroup_representative": True,
+                "subject_orthogroup_representative": True,
+            }
+        )
+
+    with pytest.raises(ValidationError, match="conflicting orthogroups"):
+        calculate_orthogroup_alignment_offsets(
+            records,
+            [pd.DataFrame.from_records(rows)],
+            _orthogroup_alignment_canvas_config(),
+            "fanchor",
+        )
 
 
 @pytest.mark.linear

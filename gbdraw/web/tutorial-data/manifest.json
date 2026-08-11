@@ -1,0 +1,2145 @@
+{
+  "schemaVersion": 2,
+  "canonicalRoot": "gbdraw/web/tutorial-data",
+  "provenancePolicy": {
+    "retrievalDateRequiredForRepositoryAdditionsAfter": "2026-08-04",
+    "legacyUnknownStatus": "unknown-legacy"
+  },
+  "packageBudgets": {
+    "core": {
+      "maxUncompressedBytes": 1048576,
+      "actualUncompressedBytes": 981228,
+      "fileCount": 16
+    },
+    "extended": {
+      "maxUncompressedBytes": 16777216,
+      "actualUncompressedBytes": 7848956,
+      "fileCount": 20
+    }
+  },
+  "fixtures": {
+    "human-mitochondrion": {
+      "title": "Human mitochondrial reference genome",
+      "packageTier": "core",
+      "sizeBudgetBytes": 70000,
+      "fileIds": [
+        "human-mitochondrion-genbank",
+        "human-mitochondrion-visibility"
+      ],
+      "fileReferences": [
+        "shared-cds-gene-qualifier-priority"
+      ],
+      "scenarioIds": [
+        "T-GUI-01",
+        "T-GUI-06",
+        "T-GUI-09",
+        "T-GUI-10",
+        "T-CLI-01",
+        "T-CLI-03",
+        "T-CLI-09",
+        "T-CLI-11",
+        "T-PY-01",
+        "T-PY-06",
+        "T-PY-08",
+        "T-PY-09",
+        "H-GUI-09",
+        "H-GUI-11",
+        "H-GUI-12",
+        "H-GUI-13",
+        "H-GUI-14",
+        "H-GUI-15",
+        "H-CLI-09",
+        "H-CLI-11",
+        "H-CLI-12",
+        "H-CLI-13",
+        "H-GUI-02",
+        "H-GUI-06",
+        "H-CLI-02",
+        "H-CLI-05",
+        "H-CLI-03",
+        "H-PY-01",
+        "H-PY-03"
+      ]
+    },
+    "lambda": {
+      "title": "Enterobacteria phage lambda reference genome",
+      "packageTier": "core",
+      "sizeBudgetBytes": 200000,
+      "fileIds": [
+        "lambda-genbank"
+      ],
+      "fileReferences": [
+        "shared-cds-gene-qualifier-priority"
+      ],
+      "scenarioIds": [
+        "T-GUI-02",
+        "T-CLI-02",
+        "T-CLI-07",
+        "T-PY-03",
+        "T-PY-04",
+        "H-GUI-01",
+        "H-CLI-01",
+        "H-GUI-03",
+        "H-CLI-04",
+        "T-GUI-03",
+        "T-CLI-07",
+        "T-PY-04",
+        "H-GUI-04",
+        "H-GUI-05",
+        "H-CLI-02",
+        "H-CLI-05",
+        "H-PY-02"
+      ]
+    },
+    "lambda-gff3": {
+      "title": "Whole-record Lambda GFF3 and FASTA derivative",
+      "packageTier": "core",
+      "sizeBudgetBytes": 90000,
+      "fileIds": [
+        "lambda-full-record-gff3",
+        "lambda-full-record-fasta"
+      ],
+      "fileReferences": [
+        "lambda-genbank"
+      ],
+      "scenarioIds": [
+        "H-GUI-01",
+        "H-CLI-01",
+        "H-PY-04"
+      ],
+      "expectedSemantics": {
+        "recordCount": 1,
+        "recordId": "NC_001416.1",
+        "wholeSourceRecord": true,
+        "multiRecordFixture": false,
+        "note": "This derivative preserves the complete natural Lambda sequence and is not used to simulate multiple records."
+      }
+    },
+    "de3": {
+      "title": "Enterobacteria phage DE3 complete genome",
+      "packageTier": "core",
+      "sizeBudgetBytes": 120000,
+      "fileIds": [
+        "de3-genbank"
+      ],
+      "fileReferences": [],
+      "scenarioIds": [
+        "T-GUI-03",
+        "T-CLI-07",
+        "T-PY-04",
+        "H-GUI-04",
+        "H-GUI-05",
+        "H-CLI-02",
+        "H-CLI-05",
+        "H-PY-02"
+      ],
+      "expectedSemantics": {
+        "recordCount": 1,
+        "recordId": "NC_042057.1",
+        "wholeSourceRecord": true,
+        "length": 42925,
+        "description": "Enterobacteria phage DE3, complete genome"
+      }
+    },
+    "lambda-de3-comparison": {
+      "title": "Whole-genome Lambda and DE3 comparison evidence",
+      "packageTier": "core",
+      "sizeBudgetBytes": 30000,
+      "fileIds": [
+        "lambda-de3-losatn",
+        "lambda-de3-tlosatx"
+      ],
+      "fileReferences": [
+        "lambda-genbank",
+        "de3-genbank"
+      ],
+      "scenarioIds": [
+        "T-GUI-03",
+        "T-CLI-07",
+        "T-PY-04",
+        "H-GUI-04",
+        "H-GUI-05",
+        "H-CLI-02",
+        "H-CLI-05",
+        "H-PY-02"
+      ],
+      "expectedSemantics": {
+        "queryRecordId": "NC_001416.1",
+        "subjectRecordId": "NC_042057.1",
+        "recordsAreWholeCanonicalSources": true,
+        "comparisonEvidence": true,
+        "runtime": "LOSAT 0.1.0 browser WASM",
+        "scheduling": "serial-one-thread",
+        "losatn": {
+          "task": "megablast",
+          "rawRows": 6,
+          "defaultRetainedRows": 6
+        },
+        "tlosatx": {
+          "queryGeneticCode": 1,
+          "subjectGeneticCode": 1,
+          "rawRows": 397,
+          "defaultRetainedRows": 266,
+          "tutorialMinimumAlignmentLength": 1000,
+          "tutorialRetainedRows": 7
+        },
+        "note": "Both evidence files were reproduced byte-for-byte in two serial browser runs from the complete Lambda and DE3 records."
+      }
+    },
+    "aminoglycoside-bgc-five": {
+      "title": "Five aminoglycoside biosynthetic gene clusters",
+      "packageTier": "core",
+      "sizeBudgetBytes": 550000,
+      "fileIds": [
+        "bgc-0000708-genbank",
+        "bgc-0000709-genbank",
+        "bgc-0000711-genbank",
+        "bgc-0000712-genbank",
+        "bgc-0000713-genbank",
+        "bgc-default-colors",
+        "bgc-specific-colors"
+      ],
+      "fileReferences": [
+        "shared-cds-gene-qualifier-priority"
+      ],
+      "scenarioIds": [
+        "T-GUI-04",
+        "T-CLI-08",
+        "T-PY-05",
+        "H-GUI-07",
+        "H-GUI-11",
+        "H-GUI-13",
+        "H-CLI-07",
+        "H-CLI-08",
+        "H-CLI-11"
+      ],
+      "expectedSemantics": {
+        "displayedFeatureCount": 155,
+        "displayedFeatureTypes": [
+          "CDS"
+        ],
+        "recordCount": 5,
+        "recordIds": [
+          "BGC0000708",
+          "BGC0000709",
+          "BGC0000711",
+          "BGC0000712",
+          "BGC0000713"
+        ],
+        "recordsAreWholeCanonicalSources": true,
+        "galleryAlignedLosatpMode": "similarity-groups",
+        "tutorialScenarioId": "T-GUI-04",
+        "similarityGroupScenarioId": "H-GUI-07",
+        "collinearScenarioId": "H-CLI-08",
+        "losatpQualificationStatus": "qualified",
+        "qualifiedOn": "2026-08-04",
+        "rawAdjacentResultRows": 232,
+        "similarityGroupCount": 23,
+        "similarityGroupLinkCount": 77,
+        "collinearBlockCount": 7,
+        "qualificationNote": "Qualified from all five whole records with serial one-thread LOSATP; executable captures pin the source checksums and verify the raw-row, Similarity-group, link, and Collinear-block counts."
+      }
+    },
+    "metazoan-mitochondria-four": {
+      "title": "Four complete metazoan mitochondrial genomes",
+      "packageTier": "extended",
+      "sizeBudgetBytes": 180000,
+      "fileIds": [
+        "danio-mitochondrion-genbank",
+        "drosophila-mitochondrion-genbank",
+        "caenorhabditis-mitochondrion-genbank"
+      ],
+      "fileReferences": [
+        "human-mitochondrion-genbank"
+      ],
+      "scenarioIds": [
+        "H-GUI-02",
+        "T-GUI-06",
+        "H-GUI-06",
+        "H-CLI-02",
+        "H-CLI-03",
+        "H-PY-01"
+      ],
+      "expectedSemantics": {
+        "recordCount": 4,
+        "recordIds": [
+          "NC_012920.1",
+          "NC_002333.2",
+          "NC_024511.2",
+          "NC_001328.1"
+        ],
+        "recordLengths": [16569, 16596, 19524, 13794],
+        "topologies": ["circular", "circular", "circular", "circular"],
+        "recordsAreWholeCanonicalSources": true,
+        "comparisonEvidence": false,
+        "intendedUse": "layout-only",
+        "note": "The Circular multi-record examples use four complete natural RefSeq mitochondrial genomes. No linear region, cropped sequence, split record, or synthetic contig is presented as circular."
+      }
+    },
+    "metazoan-mitochondria-comparison": {
+      "title": "Complete metazoan mitochondrial TLOSATX evidence",
+      "packageTier": "extended",
+      "sizeBudgetBytes": 100000,
+      "fileIds": [
+        "danio-human-tlosatx",
+        "drosophila-human-tlosatx",
+        "caenorhabditis-human-tlosatx",
+        "danio-mitochondrion-fasta",
+        "drosophila-mitochondrion-fasta",
+        "caenorhabditis-mitochondrion-fasta"
+      ],
+      "fileReferences": [
+        "human-mitochondrion-genbank",
+        "danio-mitochondrion-genbank",
+        "drosophila-mitochondrion-genbank",
+        "caenorhabditis-mitochondrion-genbank"
+      ],
+      "scenarioIds": ["T-GUI-06", "T-CLI-09", "T-PY-06", "H-CLI-02", "H-CLI-05"],
+      "expectedSemantics": {
+        "referenceRecordId": "NC_012920.1",
+        "referenceSide": "subject",
+        "sourceRecordIds": [
+          "NC_012920.1",
+          "NC_002333.2",
+          "NC_024511.2",
+          "NC_001328.1"
+        ],
+        "sourceTopologies": ["circular", "circular", "circular", "circular"],
+        "recordsAreWholeCanonicalSources": true,
+        "comparisonEvidence": true,
+        "program": "TLOSATX",
+        "runtime": "LOSAT 0.1.0 native linux-x86_64",
+        "scheduling": "serial-one-thread",
+        "totalRawRows": 435,
+        "retainedRows": 106,
+        "retainedUnionCoverageBp": 9813,
+        "thresholds": {
+          "evalueMaximum": 1e-5,
+          "bitscoreMinimum": 50,
+          "identityMinimum": 40,
+          "alignmentLengthMinimum": 50
+        },
+        "note": "Three byte-stable TLOSATX tables compare complete zebrafish, fruit-fly, and nematode mitochondrial genomes with the complete human mitochondrial subject."
+      }
+    },
+    "hepatoplasmataceae-five": {
+      "title": "Five complete Hepatoplasmataceae genomes for protein comparison",
+      "packageTier": "extended",
+      "sizeBudgetBytes": 7300000,
+      "fileIds": [
+        "hepatoplasmataceae-ap027078-genbank",
+        "hepatoplasmataceae-ap027131-genbank",
+        "hepatoplasmataceae-ap027132-genbank",
+        "hepatoplasmataceae-nz-cp006932-genbank"
+      ],
+      "fileReferences": ["ap027133-genbank"],
+      "scenarioIds": ["T-GUI-08", "T-CLI-10", "T-PY-07", "H-GUI-08"],
+      "expectedSemantics": {
+        "recordCount": 5,
+        "recordIds": ["AP027078.1", "AP027131.1", "AP027133.1", "AP027132.1", "NZ_CP006932.1"],
+        "recordLengths": [615622, 662108, 606194, 643039, 657101],
+        "recordTopologies": ["circular", "circular", "circular", "circular", "circular"],
+        "recordsAreWholeCanonicalSources": true,
+        "comparisonProgram": "LOSATP",
+        "galleryCollinearSearchScope": "adjacent",
+        "gallerySearchedRecordPairCount": 4,
+        "allRecordHowToSearchScope": "all",
+        "allRecordHowToPairCount": 10,
+        "displayedRibbonScope": "adjacent",
+        "recordOrderMatchesGallery": true
+      }
+    },
+    "tobacco-plastome-regions": {
+      "title": "Complete tobacco plastome with named structural regions",
+      "packageTier": "extended",
+      "sizeBudgetBytes": 340000,
+      "fileIds": [
+        "tobacco-plastome-genbank",
+        "tobacco-plastome-regions-table",
+        "tobacco-plastome-default-colors",
+        "tobacco-plastome-specific-colors",
+        "tobacco-plastome-qualifier-priority"
+      ],
+      "fileReferences": [],
+      "scenarioIds": [
+        "T-GUI-05",
+        "T-CLI-06",
+        "T-PY-02",
+        "H-GUI-10",
+        "H-CLI-02",
+        "H-CLI-10",
+        "H-PY-03"
+      ],
+      "expectedSemantics": {
+        "recordCount": 1,
+        "recordId": "NC_001879.2",
+        "recordLength": 155943,
+        "topology": "circular",
+        "wholeSourceRecord": true,
+        "annotationSetId": "plastome_regions",
+        "annotationIds": ["lsc", "irb", "ssc", "ira"],
+        "annotationRanges": [[1, 86686], [86687, 112029], [112030, 130600], [130601, 155943]]
+      }
+    },
+    "depth-1kb": {
+      "title": "Complete AP027133 genome with 1 kbp mean depth",
+      "packageTier": "extended",
+      "sizeBudgetBytes": 1370000,
+      "fileIds": [
+        "ap027133-genbank",
+        "ap027133-drr394922-depth-1kb"
+      ],
+      "fileReferences": [],
+      "scenarioIds": [
+        "T-CLI-05",
+        "T-GUI-08",
+        "T-GUI-12",
+        "T-PY-11",
+        "H-GUI-09",
+        "H-CLI-02",
+        "H-CLI-09",
+        "H-PY-03"
+      ],
+      "expectedSemantics": {
+        "recordCount": 1,
+        "recordId": "AP027133.1",
+        "recordLength": 606194,
+        "topology": "circular",
+        "wholeSourceRecord": true,
+        "sourceRun": "DRR394922",
+        "sourceRowCount": 606194,
+        "binSizeBp": 1000,
+        "binCount": 607,
+        "aggregation": "arithmetic mean of per-base integer depth in each consecutive non-overlapping bin",
+        "plottingContract": "Each derivative row is one pre-aggregated bin at its 1-based start; use depth window 1 and step 1000."
+      }
+    },
+    "shared-label-rules": {
+      "title": "Shared concise CDS label rule",
+      "packageTier": "core",
+      "sizeBudgetBytes": 1024,
+      "fileIds": [
+        "shared-cds-gene-qualifier-priority"
+      ],
+      "fileReferences": [],
+      "scenarioIds": [
+        "T-GUI-01",
+        "T-GUI-10",
+        "T-CLI-01",
+        "T-CLI-02",
+        "T-CLI-08",
+        "T-CLI-09",
+        "T-CLI-11",
+        "T-GUI-04",
+        "T-GUI-08",
+        "T-PY-03",
+        "T-PY-05",
+        "T-PY-06",
+        "T-PY-08",
+        "T-PY-09",
+        "H-GUI-06",
+        "H-GUI-11",
+        "H-CLI-02",
+        "H-CLI-05",
+        "H-CLI-03",
+        "H-CLI-11",
+        "H-CLI-12",
+        "H-CLI-13"
+      ]
+    }
+  },
+  "files": {
+    "human-mitochondrion-genbank": {
+      "fixtureId": "human-mitochondrion",
+      "relativePath": "human-mitochondrion/HmmtDNA.gbk",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 64640,
+      "sha256": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f",
+      "packageTier": "core",
+      "records": [
+        {
+          "id": "NC_012920.1",
+          "accession": "NC_012920",
+          "sequenceVersion": 1,
+          "organism": "Homo sapiens",
+          "description": "Homo sapiens mitochondrion, complete genome",
+          "topology": "circular",
+          "length": 16569,
+          "sequenceSha256": "f156ff3f65bbcc80c7ebb9936dceb96b1477b4f8f535c4e1dbe7baea225cbc66",
+          "featureCount": 77,
+          "displayedFeatureCount": 37,
+          "featureCounts": {
+            "CDS": 13,
+            "D-loop": 1,
+            "gene": 37,
+            "misc_feature": 1,
+            "rRNA": 2,
+            "source": 1,
+            "tRNA": 22
+          },
+          "strandCounts": {
+            "positive": 58,
+            "negative": 19,
+            "unknown": 0
+          }
+        }
+      ],
+      "provenance": {
+        "sourceName": "NCBI Nucleotide (RefSeq)",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_012920.1",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-02-09",
+        "repositoryAddedCommit": "c09463fd",
+        "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.",
+        "filenameNormalization": "The accession-pinned record is retained under the established tutorial filename HmmtDNA.gbk."
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-01",
+        "T-GUI-06",
+        "T-GUI-09",
+        "T-GUI-10",
+        "T-CLI-01",
+        "T-CLI-03",
+        "T-CLI-09",
+        "T-CLI-11",
+        "T-PY-01",
+        "T-PY-06",
+        "T-PY-08",
+        "T-PY-09",
+        "H-GUI-09",
+        "H-GUI-11",
+        "H-GUI-12",
+        "H-GUI-13",
+        "H-GUI-14",
+        "H-GUI-15",
+        "H-CLI-09",
+        "H-CLI-11",
+        "H-CLI-12",
+        "H-CLI-13",
+        "H-GUI-02",
+        "H-GUI-06",
+        "H-CLI-02",
+        "H-CLI-05",
+        "H-CLI-03",
+        "H-PY-01",
+        "H-PY-03"
+      ]
+    },
+    "human-mitochondrion-visibility": {
+      "fixtureId": "human-mitochondrion",
+      "relativePath": "human-mitochondrion/HmmtDNA_feature_visibility.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "feature-visibility-table",
+      "sizeBytes": 212,
+      "sha256": "aca42671c08de16dfbb2317d8b8f53801d1601e956c04aab6de5deaed2a5f348",
+      "packageTier": "core",
+      "records": [],
+      "provenance": {
+        "sourceName": "gbdraw executable example support asset",
+        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-03",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
+        "filenameNormalization": "Materialized from the generated feature_visibility.tsv support asset with unchanged bytes."
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "H-GUI-12",
+        "H-CLI-11",
+        "T-CLI-03"
+      ],
+      "replaces": [
+        "tools/reproduce_examples_manifest.py:feature_visibility.tsv"
+      ]
+    },
+    "danio-mitochondrion-genbank": {
+      "fixtureId": "metazoan-mitochondria-four",
+      "relativePath": "metazoan-mitochondria-four/NC_002333.2.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 55541,
+      "sha256": "94ab35da6f81abc2595fcd425c23585ed78d9396b5143918d9d1025d8a4d2140",
+      "packageTier": "extended",
+      "records": [
+        {
+          "id": "NC_002333.2",
+          "accession": "NC_002333",
+          "sequenceVersion": 2,
+          "organism": "Danio rerio",
+          "description": "Danio rerio mitochondrion, complete genome",
+          "topology": "circular",
+          "length": 16596,
+          "sequenceSha256": "2c964a8176d913570e466187c9620b20742c3c8898e8a0a9edd7a8b28afcd4f9",
+          "featureCount": 77,
+          "displayedFeatureCount": 37,
+          "featureCounts": {
+            "CDS": 13,
+            "D-loop": 1,
+            "gene": 37,
+            "rRNA": 2,
+            "rep_origin": 1,
+            "source": 1,
+            "tRNA": 22
+          },
+          "cdsStrandCounts": {"positive": 12, "negative": 1, "unknown": 0}
+        }
+      ],
+      "provenance": {
+        "sourceName": "NCBI Nucleotide (RefSeq)",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_002333.2",
+        "retrievedOn": "2026-08-03",
+        "repositoryAddedOn": "2026-08-03",
+        "repositoryAddedCommit": null,
+        "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.",
+        "filenameNormalization": "The versioned RefSeq accession is retained in the filename."
+      },
+      "derivation": null,
+      "scenarioIds": ["H-GUI-02", "T-GUI-06", "H-GUI-06", "H-CLI-02", "H-CLI-05", "H-CLI-03", "H-PY-01"]
+    },
+    "drosophila-mitochondrion-genbank": {
+      "fixtureId": "metazoan-mitochondria-four",
+      "relativePath": "metazoan-mitochondria-four/NC_024511.2.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 72340,
+      "sha256": "79fa36199682961919c4a11f3a8fc50c9e598e68b867eb25e847bce1aa1c4229",
+      "packageTier": "extended",
+      "records": [
+        {
+          "id": "NC_024511.2",
+          "accession": "NC_024511",
+          "sequenceVersion": 2,
+          "organism": "Drosophila melanogaster",
+          "description": "Drosophila melanogaster mitochondrion, complete genome",
+          "topology": "circular",
+          "length": 19524,
+          "sequenceSha256": "75139da63aab46c9ca4a378687489407e31650c3abf0a089e4c967393b17f4bc",
+          "featureCount": 76,
+          "displayedFeatureCount": 37,
+          "featureCounts": {
+            "CDS": 13,
+            "gene": 37,
+            "misc_feature": 1,
+            "rRNA": 2,
+            "source": 1,
+            "tRNA": 22
+          },
+          "cdsStrandCounts": {"positive": 9, "negative": 4, "unknown": 0}
+        }
+      ],
+      "provenance": {
+        "sourceName": "NCBI Nucleotide (RefSeq)",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_024511.2",
+        "retrievedOn": "2026-08-03",
+        "repositoryAddedOn": "2026-08-03",
+        "repositoryAddedCommit": null,
+        "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.",
+        "filenameNormalization": "The versioned RefSeq accession is retained in the filename."
+      },
+      "derivation": null,
+      "scenarioIds": ["H-GUI-02", "T-GUI-06", "H-GUI-06", "H-CLI-02", "H-CLI-05", "H-CLI-03", "H-PY-01"]
+    },
+    "caenorhabditis-mitochondrion-genbank": {
+      "fixtureId": "metazoan-mitochondria-four",
+      "relativePath": "metazoan-mitochondria-four/NC_001328.1.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 39227,
+      "sha256": "8de5f7cf3686f493ee5b8068dba39b31c5d02e70d997063f65ed19d0fa859a59",
+      "packageTier": "extended",
+      "records": [
+        {
+          "id": "NC_001328.1",
+          "accession": "NC_001328",
+          "sequenceVersion": 1,
+          "organism": "Caenorhabditis elegans",
+          "description": "Caenorhabditis elegans mitochondrion, complete genome",
+          "topology": "circular",
+          "length": 13794,
+          "sequenceSha256": "3cbb1d2f1925ee7eacae394dd7fa867c225bcf3cb4701b3dd07ecad7b904446e",
+          "featureCount": 75,
+          "displayedFeatureCount": 36,
+          "featureCounts": {
+            "CDS": 12,
+            "gene": 36,
+            "misc_feature": 2,
+            "rRNA": 2,
+            "source": 1,
+            "tRNA": 22
+          },
+          "cdsStrandCounts": {"positive": 12, "negative": 0, "unknown": 0}
+        }
+      ],
+      "provenance": {
+        "sourceName": "NCBI Nucleotide (RefSeq)",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_001328.1",
+        "retrievedOn": "2026-08-03",
+        "repositoryAddedOn": "2026-08-03",
+        "repositoryAddedCommit": null,
+        "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.",
+        "filenameNormalization": "The versioned RefSeq accession is retained in the filename."
+      },
+      "derivation": null,
+      "scenarioIds": ["H-GUI-02", "T-GUI-06", "H-GUI-06", "H-CLI-02", "H-CLI-05", "H-CLI-03", "H-PY-01"]
+    },
+    "danio-human-tlosatx": {
+      "fixtureId": "metazoan-mitochondria-comparison",
+      "relativePath": "metazoan-mitochondria-comparison/danio-human.tlosatx.tsv",
+      "role": "derived",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "blast-outfmt6",
+      "sizeBytes": 19284,
+      "sha256": "4135025ba9fc6f346551757ad3d842b30c2f813bb2a412882d571997ff95c597",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {
+        "program": "TLOSATX",
+        "queryRecordId": "NC_002333.2",
+        "subjectRecordId": "NC_012920.1",
+        "referenceSide": "subject",
+        "columnCount": 12,
+        "rawRowCount": 276,
+        "retainedRowCount": 68,
+        "queryCoordinateRange": [356, 16462],
+        "subjectCoordinateRange": [378, 16525],
+        "orientationCounts": {"++": 132, "+-": 3, "-+": 4, "--": 137}
+      },
+      "provenance": {
+        "sourceName": "Derived from packaged complete human and zebrafish mitochondrial RefSeq records",
+        "sourceUrl": "https://github.com/satoshikawato/LOSAT",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Derived comparison evidence; retain attribution and data-usage notes for both NCBI source records.",
+        "filenameNormalization": null
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_metazoan_mitochondria_comparison_fixture.py",
+        "sourceFileIds": ["danio-mitochondrion-genbank", "human-mitochondrion-genbank"],
+        "sourceChecksums": [
+          "94ab35da6f81abc2595fcd425c23585ed78d9396b5143918d9d1025d8a4d2140",
+          "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
+        ],
+        "tool": "LOSAT native linux-x86_64",
+        "toolVersion": "0.1.0",
+        "toolSha256": "3d357ae9062d5ed4b2fa591e0316c2dd67fb7b3b986a079902bfa078ee18d3dd",
+        "arguments": {
+          "program": "tblastx",
+          "queryGeneticCode": 2,
+          "subjectGeneticCode": 2,
+          "outfmt": 6,
+          "scheduling": "serial",
+          "threads": 1,
+          "runs": 2
+        },
+        "outputStatistics": {
+          "rawRowCount": 276,
+          "retainedRowCount": 68,
+          "byteIdenticalRuns": true
+        }
+      },
+      "scenarioIds": ["T-GUI-06", "T-CLI-09", "T-PY-06", "H-CLI-02", "H-CLI-05"]
+    },
+    "drosophila-human-tlosatx": {
+      "fixtureId": "metazoan-mitochondria-comparison",
+      "relativePath": "metazoan-mitochondria-comparison/drosophila-human.tlosatx.tsv",
+      "role": "derived",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "blast-outfmt6",
+      "sizeBytes": 6587,
+      "sha256": "1d9287499564e24bc52063625be977c71976c2e5f2bad236ec08733584358117",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {
+        "program": "TLOSATX",
+        "queryRecordId": "NC_024511.2",
+        "subjectRecordId": "NC_012920.1",
+        "referenceSide": "subject",
+        "columnCount": 12,
+        "rawRowCount": 93,
+        "retainedRowCount": 24,
+        "queryCoordinateRange": [174, 14488],
+        "subjectCoordinateRange": [1192, 15838],
+        "orientationCounts": {"++": 26, "+-": 20, "-+": 27, "--": 20}
+      },
+      "provenance": {
+        "sourceName": "Derived from packaged complete human and fruit-fly mitochondrial RefSeq records",
+        "sourceUrl": "https://github.com/satoshikawato/LOSAT",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Derived comparison evidence; retain attribution and data-usage notes for both NCBI source records.",
+        "filenameNormalization": null
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_metazoan_mitochondria_comparison_fixture.py",
+        "sourceFileIds": ["drosophila-mitochondrion-genbank", "human-mitochondrion-genbank"],
+        "sourceChecksums": [
+          "79fa36199682961919c4a11f3a8fc50c9e598e68b867eb25e847bce1aa1c4229",
+          "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
+        ],
+        "tool": "LOSAT native linux-x86_64",
+        "toolVersion": "0.1.0",
+        "toolSha256": "3d357ae9062d5ed4b2fa591e0316c2dd67fb7b3b986a079902bfa078ee18d3dd",
+        "arguments": {
+          "program": "tblastx",
+          "queryGeneticCode": 5,
+          "subjectGeneticCode": 2,
+          "outfmt": 6,
+          "scheduling": "serial",
+          "threads": 1,
+          "runs": 2
+        },
+        "outputStatistics": {
+          "rawRowCount": 93,
+          "retainedRowCount": 24,
+          "byteIdenticalRuns": true
+        }
+      },
+      "scenarioIds": ["T-GUI-06", "T-CLI-09", "T-PY-06", "H-CLI-02", "H-CLI-05"]
+    },
+    "caenorhabditis-human-tlosatx": {
+      "fixtureId": "metazoan-mitochondria-comparison",
+      "relativePath": "metazoan-mitochondria-comparison/caenorhabditis-human.tlosatx.tsv",
+      "role": "derived",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "blast-outfmt6",
+      "sizeBytes": 4681,
+      "sha256": "b7244a0154965935d60694549a8d2e779c8f0788737b2a1f4f1f96ebc57bd416",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {
+        "program": "TLOSATX",
+        "queryRecordId": "NC_001328.1",
+        "subjectRecordId": "NC_012920.1",
+        "referenceSide": "subject",
+        "columnCount": 12,
+        "rawRowCount": 66,
+        "retainedRowCount": 14,
+        "queryCoordinateRange": [635, 12937],
+        "subjectCoordinateRange": [112, 15823],
+        "orientationCounts": {"++": 36, "+-": 8, "-+": 4, "--": 18}
+      },
+      "provenance": {
+        "sourceName": "Derived from packaged complete human and nematode mitochondrial RefSeq records",
+        "sourceUrl": "https://github.com/satoshikawato/LOSAT",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Derived comparison evidence; retain attribution and data-usage notes for both NCBI source records.",
+        "filenameNormalization": null
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_metazoan_mitochondria_comparison_fixture.py",
+        "sourceFileIds": ["caenorhabditis-mitochondrion-genbank", "human-mitochondrion-genbank"],
+        "sourceChecksums": [
+          "8de5f7cf3686f493ee5b8068dba39b31c5d02e70d997063f65ed19d0fa859a59",
+          "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
+        ],
+        "tool": "LOSAT native linux-x86_64",
+        "toolVersion": "0.1.0",
+        "toolSha256": "3d357ae9062d5ed4b2fa591e0316c2dd67fb7b3b986a079902bfa078ee18d3dd",
+        "arguments": {
+          "program": "tblastx",
+          "queryGeneticCode": 5,
+          "subjectGeneticCode": 2,
+          "outfmt": 6,
+          "scheduling": "serial",
+          "threads": 1,
+          "runs": 2
+        },
+        "outputStatistics": {
+          "rawRowCount": 66,
+          "retainedRowCount": 14,
+          "byteIdenticalRuns": true
+        }
+      },
+      "scenarioIds": ["T-GUI-06", "T-CLI-09", "T-PY-06", "H-CLI-02", "H-CLI-05"]
+    },
+    "tobacco-plastome-genbank": {
+      "fixtureId": "tobacco-plastome-regions",
+      "relativePath": "tobacco-plastome-regions/NC_001879.gbk",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 331860,
+      "sha256": "25c5b39fd25d702c0a390fe5e7480eda0ccc1e4d6d7c388445b4686049412a24",
+      "packageTier": "extended",
+      "records": [
+        {
+          "id": "NC_001879.2",
+          "accession": "NC_001879",
+          "sequenceVersion": 2,
+          "organism": "Nicotiana tabacum",
+          "description": "Nicotiana tabacum plastid, complete genome",
+          "topology": "circular",
+          "length": 155943,
+          "sequenceSha256": "6f4df398e40d4101096306ecc3c6fe115e484f11d97c3501033361327a227959",
+          "featureCount": 369,
+          "displayedFeatureCount": 145,
+          "displayedFeatureTypes": ["CDS", "rRNA", "tRNA", "repeat_region"],
+          "featureCounts": {
+            "CDS": 98,
+            "exon": 49,
+            "gene": 144,
+            "intron": 16,
+            "misc_feature": 10,
+            "rRNA": 8,
+            "rep_origin": 4,
+            "repeat_region": 2,
+            "source": 1,
+            "tRNA": 37
+          },
+          "strandCounts": {"positive": 152, "negative": 215, "unknown": 2},
+          "cdsStrandCounts": {"positive": 36, "negative": 61, "unknown": 1}
+        }
+      ],
+      "provenance": {
+        "sourceName": "NCBI Nucleotide (RefSeq)",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-02-19",
+        "repositoryAddedCommit": "c956f917",
+        "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.",
+        "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the public tutorial fixture set."
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"]
+    },
+    "tobacco-plastome-regions-table": {
+      "fixtureId": "tobacco-plastome-regions",
+      "relativePath": "tobacco-plastome-regions/nicotiana-tabacum-regions.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "region-annotation-table",
+      "sizeBytes": 594,
+      "sha256": "3a85aed5145c88f93b4478d1901fab53714b9d47afc754d32cc9e5c0b8412b88",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {
+        "annotationCount": 4,
+        "annotationSetId": "plastome_regions",
+        "recordId": "NC_001879.2",
+        "coordinateSpace": "source"
+      },
+      "provenance": {
+        "sourceName": "gbdraw Gallery annotation table",
+        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-07-17",
+        "repositoryAddedCommit": "386ff9cf",
+        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
+        "filenameNormalization": "Copied byte-for-byte from gbdraw/web/gallery/files/nicotiana-tabacum-regions.tsv."
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
+      "replaces": ["gbdraw/web/gallery/files/nicotiana-tabacum-regions.tsv"]
+    },
+    "tobacco-plastome-default-colors": {
+      "fixtureId": "tobacco-plastome-regions",
+      "relativePath": "tobacco-plastome-regions/modified_default_colors.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "default-color-table",
+      "sizeBytes": 95,
+      "sha256": "e48654dfc5225c8c1eec251f773fc07892228dee906cb1e105e4d24cb5ae8bc1",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {"ruleCount": 5},
+      "provenance": {
+        "sourceName": "gbdraw Gallery default color table",
+        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2024-01-22",
+        "repositoryAddedCommit": "d230a5f4",
+        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
+        "filenameNormalization": "Copied byte-for-byte from gbdraw/web/gallery/files/modified_default_colors.tsv."
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-05", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
+      "replaces": ["gbdraw/web/gallery/files/modified_default_colors.tsv"]
+    },
+    "tobacco-plastome-specific-colors": {
+      "fixtureId": "tobacco-plastome-regions",
+      "relativePath": "tobacco-plastome-regions/chloroplast_specific_table.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "feature-specific-color-table",
+      "sizeBytes": 3033,
+      "sha256": "406f1a042ec072c0026c014fc173950793582ffe4c8c568ec2539e2db98df0ec",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {
+        "ruleCount": 70,
+        "featureType": "CDS",
+        "qualifier": "gene",
+        "legendGroups": 11
+      },
+      "provenance": {
+        "sourceName": "gbdraw Gallery chloroplast feature color table",
+        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-07-17",
+        "repositoryAddedCommit": "386ff9cf",
+        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
+        "filenameNormalization": "Copied from gbdraw/web/gallery/files/chloroplast_specific_table.tsv with one trailing newline added."
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02"],
+      "replaces": ["gbdraw/web/gallery/files/chloroplast_specific_table.tsv"]
+    },
+    "tobacco-plastome-qualifier-priority": {
+      "fixtureId": "tobacco-plastome-regions",
+      "relativePath": "tobacco-plastome-regions/qualifier_priority.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "qualifier-priority-table",
+      "sizeBytes": 23,
+      "sha256": "2f40dedf957041e3093a1d1a4dc8f6c2d1a0843ebf5367f0ae78f0e75769eaa1",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {"featureType": "CDS", "qualifiers": ["gene", "old_locus_tag"]},
+      "provenance": {
+        "sourceName": "gbdraw Gallery qualifier priority table",
+        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2025-09-08",
+        "repositoryAddedCommit": "4a069ece",
+        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
+        "filenameNormalization": "Copied byte-for-byte from gbdraw/web/gallery/files/qualifier_priority.tsv."
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-05", "T-CLI-06", "T-PY-02", "H-GUI-10", "H-CLI-02", "H-CLI-10", "H-PY-03"],
+      "replaces": ["gbdraw/web/gallery/files/qualifier_priority.tsv"]
+    },
+    "ap027133-genbank": {
+      "fixtureId": "depth-1kb",
+      "relativePath": "depth-1kb/AP027133.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 1344094,
+      "sha256": "913af50dd9d37cc2107be5e46484b885c5d586fb414b4b501380fc8f17a659d6",
+      "packageTier": "extended",
+      "records": [
+        {
+          "id": "AP027133.1",
+          "accession": "AP027133",
+          "sequenceVersion": 1,
+          "organism": "Candidatus Hepatoplasma scabrum",
+          "description": "MAG: Candidatus Hepatoplasma scabrum Ps-JP DNA, complete genome",
+          "topology": "circular",
+          "length": 606194,
+          "sequenceSha256": "0812c02b715dac11abbf8b021b7556dd834364f5d74985994e6af0105d22ece3",
+          "featureCount": 1152,
+          "displayedFeatureCount": 576,
+          "displayedFeatureTypes": ["CDS", "rRNA", "tRNA", "tmRNA", "repeat_region"],
+          "featureCounts": {
+            "CDS": 543,
+            "gene": 575,
+            "rRNA": 3,
+            "repeat_region": 1,
+            "source": 1,
+            "tRNA": 28,
+            "tmRNA": 1
+          },
+          "strandCounts": {"positive": 552, "negative": 600, "unknown": 0},
+          "cdsStrandCounts": {"positive": 259, "negative": 284, "unknown": 0}
+        }
+      ],
+      "provenance": {
+        "sourceName": "DDBJ/NCBI Nucleotide",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027133.1?report=girevhist",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-02-06",
+        "repositoryAddedCommit": "e6e87174",
+        "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.",
+        "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the public tutorial fixture set.",
+        "mirrorVerification": {
+          "authoritativeRequestUrl": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027133.1&sat=3&satkey=69902298",
+          "accession": "AP027133.1",
+          "format": "GenBank (full), text",
+          "verifiedOn": "2026-08-09T06:22:18Z",
+          "sourceSizeBytes": 1344094,
+          "sourceSha256": "913af50dd9d37cc2107be5e46484b885c5d586fb414b4b501380fc8f17a659d6",
+          "mirrorSizeBytes": 1344094,
+          "mirrorSha256": "913af50dd9d37cc2107be5e46484b885c5d586fb414b4b501380fc8f17a659d6",
+          "comparisonResult": "byte-identical"
+        }
+      },
+      "derivation": null,
+      "scenarioIds": ["T-CLI-05", "T-CLI-10", "T-GUI-08", "T-GUI-12", "T-PY-07", "T-PY-11", "H-GUI-08", "H-GUI-09", "H-CLI-02", "H-CLI-09", "H-PY-03"]
+    },
+    "ap027133-drr394922-depth-1kb": {
+      "fixtureId": "depth-1kb",
+      "relativePath": "depth-1kb/AP027133.DRR394922.depth-1kb.tsv",
+      "role": "derived",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "depth-table",
+      "sizeBytes": 16913,
+      "sha256": "6f57cfd89a165ad97a162aa2f0b1f3b3ad21fb5638f4f9ac5cbd069badd6aab7",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {
+        "referenceName": "AP027133.1",
+        "sourceRun": "DRR394922",
+        "sourceRowCount": 606194,
+        "binSizeBp": 1000,
+        "binCount": 607,
+        "firstBinStart": 1,
+        "lastBinStart": 606001,
+        "minimumMeanDepth": 12.446,
+        "maximumMeanDepth": 74.546
+      },
+      "provenance": {
+        "sourceName": "Repository samtools-depth fixture derived from DDBJ SRA DRR394922",
+        "sourceUrl": "https://trace.ddbj.nig.ac.jp/DRASearch/run?acc=DRR394922",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-01-28",
+        "repositoryAddedCommit": "d8f84d85",
+        "licenseNote": "This numerical summary is derived from the repository's public sequencing-depth fixture; consult the DDBJ run record for source metadata.",
+        "filenameNormalization": "The filename records the reference, run accession, and 1 kbp bin size."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_depth_1kb_fixture.py",
+        "sourceFileIds": ["ap027133-genbank"],
+        "sourceChecksums": ["913af50dd9d37cc2107be5e46484b885c5d586fb414b4b501380fc8f17a659d6"],
+        "externalSources": [
+          {
+            "id": "repository-raw-depth-ap027133-drr394922",
+            "filename": "AP027133.DRR394922.depth.tsv",
+            "repositoryLocation": "unbundled test fixture",
+            "sizeBytes": 12610982,
+            "sha256": "dd685990decefbd52a392de160f2a4b4a146a1e470ae197ef7135aef16fc6080"
+          }
+        ],
+        "tool": "Python standard library and Biopython SeqIO",
+        "toolVersion": "Python 3.10+; Biopython 1.85",
+        "arguments": {
+          "binSizeBp": 1000,
+          "aggregation": "arithmetic mean",
+          "bins": "consecutive non-overlapping",
+          "outputPosition": "1-based bin start",
+          "decimalPlaces": 6
+        },
+        "outputStatistics": {
+          "sourceRowCount": 606194,
+          "binCount": 607,
+          "minimumMeanDepth": 12.446,
+          "maximumMeanDepth": 74.546
+        }
+      },
+      "scenarioIds": ["T-CLI-05", "T-GUI-12", "T-PY-11", "H-GUI-09", "H-CLI-02", "H-CLI-09", "H-PY-03"]
+    },
+    "lambda-genbank": {
+      "fixtureId": "lambda",
+      "relativePath": "lambda/NC_001416.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 176723,
+      "sha256": "4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7",
+      "packageTier": "core",
+      "records": [
+        {
+          "id": "NC_001416.1",
+          "accession": "NC_001416",
+          "sequenceVersion": 1,
+          "organism": "Escherichia phage Lambda",
+          "description": "Enterobacteria phage lambda, complete genome",
+          "topology": "linear",
+          "length": 48502,
+          "sequenceSha256": "36432a40f602258d19ae7c8152ddbc30390b559f2859c01d7047c77b048c71b3",
+          "featureCount": 285,
+          "displayedFeatureCount": 73,
+          "featureCounts": {
+            "CDS": 73,
+            "gene": 92,
+            "mRNA": 23,
+            "mat_peptide": 1,
+            "misc_binding": 10,
+            "misc_feature": 2,
+            "misc_recomb": 6,
+            "regulatory": 7,
+            "sig_peptide": 1,
+            "source": 1,
+            "unsure": 1,
+            "variation": 68
+          },
+          "cdsStrandCounts": {
+            "positive": 47,
+            "negative": 26,
+            "unknown": 0
+          }
+        }
+      ],
+      "provenance": {
+        "sourceName": "NCBI Nucleotide (RefSeq)",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-04-07",
+        "repositoryAddedCommit": "9c8e897d",
+        "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.",
+        "filenameNormalization": "The versioned accession is retained under the established filename NC_001416.gb."
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-02",
+        "T-CLI-02",
+        "T-CLI-07",
+        "T-PY-03",
+        "T-PY-04",
+        "H-GUI-01",
+        "H-CLI-01",
+        "H-GUI-03",
+        "H-CLI-04",
+        "T-GUI-03",
+        "H-GUI-04",
+        "H-GUI-05",
+        "H-CLI-02",
+        "H-CLI-05",
+        "H-PY-02"
+      ]
+    },
+    "lambda-full-record-gff3": {
+      "fixtureId": "lambda-gff3",
+      "relativePath": "lambda-gff3/NC_001416.gff3",
+      "role": "derived",
+      "mediaType": "text/gff3",
+      "inputType": "gff3",
+      "sizeBytes": 36794,
+      "sha256": "d53e05de87933104cd26111bca42006cce9b5e903fb5b187740f963b3a2098cb",
+      "packageTier": "core",
+      "records": [
+        {
+          "id": "NC_001416.1",
+          "accession": "NC_001416",
+          "sequenceVersion": 1,
+          "organism": "Escherichia phage Lambda",
+          "description": "Enterobacteria phage lambda, complete genome",
+          "topology": "linear",
+          "sourceRegion": "NC_001416.1:1-48502",
+          "length": 48502,
+          "featureCount": 165,
+          "featureCounts": {
+            "CDS": 73,
+            "gene": 92
+          },
+          "cdsStrandCounts": {
+            "positive": 47,
+            "negative": 26,
+            "unknown": 0
+          }
+        }
+      ],
+      "provenance": {
+        "sourceName": "Derived from the packaged NC_001416.1 RefSeq record",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-03",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Derived annotation representation of the complete accession-pinned record; retain the NCBI accession and the same GenBank data-usage caution as the source fixture.",
+        "filenameNormalization": "NC_001416.1 is retained as the sole sequence ID; the filename omits only the accession version suffix."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_lambda_gff3_fixture.py",
+        "sourceFileIds": [
+          "lambda-genbank"
+        ],
+        "sourceChecksums": [
+          "4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7"
+        ],
+        "tool": "Biopython SeqIO plus repository code",
+        "toolVersion": "1.85",
+        "arguments": {
+          "recordIds": [
+            "NC_001416.1"
+          ],
+          "featureTypes": [
+            "gene",
+            "CDS"
+          ],
+          "preserveWholeSequence": true,
+          "gffSource": "RefSeq-extract"
+        },
+        "outputStatistics": {
+          "recordCount": 1,
+          "sequenceLength": 48502,
+          "featureRowCount": 165,
+          "geneCount": 92,
+          "cdsCount": 73,
+          "translationCount": 73,
+          "parentedCdsCount": 73,
+          "positiveCdsCount": 47,
+          "negativeCdsCount": 26
+        }
+      },
+      "scenarioIds": [
+        "H-GUI-01",
+        "H-CLI-01",
+        "H-PY-04"
+      ]
+    },
+    "lambda-full-record-fasta": {
+      "fixtureId": "lambda-gff3",
+      "relativePath": "lambda-gff3/NC_001416.fna",
+      "role": "derived",
+      "mediaType": "text/fasta",
+      "inputType": "fasta",
+      "sizeBytes": 49253,
+      "sha256": "80897a7ee6b8aaffbab5442e0daad292592ac74701dbdf35af4b400ae0770ef3",
+      "packageTier": "core",
+      "records": [
+        {
+          "id": "NC_001416.1",
+          "accession": "NC_001416",
+          "sequenceVersion": 1,
+          "organism": "Escherichia phage Lambda",
+          "description": "Enterobacteria phage lambda, complete genome",
+          "topology": "linear",
+          "sourceRegion": "NC_001416.1:1-48502",
+          "length": 48502,
+          "sequenceSha256": "36432a40f602258d19ae7c8152ddbc30390b559f2859c01d7047c77b048c71b3"
+        }
+      ],
+      "provenance": {
+        "sourceName": "Derived from the packaged NC_001416.1 RefSeq record",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-03",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Derived FASTA representation of the complete accession-pinned record; retain the NCBI accession and the same GenBank data-usage caution as the source fixture.",
+        "filenameNormalization": "NC_001416.1 is retained as the sole FASTA ID; the filename omits only the accession version suffix."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_lambda_gff3_fixture.py",
+        "sourceFileIds": [
+          "lambda-genbank"
+        ],
+        "sourceChecksums": [
+          "4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7"
+        ],
+        "tool": "Biopython SeqIO plus repository code",
+        "toolVersion": "1.85",
+        "arguments": {
+          "recordIds": [
+            "NC_001416.1"
+          ],
+          "preserveWholeSequence": true,
+          "lineWidth": 70
+        },
+        "outputStatistics": {
+          "recordCount": 1,
+          "sequenceLengths": [
+            48502
+          ]
+        }
+      },
+      "scenarioIds": [
+        "H-GUI-01",
+        "H-CLI-01",
+        "H-PY-04"
+      ]
+    },
+    "de3-genbank": {
+      "fixtureId": "de3",
+      "relativePath": "de3/NC_042057.1.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 111686,
+      "sha256": "288eb87480f8fe6eab6246fe1fc4af78c85a6cb7e591c47fd7d7f0170c932e09",
+      "packageTier": "core",
+      "records": [
+        {
+          "id": "NC_042057.1",
+          "accession": "NC_042057",
+          "sequenceVersion": 1,
+          "organism": "Escherichia phage DE3",
+          "description": "Enterobacteria phage DE3, complete genome",
+          "topology": "linear",
+          "length": 42925,
+          "sequenceSha256": "533c360de52e4d5ac1f5dc31e0b927a518ff04951676d287b4b6d0238758aa45",
+          "featureCount": 119,
+          "displayedFeatureCount": 57,
+          "featureCounts": {
+            "CDS": 57,
+            "gene": 58,
+            "misc_feature": 2,
+            "regulatory": 1,
+            "source": 1
+          },
+          "cdsStrandCounts": {
+            "positive": 37,
+            "negative": 20,
+            "unknown": 0
+          }
+        }
+      ],
+      "provenance": {
+        "sourceName": "NCBI Nucleotide (RefSeq)",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_042057.1",
+        "retrievedOn": "2026-08-03",
+        "repositoryAddedOn": "2026-08-03",
+        "repositoryAddedCommit": null,
+        "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.",
+        "filenameNormalization": "The versioned accession is retained in the filename NC_042057.1.gb."
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-03",
+        "T-CLI-07",
+        "T-PY-04",
+        "H-GUI-04",
+        "H-GUI-05",
+        "H-CLI-02",
+        "H-CLI-05",
+        "H-PY-02"
+      ]
+    },
+    "lambda-de3-losatn": {
+      "fixtureId": "lambda-de3-comparison",
+      "relativePath": "lambda-de3-comparison/lambda-de3.losatn.tsv",
+      "role": "derived",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "blast-outfmt6",
+      "sizeBytes": 436,
+      "sha256": "703b0ac749669152a8e6d5fa6fb246cf5973cb1a3e0ca9db2f346ee33628317c",
+      "packageTier": "core",
+      "records": [],
+      "expectedSemantics": {
+        "program": "LOSATN",
+        "queryRecordId": "NC_001416.1",
+        "subjectRecordId": "NC_042057.1",
+        "columnCount": 12,
+        "rawRowCount": 6,
+        "defaultRetainedRowCount": 6,
+        "queryCoordinateRange": [1, 48502],
+        "subjectCoordinateRange": [1, 42925],
+        "orientationCounts": {"++": 6}
+      },
+      "provenance": {
+        "sourceName": "Derived from the packaged complete Lambda and DE3 RefSeq records",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_042057.1",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-03",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Derived comparison evidence; retain attribution and data-usage notes for both NCBI source records.",
+        "filenameNormalization": null
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/qualify_lambda_de3_comparison_fixture.py",
+        "sourceFileIds": ["lambda-genbank", "de3-genbank"],
+        "sourceChecksums": [
+          "4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7",
+          "288eb87480f8fe6eab6246fe1fc4af78c85a6cb7e591c47fd7d7f0170c932e09"
+        ],
+        "tool": "LOSAT browser WASM",
+        "toolVersion": "0.1.0",
+        "toolSha256": "1c597c9e366785051af698cb69f315bec10ac6c55e7a3b9c2e9325dbbd46f312",
+        "arguments": {
+          "program": "blastn",
+          "task": "megablast",
+          "outfmt": 6,
+          "scheduling": "serial",
+          "threads": 1,
+          "runs": 2
+        },
+        "outputStatistics": {
+          "rawRowCount": 6,
+          "defaultRetainedRowCount": 6,
+          "byteIdenticalRuns": true
+        }
+      },
+      "scenarioIds": ["T-GUI-03", "T-CLI-07", "T-PY-04", "H-GUI-04", "H-CLI-02", "H-CLI-05", "H-PY-02"]
+    },
+    "lambda-de3-tlosatx": {
+      "fixtureId": "lambda-de3-comparison",
+      "relativePath": "lambda-de3-comparison/lambda-de3.tlosatx.tsv",
+      "role": "derived",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "blast-outfmt6",
+      "sizeBytes": 28303,
+      "sha256": "483e98f8b3dce172523cf00c82eb9d47e4faee13e4781b06f3d58ea4fb63532d",
+      "packageTier": "core",
+      "records": [],
+      "expectedSemantics": {
+        "program": "TLOSATX",
+        "queryRecordId": "NC_001416.1",
+        "subjectRecordId": "NC_042057.1",
+        "columnCount": 12,
+        "rawRowCount": 397,
+        "defaultRetainedRowCount": 266,
+        "tutorialMinimumAlignmentLength": 1000,
+        "tutorialRetainedRowCount": 7,
+        "queryCoordinateRange": [1, 48502],
+        "subjectCoordinateRange": [1, 42925],
+        "orientationCounts": {"++": 171, "+-": 6, "-+": 5, "--": 215}
+      },
+      "provenance": {
+        "sourceName": "Derived from the packaged complete Lambda and DE3 RefSeq records",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_042057.1",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-03",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Derived comparison evidence; retain attribution and data-usage notes for both NCBI source records.",
+        "filenameNormalization": null
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/qualify_lambda_de3_comparison_fixture.py",
+        "sourceFileIds": ["lambda-genbank", "de3-genbank"],
+        "sourceChecksums": [
+          "4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7",
+          "288eb87480f8fe6eab6246fe1fc4af78c85a6cb7e591c47fd7d7f0170c932e09"
+        ],
+        "tool": "LOSAT browser WASM",
+        "toolVersion": "0.1.0",
+        "toolSha256": "1c597c9e366785051af698cb69f315bec10ac6c55e7a3b9c2e9325dbbd46f312",
+        "arguments": {
+          "program": "tblastx",
+          "queryGeneticCode": 1,
+          "subjectGeneticCode": 1,
+          "outfmt": 6,
+          "scheduling": "serial",
+          "threads": 1,
+          "runs": 2
+        },
+        "outputStatistics": {
+          "rawRowCount": 397,
+          "defaultRetainedRowCount": 266,
+          "tutorialMinimumAlignmentLength": 1000,
+          "tutorialRetainedRowCount": 7,
+          "byteIdenticalRuns": true
+        }
+      },
+      "scenarioIds": ["H-GUI-04", "H-GUI-05", "H-CLI-05", "H-PY-02"]
+    },
+    "bgc-0000708-genbank": {
+      "fixtureId": "aminoglycoside-bgc-five",
+      "relativePath": "aminoglycoside-bgc-five/BGC0000708.gbk",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 105185,
+      "sha256": "9a5f971c5ed8c406b20574fb50aac567609deb787eb1e8d4635050aa264a04b0",
+      "packageTier": "core",
+      "records": [
+        {
+          "id": "BGC0000708",
+          "accession": "BGC0000708",
+          "sequenceVersion": null,
+          "organism": "Streptomyces lividus",
+          "description": "Streptomyces lividus lividomycin biosynthesis gene cluster",
+          "topology": "linear",
+          "length": 40579,
+          "sequenceSha256": "3113741b3f650ee6734cb99ada1fe8c7123966737233e2e6598b88305ab3ab9b",
+          "featureCount": 79,
+          "displayedFeatureCount": 30,
+          "cdsCount": 30,
+          "cdsStrandCounts": {
+            "positive": 23,
+            "negative": 7,
+            "unknown": 0
+          }
+        }
+      ],
+      "provenance": {
+        "sourceName": "MIBiG repository",
+        "sourceUrl": "https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-05-06",
+        "repositoryAddedCommit": "4b841632",
+        "licenseNote": "The MIBiG 4.0 data-availability statement identifies MIBiG data as CC BY 4.0; retain MIBiG and entry attribution.",
+        "filenameNormalization": null
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-04",
+        "T-CLI-08",
+        "T-PY-05",
+        "H-GUI-07",
+        "H-CLI-07",
+        "H-CLI-08"
+      ]
+    },
+    "bgc-0000709-genbank": {
+      "fixtureId": "aminoglycoside-bgc-five",
+      "relativePath": "aminoglycoside-bgc-five/BGC0000709.gbk",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 121511,
+      "sha256": "4b66b7e4b78d429d12176e1e36d0e48178c562a9d128d4308b38753af9995255",
+      "packageTier": "core",
+      "records": [
+        {
+          "id": "BGC0000709",
+          "accession": "BGC0000709",
+          "sequenceVersion": null,
+          "organism": "Streptomyces fradiae ATCC 10745 = DSM 40063",
+          "description": "Streptomyces fradiae neomycin biosynthesis gene cluster, strain DSM 40063",
+          "topology": "linear",
+          "length": 50466,
+          "sequenceSha256": "e059714c7406b89f783c4b8e99f26b5c73fc383fa97023a77fe386b54b129dd1",
+          "featureCount": 68,
+          "displayedFeatureCount": 38,
+          "cdsCount": 38,
+          "cdsStrandCounts": {
+            "positive": 26,
+            "negative": 12,
+            "unknown": 0
+          }
+        }
+      ],
+      "provenance": {
+        "sourceName": "MIBiG repository",
+        "sourceUrl": "https://mibig.secondarymetabolites.org/repository/BGC0000709.5/BGC0000709.gbk",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-05-06",
+        "repositoryAddedCommit": "4b841632",
+        "licenseNote": "The MIBiG 4.0 data-availability statement identifies MIBiG data as CC BY 4.0; retain MIBiG and entry attribution.",
+        "filenameNormalization": null
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-04",
+        "T-CLI-08",
+        "T-PY-05",
+        "H-GUI-07",
+        "H-CLI-07",
+        "H-CLI-08"
+      ]
+    },
+    "bgc-0000711-genbank": {
+      "fixtureId": "aminoglycoside-bgc-five",
+      "relativePath": "aminoglycoside-bgc-five/BGC0000711.gbk",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 72291,
+      "sha256": "32393648f6a91166444331b83687f1b9b7b24c60553a7ddcb677dfe207736789",
+      "packageTier": "core",
+      "records": [
+        {
+          "id": "BGC0000711",
+          "accession": "BGC0000711",
+          "sequenceVersion": null,
+          "organism": "Streptomyces fradiae",
+          "description": "Streptomyces fradiae neomycin biosynthetic gene cluster, strain MCIMB 8233",
+          "topology": "linear",
+          "length": 30837,
+          "sequenceSha256": "a4260a74b9215f091990d024859c9f45e2ca65a1696d673544c4cf08beb54589",
+          "featureCount": 28,
+          "displayedFeatureCount": 21,
+          "cdsCount": 21,
+          "cdsStrandCounts": {
+            "positive": 14,
+            "negative": 7,
+            "unknown": 0
+          }
+        }
+      ],
+      "provenance": {
+        "sourceName": "MIBiG repository",
+        "sourceUrl": "https://mibig.secondarymetabolites.org/repository/BGC0000711.5/BGC0000711.gbk",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-05-06",
+        "repositoryAddedCommit": "4b841632",
+        "licenseNote": "The MIBiG 4.0 data-availability statement identifies MIBiG data as CC BY 4.0; retain MIBiG and entry attribution.",
+        "filenameNormalization": null
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-04",
+        "T-CLI-08",
+        "T-PY-05",
+        "H-GUI-07",
+        "H-CLI-07",
+        "H-CLI-08"
+      ]
+    },
+    "bgc-0000712-genbank": {
+      "fixtureId": "aminoglycoside-bgc-five",
+      "relativePath": "aminoglycoside-bgc-five/BGC0000712.gbk",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 134734,
+      "sha256": "705104a0daa5c44981b0a1e5352d3e56f012dd2e3ae94c98c85cd0ee9198bf94",
+      "packageTier": "core",
+      "records": [
+        {
+          "id": "BGC0000712",
+          "accession": "BGC0000712",
+          "sequenceVersion": null,
+          "organism": "Streptomyces paromomycinus",
+          "description": "Streptomyces rimosus subsp. paromomycinus genomic region of the paromomycin biosynthesis gene cluster, strain NRRL 2455",
+          "topology": "linear",
+          "length": 48169,
+          "sequenceSha256": "90d767c39d920fa3b7031f9cfbacd850ed27665055396f0304fc610c6d693e3f",
+          "featureCount": 111,
+          "displayedFeatureCount": 40,
+          "cdsCount": 40,
+          "cdsStrandCounts": {
+            "positive": 25,
+            "negative": 15,
+            "unknown": 0
+          }
+        }
+      ],
+      "provenance": {
+        "sourceName": "MIBiG repository",
+        "sourceUrl": "https://mibig.secondarymetabolites.org/repository/BGC0000712.5/BGC0000712.gbk",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-05-06",
+        "repositoryAddedCommit": "4b841632",
+        "licenseNote": "The MIBiG 4.0 data-availability statement identifies MIBiG data as CC BY 4.0; retain MIBiG and entry attribution.",
+        "filenameNormalization": null
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-04",
+        "T-CLI-08",
+        "T-PY-05",
+        "H-GUI-07",
+        "H-CLI-07",
+        "H-CLI-08"
+      ]
+    },
+    "bgc-0000713-genbank": {
+      "fixtureId": "aminoglycoside-bgc-five",
+      "relativePath": "aminoglycoside-bgc-five/BGC0000713.gbk",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 79197,
+      "sha256": "bf182663de453f4a3fc30ed0aa8f040a164eeab1c98e604983844994996e58fb",
+      "packageTier": "core",
+      "records": [
+        {
+          "id": "BGC0000713",
+          "accession": "BGC0000713",
+          "sequenceVersion": null,
+          "organism": "Streptomyces ribosidificus",
+          "description": "Streptomyces ribosidificus ribostamycin biosynthetic gene cluster",
+          "topology": "linear",
+          "length": 31892,
+          "sequenceSha256": "ea714fa3efece5259436bca0be79817b2f8f77eebcc0febaa2ba347d370a3b14",
+          "featureCount": 61,
+          "displayedFeatureCount": 26,
+          "cdsCount": 26,
+          "cdsStrandCounts": {
+            "positive": 7,
+            "negative": 19,
+            "unknown": 0
+          }
+        }
+      ],
+      "provenance": {
+        "sourceName": "MIBiG repository",
+        "sourceUrl": "https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-05-06",
+        "repositoryAddedCommit": "4b841632",
+        "licenseNote": "The MIBiG 4.0 data-availability statement identifies MIBiG data as CC BY 4.0; retain MIBiG and entry attribution.",
+        "filenameNormalization": "Canonical bytes preserve the source orientation. Reverse-complemented Gallery session resources are derived views, not canonical raw input."
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-04",
+        "T-CLI-08",
+        "T-PY-05",
+        "H-GUI-07",
+        "H-CLI-07",
+        "H-CLI-08"
+      ]
+    },
+    "bgc-default-colors": {
+      "fixtureId": "aminoglycoside-bgc-five",
+      "relativePath": "aminoglycoside-bgc-five/BGC0000708-BGC0000713_default_colors.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "default-color-table",
+      "sizeBytes": 12,
+      "sha256": "85eaab9bc372ed31b0253487e01747a29fecec246bae3aedaba010c4f2a16d5b",
+      "packageTier": "core",
+      "records": [],
+      "provenance": {
+        "sourceName": "gbdraw Gallery rule table",
+        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-07-14",
+        "repositoryAddedCommit": "8f952d43",
+        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
+        "filenameNormalization": null
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-04",
+        "T-CLI-08",
+        "T-PY-05",
+        "H-GUI-11",
+        "H-CLI-11"
+      ],
+      "replaces": [
+        "gbdraw/web/gallery/files/BGC0000708-BGC0000713_default_colors.tsv"
+      ]
+    },
+    "bgc-specific-colors": {
+      "fixtureId": "aminoglycoside-bgc-five",
+      "relativePath": "aminoglycoside-bgc-five/BGC0000708-BGC0000713_specific_colors.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "feature-specific-color-table",
+      "sizeBytes": 242,
+      "sha256": "f8881e9b64ddecb9732103fe8b11a86c1c7a7972007bdca161bce3055a5597af",
+      "packageTier": "core",
+      "records": [],
+      "expectedSemantics": {
+        "ruleCount": 4,
+        "matchedCdsCount": 66,
+        "qualifier": "gene_kind"
+      },
+      "provenance": {
+        "sourceName": "gbdraw Gallery rule table",
+        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-07-14",
+        "repositoryAddedCommit": "8f952d43",
+        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
+        "filenameNormalization": null
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-04",
+        "T-CLI-08",
+        "T-PY-05",
+        "H-GUI-11",
+        "H-CLI-11"
+      ],
+      "replaces": [
+        "gbdraw/web/gallery/files/BGC0000708-BGC0000713_specific_colors.tsv"
+      ]
+    },
+    "danio-mitochondrion-fasta": {
+      "fixtureId": "metazoan-mitochondria-comparison",
+      "relativePath": "metazoan-mitochondria-comparison/NC_002333.2.fna",
+      "role": "derived",
+      "mediaType": "text/plain",
+      "inputType": "fasta",
+      "sizeBytes": 16886,
+      "sha256": "2fc1138b90e4ae0e38f7ca9d8e0dfa944842ea1c175670dccfe0c292d873ed93",
+      "packageTier": "extended",
+      "records": [{"id": "NC_002333.2", "length": 16596, "sequenceSha256": "2c964a8176d913570e466187c9620b20742c3c8898e8a0a9edd7a8b28afcd4f9"}],
+      "provenance": {
+        "sourceName": "Derived from the packaged complete zebrafish mitochondrial RefSeq record",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_002333.2",
+        "retrievedOn": "2026-08-03",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Sequence derivative; retain the NCBI source-record data-usage note.",
+        "filenameNormalization": "The versioned source accession is retained and the sequence is wrapped at 60 columns."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_metazoan_mitochondria_comparison_fixture.py",
+        "sourceFileIds": ["danio-mitochondrion-genbank"],
+        "sourceChecksums": ["94ab35da6f81abc2595fcd425c23585ed78d9396b5143918d9d1025d8a4d2140"],
+        "tool": "Biopython SeqIO",
+        "toolVersion": "1.85",
+        "arguments": {"recordId": "NC_002333.2", "lineWidth": 60, "alphabet": "uppercase"},
+        "outputStatistics": {"recordCount": 1, "sequenceLength": 16596}
+      },
+      "scenarioIds": ["T-GUI-06", "T-CLI-09", "T-PY-06"]
+    },
+    "drosophila-mitochondrion-fasta": {
+      "fixtureId": "metazoan-mitochondria-comparison",
+      "relativePath": "metazoan-mitochondria-comparison/NC_024511.2.fna",
+      "role": "derived",
+      "mediaType": "text/plain",
+      "inputType": "fasta",
+      "sizeBytes": 19863,
+      "sha256": "cf44d9db8d78344182e49e12e43593f03bd009c2d4bfb1ba0a37d463cf44731e",
+      "packageTier": "extended",
+      "records": [{"id": "NC_024511.2", "length": 19524, "sequenceSha256": "75139da63aab46c9ca4a378687489407e31650c3abf0a089e4c967393b17f4bc"}],
+      "provenance": {
+        "sourceName": "Derived from the packaged complete fruit-fly mitochondrial RefSeq record",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_024511.2",
+        "retrievedOn": "2026-08-03",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Sequence derivative; retain the NCBI source-record data-usage note.",
+        "filenameNormalization": "The versioned source accession is retained and the sequence is wrapped at 60 columns."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_metazoan_mitochondria_comparison_fixture.py",
+        "sourceFileIds": ["drosophila-mitochondrion-genbank"],
+        "sourceChecksums": ["79fa36199682961919c4a11f3a8fc50c9e598e68b867eb25e847bce1aa1c4229"],
+        "tool": "Biopython SeqIO",
+        "toolVersion": "1.85",
+        "arguments": {"recordId": "NC_024511.2", "lineWidth": 60, "alphabet": "uppercase"},
+        "outputStatistics": {"recordCount": 1, "sequenceLength": 19524}
+      },
+      "scenarioIds": ["T-GUI-06", "T-CLI-09", "T-PY-06"]
+    },
+    "caenorhabditis-mitochondrion-fasta": {
+      "fixtureId": "metazoan-mitochondria-comparison",
+      "relativePath": "metazoan-mitochondria-comparison/NC_001328.1.fna",
+      "role": "derived",
+      "mediaType": "text/plain",
+      "inputType": "fasta",
+      "sizeBytes": 14037,
+      "sha256": "6d3258a80aa12f399f801e3eb1296821b1eebb40c7ca41342b4aec2b765133ee",
+      "packageTier": "extended",
+      "records": [{"id": "NC_001328.1", "length": 13794, "sequenceSha256": "3cbb1d2f1925ee7eacae394dd7fa867c225bcf3cb4701b3dd07ecad7b904446e"}],
+      "provenance": {
+        "sourceName": "Derived from the packaged complete nematode mitochondrial RefSeq record",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NC_001328.1",
+        "retrievedOn": "2026-08-03",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "Sequence derivative; retain the NCBI source-record data-usage note.",
+        "filenameNormalization": "The versioned source accession is retained and the sequence is wrapped at 60 columns."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_metazoan_mitochondria_comparison_fixture.py",
+        "sourceFileIds": ["caenorhabditis-mitochondrion-genbank"],
+        "sourceChecksums": ["8de5f7cf3686f493ee5b8068dba39b31c5d02e70d997063f65ed19d0fa859a59"],
+        "tool": "Biopython SeqIO",
+        "toolVersion": "1.85",
+        "arguments": {"recordId": "NC_001328.1", "lineWidth": 60, "alphabet": "uppercase"},
+        "outputStatistics": {"recordCount": 1, "sequenceLength": 13794}
+      },
+      "scenarioIds": ["T-GUI-06", "T-CLI-09", "T-PY-06"]
+    },
+    "hepatoplasmataceae-ap027078-genbank": {
+      "fixtureId": "hepatoplasmataceae-five",
+      "relativePath": "hepatoplasmataceae-five/AP027078.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 1344275,
+      "sha256": "2b7f3fe01757416ed09a34c95c5d326269519f7323ff272e2950e8d6617a87c7",
+      "packageTier": "extended",
+      "records": [{"id": "AP027078.1", "accession": "AP027078", "sequenceVersion": 1, "organism": "Candidatus Tyloplasma litorale", "description": "MAG: Candidatus Tyloplasma litorale Fukuoka2020 DNA, complete genome", "topology": "circular", "length": 615622, "sequenceSha256": "5f479286e8965f7d6c3b957e83b7abbf0cab5a0e073dc39a5f888fc193d7a7b9", "featureCount": 1127, "displayedFeatureCount": 530, "cdsCount": 530, "cdsStrandCounts": {"positive": 259, "negative": 271, "unknown": 0}}],
+      "provenance": {
+        "sourceName": "DDBJ/NCBI Nucleotide",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027078.1?report=girevhist",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.",
+        "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set.",
+        "mirrorVerification": {
+          "authoritativeRequestUrl": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027078.1&sat=3&satkey=69902295",
+          "accession": "AP027078.1",
+          "format": "GenBank (full), text",
+          "verifiedOn": "2026-08-09T06:22:18Z",
+          "sourceSizeBytes": 1344275,
+          "sourceSha256": "2b7f3fe01757416ed09a34c95c5d326269519f7323ff272e2950e8d6617a87c7",
+          "mirrorSizeBytes": 1344275,
+          "mirrorSha256": "2b7f3fe01757416ed09a34c95c5d326269519f7323ff272e2950e8d6617a87c7",
+          "comparisonResult": "byte-identical"
+        }
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-08", "T-CLI-10", "T-PY-07", "H-GUI-08"]
+    },
+    "hepatoplasmataceae-ap027131-genbank": {
+      "fixtureId": "hepatoplasmataceae-five",
+      "relativePath": "hepatoplasmataceae-five/AP027131.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 1455315,
+      "sha256": "4281dfd61d963e1264823ef8edef97f6072f567e443f650a97629bd683fba6da",
+      "packageTier": "extended",
+      "records": [{"id": "AP027131.1", "accession": "AP027131", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma vulgare", "description": "MAG: Candidatus Hepatoplasma vulgare Av-JP DNA, complete genome", "topology": "circular", "length": 662108, "sequenceSha256": "96d069bd35c78c09d06cf16663f91ff6da91fcccc538420b2cdbccfbd58fef9e", "featureCount": 1252, "displayedFeatureCount": 595, "cdsCount": 595, "cdsStrandCounts": {"positive": 335, "negative": 260, "unknown": 0}}],
+      "provenance": {
+        "sourceName": "DDBJ/NCBI Nucleotide",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027131.1?report=girevhist",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.",
+        "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set.",
+        "mirrorVerification": {
+          "authoritativeRequestUrl": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027131.1&sat=3&satkey=69902296",
+          "accession": "AP027131.1",
+          "format": "GenBank (full), text",
+          "verifiedOn": "2026-08-09T06:22:18Z",
+          "sourceSizeBytes": 1455315,
+          "sourceSha256": "4281dfd61d963e1264823ef8edef97f6072f567e443f650a97629bd683fba6da",
+          "mirrorSizeBytes": 1455315,
+          "mirrorSha256": "4281dfd61d963e1264823ef8edef97f6072f567e443f650a97629bd683fba6da",
+          "comparisonResult": "byte-identical"
+        }
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-08", "T-CLI-10", "T-PY-07", "H-GUI-08"]
+    },
+    "hepatoplasmataceae-ap027132-genbank": {
+      "fixtureId": "hepatoplasmataceae-five",
+      "relativePath": "hepatoplasmataceae-five/AP027132.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 1419813,
+      "sha256": "b251675fb9dc1853851204da0dff8b3dc7b46110292798e9a5792582383e3903",
+      "packageTier": "extended",
+      "records": [{"id": "AP027132.1", "accession": "AP027132", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma crinochetorum", "description": "MAG: Candidatus Hepatoplasma crinochetorum Tokyo2021 DNA, complete genome", "topology": "circular", "length": 643039, "sequenceSha256": "4eb16c23b766cc0ffa6e6dab0c0c96f5a22d0e074db61c735af4761fafad3c8b", "featureCount": 1210, "displayedFeatureCount": 573, "cdsCount": 573, "cdsStrandCounts": {"positive": 274, "negative": 299, "unknown": 0}}],
+      "provenance": {
+        "sourceName": "DDBJ/NCBI Nucleotide",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/AP027132.1?report=girevhist",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "INSDC sequence data are publicly distributed; consult the source record for submitter and reuse metadata.",
+        "filenameNormalization": "Copied byte-for-byte from the repository test fixture into the tutorial fixture set.",
+        "mirrorVerification": {
+          "authoritativeRequestUrl": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027132.1&sat=3&satkey=69902297",
+          "accession": "AP027132.1",
+          "format": "GenBank (full), text",
+          "verifiedOn": "2026-08-09T06:22:18Z",
+          "sourceSizeBytes": 1419813,
+          "sourceSha256": "b251675fb9dc1853851204da0dff8b3dc7b46110292798e9a5792582383e3903",
+          "mirrorSizeBytes": 1419813,
+          "mirrorSha256": "b251675fb9dc1853851204da0dff8b3dc7b46110292798e9a5792582383e3903",
+          "comparisonResult": "byte-identical"
+        }
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-08", "T-CLI-10", "T-PY-07", "H-GUI-08"]
+    },
+    "hepatoplasmataceae-nz-cp006932-genbank": {
+      "fixtureId": "hepatoplasmataceae-five",
+      "relativePath": "hepatoplasmataceae-five/NZ_CP006932.gb",
+      "role": "raw",
+      "mediaType": "text/plain",
+      "inputType": "genbank",
+      "sizeBytes": 1684495,
+      "sha256": "c92f2df6b5b1eb911d2569af758677cae91e64af4af67e47b5ec0d2c866361a8",
+      "packageTier": "extended",
+      "records": [{"id": "NZ_CP006932.1", "accession": "NZ_CP006932", "sequenceVersion": 1, "organism": "Candidatus Hepatoplasma crinochetorum Av", "description": "Candidatus Hepatoplasma crinochetorum Av chromosome, complete genome", "topology": "circular", "length": 657101, "sequenceSha256": "785e6afc80d9b3a316f20e7d60706cd610d6158be68934420598cbda203571b1", "featureCount": 1246, "displayedFeatureCount": 588, "cdsCount": 588, "cdsStrandCounts": {"positive": 281, "negative": 307, "unknown": 0}}],
+      "provenance": {
+        "sourceName": "NCBI Nucleotide Revision History (RefSeq)",
+        "sourceUrl": "https://www.ncbi.nlm.nih.gov/nuccore/NZ_CP006932.1?report=girevhist",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-08-04",
+        "repositoryAddedCommit": null,
+        "licenseNote": "NCBI states that it places no restrictions on GenBank data use or distribution, while noting that submitters may claim rights in submitted material.",
+        "filenameNormalization": "Saved without byte changes from the pinned NCBI Revision History request as NZ_CP006932.gb.",
+        "mirrorVerification": {
+          "authoritativeRequestUrl": "https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=NZ_CP006932.1&sat=60&satkey=39275474",
+          "accession": "NZ_CP006932.1",
+          "format": "GenBank (full), text",
+          "verifiedOn": "2026-08-09T06:03:23Z",
+          "sourceSizeBytes": 1684495,
+          "sourceSha256": "c92f2df6b5b1eb911d2569af758677cae91e64af4af67e47b5ec0d2c866361a8",
+          "mirrorSizeBytes": 1684495,
+          "mirrorSha256": "c92f2df6b5b1eb911d2569af758677cae91e64af4af67e47b5ec0d2c866361a8",
+          "comparisonResult": "byte-identical"
+        }
+      },
+      "derivation": null,
+      "scenarioIds": ["T-GUI-08", "T-CLI-10", "T-PY-07", "H-GUI-08"]
+    },
+    "shared-cds-gene-qualifier-priority": {
+      "fixtureId": "shared-label-rules",
+      "relativePath": "shared/cds_gene_qualifier_priority.tsv",
+      "role": "rule",
+      "mediaType": "text/tab-separated-values",
+      "inputType": "qualifier-priority-table",
+      "sizeBytes": 9,
+      "sha256": "1d3c787c5768b52191cc7e8a325cd00fdc4b1e9b495d37e580c3a69dec21b87a",
+      "packageTier": "core",
+      "records": [],
+      "provenance": {
+        "sourceName": "gbdraw Gallery rule tables",
+        "sourceUrl": "https://github.com/satoshikawato/gbdraw",
+        "retrievedOn": null,
+        "retrievalDateStatus": "unknown-legacy",
+        "repositoryAddedOn": "2026-07-14",
+        "repositoryAddedCommit": "8f952d43",
+        "licenseNote": "Repository-maintained tutorial rule distributed under the gbdraw repository license.",
+        "filenameNormalization": "Two byte-identical Gallery files are represented by this single shared canonical rule."
+      },
+      "derivation": null,
+      "scenarioIds": [
+        "T-GUI-01",
+        "T-GUI-10",
+        "T-CLI-01",
+        "T-CLI-02",
+        "T-CLI-08",
+        "T-CLI-09",
+        "T-CLI-11",
+        "T-GUI-04",
+        "T-GUI-08",
+        "T-PY-03",
+        "T-PY-05",
+        "T-PY-06",
+        "T-PY-08",
+        "T-PY-09",
+        "H-GUI-06",
+        "H-GUI-11",
+        "H-CLI-02",
+        "H-CLI-05",
+        "H-CLI-03",
+        "H-CLI-11",
+        "H-CLI-12",
+        "H-CLI-13"
+      ],
+      "replaces": [
+        "gbdraw/web/gallery/files/HmmtDNA_qualifier_priority.tsv",
+        "gbdraw/web/gallery/files/BGC0000708-BGC0000713_qualifier_priority.tsv",
+        "tools/reproduce_examples_manifest.py:qualifier_priority.tsv"
+      ]
+    }
+  }
+}

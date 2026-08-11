@@ -49,6 +49,7 @@ const loadingStatus = ref('Initializing...');
 const errorLog = ref(null);
 const sessionTitle = ref('');
 const semanticFileWatchersSuppressed = ref(false);
+const sessionImportRollbackInProgress = ref(false);
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
@@ -330,7 +331,7 @@ export const createDefaultLosat = () => ({
     collinearColorMode: 'orientation',
     collinearUnitMode: 'auto',
     collinearAnchorMode: 'rbh',
-    collinearSearchScope: 'adjacent'
+    collinearSearchScope: 'all'
   }
 });
 
@@ -455,6 +456,7 @@ const proteinIdentityManifest = ref({
 const legacyProteinRawCandidates = ref({ schema: 1, entries: [] });
 const legacyProteinDerivedEvidence = ref({ schema: 1, entries: [] });
 const orthogroups = ref([]);
+const collinearGroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
 const orthogroupNameOverrides = reactive({});
@@ -795,33 +797,6 @@ const skipPositionReapply = ref(false);
 // This prevents race condition where watcher overwrites correct legend state
 const skipExtractOnSvgChange = ref(false);
 
-// Base configuration for circular mode (stored when SVG is generated)
-// Used to calculate absolute positions without accumulation
-const circularBaseConfig = ref({
-  viewBoxWidth: 0, // Base viewBox width (without legend-based adjustments)
-  viewBoxHeight: 0, // Base viewBox height
-  diagramCenterX: 0, // Original diagram center X coordinate
-  diagramCenterY: 0, // Original diagram center Y coordinate
-  legendWidth: 0, // Legend width
-  legendHeight: 0, // Legend height
-  generatedPosition: 'right' // The position when SVG was generated
-});
-
-// Base configuration for linear mode (stored when SVG is generated)
-const linearBaseConfig = ref({
-  verticalViewBox: { x: 0, y: 0, w: 0, h: 0 }, // ViewBox for vertical legend (left/right)
-  horizontalViewBox: { x: 0, y: 0, w: 0, h: 0 }, // ViewBox for horizontal legend (top/bottom)
-  diagramBaseTransforms: new Map(), // Base transforms for diagram elements
-  horizontalLegendWidth: 0,
-  horizontalLegendHeight: 0,
-  verticalLegendWidth: 0,
-  verticalLegendHeight: 0,
-  generatedPosition: 'right' // The position when SVG was generated
-});
-
-// Store base transforms for diagram elements (separate from current offsets)
-const diagramElementBaseTransforms = ref(new Map());
-
 const featureKeys = [
   'assembly_gap',
   'C_region',
@@ -974,6 +949,7 @@ export const state = {
   errorLog,
   sessionTitle,
   semanticFileWatchersSuppressed,
+  sessionImportRollbackInProgress,
   results,
   selectedResultIndex,
   resultPanelTab,
@@ -1020,6 +996,7 @@ export const state = {
   legacyProteinRawCandidates,
   legacyProteinDerivedEvidence,
   orthogroups,
+  collinearGroups,
   featureOrthogroupIndex,
   selectedOrthogroupAlignmentFeature,
   orthogroupNameOverrides,
@@ -1177,9 +1154,6 @@ export const state = {
   skipCaptureBaseConfig,
   skipPositionReapply,
   skipExtractOnSvgChange,
-  circularBaseConfig,
-  linearBaseConfig,
-  diagramElementBaseTransforms,
   normalizePaletteColors,
   normalizePaletteDefinitions,
   featureKeys,

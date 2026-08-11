@@ -383,6 +383,7 @@ def test_current_session_preserves_v2_feature_geometry(tmp_path: Path) -> None:
     assert decoded.options.tracks.linear_track_slots == (feature_slot,)
 
 
+@pytest.mark.browser
 def test_web_writer_payload_decodes_with_python_codec(tmp_path: Path) -> None:
     node = shutil.which("node")
     if node is None:
@@ -412,6 +413,7 @@ def test_web_writer_payload_decodes_with_python_codec(tmp_path: Path) -> None:
     assert [record.id for record in records] == ["WEBTEST"]
 
 
+@pytest.mark.browser
 def test_web_depth_writer_payload_decodes_with_python_codec(tmp_path: Path) -> None:
     node = shutil.which("node")
     if node is None:
@@ -447,6 +449,7 @@ def test_web_depth_writer_payload_decodes_with_python_codec(tmp_path: Path) -> N
     assert request.options.depth_track_labels is None
 
 
+@pytest.mark.browser
 def test_web_resolved_protein_writer_preserves_alignment_settings(
     tmp_path: Path,
 ) -> None:
@@ -487,7 +490,8 @@ def test_web_resolved_protein_writer_preserves_alignment_settings(
 
 
 @pytest.mark.parametrize("collinearity_value_kind", ("result", "blocks"))
-def test_python_typed_protein_results_round_trip_through_web_projection(
+@pytest.mark.browser
+def test_python_typed_protein_round_trip_with_explicit_adjacent_comparison(
     tmp_path: Path,
     collinearity_value_kind: str,
 ) -> None:
@@ -568,6 +572,7 @@ def test_python_typed_protein_results_round_trip_through_web_projection(
             "tests/web/session-request.test.mjs",
             "--round-trip-session",
             str(session_path),
+            "--activate-adjacent-comparison",
         ],
         check=True,
         capture_output=True,
@@ -604,6 +609,7 @@ def test_python_typed_protein_results_round_trip_through_web_projection(
     assert decoded.options.collinearity_blocks == collinearity
 
 
+@pytest.mark.browser
 def test_python_depth_request_projects_in_web(tmp_path: Path) -> None:
     node = shutil.which("node")
     if node is None:

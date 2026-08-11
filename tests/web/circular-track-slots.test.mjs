@@ -136,6 +136,42 @@ const slotSides = (state) => Object.fromEntries(
   state.adv.circular_track_slots.map((slot) => [slot.id, slot.side])
 );
 
+test('Circular placement actions preserve the Axis boundary and radial sides', () => {
+  const state = createState({
+    slots: [
+      { ...gcSlot(), side: 'outside' },
+      { ...featureSlot(), side: 'inside', params: { lane_direction: 'inside' } },
+      tickSlot('inside'),
+      {
+        id: 'gc_skew',
+        renderer: 'dinucleotide_skew',
+        enabled: true,
+        side: 'inside',
+        z: 0,
+        params: { nt: 'GC' }
+      }
+    ],
+    axisIndex: 1
+  });
+  const editor = createCircularTrackSlotEditor({ state });
+
+  assert.equal(editor.canMoveCircularTrackSlot(1, -1), false);
+  editor.moveCircularTrackSlot(1, 0);
+  assert.deepEqual(
+    state.adv.circular_track_slots.map((slot) => slot.id),
+    ['gc_content', 'features', 'ticks', 'gc_skew']
+  );
+
+  editor.moveCircularTrackSlotOutside(1);
+  assert.deepEqual(slotSides(state), {
+    gc_content: 'outside',
+    features: 'outside',
+    ticks: 'inside',
+    gc_skew: 'inside'
+  });
+  assert.equal(state.adv.circular_track_slots[1].params.lane_direction, 'outside');
+});
+
 test('managed Depth insertion preserves the existing Axis sides', () => {
   const state = createState({
     showDepth: true,

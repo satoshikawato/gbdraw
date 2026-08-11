@@ -13,9 +13,10 @@ from ....analysis.gc import calculate_gc_percent
 from ....canvas import CircularCanvasConfigurator
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ....core.record_metadata import infer_record_source_metadata
+from ....core.text import calculate_svg_bbox_dimensions, parse_mixed_content_text
+from ....layout.spatial import Aabb
 from ....svg.ids import definition_group_svg_id
 from ...drawers.circular.definition import DefinitionDrawer
-from ....core.text import parse_mixed_content_text
 
 
 CircularDefinitionProfile = Literal["full", "record_summary", "shared_common"]
@@ -131,6 +132,7 @@ class DefinitionGroup:
         self.calculate_coordinates()
         self.find_organism_name()
         self.add_circular_definitions()
+        self.local_bounds = self._measure_local_bounds()
 
     def calculate_coordinates(self) -> None:
         self.end_x_1: float = (self.radius) * math.cos(math.radians(360.0 * 0 - 90))
@@ -218,6 +220,87 @@ class DefinitionGroup:
             font_size=active_font_size,
             name_font_weight=active_name_font_weight,
         )
+
+    def _measure_local_bounds(self) -> Aabb:
+        """Return authoritative painted text bounds in group-local coordinates."""
+        min_x: float | None = None
+        min_y: float | None = None
+        max_x: float | None = None
+        max_y: float | None = None
+
+        for element in getattr(self.definition_group, "elements", ()):
+            attribs = getattr(element, "attribs", None)
+            if not isinstance(attribs, dict):
+                continue
+
+            parts: list[tuple[str, str]] = []
+            element_text = str(getattr(element, "text", "") or "")
+            if element_text:
+                parts.append((element_text, str(attribs.get("font-style", "normal"))))
+            for child in getattr(element, "elements", ()):
+                child_text = str(getattr(child, "text", "") or "")
+                if not child_text:
+                    continue
+                child_attribs = getattr(child, "attribs", None)
+                child_style = (
+                    str(child_attribs.get("font-style", attribs.get("font-style", "normal")))
+                    if isinstance(child_attribs, dict)
+                    else str(attribs.get("font-style", "normal"))
+                )
+                parts.append((child_text, child_style))
+            if not parts:
+                continue
+
+            x = float(attribs.get("x", 0.0))
+            y = float(attribs.get("y", 0.0))
+            font_family = str(attribs.get("font-family", self.font))
+            font_size = float(attribs.get("font-size", self.font_size))
+            font_weight = str(attribs.get("font-weight", "normal"))
+            widths: list[float] = []
+            heights: list[float] = []
+            for text, font_style in parts:
+                width, height = calculate_svg_bbox_dimensions(
+                    text,
+                    font_family,
+                    font_size,
+                    self._cfg.canvas.dpi,
+                    font_weight=font_weight,
+                    font_style=font_style,
+                )
+                widths.append(float(width))
+                heights.append(float(height))
+
+            width = sum(widths)
+            height = max(heights, default=font_size)
+            text_anchor = str(attribs.get("text-anchor", "start")).strip().lower()
+            if text_anchor == "middle":
+                left = x - (0.5 * width)
+                right = x + (0.5 * width)
+            elif text_anchor == "end":
+                left = x - width
+                right = x
+            else:
+                left = x
+                right = x + width
+
+            dominant_baseline = str(
+                attribs.get("dominant-baseline", "auto")
+            ).strip().lower()
+            if dominant_baseline == "middle":
+                top = y - (0.5 * height)
+                bottom = y + (0.5 * height)
+            else:
+                top = y - height
+                bottom = y
+
+            min_x = left if min_x is None else min(min_x, left)
+            min_y = top if min_y is None else min(min_y, top)
+            max_x = right if max_x is None else max(max_x, right)
+            max_y = bottom if max_y is None else max(max_y, bottom)
+
+        if min_x is None or min_y is None or max_x is None or max_y is None:
+            return Aabb(0.0, 0.0, 0.0, 0.0)
+        return Aabb(min_x, min_y, max_x, max_y)
 
     def get_group(self) -> Group:
         return self.definition_group

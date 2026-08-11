@@ -53,6 +53,7 @@ def build_interactive_svg_context(
     annotations: AnnotationOptions | None = None,
     mode: str | None = None,
     comparison_sequence_records: Sequence[Sequence[SeqRecord]] | None = None,
+    collinearity_search_scope: str | None = None,
 ) -> InteractiveSvgContext:
     """Build rich popup metadata from rendered records.
 
@@ -179,6 +180,7 @@ def build_interactive_svg_context(
             )
             for record_index, record in enumerate(record_list)
         ),
+        collinearity_search_scope=collinearity_search_scope,
     )
 
 

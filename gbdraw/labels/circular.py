@@ -4721,21 +4721,12 @@ def prepare_label_list(
             if is_embedded:
                 embedded_labels.append(label_entry)
             else:
-                if label_entry["middle"] > (total_length / 2):
-                    if feature_object.strand == "positive" or inner_labels_enabled is False:
-                        label_entry["is_inner"] = False
-                        outer_labels.append(label_entry)
-                    else:
-                        label_entry["is_inner"] = True
-                        inner_labels.append(label_entry)
-
+                if feature_object.strand == "positive" or inner_labels_enabled is False:
+                    label_entry["is_inner"] = False
+                    outer_labels.append(label_entry)
                 else:
-                    if feature_object.strand == "positive" or inner_labels_enabled is False:
-                        label_entry["is_inner"] = False
-                        outer_labels.append(label_entry)
-                    else:
-                        label_entry["is_inner"] = True
-                        inner_labels.append(label_entry)
+                    label_entry["is_inner"] = True
+                    inner_labels.append(label_entry)
 
     if profile.label_placement == "radial":
         outer_reserved_radius_px = 0.0

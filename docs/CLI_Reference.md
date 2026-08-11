@@ -1,8 +1,12 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | **CLI Reference** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [Command semantics](./REFERENCE/command-line.md) | **Generated option inventory** | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [About](./ABOUT.md)
 
-# Command-Line Reference
+# Generated command-line option inventory
 
-This reference mirrors the current command help from `python -m gbdraw.cli` and lists the available options and defaults.
+This generated inventory mirrors the current command help from
+`python -m gbdraw.cli` and lists every available option and default. For
+curated command behavior, input boundaries, and error semantics, use the
+[command-line reference](./REFERENCE/command-line.md), which documents current
+CLI semantics.
 
 Every diagram run writes a base `.svg` and any additional requested formats.
 Both commands validate that complete target set before rendering and refuse to
@@ -838,6 +842,7 @@ usage: gbdraw linear [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
               [--protein_blastp_max_hits PROTEIN_BLASTP_MAX_HITS]
               [--protein_blastp_candidate_limit PROTEIN_BLASTP_CANDIDATE_LIMIT]
+              [--protein_blastp_output TSV]
               [--align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE]
               [--collinear_search_scope {adjacent,all}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
@@ -970,6 +975,11 @@ options:
   --protein_blastp_candidate_limit PROTEIN_BLASTP_CANDIDATE_LIMIT
                         Optional protein blastp candidate cap per query; use
                         'none' for no cap (default: none).
+  --protein_blastp_output TSV
+                        Write the raw protein-search evidence to one
+                        deterministic TSV. Runtime handles are replaced with
+                        user-visible protein IDs; requires
+                        --protein_blastp_mode.
   --align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE
                         Align linear records by the gbdraw similarity group
                         containing this feature SVG hash or protein ID.
@@ -1355,9 +1365,9 @@ record each:
 
 ```bash
 gbdraw linear \
-  --gbk tests/test_inputs/AP027131.gb tests/test_inputs/AP027132.gb \
-  --depth_track tests/test_inputs/AP027131.DRR394921.depth.tsv '' \
-  --depth_track '' tests/test_inputs/AP027132.DRR394921.depth.tsv \
+  --gbk record-a.gb record-b.gb \
+  --depth_track record-a.depth.tsv '' \
+  --depth_track '' record-b.depth.tsv \
   -o sparse-depth \
   -f svg
 ```
@@ -1377,12 +1387,14 @@ still force a native LOSAT executable on any platform with `--losatp_bin`.
 NCBI BLAST+ fallback produces compatible outfmt 6 protein comparisons, but its
 hit set is not guaranteed to be identical to LOSAT.
 
-## Related guides
+## Related documentation
 
 - [Quickstart](./QUICKSTART.md)
 - [Recipes](./RECIPES.md)
-- [Command-line guides](./TUTORIALS/README.md)
-- [Draw protein matches from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md)
-- [Use TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md)
+- [Command-line Tutorials](./TUTORIALS/CLI/README.md)
+- [LOSATP modes and comparison semantics](./REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Similarity group Tutorial](./TUTORIALS/CLI/compare-proteins-losatp.md)
+- [Collinear block Tutorial](./TUTORIALS/CLI/compare-proteins-losatp-collinear.md)
+- [Input formats and TSV schemas](./REFERENCE/input-formats-and-tsv-schemas.md)
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | **CLI Reference** | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | **CLI Reference (generated)** | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [About](./ABOUT.md)

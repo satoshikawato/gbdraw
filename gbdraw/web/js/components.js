@@ -119,7 +119,7 @@ export const ColorValueControl = {
 
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId'],
   emits: ['update:modelValue'],
   setup(props, { emit }) {
     const input = ref(null);

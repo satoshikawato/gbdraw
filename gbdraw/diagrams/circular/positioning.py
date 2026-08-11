@@ -10,6 +10,7 @@ from typing import Literal, cast
 from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
+from ...layout.spatial import Aabb
 
 DefinitionPosition = Literal["center", "top", "bottom"]
 _SUPPORTED_DEFINITION_POSITIONS = {"center", "top", "bottom"}
@@ -86,7 +87,9 @@ def center_group_on_canvas(group: Group, canvas_config: CircularCanvasConfigurat
     Returns:
     Group: The centered SVG group.
     """
-    group.translate(canvas_config.offset_x, canvas_config.offset_y)
+    translation = (float(canvas_config.offset_x), float(canvas_config.offset_y))
+    group.translate(*translation)
+    setattr(group, "_gbdraw_plot_translation", translation)
     return group
 
 
@@ -99,6 +102,17 @@ def place_definition_group_on_canvas(
 ) -> Group:
     normalized = normalize_definition_position(str(position))
     if normalized == "center":
+        local_bounds = getattr(group, "_gbdraw_local_bounds", None)
+        if isinstance(local_bounds, Aabb):
+            translate_x = float(canvas_config.offset_x) - 0.5 * (
+                local_bounds.min_x + local_bounds.max_x
+            )
+            translate_y = float(canvas_config.offset_y) - 0.5 * (
+                local_bounds.min_y + local_bounds.max_y
+            )
+            group.translate(translate_x, translate_y)
+            setattr(group, "_gbdraw_plot_translation", (translate_x, translate_y))
+            return group
         return center_group_on_canvas(group, canvas_config)
 
     bounds_min_y, bounds_max_y = _definition_group_vertical_bounds(group)
@@ -111,52 +125,7 @@ def place_definition_group_on_canvas(
         margin_px=float(margin_px),
     )
     group.translate(translate_x, translate_y)
-    return group
-
-
-def place_definition_group_on_size(
-    group: Group,
-    *,
-    canvas_width: float,
-    canvas_height: float,
-    position: DefinitionPosition | str = "center",
-    center_x: float | None = None,
-    center_y: float | None = None,
-    margin_px: float = DEFAULT_DEFINITION_EDGE_MARGIN_PX,
-) -> Group:
-    normalized = normalize_definition_position(str(position))
-    if normalized == "center":
-        group.translate(
-            float(center_x) if center_x is not None else (0.5 * float(canvas_width)),
-            float(center_y) if center_y is not None else (0.5 * float(canvas_height)),
-        )
-        return group
-
-    bounds_min_y, bounds_max_y = _definition_group_vertical_bounds(group)
-    translate_x = 0.5 * float(canvas_width)
-    translate_y = _definition_edge_translate_y(
-        position=normalized,
-        canvas_height=float(canvas_height),
-        bounds_min_y=bounds_min_y,
-        bounds_max_y=bounds_max_y,
-        margin_px=float(margin_px),
-    )
-    group.translate(translate_x, translate_y)
-    return group
-
-
-def place_legend_on_canvas(group: Group, canvas_config: CircularCanvasConfigurator) -> Group:
-    """
-    Places a legend group at the configured legend position on the canvas.
-
-    Parameters:
-    group (Group): The SVG group containing the legend.
-    canvas_config (CircularCanvasConfigurator): The configuration of the circular canvas.
-
-    Returns:
-    Group: The positioned legend group.
-    """
-    group.translate(canvas_config.legend_offset_x, canvas_config.legend_offset_y)
+    setattr(group, "_gbdraw_plot_translation", (float(translate_x), float(translate_y)))
     return group
 
 
@@ -164,6 +133,4 @@ __all__ = [
     "center_group_on_canvas",
     "normalize_definition_position",
     "place_definition_group_on_canvas",
-    "place_definition_group_on_size",
-    "place_legend_on_canvas",
 ]

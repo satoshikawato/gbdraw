@@ -222,16 +222,15 @@ Package configuration, test markers, coverage settings.
 Tests compare generated SVG against `tests/reference_outputs/` files.
 
 ### Test Helpers (tests/conftest.py)
-- `GbdrawRunner` - Helper class for running gbdraw commands in tests
-- `get_test_input_path()` - Find test input files across directories
-- `get_reference_output_path()` - Find reference SVG files
-- `temp_output_dir` fixture - Creates temporary directory for test outputs
+- `GbdrawRunner.run()` - Run either diagram subcommand with optional BLAST inputs
+- `find_test_input` fixture - Find test inputs across repository and optional local directories
+- `tmp_path` - Built-in pytest fixture for isolated test outputs
 
 ## CI/CD
 
 - **Python versions tested:** 3.10, 3.11, 3.12
 - **Lint job:** Uses Ruff 0.15.12 and blocks CI on lint failures
-- **CairoSVG job:** Separate test on Python 3.11 requiring system packages (`libcairo2-dev`, `libpango1.0-dev` on Ubuntu)
+- **CairoSVG:** The Python matrix installs the `dev` extra and required system packages (`libcairo2-dev`, `libpango1.0-dev` on Ubuntu)
 - **Slow tests:** Only run on push to main branch
 
 ## Dependencies
@@ -279,6 +278,21 @@ normal test runs do not write to `tests/reference_outputs/`.
 
 ## Documentation
 
+- Public documentation has four teaching routes: Tutorials, Technical
+  documentation, FAQ, and Gallery. `docs/DOCS.md` is the navigation authority.
+- Use the fewest public pages that answer distinct reader questions. Coverage
+  does not require one page per capability, workflow, or interface.
+- Before adding a public page, record the reader question, the existing owner,
+  and a `keep`, `merge`, `delete`, or `new` disposition. Add a page only when
+  editing an existing owner cannot answer the question clearly.
+- A Tutorial needs a deliberate learning progression to a finished result.
+  Separate GUI, CLI, or Python evidence does not by itself justify separate
+  public pages.
+- Technical documentation owns exact behavior and contracts. FAQ owns concise
+  decisions and troubleshooting, and links to the technical owner. Gallery is
+  for discovering finished outcomes.
+- Executable scenarios may support one public page or no public page. Do not
+  turn an evidence inventory into a public-page inventory.
 - Always read and apply `.agents/skills/avoid-ai-writing/SKILL.md` when auditing
   or changing prose intended for users or human developers, including
   documentation, tutorials, CLI/UI text, release notes, reports, and
@@ -291,8 +305,12 @@ normal test runs do not write to `tests/reference_outputs/`.
 - Preserve exact technical terms, UI labels, CLI options, identifiers, and
   scientifically necessary qualifications. Do not make prose less accurate merely
   to avoid a statistical writing pattern.
+- `avoid-ai-writing` is a prose-style check. It does not establish accuracy,
+  pedagogy, information architecture, or freedom from duplication.
 - Main docs: `docs/DOCS.md`
 - Canonical tutorial index: `docs/TUTORIALS/README.md`
+- Current documentation plan:
+  `docs/internal/DOCUMENTATION_SIMPLIFICATION_IMPLEMENTATION_PLAN_2026-08-09.md`
 - CLI Reference: `docs/CLI_Reference.md`
 - **Web app development:** See `gbdraw/web/CLAUDE.md` for web-specific guidance
 - Web app: https://gbdraw.app/

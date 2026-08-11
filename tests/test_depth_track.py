@@ -45,18 +45,6 @@ from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.linear_comparison import LinearComparison
 
 
-def _stub_typed_request_export(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
-
-
 def _make_record(record_id: str = "rec1", length: int = 120) -> SeqRecord:
     record = SeqRecord(Seq("ATGC" * (length // 4)), id=record_id, name=record_id)
     record.annotations["molecule_type"] = "DNA"
@@ -339,24 +327,46 @@ def _svg_group_translate_y(svg: str, group_id: str) -> float:
     if semantic_groups:
         assert len(semantic_groups) == 1
         transform = semantic_groups[0].get("transform", "")
-        match = re.fullmatch(r"translate\([^,]+,([^)]+)\)", transform)
-        assert match is not None
-        return float(match.group(1))
-    match = re.search(rf'<g id="{re.escape(group_id)}" transform="translate\([^,]+,([^)]+)\)"', svg)
-    assert match is not None
-    return float(match.group(1))
+        return _transform_translate_y(transform)
+    root = ET.fromstring(svg)
+    group = next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and element.get("id") == group_id
+        ),
+        None,
+    )
+    assert group is not None
+    return _transform_translate_y(group.get("transform", ""))
 
 
 def _svg_group(svg: str, group_id: str) -> str:
-    match = re.search(
-        rf'<g data-gbdraw-slot-id="{re.escape(group_id)}".*?</g>',
-        svg,
-        flags=re.DOTALL,
+    root = ET.fromstring(svg)
+    group = next(
+        (
+            element
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "g"
+            and (
+                element.get("data-gbdraw-slot-id") == group_id
+                or element.get("id") == group_id
+            )
+        ),
+        None,
     )
-    if match is None:
-        match = re.search(rf'<g id="{re.escape(group_id)}".*?</g>', svg, flags=re.DOTALL)
-    assert match is not None
-    return match.group(0)
+    assert group is not None
+    return ET.tostring(group, encoding="unicode")
+
+
+def _transform_translate_y(transform: str) -> float:
+    translations = re.findall(
+        r"translate\(\s*[-+0-9.eE]+(?:px)?[\s,]+([-+0-9.eE]+)(?:px)?\s*\)",
+        transform,
+    )
+    assert translations
+    return sum(float(value) for value in translations)
 
 
 def _semantic_slot_groups(
@@ -397,9 +407,7 @@ def _semantic_slot_translate_y(svg: str, slot_id: str) -> float:
     groups = _semantic_slot_groups(svg, slot_id)
     assert len(groups) == 1
     transform = groups[0].get("transform", "")
-    match = re.fullmatch(r"translate\([^,]+,([^)]+)\)", transform)
-    assert match is not None
-    return float(match.group(1))
+    return _transform_translate_y(transform)
 
 
 def _circular_semantic_slot_record_indices(svg: str, slot_id: str) -> list[int]:
@@ -1909,6 +1917,7 @@ def test_cli_rejects_removed_depth_tick_interval(get_args) -> None:
 def test_circular_cli_depth_options_forward_to_api(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _make_record()
     captured: dict[str, object] = {}
@@ -1917,7 +1926,6 @@ def test_circular_cli_depth_options_forward_to_api(
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
         captured["options"] = kwargs["options"]
@@ -1980,6 +1988,7 @@ def test_circular_cli_depth_options_forward_to_api(
 def test_circular_cli_reads_depth_file_once_for_multiple_records(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     records = [_make_record("rec1"), _make_record("rec2")]
     depth_file = tmp_path / "depth.tsv"
@@ -1997,7 +2006,6 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
     monkeypatch.setattr(depth_tracks_module, "read_depth_tsv", counting_read_depth_tsv)
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     circular_cli_module.circular_main(
         [
@@ -2019,6 +2027,7 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
 def test_linear_cli_depth_options_forward_to_api(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _make_record()
     captured: dict[str, object] = {}
@@ -2028,7 +2037,6 @@ def test_linear_cli_depth_options_forward_to_api(
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_build(_records, *, options, **_kwargs):
         captured["options"] = options
@@ -2091,6 +2099,7 @@ def test_linear_cli_depth_options_forward_to_api(
 def test_linear_cli_repeated_depth_track_forwards_record_major_files(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     records = [_make_record("rec1"), _make_record("rec2")]
     captured: dict[str, object] = {}
@@ -2098,7 +2107,6 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_build(_records, *, options, **_kwargs):
         captured["options"] = options
@@ -2173,6 +2181,7 @@ def test_linear_cli_repeated_depth_track_forwards_record_major_files(
 def test_linear_cli_depth_track_placeholders_keep_record_slots(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     records = [_make_record("rec1"), _make_record("rec2")]
     captured: dict[str, object] = {}
@@ -2180,7 +2189,6 @@ def test_linear_cli_depth_track_placeholders_keep_record_slots(
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *args, **kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_build(_records, *, options, **_kwargs):
         captured["options"] = options
@@ -2299,13 +2307,13 @@ def test_linear_cli_sparse_depth_tracks_render_end_to_end(
 def test_circular_cli_repeated_depth_track_forwards_record_major_files(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     records = [_make_record("rec1"), _make_record("rec2")]
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
         captured["options"] = kwargs["options"]

@@ -224,7 +224,7 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(tutorialPanel.getByRole('heading', { name: 'Quick reproduce' })).toHaveCount(0);
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(10);
+  await expect(mediaImages).toHaveCount(12);
   await expect(mediaImages.first()).toHaveAttribute('src', /manual-01-01-linear-mode\.webp$/);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-five-file-upload-order.webp"]')).toHaveCount(0);
@@ -276,7 +276,7 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   ).toBeVisible();
 
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(10);
+  await expect(mediaImages).toHaveCount(12);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-record-row.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-01-record-layout.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-03-adjacent-pairs.webp"]')).toHaveCount(1);
@@ -341,7 +341,7 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
     page.getByRole('heading', { name: 'Plot CDS protein-similarity links across five Hepatoplasmataceae genomes' })
   ).toBeVisible();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
-  await expect(tutorialPanel.getByRole('row', { name: 'blastp mode Similarity groups' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'LOSATP mode Similarity groups' })).toBeVisible();
   await expect(
     tutorialPanel.getByText(
       'gbdraw builds its similarity groups from searches across all record pairs, then draws links between adjacent displayed records.'
@@ -350,7 +350,7 @@ test('Gallery renders the Hepatoplasmataceae orthogroup tutorial and media', asy
   await expect(tutorialPanel.getByRole('row', { name: 'Minimum Identity 0' })).toBeVisible();
   await expect(page.getByText('gbdraw group ID, display name, member count')).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(10);
+  await expect(mediaImages).toHaveCount(11);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-upload-row-context.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-02-01-five-file-upload-order.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-05-02-layout-overview.webp"]')).toHaveCount(1);
@@ -437,11 +437,13 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     { text: 'BGC0000713.gbk', overflowWrap: 'normal', lineCount: 1 }
   ]);
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(16);
+  await expect(mediaImages).toHaveCount(18);
+  await expect(tutorialPanel.locator('img[src$="manual-03-03-first-comparison-boundary.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-03-track-layout-middle.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-04-04-pairwise-style-curve.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-03-02-select-losatp-orthogroups.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-04-pairwise-style-curve.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-specific-rules-all.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-align-og1.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-03-set-thresholds.webp"]')).toHaveCount(0);
@@ -644,7 +646,7 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'blastp mode Similarity groups'
+      name: 'LOSATP mode Similarity groups'
     })
   ).toBeVisible();
   await expect(
@@ -682,7 +684,8 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   await expect(tutorialPanel.locator('img[src$="manual-09-01-files-tab.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-03-03-thread-threshold-settings.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-04-02-legend-position-right.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-04-03-pairwise-match.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-03-02-losatp-orthogroups.webp"]')).toHaveCount(1);
+  await expect(tutorialPanel.locator('img[src$="manual-04-03-pairwise-match.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-06-01-specific-rules-all.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-06-01-color-rule-wssv-like.webp"]')).toHaveCount(0);
   await expect(tutorialPanel.locator('img[src$="manual-06-02-color-rule-birp.webp"]')).toHaveCount(0);
@@ -996,7 +999,7 @@ test('Gallery tutorial media fits a mobile viewport', async ({ page }) => {
   await page.getByRole('tab', { name: 'Tutorial' }).click();
 
   const mediaImages = page.locator('#tutorial-panel .tutorial-media img');
-  await expect(mediaImages).toHaveCount(10);
+  await expect(mediaImages).toHaveCount(12);
   await mediaImages.last().scrollIntoViewIfNeeded();
   const overflowingImages = await mediaImages.evaluateAll((images) =>
     images

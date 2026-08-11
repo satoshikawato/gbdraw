@@ -153,11 +153,6 @@ const buildFallbackUiStateData = (state) => ({
   appliedPaletteColors: clonePlainObject(getRef(state.appliedPaletteColors, {})),
   pendingPaletteName: getRef(state.pendingPaletteName, ''),
   pendingPaletteColors: clonePlainObject(getRef(state.pendingPaletteColors, {})),
-  circularBaseConfig: clonePlainObject(getRef(state.circularBaseConfig, {})),
-  linearBaseConfig: {
-    ...clonePlainObject(getRef(state.linearBaseConfig, {})),
-    diagramBaseTransforms: []
-  },
   legendCurrentOffset: { ...(state.legendCurrentOffset || {}) },
   diagramOffset: { ...(state.diagramOffset || {}) },
   lengthBarUserOffset: { ...(state.lengthBarUserOffset || {}) },
@@ -192,13 +187,6 @@ const applyFallbackUiStateData = (state, ui = {}) => {
   if (ui.appliedPaletteColors) setRef(state.appliedPaletteColors, clonePlainObject(ui.appliedPaletteColors));
   if (ui.pendingPaletteName !== undefined) setRef(state.pendingPaletteName, String(ui.pendingPaletteName || ''));
   if (ui.pendingPaletteColors) setRef(state.pendingPaletteColors, clonePlainObject(ui.pendingPaletteColors));
-  if (ui.circularBaseConfig) setRef(state.circularBaseConfig, clonePlainObject(ui.circularBaseConfig));
-  if (ui.linearBaseConfig) {
-    setRef(state.linearBaseConfig, {
-      ...clonePlainObject(ui.linearBaseConfig),
-      diagramBaseTransforms: new Map()
-    });
-  }
   if (state.legendCurrentOffset && ui.legendCurrentOffset) {
     state.legendCurrentOffset.x = Number(ui.legendCurrentOffset.x) || 0;
     state.legendCurrentOffset.y = Number(ui.legendCurrentOffset.y) || 0;
@@ -434,16 +422,9 @@ export const createHistorySnapshotService = ({
     throw new Error('createHistorySnapshotService requires state and fileStore.');
   }
 
-  const buildHistorySnapshot = async () => {
-    const config = typeof buildConfigData === 'function'
-      ? buildConfigData()
-      : {
-          form: state.form,
-          adv: state.adv,
-          linearComparisonPlan: cloneLinearComparisonPlanMetadata(state.linearComparisonPlan)
-        };
+  const buildGeneratedArtifactSnapshot = ({ includePreviewNavigation = true } = {}) => {
     const ui = typeof buildUiStateData === 'function'
-      ? buildUiStateData({ includePreviewNavigation: false })
+      ? buildUiStateData({ includePreviewNavigation })
       : buildFallbackUiStateData(state);
     const features = typeof buildFeatureStateData === 'function'
       ? buildFeatureStateData()
@@ -465,14 +446,73 @@ export const createHistorySnapshotService = ({
         };
 
     return cloneJsonData({
-      config,
       ui,
-      files: buildFilesData(state, fileStore),
       results,
       features,
       editorState,
       orthogroupState,
       runState
+    });
+  };
+
+  const applyArtifactDomains = (snapshot, { trusted = false } = {}) => {
+    const ui = snapshot?.ui || {};
+    if (typeof applyResultsData === 'function') {
+      applyResultsData(snapshot?.results || [], ui);
+    } else {
+      applyFallbackResultsData(state, snapshot?.results || []);
+      applyFallbackUiStateData(state, { selectedResultIndex: ui.selectedResultIndex });
+    }
+
+    if (typeof applyFeatureStateData === 'function') {
+      applyFeatureStateData(snapshot?.features || {});
+    } else {
+      applyFallbackFeatureStateData(state, snapshot?.features || {});
+    }
+
+    if (typeof applyOrthogroupStateData === 'function') {
+      applyOrthogroupStateData(snapshot?.orthogroupState || {});
+    } else {
+      applyFallbackOrthogroupStateData(state, snapshot?.orthogroupState || {});
+    }
+
+    if (typeof applyEditorStateData === 'function') {
+      applyEditorStateData(snapshot?.editorState || {}, { trusted });
+    }
+
+    if (typeof applyRunStateData === 'function') {
+      applyRunStateData(snapshot?.runState || {});
+    } else {
+      setRef(state.lastRunInfo, cloneJsonData(snapshot?.runState?.lastRunInfo) || null);
+      setRef(state.pairwiseMatchFactors, clonePlainObject(snapshot?.runState?.pairwiseMatchFactors));
+    }
+  };
+
+  const applyGeneratedArtifactSnapshot = (snapshot) => {
+    if (!snapshot || typeof snapshot !== 'object') return;
+    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
+    if (state.skipPositionReapply) state.skipPositionReapply.value = true;
+    applyArtifactDomains(snapshot, { trusted: true });
+    if (typeof applyUiStateData === 'function') {
+      applyUiStateData(snapshot.ui || {});
+    } else {
+      applyFallbackUiStateData(state, snapshot.ui || {});
+    }
+  };
+
+  const buildHistorySnapshot = async () => {
+    const config = typeof buildConfigData === 'function'
+      ? buildConfigData()
+      : {
+          form: state.form,
+          adv: state.adv,
+          linearComparisonPlan: cloneLinearComparisonPlanMetadata(state.linearComparisonPlan)
+        };
+
+    return cloneJsonData({
+      config,
+      files: buildFilesData(state, fileStore),
+      ...buildGeneratedArtifactSnapshot({ includePreviewNavigation: false })
     });
   };
 
@@ -510,35 +550,7 @@ export const createHistorySnapshotService = ({
     if (state.skipPositionReapply) state.skipPositionReapply.value = true;
     if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
 
-    if (typeof applyResultsData === 'function') {
-      applyResultsData(snapshot.results || [], ui);
-    } else {
-      applyFallbackResultsData(state, snapshot.results || []);
-      applyFallbackUiStateData(state, { selectedResultIndex: ui.selectedResultIndex });
-    }
-
-    if (typeof applyFeatureStateData === 'function') {
-      applyFeatureStateData(snapshot.features || {});
-    } else {
-      applyFallbackFeatureStateData(state, snapshot.features || {});
-    }
-
-    if (typeof applyOrthogroupStateData === 'function') {
-      applyOrthogroupStateData(snapshot.orthogroupState || {});
-    } else {
-      applyFallbackOrthogroupStateData(state, snapshot.orthogroupState || {});
-    }
-
-    if (typeof applyEditorStateData === 'function') {
-      applyEditorStateData(snapshot.editorState || {});
-    }
-
-    if (typeof applyRunStateData === 'function') {
-      applyRunStateData(snapshot.runState || {});
-    } else {
-      setRef(state.lastRunInfo, cloneJsonData(snapshot.runState?.lastRunInfo) || null);
-      setRef(state.pairwiseMatchFactors, clonePlainObject(snapshot.runState?.pairwiseMatchFactors));
-    }
+    applyArtifactDomains(snapshot);
 
     await nextTick();
     await nextFrame();
@@ -552,7 +564,9 @@ export const createHistorySnapshotService = ({
   const snapshotSignature = (snapshot) => JSON.stringify(snapshot);
 
   return {
+    applyGeneratedArtifactSnapshot,
     applyHistorySnapshot,
+    buildGeneratedArtifactSnapshot,
     buildHistorySnapshot,
     snapshotSignature
   };

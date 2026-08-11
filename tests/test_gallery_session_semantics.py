@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from functools import cache
 import math
+from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -16,9 +18,11 @@ from gbdraw.api import (
     session_to_request,
 )
 from gbdraw.api.session_compat import build_session_compatible_request_diagram
-from gbdraw.session_io import load_session
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample
+
+
+pytestmark = pytest.mark.gallery
 
 
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -26,18 +30,35 @@ _SVG_NUMBER = r"-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 _PATH_POINT_RE = re.compile(
     rf"[ML]\s*({_SVG_NUMBER})\s*,?\s*({_SVG_NUMBER})"
 )
-_TRANSLATE_RE = re.compile(
-    rf"^translate\(\s*({_SVG_NUMBER})\s*[, ]\s*({_SVG_NUMBER})\s*\)$"
+_TRANSLATE_COMPONENT_RE = re.compile(
+    rf"translate\(\s*({_SVG_NUMBER})\s*[, ]\s*({_SVG_NUMBER})\s*\)"
 )
 
 
+def _translate_chain_y(transform: str) -> float:
+    matches = list(_TRANSLATE_COMPONENT_RE.finditer(transform))
+    assert matches, transform
+    cursor = 0
+    for match in matches:
+        assert not transform[cursor : match.start()].strip(), transform
+        cursor = match.end()
+    assert not transform[cursor:].strip(), transform
+    return sum(float(match.group(2)) for match in matches)
+
+
+@cache
 def _example(example_id: str) -> GallerySessionExample:
     return next(example for example in EXAMPLES if example.id == example_id)
 
 
-def _session(example_id: str) -> tuple[GallerySessionExample, dict[str, object]]:
-    example = _example(example_id)
-    return example, load_session(example.session_path)
+@pytest.fixture(scope="module")
+def gallery_sessions(
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> dict[str, tuple[GallerySessionExample, dict[str, object]]]:
+    return {
+        example.id: (example, load_cached_gallery_session(example.session_path))
+        for example in EXAMPLES
+    }
 
 
 def _request(session: dict[str, object]) -> dict[str, object]:
@@ -54,8 +75,10 @@ def _request(session: dict[str, object]) -> dict[str, object]:
 )
 def test_gallery_sessions_do_not_persist_overwrite_permission(
     example: GallerySessionExample,
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
 ) -> None:
-    output = _request(load_session(example.session_path))["output"]
+    _, session = gallery_sessions[example.id]
+    output = _request(session)["output"]
     outputs = output if isinstance(output, list) else [output]
 
     assert outputs
@@ -65,8 +88,10 @@ def test_gallery_sessions_do_not_persist_overwrite_permission(
     )
 
 
-def test_lambda_basic_linear_gallery_session_opts_out_of_comparisons() -> None:
-    _, session = _session("lambda_basic_linear")
+def test_lambda_basic_linear_gallery_session_opts_out_of_comparisons(
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
+) -> None:
+    _, session = gallery_sessions["lambda_basic_linear"]
 
     plan = session["config"]["linearComparisonPlan"]
     assert plan["mode"] == "none"
@@ -107,27 +132,34 @@ def _option_resource_ref(
     raise AssertionError(f"missing resource-backed option: {' or '.join(names)}")
 
 
-def _visual_roots(
-    example: GallerySessionExample,
-    session: dict[str, object],
-    *,
-    include_gallery: bool = False,
-) -> tuple[tuple[str, ET.Element], ...]:
-    results = session["results"]
-    assert isinstance(results, list) and results
-    result = results[0]
-    assert isinstance(result, dict)
-    content = result.get("content")
-    assert isinstance(content, str) and content
-    roots = (
-        ("session result", ET.fromstring(content)),
-        ("gallery source", ET.parse(example.source_svg_path).getroot()),
-    )
-    if include_gallery:
-        roots += (
-            ("gallery example", ET.parse(example.gallery_svg_path).getroot()),
+@pytest.fixture(scope="module")
+def gallery_visual_roots(
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
+    load_cached_svg_root: Callable[[Path], ET.Element],
+) -> Callable[[str, bool], tuple[tuple[str, ET.Element], ...]]:
+    @cache
+    def load(
+        example_id: str,
+        include_gallery: bool = False,
+    ) -> tuple[tuple[str, ET.Element], ...]:
+        example, session = gallery_sessions[example_id]
+        results = session["results"]
+        assert isinstance(results, list) and results
+        result = results[0]
+        assert isinstance(result, dict)
+        content = result.get("content")
+        assert isinstance(content, str) and content
+        roots = (
+            ("session result", ET.fromstring(content)),
+            ("gallery source", load_cached_svg_root(example.source_svg_path)),
         )
-    return roots
+        if include_gallery:
+            roots += (
+                ("gallery example", load_cached_svg_root(example.gallery_svg_path)),
+            )
+        return roots
+
+    return load
 
 
 def _texts(root: ET.Element) -> list[str]:
@@ -150,9 +182,7 @@ def _group_translate_y(root: ET.Element, group_id: str) -> float:
     )
     assert group is not None, group_id
     transform = str(group.get("transform") or "")
-    match = _TRANSLATE_RE.fullmatch(transform)
-    assert match is not None, (group_id, transform)
-    return float(match.group(2))
+    return _translate_chain_y(transform)
 
 
 def _record_group_translate_y(
@@ -184,9 +214,7 @@ def _record_group_translate_y(
         )
     assert group is not None, (record_id, record_index)
     transform = str(group.get("transform") or "")
-    match = _TRANSLATE_RE.fullmatch(transform)
-    assert match is not None, (record_id, record_index, transform)
-    return float(match.group(2))
+    return _translate_chain_y(transform)
 
 
 def _circular_axis_and_feature_band(
@@ -269,8 +297,11 @@ def _local_track_geometry_signature(
     )
 
 
-def test_hmmt_at_skew_session_keeps_tracks_palette_and_gene_labels() -> None:
-    example, session = _session("HmmtDNA_ATskew")
+def test_hmmt_at_skew_session_keeps_tracks_palette_and_gene_labels(
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
+    gallery_visual_roots: Callable[[str, bool], tuple[tuple[str, ET.Element], ...]],
+) -> None:
+    _example, session = gallery_sessions["HmmtDNA_ATskew"]
     request = _request(session)
     options = request["diagramOptions"]
     assert isinstance(options, dict)
@@ -304,11 +335,7 @@ def test_hmmt_at_skew_session_keeps_tracks_palette_and_gene_labels() -> None:
     )
     assert "CDS\tgene" in _resource_text(session, priority_ref)
 
-    for location, root in _visual_roots(
-        example,
-        session,
-        include_gallery=True,
-    ):
+    for location, root in gallery_visual_roots("HmmtDNA_ATskew", True):
         slot_ids = {
             element.get("data-gbdraw-slot-id")
             for element in root.iter()
@@ -327,8 +354,11 @@ def test_hmmt_at_skew_session_keeps_tracks_palette_and_gene_labels() -> None:
         } <= fills, location
 
 
-def test_hmmt_at_skew_session_and_visuals_keep_middle_feature_placement() -> None:
-    example, session = _session("HmmtDNA_ATskew")
+def test_hmmt_at_skew_session_and_visuals_keep_middle_feature_placement(
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
+    gallery_visual_roots: Callable[[str, bool], tuple[tuple[str, ET.Element], ...]],
+) -> None:
+    _example, session = gallery_sessions["HmmtDNA_ATskew"]
     request = _request(session)
     options = request["diagramOptions"]
     assert isinstance(options, dict)
@@ -341,18 +371,17 @@ def test_hmmt_at_skew_session_and_visuals_keep_middle_feature_placement() -> Non
     assert feature_slot["renderer"] == "features"
     assert feature_slot["params"]["lane_direction"] == "split"
 
-    for location, root in _visual_roots(
-        example,
-        session,
-        include_gallery=True,
-    ):
+    for location, root in gallery_visual_roots("HmmtDNA_ATskew", True):
         axis_radius, feature_inner, feature_outer = (
             _circular_axis_and_feature_band(root)
         )
         assert feature_inner < axis_radius < feature_outer, location
 
 
-def test_bgc_gallery_session_keeps_curated_presentation_and_styles() -> None:
+def test_bgc_gallery_session_keeps_curated_presentation_and_styles(
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
+    gallery_visual_roots: Callable[[str, bool], tuple[tuple[str, ET.Element], ...]],
+) -> None:
     expected_labels = (
         "Streptomyces lividus CBS 844.73",
         "Streptomyces fradiae ATCC 10745",
@@ -376,7 +405,7 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles() -> None:
         "Regulatory genes",
     }
 
-    example, session = _session("BGC0000708-BGC0000713")
+    _example, session = gallery_sessions["BGC0000708-BGC0000713"]
     request = _request(session)
     records = request["records"]
     assert isinstance(records, list)
@@ -399,7 +428,7 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles() -> None:
     )
     assert "CDS\tgene" in _resource_text(session, priority_ref)
 
-    for location, root in _visual_roots(example, session):
+    for location, root in gallery_visual_roots("BGC0000708-BGC0000713", False):
         texts = set(_texts(root))
         fills = {element.get("fill") for element in root.iter()}
         group_ids = {element.get("id") for element in root.iter()}
@@ -432,7 +461,10 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles() -> None:
             assert all(line.get("fill") == "#7b7c7d" for line in lines[2:])
 
 
-def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules() -> None:
+def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
+    gallery_visual_roots: Callable[[str, bool], tuple[tuple[str, ET.Element], ...]],
+) -> None:
     expected_labels = (
         "Marsupenaeus japonicus endogenous nimavirus",
         "Melicertus latisulcatus majanivirus",
@@ -447,7 +479,7 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules() -> No
     captions = {"WSSV-like proteins", "BIRP", "tyrosine recombinase"}
     expected_colors = {"#89d1fa", "yellow", "red"}
 
-    example, session = _session("majanivirus_orthogroup")
+    _example, session = gallery_sessions["majanivirus_orthogroup"]
     request = _request(session)
     records = request["records"]
     assert isinstance(records, list)
@@ -464,7 +496,7 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules() -> No
     assert all(caption in rules for caption in captions)
     assert all(color in rules for color in expected_colors)
 
-    for location, root in _visual_roots(example, session):
+    for location, root in gallery_visual_roots("majanivirus_orthogroup", False):
         texts = set(_texts(root))
         fills = {element.get("fill") for element in root.iter()}
         definitions = [
@@ -478,7 +510,10 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules() -> No
         assert len(definitions) == 9, location
 
 
-def test_wssv_gallery_session_keeps_all_twenty_conservation_rings() -> None:
+def test_wssv_gallery_session_keeps_all_twenty_conservation_rings(
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
+    gallery_visual_roots: Callable[[str, bool], tuple[tuple[str, ET.Element], ...]],
+) -> None:
     labels = (
         "CN01",
         "WSSV-TW",
@@ -524,7 +559,7 @@ def test_wssv_gallery_session_keeps_all_twenty_conservation_rings() -> None:
         "#c6bebb",
     )
 
-    example, session = _session("WSSV_genome_comparison")
+    _example, session = gallery_sessions["WSSV_genome_comparison"]
     request = _request(session)
     options = request["diagramOptions"]
     assert isinstance(options, dict)
@@ -542,7 +577,7 @@ def test_wssv_gallery_session_keeps_all_twenty_conservation_rings() -> None:
     assert isinstance(palette, dict)
     assert palette["defaultColorsPalette"] == "royal_gala"
 
-    for location, root in _visual_roots(example, session):
+    for location, root in gallery_visual_roots("WSSV_genome_comparison", False):
         group_labels = {
             element.get("data-track-label")
             for element in root.iter()
@@ -569,8 +604,9 @@ def test_gallery_sessions_keep_precomputed_comparisons_and_orthogroups(
     record_count: int,
     precomputed_count: int,
     orthogroup_count: int,
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
 ) -> None:
-    _, session = _session(example_id)
+    _, session = gallery_sessions[example_id]
     request = _request(session)
     records = request["records"]
     comparisons = request["comparisons"]
@@ -615,8 +651,10 @@ def test_gallery_sessions_keep_precomputed_comparisons_and_orthogroups(
 )
 def test_hepatoplasmataceae_gallery_keeps_shared_track_spacing(
     example_id: str,
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
+    gallery_visual_roots: Callable[[str, bool], tuple[tuple[str, ET.Element], ...]],
 ) -> None:
-    example, session = _session(example_id)
+    _example, session = gallery_sessions[example_id]
     request = _request(session)
     options = request["diagramOptions"]
     assert isinstance(options, dict)
@@ -666,11 +704,7 @@ def test_hepatoplasmataceae_gallery_keeps_shared_track_spacing(
             - float(skew_reserve["bottomPx"])
         ) == pytest.approx(declared_spacing)
 
-    for location, root in _visual_roots(
-        example,
-        session,
-        include_gallery=True,
-    ):
+    for location, root in gallery_visual_roots(example_id, True):
         for record in records:
             record_index = int(record["recordIndex"])
             record_number = record_index + 1

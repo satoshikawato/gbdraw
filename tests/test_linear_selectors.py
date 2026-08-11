@@ -39,9 +39,12 @@ def _extract_group_translate_y(root: ET.Element, group_id: str) -> float:
     group = root.find(f".//svg:g[@id='{group_id}']", SVG_NS)
     assert group is not None
     transform = group.attrib.get("transform", "")
-    match = re.search(r"translate\(\s*[-0-9.]+(?:px)?[\s,]+([-0-9.]+)", transform)
-    assert match is not None
-    return float(match.group(1))
+    translations = re.findall(
+        r"translate\(\s*[-+0-9.eE]+(?:px)?[\s,]+([-+0-9.eE]+)(?:px)?\s*\)",
+        transform,
+    )
+    assert translations
+    return sum(float(value) for value in translations)
 
 
 def _extract_group_font_sizes(root: ET.Element, group_id: str) -> list[float]:
@@ -154,6 +157,7 @@ def _write_multi_record_gbk(path: Path) -> dict[str, int]:
 def test_linear_cli_records_table_regions_follow_sorted_rows(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     table = tmp_path / "records.tsv"
     table.write_text(
@@ -183,14 +187,6 @@ def test_linear_cli_records_table_regions_follow_sorted_rows(
         "build_linear_diagram_result",
         fake_build,
     )
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
-
     linear_cli_module.linear_main(
         [
             "--records_table",
@@ -228,14 +224,15 @@ def test_linear_cli_rejects_qualified_records_table_region_before_rendering(
 
 
 @pytest.mark.linear
-def test_linear_record_id_and_label(temp_output_dir: Path, gbdraw_runner) -> None:
-    gbk_path = temp_output_dir / "multi_records.gbk"
+def test_linear_record_id_and_label(tmp_path: Path, gbdraw_runner) -> None:
+    gbk_path = tmp_path / "multi_records.gbk"
     lengths = _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_record_id_label",
-        temp_output_dir,
+        tmp_path,
         extra_args=["--record_id", "RecB", "--record_label", "CustomLabel", "--legend", "none"],
     )
 
@@ -247,14 +244,15 @@ def test_linear_record_id_and_label(temp_output_dir: Path, gbdraw_runner) -> Non
 
 
 @pytest.mark.linear
-def test_linear_region_crop_with_record_selector(temp_output_dir: Path, gbdraw_runner) -> None:
-    gbk_path = temp_output_dir / "multi_records_region.gbk"
+def test_linear_region_crop_with_record_selector(tmp_path: Path, gbdraw_runner) -> None:
+    gbk_path = tmp_path / "multi_records_region.gbk"
     lengths = _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_region_crop",
-        temp_output_dir,
+        tmp_path,
         extra_args=["--region", "RecA:1-200", "--legend", "none"],
     )
 
@@ -267,15 +265,16 @@ def test_linear_region_crop_with_record_selector(temp_output_dir: Path, gbdraw_r
 
 
 @pytest.mark.linear
-def test_linear_region_crop_with_file_prefix(temp_output_dir: Path, gbdraw_runner) -> None:
-    gbk_path = temp_output_dir / "multi_records_fileprefix.gbk"
+def test_linear_region_crop_with_file_prefix(tmp_path: Path, gbdraw_runner) -> None:
+    gbk_path = tmp_path / "multi_records_fileprefix.gbk"
     lengths = _write_multi_record_gbk(gbk_path)
     file_selector = gbk_path.name
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_region_fileprefix",
-        temp_output_dir,
+        tmp_path,
         extra_args=["--region", f"{file_selector}:RecA:1-200:rc", "--legend", "none"],
     )
 
@@ -289,14 +288,15 @@ def test_linear_region_crop_with_file_prefix(temp_output_dir: Path, gbdraw_runne
 
 
 @pytest.mark.linear
-def test_linear_reverse_complement_flag(temp_output_dir: Path, gbdraw_runner) -> None:
-    gbk_path = temp_output_dir / "multi_records_rc.gbk"
+def test_linear_reverse_complement_flag(tmp_path: Path, gbdraw_runner) -> None:
+    gbk_path = tmp_path / "multi_records_rc.gbk"
     _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_reverse_complement",
-        temp_output_dir,
+        tmp_path,
         extra_args=["--record_id", "RecA", "--reverse_complement", "true", "--legend", "none"],
     )
 
@@ -307,16 +307,17 @@ def test_linear_reverse_complement_flag(temp_output_dir: Path, gbdraw_runner) ->
 
 @pytest.mark.linear
 def test_linear_reverse_complement_without_region_keeps_length_label(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_rc_length.gbk"
+    gbk_path = tmp_path / "multi_records_rc_length.gbk"
     lengths = _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_reverse_complement_keeps_length",
-        temp_output_dir,
+        tmp_path,
         extra_args=["--record_id", "RecA", "--reverse_complement", "true", "--legend", "none"],
     )
 
@@ -328,16 +329,17 @@ def test_linear_reverse_complement_without_region_keeps_length_label(
 
 @pytest.mark.linear
 def test_linear_region_ruler_on_axis_uses_absolute_coordinates(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_region_axis.gbk"
+    gbk_path = tmp_path / "multi_records_region_axis.gbk"
     _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_region_axis_coords",
-        temp_output_dir,
+        tmp_path,
         extra_args=[
             "--record_id",
             "RecA",
@@ -365,16 +367,17 @@ def test_linear_region_ruler_on_axis_uses_absolute_coordinates(
 
 @pytest.mark.linear
 def test_linear_region_ruler_on_axis_rc_labels_descend_left_to_right(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_region_axis_rc.gbk"
+    gbk_path = tmp_path / "multi_records_region_axis_rc.gbk"
     _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_region_axis_coords_rc",
-        temp_output_dir,
+        tmp_path,
         extra_args=[
             "--record_id",
             "RecA",
@@ -405,13 +408,14 @@ def test_linear_region_ruler_on_axis_rc_labels_descend_left_to_right(
 
 @pytest.mark.linear
 def test_linear_region_ruler_on_axis_uses_span_based_units_for_high_coordinates(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [INPUT_MG1655],
         "linear_region_axis_high_coords",
-        temp_output_dir,
+        tmp_path,
         extra_args=[
             "--region",
             "NC_000913.3:1028779-1035047",
@@ -434,16 +438,17 @@ def test_linear_region_ruler_on_axis_uses_span_based_units_for_high_coordinates(
 
 @pytest.mark.linear
 def test_linear_plot_title_drawn_once_and_coexists_with_record_labels(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_plot_title.gbk"
+    gbk_path = tmp_path / "multi_records_plot_title.gbk"
     _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_plot_title_with_labels",
-        temp_output_dir,
+        tmp_path,
         extra_args=[
             "--plot_title",
             "Global Plot Title",
@@ -470,18 +475,19 @@ def test_linear_plot_title_drawn_once_and_coexists_with_record_labels(
 
 @pytest.mark.linear
 def test_linear_plot_title_position_changes_vertical_location(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_plot_title_position.gbk"
+    gbk_path = tmp_path / "multi_records_plot_title_position.gbk"
     _write_multi_record_gbk(gbk_path)
 
     y_positions: dict[str, float] = {}
     for position in ("top", "center", "bottom"):
-        returncode, output, svg_path = gbdraw_runner.run_linear(
+        returncode, output, svg_path = gbdraw_runner.run(
+            "linear",
             [gbk_path],
             f"linear_plot_title_{position}",
-            temp_output_dir,
+            tmp_path,
             extra_args=[
                 "--plot_title",
                 "Position Test",
@@ -500,16 +506,17 @@ def test_linear_plot_title_position_changes_vertical_location(
 
 @pytest.mark.linear
 def test_linear_record_label_adds_top_line_without_hiding_accession(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_definition_stack.gbk"
+    gbk_path = tmp_path / "multi_records_definition_stack.gbk"
     lengths = _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_definition_record_label_stack",
-        temp_output_dir,
+        tmp_path,
         extra_args=["--record_id", "RecB", "--record_label", "CustomLabel", "--legend", "none"],
     )
 
@@ -522,16 +529,17 @@ def test_linear_record_label_adds_top_line_without_hiding_accession(
 
 @pytest.mark.linear
 def test_linear_record_subtitle_renders_between_label_and_accession(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_definition_subtitle.gbk"
+    gbk_path = tmp_path / "multi_records_definition_subtitle.gbk"
     lengths = _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_definition_record_subtitle_stack",
-        temp_output_dir,
+        tmp_path,
         extra_args=[
             "--record_id",
             "RecB",
@@ -556,16 +564,17 @@ def test_linear_record_subtitle_renders_between_label_and_accession(
 
 @pytest.mark.linear
 def test_linear_record_subtitle_preserves_mixed_content_italics(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_definition_subtitle_italic.gbk"
+    gbk_path = tmp_path / "multi_records_definition_subtitle_italic.gbk"
     lengths = _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_definition_record_subtitle_italic",
-        temp_output_dir,
+        tmp_path,
         extra_args=[
             "--record_id",
             "RecA",
@@ -591,16 +600,17 @@ def test_linear_record_subtitle_preserves_mixed_content_italics(
 
 @pytest.mark.linear
 def test_linear_definition_replicon_hidden_by_default_and_shown_on_request(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_replicon.gbk"
+    gbk_path = tmp_path / "multi_records_replicon.gbk"
     lengths = _write_multi_record_gbk(gbk_path)
 
-    default_returncode, default_output, default_svg = gbdraw_runner.run_linear(
+    default_returncode, default_output, default_svg = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_definition_replicon_default",
-        temp_output_dir,
+        tmp_path,
         extra_args=["--legend", "none"],
     )
     assert default_returncode == 0, f"gbdraw failed: {default_output}"
@@ -608,10 +618,11 @@ def test_linear_definition_replicon_hidden_by_default_and_shown_on_request(
     assert _extract_group_texts(default_root, "RecA_definition_record_1") == ["RecA", f"{lengths['RecA']:,} bp"]
     assert _extract_group_texts(default_root, "RecB_definition_record_2") == ["RecB", f"{lengths['RecB']:,} bp"]
 
-    show_returncode, show_output, show_svg = gbdraw_runner.run_linear(
+    show_returncode, show_output, show_svg = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_definition_replicon_shown",
-        temp_output_dir,
+        tmp_path,
         extra_args=["--show_replicon", "--legend", "none"],
     )
     assert show_returncode == 0, f"gbdraw failed: {show_output}"
@@ -629,18 +640,19 @@ def test_linear_definition_replicon_hidden_by_default_and_shown_on_request(
     ],
 )
 def test_linear_definition_hide_flags_preserve_other_lines_and_region_coordinates(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
     extra_args: list[str],
     expected_texts: list[str],
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_hide_flags.gbk"
+    gbk_path = tmp_path / "multi_records_hide_flags.gbk"
     _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_definition_hide_flags",
-        temp_output_dir,
+        tmp_path,
         extra_args=[
             "--record_id",
             "RecA",
@@ -661,16 +673,17 @@ def test_linear_definition_hide_flags_preserve_other_lines_and_region_coordinate
 
 @pytest.mark.linear
 def test_linear_definition_group_ids_are_unique_and_multi_line_blocks_do_not_overlap(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_definition_spacing.gbk"
+    gbk_path = tmp_path / "multi_records_definition_spacing.gbk"
     lengths = _write_multi_record_gbk(gbk_path)
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_definition_spacing",
-        temp_output_dir,
+        tmp_path,
         extra_args=[
             "--record_label",
             "Label A",
@@ -698,16 +711,17 @@ def test_linear_definition_group_ids_are_unique_and_multi_line_blocks_do_not_ove
 
 @pytest.mark.linear
 def test_linear_plot_title_font_size_default_and_override(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_plot_title_size.gbk"
+    gbk_path = tmp_path / "multi_records_plot_title_size.gbk"
     _write_multi_record_gbk(gbk_path)
 
-    default_returncode, default_output, default_svg = gbdraw_runner.run_linear(
+    default_returncode, default_output, default_svg = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_plot_title_default_size",
-        temp_output_dir,
+        tmp_path,
         extra_args=["--plot_title", "Default Size", "--legend", "none"],
     )
     assert default_returncode == 0, f"gbdraw failed: {default_output}"
@@ -715,10 +729,11 @@ def test_linear_plot_title_font_size_default_and_override(
     default_sizes = _extract_group_font_sizes(default_root, "plot_title")
     assert default_sizes == [32.0]
 
-    override_returncode, override_output, override_svg = gbdraw_runner.run_linear(
+    override_returncode, override_output, override_svg = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_plot_title_override_size",
-        temp_output_dir,
+        tmp_path,
         extra_args=[
             "--plot_title",
             "Override Size",
@@ -736,20 +751,21 @@ def test_linear_plot_title_font_size_default_and_override(
 
 @pytest.mark.linear
 def test_linear_plot_title_keeps_plain_text_around_inline_italics(
-    temp_output_dir: Path,
+    tmp_path: Path,
     gbdraw_runner,
 ) -> None:
-    gbk_path = temp_output_dir / "multi_records_plot_title_mixed_content.gbk"
+    gbk_path = tmp_path / "multi_records_plot_title_mixed_content.gbk"
     _write_multi_record_gbk(gbk_path)
     plot_title = (
         "Erythromycin A biosynthetic gene cluster from "
         "<i>Saccharopolyspora erythraea</i>"
     )
 
-    returncode, output, svg_path = gbdraw_runner.run_linear(
+    returncode, output, svg_path = gbdraw_runner.run(
+        "linear",
         [gbk_path],
         "linear_plot_title_mixed_content",
-        temp_output_dir,
+        tmp_path,
         extra_args=[
             "--plot_title",
             plot_title,

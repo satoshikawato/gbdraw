@@ -1684,6 +1684,17 @@ def build_prepared_interactive_context(
             LinearDiagramOptions,
         ):
             computed_orthogroups = options.orthogroups
+        collinearity_search_scope = None
+        if (
+            isinstance(options, LinearDiagramOptions)
+            and prepared.linear_metadata is not None
+            and prepared.linear_metadata.collinearity_result is not None
+            and prepared.linear_metadata.collinearity_result.orthogroups
+            is not None
+        ):
+            collinearity_search_scope = str(
+                options.collinearity_search_scope
+            )
         return build_interactive_svg_context(
             prepared.records,
             selected_features_set=options.selected_features_set,
@@ -1694,6 +1705,7 @@ def build_prepared_interactive_context(
             annotations=options.annotations,
             mode=prepared.mode,
             comparison_sequence_records=comparison_sequence_records,
+            collinearity_search_scope=collinearity_search_scope,
         )
 
     return require_interactive_svg_metadata(build)
@@ -1729,11 +1741,7 @@ def render_request(
     plan = plan_request(request)
     batch_outputs_preflighted = isinstance(plan, CircularBatchRequestPlan)
     plan.preflight_outputs()
-    prepared = (
-        build_request_plan_diagram(plan)
-        if artifacts is None
-        else build_request_plan_diagram(plan, artifacts=artifacts)
-    )
+    prepared = build_request_plan_diagram(plan, artifacts=artifacts)
     return render_prepared_request(
         prepared,
         batch_outputs_preflighted=batch_outputs_preflighted,

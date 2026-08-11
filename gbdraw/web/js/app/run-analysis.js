@@ -40,11 +40,9 @@ import {
 } from './depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
-  collinearGroupScopeForEvidenceScope,
   normalizeCollinearAnchorMode,
   normalizeCollinearSearchScope,
-  normalizeOrthogroupMembershipMode,
-  normalizeGroupMetadataScope
+  normalizeOrthogroupMembershipMode
 } from './losat-normalization.js';
 import { buildRunInfo } from './run-info.js';
 import {
@@ -60,10 +58,10 @@ import { serializeFeatureVisibilityRules } from './feature-visibility.js';
 import {
   normalizeDefinitionLineStyleState
 } from './definition-line-style-state.js';
-import { downloadZipFile } from '../utils/zip.js';
+import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
-import { downloadTextFile } from '../services/text-download.js';
+import { downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
@@ -75,7 +73,6 @@ import {
 } from './current-option-values.js';
 import { PAIRWISE_LEGEND_SELECTOR } from './legend/utils.js';
 import {
-  circularInputNeedsRecordDiscovery,
   discoverGffFastaRecords,
   discoverSequenceRecords
 } from './record-discovery.js';
@@ -101,6 +98,10 @@ import { readFileBytes, readFileText } from '../services/file-content-cache.js';
 import {
   validateFeatureCatalog
 } from '../services/feature-catalog.js';
+import {
+  buildOrthogroupFeatureIndex,
+  enrichFeaturesWithOrthogroups
+} from '../services/orthogroup-feature-metadata.js';
 import { prepareCandidateRenderCommit } from './candidate-render.js';
 
 const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
@@ -284,6 +285,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   cacheSchema: LOSAT_DERIVED_CACHE_SCHEMA,
   idEncoding: 'runtime-handle-v1',
   converter: 'convert_losatp_blastp_pairs_to_genomic_payload',
+  featureIdentity: 'stable-source-rendered-display-v1',
   mode: String(mode || 'pairwise'),
   maxHits: Number(maxHits) || 5,
   thresholds: {
@@ -334,11 +336,33 @@ const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
   const entry = cacheMap.get(key);
   if (
     !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
-    !validateDerivedProteinReferences(entry, manifest)
+    !validateDerivedProteinReferences(entry, manifest) ||
+    !hasRequiredCanonicalAnalysisResource(entry.mode, entry.payload)
   ) return null;
   cacheMap.delete(key);
   cacheMap.set(key, entry);
   return cloneJsonData(entry.payload);
+};
+
+export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
+  const normalizedMode = String(mode || '').trim().toLowerCase();
+  if (!['orthogroup', 'collinear'].includes(normalizedMode)) return true;
+  const resource = normalizedMode === 'collinear'
+    ? payload?.collinearityResult
+    : payload?.orthogroupResult;
+  const expectedKind = normalizedMode === 'collinear' ? 'result' : 'orthogroupResult';
+  const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupResult';
+  return Boolean(
+    resource
+    && typeof resource === 'object'
+    && !Array.isArray(resource)
+    && [1, 2].includes(resource.schema)
+    && resource.kind === expectedKind
+    && resource.value?.type === expectedType
+    && resource.value.fields
+    && typeof resource.value.fields === 'object'
+    && !Array.isArray(resource.value.fields)
+  );
 };
 
 const stripRuntimeCacheStats = (payload) => {
@@ -416,7 +440,8 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) =
   };
   if (
     !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
-    !validateDerivedProteinReferences(entry, manifest)
+    !validateDerivedProteinReferences(entry, manifest) ||
+    !hasRequiredCanonicalAnalysisResource(entry.mode, entry.payload)
   ) return;
   if (cacheMap.has(key)) cacheMap.delete(key);
   cacheMap.set(key, entry);
@@ -769,8 +794,11 @@ export const createRunAnalysis = ({
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
+  buildGeneratedArtifactSnapshot,
+  applyGeneratedArtifactSnapshot,
   resetPreviewViewport,
   validateAnnotationTargets = null,
+  prepareLinearRecordCatalog = null,
   losatExecutor = runLosatPairsParallel,
   prepareCandidateCommit = prepareCandidateRenderCommit
 }) => {
@@ -787,22 +815,16 @@ export const createRunAnalysis = ({
     lastRunInfo,
     trackSlotResolvedGeometry,
     errorLog,
+    semanticFileWatchersSuppressed,
+    sessionImportRollbackInProgress,
     zoom,
     canvasPan,
     skipCaptureBaseConfig,
     skipPositionReapply,
-    pairwiseMatchFactors,
     matchSequenceRegistry,
-    addedLegendCaptions,
-    fileLegendCaptions,
     featureColorOverrides,
     featureVisibilityRules,
     featureStrokeOverrides,
-    legendEntries,
-    deletedLegendEntries,
-    legendColorOverrides,
-    originalLegendOrder,
-    originalLegendColors,
     selectedPalette,
     currentColors,
     paletteDefinitions,
@@ -831,6 +853,7 @@ export const createRunAnalysis = ({
     circularConservation,
     annotationSets,
     orthogroups,
+    collinearGroups,
     featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
@@ -858,11 +881,7 @@ export const createRunAnalysis = ({
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
-    selectedFeatureIds,
-    selectedFeatureAnchorId,
-    featureSelectionStatus,
     editableLabels,
-    clickedLabel,
     labelTextScopeDialog,
     labelTextFeatureOverrides,
     canonicalLabelOverrideRows,
@@ -873,6 +892,12 @@ export const createRunAnalysis = ({
     labelReflowProcessing,
     labelReflowLastError
   } = state;
+  if (
+    typeof buildGeneratedArtifactSnapshot !== 'function'
+    || typeof applyGeneratedArtifactSnapshot !== 'function'
+  ) {
+    throw new Error('createRunAnalysis requires generated artifact snapshot handlers.');
+  }
   const executeLosatJobs = (...args) => {
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     return (typeof override === 'function' ? override : losatExecutor)(...args);
@@ -883,9 +908,14 @@ export const createRunAnalysis = ({
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let circularRecordRefreshGeneration = 0;
+  let activeCircularRecordRefresh = null;
   let activeLosatAbortController = null;
   let latestCliHelperFiles = [];
   let latestCliHelperArchiveName = 'out-cli-files.zip';
+  const recordDiscoverySuppressed = () => Boolean(
+    semanticFileWatchersSuppressed?.value ||
+    sessionImportRollbackInProgress?.value
+  );
 
   const buildLatestCliHelperFiles = (runInfo, generatedCliFileMap, archiveBaseName) => {
     const helperFiles = Array.isArray(runInfo?.helperFiles) ? runInfo.helperFiles : [];
@@ -933,7 +963,7 @@ export const createRunAnalysis = ({
       );
       if (!proceed) return;
     }
-    downloadZipFile(latestCliHelperArchiveName, latestCliHelperFiles);
+    downloadBlob(createZipBlob(latestCliHelperFiles), latestCliHelperArchiveName);
   };
 
   const extractCircularTrackSlotError = (err) => {
@@ -996,8 +1026,6 @@ export const createRunAnalysis = ({
     });
   };
 
-  const buildOrthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
-
   const pruneOrthogroupOverrides = (groupIds, { clearAll = false } = {}) => {
     const validIds = new Set(Array.isArray(groupIds) ? groupIds.map((id) => String(id || '').trim()).filter(Boolean) : []);
     const pruneMap = (overrideMap) => {
@@ -1011,64 +1039,19 @@ export const createRunAnalysis = ({
 
   const setOrthogroupMetadata = (orthogroupPayload) => {
     const groups = Array.isArray(orthogroupPayload) ? orthogroupPayload : [];
-    const index = new Map();
-    const indexOwners = new Map();
-    const ambiguousIndexKeys = new Set();
-    const addUniqueIndexEntry = (key, owner, entry) => {
-      if (!key || ambiguousIndexKeys.has(key)) return;
-      const existingOwner = indexOwners.get(key);
-      if (existingOwner && existingOwner !== owner) {
-        index.delete(key);
-        ambiguousIndexKeys.add(key);
-        return;
-      }
-      indexOwners.set(key, owner);
-      index.set(key, entry);
-    };
-    const groupIds = [];
-    groups.forEach((group) => {
-      const orthogroupId = String(group?.id || '').trim();
-      if (orthogroupId) groupIds.push(orthogroupId);
-      const members = Array.isArray(group?.members) ? group.members : [];
-      const memberCount = Number(group?.member_count || members.length || 0);
-      const recordCoverage = Number(group?.record_coverage_count || new Set(
-        members.map((member) => Number(member?.recordIndex)).filter((recordIndex) => Number.isInteger(recordIndex))
-      ).size || 0);
-      const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
-      const sourceRecordIndex = Number(group?.source_record_index);
-      members.forEach((member, memberIndex) => {
-        const featureSvgIds = Array.from(new Set([
-          member?.stableFeatureSvgId,
-          member?.stable_feature_svg_id,
-          member?.featureSvgId,
-          member?.feature_svg_id
-        ].map((value) => String(value || '').trim()).filter(Boolean)));
-        const recordIndex = Number(member?.recordIndex);
-        if (featureSvgIds.length === 0 || !Number.isInteger(recordIndex)) return;
-        const entry = {
-          orthogroupId,
-          orthogroupMemberCount: memberCount,
-          orthogroupRecordCoverage: recordCoverage,
-          proteinId: String(member?.proteinId || '').trim(),
-          sourceProteinId: String(member?.sourceProteinId || '').trim(),
-          orthogroupRepresentative: Boolean(member?.representative),
-          orthogroupScope,
-          orthogroupSourceRecordIndex: Number.isInteger(sourceRecordIndex) ? sourceRecordIndex : null,
-          orthogroupMember: member
-        };
-        const owner = `${recordIndex}\u001f${member?.featureIndex ?? memberIndex}\u001f${orthogroupId}`;
-        featureSvgIds.forEach((featureSvgId) => {
-          addUniqueIndexEntry(
-            buildOrthogroupIndexKey(recordIndex, featureSvgId),
-            owner,
-            entry
-          );
-          addUniqueIndexEntry(featureSvgId, owner, entry);
-        });
-      });
-    });
+    const index = buildOrthogroupFeatureIndex(groups);
+    const groupIds = groups
+      .map((group) => String(group?.id || '').trim())
+      .filter(Boolean);
     orthogroups.value = groups;
     featureOrthogroupIndex.value = index;
+    extractedFeatures.value = enrichFeaturesWithOrthogroups(extractedFeatures.value, index);
+    if (biologicalFeatures) {
+      biologicalFeatures.value = enrichFeaturesWithOrthogroups(
+        biologicalFeatures.value,
+        index
+      );
+    }
     pruneOrthogroupOverrides(groupIds);
     if (!selectedOrthogroupId.value || !groupIds.includes(String(selectedOrthogroupId.value || '').trim())) {
       selectedOrthogroupId.value = groupIds[0] || '';
@@ -1412,8 +1395,9 @@ export const createRunAnalysis = ({
     });
   };
 
-  const refreshCircularRecordOrder = async ({ discoverRecords = true } = {}) => {
+  const runCircularRecordRefresh = async ({ suppress = false } = {}) => {
     const refreshGeneration = ++circularRecordRefreshGeneration;
+    if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(adv.multi_record_positions)) {
       adv.multi_record_positions = [];
     }
@@ -1422,30 +1406,32 @@ export const createRunAnalysis = ({
     const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
     const pairedFile = inputType === 'gff' ? files.c_fasta : null;
     const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
-    const shouldDiscoverRecords = discoverRecords !== false;
+    const hasActiveInput = mode.value === 'circular' && hasCompleteInput;
+    const canReadWithoutRuntime = typeof (
+      inputType === 'gff' ? pairedFile : primaryFile
+    )?.text === 'function';
     Object.assign(circularRecordDiscovery, {
-      status: hasCompleteInput && shouldDiscoverRecords ? 'loading' : 'idle',
+      status: hasActiveInput ? 'loading' : 'idle',
       error: '',
       inputType,
       primaryFile: primaryFile || null,
       pairedFile: pairedFile || null
     });
     if (
-      mode.value !== 'circular' ||
-      !hasCompleteInput ||
-      !shouldDiscoverRecords
+      !hasActiveInput
     ) {
       circularRecordList.value = [];
-      if (!hasCompleteInput || !shouldDiscoverRecords) {
-        adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
-      }
+      adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
       return;
     }
-    if (!pyodideReady.value || !pyodide) {
+    if ((!pyodideReady.value || !pyodide) && !canReadWithoutRuntime) {
       try {
         pyodide = await ensureHelperRuntime();
       } catch (error) {
-        if (refreshGeneration !== circularRecordRefreshGeneration) return;
+        if (
+          refreshGeneration !== circularRecordRefreshGeneration ||
+          recordDiscoverySuppressed()
+        ) return;
         console.warn('Failed to start record discovery runtime:', error);
         circularRecordList.value = [];
         circularRecordDiscovery.status = 'error';
@@ -1456,6 +1442,7 @@ export const createRunAnalysis = ({
     }
     if (
       refreshGeneration !== circularRecordRefreshGeneration ||
+      recordDiscoverySuppressed() ||
       mode.value !== 'circular' ||
       cInputType.value !== inputType ||
       (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
@@ -1467,6 +1454,7 @@ export const createRunAnalysis = ({
         ? await discoverGffFastaRecords({
             gffFile: primaryFile,
             fastaFile: pairedFile,
+            readText: readFileText,
             pyodide,
             writeFileToFs,
             gffTemporaryPath: `/record-discovery-circular-${refreshGeneration}.gff`,
@@ -1475,12 +1463,14 @@ export const createRunAnalysis = ({
         : await discoverSequenceRecords({
             file: primaryFile,
             format: 'genbank',
+            readText: readFileText,
             pyodide,
             writeFileToFs,
             temporaryPath: `/record-discovery-circular-${refreshGeneration}.gb`
           });
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
+        recordDiscoverySuppressed() ||
         mode.value !== 'circular' ||
         cInputType.value !== inputType ||
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
@@ -1498,6 +1488,7 @@ export const createRunAnalysis = ({
     } catch (error) {
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
+        recordDiscoverySuppressed() ||
         mode.value !== 'circular' ||
         cInputType.value !== inputType ||
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
@@ -1509,6 +1500,32 @@ export const createRunAnalysis = ({
       circularRecordDiscovery.error = 'Could not read records from the circular input file(s).';
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
     }
+  };
+
+  const refreshCircularRecordOrder = (options = {}) => {
+    const inputType = cInputType.value;
+    const fingerprint = [
+      Boolean(options.suppress || recordDiscoverySuppressed()),
+      mode.value,
+      inputType,
+      inputType === 'gff' ? files.c_gff : files.c_gb,
+      inputType === 'gff' ? files.c_fasta : null
+    ];
+    if (
+      activeCircularRecordRefresh &&
+      fingerprint.length === activeCircularRecordRefresh.fingerprint.length &&
+      fingerprint.every((value, index) => (
+        Object.is(value, activeCircularRecordRefresh.fingerprint[index])
+      ))
+    ) {
+      return activeCircularRecordRefresh.promise;
+    }
+    const entry = { fingerprint, promise: null };
+    entry.promise = runCircularRecordRefresh(options).finally(() => {
+      if (activeCircularRecordRefresh === entry) activeCircularRecordRefresh = null;
+    });
+    activeCircularRecordRefresh = entry;
+    return entry.promise;
   };
 
   const runAnalysisInternal = async ({
@@ -1529,6 +1546,7 @@ export const createRunAnalysis = ({
           })
         )
       : null;
+    let linearRecordCatalog = null;
 
     const generationToken = ++latestGenerationToken;
     let keepProcessingStatus = false;
@@ -1549,20 +1567,58 @@ export const createRunAnalysis = ({
       !isReflow && typeof AbortController === 'function' ? new AbortController() : null;
     generationAbortSignal = generationAbortController?.signal || null;
     if (!isReflow) activeLosatAbortController = generationAbortController;
+    if (mode.value === 'linear' && typeof prepareLinearRecordCatalog === 'function') {
+      if (!isReflow) {
+        processing.value = true;
+        processingStatus.value = 'Reading input records...';
+      }
+      let prepared;
+      try {
+        prepared = await prepareLinearRecordCatalog(
+          activeComparisonPlanSnapshot?.hasComparisonIntent
+        );
+      } catch (error) {
+        prepared = {
+          catalog: null,
+          error: error?.message || 'Could not read records from the Linear input file(s).'
+        };
+      } finally {
+        if (!isReflow) {
+          processing.value = false;
+          processingStatus.value = '';
+        }
+      }
+      if (
+        !isReflow && (
+          generationAbortSignal?.aborted ||
+          generationCancelRequested.value ||
+          generationToken !== latestGenerationToken
+        )
+      ) {
+        if (activeLosatAbortController === generationAbortController) {
+          activeLosatAbortController = null;
+        }
+        generationCancelRequested.value = false;
+        return { status: 'canceled' };
+      }
+      if (prepared?.error) {
+        const message = String(prepared.error);
+        if (isReflow) labelReflowLastError.value = message;
+        else errorLog.value = formatJsError(new Error(message));
+        if (activeLosatAbortController === generationAbortController) {
+          activeLosatAbortController = null;
+        }
+        return { status: 'error' };
+      }
+      linearRecordCatalog = prepared?.catalog || null;
+    }
     if (!isReflow && mode.value === 'circular') {
       const inputType = cInputType.value;
       const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
       const pairedFile = inputType === 'gff' ? files.c_fasta : null;
       const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
-      const recordAwarePreflightNeeded = circularInputNeedsRecordDiscovery({
-        form,
-        adv,
-        files,
-        annotationSets
-      });
       if (
         hasCompleteInput &&
-        recordAwarePreflightNeeded &&
         !circularDiscoveryMatchesCurrentInput()
       ) {
         processing.value = true;
@@ -1610,52 +1666,22 @@ export const createRunAnalysis = ({
     const manualCancelSnapshot = isReflow
       ? null
       : {
-          results: Array.isArray(results.value) ? results.value.map((entry) => ({ ...entry })) : [],
+          artifact: buildGeneratedArtifactSnapshot(),
+          resultIdentity: results.value,
+          extractedFeatureIdentity: extractedFeatures.value,
+          biologicalFeatureIdentity: biologicalFeatures?.value,
           trackSlotResolvedGeometry: cloneJsonValue(trackSlotResolvedGeometry.value || null, null),
-          selectedResultIndex: selectedResultIndex.value,
           resultGenerationKey: resultGenerationKey?.value ?? 0,
           resultPanelTab: resultPanelTab.value,
-          lastRunInfo: cloneJsonValue(lastRunInfo.value, null),
           errorLog: cloneJsonValue(errorLog.value, null),
           latestCliHelperFiles: cloneJsonValue(latestCliHelperFiles, []),
           latestCliHelperArchiveName,
-          zoom: zoom.value,
-          canvasPan: {
-            x: Number(canvasPan?.x) || 0,
-            y: Number(canvasPan?.y) || 0
-          },
-          pairwiseMatchFactors: { ...(pairwiseMatchFactors.value || {}) },
           matchSequenceSources: matchSequenceRegistry?.values?.() || [],
-          addedLegendCaptions: new Set(addedLegendCaptions.value || []),
-          fileLegendCaptions: new Set(fileLegendCaptions.value || []),
-          featureColorOverrides: cloneJsonValue(featureColorOverrides, {}),
-          featureStrokeOverrides: cloneJsonValue(featureStrokeOverrides, {}),
-          legendEntries: cloneJsonValue(legendEntries.value || [], []),
-          deletedLegendEntries: cloneJsonValue(deletedLegendEntries.value || [], []),
-          legendColorOverrides: cloneJsonValue(legendColorOverrides, {}),
-          originalLegendOrder: cloneJsonValue(originalLegendOrder.value || [], []),
-          originalLegendColors: cloneJsonValue(originalLegendColors.value || {}, {}),
-          appliedPaletteName: appliedPaletteName.value,
-          appliedPaletteColors: cloneJsonValue(appliedPaletteColors.value || {}, {}),
-          pendingPaletteName: pendingPaletteName.value,
-          pendingPaletteColors: cloneJsonValue(pendingPaletteColors.value || {}, {}),
-          extractedFeatures: cloneJsonValue(extractedFeatures.value || [], []),
-          biologicalFeatures: biologicalFeatures
-            ? cloneJsonValue(biologicalFeatures.value || [], [])
-            : null,
-          featureCatalog: cloneJsonValue(featureCatalog?.value, null),
-          featureSelectorSafetyScope: cloneJsonValue(featureSelectorSafetyScope.value || [], []),
-          selectedFeatureIds: new Set(selectedFeatureIds?.value || []),
-          selectedFeatureAnchorId: selectedFeatureAnchorId?.value || '',
-          featureSelectionStatus: featureSelectionStatus?.value || '',
           editableLabels: cloneJsonValue(editableLabels.value || [], []),
-          clickedLabel: cloneJsonValue(clickedLabel.value, null),
           labelTextScopeDialog: cloneJsonValue(labelTextScopeDialog, {}),
           featureEditorStatus: cloneJsonValue(featureEditorStatus || {}, {}),
           featureExtractionPending: featureExtractionPending.value,
           featureExtractionError: featureExtractionError.value,
-          featureRecordIds: cloneJsonValue(featureRecordIds.value || [], []),
-          selectedFeatureRecordIdx: selectedFeatureRecordIdx.value,
           labelOverrideBuildWarning: labelOverrideBuildWarning.value,
           proteinIdentityManifest: proteinIdentityManifest.value,
           legacyProteinRawCandidates: legacyProteinRawCandidates.value,
@@ -1663,133 +1689,33 @@ export const createRunAnalysis = ({
           losatCache: Array.from(losatCache.value || new Map()),
           losatDerivedCache: Array.from(losatDerivedCache.value || new Map()),
           losatCacheInfo: losatCacheInfo.value,
-          orthogroups: orthogroups.value,
-          featureOrthogroupIndex: featureOrthogroupIndex.value,
-          selectedOrthogroupAlignmentFeature: selectedOrthogroupAlignmentFeature.value,
-          selectedOrthogroupId: selectedOrthogroupId.value,
-          generatedLegendPosition: generatedLegendPosition.value,
-          generatedMode: generatedMode.value,
-          generatedMultiRecordCanvas: generatedMultiRecordCanvas.value,
-          generatedCircularPlotTitlePosition: generatedCircularPlotTitlePosition.value,
-          orthogroupNameOverrides: cloneJsonValue(orthogroupNameOverrides, {}),
-          orthogroupDescriptionOverrides: cloneJsonValue(
-            orthogroupDescriptionOverrides,
-            {}
-          ),
+          collinearGroups: collinearGroups.value,
           losatTelemetry: cloneJsonValue(
             globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__,
             null
           )
         };
-    const restoreManualMigrationSnapshot = () => {
-      if (!manualCancelSnapshot) return;
-      proteinIdentityManifest.value = manualCancelSnapshot.proteinIdentityManifest;
-      legacyProteinRawCandidates.value = manualCancelSnapshot.legacyProteinRawCandidates;
-      legacyProteinDerivedEvidence.value = manualCancelSnapshot.legacyProteinDerivedEvidence;
-      losatCache.value = new Map(manualCancelSnapshot.losatCache);
-      losatDerivedCache.value = new Map(manualCancelSnapshot.losatDerivedCache);
-      losatCacheInfo.value = manualCancelSnapshot.losatCacheInfo;
-      orthogroups.value = manualCancelSnapshot.orthogroups;
-      featureOrthogroupIndex.value = manualCancelSnapshot.featureOrthogroupIndex;
-      extractedFeatures.value = cloneJsonValue(manualCancelSnapshot.extractedFeatures, []);
-      if (biologicalFeatures) {
-        biologicalFeatures.value = manualCancelSnapshot.biologicalFeatures || [];
-      }
-      selectedOrthogroupAlignmentFeature.value =
-        manualCancelSnapshot.selectedOrthogroupAlignmentFeature;
-      selectedOrthogroupId.value = manualCancelSnapshot.selectedOrthogroupId;
-      Object.keys(orthogroupNameOverrides).forEach((key) => delete orthogroupNameOverrides[key]);
-      Object.assign(
-        orthogroupNameOverrides,
-        cloneJsonValue(manualCancelSnapshot.orthogroupNameOverrides, {})
-      );
-      Object.keys(orthogroupDescriptionOverrides)
-        .forEach((key) => delete orthogroupDescriptionOverrides[key]);
-      Object.assign(
-        orthogroupDescriptionOverrides,
-        cloneJsonValue(manualCancelSnapshot.orthogroupDescriptionOverrides, {})
-      );
-      globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = cloneJsonValue(
-        manualCancelSnapshot.losatTelemetry,
-        null
-      );
-    };
     const restoreManualCancelSnapshot = () => {
       if (!manualCancelSnapshot) return;
-      const currentResults = Array.isArray(results.value) ? results.value : [];
-      const snapshotResults = manualCancelSnapshot.results;
-      const resultsUnchanged = (
-        currentResults.length === snapshotResults.length
-        && currentResults.every((entry, index) => {
-          const snapshotEntry = snapshotResults[index];
-          if (entry === snapshotEntry) return true;
-          if (!entry || !snapshotEntry) return entry === snapshotEntry;
-          const keys = new Set([
-            ...Object.keys(entry),
-            ...Object.keys(snapshotEntry)
-          ]);
-          return Array.from(keys).every((key) => entry[key] === snapshotEntry[key]);
-        })
-      );
-      if (!resultsUnchanged) {
-        skipCaptureBaseConfig.value = true;
-        skipPositionReapply.value = true;
-        results.value = snapshotResults;
+      applyGeneratedArtifactSnapshot(manualCancelSnapshot.artifact);
+      results.value = manualCancelSnapshot.resultIdentity;
+      extractedFeatures.value = manualCancelSnapshot.extractedFeatureIdentity;
+      if (biologicalFeatures) {
+        biologicalFeatures.value = manualCancelSnapshot.biologicalFeatureIdentity;
       }
       trackSlotResolvedGeometry.value = manualCancelSnapshot.trackSlotResolvedGeometry;
-      selectedResultIndex.value = Math.max(
-        0,
-        Math.min(manualCancelSnapshot.selectedResultIndex, Math.max(0, manualCancelSnapshot.results.length - 1))
-      );
-      zoom.value = manualCancelSnapshot.zoom;
-      if (canvasPan) {
-        canvasPan.x = manualCancelSnapshot.canvasPan.x;
-        canvasPan.y = manualCancelSnapshot.canvasPan.y;
-      }
       if (typeof resetPreviewViewport === 'function') {
-        resetPreviewViewport({ pan: manualCancelSnapshot.canvasPan });
+        resetPreviewViewport({ pan: manualCancelSnapshot.artifact.ui?.canvasPan });
       }
       if (resultGenerationKey) {
         resultGenerationKey.value = manualCancelSnapshot.resultGenerationKey;
       }
       resultPanelTab.value = manualCancelSnapshot.resultPanelTab;
-      lastRunInfo.value = cloneJsonValue(manualCancelSnapshot.lastRunInfo, null);
       errorLog.value = cloneJsonValue(manualCancelSnapshot.errorLog, null);
       latestCliHelperFiles = cloneJsonValue(manualCancelSnapshot.latestCliHelperFiles, []);
       latestCliHelperArchiveName = manualCancelSnapshot.latestCliHelperArchiveName;
-      pairwiseMatchFactors.value = { ...manualCancelSnapshot.pairwiseMatchFactors };
       matchSequenceRegistry?.reset?.(manualCancelSnapshot.matchSequenceSources);
-      addedLegendCaptions.value = new Set(manualCancelSnapshot.addedLegendCaptions);
-      fileLegendCaptions.value = new Set(manualCancelSnapshot.fileLegendCaptions);
-      Object.keys(featureColorOverrides).forEach((k) => delete featureColorOverrides[k]);
-      Object.assign(featureColorOverrides, cloneJsonValue(manualCancelSnapshot.featureColorOverrides, {}));
-      Object.keys(featureStrokeOverrides).forEach((k) => delete featureStrokeOverrides[k]);
-      Object.assign(featureStrokeOverrides, cloneJsonValue(manualCancelSnapshot.featureStrokeOverrides, {}));
-      legendEntries.value = cloneJsonValue(manualCancelSnapshot.legendEntries, []);
-      deletedLegendEntries.value = cloneJsonValue(manualCancelSnapshot.deletedLegendEntries, []);
-      Object.keys(legendColorOverrides).forEach((k) => delete legendColorOverrides[k]);
-      Object.assign(legendColorOverrides, cloneJsonValue(manualCancelSnapshot.legendColorOverrides, {}));
-      originalLegendOrder.value = cloneJsonValue(manualCancelSnapshot.originalLegendOrder, []);
-      originalLegendColors.value = cloneJsonValue(manualCancelSnapshot.originalLegendColors, {});
-      appliedPaletteName.value = manualCancelSnapshot.appliedPaletteName;
-      appliedPaletteColors.value = cloneJsonValue(manualCancelSnapshot.appliedPaletteColors, {});
-      pendingPaletteName.value = manualCancelSnapshot.pendingPaletteName;
-      pendingPaletteColors.value = cloneJsonValue(manualCancelSnapshot.pendingPaletteColors, {});
-      featureSelectorSafetyScope.value = cloneJsonValue(manualCancelSnapshot.featureSelectorSafetyScope, []);
-      if (featureCatalog) {
-        featureCatalog.value = cloneJsonValue(manualCancelSnapshot.featureCatalog, null);
-      }
-      if (selectedFeatureIds) {
-        selectedFeatureIds.value = new Set(manualCancelSnapshot.selectedFeatureIds);
-      }
-      if (selectedFeatureAnchorId) {
-        selectedFeatureAnchorId.value = manualCancelSnapshot.selectedFeatureAnchorId;
-      }
-      if (featureSelectionStatus) {
-        featureSelectionStatus.value = manualCancelSnapshot.featureSelectionStatus;
-      }
       editableLabels.value = cloneJsonValue(manualCancelSnapshot.editableLabels, []);
-      clickedLabel.value = cloneJsonValue(manualCancelSnapshot.clickedLabel, null);
       Object.assign(
         labelTextScopeDialog,
         cloneJsonValue(manualCancelSnapshot.labelTextScopeDialog, {})
@@ -1797,15 +1723,18 @@ export const createRunAnalysis = ({
       setFeatureEditorStatus(cloneJsonValue(manualCancelSnapshot.featureEditorStatus, {}));
       featureExtractionPending.value = manualCancelSnapshot.featureExtractionPending;
       featureExtractionError.value = manualCancelSnapshot.featureExtractionError;
-      featureRecordIds.value = cloneJsonValue(manualCancelSnapshot.featureRecordIds, []);
-      selectedFeatureRecordIdx.value = manualCancelSnapshot.selectedFeatureRecordIdx;
       labelOverrideBuildWarning.value = manualCancelSnapshot.labelOverrideBuildWarning;
-      generatedLegendPosition.value = manualCancelSnapshot.generatedLegendPosition;
-      generatedMode.value = manualCancelSnapshot.generatedMode;
-      generatedMultiRecordCanvas.value = manualCancelSnapshot.generatedMultiRecordCanvas;
-      generatedCircularPlotTitlePosition.value =
-        manualCancelSnapshot.generatedCircularPlotTitlePosition;
-      restoreManualMigrationSnapshot();
+      proteinIdentityManifest.value = manualCancelSnapshot.proteinIdentityManifest;
+      legacyProteinRawCandidates.value = manualCancelSnapshot.legacyProteinRawCandidates;
+      legacyProteinDerivedEvidence.value = manualCancelSnapshot.legacyProteinDerivedEvidence;
+      losatCache.value = new Map(manualCancelSnapshot.losatCache);
+      losatDerivedCache.value = new Map(manualCancelSnapshot.losatDerivedCache);
+      losatCacheInfo.value = manualCancelSnapshot.losatCacheInfo;
+      collinearGroups.value = manualCancelSnapshot.collinearGroups;
+      globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = cloneJsonValue(
+        manualCancelSnapshot.losatTelemetry,
+        null
+      );
     };
     const finishCanceledManualRun = () => {
       restoreManualCancelSnapshot();
@@ -1876,7 +1805,15 @@ export const createRunAnalysis = ({
           throw new Error(activeComparisonPlanSnapshot.error);
         }
       }
-      let annotationLoadComparison = false;
+      const annotationLoadComparison = (
+        mode.value === 'linear' && activeComparisonPlanSnapshot?.hasComparisonIntent === true
+      );
+      if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
+        const annotationError = validateAnnotationTargets({
+          loadComparison: annotationLoadComparison
+        });
+        if (annotationError) throw new Error(annotationError);
+      }
       let regionSpecs = [];
       let recordSelectors = [];
       let reverseFlags = [];
@@ -2612,8 +2549,6 @@ export const createRunAnalysis = ({
         }
       } else {
         requireCurrentLinearTrackLayout(form.linear_track_layout);
-        const normalizedPairwiseMatchStyle = normalizePairwiseMatchStyle(adv.pairwise_match_style);
-        adv.pairwise_match_style = normalizedPairwiseMatchStyle;
         const useLinearTrackSlots = adv.linear_track_slots_enabled === true;
         let linearTrackSlots = [];
         let linearTrackSlotAxisIndex = null;
@@ -2668,74 +2603,123 @@ export const createRunAnalysis = ({
           adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
         }
         const comparisonResolution = activeComparisonPlanSnapshot;
+        const hasComparisonIntent = comparisonResolution.hasComparisonIntent === true;
         const useLosat = comparisonResolution.hasLosatIntent === true;
         const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
-        const blastpMode = normalizeBlastpMode(losat.blastp?.mode);
+        const blastpMode = useProteinBlastp
+          ? normalizeBlastpMode(losat.blastp?.mode)
+          : String(losat.blastp?.mode ?? '');
+        const usePairwiseBlastp = useProteinBlastp && blastpMode === 'pairwise';
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
-        adv.min_bitscore = normalizeBlastThresholdNumber(
-          adv.min_bitscore,
-          DEFAULT_LINEAR_BLAST_FILTERS.bitscore
-        );
-        adv.evalue = normalizeBlastThresholdText(adv.evalue, DEFAULT_LINEAR_BLAST_FILTERS.evalue);
-        adv.identity = normalizeBlastThresholdNumber(
-          adv.identity,
-          DEFAULT_LINEAR_BLAST_FILTERS.identity
-        );
-        adv.alignment_length = normalizeBlastThresholdNumber(
-          adv.alignment_length,
-          DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
-          { integer: true }
-        );
-        const blastpDisplayMaxHits = normalizeBlastThresholdNumber(
-          losat.blastp?.maxHits,
-          5,
-          { integer: true }
-        );
-        losat.blastp.mode = blastpMode;
-        losat.blastp.maxHits = Math.max(1, blastpDisplayMaxHits);
-        losat.blastp.candidateLimit = null;
-        losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(
-          losat.blastp?.orthogroupMembershipMode
-        );
-        losat.blastp.orthogroupMemberMaxHits = Math.max(
-          1,
-          normalizeBlastThresholdNumber(losat.blastp?.orthogroupMemberMaxHits, 5, { integer: true })
-        );
-        losat.blastp.collinearMinAnchors = Math.max(
-          1,
-          normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 1, { integer: true })
-        );
-        losat.blastp.collinearMaxUnitGap = Math.max(
-          0,
-          normalizeBlastThresholdNumber(losat.blastp?.collinearMaxUnitGap, 0, { integer: true })
-        );
-        losat.blastp.collinearMaxDiagonalDrift = Math.max(
-          0,
-          normalizeBlastThresholdNumber(losat.blastp?.collinearMaxDiagonalDrift, 0, { integer: true })
-        );
-        losat.blastp.collinearMaxConflictsInMergeGap = Math.max(
-          0,
-          normalizeBlastThresholdNumber(
-            losat.blastp?.collinearMaxConflictsInMergeGap,
-            1,
+        if (hasComparisonIntent) {
+          adv.pairwise_match_style = normalizePairwiseMatchStyle(adv.pairwise_match_style);
+          adv.min_bitscore = normalizeBlastThresholdNumber(
+            adv.min_bitscore,
+            DEFAULT_LINEAR_BLAST_FILTERS.bitscore
+          );
+          adv.evalue = normalizeBlastThresholdText(adv.evalue, DEFAULT_LINEAR_BLAST_FILTERS.evalue);
+          adv.identity = normalizeBlastThresholdNumber(
+            adv.identity,
+            DEFAULT_LINEAR_BLAST_FILTERS.identity
+          );
+          adv.alignment_length = normalizeBlastThresholdNumber(
+            adv.alignment_length,
+            DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
             { integer: true }
-          )
-        );
-        losat.blastp.collinearMaxParalogLinksPerOrthogroup = Math.max(
-          1,
-          normalizeBlastThresholdNumber(
-            losat.blastp?.collinearMaxParalogLinksPerOrthogroup,
-            2,
-            { integer: true }
-          )
-        );
-        losat.blastp.collinearColorMode = normalizeCollinearColorMode(losat.blastp?.collinearColorMode);
-        losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(losat.blastp?.collinearAnchorMode);
-        losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope);
-        const orthogroupMembershipMode = losat.blastp.orthogroupMembershipMode;
-        const orthogroupMemberMaxHits = Math.max(1, losat.blastp.orthogroupMemberMaxHits);
-        const collinearSearchScope = losat.blastp.collinearSearchScope;
+          );
+        }
+
+        const blastpMaxHits = usePairwiseBlastp
+          ? Math.max(1, normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true }))
+          : 5;
+        const orthogroupMembershipMode = useOrthogroupBlastp
+          ? normalizeOrthogroupMembershipMode(losat.blastp?.orthogroupMembershipMode)
+          : 'anchor_core_v1';
+        const orthogroupMemberMaxHits = useOrthogroupBlastp
+          ? Math.max(
+              1,
+              normalizeBlastThresholdNumber(losat.blastp?.orthogroupMemberMaxHits, 5, { integer: true })
+            )
+          : 5;
+        const collinearMinAnchors = useCollinearBlastp
+          ? Math.max(
+              1,
+              normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 1, { integer: true })
+            )
+          : 1;
+        const collinearMaxUnitGap = useCollinearBlastp
+          ? Math.max(
+              0,
+              normalizeBlastThresholdNumber(losat.blastp?.collinearMaxUnitGap, 0, { integer: true })
+            )
+          : 0;
+        const collinearMaxDiagonalDrift = useCollinearBlastp
+          ? Math.max(
+              0,
+              normalizeBlastThresholdNumber(
+                losat.blastp?.collinearMaxDiagonalDrift,
+                0,
+                { integer: true }
+              )
+            )
+          : 0;
+        const collinearMaxConflictsInMergeGap = useCollinearBlastp
+          ? Math.max(
+              0,
+              normalizeBlastThresholdNumber(
+                losat.blastp?.collinearMaxConflictsInMergeGap,
+                1,
+                { integer: true }
+              )
+            )
+          : 1;
+        const collinearMaxParalogLinksPerOrthogroup = useCollinearBlastp
+          ? Math.max(
+              1,
+              normalizeBlastThresholdNumber(
+                losat.blastp?.collinearMaxParalogLinksPerOrthogroup,
+                2,
+                { integer: true }
+              )
+            )
+          : 2;
+        const collinearColorMode = useCollinearBlastp
+          ? normalizeCollinearColorMode(losat.blastp?.collinearColorMode)
+          : 'orientation';
+        const rawCollinearUnitMode = String(
+          losat.blastp?.collinearUnitMode || ''
+        ).trim().toLowerCase();
+        const collinearUnitMode = useCollinearBlastp &&
+          ['auto', 'cds', 'locus'].includes(rawCollinearUnitMode)
+          ? rawCollinearUnitMode
+          : 'auto';
+        const collinearAnchorMode = useCollinearBlastp
+          ? normalizeCollinearAnchorMode(losat.blastp?.collinearAnchorMode)
+          : 'rbh';
+        const collinearSearchScope = useCollinearBlastp
+          ? normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope)
+          : 'adjacent';
+
+        if (useProteinBlastp) losat.blastp.mode = blastpMode;
+        if (usePairwiseBlastp) {
+          losat.blastp.maxHits = blastpMaxHits;
+          losat.blastp.candidateLimit = null;
+        } else if (useOrthogroupBlastp) {
+          losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
+          losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
+        } else if (useCollinearBlastp) {
+          losat.blastp.collinearMinAnchors = collinearMinAnchors;
+          losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
+          losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
+          losat.blastp.collinearMaxConflictsInMergeGap = collinearMaxConflictsInMergeGap;
+          losat.blastp.collinearMaxParalogLinksPerOrthogroup =
+            collinearMaxParalogLinksPerOrthogroup;
+          losat.blastp.collinearColorMode = collinearColorMode;
+          losat.blastp.collinearUnitMode = collinearUnitMode;
+          losat.blastp.collinearAnchorMode = collinearAnchorMode;
+          losat.blastp.collinearSearchScope = collinearSearchScope;
+        }
 
         const normalizedPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);
@@ -2768,9 +2752,11 @@ export const createRunAnalysis = ({
         adv.label_rendering = normalizedLabelRendering;
         const normalizedLinearLabelSpacing = normalizePositiveNumberOrNull(adv.linear_label_spacing);
         adv.linear_label_spacing = normalizedLinearLabelSpacing;
-        const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
-        if (comparisonHeight.status === 'invalid') {
-          throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+        if (hasComparisonIntent) {
+          const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
+          if (comparisonHeight.status === 'invalid') {
+            throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+          }
         }
 
         const viewTransformSpecs = [];
@@ -2813,7 +2799,6 @@ export const createRunAnalysis = ({
           return null;
         };
 
-        let hasLinearComparisonData = comparisonResolution.hasComparisonIntent === true;
         const fastaCache = new Map();
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
@@ -2825,6 +2810,7 @@ export const createRunAnalysis = ({
         let resolveLegacyProteinReferences = null;
         let convertProteinBlast = null;
         let convertNucleotideBlast = null;
+        collinearGroups.value = [];
         if (useOrthogroupBlastp) {
           clearOrthogroupMetadata();
         } else {
@@ -2951,7 +2937,7 @@ export const createRunAnalysis = ({
                 recordInstanceKey,
                 recordIndex: idx,
                 featureVisibility: featureVisibilityCacheKey,
-                proteinMapSchema: 3
+                proteinMapSchema: 4
               })
             : JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
           const usePersistentFastaCache = !useProteinBlastp;
@@ -3251,7 +3237,7 @@ export const createRunAnalysis = ({
         const getBlastpCandidateLimit = () => {
           if (!useProteinBlastp) return null;
           if (useOrthogroupBlastp || useCollinearBlastp) return null;
-          return Math.max(1, losat.blastp.maxHits);
+          return blastpMaxHits;
         };
 
         const buildLosatArgs = (queryIdx, subjectIdx) => {
@@ -3657,19 +3643,19 @@ export const createRunAnalysis = ({
             if (useDerivedProteinPayloadCache) {
               const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
                 mode: blastpMode,
-                maxHits: Math.max(1, losat.blastp.maxHits),
+                maxHits: blastpMaxHits,
                 bitscore: adv.min_bitscore,
                 evalue: adv.evalue,
                 identity: adv.identity,
                 alignmentLength: adv.alignment_length,
-                collinearMinAnchors: losat.blastp.collinearMinAnchors,
-                collinearMaxUnitGap: losat.blastp.collinearMaxUnitGap,
+                collinearMinAnchors,
+                collinearMaxUnitGap,
                 collinearUnitMode: 'cds',
-                collinearColorMode: losat.blastp.collinearColorMode,
+                collinearColorMode,
                 collinearAnchorMode: 'rbh',
-                collinearMaxDiagonalDrift: losat.blastp.collinearMaxDiagonalDrift,
-                collinearMaxConflictsInMergeGap: losat.blastp.collinearMaxConflictsInMergeGap,
-                collinearMaxParalogLinksPerOrthogroup: losat.blastp.collinearMaxParalogLinksPerOrthogroup,
+                collinearMaxDiagonalDrift,
+                collinearMaxConflictsInMergeGap,
+                collinearMaxParalogLinksPerOrthogroup,
                 collinearSearchScope,
                 orthogroupMembershipMode,
                 orthogroupMemberMaxHits,
@@ -3697,19 +3683,19 @@ export const createRunAnalysis = ({
                 convertProteinBlast(
                   JSON.stringify({ records: recordPayloads, pairs: pairPayloads }),
                   blastpMode,
-                  Math.max(1, losat.blastp.maxHits),
+                  blastpMaxHits,
                   adv.min_bitscore,
                   adv.evalue,
                   adv.identity,
                   adv.alignment_length,
-                  losat.blastp.collinearMinAnchors,
-                  losat.blastp.collinearMaxUnitGap,
+                  collinearMinAnchors,
+                  collinearMaxUnitGap,
                   'cds',
-                  losat.blastp.collinearColorMode,
+                  collinearColorMode,
                   'rbh',
-                  losat.blastp.collinearMaxDiagonalDrift,
-                  losat.blastp.collinearMaxConflictsInMergeGap,
-                  losat.blastp.collinearMaxParalogLinksPerOrthogroup,
+                  collinearMaxDiagonalDrift,
+                  collinearMaxConflictsInMergeGap,
+                  collinearMaxParalogLinksPerOrthogroup,
                   collinearSearchScope,
                   orthogroupMembershipMode,
                   orthogroupMemberMaxHits
@@ -3725,14 +3711,25 @@ export const createRunAnalysis = ({
             }
             losatDerivedCache.value = derivedCacheMap;
             if (convertedPayload.error) throw new Error(convertedPayload.error);
+            if (!hasRequiredCanonicalAnalysisResource(blastpMode, convertedPayload)) {
+              throw new Error(
+                'Protein comparison analysis did not return its canonical typed result.'
+              );
+            }
             const conversionCache = convertedPayload.cache || {};
             if (conversionCache.convertedPayloadHit) losatTiming.proteinConversionCacheHits += 1;
             losatTiming.proteinFilteredHitCacheHits += Number(conversionCache.filteredHitCacheHits || 0);
             losatTiming.proteinFilteredHitCacheMisses += Number(conversionCache.filteredHitCacheMisses || 0);
-            if (useOrthogroupBlastp || (useCollinearBlastp && collinearGroupScopeForEvidenceScope(collinearSearchScope) === 'global_collinear')) {
-              setOrthogroupMetadata(convertedPayload.orthogroups || []);
-            } else {
-              clearOrthogroupMetadata({ clearSelection: true });
+            if (useCollinearBlastp) {
+              resolvedComparisons.push({
+                kind: 'collinearityResult',
+                typedResource: convertedPayload.collinearityResult
+              });
+            } else if (useOrthogroupBlastp) {
+              resolvedComparisons.push({
+                kind: 'orthogroupResult',
+                typedResource: convertedPayload.orthogroupResult
+              });
             }
             const convertedPairs = Array.isArray(convertedPayload.pairs) ? convertedPayload.pairs : [];
             for (const converted of convertedPairs) {
@@ -3753,15 +3750,16 @@ export const createRunAnalysis = ({
                 name: blastName,
                 slot: blastSlot
               });
-              resolvedComparisons.push({
-                kind: 'precomputedProteinComparison',
-                edgeKey: sourcePair?.edgeKey || '',
-                ordinal: Number(sourcePair?.ordinal),
-                queryRecordIndex: Number(sourcePair?.queryIndex),
-                subjectRecordIndex: Number(sourcePair?.subjectIndex),
-                rows: Array.isArray(converted.rows) ? converted.rows : []
-              });
-              hasLinearComparisonData = true;
+              if (!useCollinearBlastp) {
+                resolvedComparisons.push({
+                  kind: 'precomputedProteinComparison',
+                  edgeKey: sourcePair?.edgeKey || '',
+                  ordinal: Number(sourcePair?.ordinal),
+                  queryRecordIndex: Number(sourcePair?.queryIndex),
+                  subjectRecordIndex: Number(sourcePair?.subjectIndex),
+                  rows: Array.isArray(converted.rows) ? converted.rows : []
+                });
+              }
             }
           } else {
             if (!convertNucleotideBlast) {
@@ -3801,7 +3799,6 @@ export const createRunAnalysis = ({
                 subjectRecordIndex: pair.subjectIndex,
                 text: converted.tsv || '',
               });
-              hasLinearComparisonData = true;
             }
           }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
@@ -3938,14 +3935,9 @@ export const createRunAnalysis = ({
           validateDepthStyleSettings();
           adv.depth_height = normalizePositiveNumberOrNull(adv.depth_height);
         }
-        annotationLoadComparison = hasLinearComparisonData;
       }
 
-      if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
-        const annotationError = validateAnnotationTargets({
-          loadComparison: mode.value === 'linear' ? annotationLoadComparison : false
-        });
-        if (annotationError) throw new Error(annotationError);
+      if (annotationSets.length > 0) {
         stageTextFile('/web_annotations.tsv', encodeAnnotationTable(annotationSets), {
           name: 'annotations.tsv',
           slot: 'generatedFiles.web_annotations'
@@ -3957,7 +3949,11 @@ export const createRunAnalysis = ({
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }
-      const serializedFiles = await serializeCanonicalFiles(activeComparisonPlanSnapshot);
+      const serializedFiles = await serializeCanonicalFiles(
+        activeComparisonPlanSnapshot,
+        linearRecordCatalog
+      );
+      throwIfGenerationCanceled();
       const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
         ...entry,
         fasta: serializedFiles.c_conservation_fastas?.[entry.sourceIndex] || null
@@ -4058,7 +4054,7 @@ export const createRunAnalysis = ({
               featureColorOverrides,
               featureStrokeOverrides,
               manualSpecificRules,
-              legacyFeatures: manualCancelSnapshot?.extractedFeatures || []
+              legacyFeatures: manualCancelSnapshot?.artifact?.features?.extractedFeatures || []
             })
           )
         : null;
@@ -4128,6 +4124,9 @@ export const createRunAnalysis = ({
         selectedFeatureRecordIdx.value = 0;
         editableLabels.value = [];
         setOrthogroupMetadata(candidateCommit.featureState.orthogroups);
+        collinearGroups.value = Array.isArray(candidateCommit.featureState.collinearGroups)
+          ? candidateCommit.featureState.collinearGroups
+          : [];
         matchSequenceRegistry?.reset?.(candidateCommit.featureState.sequenceSources);
         featureExtractionPending.value = false;
         featureExtractionError.value = null;

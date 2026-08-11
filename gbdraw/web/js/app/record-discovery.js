@@ -1,30 +1,3 @@
-export const circularInputNeedsRecordDiscovery = ({
-  form,
-  adv,
-  files,
-  annotationSets
-} = {}) => {
-  const customDepthRequested = (
-    adv?.circular_track_slots_enabled === true &&
-    (Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots : []).some((slot) => (
-      slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
-    ))
-  );
-  const hasAnnotations = (Array.isArray(annotationSets) ? annotationSets : []).some((set) => (
-    Array.isArray(set?.annotations) && set.annotations.length > 0
-  ));
-  return (
-    form?.multi_record_canvas === true ||
-    (
-      (form?.show_depth === true || customDepthRequested) &&
-      Array.isArray(files?.c_depth) &&
-      files.c_depth.length > 0 &&
-      files.c_depth.every((row) => Array.isArray(row))
-    ) ||
-    hasAnnotations
-  );
-};
-
 const normalizeRecordLength = (value) => {
   const numeric = Number(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
@@ -51,6 +24,50 @@ export const normalizeSequenceRecords = (payload) => {
   return records;
 };
 
+const parseGenBankRecordText = (text) => {
+  const records = String(text || '')
+    .split(/^\/\/\s*$/m)
+    .map((chunk, index) => {
+      const locus = chunk.match(/^LOCUS\s+(\S+)(?:\s+(\d+)\s+(?:bp|aa)\b)?/m);
+      if (!locus) return null;
+      const accession = chunk.match(/^ACCESSION\s+(\S+)/m)?.[1];
+      const version = chunk.match(/^VERSION\s+(\S+)/m)?.[1];
+      return {
+        selector: `#${index + 1}`,
+        record_id: version || accession || locus[1],
+        record_length: locus[2] ? Number(locus[2]) : null
+      };
+    })
+    .filter(Boolean)
+    .map((record, index) => ({ ...record, selector: `#${index + 1}` }));
+  return normalizeSequenceRecords({ records });
+};
+
+const parseFastaRecordText = (text) => {
+  const records = [];
+  let current = null;
+  String(text || '').split(/\r?\n/).forEach((line) => {
+    if (line.startsWith('>')) {
+      if (current) records.push(current);
+      current = {
+        selector: `#${records.length + 1}`,
+        record_id: line.slice(1).trim().split(/\s+/)[0],
+        record_length: 0
+      };
+    } else if (current) {
+      current.record_length += line.replace(/\s+/g, '').length;
+    }
+  });
+  if (current) records.push(current);
+  return normalizeSequenceRecords({ records });
+};
+
+export const parseSequenceRecordText = (text, format) => {
+  if (format === 'genbank') return parseGenBankRecordText(text);
+  if (format === 'fasta') return parseFastaRecordText(text);
+  throw new Error(`Unsupported format: ${String(format)}.`);
+};
+
 const readRecordPayload = (pyodide, helperName, args) => {
   const helper = pyodide.globals.get(helperName);
   try {
@@ -73,12 +90,24 @@ const unlinkIfPresent = (pyodide, path) => {
 export const discoverSequenceRecords = async ({
   file,
   format,
+  readText = null,
   pyodide,
   writeFileToFs,
   temporaryPath
 }) => {
   if (!file) throw new Error('A sequence file is required.');
-  if (!pyodide) throw new Error('Python environment is not ready.');
+  let textError = null;
+  const readSourceText = typeof readText === 'function'
+    ? () => readText(file)
+    : (typeof file.text === 'function' ? () => file.text() : null);
+  if (readSourceText) {
+    try {
+      return parseSequenceRecordText(await readSourceText(), format);
+    } catch (error) {
+      textError = error;
+    }
+  }
+  if (!pyodide) throw textError || new Error('Python environment is not ready.');
   if (typeof writeFileToFs !== 'function') throw new Error('File staging is unavailable.');
   if (!temporaryPath) throw new Error('A temporary path is required.');
 
@@ -94,13 +123,25 @@ export const discoverSequenceRecords = async ({
 export const discoverGffFastaRecords = async ({
   gffFile,
   fastaFile,
+  readText = null,
   pyodide,
   writeFileToFs,
   gffTemporaryPath,
   fastaTemporaryPath
 }) => {
   if (!gffFile || !fastaFile) throw new Error('GFF3 and FASTA files are required.');
-  if (!pyodide) throw new Error('Python environment is not ready.');
+  let textError = null;
+  const readSourceText = typeof readText === 'function'
+    ? () => readText(fastaFile)
+    : (typeof fastaFile.text === 'function' ? () => fastaFile.text() : null);
+  if (readSourceText) {
+    try {
+      return parseSequenceRecordText(await readSourceText(), 'fasta');
+    } catch (error) {
+      textError = error;
+    }
+  }
+  if (!pyodide) throw textError || new Error('Python environment is not ready.');
   if (typeof writeFileToFs !== 'function') throw new Error('File staging is unavailable.');
   if (!gffTemporaryPath || !fastaTemporaryPath) throw new Error('Temporary paths are required.');
 

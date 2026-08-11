@@ -1,62 +1,9 @@
 const { test, expect } = require('@playwright/test');
-const { createReadStream, existsSync, readFileSync } = require('node:fs');
-const { createServer } = require('node:http');
-const { extname, join, normalize, resolve, sep } = require('node:path');
+const { readFileSync } = require('node:fs');
+const { join, resolve } = require('node:path');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
-const contentTypes = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.wasm': 'application/wasm',
-  '.whl': 'application/octet-stream',
-  '.data': 'application/octet-stream'
-};
-
-let server;
-let baseUrl;
-
-test.beforeAll(async () => {
-  await new Promise((resolveServer, rejectServer) => {
-    server = createServer((request, response) => {
-      const url = new URL(request.url || '/', 'http://127.0.0.1');
-      const requestedPath = normalize(decodeURIComponent(url.pathname))
-        .replace(/^(\.\.(?:\/|\\|$))+/, '');
-      const filePath = resolve(repoRoot, requestedPath.replace(/^[/\\]+/, ''));
-      if (!filePath.startsWith(`${repoRoot}${sep}`) && filePath !== repoRoot) {
-        response.writeHead(403);
-        response.end('Forbidden');
-        return;
-      }
-      const finalPath = filePath === repoRoot
-        ? join(repoRoot, 'gbdraw/web/index.html')
-        : filePath;
-      if (!existsSync(finalPath)) {
-        response.writeHead(404);
-        response.end('Not found');
-        return;
-      }
-      response.writeHead(200, {
-        'Content-Type': contentTypes[extname(finalPath)] || 'application/octet-stream'
-      });
-      createReadStream(finalPath).pipe(response);
-    });
-    server.once('error', rejectServer);
-    server.listen(0, '127.0.0.1', () => {
-      baseUrl = `http://127.0.0.1:${server.address().port}`;
-      resolveServer();
-    });
-  });
-});
-
-test.afterAll(async () => {
-  await new Promise((resolveClose) => server.close(resolveClose));
-});
-
 const runDiagram = async (page) => page.evaluate(async () => {
   const app = window.__GBDRAW_APP__;
   const result = await app.runAnalysis();
@@ -92,7 +39,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   test.setTimeout(300000);
   const genbank = readFileSync(genbankPath, 'utf8');
 
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(
     () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
@@ -219,7 +166,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   test.setTimeout(300000);
   const genbank = readFileSync(genbankPath, 'utf8');
 
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(
     () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,

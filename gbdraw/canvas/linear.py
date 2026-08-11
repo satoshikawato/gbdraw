@@ -4,16 +4,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from svgwrite import Drawing
 
 from ..config.models import LinearRenderProfile
 from ..core.sequence import determine_length_parameter
-
-if TYPE_CHECKING:
-    from ..configurators.legend import LegendMeasurement
-
 
 # The configured arrow coefficients are calibrated to these non-stranded heights.
 _ARROW_LENGTH_REFERENCE_CDS_HEIGHT = {
@@ -92,7 +88,6 @@ class LinearCanvasConfigurator:
     vertical_padding (float): Vertical padding between elements.
     configured_track_spacing (float): Default spacing between linear data tracks.
     comparison_height (float): Height for comparison tracks.
-    canvas_padding (float): Padding around the canvas.
     definition_gap (float): Minimum gap between definition text and record axis.
     default_cds_height (float): Default height for coding sequences.
     default_gc_height (float): Default height for GC content.
@@ -143,7 +138,6 @@ class LinearCanvasConfigurator:
         self.original_vertical_offset: float = cfg.canvas.linear.vertical_offset
         self.vertical_offset: float = cfg.canvas.linear.vertical_offset
         self.horizontal_offset: float = cfg.canvas.linear.horizontal_offset
-        self.original_horizontal_offset = self.horizontal_offset
         self.vertical_padding: float = cfg.canvas.linear.vertical_padding
         self.configured_track_spacing: float = cfg.canvas.linear.track_spacing
         self.has_comparisons: bool = has_comparisons
@@ -153,7 +147,6 @@ class LinearCanvasConfigurator:
         # The actual inter-record spacing will be recalculated in assemble_linear_diagram
         # based on feature track heights
         self.comparison_height: float = cfg.canvas.linear.comparison_height if has_comparisons else 0
-        self.canvas_padding: float = cfg.canvas.linear.canvas_padding
         self.definition_gap: float = cfg.canvas.linear.definition_gap
         self.length_threshold = cfg.labels.length_threshold.linear
         self.length_param = determine_length_parameter(self.longest_genome, self.length_threshold)
@@ -170,7 +163,6 @@ class LinearCanvasConfigurator:
         self.normalize_length: bool = cfg.canvas.linear.normalize_length
         self.legend_position = legend
         self.num_of_entries: int = num_of_entries
-        self.total_height = 0
         self.plot_tracks_top_extent = 0.0
         self.plot_tracks_bottom_extent = 0.0
 
@@ -351,7 +343,7 @@ class LinearCanvasConfigurator:
         # Keep the record axis width fixed to the configured figure width from the start.
         # Horizontal offsets reposition the plotted record; they do not shorten its scale.
         self.alignment_width: float = self.fig_width
-        self.total_width = int(self.fig_width + 2 * self.canvas_padding)
+        self.total_width = int(self.horizontal_offset + self.fig_width)
         self.total_height = int(
             2 * self.vertical_offset
             + (self.cds_height + self.plot_tracks_height)
@@ -365,84 +357,13 @@ class LinearCanvasConfigurator:
             * (self.num_of_entries - 1)
         )
 
-    def recalculate_canvas_dimensions(
-        self,
-        legend_measurement: LegendMeasurement,
-        max_definition_width: float,
-    ) -> None:
-        """
-        Calculates final canvas dimensions and legend offsets, ensuring the legend fits within the canvas.
-        """
-        # Keep the alignment width fixed to the configured figure width so the longest record fits.
-        # Horizontal offsets and legend widths expand the total canvas width around that baseline.
-        self.alignment_width = self.fig_width
-        if self.legend_position in {"left", "right"}:
-            self.total_height = max(
-                float(self.total_height),
-                float(legend_measurement.legend_height)
-                + (2.0 * float(self.vertical_padding)),
-            )
+    def configure_plot_width(self, definition_reserve_width: float) -> None:
+        """Resolve the legend-independent horizontal plot-space origin."""
 
-        def calculate_optimal_legend_y():
-            genome_area_top = self.vertical_offset
-            genome_area_bottom = self.total_height - self.vertical_offset - self.vertical_padding
-            genome_area_center_y = genome_area_top + (genome_area_bottom - genome_area_top) / 2
-            legend_y = (
-                genome_area_center_y
-                - (legend_measurement.legend_height / 2)
-            )
-
-            minimum_y = float(self.vertical_padding)
-            maximum_y = max(
-                minimum_y,
-                float(self.total_height)
-                - float(legend_measurement.legend_height)
-                - float(self.vertical_padding),
-            )
-            return min(max(float(legend_y), minimum_y), maximum_y)
-
-        padding = self.canvas_padding
-        legend_width = legend_measurement.legend_width
-        definition_reserve_width = max_definition_width + self.definition_gap
-
-        if self.legend_position == "right":
-            self.horizontal_offset = 2 * padding + definition_reserve_width
-            self.total_width = (
-                self.horizontal_offset
-                + self.alignment_width
-                + 2 * padding
-                + legend_width
-                + 1 * padding
-            )
-            self.legend_offset_x = self.horizontal_offset + self.alignment_width + 2 * padding
-            self.legend_offset_y = calculate_optimal_legend_y()
-
-        elif self.legend_position == "left":
-            self.horizontal_offset = 1 * padding + legend_width + 2 * padding + definition_reserve_width
-            self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
-            self.legend_offset_x = padding
-            self.legend_offset_y = calculate_optimal_legend_y()
-
-        elif self.legend_position in ["top", "bottom"]:
-            self.horizontal_offset = 2 * padding + definition_reserve_width
-            self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
-            self.legend_offset_x = (
-                self.total_width - legend_measurement.legend_width
-            ) / 2
-            if self.legend_position == "top":
-                self.legend_offset_y = self.original_vertical_offset + 2 * self.vertical_padding
-            elif self.legend_position == "bottom":
-                self.legend_offset_y = (
-                    self.total_height
-                    - self.original_vertical_offset
-                    - legend_measurement.legend_height
-                )
-
-        else:
-            self.horizontal_offset = 2 * padding + definition_reserve_width
-            self.total_width = self.horizontal_offset + self.alignment_width + 2 * padding
-            self.legend_offset_x = 0
-            self.legend_offset_y = 0
+        reserve = max(0.0, float(definition_reserve_width))
+        self.alignment_width = float(self.fig_width)
+        self.horizontal_offset = reserve + float(self.definition_gap)
+        self.total_width = self.horizontal_offset + self.alignment_width
 
     def create_svg_canvas(self) -> Drawing:
         """

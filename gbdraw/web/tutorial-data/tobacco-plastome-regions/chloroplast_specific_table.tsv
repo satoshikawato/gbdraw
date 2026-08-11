@@ -1,0 +1,71 @@
+CDS	gene	psaA	#00662c	photosystem I
+CDS	gene	psaB	#00662c	photosystem I
+CDS	gene	psaC	#00662c	photosystem I
+CDS	gene	psaJ	#00662c	photosystem I
+CDS	gene	psaI	#00662c	photosystem I
+CDS	gene	psbA	#328925	photosystem II
+CDS	gene	psbC	#328925	photosystem II
+CDS	gene	psbD	#328925	photosystem II
+CDS	gene	psbI	#328925	photosystem II
+CDS	gene	psbK	#328925	photosystem II
+CDS	gene	psbE	#328925	photosystem II
+CDS	gene	psbH	#328925	photosystem II
+CDS	gene	psbF	#328925	photosystem II
+CDS	gene	psbL	#328925	photosystem II
+CDS	gene	psbJ	#328925	photosystem II
+CDS	gene	psbN	#328925	photosystem II
+CDS	gene	psbT	#328925	photosystem II
+CDS	gene	psbB	#328925	photosystem II
+CDS	gene	petA	#799c13	cytochrome b/f complex
+CDS	gene	petB	#799c13	cytochrome b/f complex
+CDS	gene	petD	#799c13	cytochrome b/f complex
+CDS	gene	petG	#799c13	cytochrome b/f complex
+CDS	gene	petL	#799c13	cytochrome b/f complex
+CDS	gene	rpoA	#bd1220	RNA polymerase
+CDS	gene	rpoB	#bd1220	RNA polymerase
+CDS	gene	rpoC1	#bd1220	RNA polymerase
+CDS	gene	rpoC2	#bd1220	RNA polymerase
+CDS	gene	rpl20	#9e7742	ribosomal proteins (LSU)
+CDS	gene	rpl2	#9e7742	ribosomal proteins (LSU)
+CDS	gene	rpl22	#9e7742	ribosomal proteins (LSU)
+CDS	gene	rpl14	#9e7742	ribosomal proteins (LSU)
+CDS	gene	rpl16	#9e7742	ribosomal proteins (LSU)
+CDS	gene	rpl36	#9e7742	ribosomal proteins (LSU)
+CDS	gene	rpl33	#9e7742	ribosomal proteins (LSU)
+CDS	gene	rpl23	#9e7742	ribosomal proteins (LSU)
+CDS	gene	rpl32	#9e7742	ribosomal proteins (LSU)
+CDS	gene	ycf1	#dadada	hypothetical chloroplast reading frames (ycf)
+CDS	gene	ycf2	#dadada	hypothetical chloroplast reading frames (ycf)
+CDS	gene	ycf3	#dadada	hypothetical chloroplast reading frames (ycf)
+CDS	gene	ycf4	#dadada	hypothetical chloroplast reading frames (ycf)
+CDS	gene	rps3	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	rps4	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	rps8	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	rps11	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	rps7	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	rps12	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	rps15	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	rps16	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	rps18	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	rps2	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	rps19	#dbaa73	ribosomal proteins (SSU)
+CDS	gene	atpB	#97be0d	ATP synthase
+CDS	gene	atpE	#97be0d	ATP synthase
+CDS	gene	atpI	#97be0d	ATP synthase
+CDS	gene	atpH	#97be0d	ATP synthase
+CDS	gene	atpF	#97be0d	ATP synthase
+CDS	gene	atpA	#97be0d	ATP synthase
+CDS	gene	clpP	#e95d0f	clpP, matK
+CDS	gene	matK	#e95d0f	clpP, matK
+CDS	gene	rbcL	#1fa12d	RubisCO large subunit
+CDS	gene	ndhD	#ffec00	NADH dehydrogenase
+CDS	gene	ndhE	#ffec00	NADH dehydrogenase
+CDS	gene	ndhG	#ffec00	NADH dehydrogenase
+CDS	gene	ndhI	#ffec00	NADH dehydrogenase
+CDS	gene	ndhA	#ffec00	NADH dehydrogenase
+CDS	gene	ndhH	#ffec00	NADH dehydrogenase
+CDS	gene	ndhF	#ffec00	NADH dehydrogenase
+CDS	gene	ndhB	#ffec00	NADH dehydrogenase
+CDS	gene	ndhC	#ffec00	NADH dehydrogenase
+CDS	gene	ndhK	#ffec00	NADH dehydrogenase
+CDS	gene	ndhJ	#ffec00	NADH dehydrogenase

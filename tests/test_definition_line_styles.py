@@ -215,15 +215,7 @@ def test_modify_config_dict_updates_nested_definition_line_styles() -> None:
     assert "fill" not in line_styles["accession"]
 
 
-def test_session_io_definition_line_styles_parse_cli_and_emit_gui_args() -> None:
-    parsed = session_io._definition_line_styles_from_cli_args(
-        [
-            "--definition_line_style",
-            "name:weight=bold",
-            "--definition-line-style",
-            "coordinates:color=rgb(1,2,3)",
-        ]
-    )
+def test_session_io_definition_line_styles_emit_gui_args() -> None:
     run_args: list[str] = []
     invocation_args: list[str] = []
 
@@ -240,10 +232,6 @@ def test_session_io_definition_line_styles_parse_cli_and_emit_gui_args() -> None
         },
     )
 
-    assert parsed == {
-        "name": {"font_weight": "bold"},
-        "length": {"fill": "rgb(1,2,3)"},
-    }
     assert run_args == [
         "--definition_line_style",
         "name:weight=bold,color=#111111",

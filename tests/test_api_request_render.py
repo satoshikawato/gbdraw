@@ -588,50 +588,58 @@ def test_normalize_in_memory_record_validates_selector() -> None:
 
 
 def test_normalize_gff_fasta_source_uses_selector() -> None:
-    fixture_dir = Path(__file__).parents[1] / "examples" / "gff3_lambda"
+    fixture_dir = (
+        Path(__file__).parents[1] / "gbdraw" / "web" / "tutorial-data" / "lambda-gff3"
+    )
     request = LinearDiagramRequest(
         records=(
             RecordInput(
                 source=GffFastaInputSource(
-                    fixture_dir / "lambda_two_contigs.gff3",
-                    fixture_dir / "lambda_two_contigs.fna",
+                    fixture_dir / "NC_001416.gff3",
+                    fixture_dir / "NC_001416.fna",
                 ),
-                selector=parse_record_selector("lambda_left"),
+                selector=parse_record_selector("NC_001416.1"),
             ),
         ),
     )
 
     (record,) = normalize_request_records(request)
 
-    assert record.id == "lambda_left"
+    assert record.id == "NC_001416.1"
+    assert len(record) == 48_502
     assert any(feature.type == "CDS" for feature in record.features)
 
 
-def test_normalize_record_input_requires_one_resolved_record() -> None:
-    fixture_dir = Path(__file__).parents[1] / "examples" / "gff3_lambda"
+def test_normalize_single_record_gff_fasta_source_without_selector() -> None:
+    fixture_dir = (
+        Path(__file__).parents[1] / "gbdraw" / "web" / "tutorial-data" / "lambda-gff3"
+    )
     request = LinearDiagramRequest(
         records=(
             RecordInput(
                 source=GffFastaInputSource(
-                    fixture_dir / "lambda_two_contigs.gff3",
-                    fixture_dir / "lambda_two_contigs.fna",
+                    fixture_dir / "NC_001416.gff3",
+                    fixture_dir / "NC_001416.fna",
                 )
             ),
         )
     )
 
-    with pytest.raises(ValidationError, match="exactly one record"):
-        normalize_request_records(request)
+    (record,) = normalize_request_records(request)
+
+    assert record.id == "NC_001416.1"
 
 
 def test_linear_record_first_cardinality_is_explicit_with_comparisons() -> None:
-    fixture_dir = Path(__file__).parents[1] / "examples" / "gff3_lambda"
+    fixture_dir = (
+        Path(__file__).parents[1] / "gbdraw" / "web" / "tutorial-data" / "lambda-gff3"
+    )
     request = LinearDiagramRequest(
         records=(
             RecordInput(
                 source=GffFastaInputSource(
-                    fixture_dir / "lambda_two_contigs.gff3",
-                    fixture_dir / "lambda_two_contigs.fna",
+                    fixture_dir / "NC_001416.gff3",
+                    fixture_dir / "NC_001416.fna",
                 ),
                 cardinality=RecordCardinality.FIRST,
             ),
@@ -639,7 +647,7 @@ def test_linear_record_first_cardinality_is_explicit_with_comparisons() -> None:
         options=LinearDiagramOptions(blast_files=("comparison.tsv",)),
     )
 
-    assert normalize_request_records(request)[0].id == "lambda_left"
+    assert normalize_request_records(request)[0].id == "NC_001416.1"
 
 
 @pytest.mark.linear
@@ -647,7 +655,9 @@ def test_prepared_request_resolves_feature_inputs_once_for_gff_and_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fixture_dir = Path(__file__).parents[1] / "examples" / "gff3_lambda"
+    fixture_dir = (
+        Path(__file__).parents[1] / "gbdraw" / "web" / "tutorial-data" / "lambda-gff3"
+    )
     color_file = tmp_path / "colors.tsv"
     color_file.write_text(
         "CDS\tproduct\t.*\t#123456\tCoding sequence\n",
@@ -662,10 +672,10 @@ def test_prepared_request_resolves_feature_inputs_once_for_gff_and_metadata(
         records=(
             RecordInput(
                 source=GffFastaInputSource(
-                    fixture_dir / "lambda_two_contigs.gff3",
-                    fixture_dir / "lambda_two_contigs.fna",
+                    fixture_dir / "NC_001416.gff3",
+                    fixture_dir / "NC_001416.fna",
                 ),
-                selector=parse_record_selector("lambda_left"),
+                selector=parse_record_selector("NC_001416.1"),
             ),
         ),
         options=LinearDiagramOptions(
@@ -1130,7 +1140,7 @@ def test_render_request_passes_output_policy_and_returns_existing_paths(
     monkeypatch.setattr(
         request_render_module,
         "build_request_plan_diagram",
-        lambda _: prepared,
+        lambda _, **__: prepared,
     )
     monkeypatch.setattr(
         request_render_module,
@@ -1184,7 +1194,7 @@ def test_render_request_plain_svg_retains_catalog_context_only_when_opted_in(
     monkeypatch.setattr(
         request_render_module,
         "build_request_plan_diagram",
-        lambda _: prepared,
+        lambda _, **__: prepared,
     )
     monkeypatch.setattr(
         request_render_module,
@@ -1207,6 +1217,7 @@ def test_render_request_plain_svg_retains_catalog_context_only_when_opted_in(
 def test_render_request_plain_svg_skips_catalog_context_by_default(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    stub_typed_request_export,
 ) -> None:
     request = LinearDiagramRequest(
         records=(_memory_input("default-record"),),
@@ -1225,7 +1236,7 @@ def test_render_request_plain_svg_skips_catalog_context_by_default(
     monkeypatch.setattr(
         request_render_module,
         "build_request_plan_diagram",
-        lambda _: prepared,
+        lambda _, **__: prepared,
     )
     monkeypatch.setattr(
         request_render_module,
@@ -1234,12 +1245,6 @@ def test_render_request_plain_svg_skips_catalog_context_by_default(
             "plain SVG must not build feature context without an explicit opt-in"
         ),
     )
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, **_kwargs: [str(tmp_path / "default-diagram.svg")],
-    )
-
     result = render_request(request)
 
     assert result.interactive_context is None
@@ -1266,7 +1271,7 @@ def test_render_request_fails_when_interactive_metadata_generation_fails(
     monkeypatch.setattr(
         request_render_module,
         "build_request_plan_diagram",
-        lambda _: prepared,
+        lambda _, **__: prepared,
     )
 
     def fail_context(*_args, **_kwargs):

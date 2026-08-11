@@ -1,3 +1,5 @@
+import { copyTextToClipboard } from '../js/utils/clipboard.js';
+
 const DEFAULT_SAMPLE_ID = 'Vnig_TUMSAT-TG-2018';
 const COMMON_COLOR_RULE_GUIDE_PATH = './tutorials/_common-color-rule-guide.json';
 
@@ -800,20 +802,6 @@ const updateCopyButton = (text) => {
   }, 1600);
 };
 
-const copyText = async (text) => {
-  if (navigator.clipboard?.writeText && window.isSecureContext) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const buffer = document.createElement('textarea');
-  buffer.className = 'copy-buffer';
-  buffer.value = text;
-  document.body.appendChild(buffer);
-  buffer.select();
-  document.execCommand('copy');
-  buffer.remove();
-};
-
 const renderSampleList = () => {
   clearChildren(sampleList);
   const visibleExamples = filteredExamples();
@@ -1010,7 +998,7 @@ copyLink.addEventListener('click', async () => {
   const sample = examples.find((entry) => entry.id === selectedId);
   if (!sample) return;
   try {
-    await copyText(getCurrentSampleUrl(sample));
+    await copyTextToClipboard(getCurrentSampleUrl(sample));
     updateCopyButton('Copied');
   } catch (error) {
     updateCopyButton('Copy failed');
@@ -1021,7 +1009,7 @@ copyCommandButton.addEventListener('click', async () => {
   const sample = examples.find((entry) => entry.id === selectedId);
   if (!sample || sample.commandKind !== 'runnable') return;
   try {
-    await copyText(sample.command);
+    await copyTextToClipboard(sample.command);
     copyCommandButton.textContent = 'Copied';
     window.setTimeout(() => {
       if (selectedId === sample.id) copyCommandButton.textContent = 'Copy command';

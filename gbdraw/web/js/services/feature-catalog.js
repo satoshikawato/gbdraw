@@ -1,3 +1,8 @@
+import {
+  SOURCE_FEATURE_INDEX_KEYS,
+  nonnegativeIntegerAliasStatus
+} from './feature-identity.js';
+
 const FEATURE_CATALOG_RELOAD_MESSAGE =
   'The diagram engine returned incompatible feature metadata. Reload the page and Generate again.';
 
@@ -82,8 +87,23 @@ const validateCatalogItem = (item, result, resultIndex) => {
   const sourceSequences = canonicalSequenceSourceStrings(sequenceSources);
   const biologicalFeatures = requireArray(item.biologicalFeatures);
   const knownFeatures = new Set();
+  const sourceIndexesByStableIdentity = new Map();
   biologicalFeatures.forEach((feature) => {
     if (!isObject(feature)) throw catalogError();
+    const sourceFeatureIndex = nonnegativeIntegerAliasStatus(
+      feature,
+      SOURCE_FEATURE_INDEX_KEYS
+    );
+    if (
+      !sourceFeatureIndex.valid
+      || (
+        Object.prototype.hasOwnProperty.call(feature, 'sourceFeatureIndex')
+        && (
+          !Number.isSafeInteger(feature.sourceFeatureIndex)
+          || feature.sourceFeatureIndex < 0
+        )
+      )
+    ) throw catalogError();
     const recordKey = text(feature.recordKey);
     const featureId = text(feature.biologicalFeatureId);
     const key = biologicalFeatureKey(recordKey, featureId);
@@ -94,6 +114,14 @@ const validateCatalogItem = (item, result, resultIndex) => {
     ) {
       throw catalogError();
     }
+    const stableId = text(feature.stableFeatureId) || featureId;
+    const stableIdentity = biologicalFeatureKey(recordKey, stableId);
+    if (!sourceIndexesByStableIdentity.has(stableIdentity)) {
+      sourceIndexesByStableIdentity.set(stableIdentity, []);
+    }
+    sourceIndexesByStableIdentity.get(stableIdentity).push(
+      sourceFeatureIndex.supplied ? sourceFeatureIndex.value : null
+    );
     if (feature.translationFromAminoAcidSequence !== undefined) {
       const qualifiers = isObject(feature.qualifiers) ? feature.qualifiers : {};
       const aminoAcidSequence = Object.prototype.hasOwnProperty.call(
@@ -133,6 +161,17 @@ const validateCatalogItem = (item, result, resultIndex) => {
     }
     knownFeatures.add(key);
   });
+  sourceIndexesByStableIdentity.forEach((sourceIndexes) => {
+    if (
+      sourceIndexes.length > 1
+      && (
+        sourceIndexes.some((sourceIndex) => sourceIndex === null)
+        || new Set(sourceIndexes).size !== sourceIndexes.length
+      )
+    ) {
+      throw catalogError();
+    }
+  });
 
   const svgIds = new Set();
   const features = requireArray(item.features);
@@ -150,15 +189,144 @@ const validateCatalogItem = (item, result, resultIndex) => {
   });
 
   const orthogroups = requireArray(item.orthogroups);
+  const knownGroupIds = new Set();
+  const groupsById = new Map();
   orthogroups.forEach((group) => {
     if (!isObject(group)) throw catalogError();
+    const groupId = text(group.id);
+    if (!groupId || knownGroupIds.has(groupId)) throw catalogError();
+    knownGroupIds.add(groupId);
+    groupsById.set(groupId, group);
+    const presentationScope = text(group.presentationScope);
+    const hasPresentation = [
+      'presentationScope',
+      'collinearGroupScope',
+      'groupKind'
+    ].some((key) => Object.prototype.hasOwnProperty.call(group, key));
+    if (hasPresentation) {
+      const expectedKind = {
+        adjacent_local: 'collinear_gene_group',
+        global_collinear: 'orthogroup'
+      }[presentationScope];
+      if (
+        !expectedKind
+        || text(group.collinearGroupScope) !== presentationScope
+        || text(group.groupKind) !== expectedKind
+      ) {
+        throw catalogError();
+      }
+    }
+    const knownMembers = new Set();
+    requireArray(group.members).forEach((member) => {
+      if (!isObject(member)) throw catalogError();
+      const key = biologicalFeatureKey(
+        member.recordKey,
+        member.biologicalFeatureId
+      );
+      if (!knownFeatures.has(key) || knownMembers.has(key)) {
+        throw catalogError();
+      }
+      knownMembers.add(key);
+    });
     validateReferences(
-      requireArray(group.members),
+      group.members,
       knownFeatures,
       [['recordKey', 'biologicalFeatureId']]
     );
   });
   const comparisonMatches = requireArray(item.comparisonMatches);
+  const knownMatchIds = new Set();
+  comparisonMatches.forEach((match) => {
+    if (!isObject(match)) throw catalogError();
+    const matchIds = new Set(
+      ['id', 'matchId', 'match_id']
+        .filter((key) => Object.prototype.hasOwnProperty.call(match, key))
+        .map((key) => text(match[key]))
+        .filter(Boolean)
+    );
+    if (matchIds.size !== 1) throw catalogError();
+    const matchId = [...matchIds][0];
+    if (knownMatchIds.has(matchId)) throw catalogError();
+    knownMatchIds.add(matchId);
+    const groupIds = match.orthogroup_ids === undefined
+      ? []
+      : requireArray(match.orthogroup_ids).map(text);
+    if (
+      groupIds.some((groupId) => !groupId || !knownGroupIds.has(groupId))
+      || new Set(groupIds).size !== groupIds.length
+    ) {
+      throw catalogError();
+    }
+    const hasPresentation = [
+      'collinear_group_scope',
+      'group_scope',
+      'group_kind'
+    ].some((key) => Object.prototype.hasOwnProperty.call(match, key));
+    if (hasPresentation) {
+      const scopeValues = ['collinear_group_scope', 'group_scope']
+        .filter((key) => Object.prototype.hasOwnProperty.call(match, key))
+        .map((key) => text(match[key]));
+      const kindValues = ['group_kind']
+        .filter((key) => Object.prototype.hasOwnProperty.call(match, key))
+        .map((key) => text(match[key]));
+      const scope = scopeValues[0] || '';
+      const kind = kindValues[0] || '';
+      const expectedKind = {
+        adjacent_local: 'collinear_gene_group',
+        global_collinear: 'orthogroup'
+      }[scope];
+      if (
+        scopeValues.some((value) => !value || value !== scope)
+        || kindValues.some((value) => !value || value !== kind)
+        || !expectedKind
+        || kind !== expectedKind
+      ) {
+        throw catalogError();
+      }
+      groupIds.forEach((groupId) => {
+        const group = groupsById.get(groupId);
+        if (
+          text(group?.presentationScope) !== scope
+          || text(group?.collinearGroupScope) !== scope
+          || text(group?.groupKind) !== kind
+        ) {
+          throw catalogError();
+        }
+      });
+    }
+    ['query', 'subject'].forEach((role) => {
+      const referencesKey = `${role}FeatureReferences`;
+      const singularKey = biologicalFeatureKey(
+        match[`${role}RecordKey`],
+        match[`${role}BiologicalFeatureId`]
+      );
+      const hasSingular = Boolean(
+        text(match[`${role}RecordKey`])
+        || text(match[`${role}BiologicalFeatureId`])
+      );
+      if (hasSingular && (!singularKey || !knownFeatures.has(singularKey))) {
+        throw catalogError();
+      }
+      if (match[referencesKey] === undefined) return;
+      const referenceKeys = requireArray(match[referencesKey]).map((reference) => {
+        if (!isObject(reference)) throw catalogError();
+        const key = biologicalFeatureKey(
+          reference.recordKey,
+          reference.biologicalFeatureId
+        );
+        if (!key || !knownFeatures.has(key)) throw catalogError();
+        return key;
+      });
+      if (
+        referenceKeys.length === 0
+        || new Set(referenceKeys).size !== referenceKeys.length
+        || (referenceKeys.length === 1 && singularKey !== referenceKeys[0])
+        || (referenceKeys.length > 1 && hasSingular)
+      ) {
+        throw catalogError();
+      }
+    });
+  });
   validateReferences(comparisonMatches, knownFeatures, [
     ['queryRecordKey', 'queryBiologicalFeatureId'],
     ['subjectRecordKey', 'subjectBiologicalFeatureId']
@@ -344,6 +512,11 @@ const expandBiologicalFeature = (
   const recordKey = text(feature.recordKey);
   const biologicalFeatureId = text(feature.biologicalFeatureId);
   const stableId = text(feature.stableFeatureId) || biologicalFeatureId;
+  const sourceFeatureIndex = nonnegativeIntegerAliasStatus(
+    feature,
+    SOURCE_FEATURE_INDEX_KEYS
+  );
+  if (!sourceFeatureIndex.valid) throw catalogError();
   const overrideKey = biologicalFeatureKey(recordKey, biologicalFeatureId);
   const expanded = restoreCompactBiologicalDefaults({
     ...cloneJson(feature),
@@ -361,6 +534,12 @@ const expandBiologicalFeature = (
     displayRecordId,
     selector: selectorForFeature(feature, stableId)
   });
+  if (sourceFeatureIndex.supplied) {
+    expanded.sourceFeatureIndex = sourceFeatureIndex.value;
+    expanded.source_feature_index = sourceFeatureIndex.value;
+    expanded.featureIndex = sourceFeatureIndex.value;
+    expanded.feature_index = sourceFeatureIndex.value;
+  }
   const nucleotideSequence = deriveCatalogNucleotideSequence(
     expanded,
     sequenceSources,
@@ -406,7 +585,8 @@ const expandOrthogroup = (group, biologicalByKey, renderedByKey) => ({
       member.biologicalFeatureId
     );
     const biological = biologicalByKey.get(key) || {};
-    const rendered = renderedByKey.get(key)?.[0] || null;
+    const renderedReferences = renderedByKey.get(key) || [];
+    const rendered = renderedReferences.length === 1 ? renderedReferences[0] : null;
     const recordIndex = Number(biological.record_idx);
     const stableId = text(biological.stable_feature_id);
     return {
@@ -479,6 +659,7 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
   const extractedFeatures = [];
   const biologicalFeatures = [];
   const orthogroups = [];
+  const collinearGroups = [];
   const annotations = [];
   const comparisonMatches = [];
   const sequenceSources = [];
@@ -530,11 +711,14 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
         fill_color: text(rendered.fillColor)
       });
     });
-    orthogroups.push(
-      ...item.orthogroups.map((group) => (
-        expandOrthogroup(group, biologicalByKey, renderedByKey)
-      ))
-    );
+    item.orthogroups.forEach((group) => {
+      const expanded = expandOrthogroup(group, biologicalByKey, renderedByKey);
+      if (text(expanded.presentationScope) === 'adjacent_local') {
+        collinearGroups.push(expanded);
+      } else {
+        orthogroups.push(expanded);
+      }
+    });
     annotations.push(...cloneJson(item.annotations));
     comparisonMatches.push(...cloneJson(item.comparisonMatches));
     sequenceSources.push(...itemSequenceSources);
@@ -547,6 +731,7 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
     featureSelectorSafetyScope: [],
     selectedFeatureRecordIdx: 0,
     orthogroups,
+    collinearGroups,
     annotations,
     comparisonMatches,
     sequenceSources

@@ -17,15 +17,6 @@ export const confirmLargeSessionBlob = (
   ));
 };
 
-export const downloadSessionBlob = (blob, filename) => {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-};
-
 const readUtf8Stream = async (stream, maxBytes) => {
   const reader = stream.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });

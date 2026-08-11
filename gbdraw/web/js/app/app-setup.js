@@ -1,5 +1,4 @@
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
-import { debugLog } from '../config.js';
 import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import {
   adoptCanonicalRenderArtifacts,
@@ -26,7 +25,10 @@ import {
 import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
+import { cloneJsonData } from '../services/json-clone.js';
+import { readFileText } from '../services/file-content-cache.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
+import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import {
@@ -50,12 +52,19 @@ import { createRunAnalysis } from './run-analysis.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
+import {
+  COMPOSITION_METADATA_ATTRIBUTE,
+  COMPOSITION_SCHEMA_ATTRIBUTE
+} from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
-import { createOrthogroupEditor } from './orthogroups.js';
+import {
+  createOrthogroupEditor,
+  resolveUniqueOrthogroupMemberForFeature
+} from './orthogroups.js';
 import {
   createCircularTrackSlotEditor,
   estimateCircularConservationLayoutWarning
@@ -84,12 +93,19 @@ import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
   adjacentRowPairs,
+  buildLinearComparisonTimeline,
   createLinearComparisonEdge,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
   normalizeLinearComparisonPlan,
+  plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan
 } from './linear-comparisons.js';
+import {
+  projectLinearComparisonLosatModeSelection,
+  projectLinearComparisonLosatpModeSelection,
+  projectLinearComparisonUi
+} from './comparison-ui.js';
 import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import {
   conservationSourceDescriptors,
@@ -130,6 +146,36 @@ import {
 } from './depth-track-state.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, reactive } = window.Vue;
+
+export const createSessionImportRollbackState = ({
+  depthTrackUiCounts,
+  depthTracks,
+  featureListScrollTop,
+  featureListScrollRef,
+  selectedPairwiseBlockOrthogroupId
+}) => ({
+  capture: () => ({
+    circularDepthTrackUiCount: depthTrackUiCounts.circular,
+    depthTracks: cloneJsonData(depthTracks),
+    featureListScrollTop: featureListScrollTop.value,
+    selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value
+  }),
+  restore: async (snapshot) => {
+    depthTrackUiCounts.circular = snapshot.circularDepthTrackUiCount;
+    depthTracks.splice(
+      0,
+      depthTracks.length,
+      ...cloneJsonData(snapshot.depthTracks)
+    );
+    await nextTick();
+    featureListScrollTop.value = snapshot.featureListScrollTop;
+    if (featureListScrollRef.value) {
+      featureListScrollRef.value.scrollTop = snapshot.featureListScrollTop;
+    }
+    selectedPairwiseBlockOrthogroupId.value =
+      snapshot.selectedPairwiseBlockOrthogroupId;
+  }
+});
 
 export const createAppSetup = () => {
   const {
@@ -315,9 +361,6 @@ export const createAppSetup = () => {
     skipCaptureBaseConfig,
     skipPositionReapply,
     skipExtractOnSvgChange,
-    circularBaseConfig,
-    linearBaseConfig,
-    diagramElementBaseTransforms,
     featureKeys,
     defaultColorKeys,
     newColorFeat,
@@ -330,11 +373,15 @@ export const createAppSetup = () => {
     filteredFeatures
   } = state;
 
-  const comparisonHeightValidationError = computed(() => (
-    classifyOptionalPositiveNumber(adv.comparison_height).status === 'invalid'
+  const comparisonHeightValidationError = computed(() => {
+    if (
+      mode.value !== 'linear' ||
+      linearComparisonResolution.value?.hasComparisonIntent !== true
+    ) return '';
+    return classifyOptionalPositiveNumber(adv.comparison_height).status === 'invalid'
       ? 'Pairwise Match Height must be Auto or a positive finite number.'
-      : ''
-  ));
+      : '';
+  });
 
   const sameLinearComparisonEdge = (left, right) => (
     left?.id === right?.id &&
@@ -348,10 +395,42 @@ export const createAppSetup = () => {
     left?.losatFilename === right?.losatFilename
   );
 
-  const invalidateLinearComparisonArtifacts = () => {
+  const reindexLinearLosatCacheInfo = () => {
+    if (!Array.isArray(losatCacheInfo.value)) return;
+    const indexByUid = new Map(
+      linearSeqs.map((sequence, index) => [String(sequence?.uid || ''), index])
+    );
+    const resolvedByEdgeKey = new Map(
+      linearComparisonResolution.value.edges.map((edge) => [edge.edgeKey, edge])
+    );
+    losatCacheInfo.value = losatCacheInfo.value.flatMap((entry) => {
+      const edgeKey = String(entry?.edgeKey || '');
+      if (!edgeKey) return [entry];
+      const resolved = resolvedByEdgeKey.get(edgeKey);
+      const queryUid = String(resolved?.queryUid || entry?.queryUid || '');
+      const subjectUid = String(resolved?.subjectUid || entry?.subjectUid || '');
+      const queryIndex = indexByUid.get(queryUid);
+      const subjectIndex = indexByUid.get(subjectUid);
+      if (!Number.isInteger(queryIndex) || !Number.isInteger(subjectIndex)) return [];
+      return [{
+        ...entry,
+        edgeKey,
+        queryUid,
+        subjectUid,
+        queryIndex,
+        subjectIndex,
+        ordinal: Number.isInteger(Number(resolved?.ordinal))
+          ? Number(resolved.ordinal)
+          : entry.ordinal
+      }];
+    });
+  };
+
+  const invalidateLinearComparisonArtifacts = ({ preserveLosatCacheInfo = false } = {}) => {
     files.linearCanonicalComparisons = [];
     if (Array.isArray(losatCacheInfo.value)) {
-      losatCacheInfo.value = losatCacheInfo.value.filter((entry) => !entry?.edgeKey);
+      if (preserveLosatCacheInfo) reindexLinearLosatCacheInfo();
+      else losatCacheInfo.value = losatCacheInfo.value.filter((entry) => !entry?.edgeKey);
     }
   };
 
@@ -390,36 +469,38 @@ export const createAppSetup = () => {
     return !unchanged;
   };
 
-  const syncLinearRecordLayout = () => {
+  const syncLinearRecordLayout = ({ preserveLosatCacheInfo = false } = {}) => {
     const next = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
     const rowsUnchanged = next.length === linearRecordRows.length && next.every((entry, index) => (
       entry.uid === linearRecordRows[index]?.uid && entry.row === linearRecordRows[index]?.row
     ));
     if (!rowsUnchanged) linearRecordRows.splice(0, linearRecordRows.length, ...next);
     const comparisonsChanged = syncLinearComparisonRecords({ invalidate: false });
-    if (!rowsUnchanged || comparisonsChanged) invalidateLinearComparisonArtifacts();
+    if (!rowsUnchanged || comparisonsChanged) {
+      invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo });
+    }
     return !rowsUnchanged || comparisonsChanged;
   };
   const setLinearRecordRow = (uid, row) => {
-    syncLinearRecordLayout();
+    syncLinearRecordLayout({ preserveLosatCacheInfo: true });
     const previous = linearRecordRows.find((entry) => entry.uid === uid)?.row;
     updateLinearRecordRow(linearRecordRows, uid, row);
     if (linearRecordRows.find((entry) => entry.uid === uid)?.row !== previous) {
-      invalidateLinearComparisonArtifacts();
+      invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo: true });
     }
   };
   const setLinearRecordLayoutEnabled = (enabled) => {
     const nextEnabled = Boolean(enabled);
     if (linearRecordLayoutEnabled.value === nextEnabled) return;
     linearRecordLayoutEnabled.value = nextEnabled;
-    syncLinearRecordLayout();
-    invalidateLinearComparisonArtifacts();
+    syncLinearRecordLayout({ preserveLosatCacheInfo: true });
+    invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo: true });
   };
   const moveLinearRecordWithinRow = (uid, direction) => {
     const next = moveLinearRecordInRow(linearSeqs, linearRecordRows, uid, direction);
     linearRecordRows.splice(0, linearRecordRows.length, ...next);
-    syncLinearComparisonRecords();
-    invalidateLinearComparisonArtifacts();
+    syncLinearComparisonRecords({ invalidate: false });
+    invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo: true });
   };
 
   const linearComparisonGlobalAction = computed(() => {
@@ -427,6 +508,81 @@ export const createAppSetup = () => {
     if (linearComparisonPlan.mode !== LINEAR_COMPARISON_MODES.ADJACENT) return 'selected';
     return linearComparisonPlan.defaultSource;
   });
+
+  const linearComparisonUi = computed(() => projectLinearComparisonUi({
+    plan: linearComparisonPlan,
+    resolution: linearComparisonResolution.value,
+    losatProgram: losatProgram.value,
+    blastpMode: losat.blastp?.mode,
+    filters: {
+      min_bitscore: adv.min_bitscore,
+      evalue: adv.evalue,
+      identity: adv.identity,
+      alignment_length: adv.alignment_length
+    }
+  }));
+
+  const linearComparisonTimeline = computed(() => buildLinearComparisonTimeline({
+    sequences: linearSeqs,
+    layout: effectiveLinearComparisonLayout(),
+    plan: linearComparisonPlan,
+    resolution: linearComparisonResolution.value
+  }));
+  const linearComparisonPairForEdgeKey = (edgeKey) => {
+    for (const row of linearComparisonTimeline.value.rows) {
+      const pair = row.boundaryAfter?.pairs.find((entry) => entry.edgeKey === edgeKey);
+      if (pair) return pair;
+    }
+    return null;
+  };
+  const linearComparisonRecordLabel = (uid) => {
+    const sequence = linearSeqs.find((entry) => entry.uid === uid);
+    return plainTextLinearRecordLabel(
+      sequence?.definition ||
+      sequence?.gb?.name ||
+      sequence?.gff?.name ||
+      sequence?.fasta?.name ||
+      'Record'
+    );
+  };
+  const openLinearComparisonDisclosure = async (disclosureKey) => {
+    if (!disclosureKey) return null;
+    const details = [...document.querySelectorAll('[data-linear-comparison-disclosure]')]
+      .find((element) => element.dataset.linearComparisonDisclosure === disclosureKey);
+    if (!details) return null;
+    details.open = true;
+    await nextTick();
+    return details;
+  };
+  const focusLinearComparisonPair = async (edgeKey) => {
+    await openLinearComparisonDisclosure('selected-pairs');
+    const container = [...document.querySelectorAll('[data-edge-key]')]
+      .find((element) => element.dataset.edgeKey === edgeKey);
+    container?.querySelector('input, select, button')?.focus();
+  };
+
+  const focusLinearComparisonIssue = async () => {
+    const target = linearComparisonUi.value.errorTargets[0];
+    if (!target) return false;
+    const details = await openLinearComparisonDisclosure(target.disclosureKey);
+    let container = details;
+    if (target.edgeKey) {
+      container = [...document.querySelectorAll('[data-edge-key]')]
+        .find((element) => element.dataset.edgeKey === target.edgeKey) || container;
+    }
+    if (target.edgeId && target.focusTargetKey === 'pair-row') {
+      container = [...document.querySelectorAll('[data-linear-unplaced-draft]')]
+        .find((element) => element.dataset.linearUnplacedDraft === target.edgeId) || container;
+    }
+    const marked = container?.querySelector(
+      `[data-comparison-focus="${target.focusTargetKey}"]`
+    );
+    const focusable = marked?.matches?.('input, select, button, [tabindex]')
+      ? marked
+      : marked?.querySelector?.('input, select, button, [tabindex]');
+    (focusable || container?.querySelector?.('input, select, button, [tabindex]'))?.focus();
+    return true;
+  };
 
   const setLinearComparisonGlobalAction = (action) => {
     const normalized = String(action || '').trim().toLowerCase();
@@ -442,12 +598,27 @@ export const createAppSetup = () => {
     });
   };
 
-  const setLinearLosatProgram = (program) => {
-    const normalized = String(program || '').trim().toLowerCase();
-    if (!['blastn', 'blastp', 'tblastx'].includes(normalized)) return;
-    if (losatProgram.value === normalized) return;
-    losatProgram.value = normalized;
+  const setLinearComparisonLosatMode = (modeKey) => {
+    const selection = projectLinearComparisonLosatModeSelection({ modeKey });
+    if (!selection.selectable || !selection.patch) return false;
+    const nextProgram = selection.patch.losatProgram;
+    if (losatProgram.value === nextProgram) return true;
+    losatProgram.value = nextProgram;
     invalidateLinearComparisonArtifacts();
+    return true;
+  };
+
+  const setLinearComparisonLosatpMode = (modeKey) => {
+    const selection = projectLinearComparisonLosatpModeSelection({
+      plan: linearComparisonPlan,
+      modeKey
+    });
+    if (!selection.selectable || !selection.patch) return false;
+    const nextBlastpMode = selection.patch.blastpMode;
+    if (losat.blastp?.mode === nextBlastpMode) return true;
+    losat.blastp.mode = nextBlastpMode;
+    invalidateLinearComparisonArtifacts();
+    return true;
   };
 
   const selectedPlanForEdit = () => {
@@ -461,9 +632,17 @@ export const createAppSetup = () => {
   };
 
   const findEdgeIndex = (edges, id) => edges.findIndex((edge) => edge.id === id);
-  const findEdgeIndexByKey = (edges, edgeKey) => edges.findIndex((edge) => (
-    linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) === edgeKey
-  ));
+  const findEdgeIndexForPair = (edges, pair) => {
+    const ownerId = pair?.draft?.id || pair?.resolved?.id || pair?.edgeId || '';
+    const ownerIndex = ownerId ? findEdgeIndex(edges, ownerId) : -1;
+    if (ownerIndex >= 0) return ownerIndex;
+    const matchingIndexes = edges
+      .map((edge, index) => (
+        linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) === pair?.edgeKey ? index : -1
+      ))
+      .filter((index) => index >= 0);
+    return matchingIndexes.length === 1 ? matchingIndexes[0] : -1;
+  };
 
   const upsertSelectedComparison = (next, {
     id = '',
@@ -473,7 +652,14 @@ export const createAppSetup = () => {
   }) => {
     const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
     let index = id ? findEdgeIndex(next.edges, id) : -1;
-    if (index < 0) index = findEdgeIndexByKey(next.edges, edgeKey);
+    if (index < 0) {
+      const matchingIndexes = next.edges
+        .map((edge, edgeIndex) => (
+          linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) === edgeKey ? edgeIndex : -1
+        ))
+        .filter((edgeIndex) => edgeIndex >= 0);
+      if (!id || matchingIndexes.length === 1) index = matchingIndexes[0] ?? -1;
+    }
     if (index < 0) {
       next.edges.push(createLinearComparisonEdge({
         queryUid,
@@ -491,7 +677,7 @@ export const createAppSetup = () => {
     return edge;
   };
 
-  const addLinearComparison = () => {
+  const addLinearComparison = async () => {
     if (linearSeqs.length < 2) return;
     syncLinearRecordLayout();
     const [firstPair] = adjacentRowPairs(
@@ -502,6 +688,7 @@ export const createAppSetup = () => {
     const next = selectedPlanForEdit();
     upsertSelectedComparison(next, { queryUid, subjectUid });
     replaceLinearComparisonPlan(next);
+    await focusLinearComparisonPair(linearComparisonEdgeKey(queryUid, subjectUid));
   };
   const omitLinearComparison = (id) => {
     const next = selectedPlanForEdit();
@@ -572,7 +759,7 @@ export const createAppSetup = () => {
     if (!edge) return;
     edge.losatFilename = String(value || '');
     edge.losatFilenameActive = Boolean(edge.losatFilename.trim());
-    replaceLinearComparisonPlan(next);
+    replaceLinearComparisonPlan(next, { invalidate: false });
   };
   const reuseLinearComparisonLosatFilename = (id) => {
     const next = selectedPlanForEdit();
@@ -588,13 +775,18 @@ export const createAppSetup = () => {
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
     edge.losatFilenameActive = false;
-    replaceLinearComparisonPlan(next);
+    replaceLinearComparisonPlan(next, { invalidate: false });
   };
   const updateResolvedLosatFilenameDraft = (edgeKey, updater) => {
     const resolved = linearComparisonResolution.value.edges.find((edge) => edge.edgeKey === edgeKey);
     if (!resolved) return;
     const next = normalizeLinearComparisonPlan(linearComparisonPlan);
-    let index = findEdgeIndexByKey(next.edges, edgeKey);
+    const pair = linearComparisonPairForEdgeKey(edgeKey) || {
+      edgeKey,
+      edgeId: resolved.id,
+      resolved
+    };
+    let index = findEdgeIndexForPair(next.edges, pair);
     if (index < 0) {
       next.edges.push(createLinearComparisonEdge({
         queryUid: resolved.queryUid,
@@ -605,7 +797,7 @@ export const createAppSetup = () => {
       index = next.edges.length - 1;
     }
     updater(next.edges[index]);
-    replaceLinearComparisonPlan(next);
+    replaceLinearComparisonPlan(next, { invalidate: false });
   };
   const setResolvedLinearComparisonLosatFilename = (edgeKey, value) => {
     updateResolvedLosatFilenameDraft(edgeKey, (edge) => {
@@ -632,10 +824,10 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonGapAction = (edgeKey, action) => {
-    const gap = linearAdjacentComparisonRows.value.find((entry) => entry.edgeKey === edgeKey);
-    if (!gap) return;
+    const pair = linearComparisonPairForEdgeKey(edgeKey);
+    if (!pair) return;
     const next = selectedPlanForEdit();
-    const index = findEdgeIndexByKey(next.edges, edgeKey);
+    const index = findEdgeIndexForPair(next.edges, pair);
     if (action === 'none') {
       if (index >= 0) {
         next.edges[index].included = false;
@@ -647,13 +839,24 @@ export const createAppSetup = () => {
       return;
     }
     upsertSelectedComparison(next, {
-      queryUid: gap.queryUid,
-      subjectUid: gap.subjectUid,
+      id: pair.edgeId,
+      queryUid: pair.queryUid,
+      subjectUid: pair.subjectUid,
       source: action === LINEAR_COMPARISON_SOURCES.UPLOAD
         ? LINEAR_COMPARISON_SOURCES.UPLOAD
         : LINEAR_COMPARISON_SOURCES.LOSAT
     });
     replaceLinearComparisonPlan(next);
+  };
+  const setLinearComparisonCardFile = (edgeKey, file) => {
+    let pair = linearComparisonPairForEdgeKey(edgeKey);
+    let draft = pair?.draft || null;
+    if (!draft) {
+      setLinearComparisonGapAction(edgeKey, LINEAR_COMPARISON_SOURCES.UPLOAD);
+      pair = linearComparisonPairForEdgeKey(edgeKey);
+      draft = pair?.draft || null;
+    }
+    if (draft) setLinearComparisonFile(draft.id, file);
   };
   const linearRecordRowFor = (uid, fallback) => {
     return linearRecordRows.find((entry) => entry.uid === uid)?.row || fallback;
@@ -662,36 +865,6 @@ export const createAppSetup = () => {
     linearRecordLayoutEnabled.value
       ? linearRecordPositionTokens(linearSeqs, linearRecordRows)
       : []
-  ));
-  const linearAdjacentComparisonRows = computed(() => {
-    const resolvedByKey = new Map(
-      linearComparisonResolution.value.edges.map((edge) => [edge.edgeKey, edge])
-    );
-    const draftByKey = new Map(
-      linearComparisonPlan.edges.map((edge) => [
-        linearComparisonEdgeKey(edge.queryUid, edge.subjectUid),
-        edge
-      ])
-    );
-    const indexByUid = new Map(linearSeqs.map((sequence, index) => [sequence.uid, index]));
-    return adjacentRowPairs(linearSeqs, effectiveLinearComparisonLayout()).map(([queryUid, subjectUid]) => {
-      const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
-      const resolved = resolvedByKey.get(edgeKey) || null;
-      const draft = draftByKey.get(edgeKey) || null;
-      return {
-        edgeKey,
-        queryUid,
-        subjectUid,
-        queryIndex: indexByUid.get(queryUid),
-        subjectIndex: indexByUid.get(subjectUid),
-        source: resolved?.source || 'none',
-        active: Boolean(resolved),
-        draft
-      };
-    });
-  });
-  const linearResolvedLosatEdges = computed(() => (
-    linearComparisonResolution.value.edges.filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT)
   ));
   const linearLosatCacheInfoByEdgeKey = computed(() => Object.fromEntries(
     (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : [])
@@ -710,6 +883,7 @@ export const createAppSetup = () => {
         ? discoverGffFastaRecords({
             gffFile: primaryFile,
             fastaFile: pairedFile,
+            readText: readFileText,
             pyodide: getPyodide(),
             writeFileToFs: pyodideManager.writeFileToFs,
             gffTemporaryPath: `${temporaryPathPrefix}.gff`,
@@ -718,6 +892,7 @@ export const createAppSetup = () => {
         : discoverSequenceRecords({
             file: primaryFile,
             format: 'genbank',
+            readText: readFileText,
             pyodide: getPyodide(),
             writeFileToFs: pyodideManager.writeFileToFs,
             temporaryPath: `${temporaryPathPrefix}.gb`
@@ -838,7 +1013,6 @@ export const createAppSetup = () => {
     state,
     getPyodide,
     ensurePyodide: pyodideManager.initPyodide,
-    debugLog,
     history
   });
   const svgActions = createSvgStyles({
@@ -880,6 +1054,7 @@ export const createAppSetup = () => {
 
   let featureSearchDebounceId = null;
   const featureListScrollRef = ref(null);
+  const selectedPairwiseBlockOrthogroupId = ref('');
   const resetFeatureListScroll = () => {
     featureListScrollTop.value = 0;
     if (featureListScrollRef.value) featureListScrollRef.value.scrollTop = 0;
@@ -1642,7 +1817,8 @@ export const createAppSetup = () => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
-  const legendLayout = createLegendLayout({ state, debugLog, legendActions, svgActions, history });
+  const legendLayout = createLegendLayout({ state, legendActions, svgActions, history });
+  legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
     cancelRunAnalysis,
@@ -1659,13 +1835,17 @@ export const createAppSetup = () => {
     getPyodide,
     ensurePyodide: pyodideManager.initPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
-    serializeCanonicalFiles: (comparisonPlanSnapshot) => serializeActiveRenderFiles(
-      state.mode.value,
-      state,
-      comparisonPlanSnapshot
+    serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog = null) => (
+      serializeActiveRenderFiles(state.mode.value, state, {
+        comparisonPlan: comparisonPlanSnapshot,
+        linearRecordCatalog
+      })
     ),
+    prepareLinearRecordCatalog,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
+    buildGeneratedArtifactSnapshot: historySnapshots.buildGeneratedArtifactSnapshot,
+    applyGeneratedArtifactSnapshot: historySnapshots.applyGeneratedArtifactSnapshot,
     resetPreviewViewport,
     validateAnnotationTargets: ({ loadComparison }) => {
       const catalog = getAnnotationRecordCatalog(loadComparison);
@@ -1677,6 +1857,7 @@ export const createAppSetup = () => {
     state,
     getPyodide,
     ensurePyodide: pyodideManager.initPyodide,
+    writeFileToFs: pyodideManager.writeFileToFs,
     legendLayout,
     rerenderLinearDefinitions: runLabelReflow
   });
@@ -1686,7 +1867,6 @@ export const createAppSetup = () => {
     watch,
     nextTick,
     onMounted,
-    debugLog,
     legendActions,
     svgActions,
     featureActions,
@@ -1717,7 +1897,7 @@ export const createAppSetup = () => {
     }
   });
 
-  const refreshLoadedSessionSvgLayout = async () => {
+  const refreshLoadedSessionSvgLayout = async ({ ui = {} } = {}) => {
     await nextTick();
     await new Promise((resolve) => {
       if (typeof window.requestAnimationFrame === 'function') {
@@ -1727,24 +1907,42 @@ export const createAppSetup = () => {
       }
     });
 
-    if (mode.value !== 'linear') return;
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return;
-    const legendGroup = svg.getElementById?.('legend');
-    if (!legendGroup || legendGroup.getAttribute('display') === 'none') return;
-
-    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-    const verticalLegend = legendGroup.querySelector('#legend_vertical');
-    if (horizontalLegend && verticalLegend) {
-      legendActions.reflowDualLegendLayout(svg);
-    } else {
-      legendActions.updatePairwiseLegendPositions(svg);
-    }
-    legendActions.recenterCurrentLegendRoot(svg);
-
-    const idx = selectedResultIndex.value;
-    if (idx >= 0 && results.value.length > idx) {
-      results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+    try {
+      const hasSchema = svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null;
+      const hasMetadata = svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null;
+      if (!hasSchema && !hasMetadata) {
+        legendLayout.normalizeLegacySvg({
+          legendSide: form.legend || 'none',
+          titleSide: adv.plot_title_position || 'none',
+          userDeltas: {
+            primary: ui.diagramOffset
+              ? [ui.diagramOffset.x, ui.diagramOffset.y]
+              : null,
+            legend: ui.legendCurrentOffset
+              ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
+              : null,
+            lengthBar: ui.lengthBarUserOffset
+              ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
+              : null,
+            title: ui.plotTitleUserOffset
+              ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
+              : null
+          }
+        });
+      } else {
+        legendLayout.captureBaseConfig();
+      }
+      legendActions.setupLegendDrag();
+      legendLayout.setupDiagramDrag(false);
+      legendLayout.persistCurrentSvg();
+    } catch (error) {
+      errorLog.value = {
+        summary: error?.message || 'The saved SVG composition metadata is invalid.',
+        details: []
+      };
+      throw error;
     }
   };
 
@@ -1796,7 +1994,16 @@ export const createAppSetup = () => {
   };
 
   const importSession = async (event) => {
-    const result = await importSessionFromFile(event, { afterLoad: refreshLoadedSessionSvgLayout });
+    const result = await importSessionFromFile(event, {
+      afterLoad: refreshLoadedSessionSvgLayout,
+      rollbackState: createSessionImportRollbackState({
+        depthTrackUiCounts,
+        depthTracks: adv.depth_tracks,
+        featureListScrollTop,
+        featureListScrollRef,
+        selectedPairwiseBlockOrthogroupId
+      })
+    });
     if (result?.status === 'ok' || result?.status === 'legacy') {
       await nextTick();
       if (result?.status === 'ok') {
@@ -1978,29 +2185,11 @@ export const createAppSetup = () => {
   const runInfoHasCliHelperFiles = computed(() =>
     Array.isArray(lastRunInfo.value?.helperFiles) && lastRunInfo.value.helperFiles.length > 0
   );
-  const copyTextFallback = (text) => {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand('copy');
-    } finally {
-      textarea.remove();
-    }
-  };
   const copyRunCommand = async () => {
     const command = String(lastRunInfo.value?.command || '');
     if (!command) return;
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(command);
-      } else {
-        copyTextFallback(command);
-      }
+      await copyTextToClipboard(command);
       runInfoCopyStatus.value = 'Copied';
       setTimeout(() => {
         if (runInfoCopyStatus.value === 'Copied') runInfoCopyStatus.value = '';
@@ -2014,32 +2203,41 @@ export const createAppSetup = () => {
     }
   };
 
+  async function prepareLinearRecordCatalog(loadComparison = false) {
+    if (mode.value !== 'linear') return { catalog: null, error: '' };
+    const hasAutomaticSequence = linearSeqs.some((sequence) => {
+      if (String(sequence?.region_record_id || '').trim()) return false;
+      const primary = lInputType.value === 'gff' ? sequence?.gff : sequence?.gb;
+      return Boolean(primary && (lInputType.value !== 'gff' || sequence?.fasta));
+    });
+    const hasRegionAnnotations = annotationSets.some((set) => (
+      Array.isArray(set?.annotations) && set.annotations.length > 0
+    ));
+    if (!hasAutomaticSequence && !hasRegionAnnotations) {
+      return { catalog: null, error: '' };
+    }
+    let catalog = getAnnotationRecordCatalog(loadComparison);
+    if (catalog.status !== 'ready') {
+      try {
+        await linearRecordSelector.refresh();
+      } catch (error) {
+        console.warn('Failed to start Linear record discovery:', error);
+      }
+      catalog = getAnnotationRecordCatalog(loadComparison);
+    }
+    return catalog.status === 'ready'
+      ? { catalog, error: '' }
+      : {
+          catalog: null,
+          error: catalog.issues[0] || 'Could not read records from the Linear input file(s).'
+        };
+  }
+
   const runAnalysis = async () => history.runUndoable('Generate diagram', async () => {
     cancelDefinitionUpdate();
     const comparisonPlanSnapshot = mode.value === 'linear'
       ? linearComparisonResolution.value
       : null;
-    const annotationComparisonIntent = comparisonPlanSnapshot?.hasComparisonIntent ?? null;
-
-    const hasRegionAnnotations = annotationSets.some((set) => (
-      Array.isArray(set?.annotations) && set.annotations.length > 0
-    ));
-    if (hasRegionAnnotations) {
-      let catalog = getAnnotationRecordCatalog(annotationComparisonIntent);
-      if (catalog.status !== 'ready') {
-        if (mode.value === 'linear') await linearRecordSelector.refresh();
-        else await refreshCircularRecordOrder();
-        catalog = getAnnotationRecordCatalog(annotationComparisonIntent);
-      }
-      reconcileAnnotationRecordBindings(annotationSets, catalog);
-      const annotationTargetError = validateAnnotationRecordTargets(annotationSets, catalog);
-      if (annotationTargetError) {
-        errorLog.value = { summary: annotationTargetError, details: [] };
-        processing.value = false;
-        processingStatus.value = '';
-        return { status: 'error' };
-      }
-    }
 
     if (diagramGenerationWorkerError.value) {
       diagramGenerationWorkerReady.value = false;
@@ -2048,6 +2246,9 @@ export const createAppSetup = () => {
     }
 
     const result = await runGeneratedDiagramAnalysis(comparisonPlanSnapshot);
+    if (result?.status === 'error' && mode.value === 'linear') {
+      await focusLinearComparisonIssue();
+    }
     if (result?.status === 'ok') {
       featureSelection.clearFeatureSelection({ clearStatus: true });
     }
@@ -2087,34 +2288,10 @@ export const createAppSetup = () => {
     const cf = clickedFeature.value;
     const orthogroupId = String(cf?.orthogroupId || '').trim();
     if (!orthogroupId) return null;
-    const group = (Array.isArray(orthogroups.value) ? orthogroups.value : [])
-      .find((entry) => String(entry?.id || '').trim() === orthogroupId);
+    const group = orthogroupActions.getOrthogroupById(orthogroupId);
     if (!group) return null;
     const members = orthogroupActions.getEnrichedOrthogroupMembers(group);
-    const currentStableId = String(
-      cf?.feat?.stable_feature_id ||
-      cf?.feat?.stableFeatureId ||
-      cf?.feat?.stable_svg_id ||
-      cf?.feat?.stableFeatureSvgId ||
-      cf?.feat?.svg_id ||
-      ''
-    ).trim();
-    const currentRecordIndex = Number(
-      cf?.feat?.fileIdx ??
-      cf?.orthogroupMember?.recordIndex ??
-      cf?.feat?.recordIndex ??
-      cf?.feat?.record_idx
-    );
-    const currentMember = members.find((member) => (
-      String(
-        member?.stableFeatureSvgId ||
-        member?.stable_feature_svg_id ||
-        member?.featureSvgId ||
-        member?.feature_svg_id ||
-        ''
-      ).trim() === currentStableId &&
-      (!Number.isInteger(currentRecordIndex) || Number(member?.recordIndex) === currentRecordIndex)
-    )) || cf.orthogroupMember || null;
+    const currentMember = resolveUniqueOrthogroupMemberForFeature(cf?.feat, members);
     const membersByRecord = orthogroupActions.groupOrthogroupMembersByRecord(members);
     return {
       id: orthogroupId,
@@ -2268,7 +2445,6 @@ export const createAppSetup = () => {
     return style;
   });
 
-  const selectedPairwiseBlockOrthogroupId = ref('');
   const pairwiseBlockOrthogroups = computed(() => (
     Array.isArray(clickedPairwiseMatch.value?.blockOrthogroups)
       ? clickedPairwiseMatch.value.blockOrthogroups
@@ -2314,7 +2490,7 @@ export const createAppSetup = () => {
     selectedPairwiseBlockOrthogroupId.value = '';
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return;
-    const matchId = String(match?.matchId || '').trim();
+    const matchId = String(match?.id || '').trim();
     svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((element) => {
       const elementMatchId = String(
         element.getAttribute('data-gbdraw-match-id') ||
@@ -2529,28 +2705,6 @@ export const createAppSetup = () => {
     return `${startPos}..${endPos}${strand}`;
   });
 
-  const copyText = async (text) => {
-    const value = String(text ?? '');
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return;
-    }
-
-    const textarea = document.createElement('textarea');
-    textarea.value = value;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    textarea.style.top = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand('copy');
-    } finally {
-      document.body.removeChild(textarea);
-    }
-  };
-
   const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
     const value = String(text ?? '');
     if (!value) return;
@@ -2604,7 +2758,14 @@ export const createAppSetup = () => {
       sessionTitle.value = title;
     }
     try {
-      return await exportSession(title);
+      const comparisonPlanSnapshot = mode.value === 'linear'
+        ? linearComparisonResolution.value
+        : null;
+      const { catalog, error } = await prepareLinearRecordCatalog(
+        comparisonPlanSnapshot?.hasComparisonIntent
+      );
+      if (error) throw new Error(error);
+      return await exportSession(title, { linearRecordCatalog: catalog });
     } catch (error) {
       errorLog.value = normalizeUserFacingError(error);
       return { status: 'error' };
@@ -2718,7 +2879,7 @@ export const createAppSetup = () => {
     adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
   };
 
-  const applyLinearSeqMutation = (items) => {
+  const applyLinearSeqMutation = (items, { preserveLosatCacheInfo = false } = {}) => {
     const depthWidth = linearDepthLogicalWidth();
     const next = normalizeLinearSeqList(items);
     if (depthWidth > 0) {
@@ -2733,7 +2894,7 @@ export const createAppSetup = () => {
       reconcileLinearComparisonPlan(linearComparisonPlan, linearSeqs),
       { invalidate: false }
     );
-    invalidateLinearComparisonArtifacts();
+    invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo });
     linearReorderNotice.value = '';
   };
 
@@ -2803,7 +2964,7 @@ export const createAppSetup = () => {
     const current = Array.from(linearSeqs);
     const [moved] = current.splice(from, 1);
     current.splice(to, 0, moved);
-    applyLinearSeqMutation(current);
+    applyLinearSeqMutation(current, { preserveLosatCacheInfo: true });
   };
 
   const moveLinearSeqUp = (index) => {
@@ -2851,7 +3012,6 @@ export const createAppSetup = () => {
     cInputType,
     lInputType,
     losatProgram,
-    setLinearLosatProgram,
     files,
     circularConservation,
     annotationSets,
@@ -2919,11 +3079,12 @@ export const createAppSetup = () => {
     linearComparisonPlan,
     linearComparisonResolution,
     linearComparisonGlobalAction,
+    linearComparisonUi,
     hasLinearComparisonIntent,
     hasActiveLinearLosatIntent,
     hasActiveLinearUploadIntent,
-    linearAdjacentComparisonRows,
-    linearResolvedLosatEdges,
+    linearComparisonTimeline,
+    linearComparisonRecordLabel,
     linearLosatCacheInfoByEdgeKey,
     linearLayoutTokens,
     syncLinearRecordLayout,
@@ -2931,6 +3092,8 @@ export const createAppSetup = () => {
     setLinearRecordRow,
     moveLinearRecordWithinRow,
     setLinearComparisonGlobalAction,
+    setLinearComparisonLosatMode,
+    setLinearComparisonLosatpMode,
     setLinearComparisonGapAction,
     addLinearComparison,
     omitLinearComparison,
@@ -2938,6 +3101,7 @@ export const createAppSetup = () => {
     setLinearComparisonEndpoint,
     setLinearComparisonSource,
     setLinearComparisonFile,
+    setLinearComparisonCardFile,
     reuseLinearComparisonFile,
     deactivateLinearComparisonFile,
     setLinearComparisonLosatFilename,
@@ -3302,7 +3466,7 @@ export const createAppSetup = () => {
     selectPairwiseBlockOrthogroup,
     openPairwiseFeatureRow,
     clickedFeatureLocation,
-    copyText,
+      copyText: copyTextToClipboard,
     downloadText,
     canUseClickedOrthogroupActions,
     clickedOrthogroupDetail,

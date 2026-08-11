@@ -34,6 +34,9 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.models.objects import (  # type: ignore[reportMissingImports]
+    normalize_pairwise_match_style,
+)
 from gbdraw.config.modify import validate_config_overrides  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.features.shapes import (  # type: ignore[reportMissingImports]
@@ -412,6 +415,21 @@ class CircularOutputOptions:
     plot_title_position: Literal["none", "top", "bottom"] | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.legend, str) or self.legend not in {
+            "left",
+            "right",
+            "top",
+            "bottom",
+            "upper_left",
+            "upper_right",
+            "lower_left",
+            "lower_right",
+            "none",
+        }:
+            raise ValidationError(
+                "Circular legend must be one of: left, right, top, bottom, "
+                "upper_left, upper_right, lower_left, lower_right, none."
+            )
         if self.plot_title_position not in {None, "none", "top", "bottom"}:
             raise ValidationError(
                 "Circular plot_title_position must be one of: none, top, bottom."
@@ -426,6 +444,16 @@ class LinearOutputOptions:
     plot_title_position: Literal["center", "top", "bottom"] | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.legend, str) or self.legend not in {
+            "left",
+            "right",
+            "top",
+            "bottom",
+            "none",
+        }:
+            raise ValidationError(
+                "Linear legend must be one of: left, right, top, bottom, none."
+            )
         if self.plot_title_position not in {None, "center", "top", "bottom"}:
             raise ValidationError(
                 "Linear plot_title_position must be one of: center, top, bottom."
@@ -933,12 +961,11 @@ class LinearDiagramOptions(_ModeDiagramOptions):
             )
         if self.collinearity_params is not None:
             self.collinearity_params.validate()
-        pairwise_match_style = str(self.pairwise_match_style).strip().lower()
-        if pairwise_match_style not in {"ribbon", "curve"}:
-            raise ValidationError(
-                "pairwise_match_style must be one of: ribbon, curve."
-            )
-        object.__setattr__(self, "pairwise_match_style", pairwise_match_style)
+        object.__setattr__(
+            self,
+            "pairwise_match_style",
+            normalize_pairwise_match_style(self.pairwise_match_style),
+        )
         object.__setattr__(
             self,
             "protein_blastp_mode",

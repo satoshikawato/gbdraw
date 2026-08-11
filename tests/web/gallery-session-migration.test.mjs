@@ -5,6 +5,24 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 
+globalThis.window = {
+  Vue: {
+    ref: (value) => ({ value }),
+    reactive: (value) => value,
+    computed: (getter) => ({ get value() { return getter(); } }),
+    nextTick: async () => {}
+  },
+  DOMPurify: { sanitize: (value) => value }
+};
+globalThis.document = {};
+globalThis.File = class File extends Blob {
+  constructor(parts, name, options = {}) {
+    super(parts, options);
+    this.name = String(name || 'file');
+    this.lastModified = options.lastModified ?? Date.now();
+  }
+};
+
 const repoRoot = process.cwd();
 const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js');
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-gallery-session-migration-'));
@@ -17,8 +35,23 @@ const {
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'gallery-session-migration.js'))
 );
-const { projectCanonicalSessionRequest } = await import(
+const {
+  buildCanonicalRenderRequest,
+  projectCanonicalSessionRequest
+} = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
+);
+const {
+  createDefaultLinearComparisonPlan,
+  resolveLinearComparisonPlan
+} = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-comparisons.js'))
+);
+const { applyConfigData } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'config.js'))
+);
+const { state: webState } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'state.js'))
 );
 
 const sessionRoot = join(repoRoot, 'gbdraw', 'web', 'gallery', 'sessions');
@@ -59,6 +92,12 @@ const syntheticCliSession = {
       selector: null,
       region: null,
       presentation: null
+    }, {
+      recordKey: 'record-2',
+      source: { kind: 'genbank', resourceId: 'record-source-2' },
+      selector: null,
+      region: null,
+      presentation: null
     }],
     diagramOptions: {
       config: { form: { legend: 'right' }, marker: 'must-survive' },
@@ -70,11 +109,22 @@ const syntheticCliSession = {
       featureShapes: {}
     },
     layout: {},
-    comparisons: [],
+    comparisons: [{
+      kind: 'nucleotideBlast',
+      resourceId: 'committed-comparison',
+      queryRecordIndex: 0,
+      subjectRecordIndex: 1
+    }],
     output: { prefix: 'cli', formats: ['interactive_svg'], overwrite: true }
   },
   resources: {
-    'record-source': syntheticResource('genbank', 'cli.gb', 'LOCUS synthetic')
+    'record-source': syntheticResource('genbank', 'cli.gb', 'LOCUS synthetic'),
+    'record-source-2': syntheticResource('genbank', 'cli-2.gb', 'LOCUS synthetic two'),
+    'committed-comparison': syntheticResource(
+      'nucleotide-blast',
+      'committed.tsv',
+      'q\ts\t99'
+    )
   }
 };
 const originalCliRequest = structuredClone(syntheticCliSession.renderRequest);
@@ -92,7 +142,58 @@ assert.deepEqual(
   promotedSyntheticCli.renderRequest.diagramOptions.config,
   originalCliRequest.diagramOptions.config
 );
+assert.deepEqual(
+  promotedSyntheticCli.renderRequest.comparisons,
+  originalCliRequest.comparisons,
+  'CLI-only promotion must preserve the last committed comparison render'
+);
+assert.equal(
+  Object.hasOwn(promotedSyntheticCli.config, 'linearComparisonPlan'),
+  false,
+  'CLI-only replay must not synthesize an editable Web comparison plan'
+);
+assert.equal(
+  createDefaultLinearComparisonPlan().mode,
+  'none',
+  'the next Web request uses the fresh editable plan instead of inferring CLI intent'
+);
 assert.deepEqual(syntheticCliSession.renderRequest, originalCliRequest);
+
+const committedCliComparisons = structuredClone(
+  promotedSyntheticCli.renderRequest.comparisons
+);
+const cliEditorProjection = projectCanonicalSessionRequest({
+  renderRequest: promotedSyntheticCli.renderRequest,
+  resources: promotedSyntheticCli.resources,
+  webFiles: promotedSyntheticCli.webFiles || {},
+  storedConfig: promotedSyntheticCli.config
+});
+webState.mode.value = 'linear';
+webState.lInputType.value = cliEditorProjection.inputType;
+applyConfigData(promotedSyntheticCli.config);
+const cliNextComparisonSnapshot = resolveLinearComparisonPlan({
+  plan: webState.linearComparisonPlan,
+  sequences: cliEditorProjection.files.linearSeqs,
+  layout: webState.linearRecordLayoutEnabled.value ? webState.linearRecordRows : [],
+  losatProgram: webState.losatProgram.value,
+  blastpMode: webState.losat.blastp.mode
+});
+const cliNextWebRequest = buildCanonicalRenderRequest({
+  state: webState,
+  filesData: cliEditorProjection.files,
+  comparisonPlanSnapshot: cliNextComparisonSnapshot
+});
+assert.equal(webState.linearComparisonPlan.mode, 'none');
+assert.deepEqual(
+  promotedSyntheticCli.renderRequest.comparisons,
+  committedCliComparisons,
+  'applying the CLI-only config must not mutate its committed replay'
+);
+assert.deepEqual(
+  cliNextWebRequest.renderRequest.comparisons,
+  [],
+  'the next canonical Web request must use the fresh no-comparison draft'
+);
 
 const syntheticGuiSession = {
   version: 33,
@@ -398,6 +499,29 @@ assert.deepEqual(migratedDisabledLayoutDraft.filesData.linearComparisons, [{
   id: 'dormant-a-c',
   file: dormantExplicitUpload
 }]);
+
+const migratedAbsentLayoutDraft = migrateLegacyLinearComparisonDraft({
+  config: { blastSource: 'losat' },
+  filesData: { linearSeqs: [{ uid: 'a' }, { uid: 'b' }] },
+  forceWebDraft: true
+});
+assert.equal(
+  migratedAbsentLayoutDraft.config.linearComparisonPlan.mode,
+  'adjacent'
+);
+
+const migratedExplicitNoneDraft = migrateLegacyLinearComparisonDraft({
+  config: {
+    blastSource: 'none',
+    linearRecordLayout: { enabled: false, rows: [] }
+  },
+  filesData: { linearSeqs: [{ uid: 'a' }, { uid: 'b' }] },
+  forceWebDraft: true
+});
+assert.equal(
+  migratedExplicitNoneDraft.config.linearComparisonPlan.mode,
+  'none'
+);
 
 const migratedCliOnly = migrateLegacyLinearComparisonDraft({
   config: { blastSource: 'losat', cliOptions: { rawArgs: [] } },

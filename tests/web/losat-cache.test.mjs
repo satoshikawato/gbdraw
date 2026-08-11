@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -103,6 +104,44 @@ assert.equal(
   'branch-internal protein raw schema 3 must not be accepted'
 );
 assert.equal(cache.validateProteinIdentityManifest(manifest), true);
+const canonicalJson = (value) => {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => (
+      `${JSON.stringify(key)}:${canonicalJson(value[key])}`
+    )).join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+for (const forbiddenKey of [
+  'viewFeatureSvgId',
+  'queryViewFeatureSvgId',
+  'processed_view_feature_svg_id',
+  'subjectViewFeatureHashParts',
+  'renderedFeatureSvgId',
+  'queryRenderedFeatureSvgId',
+  'processed_rendered_svg_id'
+]) {
+  const maliciousManifest = JSON.parse(JSON.stringify(manifest));
+  const instance = maliciousManifest.recordInstances['record-1'];
+  instance.featureMetadata[featureA].extension = {
+    [forbiddenKey]: 'presentation-only'
+  };
+  const displayPayload = {
+    recordAnalysisId: instance.recordAnalysisId,
+    recordSourceId: maliciousManifest.recordAnalyses[instance.recordAnalysisId].recordSourceId,
+    recordInstanceKey: 'record-1',
+    featureMetadata: instance.featureMetadata
+  };
+  instance.displayBindingHash = `sha256:${createHash('sha256')
+    .update(canonicalJson(displayPayload), 'utf8')
+    .digest('hex')}`;
+  assert.equal(
+    cache.validateProteinIdentityManifest(maliciousManifest),
+    false,
+    `${forbiddenKey} must not cross the presentation-independent manifest boundary`
+  );
+}
 assert.equal(
   cache.validateProteinIdentityManifest({ ...manifest, schema: 1 }),
   false,
@@ -291,7 +330,10 @@ assert.equal(cache.isLosatDerivedCacheEntry({
   kind: 'derived-losatp-payload',
   idEncoding: 'runtime-handle-v1',
   key: 'current-derived',
-  payload: {}
+  payload: {
+    queryViewFeatureSvgId: 'processed-view-id',
+    viewTransform: { length: 100, reverse: true }
+  }
 }, { allowLegacy: false }), true);
 
 const zeroHitDerivedEntry = (mode, { includeIdentity = true } = {}) => {

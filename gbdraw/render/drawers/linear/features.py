@@ -56,6 +56,7 @@ class FeatureDrawer:
         stable_feature_id: Optional[str] = None,
         record_id: Optional[str] = None,
         record_index: int | None = None,
+        source_feature_index: int | None = None,
         feature_part: Optional[str] = None,
     ) -> None:
         stroke_color: str = (
@@ -86,6 +87,10 @@ class FeatureDrawer:
                 path.attribs["data-gbdraw-record-id"] = record_id
             if record_index is not None:
                 path.attribs["data-gbdraw-record-index"] = str(int(record_index))
+            if source_feature_index is not None:
+                path.attribs["data-gbdraw-source-feature-index"] = str(
+                    int(source_feature_index)
+                )
             if feature_part:
                 path.attribs["data-gbdraw-feature-part"] = feature_part
         group.add(path)
@@ -106,7 +111,7 @@ class FeatureDrawer:
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
         record_index: int = 0,
         record_count: int = 1,
-        feature_instance_id: str | None = None,
+        feature_instance_id: int | None = None,
     ) -> Group:
         path_generator = FeaturePathGenerator(
             genome_length=genome_length,
@@ -166,6 +171,7 @@ class FeatureDrawer:
                     stable_feature_id=stable_feature_id,
                     record_id=getattr(feature_object, "record_id", None),
                     record_index=record_index,
+                    source_feature_index=feature_instance_id,
                     feature_part="block",
                 )
             elif path_type == "line":
@@ -187,6 +193,7 @@ class FeatureDrawer:
                     stable_feature_id=stable_feature_id,
                     record_id=getattr(feature_object, "record_id", None),
                     record_index=record_index,
+                    source_feature_index=feature_instance_id,
                     feature_part="connector",
                 )
         return group

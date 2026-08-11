@@ -1,6 +1,5 @@
 name: Tests
 
-# Limit GITHUB_TOKEN permissions to minimum required
 permissions:
   contents: read
 
@@ -12,13 +11,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  core:
+    name: Core (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,37 +27,27 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
-      - name: Install system dependencies for CairoSVG
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libpango1.0-dev
+      - name: Install core test dependencies
+        run: python -m pip install -e ".[export]" pytest pytest-timeout pytest-xdist Pillow
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel build
-          pip install -e ".[dev]"
-
-      - name: Prepare browser wheel
-        run: |
-          python tools/prepare_browser_wheel.py
-
-      - name: Run fast tests
-        run: |
-          pytest tests/ -v --tb=short -m "not slow" --timeout=120
+      - name: Run core tests
+        run: >-
+          python -m pytest tests/
+          -m "not slow and not (recipe or gallery or browser)"
+          -n auto --dist loadfile
+          --durations=30
 
       - name: Verify reference outputs are unchanged
         if: always()
-        run: |
-          git diff --exit-code -- tests/reference_outputs/
+        run: git diff --exit-code -- tests/reference_outputs/
 
-      - name: Run slow tests
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          pytest tests/ -v --tb=short -m "slow" --timeout=600
-
-  test-with-cairosvg:
-    runs-on: ubuntu-latest
+  recipes-standard:
+    name: Recipes standard (Python 3.11)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,26 +56,170 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
-      - name: Install system dependencies for CairoSVG
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libpango1.0-dev
+      - name: Install recipe test dependencies
+        run: python -m pip install -e ".[dev]"
 
-      - name: Install dependencies with export extras
+      - name: Run standard recipe tests
+        run: >-
+          python -m pytest tests/
+          -m "recipe and not slow"
+          --durations=30
+
+  gallery:
+    name: Gallery (Python 3.11)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Gallery test dependencies
+        run: python -m pip install -e ".[export]" pytest pytest-timeout Pillow
+
+      - name: Run Gallery tests
+        run: >-
+          python -m pytest tests/
+          -m "gallery and not slow"
+          --durations=30
+
+  browser:
+    name: Browser (Python 3.11)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install browser test dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel build
-          pip install -e ".[dev,export]"
+          python -m pip install -e ".[dev]"
+          npm ci
+          python -m playwright install --with-deps chromium
 
       - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Run Web JavaScript tests
         run: |
+          node --test tests/web/*.test.mjs
+          node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz
+          node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json
+          node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz
+
+      - name: Run Python browser tests
+        run: >-
+          python -m pytest tests/
+          -m "browser and not slow"
+          --durations=30
+
+  acceptance-supported-main:
+    name: ${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }})
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+        surface: ["recipe", "gallery", "browser"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        if: matrix.surface == 'browser'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install acceptance dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Install browser runtime
+        if: matrix.surface == 'browser'
+        run: |
+          npm ci
+          python -m playwright install --with-deps chromium
           python tools/prepare_browser_wheel.py
 
-      - name: Run tests with CairoSVG
+      - name: Run supported-version acceptance
+        run: >-
+          python -m pytest tests/
+          -m "${{ matrix.surface }} and not slow"
+          --durations=30
+
+  slow-main:
+    name: Slow (Python ${{ matrix.python-version }})
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install slow test dependencies
         run: |
-          pytest tests/ -v --tb=short -m "not slow" --timeout=120
+          python -m pip install -e ".[dev]"
+          python -m playwright install --with-deps chromium
+
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Run slow tests
+        run: >-
+          python -m pytest tests/
+          -m "slow"
+          --timeout=600
+          --durations=30
+
+      - name: Verify reference outputs are unchanged
+        if: always()
+        run: git diff --exit-code -- tests/reference_outputs/
 
   lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -95,17 +229,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install "ruff==0.15.12"
+      - name: Install Ruff
+        run: python -m pip install "ruff==0.15.12"
 
       - name: Check code formatting
-        run: |
-          ruff check gbdraw/
+        run: ruff check gbdraw/
 
   losat-cache-browser-acceptance:
+    name: LOSAT cache browser acceptance
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -116,6 +250,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -126,13 +262,12 @@ jobs:
       - name: Install build and browser dependencies
         run: |
           python -m pip install --upgrade build setuptools wheel
+          python -m pip install -e .
           npm ci
           npx playwright install --with-deps chromium
 
       - name: Prepare browser wheel
-        run: |
-          python tools/prepare_browser_wheel.py
+        run: python tools/prepare_browser_wheel.py
 
       - name: Run LOSAT cache migration browser acceptance
-        run: |
-          python tests/run_losat_cache_browser_acceptance.py
+        run: python tests/run_losat_cache_browser_acceptance.py

@@ -30,17 +30,19 @@
 
 ## Documentation
 
-| Guide | Description |
+| Route | Use it for |
 | --- | --- |
-| [Full documentation](./docs/DOCS.md) | Main entry point for the published docs set. |
-| [Installation](./docs/INSTALL.md) | Hosted app, Bioconda, and local development installation. |
-| [Quickstart](./docs/QUICKSTART.md) | Create a circular plot from a GenBank record. |
-| [Tutorials](./docs/TUTORIALS/README.md) | Numbered command-line guides, web app tutorials, and related workflows. |
-| [Recipes](./docs/RECIPES.md) | Copy-paste command patterns for common tasks. |
-| [CLI Reference](./docs/CLI_Reference.md) | Current command help for the CLI. |
-| [Gallery](./docs/GALLERY.md) | Example plots and commands. |
-| [FAQ](./docs/FAQ.md) | Common questions and known limitations. |
-| [About](./docs/ABOUT.md) | Citation information and project background. |
+| [Tutorials](./docs/TUTORIALS/README.md) | Build complete, reproducible figures in the web app, on the command line, or from Python. |
+| [Technical documentation](./docs/REFERENCE/README.md) | Look up controls, options, schemas, APIs, compatibility, outputs, and source provenance. |
+| [FAQ](./docs/FAQ.md) | Choose a layout, interface, or comparison method and resolve common problems. |
+| [Gallery](./docs/GALLERY.md) | Inspect finished static and interactive figures before choosing a workflow. |
+
+The [documentation home](./docs/DOCS.md) links the four routes above. Supporting
+pages cover [installation](./docs/INSTALL.md), [tutorial
+inputs](./docs/GETTING_TUTORIAL_DATA.md), [citation and project
+background](./docs/ABOUT.md), and the [changelog](./CHANGELOG.md).
+See [Contributing](./CONTRIBUTING.md) to report a bug, set up a development
+environment, or submit a pull request.
 
 ## Use without local installation
 

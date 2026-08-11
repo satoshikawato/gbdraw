@@ -66,7 +66,6 @@ class DiagramRunResult:
     protein_identity_manifest: Mapping[str, Any] | None = None
     legacy_protein_raw_candidates: tuple[Mapping[str, Any], ...] | None = None
     legacy_protein_derived_evidence: tuple[Mapping[str, Any], ...] | None = None
-    linear_record_metadata: tuple[Mapping[str, Any], ...] = ()
     run_metadata: Mapping[str, Any] = field(default_factory=dict)
     canonical_request: DiagramRequest | None = None
     biological_feature_metadata: tuple[Mapping[str, Any], ...] = ()
@@ -437,7 +436,6 @@ def save_session_sidecar_if_requested(
             source_session=source_session,
             cli_invocation_args=invocation_args,
             file_bindings=tuple(bindings),
-            linear_record_metadata=run_result.linear_record_metadata,
         ),
         svg_results=svg_results,
         embedded_files=session_files,
@@ -449,6 +447,7 @@ def save_session_sidecar_if_requested(
         legacy_protein_raw_candidates=run_result.legacy_protein_raw_candidates,
         legacy_protein_derived_evidence=run_result.legacy_protein_derived_evidence,
         canonical_request=run_result.canonical_request,
+        _canonical_request_is_resolved=True,
     )
     payload.pop("files", None)
     write_session_json(sidecar_path, payload, overwrite=overwrite)
@@ -468,9 +467,10 @@ def render_canonical_session_if_present(
     """Render an authoritative canonical request and bypass legacy CLI replay."""
 
     from gbdraw.session import (
+        _build_session_document_from_resolved_request,
+        _write_session_document,
         load_session_document,
         materialize_session,
-        save_session_document,
         session_to_request,
         with_request_output,
     )
@@ -653,12 +653,14 @@ def render_canonical_session_if_present(
                 adjunct["runMetadata"] = run_metadata
             else:
                 adjunct.pop("runMetadata", None)
-            save_session_document(
+            _write_session_document(
                 sidecar_path,
-                rendered_request,
-                title=str(document.to_dict().get("title") or replay_prefix),
-                adjunct=adjunct,
-                web_file_inventory=web_file_inventory,
+                _build_session_document_from_resolved_request(
+                    rendered_request,
+                    title=str(document.to_dict().get("title") or replay_prefix),
+                    adjunct=adjunct,
+                    web_file_inventory=web_file_inventory,
+                ),
                 overwrite=overwrite,
             )
     return True

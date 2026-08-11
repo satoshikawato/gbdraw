@@ -35,13 +35,13 @@ const fallbackColor = (index, defaults = {}) => {
   return DEPTH_TRACK_FALLBACK_COLORS[index % DEPTH_TRACK_FALLBACK_COLORS.length];
 };
 
-export const depthFileBaseName = (file) => {
+const depthFileBaseName = (file) => {
   const rawName = String(file?.name || '').split(/[\\/]/).pop().trim();
   if (!rawName) return '';
   return rawName.replace(/\.[^.]+$/, '').trim() || rawName;
 };
 
-export const depthLabelMatchesFile = (label, file) => {
+const depthLabelMatchesFile = (label, file) => {
   const labelText = String(label || '').toLowerCase();
   const fileText = depthFileBaseName(file).toLowerCase();
   if (!labelText || !fileText) return false;
@@ -252,51 +252,6 @@ export const reconcileDepthTracksToFiles = ({
   });
 };
 
-export const removeDepthTrackAt = ({
-  files,
-  depthTracks,
-  index,
-  minCount = 1,
-  defaults = {}
-} = {}) => {
-  const idx = Number(index);
-  const originalFiles = depthFileSlotsFromValue(files);
-  const originalTracks = Array.isArray(depthTracks) ? depthTracks.slice() : [];
-  if (!Number.isInteger(idx) || idx < 0) {
-    return {
-      files: compactDepthFileSlots(originalFiles),
-      depthTracks: ensureDepthTrackConfigCount(originalTracks, minCount, defaults),
-      removed: false,
-      removedFile: null,
-      previousFiles: originalFiles
-    };
-  }
-  const visibleCount = Math.max(minCount, originalFiles.length, 1);
-  const nextFiles = originalFiles.slice();
-  const nextTracks = originalTracks.slice();
-  const removedFile = nextFiles[idx] || null;
-  if (visibleCount <= 1) {
-    nextFiles[0] = null;
-    nextTracks.splice(0, nextTracks.length);
-  } else {
-    nextFiles.splice(idx, 1);
-    if (idx < nextTracks.length) nextTracks.splice(idx, 1);
-  }
-  const compactedFiles = compactDepthFileSlots(nextFiles);
-  const normalizedTracks = ensureDepthTrackConfigCount(
-    nextTracks,
-    Math.max(minCount, compactedFiles.length),
-    defaults
-  );
-  return {
-    files: compactedFiles,
-    depthTracks: normalizedTracks,
-    removed: true,
-    removedFile,
-    previousFiles: originalFiles
-  };
-};
-
 export const depthSlotTrackIndex = (slot, fallbackIndex = null) => {
   const rawTrackIndex = slot?.params?.track_index;
   if (rawTrackIndex !== null && rawTrackIndex !== undefined && rawTrackIndex !== '') {
@@ -313,7 +268,7 @@ export const depthSlotTrackIndex = (slot, fallbackIndex = null) => {
   return null;
 };
 
-export const referencedDepthTrackWidth = (slots) => {
+const referencedDepthTrackWidth = (slots) => {
   let width = 0;
   (Array.isArray(slots) ? slots : []).forEach((slot) => {
     if (!slot || String(slot.renderer || '') !== 'depth') return;

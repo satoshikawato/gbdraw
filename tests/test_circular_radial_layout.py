@@ -95,8 +95,37 @@ def test_stranded_feature_stack_lane_order_is_preset_deterministic() -> None:
     assert tuckin.lane_centers_by_track_id[0] == pytest.approx(93.0)
     assert middle.lane_centers_by_track_id[-1] == pytest.approx(94.0)
     assert middle.lane_centers_by_track_id[0] == pytest.approx(106.0)
-    assert spreadout.lane_centers_by_track_id[0] == pytest.approx(107.0)
-    assert spreadout.lane_centers_by_track_id[-1] == pytest.approx(119.0)
+    assert spreadout.lane_centers_by_track_id[-1] == pytest.approx(107.0)
+    assert spreadout.lane_centers_by_track_id[0] == pytest.approx(119.0)
+
+    for metrics in (tuckin, middle, spreadout):
+        assert metrics.lane_centers_by_track_id[0] > metrics.lane_centers_by_track_id[-1]
+
+
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+def test_stranded_feature_position_factors_keep_positive_strand_outermost(
+    track_type: str,
+) -> None:
+    positive = calculate_feature_position_factors_circular(
+        total_length=1000,
+        strand="positive",
+        track_ratio=0.19,
+        cds_ratio=0.1,
+        offset=0.0,
+        track_type=track_type,
+        strandedness=True,
+    )
+    negative = calculate_feature_position_factors_circular(
+        total_length=1000,
+        strand="negative",
+        track_ratio=0.19,
+        cds_ratio=0.1,
+        offset=0.0,
+        track_type=track_type,
+        strandedness=True,
+    )
+
+    assert positive[1] > negative[1]
 
 
 def test_middle_combined_feature_center_is_axis_radius() -> None:
@@ -189,8 +218,6 @@ def test_custom_core_slot_order_moves_feature_inward_when_ticks_are_axis_side() 
             CircularTrackSlot(id="features", renderer="features"),
         ],
         feature_dict={"a": _Feature(0)},
-        show_features=True,
-        show_ticks=True,
     )
 
     assert layout.features is not None
@@ -209,8 +236,6 @@ def test_custom_core_slot_order_keeps_default_feature_then_ticks_order() -> None
             CircularTrackSlot(id="ticks", renderer="ticks"),
         ],
         feature_dict={"a": _Feature(0)},
-        show_features=True,
-        show_ticks=True,
     )
 
     assert layout.features is not None
@@ -251,8 +276,6 @@ def test_pinned_inside_slots_are_reserved_before_auto_feature_slots() -> None:
                 ),
             ],
             feature_dict={"plus": _Feature(0), "minus": _Feature(-1)},
-            show_features=True,
-            show_ticks=False,
             definition_reserved_radius_px=60.0,
         )
 
@@ -293,8 +316,6 @@ def test_auto_conservation_stack_compresses_ring_width_and_gap_when_tight() -> N
             CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
         ],
         feature_dict={"a": _Feature(0)},
-        show_features=True,
-        show_ticks=False,
     )
 
     by_id = {slot.id: slot for slot in layout.slots}
@@ -399,8 +420,6 @@ def test_explicit_inside_gaps_are_not_auto_compressed_when_widths_are() -> None:
             CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
         ],
         feature_dict={"a": _Feature(0)},
-        show_features=True,
-        show_ticks=False,
     )
 
     by_id = {slot.id: slot for slot in layout.slots}
@@ -433,8 +452,6 @@ def test_explicit_conservation_ring_width_is_not_auto_compressed() -> None:
                 ],
             ],
             feature_dict={"a": _Feature(0)},
-            show_features=True,
-            show_ticks=False,
         )
 
 
@@ -447,8 +464,6 @@ def test_radial_numeric_stack_places_default_inside_tracks_when_space_allows() -
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
             CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
         ],
-        show_features=False,
-        show_ticks=False,
         definition_reserved_radius_px=60.0,
     )
     by_id = {track.id: track for track in layout.tracks}
@@ -468,8 +483,6 @@ def test_radial_numeric_stack_compresses_group_no_lower_than_readable_minimum() 
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
             CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
         ],
-        show_features=False,
-        show_ticks=False,
         definition_reserved_radius_px=65.0,
     )
     by_id = {track.id: track for track in layout.tracks}
@@ -493,8 +506,6 @@ def test_radial_numeric_stack_raises_when_readable_minimum_cannot_fit() -> None:
                 CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
                 CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
             ],
-            show_features=False,
-            show_ticks=False,
             definition_reserved_radius_px=70.0,
         )
 
@@ -509,8 +520,6 @@ def test_outside_auto_numeric_width_is_independent_from_inside_compression() -> 
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
             CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
         ],
-        show_features=False,
-        show_ticks=False,
         definition_reserved_radius_px=65.0,
     )
     by_id = {track.id: track for track in layout.tracks}
@@ -531,8 +540,6 @@ def test_outside_auto_stack_order_is_outermost_first() -> None:
             CircularTrackSlot(id="middle_skew", renderer="dinucleotide_skew", side="outside"),
             CircularTrackSlot(id="inner_depth", renderer="depth", side="outside"),
         ],
-        show_features=False,
-        show_ticks=False,
     )
     by_id = {track.id: track for track in layout.tracks}
 
@@ -556,8 +563,6 @@ def test_user_preset_generated_private_param_is_rejected() -> None:
             total_length=1000,
             canvas_config=canvas_config,
             slots=[tagged_slot],
-            show_features=False,
-            show_ticks=False,
             definition_reserved_radius_px=35.0,
         )
 
@@ -591,8 +596,6 @@ def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -
                 width=ScalarSpec(width_px, "px"),
             )
         ],
-        show_features=False,
-        show_ticks=False,
         depth_config=depth_config,
     )
     depth = layout.tracks[0]
@@ -620,8 +623,6 @@ def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -
                 width=ScalarSpec(width_px, "px"),
             )
         ],
-        show_features=False,
-        show_ticks=False,
         depth_config=hidden_axis_config,
     )
     hidden_axis_depth = hidden_axis_layout.tracks[0]

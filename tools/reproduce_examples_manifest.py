@@ -43,18 +43,20 @@ MANUALLY_MANAGED_FIGURES: dict[str, str] = {
 }
 
 UNREFERENCED_FIGURE_RETENTION: dict[str, str] = {
-    "examples/NC_000921_spring.svg": "Archived single-genome style recipe retained for reproducibility.",
-    "examples/NC_000962_psyche.svg": "Archived single-genome style recipe retained for reproducibility.",
-    "examples/NC_001416.svg": "Static companion to the Beginner linear interactive Gallery example.",
-    "examples/NC_001879_color.svg": "Archived chloroplast color-table recipe retained for reproducibility.",
-    "examples/NC_005042_pine_reflection.svg": "Archived single-genome style recipe retained for reproducibility.",
-    "examples/NC_007205_oceanic_voyage.svg": "Archived single-genome style recipe retained for reproducibility.",
-    "examples/NC_010162_edelweiss.svg": "Source panel used by the published social-preview composite.",
-    "examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg": (
-        "Legacy static companion retained alongside the current human mitochondrial tutorial recipe."
+    "examples/ecoli_k12_plot.svg": (
+        "Former Quickstart figure retained for one compatibility release after the "
+        "Quickstart moved to bundled, version-pinned tutorial fixtures."
     ),
-    "examples/NC_016510_mint.svg": "Archived single-genome style recipe retained for reproducibility.",
-    "examples/NZ_CP010822_orange.svg": "Archived single-genome style recipe retained for reproducibility.",
+    "examples/quickstart-labeled-rna-features.svg": (
+        "Former Quickstart label example retained for one compatibility release after the "
+        "runnable recipe moved to its technical documentation owner."
+    ),
+    "examples/majani.svg": (
+        "Linked from the Gallery but not embedded because the full-size SVG is too large "
+        "for a Markdown preview."
+    ),
+    "examples/NC_001879_color.svg": "Archived chloroplast color-table recipe retained for reproducibility.",
+    "examples/NC_010162_edelweiss.svg": "Source panel used by the published social-preview composite.",
 }
 
 
@@ -667,33 +669,6 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         ),
         description="Gallery Sorangium cellulosum example.",
     )
-    figures["NC_012920_middle_qualifier_priority_inner_axis5_def28_italic"] = _figure(
-        figure_id="NC_012920_middle_qualifier_priority_inner_axis5_def28_italic",
-        output_path="examples/NC_012920_middle_qualifier_priority_inner_axis5_def28_italic.svg",
-        groups=("docs",),
-        required_inputs=("NC_012920.gb",),
-        support_assets=("qualifier_priority.tsv",),
-        recipe=CliRecipe(
-            subcommand="circular",
-            gbk_files=("NC_012920.gb",),
-            file_args=(_file_arg("--qualifier_priority", "qualifier_priority.tsv"),),
-            extra_args=(
-                "--track_type",
-                "middle",
-                "--species",
-                "<i>Homo sapiens</i>",
-                "--block_stroke_width",
-                "2",
-                "--axis_stroke_width",
-                "5",
-                "--labels",
-                "both",
-                "--definition_font_size",
-                "28",
-            ),
-        ),
-        description="Gallery mitochondrial qualifier priority example.",
-    )
     figures["NC_001879_color"] = _figure(
         figure_id="NC_001879_color",
         output_path="examples/NC_001879_color.svg",
@@ -808,34 +783,6 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         ),
         description="Tobacco chloroplast map with LSC, SSC, IRa, and IRb brackets.",
     )
-    figures["NC_001416"] = _figure(
-        figure_id="NC_001416",
-        output_path="examples/NC_001416.svg",
-        groups=("docs",),
-        required_inputs=("NC_001416.gb", "cds_white.tsv", "lambda_specific_table.tsv"),
-        recipe=CliRecipe(
-            subcommand="linear",
-            gbk_files=("NC_001416.gb",),
-            file_args=(
-                _file_arg("-d", "cds_white.tsv"),
-                _file_arg("-t", "lambda_specific_table.tsv"),
-            ),
-            extra_args=(
-                "--show_labels",
-                "all",
-                "--separate_strands",
-                "--legend",
-                "left",
-                "--block_stroke_width",
-                "2",
-                "--axis_stroke_width",
-                "5",
-                "--definition_font_size",
-                "24",
-            ),
-        ),
-        description="Gallery lambda phage example.",
-    )
     figures["M16-5_fugaku"] = _figure(
         figure_id="M16-5_fugaku",
         output_path="examples/M16-5_fugaku.svg",
@@ -888,138 +835,6 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         ),
         description="Gallery Pandoravirus example.",
     )
-    figures["NC_007205_oceanic_voyage"] = _figure(
-        figure_id="NC_007205_oceanic_voyage",
-        output_path="examples/NC_007205_oceanic_voyage.svg",
-        groups=("docs",),
-        required_inputs=("NC_007205.gb",),
-        recipe=CliRecipe(
-            subcommand="circular",
-            gbk_files=("NC_007205.gb",),
-            extra_args=(
-                "--separate_strands",
-                "--species",
-                "<i>Ca. </i> Pelagibacter ubique",
-                "--strain",
-                "HTCC1062",
-                "--legend",
-                "none",
-                "--palette",
-                "oceanic_voyage",
-            ),
-        ),
-        description="Gallery Pelagibacter example.",
-    )
-    figures["NC_005042_pine_reflection"] = _figure(
-        figure_id="NC_005042_pine_reflection",
-        output_path="examples/NC_005042_pine_reflection.svg",
-        groups=("docs",),
-        required_inputs=("NC_005042.gb",),
-        recipe=CliRecipe(
-            subcommand="circular",
-            gbk_files=("NC_005042.gb",),
-            extra_args=(
-                "--separate_strands",
-                "--species",
-                "<i>Prochlorococcus marinus</i>",
-                "--strain",
-                "CCMP1375",
-                "--legend",
-                "none",
-                "--palette",
-                "pine_reflection",
-            ),
-        ),
-        description="Gallery Prochlorococcus example.",
-    )
-    figures["NC_016510_mint"] = _figure(
-        figure_id="NC_016510_mint",
-        output_path="examples/NC_016510_mint.svg",
-        groups=("docs",),
-        required_inputs=("NC_016510.gb",),
-        recipe=CliRecipe(
-            subcommand="circular",
-            gbk_files=("NC_016510.gb",),
-            extra_args=(
-                "--separate_strands",
-                "--species",
-                "<i>Flavobacterium columnare</i>",
-                "--strain",
-                "ATCC 49512",
-                "--legend",
-                "none",
-                "--palette",
-                "mint",
-            ),
-        ),
-        description="Gallery Flavobacterium example.",
-    )
-    figures["NZ_CP010822_orange"] = _figure(
-        figure_id="NZ_CP010822_orange",
-        output_path="examples/NZ_CP010822_orange.svg",
-        groups=("docs",),
-        required_inputs=("NZ_CP010822.gb",),
-        recipe=CliRecipe(
-            subcommand="circular",
-            gbk_files=("NZ_CP010822.gb",),
-            extra_args=(
-                "--separate_strands",
-                "--species",
-                "<i>Thermus aquaticus</i>",
-                "--strain",
-                "Y51MC23",
-                "--legend",
-                "none",
-                "--palette",
-                "orange",
-            ),
-        ),
-        description="Gallery Thermus example.",
-    )
-    figures["NC_000921_spring"] = _figure(
-        figure_id="NC_000921_spring",
-        output_path="examples/NC_000921_spring.svg",
-        groups=("docs",),
-        required_inputs=("NC_000921.gb",),
-        recipe=CliRecipe(
-            subcommand="circular",
-            gbk_files=("NC_000921.gb",),
-            extra_args=(
-                "--separate_strands",
-                "--species",
-                "<i>Helicobacter pylori</i>",
-                "--strain",
-                "J99",
-                "--legend",
-                "none",
-                "--palette",
-                "spring",
-            ),
-        ),
-        description="Gallery Helicobacter example.",
-    )
-    figures["NC_000962_psyche"] = _figure(
-        figure_id="NC_000962_psyche",
-        output_path="examples/NC_000962_psyche.svg",
-        groups=("docs",),
-        required_inputs=("NC_000962.gb",),
-        recipe=CliRecipe(
-            subcommand="circular",
-            gbk_files=("NC_000962.gb",),
-            extra_args=(
-                "--separate_strands",
-                "--species",
-                "<i>Mycobacterium tuberculosis</i>",
-                "--strain",
-                "H37Rv",
-                "--legend",
-                "none",
-                "--palette",
-                "psyche",
-            ),
-        ),
-        description="Gallery Mycobacterium example.",
-    )
 
     figures["track_layout_separate_strands"] = _figure(
         figure_id="track_layout_separate_strands",
@@ -1069,7 +884,7 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
             tile_size=(3400, 3400),
             gap=32,
             padding=32,
-            panels=(
+            panels=tuple(
                 CompositePanel(
                     recipe=CliRecipe(
                         subcommand="circular",
@@ -1091,60 +906,18 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                             "--label_font_size",
                             "18",
                             "--definition_font_size",
-                            "20",
-                        ),
-                    )
-                ),
-                CompositePanel(
-                    recipe=CliRecipe(
-                        subcommand="circular",
-                        gbk_files=("HmmtDNA.gbk",),
-                        file_args=(_file_arg("--qualifier_priority", "qualifier_priority.tsv"),),
-                        extra_args=(
-                            "--track_type",
-                            "middle",
-                            "--species",
-                            "<i>Homo sapiens</i>",
-                            "--block_stroke_width",
-                            "2",
-                            "--axis_stroke_width",
-                            "5",
-                            "--labels",
-                            "both",
-                            "--palette",
-                            "soft_pastels",
-                            "--label_font_size",
-                            "18",
-                            "--definition_font_size",
+                            definition_font_size,
+                            "--plot_title",
+                            f"--definition_font_size {definition_font_size}",
+                            "--plot_title_position",
+                            "top",
+                            "--plot_title_font_size",
                             "28",
+                            "--keep_full_definition_with_plot_title",
                         ),
                     )
-                ),
-                CompositePanel(
-                    recipe=CliRecipe(
-                        subcommand="circular",
-                        gbk_files=("HmmtDNA.gbk",),
-                        file_args=(_file_arg("--qualifier_priority", "qualifier_priority.tsv"),),
-                        extra_args=(
-                            "--track_type",
-                            "middle",
-                            "--species",
-                            "<i>Homo sapiens</i>",
-                            "--block_stroke_width",
-                            "2",
-                            "--axis_stroke_width",
-                            "5",
-                            "--labels",
-                            "both",
-                            "--palette",
-                            "soft_pastels",
-                            "--label_font_size",
-                            "18",
-                            "--definition_font_size",
-                            "36",
-                        ),
-                    )
-                ),
+                )
+                for definition_font_size in ("20", "28", "36")
             ),
         ),
         description="Tutorial 3 definition font size comparison montage.",
@@ -1792,7 +1565,11 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
                 "--identity",
                 "95",
                 "--alignment_length",
-                "1000",
+                "750",
+                "--conservation_ring_width",
+                "12",
+                "--conservation_ring_gap",
+                "3",
             ),
         ),
         required_inputs=("MjeNMV.gb", "MjeNMV.MelaMJNV.tblastx.out"),

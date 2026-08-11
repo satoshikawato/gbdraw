@@ -1,99 +1,36 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
-
-[< Back to Installation](./INSTALL.md) | [Go to Tutorials >](./TUTORIALS/README.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [Installation](./INSTALL.md)
 
 # Quickstart
 
-Draw one circular genome diagram with the CLI in under 10 minutes. For a GUI workflow, use the [Beginner circular tutorial](https://gbdraw.app/gallery/#HmmtDNA_basic_circular) or run `gbdraw gui` locally.
+Choose the interface you want to use. Each guided Tutorial links the exact,
+versioned files to download, shows the filenames and working folder to create,
+and finishes with a generated image and checks for the expected SVG.
 
-## 1. Check the installation
+If this is your first guide, read [Get the tutorial inputs](./GETTING_TUTORIAL_DATA.md)
+before downloading the inputs. You do not need a source checkout.
 
-Make sure `gbdraw` is available in your environment:
+## Web app
 
-```bash
-gbdraw -h
-```
+Use [Create and export your first circular genome diagram](./TUTORIALS/GUI/first-circular-genome-diagram.md)
+if you want to work in the browser without writing commands. The page links
+both input files, shows every control state, and reaches the first preview in
+Step 2.
 
-## 2. Download a sample GenBank file
+## Command line
 
-This example uses the *Escherichia coli* K-12 reference genome.
+Use [Create a reproducible circular diagram from the command line](./TUTORIALS/CLI/first-circular-genome-diagram.md)
+for browser and command-line download instructions, an exact working-directory
+layout, a copyable command, and the checked result.
 
-```bash
-wget "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -O NC_000913.gbk
-```
+## Python
 
-With `curl`:
+Use [Draw and save your first genome diagram from Python](./TUTORIALS/PYTHON/first-genome-diagram.md)
+to download the inputs, save a complete Python program under the documented
+filename, run it, and compare its output with the generated reference figure.
 
-```bash
-curl -L "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=gbwithparts&retmode=text" -o NC_000913.gbk
-```
+After your first diagram, choose another [Tutorial](./TUTORIALS/README.md) for a
+complete figure. Use the [FAQ](./FAQ.md) to choose an approach and [Technical
+documentation](./REFERENCE/README.md) for exact controls, options, schemas,
+APIs, and output behavior.
 
-The same accession can be downloaded from [NCBI Nucleotide](https://www.ncbi.nlm.nih.gov/nuccore/NC_000913.3) by choosing the GenBank format.
-
-## 3. Generate a circular genome diagram
-
-```bash
-gbdraw circular \
-  --gbk NC_000913.gbk \
-  -o ecoli_k12_plot \
-  -f svg \
-  --separate_strands
-```
-
-This command:
-
-- reads `NC_000913.gbk`
-- writes `ecoli_k12_plot.svg`
-- draws a circular genome diagram
-- separates forward and reverse strands into different feature tracks
-
-## 4. Inspect the output
-
-Open the resulting SVG in a browser or vector editor.
-
-![Circular E. coli K-12 genome diagram with separate forward and reverse strand tracks](../examples/ecoli_k12_plot.svg)
-
-## 5. Optional: add feature labels or a center label
-
-Show labels for a focused set of RNA features. Restricting this large *E. coli* genome to rRNA and tRNA features keeps the labels readable:
-
-```bash
-gbdraw circular \
-  --gbk NC_000913.gbk \
-  -o ecoli_k12_labeled \
-  -f svg \
-  --track_type middle \
-  --features rRNA,tRNA \
-  --labels
-```
-
-![Circular E. coli K-12 genome with labeled rRNA and tRNA features](../examples/quickstart-labeled-rna-features.svg)
-
-Add a species and strain to the center of the diagram:
-
-```bash
-gbdraw circular \
-  --gbk NC_000913.gbk \
-  -o ecoli_with_title \
-  -f svg \
-  --separate_strands \
-  --species "<i>Escherichia coli</i>" \
-  --strain "K-12"
-```
-
-![Circular E. coli K-12 genome diagram with an italic species name and strain in the center](../examples/ecoli_with_title.svg)
-
-## Choose the next workflow
-
-- Create a one-record linear figure in the [Beginner linear Gallery tutorial](https://gbdraw.app/gallery/#lambda_basic_linear).
-- Select linear records or regions in [Arrange linear tracks, record labels, and rulers](./TUTORIALS/7_Linear_Layout.md#7-select-records-regions-and-orientation).
-- Continue with [Style a circular genome diagram](./TUTORIALS/1_Customizing_Plots.md).
-- Use [Draw protein matches from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md) to run protein searches during diagram generation.
-- Use [TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md) when records need separate labels, selectors, crops, or orientations.
-- Browse [Recipes](./RECIPES.md) for common command patterns.
-- Use the [CLI Reference](./CLI_Reference.md) for the full option list.
-- Explore more figures in the [Gallery](./GALLERY.md).
-
-[< Back to Installation](./INSTALL.md) | [Go to Tutorials >](./TUTORIALS/README.md)
-
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | **Quickstart** | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [Installation](./INSTALL.md)

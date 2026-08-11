@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import math
-from typing import Iterable, Mapping
+from typing import Iterable
 
 DEFINITION_LINE_KINDS: tuple[str, ...] = ("name", "subtitle", "replicon", "accession", "length")
 DEFINITION_LINE_STYLE_PROPERTIES: tuple[str, ...] = ("font_size", "font_weight", "fill")
@@ -190,31 +190,6 @@ def parse_definition_line_style_overrides(
     return overrides
 
 
-def normalize_definition_line_style_mapping(
-    line_styles: Mapping[str, Mapping[str, object]] | None,
-) -> dict[str, dict[str, object]]:
-    normalized: dict[str, dict[str, object]] = {}
-    if line_styles is None:
-        return normalized
-    for line_key_raw, raw_style in line_styles.items():
-        line_key = normalize_definition_line_key(line_key_raw)
-        if not isinstance(raw_style, Mapping):
-            raise ValueError("definition line style entries must be mappings")
-        style: dict[str, object] = {}
-        for property_raw, raw_value in raw_style.items():
-            property_key = normalize_definition_line_style_property(property_raw)
-            if property_key == "font_size":
-                value = normalize_definition_line_font_size(raw_value)
-            elif property_key == "font_weight":
-                value = normalize_definition_line_font_weight(raw_value)
-            else:
-                value = normalize_definition_line_fill(raw_value)
-            if value is not None:
-                style[property_key] = value
-        normalized.setdefault(line_key, {}).update(style)
-    return normalized
-
-
 __all__ = [
     "DEFINITION_LINE_KINDS",
     "DEFINITION_LINE_STYLE_PROPERTIES",
@@ -222,7 +197,6 @@ __all__ = [
     "normalize_definition_line_font_size",
     "normalize_definition_line_font_weight",
     "normalize_definition_line_key",
-    "normalize_definition_line_style_mapping",
     "normalize_definition_line_style_property",
     "parse_definition_line_style_assignment",
     "parse_definition_line_style_overrides",

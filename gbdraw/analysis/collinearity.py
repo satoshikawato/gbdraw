@@ -14,22 +14,16 @@ import pandas as pd
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
-from gbdraw.analysis.collinearity_units import (
-    CollinearityUnit,
-    CollinearityUnitIndex,
-    CollinearityUnitMode,
-)
+from gbdraw.analysis.collinearity_units import CollinearityUnitMode
 from gbdraw.analysis.protein_colinearity import (
     CdsProtein,
     LosatpCacheManager,
     LosatpRunner,
-    OrthogroupMember,
     OrthogroupMembershipMode,
     OrthogroupResult,
     ProteinExtractionResult,
     _cache_runner_for_search,
     _run_losatp_search,
-    build_orthogroups_from_protein_hits,
     extract_cds_proteins,
     filter_protein_hits_by_thresholds,
     normalize_orthogroup_membership_mode,
@@ -69,6 +63,10 @@ COLLINEARITY_METADATA_COLUMNS = (
     "subject_protein_id",
     "query_feature_svg_id",
     "subject_feature_svg_id",
+    "query_view_feature_svg_id",
+    "subject_view_feature_svg_id",
+    "query_feature_index",
+    "subject_feature_index",
     "rbh_orthogroup_id",
     "ortholog_path_id",
     "edge_kind",
@@ -122,6 +120,10 @@ class CollinearityAnchor:
     subject_orthogroup_representative: bool = False
     query_orthogroup_member_count: int = 0
     subject_orthogroup_member_count: int = 0
+    query_view_feature_svg_id: str = ""
+    subject_view_feature_svg_id: str = ""
+    query_feature_index: int | None = None
+    subject_feature_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -236,24 +238,6 @@ def iter_collinearity_search_pairs(
     )
 
 
-def select_collinearity_anchor_hits(
-    hits: DataFrame,
-    *,
-    anchor_mode: CollinearityAnchorMode | str = "rbh",
-    reverse_hits: DataFrame | None = None,
-) -> DataFrame:
-    """Reduce filtered protein hits to the anchors used for block calling."""
-
-    normalized_anchor_mode = normalize_collinearity_anchor_mode(str(anchor_mode))
-    if normalized_anchor_mode == "all":
-        return hits.copy()
-    if normalized_anchor_mode == "one_to_one":
-        return select_reciprocal_best_hits(hits)
-    if reverse_hits is None:
-        raise ValidationError("collinear_anchor_mode='rbh' requires reverse-direction hits.")
-    return select_reciprocal_best_hit_edges(hits, reverse_hits)
-
-
 def _float_from_row(row: object, column: str, default: float = 0.0) -> float:
     try:
         return float(getattr(row, column))
@@ -266,17 +250,6 @@ def _int_from_row(row: object, column: str, default: int = 0) -> int:
         return int(getattr(row, column))
     except (TypeError, ValueError, AttributeError):
         return int(default)
-
-
-def _anchor_strength_key(anchor: CollinearityAnchor) -> tuple[float, float, float, int, str, str]:
-    return (
-        float(anchor.evalue),
-        -float(anchor.bitscore),
-        -float(anchor.identity),
-        -int(anchor.alignment_length),
-        str(anchor.query_protein_id),
-        str(anchor.subject_protein_id),
-    )
 
 
 def _genomic_link_coordinates(protein: CdsProtein) -> tuple[int, int]:
@@ -293,201 +266,20 @@ def _normalized_strand(value: object) -> int | None:
     return strand if strand in {-1, 1} else None
 
 
+def _view_feature_svg_id(protein: CdsProtein) -> str:
+    return str(
+        protein.view_feature_svg_id
+        or protein.feature_svg_id
+        or ""
+    )
+
+
 def _anchor_strand_orientation(anchor: CollinearityAnchor) -> CollinearityOrientation | None:
     query_strand = _normalized_strand(anchor.query_strand)
     subject_strand = _normalized_strand(anchor.subject_strand)
     if query_strand is None or subject_strand is None:
         return None
     return "plus" if query_strand == subject_strand else "minus"
-
-
-def protein_hits_to_collinearity_anchors(
-    hits: DataFrame,
-    *,
-    query_units: Mapping[str, CollinearityUnit],
-    subject_units: Mapping[str, CollinearityUnit],
-    query_protein_map: Mapping[str, CdsProtein],
-    subject_protein_map: Mapping[str, CdsProtein],
-    source: str = "losatp",
-) -> tuple[CollinearityAnchor, ...]:
-    """Map retained protein hits to collinearity unit anchors."""
-
-    if hits.empty:
-        return ()
-    missing_ids: set[str] = set()
-    anchors: list[CollinearityAnchor] = []
-
-    for row in hits.itertuples(index=False):
-        query_id = str(row.query)
-        subject_id = str(row.subject)
-        query_unit = query_units.get(query_id)
-        subject_unit = subject_units.get(subject_id)
-        query_protein = query_protein_map.get(query_unit.representative_protein_id) if query_unit else None
-        subject_protein = subject_protein_map.get(subject_unit.representative_protein_id) if subject_unit else None
-        if query_unit is None:
-            missing_ids.add(query_id)
-        if subject_unit is None:
-            missing_ids.add(subject_id)
-        if query_unit is None or subject_unit is None or query_protein is None or subject_protein is None:
-            continue
-        if query_unit.unit_id == subject_unit.unit_id:
-            continue
-        if query_unit.record_index == subject_unit.record_index:
-            continue
-        qstart, qend = _genomic_link_coordinates(query_protein)
-        sstart, send = _genomic_link_coordinates(subject_protein)
-        anchors.append(
-            CollinearityAnchor(
-                query_protein_id=query_protein.protein_id,
-                subject_protein_id=subject_protein.protein_id,
-                query_record_index=int(query_unit.record_index),
-                subject_record_index=int(subject_unit.record_index),
-                query_order=int(query_unit.order),
-                subject_order=int(subject_unit.order),
-                query_start=qstart,
-                query_end=qend,
-                subject_start=sstart,
-                subject_end=send,
-                query_strand=_normalized_strand(query_protein.strand),
-                subject_strand=_normalized_strand(subject_protein.strand),
-                identity=_float_from_row(row, "identity"),
-                evalue=_float_from_row(row, "evalue"),
-                bitscore=_float_from_row(row, "bitscore"),
-                alignment_length=_int_from_row(row, "alignment_length"),
-                query_feature_svg_id=query_unit.representative_feature_svg_id,
-                subject_feature_svg_id=subject_unit.representative_feature_svg_id,
-                source=source,
-                query_unit_id=query_unit.unit_id,
-                subject_unit_id=subject_unit.unit_id,
-                query_unit_kind=query_unit.unit_kind,
-                subject_unit_kind=subject_unit.unit_kind,
-                query_locus_id=query_unit.locus_id,
-                subject_locus_id=subject_unit.locus_id,
-                query_display_name=query_unit.display_name,
-                subject_display_name=subject_unit.display_name,
-                orthogroup_id=str(getattr(row, "orthogroup_id", "") or ""),
-            )
-        )
-
-    if missing_ids:
-        raise ParseError(
-            "LOSATP blastp output contains protein IDs that do not resolve to collinearity units: "
-            + ", ".join(sorted(missing_ids)[:20])
-        )
-    return tuple(anchors)
-
-
-def deduplicate_unit_pair_anchors(
-    anchors: Sequence[CollinearityAnchor],
-) -> tuple[CollinearityAnchor, ...]:
-    """Keep the strongest anchor for each query-subject unit pair."""
-
-    best_by_pair: dict[tuple[str, str], CollinearityAnchor] = {}
-    for anchor in anchors:
-        key = (anchor.query_unit_id, anchor.subject_unit_id)
-        current = best_by_pair.get(key)
-        if current is None or _anchor_strength_key(anchor) < _anchor_strength_key(current):
-            best_by_pair[key] = anchor
-    return tuple(
-        sorted(
-            best_by_pair.values(),
-            key=lambda anchor: (
-                anchor.query_record_index,
-                anchor.subject_record_index,
-                anchor.query_order,
-                anchor.subject_order,
-                anchor.query_protein_id,
-                anchor.subject_protein_id,
-            ),
-        )
-    )
-
-
-def _collapse_duplicate_pass(
-    anchors: Sequence[CollinearityAnchor],
-    *,
-    fixed_attr: str,
-    nearby_attr: str,
-    window: int,
-) -> tuple[CollinearityAnchor, ...]:
-    if window <= 0 or len(anchors) <= 1:
-        return tuple(anchors)
-    sorted_anchors = sorted(
-        anchors,
-        key=lambda anchor: (
-            getattr(anchor, fixed_attr),
-            getattr(anchor, nearby_attr),
-            anchor.query_order,
-            anchor.subject_order,
-            anchor.query_protein_id,
-            anchor.subject_protein_id,
-        ),
-    )
-    kept: list[CollinearityAnchor] = []
-    cluster: list[CollinearityAnchor] = []
-    cluster_fixed: int | None = None
-    cluster_max_nearby: int | None = None
-
-    def flush() -> None:
-        nonlocal cluster
-        if cluster:
-            kept.append(min(cluster, key=_anchor_strength_key))
-            cluster = []
-
-    for anchor in sorted_anchors:
-        fixed = int(getattr(anchor, fixed_attr))
-        nearby = int(getattr(anchor, nearby_attr))
-        starts_new = (
-            cluster_fixed is None
-            or fixed != cluster_fixed
-            or cluster_max_nearby is None
-            or nearby - cluster_max_nearby > int(window)
-        )
-        if starts_new:
-            flush()
-            cluster_fixed = fixed
-            cluster_max_nearby = nearby
-        else:
-            cluster_max_nearby = max(cluster_max_nearby, nearby)
-        cluster.append(anchor)
-    flush()
-    return tuple(kept)
-
-
-def collapse_nearby_duplicate_anchors(
-    anchors: Sequence[CollinearityAnchor],
-    *,
-    window: int,
-) -> tuple[CollinearityAnchor, ...]:
-    """Collapse tandem/repetitive nearby unit anchors in both dimensions."""
-
-    if int(window) <= 0:
-        return tuple(anchors)
-    query_collapsed = _collapse_duplicate_pass(
-        anchors,
-        fixed_attr="query_order",
-        nearby_attr="subject_order",
-        window=int(window),
-    )
-    subject_collapsed = _collapse_duplicate_pass(
-        query_collapsed,
-        fixed_attr="subject_order",
-        nearby_attr="query_order",
-        window=int(window),
-    )
-    return tuple(
-        sorted(
-            subject_collapsed,
-            key=lambda anchor: (
-                anchor.query_record_index,
-                anchor.subject_record_index,
-                anchor.query_order,
-                anchor.subject_order,
-                anchor.query_protein_id,
-                anchor.subject_protein_id,
-            ),
-        )
-    )
 
 
 def _path_sorted_anchors(
@@ -733,6 +525,10 @@ def _lossless_anchor_from_edge_row(
         alignment_length=_int_from_row(row, "alignment_length", 0),
         query_feature_svg_id=str(query_protein.feature_svg_id or ""),
         subject_feature_svg_id=str(subject_protein.feature_svg_id or ""),
+        query_view_feature_svg_id=_view_feature_svg_id(query_protein),
+        subject_view_feature_svg_id=_view_feature_svg_id(subject_protein),
+        query_feature_index=query_protein.feature_index,
+        subject_feature_index=subject_protein.feature_index,
         source="orthogroup_display_edge",
         query_unit_id=query_id,
         subject_unit_id=subject_id,
@@ -1268,229 +1064,6 @@ def _select_orthogroup_edges(
     return selected
 
 
-def _evidence_lookup(
-    edge_tables: Mapping[tuple[int, int], DataFrame],
-) -> dict[tuple[int, int, str, str], object]:
-    lookup: dict[tuple[int, int, str, str], object] = {}
-    for (query_index, subject_index), hits in edge_tables.items():
-        if hits is None or hits.empty:
-            continue
-        for row in hits.itertuples(index=False):
-            key = (
-                int(query_index),
-                int(subject_index),
-                str(row.query),
-                str(row.subject),
-            )
-            current = lookup.get(key)
-            if current is None or _anchor_strength_key_from_row(row) < _anchor_strength_key_from_row(current):
-                lookup[key] = row
-    return lookup
-
-
-def _anchor_strength_key_from_row(row: object) -> tuple[float, float, float, int, str, str]:
-    return (
-        _float_from_row(row, "evalue", 1.0),
-        -_float_from_row(row, "bitscore", 0.0),
-        -_float_from_row(row, "identity", 0.0),
-        -_int_from_row(row, "alignment_length", 0),
-        str(getattr(row, "query", "")),
-        str(getattr(row, "subject", "")),
-    )
-
-
-def _members_by_record(
-    members: Sequence[OrthogroupMember],
-) -> dict[int, list[OrthogroupMember]]:
-    grouped: dict[int, list[OrthogroupMember]] = {}
-    for member in members:
-        grouped.setdefault(int(member.record_index), []).append(member)
-    for record_members in grouped.values():
-        record_members.sort(
-            key=lambda member: (
-                int(member.start),
-                int(member.end),
-                int(member.feature_index),
-                str(member.protein_id),
-            )
-        )
-    return grouped
-
-
-def _member_unit_pairs(
-    members: Sequence[OrthogroupMember],
-    unit_index: CollinearityUnitIndex,
-) -> list[tuple[OrthogroupMember, CollinearityUnit]]:
-    pairs: list[tuple[OrthogroupMember, CollinearityUnit]] = []
-    seen_unit_ids: set[str] = set()
-    for member in members:
-        unit = unit_index.unit_by_protein_id.get(str(member.protein_id))
-        if unit is None or unit.unit_id in seen_unit_ids:
-            continue
-        seen_unit_ids.add(unit.unit_id)
-        pairs.append((member, unit))
-    return pairs
-
-
-def _candidate_pair_rank(
-    query_member: OrthogroupMember,
-    query_unit: CollinearityUnit,
-    subject_member: OrthogroupMember,
-    subject_unit: CollinearityUnit,
-    evidence: object | None,
-) -> tuple[bool, bool, bool, bool, float, float, float, int, int, int, str, str]:
-    return (
-        not (bool(query_member.representative) and bool(subject_member.representative)),
-        not bool(query_member.representative),
-        not bool(subject_member.representative),
-        evidence is None,
-        _float_from_row(evidence, "evalue", 1.0),
-        -_float_from_row(evidence, "bitscore", 0.0),
-        -_float_from_row(evidence, "identity", 0.0),
-        -_int_from_row(evidence, "alignment_length", 0),
-        abs(int(query_unit.order) - int(subject_unit.order)),
-        int(query_unit.order),
-        str(query_member.protein_id),
-        str(subject_member.protein_id),
-    )
-
-
-def _make_orthogroup_anchor(
-    *,
-    orthogroup_id: str,
-    query_member: OrthogroupMember,
-    query_unit: CollinearityUnit,
-    subject_member: OrthogroupMember,
-    subject_unit: CollinearityUnit,
-    query_protein: CdsProtein,
-    subject_protein: CdsProtein,
-    evidence: object | None,
-    query_member_count: int,
-    subject_member_count: int,
-) -> CollinearityAnchor:
-    qstart, qend = _genomic_link_coordinates(query_protein)
-    sstart, send = _genomic_link_coordinates(subject_protein)
-    return CollinearityAnchor(
-        query_protein_id=str(query_member.protein_id),
-        subject_protein_id=str(subject_member.protein_id),
-        query_record_index=int(query_unit.record_index),
-        subject_record_index=int(subject_unit.record_index),
-        query_order=int(query_unit.order),
-        subject_order=int(subject_unit.order),
-        query_start=qstart,
-        query_end=qend,
-        subject_start=sstart,
-        subject_end=send,
-        query_strand=_normalized_strand(query_protein.strand),
-        subject_strand=_normalized_strand(subject_protein.strand),
-        identity=_float_from_row(evidence, "identity", 0.0),
-        evalue=_float_from_row(evidence, "evalue", 1.0),
-        bitscore=_float_from_row(evidence, "bitscore", 0.0),
-        alignment_length=_int_from_row(evidence, "alignment_length", 0),
-        query_feature_svg_id=str(query_protein.feature_svg_id or query_unit.representative_feature_svg_id),
-        subject_feature_svg_id=str(subject_protein.feature_svg_id or subject_unit.representative_feature_svg_id),
-        source="orthogroup",
-        query_unit_id=query_unit.unit_id,
-        subject_unit_id=subject_unit.unit_id,
-        query_unit_kind=query_unit.unit_kind,
-        subject_unit_kind=subject_unit.unit_kind,
-        query_locus_id=query_unit.locus_id,
-        subject_locus_id=subject_unit.locus_id,
-        query_display_name=query_unit.display_name,
-        subject_display_name=subject_unit.display_name,
-        orthogroup_id=str(orthogroup_id),
-        rbh_orthogroup_id=str(orthogroup_id),
-        edge_kind="rbh" if query_member.representative and subject_member.representative else "coortholog",
-        render_role="display_edge",
-        query_orthogroup_representative=bool(query_member.representative),
-        subject_orthogroup_representative=bool(subject_member.representative),
-        query_orthogroup_member_count=int(query_member_count),
-        subject_orthogroup_member_count=int(subject_member_count),
-    )
-
-
-def build_orthogroup_collinearity_anchors(
-    orthogroups: OrthogroupResult,
-    extraction: ProteinExtractionResult,
-    unit_index: CollinearityUnitIndex,
-    edge_tables: Mapping[tuple[int, int], DataFrame],
-    *,
-    max_paralog_links_per_orthogroup: int = 2,
-) -> tuple[CollinearityAnchor, ...]:
-    """Build adjacent-record anchors from orthogroup membership."""
-
-    evidence_by_pair = _evidence_lookup(edge_tables)
-    anchors: list[CollinearityAnchor] = []
-    record_count = len(extraction.proteins_by_record)
-    for orthogroup_id in sorted(orthogroups.orthogroups):
-        members_by_record = _members_by_record(orthogroups.orthogroups[orthogroup_id])
-        for query_index in range(record_count - 1):
-            subject_index = query_index + 1
-            query_members = members_by_record.get(query_index, [])
-            subject_members = members_by_record.get(subject_index, [])
-            if not query_members or not subject_members:
-                continue
-            query_pairs = _member_unit_pairs(query_members, unit_index)
-            subject_pairs = _member_unit_pairs(subject_members, unit_index)
-            candidates: list[tuple[tuple[object, ...], OrthogroupMember, CollinearityUnit, OrthogroupMember, CollinearityUnit, object | None]] = []
-            for query_member, query_unit in query_pairs:
-                for subject_member, subject_unit in subject_pairs:
-                    evidence = evidence_by_pair.get(
-                        (
-                            query_index,
-                            subject_index,
-                            str(query_member.protein_id),
-                            str(subject_member.protein_id),
-                        )
-                    )
-                    candidates.append(
-                        (
-                            _candidate_pair_rank(
-                                query_member,
-                                query_unit,
-                                subject_member,
-                                subject_unit,
-                                evidence,
-                            ),
-                            query_member,
-                            query_unit,
-                            subject_member,
-                            subject_unit,
-                            evidence,
-                        )
-                    )
-            used_query_units: set[str] = set()
-            used_subject_units: set[str] = set()
-            selected_count = 0
-            for _rank, query_member, query_unit, subject_member, subject_unit, evidence in sorted(candidates, key=lambda item: item[0]):
-                if query_unit.unit_id in used_query_units or subject_unit.unit_id in used_subject_units:
-                    continue
-                query_protein = extraction.protein_map.get(str(query_member.protein_id))
-                subject_protein = extraction.protein_map.get(str(subject_member.protein_id))
-                if query_protein is None or subject_protein is None:
-                    continue
-                anchors.append(
-                    _make_orthogroup_anchor(
-                        orthogroup_id=orthogroup_id,
-                        query_member=query_member,
-                        query_unit=query_unit,
-                        subject_member=subject_member,
-                        subject_unit=subject_unit,
-                        query_protein=query_protein,
-                        subject_protein=subject_protein,
-                        evidence=evidence,
-                        query_member_count=len(query_members),
-                        subject_member_count=len(subject_members),
-                    )
-                )
-                used_query_units.add(query_unit.unit_id)
-                used_subject_units.add(subject_unit.unit_id)
-                selected_count += 1
-                if selected_count >= int(max_paralog_links_per_orthogroup):
-                    break
-    return tuple(sorted(anchors, key=_anchor_sort_key))
-
-
 def build_orthogroup_collinearity_blocks_from_hits(
     hits_by_pair: Sequence[DataFrame] | Mapping[tuple[int, int], DataFrame],
     extraction: ProteinExtractionResult,
@@ -1562,22 +1135,15 @@ def build_orthogroup_collinearity_blocks_from_hits(
         }
     else:
         edge_tables = _select_orthogroup_edges(directional_tables, edge_mode=normalized_edge_mode)
-        if normalized_membership_mode == "rbh":
-            orthogroups = build_orthogroups_from_protein_hits(
-                tuple(edge_tables.values()),
-                extraction.protein_map,
-                include_singletons=False,
-            )
-        else:
-            seed_selection = select_rbh_orthogroup_edges_from_directional_hits(
-                directional_tables,
-                extraction.protein_map,
-                record_count=record_count,
-                orthogroup_membership_mode=normalized_membership_mode,
-                orthogroup_member_max_hits=int(orthogroup_member_max_hits),
-                max_related_edges_per_orthogroup=resolved_max_paralog_links,
-            )
-            orthogroups = seed_selection.orthogroups
+        seed_selection = select_rbh_orthogroup_edges_from_directional_hits(
+            directional_tables,
+            extraction.protein_map,
+            record_count=record_count,
+            orthogroup_membership_mode=normalized_membership_mode,
+            orthogroup_member_max_hits=int(orthogroup_member_max_hits),
+            max_related_edges_per_orthogroup=resolved_max_paralog_links,
+        )
+        orthogroups = seed_selection.orthogroups
         comparison_edges_by_pair = {
             pair: edge_tables.get(pair, _empty_hits())
             for pair in normalized_comparison_pairs
@@ -1847,12 +1413,50 @@ def _joined_anchor_values(anchors: Sequence[CollinearityAnchor], attr: str) -> s
     return ";".join(values)
 
 
+def _joined_anchor_endpoint_values(
+    anchors: Sequence[CollinearityAnchor],
+    role: Literal["query", "subject"],
+) -> tuple[str, str, str]:
+    """Return tuple-aligned stable IDs, source indexes, and view IDs."""
+
+    values: list[tuple[str, int, str]] = []
+    seen: set[tuple[str, int, str]] = set()
+    for anchor in anchors:
+        stable_id = str(
+            getattr(anchor, f"{role}_feature_svg_id", "") or ""
+        ).strip()
+        view_id = str(
+            getattr(anchor, f"{role}_view_feature_svg_id", "")
+            or stable_id
+        ).strip()
+        raw_feature_index = getattr(anchor, f"{role}_feature_index", None)
+        try:
+            feature_index = int(raw_feature_index)
+        except (TypeError, ValueError):
+            feature_index = -1
+        value = (stable_id, feature_index, view_id)
+        if value in seen:
+            continue
+        seen.add(value)
+        values.append(value)
+    return (
+        ";".join(value[0] for value in values),
+        (
+            ";".join(str(value[1]) for value in values)
+            if all(value[1] >= 0 for value in values)
+            else ""
+        ),
+        ";".join(value[2] for value in values),
+    )
+
+
 def convert_collinearity_blocks_to_pair_comparisons(
     result: CollinearityResult,
     *,
     records: Sequence[SeqRecord] | None = None,
     record_ids: Sequence[str] | None = None,
     color_mode: CollinearityColorMode | str = "orientation",
+    search_scope: CollinearitySearchScope | str | None = None,
 ) -> dict[tuple[int, int], DataFrame]:
     """Convert accepted blocks into comparison frames keyed by record endpoints.
 
@@ -1896,6 +1500,16 @@ def convert_collinearity_blocks_to_pair_comparisons(
             subject_start, subject_end = subject_max, subject_min
         else:
             subject_start, subject_end = subject_min, subject_max
+        (
+            query_feature_svg_ids,
+            query_feature_indexes,
+            query_view_feature_svg_ids,
+        ) = _joined_anchor_endpoint_values(block.anchors, "query")
+        (
+            subject_feature_svg_ids,
+            subject_feature_indexes,
+            subject_view_feature_svg_ids,
+        ) = _joined_anchor_endpoint_values(block.anchors, "subject")
         rows_by_pair.setdefault(pair, []).append(
             {
                 "query": query_name,
@@ -1929,8 +1543,12 @@ def convert_collinearity_blocks_to_pair_comparisons(
                 "subject_display_name": _joined_anchor_values(block.anchors, "subject_display_name"),
                 "query_protein_id": _joined_anchor_values(block.anchors, "query_protein_id"),
                 "subject_protein_id": _joined_anchor_values(block.anchors, "subject_protein_id"),
-                "query_feature_svg_id": _joined_anchor_values(block.anchors, "query_feature_svg_id"),
-                "subject_feature_svg_id": _joined_anchor_values(block.anchors, "subject_feature_svg_id"),
+                "query_feature_svg_id": query_feature_svg_ids,
+                "subject_feature_svg_id": subject_feature_svg_ids,
+                "query_feature_index": query_feature_indexes,
+                "subject_feature_index": subject_feature_indexes,
+                "query_view_feature_svg_id": query_view_feature_svg_ids,
+                "subject_view_feature_svg_id": subject_view_feature_svg_ids,
                 "rbh_orthogroup_id": _joined_anchor_values(block.anchors, "rbh_orthogroup_id"),
                 "ortholog_path_id": _joined_anchor_values(block.anchors, "ortholog_path_id"),
                 "edge_kind": _joined_anchor_values(block.anchors, "edge_kind") or "rbh",
@@ -1942,10 +1560,29 @@ def convert_collinearity_blocks_to_pair_comparisons(
             }
         )
 
-    return {
+    comparisons = {
         pair: pd.DataFrame.from_records(rows, columns=COLLINEARITY_COMPARISON_COLUMNS)
         for pair, rows in sorted(rows_by_pair.items())
     }
+    if search_scope is not None:
+        normalized_search_scope = normalize_collinearity_search_scope(
+            str(search_scope)
+        )
+        presentation_scope = (
+            "global_collinear"
+            if normalized_search_scope == "all"
+            else "adjacent_local"
+        )
+        group_kind = (
+            "orthogroup"
+            if presentation_scope == "global_collinear"
+            else "collinear_gene_group"
+        )
+        for comparison in comparisons.values():
+            comparison["group_kind"] = group_kind
+            comparison["group_scope"] = presentation_scope
+            comparison["collinear_group_scope"] = presentation_scope
+    return comparisons
 
 
 def convert_collinearity_blocks_to_comparisons(
@@ -1954,6 +1591,7 @@ def convert_collinearity_blocks_to_comparisons(
     records: Sequence[SeqRecord] | None = None,
     record_ids: Sequence[str] | None = None,
     color_mode: CollinearityColorMode | str = "orientation",
+    search_scope: CollinearitySearchScope | str | None = None,
 ) -> list[DataFrame]:
     """Convert accepted blocks into legacy adjacent-record comparison frames."""
 
@@ -1962,6 +1600,7 @@ def convert_collinearity_blocks_to_comparisons(
         records=records,
         record_ids=record_ids,
         color_mode=color_mode,
+        search_scope=search_scope,
     )
     record_count = len(records) if records is not None else len(_record_ids(records, record_ids))
     if records is None:
@@ -1994,21 +1633,16 @@ __all__ = [
     "CollinearitySearchScope",
     "LosslessCollinearityParameters",
     "build_collinearity_blocks_from_hits",
-    "build_orthogroup_collinearity_anchors",
     "build_orthogroup_collinearity_blocks",
     "build_orthogroup_collinearity_blocks_from_hits",
     "call_collinearity_blocks",
     "calculate_collinearity_block_evalue",
     "cluster_lossless_collinearity_anchors",
-    "collapse_nearby_duplicate_anchors",
     "convert_collinearity_blocks_to_comparisons",
     "convert_collinearity_blocks_to_pair_comparisons",
-    "deduplicate_unit_pair_anchors",
     "iter_collinearity_search_pairs",
     "normalize_collinearity_anchor_mode",
     "normalize_collinearity_color_mode",
     "normalize_collinearity_search_scope",
     "orthogroup_edges_to_lossless_collinearity_anchors",
-    "protein_hits_to_collinearity_anchors",
-    "select_collinearity_anchor_hits",
 ]

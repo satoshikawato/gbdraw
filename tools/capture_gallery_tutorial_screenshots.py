@@ -365,9 +365,14 @@ def add_capture_contract_validation(
                 result.errors.append(
                     f"{context.label}: visibleControls entry {index} needs label or selector."
                 )
-            if data_dependent and "value" not in spec and "checked" not in spec:
+            if (
+                data_dependent
+                and "value" not in spec
+                and "checked" not in spec
+                and "pressed" not in spec
+            ):
                 result.errors.append(
-                    f"{context.label}: visibleControls entry {index} needs value or checked."
+                    f"{context.label}: visibleControls entry {index} needs value, checked, or pressed."
                 )
 
     if visible_text is not None and not isinstance(visible_text, list):
@@ -548,12 +553,22 @@ def wait_for_web_app_ready(page) -> None:
 
 
 def load_web_app_session(page, session_path: Path) -> None:
-    page.locator('input[accept^=".json,"]').set_input_files(str(session_path))
+    with page.expect_event("dialog", timeout=180_000) as dialog_info:
+        page.locator('input[accept^=".json,"]').set_input_files(str(session_path))
+    dialog = dialog_info.value
+    message = dialog.message
+    dialog.accept()
+    if message != "Session loaded successfully!":
+        raise RuntimeError(f"Could not load capture session: {message}")
     page.wait_for_function(
         """
         () => {
           const app = window.__GBDRAW_APP__;
-          return Boolean(app && Array.isArray(app.results) && app.results.length > 0);
+          return Boolean(
+            app &&
+            Array.isArray(app.results) &&
+            app.results.length > 0
+          );
         }
         """,
         timeout=120000,
@@ -635,8 +650,8 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
             style.textContent = `
               .gbdraw-capture-select-control {
                 outline: 3px solid #f59e0b !important;
-                outline-offset: 2px !important;
-                box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18) !important;
+                outline-offset: -3px !important;
+                box-shadow: inset 0 0 0 4px rgba(245, 158, 11, 0.18) !important;
               }
               .gbdraw-capture-select-menu {
                 position: absolute;
@@ -719,8 +734,22 @@ def apply_open_select_overlays(page, open_select: Any) -> None:
             if (!select) {
               throw new Error(`Could not find select for openSelect ${spec.label || spec.selector || index}.`);
             }
+            if (spec.hideFollowingSiblings === true) {
+              let sibling = select.parentElement?.nextElementSibling || null;
+              while (sibling) {
+                sibling.style.visibility = 'hidden';
+                sibling = sibling.nextElementSibling;
+              }
+            }
             if (index === 0) select.scrollIntoView({ block: 'center', inline: 'nearest' });
           });
+
+          document.querySelectorAll('.app-main, .settings-pane, .settings-scroll').forEach((element) => {
+            element.scrollLeft = 0;
+          });
+          document.documentElement.scrollLeft = 0;
+          document.body.scrollLeft = 0;
+          window.scrollTo({ left: 0, top: window.scrollY });
 
           specs.forEach((spec, index) => {
             const select = resolveSelect(spec);
@@ -867,11 +896,20 @@ def capture_selector_clip(page, target_locator, padding: dict[str, float]) -> di
     return padded_clip_from_boxes([box], padding, page_scroll_dimensions(page))
 
 
-def capture_open_select_clip(page, padding: dict[str, float]) -> dict[str, float]:
+def capture_open_select_clip(
+    page,
+    padding: dict[str, float],
+    include_selectors: list[str] | None = None,
+) -> dict[str, float]:
+    include_selectors = include_selectors or []
     boxes = page.evaluate(
         """
-        () => {
-          const selectors = ['.gbdraw-capture-select-control', '.gbdraw-capture-select-menu'];
+        (includeSelectors) => {
+          const selectors = [
+            '.gbdraw-capture-select-control',
+            '.gbdraw-capture-select-menu',
+            ...includeSelectors,
+          ];
           return selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector))).map((element) => {
             const rect = element.getBoundingClientRect();
             return {
@@ -882,7 +920,8 @@ def capture_open_select_clip(page, padding: dict[str, float]) -> dict[str, float
             };
           }).filter((box) => box.width > 0 && box.height > 0);
         }
-        """
+        """,
+        include_selectors,
     )
     if not boxes:
         raise RuntimeError("openSelect crop requested, but no capture select overlay exists.")
@@ -1070,6 +1109,12 @@ def assert_capture_visible_contract(
                 failures.push(`${name}: expected checked=${Boolean(spec.checked)}, got ${actual}`);
               }
             }
+            if (Object.prototype.hasOwnProperty.call(spec, 'pressed')) {
+              const actual = element.getAttribute('aria-pressed') === 'true';
+              if (actual !== Boolean(spec.pressed)) {
+                failures.push(`${name}: expected pressed=${Boolean(spec.pressed)}, got ${actual}`);
+              }
+            }
             if (Object.prototype.hasOwnProperty.call(spec, 'value')) {
               const expected = normalize(spec.value);
               const selected = element.tagName === 'SELECT'
@@ -1180,6 +1225,18 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
     if target_locator is not None:
         target_locator.scroll_into_view_if_needed()
         page.wait_for_timeout(100)
+    page.evaluate(
+        """
+        () => {
+          document.querySelectorAll('.app-main, .settings-pane, .settings-scroll').forEach((element) => {
+            element.scrollLeft = 0;
+          });
+          document.documentElement.scrollLeft = 0;
+          document.body.scrollLeft = 0;
+          window.scrollTo({ left: 0, top: window.scrollY });
+        }
+        """
+    )
     apply_open_select_overlays(page, capture.get("openSelect"))
 
     clip_selectors = [as_text(selector) for selector in as_array(capture.get("clipSelectors")) if as_text(selector)]
@@ -1188,6 +1245,7 @@ def capture_operation(page, sample: dict[str, Any], operation: dict[str, Any], b
         clip = capture_open_select_clip(
             page,
             normalize_crop_padding(capture.get("cropPadding"), default=14),
+            clip_selectors,
         )
     elif clip_selectors:
         clip = capture_multi_selector_clip(

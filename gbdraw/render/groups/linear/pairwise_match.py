@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from collections import Counter
+from dataclasses import dataclass
 import math
-from typing import Tuple, Dict
+from typing import Dict, Mapping, Sequence, Tuple
 
 from pandas import DataFrame
 from svgwrite.container import Group
@@ -17,6 +19,59 @@ from ....core.color import (
 )
 from ....features.ids import make_linear_rendered_feature_id
 from ....layout.linear_multi_record import LinearRecordPlacement
+from ....svg.ids import instance_svg_id
+from ...drawers.linear.features import FeatureDrawer
+
+
+@dataclass(frozen=True)
+class LinearFeatureDomIndex:
+    """Rendered feature DOM identities keyed by source index and view ID."""
+
+    by_source_index: Mapping[tuple[int, int], str]
+    by_view_id: Mapping[tuple[int, str], tuple[str, ...]]
+
+
+def build_linear_feature_dom_index(
+    feature_dicts: Sequence[Mapping[str, object]],
+) -> LinearFeatureDomIndex:
+    """Index the exact DOM IDs produced from the prepared feature layers."""
+
+    record_count = len(feature_dicts)
+    by_source_index: dict[tuple[int, int], str] = {}
+    by_view_id: dict[tuple[int, str], tuple[str, ...]] = {}
+    for record_index, feature_dict in enumerate(feature_dicts):
+        features = list(feature_dict.values())
+        view_ids = [
+            str(FeatureDrawer.get_feature_data_id(feature) or "")
+            for feature in features
+        ]
+        view_id_counts = Counter(view_id for view_id in view_ids if view_id)
+        mutable_by_view_id: dict[str, list[str]] = {}
+        for feature, view_id in zip(features, view_ids, strict=True):
+            if not view_id:
+                continue
+            rendered_id = make_linear_rendered_feature_id(
+                record_index=record_index,
+                stable_feature_id=view_id,
+                record_count=record_count,
+            )
+            if not rendered_id:
+                continue
+            source_index = getattr(feature, "source_feature_index", None)
+            if view_id_counts[view_id] > 1 and source_index is not None:
+                rendered_id = instance_svg_id(rendered_id, source_index)
+            mutable_by_view_id.setdefault(view_id, []).append(rendered_id)
+            if source_index is None:
+                continue
+            key = (record_index, int(source_index))
+            if key in by_source_index:
+                raise ValueError(
+                    "Prepared linear features contain a duplicate source feature index."
+                )
+            by_source_index[key] = rendered_id
+        for view_id, rendered_ids in mutable_by_view_id.items():
+            by_view_id[(record_index, view_id)] = tuple(rendered_ids)
+    return LinearFeatureDomIndex(by_source_index, by_view_id)
 
 
 def _row_value(row: object, name: str, default: object = "") -> object:
@@ -122,6 +177,7 @@ class PairWiseMatchGroup:
         subject_placement: LinearRecordPlacement | None = None,
         query_y: float | None = None,
         subject_y: float | None = None,
+        feature_dom_index: LinearFeatureDomIndex | None = None,
     ) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
@@ -170,6 +226,7 @@ class PairWiseMatchGroup:
         self.subject_placement = subject_placement
         self.query_y = 0 if query_y is None else float(query_y)
         self.subject_y = self.comparison_height if subject_y is None else float(subject_y)
+        self.feature_dom_index = feature_dom_index
         self.record_offsets_x = record_offsets_x or {}
         self.track_id: str = "comparison" + str(self.comparison_count)
         self._pairwise_match_counter = 0
@@ -233,21 +290,74 @@ class PairWiseMatchGroup:
         track_id = _attribute_text(getattr(self, "track_id", "")) or f"comparison{self.comparison_count}"
         return f"{track_id}_match{int(match_index)}"
 
-    def _rendered_feature_svg_id_values(self, value: object, *, record_index: int) -> str:
-        stable_ids = [
-            part.strip()
-            for part in _attribute_text(value).split(";")
-            if part.strip()
-        ]
-        rendered_ids = [
-            make_linear_rendered_feature_id(
-                record_index=record_index,
-                stable_feature_id=stable_id,
-                record_count=len(self.records),
-            )
-            for stable_id in stable_ids
-        ]
-        return ";".join(rendered_id for rendered_id in rendered_ids if rendered_id)
+    def _rendered_feature_svg_id_values(
+        self,
+        value: object,
+        *,
+        record_index: int,
+        feature_index_value: object = "",
+    ) -> str:
+        view_ids = [part.strip() for part in _attribute_text(value).split(";")]
+        if not any(view_ids):
+            return ""
+        if any(not view_id for view_id in view_ids):
+            raise ValueError("Comparison view feature IDs contain an empty endpoint.")
+        raw_indexes = _attribute_text(feature_index_value)
+        feature_indexes: list[int | None]
+        if raw_indexes:
+            index_parts = [part.strip() for part in raw_indexes.split(";")]
+            if len(index_parts) != len(view_ids):
+                raise ValueError(
+                    "Comparison feature IDs and source feature indexes are not aligned."
+                )
+            feature_indexes = []
+            for part in index_parts:
+                try:
+                    feature_index = int(part)
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        "Comparison source feature index must be a nonnegative integer."
+                    ) from None
+                if feature_index < 0 or str(feature_index) != part:
+                    raise ValueError(
+                        "Comparison source feature index must be a nonnegative integer."
+                    )
+                feature_indexes.append(feature_index)
+        else:
+            feature_indexes = [None] * len(view_ids)
+
+        rendered_ids: list[str] = []
+        feature_dom_index = getattr(self, "feature_dom_index", None)
+        for view_id, feature_index in zip(view_ids, feature_indexes, strict=True):
+            if not view_id:
+                continue
+            if feature_dom_index is None:
+                rendered_id = make_linear_rendered_feature_id(
+                    record_index=record_index,
+                    stable_feature_id=view_id,
+                    record_count=len(self.records),
+                )
+            elif feature_index is not None:
+                rendered_id = feature_dom_index.by_source_index.get(
+                    (record_index, feature_index)
+                )
+                candidates = feature_dom_index.by_view_id.get(
+                    (record_index, view_id),
+                    (),
+                )
+                if rendered_id is not None and rendered_id not in candidates:
+                    raise ValueError(
+                        "Comparison source feature index conflicts with its view feature ID."
+                    )
+            else:
+                candidates = feature_dom_index.by_view_id.get(
+                    (record_index, view_id),
+                    (),
+                )
+                rendered_id = candidates[0] if len(candidates) == 1 else None
+            if rendered_id:
+                rendered_ids.append(rendered_id)
+        return ";".join(rendered_ids)
 
     def generate_linear_match_path(self, row: DataFrame, match_index: int | None = None) -> Path:
         """
@@ -417,7 +527,20 @@ class PairWiseMatchGroup:
     def add_optional_metadata_attributes(self, path: Path, row: DataFrame) -> None:
         has_collinearity_metadata = bool(_attribute_text(_row_value(row, "collinearity_block_id", "")))
         has_orthogroup_metadata = bool(_attribute_text(_row_value(row, "orthogroup_id", "")))
-        if not (has_collinearity_metadata or has_orthogroup_metadata):
+        has_endpoint_identity = any(
+            _attribute_text(_row_value(row, column, ""))
+            for column in (
+                "query_feature_svg_id",
+                "subject_feature_svg_id",
+                "query_view_feature_svg_id",
+                "subject_view_feature_svg_id",
+            )
+        )
+        if not (
+            has_collinearity_metadata
+            or has_orthogroup_metadata
+            or has_endpoint_identity
+        ):
             return
 
         metadata_columns = {
@@ -449,8 +572,8 @@ class PairWiseMatchGroup:
             "subject_orthogroup_assignment_reason": "data-subject-orthogroup-assignment-reason",
             "query_protein_id": "data-query-protein-id",
             "subject_protein_id": "data-subject-protein-id",
-            "query_feature_svg_id": "data-query-feature-svg-id",
-            "subject_feature_svg_id": "data-subject-feature-svg-id",
+            "query_feature_index": "data-query-feature-index",
+            "subject_feature_index": "data-subject-feature-index",
             "query_unit_id": "data-query-unit-id",
             "subject_unit_id": "data-subject-unit-id",
             "query_locus_id": "data-query-locus-id",
@@ -464,23 +587,36 @@ class PairWiseMatchGroup:
         subject_record_index = int(
             getattr(self, "subject_record_index", self.comparison_count)
         )
+        for role, record_index in (
+            ("query", query_record_index),
+            ("subject", subject_record_index),
+        ):
+            stable_id = _attribute_text(
+                _row_value(row, f"{role}_feature_svg_id", "")
+            )
+            view_id = _attribute_text(
+                _row_value(row, f"{role}_view_feature_svg_id", "")
+            ) or stable_id
+            if stable_id:
+                path.attribs[
+                    f"data-{role}-stable-feature-svg-id"
+                ] = stable_id
+            if view_id:
+                rendered_ids = self._rendered_feature_svg_id_values(
+                    view_id,
+                    record_index=record_index,
+                    feature_index_value=_row_value(
+                        row,
+                        f"{role}_feature_index",
+                        "",
+                    ),
+                )
+                if rendered_ids:
+                    path.attribs[f"data-{role}-feature-svg-id"] = rendered_ids
         for column, attribute in metadata_columns.items():
             text = _attribute_text(_row_value(row, column, ""))
             if text:
-                if column == "query_feature_svg_id":
-                    path.attribs["data-query-stable-feature-svg-id"] = text
-                    path.attribs[attribute] = self._rendered_feature_svg_id_values(
-                        text,
-                        record_index=query_record_index,
-                    )
-                elif column == "subject_feature_svg_id":
-                    path.attribs["data-subject-stable-feature-svg-id"] = text
-                    path.attribs[attribute] = self._rendered_feature_svg_id_values(
-                        text,
-                        record_index=subject_record_index,
-                    )
-                else:
-                    path.attribs[attribute] = text
+                path.attribs[attribute] = text
 
     def calculate_offsets(self, row: DataFrame) -> tuple[float, float, float, float]:
         """
@@ -619,5 +755,4 @@ class PairWiseMatchGroup:
 
 
 __all__ = ["PairWiseMatchGroup"]
-
 

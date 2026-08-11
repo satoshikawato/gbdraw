@@ -24,6 +24,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
+    "numpy>=1.23",
     "pandas",
     "svgwrite",
     "biopython",
@@ -38,9 +39,11 @@ dev = [
     "build",
     "cairosvg",
     "Pillow",
+    "playwright==1.61.0",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-timeout>=2.0",
+    "pytest-xdist>=3.6",
     "ruff==0.15.12",
     "setuptools>=61.0",
     "wheel",
@@ -74,6 +77,9 @@ markers = [
     "circular: marks tests for circular diagrams",
     "linear: marks tests for linear diagrams",
     "reference_generation: writes tracked SVG reference outputs when explicitly enabled",
+    "recipe: validates published documentation or executes a CLI or Python recipe",
+    "gallery: validates bundled Gallery sessions, assets, and reproductions",
+    "browser: requires Node.js or a browser runtime",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

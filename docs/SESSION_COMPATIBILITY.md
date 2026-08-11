@@ -1,11 +1,12 @@
-[Home](./DOCS.md) | [CLI Reference](./CLI_Reference.md) | [Python API](./PYTHON_API.md) | [Typed API](./TYPED_API.md) | **Session compatibility**
+[Home](./DOCS.md) | [Current compatibility reference](./REFERENCE/session-and-request-compatibility.md) | [CLI inventory](./CLI_Reference.md) | [Python API](./PYTHON_API.md) | [Typed API](./TYPED_API.md) | **Compatibility history**
 
-# Session and request compatibility
+# Session and request compatibility history
 
-This page is the current compatibility reference for gbdraw session files,
-canonical render requests, and saved LOSAT results. Tutorials and the FAQ describe
-what a user should do; release notes retain the historical record of when a format
-changed.
+This page retains the detailed version-by-version migration history for gbdraw
+session files, canonical render requests, and saved LOSAT results. The concise
+[session and request compatibility reference](./REFERENCE/session-and-request-compatibility.md)
+documents current support. Tutorials and the FAQ describe what a user should
+do; release notes record when a format changed.
 
 ## Supported versions
 
@@ -160,4 +161,4 @@ Do not retain a decoded resource path after the `with` block ends. Use
 `with_request_output()` inside the same context when replay needs a different
 prefix, output directory, format, or overwrite policy.
 
-[Home](./DOCS.md) | [CLI Reference](./CLI_Reference.md) | [Python API](./PYTHON_API.md) | [Typed API](./TYPED_API.md) | **Session compatibility**
+[Home](./DOCS.md) | [Current compatibility reference](./REFERENCE/session-and-request-compatibility.md) | [CLI inventory](./CLI_Reference.md) | [Python API](./PYTHON_API.md) | [Typed API](./TYPED_API.md) | **Compatibility history**

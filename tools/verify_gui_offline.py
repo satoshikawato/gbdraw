@@ -5,6 +5,7 @@ import argparse
 import contextlib
 import http.server
 import io
+import json
 import shutil
 import socketserver
 import subprocess
@@ -41,6 +42,18 @@ def _load_build_support_module():
 
 
 BUILD_SUPPORT = _load_build_support_module()
+
+def _required_tutorial_data_files() -> tuple[Path, ...]:
+    manifest_path = WEB_ROOT / "tutorial-data" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    declared = sorted(
+        Path("tutorial-data") / metadata["relativePath"]
+        for metadata in manifest["files"].values()
+    )
+    return (Path("tutorial-data/manifest.json"), *declared)
+
+
+REQUIRED_TUTORIAL_DATA_FILES = _required_tutorial_data_files()
 
 
 def _parse_local_wheel_paths() -> tuple[Path, ...]:
@@ -218,6 +231,7 @@ def _assert_packaged_assets() -> None:
         WEB_ROOT / "js" / "workers" / "losat-worker.js",
         WEB_ROOT / "js" / "workers" / "losat-threaded-worker.js",
         WEB_ROOT / "js" / "workers" / "losat-wasi-thread-worker.js",
+        *(WEB_ROOT / path for path in REQUIRED_TUTORIAL_DATA_FILES),
         WEB_ROOT / "vendor" / "vue" / "vue.global.js",
         WEB_ROOT / "vendor" / "tailwindcss" / "tailwindcss-play.js",
         *(WEB_ROOT / path for path in REQUIRED_UI_FONT_FILES),
@@ -325,7 +339,10 @@ def smoke_test() -> None:
                   if (!app) return false;
                   const loadingStatus = String(app.loadingStatus || '');
                   return (
-                    (app.pyodideReady === true && app.diagramGenerationWorkerReady === true) ||
+                    (
+                      app.diagramGenerationWorkerReady === true &&
+                      Object.keys(app.paletteDefinitions || {}).length > 0
+                    ) ||
                     loadingStatus.startsWith('Startup Error:') ||
                     Boolean(app.diagramGenerationWorkerError)
                   );
@@ -342,6 +359,7 @@ def smoke_test() -> None:
                   return {
                     appMounted: true,
                     pyodideReady: app.pyodideReady,
+                    paletteDefinitionCount: Object.keys(app.paletteDefinitions || {}).length,
                     loadingStatus: app.loadingStatus,
                     diagramGenerationWorkerReady: app.diagramGenerationWorkerReady,
                     diagramGenerationWorkerStatus: app.diagramGenerationWorkerStatus,
@@ -355,6 +373,7 @@ def smoke_test() -> None:
             """
             () => ({
               pyodideReady: window.__GBDRAW_APP__.pyodideReady,
+              paletteDefinitionCount: Object.keys(window.__GBDRAW_APP__.paletteDefinitions || {}).length,
               loadingStatus: window.__GBDRAW_APP__.loadingStatus,
               diagramGenerationWorkerReady: window.__GBDRAW_APP__.diagramGenerationWorkerReady,
               diagramGenerationWorkerStatus: window.__GBDRAW_APP__.diagramGenerationWorkerStatus,
@@ -362,13 +381,16 @@ def smoke_test() -> None:
             })
             """
         )
-        if not startup_state["pyodideReady"]:
-            raise RuntimeError(f"GUI startup failed offline: {startup_state['loadingStatus']}")
         if not startup_state["diagramGenerationWorkerReady"]:
             raise RuntimeError(
                 "GUI diagram engine failed offline: "
                 f"{startup_state['diagramGenerationWorkerStatus']} "
                 f"(error: {startup_state['diagramGenerationWorkerError']})"
+            )
+        if startup_state["paletteDefinitionCount"] == 0:
+            raise RuntimeError(
+                "GUI palettes failed to load offline: "
+                f"{startup_state['loadingStatus']}"
             )
 
         page.evaluate(
@@ -765,6 +787,9 @@ def inspect_wheel(wheel_path: Path) -> None:
         "gbdraw/web/vendor/phosphor-icons/regular/style.css",
     }
     required.update(f"gbdraw/web/{path.as_posix()}" for path in REQUIRED_UI_FONT_FILES)
+    required.update(
+        f"gbdraw/web/{path.as_posix()}" for path in REQUIRED_TUTORIAL_DATA_FILES
+    )
     required.update(f"gbdraw/web/{path.as_posix()}" for path in _parse_local_wheel_paths())
     required.update(
         f"gbdraw/web/vendor/pyodide/v0.29.0/full/{filename}"

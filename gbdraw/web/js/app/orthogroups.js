@@ -13,48 +13,30 @@ import {
   resolveDisplayProteinId
 } from './feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
+import { copyTextToClipboard } from '../utils/clipboard.js';
+import {
+  RECORD_INDEX_KEYS,
+  STABLE_FEATURE_ID_KEYS,
+  featureIdentity,
+  identityMatches,
+  nonnegativeIntegerAliasStatus,
+  orthogroupIdStatus,
+  renderedFeatureIdentity,
+  textAliasStatus,
+  uniqueOrthogroupEntries
+} from '../services/feature-identity.js';
+
+export { resolveUniqueOrthogroupMemberForFeature } from '../services/feature-identity.js';
 
 const { computed } = window.Vue;
 
 const normalizeText = (value) => String(value ?? '').trim();
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
 
-const normalizeRecordIndex = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const normalized = Number(value);
-  return Number.isInteger(normalized) && normalized >= 0 ? normalized : null;
+const memberStableFeatureId = (member) => {
+  const status = textAliasStatus(member, STABLE_FEATURE_ID_KEYS);
+  return status.valid ? status.value : '';
 };
-
-const memberStableFeatureId = (member) => normalizeText(
-  member?.stableFeatureSvgId ||
-  member?.stable_feature_svg_id ||
-  member?.stableFeatureId ||
-  member?.stable_feature_id ||
-  member?.featureSvgId ||
-  member?.feature_svg_id
-);
-
-const featureStableFeatureId = (feature) => normalizeText(
-  feature?.stable_feature_id ||
-  feature?.stableFeatureId ||
-  feature?.stable_svg_id ||
-  feature?.stableFeatureSvgId ||
-  feature?.svg_id ||
-  feature?.svgId
-);
-
-const featureRecordIndex = (feature) => {
-  for (const value of [feature?.fileIdx, feature?.recordIndex, feature?.record_index, feature?.record_idx]) {
-    const recordIndex = normalizeRecordIndex(value);
-    if (recordIndex !== null) return recordIndex;
-  }
-  return null;
-};
-
-const memberRecordIndex = (member) => normalizeRecordIndex(member?.recordIndex ?? member?.record_index);
-const stableRecordKey = (recordIndex, stableId) => (
-  recordIndex !== null && stableId ? `${recordIndex}:${stableId}` : ''
-);
 
 const normalizeSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
 
@@ -74,35 +56,19 @@ const makeSafeFilename = (value, fallback = 'orthogroup') => {
 const sequenceKindLabel = (sequenceKind) => (sequenceKind === 'aa' ? 'aa' : 'nt');
 const sequenceExtension = (sequenceKind) => (sequenceKindLabel(sequenceKind) === 'aa' ? 'faa' : 'fna');
 
-const copyTextToClipboard = async (text) => {
-  const value = String(text ?? '');
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.left = '-9999px';
-  textarea.style.top = '0';
-  document.body.appendChild(textarea);
-  textarea.select();
-  try {
-    document.execCommand('copy');
-  } finally {
-    document.body.removeChild(textarea);
-  }
-};
-
 const numericOrthogroupId = (id) => {
   const match = String(id || '').match(/^og_(\d+)$/i);
   return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
 };
 
+const orthogroupIdValue = (group) => {
+  const status = orthogroupIdStatus(group);
+  return status.valid && status.supplied ? status.value : '';
+};
+
 const compareOrthogroupId = (left, right) => {
-  const leftId = normalizeText(left?.id);
-  const rightId = normalizeText(right?.id);
+  const leftId = orthogroupIdValue(left);
+  const rightId = orthogroupIdValue(right);
   const leftNumber = numericOrthogroupId(leftId);
   const rightNumber = numericOrthogroupId(rightId);
   if (leftNumber !== rightNumber) return leftNumber - rightNumber;
@@ -195,53 +161,79 @@ const setOriginalStroke = (el) => {
   }
 };
 
-const addRenderedId = (index, key, renderedId) => {
-  if (!key || !renderedId) return;
-  const values = index.get(key) || new Set();
-  values.add(renderedId);
-  index.set(key, values);
+const domIdentityAgrees = (element, candidate) => {
+  const stableId = textAliasStatus({
+    stableId: element?.getAttribute?.('data-gbdraw-stable-feature-id')
+  }, ['stableId']);
+  const recordIndex = nonnegativeIntegerAliasStatus({
+    recordIndex: element?.getAttribute?.('data-gbdraw-record-index')
+  }, ['recordIndex']);
+  if (!stableId.valid || !recordIndex.valid) return false;
+  if (
+    stableId.supplied &&
+    (!candidate.stableId.supplied || stableId.value !== candidate.stableId.value)
+  ) return false;
+  if (
+    recordIndex.supplied &&
+    (!candidate.recordIndex.supplied || recordIndex.value !== candidate.recordIndex.value)
+  ) return false;
+  return true;
 };
 
 const buildRenderedFeatureIndex = (svg, features = []) => {
-  const byStableRecord = new Map();
-  const byStable = new Map();
+  const metadataByRenderedId = new Map();
+  (Array.isArray(features) ? features : []).forEach((feature) => {
+    const candidate = renderedFeatureIdentity(feature);
+    if (!candidate.usable || getFeatureElements(svg, candidate.renderedId.value).length === 0) return;
+    const values = metadataByRenderedId.get(candidate.renderedId.value) || [];
+    values.push(candidate);
+    metadataByRenderedId.set(candidate.renderedId.value, values);
+  });
+
+  const candidates = [];
+  metadataByRenderedId.forEach((values, renderedId) => {
+    if (values.length !== 1) return;
+    const elements = getFeatureElements(svg, renderedId);
+    if (elements.every((element) => domIdentityAgrees(element, values[0]))) {
+      candidates.push(values[0]);
+    }
+  });
+
+  const domByRenderedId = new Map();
   Array.from(svg?.querySelectorAll?.(FEATURE_SELECTOR) || []).forEach((element) => {
     const renderedId = normalizeText(getFeatureIdentity(element));
-    if (!renderedId) return;
-    const stableId = normalizeText(
-      element.getAttribute?.('data-gbdraw-stable-feature-id') || renderedId
-    );
-    const recordIndex = normalizeRecordIndex(
-      element.getAttribute?.('data-gbdraw-record-index')
-    );
-    addRenderedId(byStableRecord, stableRecordKey(recordIndex, stableId), renderedId);
-    addRenderedId(byStable, stableId, renderedId);
+    if (!renderedId || metadataByRenderedId.has(renderedId)) return;
+    const source = {
+      renderedFeatureSvgId: renderedId,
+      stableFeatureSvgId: element.getAttribute?.('data-gbdraw-stable-feature-id'),
+      recordIndex: element.getAttribute?.('data-gbdraw-record-index')
+    };
+    const candidate = featureIdentity(source);
+    if (!candidate.usable || !candidate.renderedId.supplied) return;
+    const existing = domByRenderedId.get(renderedId);
+    if (!existing) {
+      domByRenderedId.set(renderedId, candidate);
+      return;
+    }
+    if (
+      !identityMatches(existing, candidate, { includeRendered: true }) ||
+      !identityMatches(candidate, existing, { includeRendered: true })
+    ) {
+      domByRenderedId.set(renderedId, null);
+    }
   });
-  (Array.isArray(features) ? features : []).forEach((feature) => {
-    const renderedId = normalizeText(
-      feature?.rendered_svg_id || feature?.renderedSvgId || feature?.svg_id
-    );
-    const stableId = featureStableFeatureId(feature);
-    const recordIndex = featureRecordIndex(feature);
-    if (!renderedId || !stableId || getFeatureElements(svg, renderedId).length === 0) return;
-    addRenderedId(byStableRecord, stableRecordKey(recordIndex, stableId), renderedId);
-    addRenderedId(byStable, stableId, renderedId);
+  domByRenderedId.forEach((candidate) => {
+    if (candidate) candidates.push(candidate);
   });
-  return { byStableRecord, byStable };
+  return candidates;
 };
 
 const renderedFeatureIdForMember = (member, renderedIndex) => {
-  const stableId = memberStableFeatureId(member);
-  if (!stableId) return '';
-  const recordIndex = memberRecordIndex(member);
-  const recordMatches = recordIndex === null
-    ? null
-    : renderedIndex.byStableRecord.get(stableRecordKey(recordIndex, stableId));
-  if (recordIndex !== null) {
-    return recordMatches?.size === 1 ? recordMatches.values().next().value : '';
-  }
-  const stableMatches = renderedIndex.byStable.get(stableId);
-  return stableMatches?.size === 1 ? stableMatches.values().next().value : '';
+  const identity = featureIdentity(member);
+  if (!identity.usable) return '';
+  const matches = (Array.isArray(renderedIndex) ? renderedIndex : [])
+    .filter((candidate) => identityMatches(identity, candidate, { includeRendered: true }));
+  return matches.length === 1 ? matches[0].renderedId.value : '';
 };
 
 export const createOrthogroupEditor = ({ state, runAnalysis }) => {
@@ -263,23 +255,26 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     biologicalFeatures
   } = state;
 
+  const resolvableOrthogroupEntries = () => uniqueOrthogroupEntries(orthogroups.value);
+
   const getOrthogroupById = (orthogroupId) => {
     const id = normalizeText(orthogroupId);
     if (!id) return null;
-    return (Array.isArray(orthogroups.value) ? orthogroups.value : [])
-      .find((group) => normalizeText(group?.id) === id) || null;
+    const matches = resolvableOrthogroupEntries()
+      .filter((entry) => entry.id === id);
+    return matches.length === 1 ? matches[0].group : null;
   };
 
   const resolveOrthogroupName = (groupOrId) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    const id = normalizeText(group?.id || groupOrId);
+    const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
     return normalizeText(orthogroupNameOverrides[id]) || normalizeText(group?.name) || id;
   };
 
   const resolveOrthogroupDescription = (groupOrId) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    const id = normalizeText(group?.id || groupOrId);
+    const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
     return normalizeText(orthogroupDescriptionOverrides[id]) || normalizeText(group?.description);
   };
@@ -292,7 +287,9 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
   const orthogroupScopeLabel = (groupOrId) => groupMetadataScopeLabel(orthogroupScope(groupOrId));
 
   const isOrthogroupRenamed = (groupOrId) => {
-    const id = normalizeText(typeof groupOrId === 'string' ? groupOrId : groupOrId?.id);
+    const id = typeof groupOrId === 'string'
+      ? normalizeText(groupOrId)
+      : orthogroupIdValue(groupOrId);
     return Boolean(
       id &&
       (
@@ -302,7 +299,7 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     );
   };
 
-  const orthogroupCount = computed(() => (Array.isArray(orthogroups.value) ? orthogroups.value.length : 0));
+  const orthogroupCount = computed(() => resolvableOrthogroupEntries().length);
 
   const selectedAlignmentTargetLabel = computed(() => {
     const target = normalizeText(selectedOrthogroupAlignmentFeature.value);
@@ -313,13 +310,13 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
 
   const filteredOrthogroups = computed(() => {
     const query = normalizeLower(orthogroupSearch.value);
-    const groups = Array.isArray(orthogroups.value) ? [...orthogroups.value] : [];
+    const groups = resolvableOrthogroupEntries().map(({ group }) => group);
     const filtered = query
       ? groups.filter((group) => {
           const candidates = Array.isArray(group?.nameCandidates) ? group.nameCandidates : [];
           const members = getGroupMembers(group);
           const haystack = [
-            group?.id,
+            orthogroupIdValue(group),
             group?.name,
             group?.description,
             resolveOrthogroupName(group),
@@ -355,57 +352,60 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
   const selectedOrthogroup = computed(() => {
     const selected = getOrthogroupById(selectedOrthogroupId.value);
     if (selected) return selected;
-    return filteredOrthogroups.value[0] || (Array.isArray(orthogroups.value) ? orthogroups.value[0] : null) || null;
+    return filteredOrthogroups.value[0] || null;
   });
 
   const featureSequenceLookup = computed(() => {
-    const lookup = new Map();
-    const features = Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
+    const hasBiologicalFeatures = Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0;
+    const features = hasBiologicalFeatures
       ? biologicalFeatures.value
       : (Array.isArray(extractedFeatures?.value) ? extractedFeatures.value : []);
-    const stableCounts = new Map();
-    features.forEach((feature) => {
-      const stableId = featureStableFeatureId(feature);
-      if (stableId) stableCounts.set(stableId, (stableCounts.get(stableId) || 0) + 1);
-    });
-    features.forEach((feature) => {
-      const stableId = featureStableFeatureId(feature);
-      if (!stableId) return;
-      const recordIndex = featureRecordIndex(feature);
-      const entry = {
-        nucleotideSequence: firstSequenceText(feature?.nucleotideSequence, feature?.nucleotide_sequence),
-        aminoAcidSequence: firstSequenceText(feature?.aminoAcidSequence, feature?.amino_acid_sequence),
-        sequenceFeature: feature,
-        sequenceWarnings: Array.isArray(feature?.sequence_warnings)
-          ? feature.sequence_warnings
-          : (Array.isArray(feature?.sequenceWarnings) ? feature.sequenceWarnings : [])
+    const renderedIdentities = (Array.isArray(extractedFeatures?.value) ? extractedFeatures.value : [])
+      .map(renderedFeatureIdentity)
+      .filter((identity) => identity.usable);
+    return features.map((feature) => {
+      const identity = hasBiologicalFeatures
+        ? featureIdentity(feature, { allowLegacySvgStable: true })
+        : renderedFeatureIdentity(feature);
+      const renderedMatches = identity.usable
+        ? renderedIdentities.filter((rendered) => (
+          identityMatches(identity, rendered, { includeRendered: true })
+        ))
+        : [];
+      const renderedIdentityInvalid = renderedMatches.length > 1 || (
+        identity.renderedId.supplied && renderedMatches.length !== 1
+      );
+      const resolvedIdentity = renderedIdentityInvalid
+        ? { ...identity, usable: false }
+        : (
+            renderedMatches.length === 1 && !identity.renderedId.supplied
+              ? { ...identity, renderedId: renderedMatches[0].renderedId }
+              : identity
+          );
+      return {
+        identity: resolvedIdentity,
+        entry: {
+          nucleotideSequence: firstSequenceText(feature?.nucleotideSequence, feature?.nucleotide_sequence),
+          aminoAcidSequence: firstSequenceText(feature?.aminoAcidSequence, feature?.amino_acid_sequence),
+          sequenceFeature: feature,
+          sequenceWarnings: Array.isArray(feature?.sequence_warnings)
+            ? feature.sequence_warnings
+            : (Array.isArray(feature?.sequenceWarnings) ? feature.sequenceWarnings : [])
+        }
       };
-      if (!entry.nucleotideSequence && !entry.aminoAcidSequence) return;
-      const recordKey = stableRecordKey(recordIndex, stableId);
-      if (recordKey) lookup.set(recordKey, entry);
-      if ((stableCounts.get(stableId) || 0) === 1) lookup.set(stableId, entry);
     });
-    return lookup;
   });
 
   const enrichOrthogroupMember = (member) => {
-    const stableId = memberStableFeatureId(member);
     const memberSequenceFeature = member?.sequenceFeature || null;
-    if (!stableId) {
-      return {
-        ...member,
-        displayProteinId: resolveDisplayProteinId(
-          memberSequenceFeature,
-          member,
-          memberLocationText(member)
-        )
-      };
-    }
-    const recordIndex = memberRecordIndex(member);
-    const lookup = featureSequenceLookup.value instanceof Map ? featureSequenceLookup.value : new Map();
-    const sequenceEntry = (
-      recordIndex !== null ? lookup.get(stableRecordKey(recordIndex, stableId)) : null
-    ) || lookup.get(stableId) || null;
+    const memberIdentity = featureIdentity(member);
+    const matches = memberIdentity.usable
+      ? (Array.isArray(featureSequenceLookup.value) ? featureSequenceLookup.value : [])
+        .filter((candidate) => (
+          identityMatches(memberIdentity, candidate.identity, { includeRendered: true })
+        ))
+      : [];
+    const sequenceEntry = matches.length === 1 ? matches[0].entry : null;
     const sequenceFeature = sequenceEntry?.sequenceFeature || memberSequenceFeature;
     const resolvedDisplayProteinId = resolveDisplayProteinId(
       sequenceFeature,
@@ -433,8 +433,8 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
   const groupOrthogroupMembersByRecord = (members) => {
     const byRecord = new Map();
     (Array.isArray(members) ? members : []).forEach((member) => {
-      const recordIndex = Number(member?.recordIndex);
-      const key = Number.isInteger(recordIndex) ? recordIndex : -1;
+      const recordIndex = nonnegativeIntegerAliasStatus(member, RECORD_INDEX_KEYS);
+      const key = recordIndex.valid && recordIndex.supplied ? recordIndex.value : -1;
       if (!byRecord.has(key)) byRecord.set(key, []);
       byRecord.get(key).push(member);
     });
@@ -469,7 +469,7 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
 
   const buildOrthogroupFasta = (groupOrId, sequenceKind) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    const orthogroupId = normalizeText(group?.id || groupOrId);
+    const orthogroupId = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     return getEnrichedOrthogroupMembers(group)
       .map((member) => memberFastaText(member, sequenceKind, orthogroupId))
       .filter(Boolean)
@@ -478,12 +478,13 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
 
   const buildOrthogroupMemberFasta = (member, sequenceKind, groupOrId = selectedOrthogroup.value) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    return memberFastaText(enrichOrthogroupMember(member), sequenceKind, normalizeText(group?.id || groupOrId));
+    const orthogroupId = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
+    return memberFastaText(enrichOrthogroupMember(member), sequenceKind, orthogroupId);
   };
 
   const orthogroupSequenceFilename = (groupOrId, sequenceKind) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    const id = normalizeText(group?.id || groupOrId);
+    const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     const name = makeSafeFilename(resolveOrthogroupName(group) || id, id || 'orthogroup');
     const stem = makeSafeFilename(`${id || 'orthogroup'}_${name}_${sequenceKindLabel(sequenceKind)}`);
     return `${stem}.${sequenceExtension(sequenceKind)}`;
@@ -491,7 +492,7 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
 
   const orthogroupMemberSequenceFilename = (member, sequenceKind, groupOrId = selectedOrthogroup.value) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    const id = normalizeText(group?.id || groupOrId) || 'orthogroup';
+    const id = (group ? orthogroupIdValue(group) : normalizeText(groupOrId)) || 'orthogroup';
     const stableId = memberStableFeatureId(member);
     const memberId = normalizeText(
       resolveDisplayProteinId(
@@ -548,6 +549,7 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     const id = normalizeText(orthogroupId);
     if (!id) return;
     const group = getOrthogroupById(id);
+    if (!group) return;
     const normalized = normalizeText(value);
     const base = normalizeText(group?.name);
     if (!normalized || normalized === base) {
@@ -561,6 +563,7 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     const id = normalizeText(orthogroupId);
     if (!id) return;
     const group = getOrthogroupById(id);
+    if (!group) return;
     const normalized = normalizeText(value);
     const base = normalizeText(group?.description);
     if (!normalized || normalized === base) {
@@ -616,7 +619,7 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
 
   const alignOrthogroupById = async (orthogroupId = selectedOrthogroupId.value) => {
     const id = normalizeText(orthogroupId);
-    if (!id) return;
+    if (!id || !getOrthogroupById(id)) return;
     selectedOrthogroupAlignmentFeature.value = id;
     if (typeof runAnalysis === 'function') await runAnalysis();
   };

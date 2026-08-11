@@ -13,10 +13,17 @@ const IUPAC_COMPLEMENT = Object.freeze({
 
 const text = (value) => String(value ?? '').trim();
 const normalizedSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
-const optionalInteger = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  return Number.isInteger(numeric) ? numeric : null;
+const optionalNonnegativeIntegerStatus = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return { valid: true, supplied: false, value: null };
+  }
+  const numeric = typeof value === 'number'
+    ? value
+    : (typeof value === 'string' && /^\d+$/.test(value.trim())
+      ? Number(value.trim())
+      : Number.NaN);
+  const valid = Number.isSafeInteger(numeric) && numeric >= 0;
+  return { valid, supplied: true, value: valid ? numeric : null };
 };
 const safePart = (value, fallback = 'sequence') => {
   const cleaned = text(value).replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '');
@@ -35,6 +42,19 @@ const aliasesForSource = (source) => {
   });
   return aliases;
 };
+
+const sequenceSourcesAgree = (left, right) => (
+  left.key === right.key
+  && left.recordId === right.recordId
+  && left.sequence === right.sequence
+  && left.origin === right.origin
+  && left.recordIndex === right.recordIndex
+  && left.sourceIndex === right.sourceIndex
+  && (
+    left.aliases.length === right.aliases.length
+    && left.aliases.every((alias) => right.aliases.includes(alias))
+  )
+);
 
 export const reverseComplementNucleotide = (sequence) => {
   const input = normalizedSequence(sequence);
@@ -80,52 +100,79 @@ export const extractMatchedSpan = (sequence, startRaw, endRaw) => {
 
 export const createSequenceSourceRegistry = (initialSources = []) => {
   const sources = new Map();
+  const ambiguousKeys = new Set();
 
   const register = (source) => {
     const key = text(source?.key);
     const sequence = normalizedSequence(source?.sequence);
-    if (!key || !sequence) return null;
+    const recordIndex = optionalNonnegativeIntegerStatus(source?.recordIndex);
+    const sourceIndex = optionalNonnegativeIntegerStatus(source?.sourceIndex);
+    if (!key || !sequence || !recordIndex.valid || !sourceIndex.valid) return null;
     const entry = {
       key,
       recordId: text(source?.recordId) || key,
       aliases: Array.from(aliasesForSource(source)),
       sequence,
       origin: text(source?.origin),
-      recordIndex: optionalInteger(source?.recordIndex),
-      sourceIndex: optionalInteger(source?.sourceIndex)
+      recordIndex: recordIndex.value,
+      sourceIndex: sourceIndex.value
     };
+    if (ambiguousKeys.has(key)) return null;
+    const existing = sources.get(key);
+    if (existing) {
+      if (sequenceSourcesAgree(existing, entry)) return existing;
+      sources.delete(key);
+      ambiguousKeys.add(key);
+      return null;
+    }
     sources.set(key, entry);
     return entry;
   };
 
   const reset = (nextSources = []) => {
     sources.clear();
+    ambiguousKeys.clear();
     (Array.isArray(nextSources) ? nextSources : []).forEach(register);
   };
 
   const resolve = (sourceKey, recordId, context = {}) => {
+    const expectedSourceIndex = optionalNonnegativeIntegerStatus(context.sourceIndex);
+    const expectedRecordIndex = optionalNonnegativeIntegerStatus(context.recordIndex);
+    if (!expectedSourceIndex.valid || !expectedRecordIndex.valid) {
+      return { source: null, reason: 'The sequence source identity for this match is invalid.' };
+    }
+    const expectedOrigin = text(context.origin);
+    const wanted = text(recordId);
+    const agrees = (source) => (
+      (!expectedOrigin || source.origin === expectedOrigin)
+      && (!expectedSourceIndex.supplied || source.sourceIndex === expectedSourceIndex.value)
+      && (!expectedRecordIndex.supplied || source.recordIndex === expectedRecordIndex.value)
+      && (!wanted || source.recordId === wanted || aliasesForSource(source).has(wanted))
+    );
     const explicitKey = text(sourceKey);
     if (explicitKey) {
+      if (ambiguousKeys.has(explicitKey)) {
+        return { source: null, reason: 'The sequence source key for this match is ambiguous.' };
+      }
       const direct = sources.get(explicitKey);
-      return direct
+      if (!direct) {
+        return { source: null, reason: 'The sequence source for this match is unavailable.' };
+      }
+      return agrees(direct)
         ? { source: direct, reason: '' }
-        : { source: null, reason: 'The sequence source for this match is unavailable.' };
+        : { source: null, reason: 'The sequence source key conflicts with the match identity.' };
     }
 
-    const expectedOrigin = text(context.origin);
-    const expectedSourceIndex = optionalInteger(context.sourceIndex);
-    const expectedRecordIndex = optionalInteger(context.recordIndex);
     let candidates = Array.from(sources.values()).filter((source) => {
       if (expectedOrigin && source.origin !== expectedOrigin) return false;
-      if (expectedSourceIndex !== null && source.sourceIndex !== expectedSourceIndex) return false;
-      if (expectedRecordIndex !== null && source.recordIndex !== expectedRecordIndex) return false;
+      if (expectedSourceIndex.supplied && source.sourceIndex !== expectedSourceIndex.value) return false;
+      if (expectedRecordIndex.supplied && source.recordIndex !== expectedRecordIndex.value) return false;
       return true;
     });
 
-    if (expectedRecordIndex !== null && candidates.length === 1) {
+    if (expectedRecordIndex.supplied && candidates.length === 1 && !wanted) {
       return { source: candidates[0], reason: '' };
     }
-    const wanted = text(recordId);
     if (!wanted) return { source: null, reason: 'The match does not identify a sequence record.' };
     const exact = candidates.filter((source) => source.recordId === wanted);
     if (exact.length === 1) return { source: exact[0], reason: '' };

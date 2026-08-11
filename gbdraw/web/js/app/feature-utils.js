@@ -21,7 +21,7 @@ export const getFeatureCaption = (feature) => {
   return caption || `${feature?.type} at ${feature?.start}..${feature?.end}`;
 };
 
-export const firstFeatureText = (...values) => {
+const firstFeatureText = (...values) => {
   for (const value of values) {
     if (Array.isArray(value)) {
       const nested = firstFeatureText(...value);
@@ -53,19 +53,6 @@ export const getFeatureHashCandidates = (feature) => {
 };
 
 export const getFeatureGenerationHash = (feature) => getFeatureHashCandidates(feature)[0] || '';
-
-export const getFeatureQualifierFirstValue = (feature, key) => {
-  const normalizedKey = String(key || '').trim().toLowerCase();
-  if (!feature || !normalizedKey) return '';
-  const qualifiers = feature.qualifiers && typeof feature.qualifiers === 'object' && !Array.isArray(feature.qualifiers)
-    ? feature.qualifiers
-    : {};
-  if (Object.prototype.hasOwnProperty.call(qualifiers, normalizedKey)) {
-    return firstFeatureText(qualifiers[normalizedKey]);
-  }
-  const matchingKey = Object.keys(qualifiers).find((candidate) => candidate.toLowerCase() === normalizedKey);
-  return matchingKey ? firstFeatureText(qualifiers[matchingKey]) : '';
-};
 
 const directFeatureValue = (feature, ...keys) => {
   if (!feature || typeof feature !== 'object') return '';
@@ -172,7 +159,7 @@ export const resolveInternalProteinId = (feature, member = null, fallback = '') 
   fallback
 );
 
-export const getFeatureQualifierValue = (feat, qual) => {
+const getFeatureQualifierValue = (feat, qual) => {
   if (!qual) return null;
   const key = qual.toLowerCase();
   if (feat.qualifiers && Object.prototype.hasOwnProperty.call(feat.qualifiers, key)) {
@@ -185,7 +172,7 @@ export const getFeatureQualifierValue = (feat, qual) => {
   return null;
 };
 
-export const matchRuleValue = (value, ruleVal, strictEquals = false) => {
+const matchRuleValue = (value, ruleVal, strictEquals = false) => {
   if (!value || !ruleVal) return false;
   const values = Array.isArray(value) ? value : [value];
   const needle = String(ruleVal);

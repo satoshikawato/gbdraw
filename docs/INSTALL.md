@@ -1,4 +1,4 @@
-[Home](./DOCS.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | **Installation** | [About](./ABOUT.md)
 
 [< Back to Home](./DOCS.md) | [Go to Quickstart >](./QUICKSTART.md)
 
@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | Hosted web app | Making a diagram without a local installation | Runs at [gbdraw.app](https://gbdraw.app/) in your browser. |
 | Bioconda | Routine command-line use and reproducible environments | Recommended for most users. |
+| PyPI | Installing into an existing Python environment | Uses `python -m pip install gbdraw`. |
 | Source install | Developing or testing the current checkout | Uses `pip install -e ".[dev]"`. |
 
 ## 1. Hosted web app
@@ -53,7 +54,18 @@ Optional: launch the local GUI:
 gbdraw gui
 ```
 
-## 3. Source installation for development
+## 3. PyPI installation
+
+Install the released package into an activated Python 3.10 or newer environment:
+
+```bash
+python -m pip install gbdraw
+gbdraw -h
+```
+
+Use an isolated virtual environment rather than modifying the system Python installation.
+
+## 4. Source installation for development
 
 Use a source install when you want the current repository state, need to run tests, or plan to contribute.
 
@@ -76,8 +88,10 @@ pytest tests/ -v -m "not slow"
 SVG export works with the base install. PNG, PDF, EPS, and PS export require CairoSVG:
 
 ```bash
-python -m pip install -e ".[dev,export]"
+python -m pip install "gbdraw[export]"
 ```
+
+For an editable source checkout, use `python -m pip install -e ".[dev,export]"` instead.
 
 Depending on your platform, CairoSVG may also require system Cairo/Pango libraries.
 
@@ -91,4 +105,4 @@ gbdraw gui
 
 [< Back to Home](./DOCS.md) | [Go to Quickstart >](./QUICKSTART.md)
 
-[Home](./DOCS.md) | **Installation** | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | **Installation** | [About](./ABOUT.md)

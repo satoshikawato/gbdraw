@@ -14,11 +14,3 @@ export const PYODIDE_LOCAL_WHEELS = [
 ];
 export const LOSAT_THREADED_WASM_URL = "./wasm/losat/losat-threaded.wasm";
 export const WASI_SHIM_URL = "./vendor/browser_wasi_shim/dist/index.js";
-
-export const DEBUG = false;
-
-export const debugLog = (...args) => {
-  if (DEBUG) {
-    console.log('[DEBUG]', ...args);
-  }
-};

@@ -25,7 +25,15 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import load_comparisons
 from gbdraw.legend.table import prepare_legend_table
 from gbdraw.render.drawers.circular.conservation import ConservationDrawer
-from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
+from gbdraw.features.ids import (
+    compute_feature_object_hash,
+    make_linear_rendered_feature_id,
+)
+from gbdraw.render.groups.linear.pairwise_match import (
+    PairWiseMatchGroup,
+    build_linear_feature_dom_index,
+)
+from gbdraw.svg.ids import instance_svg_id
 
 
 def _build_record() -> SeqRecord:
@@ -411,6 +419,67 @@ def test_pairwise_match_path_serializes_orthogroup_metadata_without_collinearity
     assert path.attribs["data-query-stable-feature-svg-id"] == "fquery"
     assert path.attribs["data-subject-stable-feature-svg-id"] == "fsubject"
     assert "data-collinearity-block-id" not in path.attribs
+
+
+@pytest.mark.linear
+def test_pairwise_match_resolves_duplicate_view_ids_by_source_feature_index() -> None:
+    def feature(source_index: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            coordinates=[SimpleNamespace(start=10, end=40, strand=1)],
+            feature_type="CDS",
+            record_id="record_1",
+            source_feature_index=source_index,
+        )
+
+    first = feature(4)
+    second = feature(7)
+    view_id = compute_feature_object_hash(first)
+    assert view_id == compute_feature_object_hash(second)
+    feature_dom_index = build_linear_feature_dom_index(
+        [{"first": first, "second": second}, {}]
+    )
+    group = _build_pairwise_group("ribbon")
+    group.feature_dom_index = feature_dom_index
+    row = SimpleNamespace(
+        **_build_match_row().__dict__,
+        orthogroup_id="og_duplicate",
+        query_feature_svg_id="stable;stable",
+        query_view_feature_svg_id=f"{view_id};{view_id}",
+        query_feature_index="4;7",
+        subject_feature_svg_id="",
+    )
+
+    path = group.generate_linear_match_path(row)
+    rendered_base = make_linear_rendered_feature_id(
+        record_index=0,
+        stable_feature_id=view_id,
+        record_count=2,
+    )
+    assert rendered_base is not None
+    assert path.attribs["data-query-feature-svg-id"] == ";".join(
+        (
+            instance_svg_id(rendered_base, 4),
+            instance_svg_id(rendered_base, 7),
+        )
+    )
+    assert path.attribs["data-query-stable-feature-svg-id"] == "stable;stable"
+    assert path.attribs["data-query-feature-index"] == "4;7"
+
+
+@pytest.mark.linear
+def test_linear_feature_dom_index_rejects_repeated_source_feature_index() -> None:
+    def feature() -> SimpleNamespace:
+        return SimpleNamespace(
+            coordinates=[SimpleNamespace(start=10, end=40, strand=1)],
+            feature_type="CDS",
+            record_id="record_1",
+            source_feature_index=4,
+        )
+
+    with pytest.raises(ValueError, match="duplicate source feature index"):
+        build_linear_feature_dom_index(
+            [{"first": feature(), "second": feature()}, {}]
+        )
 
 
 @pytest.mark.linear

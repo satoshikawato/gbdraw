@@ -5,7 +5,7 @@ set -e
 
 # --- 1. Prepare the browser wheel bundled with the offline GUI ---
 echo "Preparing browser wheel..."
-$PYTHON tools/prepare_browser_wheel.py
+$PYTHON tools/prepare_browser_wheel.py --no-build-isolation
 
 # --- 2. Standard installation (for CLI usage) ---
 $PYTHON -m pip install . --no-deps --ignore-installed -vv
@@ -20,6 +20,6 @@ mkdir -p $SP_DIR/gbdraw/web
 cp gbdraw/web/index.html $SP_DIR/gbdraw/web/
 cp gbdraw/web/open-source-notices.html $SP_DIR/gbdraw/web/
 cp gbdraw/web/gbdraw-*.whl $SP_DIR/gbdraw/web/
-for web_asset_dir in assets js presets vendor wasm; do
+for web_asset_dir in assets js presets tutorial-data vendor wasm; do
     cp -r gbdraw/web/$web_asset_dir $SP_DIR/gbdraw/web/
 done

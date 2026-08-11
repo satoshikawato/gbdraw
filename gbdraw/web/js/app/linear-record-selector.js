@@ -56,6 +56,11 @@ export const createLinearRecordSelector = ({
 }) => {
   const selectorStateByUid = reactive({});
   let refreshGeneration = 0;
+  let activeRefresh = null;
+  const recordDiscoverySuppressed = () => Boolean(
+    state.semanticFileWatchersSuppressed?.value ||
+    state.sessionImportRollbackInProgress?.value
+  );
 
   const uidFor = (seq) => String(seq?.uid ?? '').trim();
   const sourceFilesFor = (seq, inputType = state.lInputType.value) => (
@@ -105,6 +110,7 @@ export const createLinearRecordSelector = ({
 
   const isCurrentRequest = ({ generation, uid, primaryFile, pairedFile, inputType }) => {
     if (generation !== refreshGeneration) return false;
+    if (recordDiscoverySuppressed()) return false;
     if (state.mode.value !== 'linear' || state.lInputType.value !== inputType) return false;
     const currentSeq = state.linearSeqs.find((seq) => uidFor(seq) === uid);
     if (!currentSeq) return false;
@@ -112,8 +118,22 @@ export const createLinearRecordSelector = ({
     return currentFiles.primaryFile === primaryFile && currentFiles.pairedFile === pairedFile;
   };
 
-  const refresh = async () => {
+  const refreshFingerprint = ({ suppress = false } = {}) => [
+    Boolean(suppress || recordDiscoverySuppressed()),
+    state.mode.value,
+    state.lInputType.value,
+    ...state.linearSeqs.flatMap((seq) => {
+      const { primaryFile, pairedFile } = sourceFilesFor(seq);
+      return [uidFor(seq), primaryFile, pairedFile];
+    })
+  ];
+  const sameFingerprint = (left, right) => (
+    left.length === right.length && left.every((value, index) => Object.is(value, right[index]))
+  );
+
+  const runRefresh = async ({ suppress = false } = {}) => {
     const generation = ++refreshGeneration;
+    if (suppress || recordDiscoverySuppressed()) return;
     purgeInactiveState();
 
     if (state.mode.value !== 'linear') {
@@ -136,16 +156,20 @@ export const createLinearRecordSelector = ({
       });
       targets.push({ uid, primaryFile, pairedFile });
     }
+    const requiresRuntime = targets.some(({ primaryFile, pairedFile }) => (
+      typeof (inputType === 'gff' ? pairedFile : primaryFile)?.text !== 'function'
+    ));
     const attemptedRuntimeStart = (
+      requiresRuntime &&
       !state.pyodideReady.value &&
       targets.length > 0 &&
       typeof ensureRuntime === 'function'
     );
     if (attemptedRuntimeStart) {
       await ensureRuntime();
-      if (generation !== refreshGeneration) return;
+      if (generation !== refreshGeneration || recordDiscoverySuppressed()) return;
     }
-    if (!state.pyodideReady.value) {
+    if (requiresRuntime && !state.pyodideReady.value) {
       if (attemptedRuntimeStart) {
         targets.forEach(({ uid, primaryFile, pairedFile }) => {
           replaceState(uid, {
@@ -186,6 +210,19 @@ export const createLinearRecordSelector = ({
         });
       }
     }
+  };
+
+  const refresh = (options = {}) => {
+    const fingerprint = refreshFingerprint(options);
+    if (activeRefresh && sameFingerprint(activeRefresh.fingerprint, fingerprint)) {
+      return activeRefresh.promise;
+    }
+    const entry = { fingerprint, promise: null };
+    entry.promise = runRefresh(options).finally(() => {
+      if (activeRefresh === entry) activeRefresh = null;
+    });
+    activeRefresh = entry;
+    return entry.promise;
   };
 
   const optionsFor = (seq) => {

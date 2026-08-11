@@ -1,0 +1,4 @@
+record_id	feature_type	qualifier	value	action
+NC_012920.1	D-loop	location	^0\.\.16569$	show
+NC_012920.1	CDS	product	^cytochrome c oxidase subunit I$	off
+*	CDS	product	^ATP synthase F0 subunit 6$	exclude_matching

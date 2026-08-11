@@ -20,10 +20,16 @@ const copyModule = async (sourceRelative, targetRelative) => {
 
 await copyModule('gbdraw/web/js/app/session-feature-metadata.js', 'app/session-feature-metadata.js');
 await copyModule('gbdraw/web/js/app/feature-metadata-extraction.js', 'app/feature-metadata-extraction.js');
+await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normalization.js');
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
 await copyModule('gbdraw/web/js/services/error-normalization.js', 'services/error-normalization.js');
 await copyModule('gbdraw/web/js/services/file-content-cache.js', 'services/file-content-cache.js');
 await copyModule('gbdraw/web/js/services/json-clone.js', 'services/json-clone.js');
+await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
+await copyModule(
+  'gbdraw/web/js/services/orthogroup-feature-metadata.js',
+  'services/orthogroup-feature-metadata.js'
+);
 await copyModule('gbdraw/web/js/services/pyodide-assets.js', 'services/pyodide-assets.js');
 await copyModule('gbdraw/web/js/services/runtime-capabilities.js', 'services/runtime-capabilities.js');
 await copyModule('gbdraw/web/js/config.js', 'config.js');
@@ -33,7 +39,8 @@ const {
   buildSessionFeatureRecoveryPlan,
   classifyFeatureMetadataState,
   collectRenderedFeatureIdentitiesFromSvg,
-  migrateFeatureOverrideState
+  migrateFeatureOverrideState,
+  normalizeRecordIndex
 } = await import(pathToFileURL(join(tempDir, 'app', 'session-feature-metadata.js')));
 const { extractFeatureMetadataForPreview } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-metadata-extraction.js'))
@@ -203,6 +210,76 @@ const svgWithFeature = ({
 }
 
 {
+  const ambiguousSvg = `
+    <svg>
+      <path data-gbdraw-feature-id="rendered-r" data-gbdraw-stable-feature-id="stable-a" data-gbdraw-record-index="0" data-gbdraw-record-id="record-a" />
+      <path data-gbdraw-feature-id="rendered-r" data-gbdraw-stable-feature-id="stable-b" data-gbdraw-record-index="1" data-gbdraw-record-id="record-b" />
+    </svg>
+  `;
+  const identities = collectRenderedFeatureIdentitiesFromSvg(ambiguousSvg);
+  assert.equal(identities.renderedIds.has('rendered-r'), true);
+  assert.equal(identities.ambiguousRenderedIds.has('rendered-r'), true);
+  assert.equal(identities.byRenderedId.has('rendered-r'), false);
+  assert.equal(identities.byStableId.has('stable-a'), false);
+  assert.equal(identities.byStableId.has('stable-b'), false);
+
+  const recovered = {
+    id: 'feature-a',
+    svg_id: 'rendered-r',
+    stable_svg_id: 'stable-a',
+    record_idx: 0,
+    record_id: 'record-a'
+  };
+  const aligned = alignRecoveredFeatureIdsToRenderedSvg({
+    features: [recovered],
+    renderedIdentities: identities
+  });
+  assert.equal(aligned.exactCount, 0);
+  assert.equal(aligned.alignedCount, 0);
+  assert.equal(aligned.unresolvedCount, 1);
+  assert.equal(aligned.features[0], recovered);
+  assert.equal(aligned.features[0].rendered_svg_id, undefined);
+  assert.equal(aligned.svgIdMap['rendered-r'], undefined);
+
+  const state = classifyFeatureMetadataState({
+    results: [{ content: ambiguousSvg }],
+    selectedResultIndex: 0,
+    extractedFeatures: [recovered]
+  });
+  assert.equal(state.state, 'stale');
+  assert.equal(state.renderedCount, 1);
+  assert.equal(state.totalRenderedCount, 1);
+  assert.equal(state.exactMatchingCount, 0);
+  assert.equal(state.aliasMatchingCount, 0);
+  assert.equal(state.missingExactCount, 1);
+
+  const plan = await buildSessionFeatureRecoveryPlan({
+    snapshot: {
+      mode: 'circular',
+      cInputType: 'gff',
+      selectedResultIndex: 0,
+      results: [{ content: ambiguousSvg }],
+      featureState: { extractedFeatures: [recovered], biologicalFeatures: [] },
+      editorState: {}
+    },
+    featureVisibilityTsv: ''
+  });
+  assert.equal(plan.status, 'unrecoverable');
+  assert.equal(plan.validation.state, 'stale');
+}
+
+{
+  const identities = collectRenderedFeatureIdentitiesFromSvg(`
+    <svg>
+      <path id="part-1" data-gbdraw-feature-id="rendered-r__part1" data-gbdraw-stable-feature-id="stable-a" data-gbdraw-record-index="0" data-gbdraw-record-id="record-a" />
+      <path id="part-2" data-gbdraw-feature-id="rendered-r__part2" data-gbdraw-stable-feature-id="stable-a" data-gbdraw-record-index="0" data-gbdraw-record-id="record-a" />
+    </svg>
+  `);
+  assert.equal(identities.ambiguousRenderedIds.has('rendered-r'), false);
+  assert.equal(identities.byRenderedId.get('rendered-r')?.stableId, 'stable-a');
+}
+
+{
   const state = classifyFeatureMetadataState({
     results: [{ content: svgWithFeature({ renderedId: 'rendered-a' }) }],
     selectedResultIndex: 0,
@@ -234,14 +311,22 @@ const svgWithFeature = ({
     features: [feature],
     renderedIdentities
   });
-  assert.equal(aligned.changedCount, 1);
-  assert.equal(aligned.alignedCount, 1);
-  assert.equal(aligned.features[0].svg_id, 'stable-a');
-  assert.equal(aligned.features[0].rendered_svg_id, 'rendered-a');
-  assert.equal(aligned.features[0].renderedSvgId, 'rendered-a');
-  assert.equal(aligned.features[0].stable_svg_id, 'stable-a');
-  assert.notEqual(aligned.features[0], feature);
-  assert.equal(aligned.svgIdMap['stable-a'], 'rendered-a');
+  assert.equal(aligned.changedCount, 0);
+  assert.equal(aligned.alignedCount, 0);
+  assert.equal(aligned.unresolvedCount, 1);
+  assert.equal(aligned.features[0], feature);
+  assert.equal(aligned.svgIdMap['stable-a'], undefined);
+}
+
+assert.equal(normalizeRecordIndex('4'), 4);
+for (const invalidRecordIndex of [
+  -1,
+  '4.5',
+  'bogus',
+  '9007199254740992',
+  true
+]) {
+  assert.equal(normalizeRecordIndex(invalidRecordIndex), null);
 }
 
 {
@@ -314,14 +399,68 @@ const svgWithFeature = ({
 }
 
 {
+  const renderedIdentities = collectRenderedFeatureIdentitiesFromSvg(
+    svgWithFeature({ renderedId: 'rendered-a', stableId: 'stable-a', recordIndex: 0 })
+  );
+  const aligned = alignRecoveredFeatureIdsToRenderedSvg({
+    features: [
+      {
+        id: 'wrong-stable',
+        svg_id: 'rendered-a',
+        stable_svg_id: 'stable-wrong',
+        record_idx: 0
+      },
+      {
+        id: 'wrong-record',
+        svg_id: 'rendered-a',
+        stable_svg_id: 'stable-a',
+        record_idx: 1
+      },
+      {
+        id: 'conflicting-stable-aliases',
+        svg_id: 'rendered-a',
+        stable_svg_id: 'stable-a',
+        stableFeatureId: 'stable-wrong',
+        record_idx: 0
+      },
+      {
+        id: 'conflicting-record-aliases',
+        svg_id: 'rendered-a',
+        stable_svg_id: 'stable-a',
+        record_idx: 0,
+        recordIndex: 1
+      },
+      {
+        id: 'conflicting-rendered-aliases',
+        svg_id: 'stable-a',
+        stable_svg_id: 'stable-a',
+        rendered_svg_id: 'rendered-a',
+        renderedFeatureSvgId: 'rendered-wrong',
+        record_idx: 0
+      }
+    ],
+    renderedIdentities
+  });
+  assert.equal(aligned.exactCount, 0);
+  assert.equal(aligned.alignedCount, 0);
+  assert.equal(aligned.unresolvedCount + aligned.ambiguousCount, 5);
+  assert.equal(aligned.features.every((feature) => feature.rendered_svg_id === undefined), true);
+}
+
+{
   const renderedIdentities = collectRenderedFeatureIdentitiesFromSvg(`
     <svg>
       <path data-gbdraw-feature-id="rendered-a" data-gbdraw-stable-feature-id="stable-a" />
-      <path data-gbdraw-feature-id="rendered-b" data-gbdraw-stable-feature-id="stable-b" />
+      <path data-gbdraw-feature-id="rendered-b" data-gbdraw-stable-feature-id="stable-b" data-gbdraw-record-index="1" />
     </svg>
   `);
   const exact = { id: 'feature-a', svg_id: 'rendered-a', stable_svg_id: 'stable-a' };
-  const changed = { id: 'feature-b', svg_id: 'stable-b', stable_svg_id: 'stable-b' };
+  const changed = {
+    id: 'feature-b',
+    svg_id: 'stable-b',
+    stable_svg_id: 'stable-b',
+    fileIdx: 1
+  };
   const aligned = alignRecoveredFeatureIdsToRenderedSvg({
     features: [exact, changed],
     renderedIdentities

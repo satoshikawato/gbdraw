@@ -1,25 +1,18 @@
 import {
+  base64ToBytes,
   bytesToBase64,
   readFileBytes,
-  sha256Hex
+  sha256Hex,
+  textToBytes
 } from './file-content-cache.js';
 import {
   decodeDepthText,
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
 
-const base64ToBytes = (value) => {
-  const binary = atob(String(value || ''));
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
-};
-
 const resourceBytes = (entry) => {
   if (isEncodedDepthFileEntry(entry)) {
-    return new TextEncoder().encode(decodeDepthText(entry.data));
+    return textToBytes(decodeDepthText(entry.data));
   }
   if (entry?.encoding !== 'base64' || typeof entry?.data !== 'string') {
     throw new Error('Session resources must contain supported embedded file data.');

@@ -1,34 +1,33 @@
-[Home](../DOCS.md) | [Installation](../INSTALL.md) | [Quickstart](../QUICKSTART.md) | **Tutorials** | [Workflow guide](../WORKFLOW_GUIDE.md) | [Recipes](../RECIPES.md) | [CLI Reference](../CLI_Reference.md) | [Gallery](../GALLERY.md)
+[Documentation home](../DOCS.md) | **Tutorials** | [Technical documentation](../REFERENCE/README.md) | [FAQ](../FAQ.md) | [Gallery](../GALLERY.md)
 
-# gbdraw tutorials
+# Tutorials
 
-The numbered tutorials are the complete set of command-line guides. Follow them in order, or open the guide for your task.
+Choose what you want to learn, then open the workflow for the interface you use.
+Each row builds the same complete figure in the web app, from the command line,
+or from Python.
 
-## Numbered tutorials
+Every row below is a Tutorial. Start here with one of the first two projects,
+which teach a first Circular or Linear figure. The remaining rows cover more
+advanced finished figures. Use the [Technical
+documentation](../REFERENCE/README.md) when you need to adapt an exact input,
+option, comparison, track, session, or export behavior.
 
-1. [Style a circular genome diagram](./1_Customizing_Plots.md)
-2. [Draw genome comparison links from precomputed BLAST results](./2_Comparative_Genomics.md)
-3. [Set feature colors and labels](./3_Advanced_Customization.md)
-4. [Draw protein matches from annotated CDS features](./4_Protein_Comparisons.md)
-5. [Use TSV manifests for CLI inputs](./5_Table_Driven_Inputs.md)
-6. [Plot read depth and other numeric tracks](./6_Depth_Quantitative_Tracks.md)
-7. [Arrange linear tracks, record labels, and rulers](./7_Linear_Layout.md)
-8. [Create interactive SVGs and restore saved sessions](./8_Interactive_SVG_Sessions.md)
-9. [Control feature visibility and shapes](./9_Feature_Visibility_Shapes.md)
+## Choose a tutorial
 
-## Web app tutorials
+| Level | What you'll learn | What you'll draw | Web app | Command line | Python API |
+| --- | --- | --- | --- | --- | --- |
+| Foundational | Create and export a first Circular diagram | A labeled human mitochondrial genome with GC content and GC skew. | [Open](GUI/first-circular-genome-diagram.md) | [Open](CLI/first-circular-genome-diagram.md) | [Open](PYTHON/first-genome-diagram.md) |
+| Foundational | Create and export a first Linear diagram | The complete Lambda genome with annotated features and a coordinate scale. | [Open](GUI/first-linear-genome-diagram.md) | [Open](CLI/first-linear-genome-diagram.md) | [Open](PYTHON/first-linear-genome-diagram.md) |
+| Advanced project | Compare nucleotide sequences with LOSATN | Complete Lambda and DE3 genomes connected by their nucleotide matches. | [Open](GUI/compare-genomes-losatn.md) | [Open](CLI/compare-genomes-losatn.md) | [Open](PYTHON/compare-genomes-losatn.md) |
+| Advanced project | Group homologous proteins with LOSATP | Five aminoglycoside biosynthetic gene clusters aligned to `og_1` and connected by Similarity-group links. | [Open](GUI/compare-proteins-losatp.md) | [Open](CLI/compare-proteins-losatp.md) | [Open](PYTHON/compare-proteins-losatp.md) |
+| Advanced project | Reproduce a polished Gallery map | The tobacco chloroplast genome with functional colors, feature labels, plastome-region annotations, and GC content. | [Open](GUI/build-an-annotated-chloroplast-map.md) | [Open](CLI/build-an-annotated-chloroplast-map.md) | [Open](PYTHON/build-an-annotated-chloroplast-map.md) |
+| Advanced project | Add comparison rings from precomputed evidence | The human mitochondrial genome surrounded by three filtered TLOSATX comparison rings. | [Open](GUI/add-precomputed-circular-comparison-rings.md) | [Open](CLI/add-precomputed-circular-comparison-rings.md) | [Open](PYTHON/add-precomputed-circular-comparison-rings.md) |
+| Advanced project | Find conserved gene order with LOSATP | Five Hepatoplasmataceae genomes connected by Collinear protein-match blocks. | [Open](GUI/compare-proteins-losatp-collinear.md) | [Open](CLI/compare-proteins-losatp-collinear.md) | [Open](PYTHON/compare-proteins-losatp-collinear.md) |
+| Advanced project | Save and replay an interactive session | An interactive human mitochondrial diagram that can be restored with its inputs and settings. | [Open](GUI/create-and-resume-an-interactive-figure.md) | [Open](CLI/create-and-resume-an-interactive-figure.md) | [Open](PYTHON/create-and-resume-an-interactive-figure.md) |
+| Advanced project | Control feature visibility, labels, shapes, and colors | A human mitochondrial map that emphasizes selected biological features without editing the GenBank file. | [Open](GUI/highlight-mitochondrial-features.md) | [Open](CLI/highlight-mitochondrial-features.md) | [Open](PYTHON/highlight-mitochondrial-features.md) |
+| Advanced project | Add quantitative tracks | A Hepatoplasma genome map with read depth, GC content, and GC skew. | [Open](GUI/build-a-quantitative-genome-map.md) | [Open](CLI/build-a-quantitative-genome-map.md) | [Open](PYTHON/build-a-quantitative-genome-map.md) |
 
-- [Create a basic circular diagram](https://gbdraw.app/gallery/#HmmtDNA_basic_circular)
-- [Create a basic linear diagram](https://gbdraw.app/gallery/#lambda_basic_linear)
-- [Compare all replicons from five *Vibrio* Harveyi-group assemblies](https://gbdraw.app/gallery/#vibrio-harveyi-group-collinear)
-- [Browse all interactive Gallery examples](https://gbdraw.app/gallery/)
+Browse the same projects by interface in the [web app](GUI/README.md),
+[command-line](CLI/README.md), and [Python](PYTHON/README.md) indexes.
 
-## Related guides
-
-- [Quickstart](../QUICKSTART.md): create a circular figure from a GenBank record.
-- [Workflow guide](../WORKFLOW_GUIDE.md): choose an input, interface, and output.
-- [Python API](../PYTHON_API.md): render diagrams from Python.
-- [GFF3 + FASTA input](../GFF3_FASTA.md): prepare and validate paired annotation and sequence files.
-- [Export formats](../EXPORT.md): choose SVG, interactive SVG, PNG, PDF, EPS, or PS.
-
-[Home](../DOCS.md) | [Quickstart](../QUICKSTART.md) | **Tutorials** | [Workflow guide](../WORKFLOW_GUIDE.md) | [Python API](../PYTHON_API.md) | [Export](../EXPORT.md)
+[Documentation home](../DOCS.md) | **Tutorials** | [Technical documentation](../REFERENCE/README.md) | [FAQ](../FAQ.md) | [Gallery](../GALLERY.md)

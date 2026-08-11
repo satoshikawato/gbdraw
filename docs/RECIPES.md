@@ -1,8 +1,21 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | **Recipes** | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [About](./ABOUT.md)
 
 # Recipes
 
-Copy-paste command examples for common tasks. For explanations and screenshots, see the [command-line guides](./TUTORIALS/README.md).
+These are command templates for common tasks. Supply the required inputs from
+one working directory and verify record identifiers before adapting a
+template. For version-pinned, clean-directory workflows, use the [CLI
+Tutorials](./TUTORIALS/CLI/README.md). The [command-line technical
+documentation](./REFERENCE/command-line.md) describes exact option behavior.
+
+## Contents
+
+- [Circular diagrams](#circular-diagrams)
+- [Linear diagrams](#linear-diagrams)
+- [Comparative genomics](#comparative-genomics)
+- [Color and label tables](#color-and-label-tables)
+- [GFF3 input](#gff3-input)
+- [Output formats](#output-formats)
 
 ## Circular diagrams
 
@@ -131,8 +144,8 @@ the thickness removed from the shaft. The settings apply to every feature type
 rendered as `arrow`. Ratios must be positive and finite; the shaft ratio must
 not exceed `1` and defaults to `1.0`.
 
-For the exact Circular HmmtDNA and Linear BGC Gallery-session workflows, follow
-[Tutorial 9](./TUTORIALS/9_Feature_Visibility_Shapes.md#recreate-the-circular-gallery-figure).
+See [feature presentation](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
+for exact visibility, shape, stroke, and overlap behavior.
 
 ### Place multiple records on one shared canvas
 
@@ -236,7 +249,8 @@ gbdraw linear \
   -f svg
 ```
 
-See [Use TSV manifests for CLI inputs](./TUTORIALS/5_Table_Driven_Inputs.md) for examples covering GenBank, GFF3+FASTA, circular placement, BLAST similarity rings, and track slots.
+See [input formats and TSV schemas](./REFERENCE/input-formats-and-tsv-schemas.md)
+for record, comparison, conservation, annotation, and track table fields.
 
 ### Highlight named regions
 
@@ -317,7 +331,14 @@ gbdraw linear \
   -f svg
 ```
 
-Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. The `orthogroup` mode creates gbdraw similarity groups for visualization; it does not infer phylogeny-based orthogroups. Do not combine these modes with `-b/--blast`. See [Draw protein matches from annotated CDS features](./TUTORIALS/4_Protein_Comparisons.md) for runtime selection and collinear examples.
+Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. The
+`orthogroup` mode creates gbdraw similarity groups for visualization; it does
+not infer phylogeny-based orthogroups. Do not combine these modes with
+`-b/--blast`. The [comparison technical
+documentation](./REFERENCE/comparison-programs-thresholds-and-results.md)
+defines all three modes. Complete projects cover [Similarity
+groups](./TUTORIALS/CLI/compare-proteins-losatp.md) and [Collinear
+blocks](./TUTORIALS/CLI/compare-proteins-losatp-collinear.md).
 
 ### Filter BLAST ribbons
 
@@ -457,4 +478,4 @@ gbdraw linear --gbk genome1.gb genome2.gb -o output -f svg,interactive_svg
 It does not require CairoSVG, Node.js, Playwright, Chromium, or a web build step.
 Open the interactive file in a browser; some desktop SVG viewers block embedded scripts.
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | **Recipes** | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | **Recipes** | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md) | [About](./ABOUT.md)

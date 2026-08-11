@@ -54,8 +54,12 @@ def _definition_translate_x(canvas: Drawing) -> float:
     definition_group = next(
         element for element in canvas.elements if element.attribs.get("id") == "record_a_definition"
     )
-    transform = str(definition_group.attribs["transform"])
-    return float(transform.split("translate(", 1)[1].split(",", 1)[0])
+    translations = re.findall(
+        r"translate\(\s*([-+0-9.eE]+)[,\s]+([-+0-9.eE]+)\s*\)",
+        str(definition_group.attribs["transform"]),
+    )
+    assert translations
+    return sum(float(x_value) for x_value, _y_value in translations)
 
 
 def _definition_text_anchors(canvas: Drawing) -> set[str]:
@@ -438,12 +442,12 @@ def test_linear_definition_band_matches_resolved_feature_center(
     }
 
     def translate_y(element) -> float:
-        match = re.search(
-            r"translate\([^,]+,([-+0-9.eE]+)\)",
+        translations = re.findall(
+            r"translate\(\s*([-+0-9.eE]+)[,\s]+([-+0-9.eE]+)\s*\)",
             str(element.attribs["transform"]),
         )
-        assert match is not None
-        return float(match.group(1))
+        assert translations
+        return sum(float(y_value) for _x_value, y_value in translations)
 
     record_group = next(
         element
@@ -564,6 +568,7 @@ def test_definition_mixed_content_width_sums_style_aware_parts(
 
 
 @pytest.mark.linear
+@pytest.mark.browser
 @pytest.mark.parametrize(
     ("label", "font_weight"),
     [

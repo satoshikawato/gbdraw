@@ -40,6 +40,23 @@ class AuditInactiveFile extends AuditFile {
   }
 }
 
+class AuditCacheMap extends Map {
+  constructor(entries = []) {
+    super(entries);
+    this.probes = 0;
+  }
+
+  get(key) {
+    this.probes += 1;
+    return super.get(key);
+  }
+
+  has(key) {
+    this.probes += 1;
+    return super.has(key);
+  }
+}
+
 globalThis.File = AuditFile;
 
 const { EXPECTED_WEB_RUNTIME_CAPABILITIES } = await import(
@@ -104,13 +121,54 @@ const {
   resolveLinearComparisonPlan
 } = await import('../../gbdraw/web/js/app/linear-comparisons.js');
 const {
+  applyEditorStateData,
+  applyFeatureStateData,
+  applyOrthogroupStateData,
+  applyResultsData,
+  applyRunStateData,
+  applyUiStateData,
+  buildEditorStateData,
+  buildFeatureStateData,
+  buildOrthogroupStateData,
+  buildRunStateData,
+  buildUiStateData,
   serializeActiveRenderFiles,
+  serializeResults,
   SESSION_VERSION
 } = await import('../../gbdraw/web/js/services/config.js');
+const { createHistoryFileStore } = await import(
+  '../../gbdraw/web/js/services/history-files.js'
+);
+const { createHistorySnapshotService } = await import(
+  '../../gbdraw/web/js/services/history-snapshot.js'
+);
 const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
-const { state } = await import('../../gbdraw/web/js/state.js');
+const { normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
+
+const artifactSnapshots = createHistorySnapshotService({
+  state,
+  fileStore: createHistoryFileStore(),
+  nextTick: window.Vue.nextTick,
+  normalizeLinearSeqList,
+  buildUiStateData,
+  applyUiStateData,
+  buildFeatureStateData,
+  applyFeatureStateData,
+  buildEditorStateData,
+  applyEditorStateData,
+  buildOrthogroupStateData,
+  applyOrthogroupStateData,
+  serializeResults,
+  applyResultsData,
+  buildRunStateData,
+  applyRunStateData
+});
+const generatedArtifactSnapshotOptions = {
+  buildGeneratedArtifactSnapshot: artifactSnapshots.buildGeneratedArtifactSnapshot,
+  applyGeneratedArtifactSnapshot: artifactSnapshots.applyGeneratedArtifactSnapshot
+};
 
 const result = (name, marker) => ({
   name,
@@ -205,6 +263,14 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   state.circularConservation.enabled = false;
   state.circularConservation.source = 'upload';
   state.annotationSets.splice(0);
+  state.circularRecordList.value = [{ selector: '#1', record_id: 'audit' }];
+  Object.assign(state.circularRecordDiscovery, {
+    status: 'ready',
+    error: '',
+    inputType: 'gb',
+    primaryFile: primary,
+    pairedFile: null
+  });
   state.linearSeqs.splice(0, state.linearSeqs.length, {
     uid: 'inactive-linear-row',
     gb: inactive,
@@ -228,7 +294,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   };
   let adoptedArtifacts = 0;
   let failArtifactAdoption = false;
-  const runner = createRunAnalysis({
+  let cancelDuringCandidate = false;
+  let runner;
+  runner = createRunAnalysis({
+    ...generatedArtifactSnapshotOptions,
     state,
     getPyodide: () => null,
     ensurePyodide: async () => {
@@ -251,12 +320,16 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       catalog,
       featureColorOverrides,
       featureStrokeOverrides
-    }) => ({
-      results: structuredClone(results),
-      featureState: featureStateFromCatalog(catalog),
-      featureColorOverrides: structuredClone(featureColorOverrides),
-      featureStrokeOverrides: structuredClone(featureStrokeOverrides)
-    }),
+    }) => {
+      const candidate = {
+        results: structuredClone(results),
+        featureState: featureStateFromCatalog(catalog),
+        featureColorOverrides: structuredClone(featureColorOverrides),
+        featureStrokeOverrides: structuredClone(featureStrokeOverrides)
+      };
+      if (cancelDuringCandidate) runner.cancelRunAnalysis();
+      return candidate;
+    },
     resetPreviewViewport: ({ pan = null } = {}) => {
       state.canvasPan.x = Number(pan?.x) || 0;
       state.canvasPan.y = Number(pan?.y) || 0;
@@ -279,6 +352,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.biologicalFeatures.value.length, 1);
 
   const committedState = committedFeatureState();
+  const committedExtractedFeatureIdentity = state.extractedFeatures.value;
+  const committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
 
   workerResponses.push(response(result('missing.svg', 'missing'), undefined));
   assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
@@ -316,14 +391,29 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     /forced late canonical artifact adoption failure/
   );
   assert.deepEqual(committedFeatureState(), lateFailureState);
+  assert.equal(state.extractedFeatures.value, committedExtractedFeatureIdentity);
+  assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
   assert.equal(state.zoom.value, 1.7);
   assert.deepEqual(state.canvasPan, { x: 31, y: -12 });
+
+  const canceledState = committedFeatureState();
+  const canceledResultIdentity = state.results.value;
+  const canceledResult = result('canceled.svg', 'canceled');
+  workerResponses.push(response(canceledResult, validCatalog(canceledResult.name)));
+  cancelDuringCandidate = true;
+  assert.deepEqual(await runner.runAnalysis(), { status: 'canceled' });
+  cancelDuringCandidate = false;
+  assert.deepEqual(committedFeatureState(), canceledState);
+  assert.equal(state.results.value, canceledResultIdentity);
+  assert.equal(state.extractedFeatures.value, committedExtractedFeatureIdentity);
+  assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
+  assert.equal(state.processingStatus.value, 'Canceled.');
 
   assert.equal(ensurePyodideCalls, 0);
   assert.equal(activePrimaryReads, 1);
   assert.equal(inactiveFileReads, 0);
   assert.equal(adoptedArtifacts, 1);
-  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 4);
+  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 5);
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
   state.form.multi_record_canvas = true;
@@ -348,6 +438,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     primaryFile: null,
     pairedFile: null
   });
+  const primaryText = primary.text.bind(primary);
+  Object.defineProperty(primary, 'text', { value: undefined, configurable: true });
   const workerRunCountBeforeDiscoveryFailure = workerMessages
     .filter(({ type }) => type === 'run')
     .length;
@@ -391,6 +483,20 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     workerRunCountBeforeDiscoveryFailure
   );
 
+  let releaseCoalescedDiscovery;
+  ensurePyodideImpl = () => new Promise((resolve) => {
+    releaseCoalescedDiscovery = resolve;
+  });
+  Object.assign(state.circularRecordDiscovery, {
+    status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
+  });
+  const firstCoalescedDiscovery = runner.refreshCircularRecordOrder();
+  const secondCoalescedDiscovery = runner.refreshCircularRecordOrder();
+  assert.equal(firstCoalescedDiscovery, secondCoalescedDiscovery);
+  assert.equal(ensurePyodideCalls, 3);
+  releaseCoalescedDiscovery();
+  await Promise.all([firstCoalescedDiscovery, secondCoalescedDiscovery]);
+
   state.form.multi_record_canvas = true;
   state.files.c_depth = null;
   state.adv.circular_track_slots_enabled = false;
@@ -408,7 +514,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     releaseDiscovery = resolve;
   });
   const canceledRun = runner.runAnalysis();
-  assert.equal(ensurePyodideCalls, 3);
+  assert.equal(ensurePyodideCalls, 4);
   await runner.cancelRunAnalysis();
   releaseDiscovery();
   assert.deepEqual(await canceledRun, { status: 'canceled' });
@@ -418,6 +524,41 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     workerMessages.filter(({ type }) => type === 'run').length,
     workerRunCountBeforeDiscoveryFailure
   );
+
+  state.form.multi_record_canvas = true;
+  state.files.c_gb = primary;
+  state.adv.multi_record_positions.splice(
+    0,
+    state.adv.multi_record_positions.length,
+    { selector: '#1', row: 2 }
+  );
+  state.circularRecordList.value = [{
+    selector: '#1',
+    record_id: 'preserved-record',
+    record_length: 123
+  }];
+  state.semanticFileWatchersSuppressed.value = false;
+  state.sessionImportRollbackInProgress.value = false;
+  let rejectStaleDiscovery;
+  ensurePyodideImpl = () => new Promise((_resolve, reject) => {
+    rejectStaleDiscovery = reject;
+  });
+  const staleDiscovery = runner.refreshCircularRecordOrder();
+  await Promise.resolve();
+  const discoveryStateBeforeRollback = {
+    records: structuredClone(state.circularRecordList.value),
+    positions: structuredClone(state.adv.multi_record_positions),
+    discovery: { ...state.circularRecordDiscovery }
+  };
+  state.semanticFileWatchersSuppressed.value = true;
+  await runner.refreshCircularRecordOrder({ suppress: true });
+  rejectStaleDiscovery(new Error('injected restored-file reparse failure'));
+  await staleDiscovery;
+  assert.deepEqual(state.circularRecordList.value, discoveryStateBeforeRollback.records);
+  assert.deepEqual(state.adv.multi_record_positions, discoveryStateBeforeRollback.positions);
+  assert.deepEqual(state.circularRecordDiscovery, discoveryStateBeforeRollback.discovery);
+  Object.defineProperty(primary, 'text', { value: primaryText, configurable: true });
+  state.semanticFileWatchersSuppressed.value = false;
 });
 
 test('Linear mode none ignores dormant comparison state while active depth and annotations render', async () => {
@@ -492,6 +633,50 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     losatFilename: '',
     losatFilenameActive: false
   });
+  Object.assign(state.adv, {
+    comparison_height: 'dormant-invalid-height',
+    min_bitscore: 'dormant-invalid-bitscore',
+    evalue: 'dormant-invalid-evalue',
+    identity: 'dormant-invalid-identity',
+    alignment_length: 'dormant-invalid-alignment',
+    pairwise_match_style: 'dormant-invalid-style'
+  });
+  state.losatProgram.value = 'dormant-invalid-program';
+  Object.assign(state.losat, {
+    totalThreadBudget: 'dormant-invalid-budget',
+    threadsPerJob: 'dormant-invalid-threads',
+    parallelWorkers: 'dormant-invalid-workers'
+  });
+  Object.assign(state.losat.blastp, {
+    mode: 'dormant-invalid-presentation',
+    maxHits: 'dormant-invalid-max-hits',
+    orthogroupMembershipMode: 'dormant-invalid-membership',
+    orthogroupMemberMaxHits: 'dormant-invalid-member-hits',
+    collinearMinAnchors: 'dormant-invalid-anchors',
+    collinearMaxUnitGap: 'dormant-invalid-unit-gap',
+    collinearMaxDiagonalDrift: 'dormant-invalid-drift',
+    collinearMaxConflictsInMergeGap: 'dormant-invalid-conflicts',
+    collinearMaxParalogLinksPerOrthogroup: 'dormant-invalid-paralogs',
+    collinearColorMode: 'dormant-invalid-color',
+    collinearAnchorMode: 'dormant-invalid-anchor-mode',
+    collinearSearchScope: 'dormant-invalid-scope'
+  });
+  const dormantComparisonSettingsBefore = structuredClone({
+    adv: {
+      comparison_height: state.adv.comparison_height,
+      min_bitscore: state.adv.min_bitscore,
+      evalue: state.adv.evalue,
+      identity: state.adv.identity,
+      alignment_length: state.adv.alignment_length,
+      pairwise_match_style: state.adv.pairwise_match_style
+    },
+    losatProgram: state.losatProgram.value,
+    losat: state.losat
+  });
+  const dormantRawCache = new AuditCacheMap([['dormant-raw', { stale: true }]]);
+  const dormantDerivedCache = new AuditCacheMap([['dormant-derived', { stale: true }]]);
+  state.losatCache.value = dormantRawCache;
+  state.losatDerivedCache.value = dormantDerivedCache;
   state.files.linearCanonicalComparisons = [{
     kind: 'precomputed',
     edgeKey: 'linear-none-first->linear-none-second',
@@ -542,7 +727,15 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   let pyodideWrites = 0;
   let losatCalls = 0;
   let annotationValidationCalls = 0;
+  let annotationValidationError = '';
+  let serializeCalls = 0;
   let serializedSnapshot = null;
+  let serializedRecordCatalog = null;
+  const preparedRecordCatalog = { mode: 'linear', status: 'ready', records: [] };
+  let prepareLinearRecordCatalogImpl = async () => ({
+    catalog: preparedRecordCatalog,
+    error: ''
+  });
   const previousLosatExecutor = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
   globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async () => {
     losatCalls += 1;
@@ -550,6 +743,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   };
 
   const runner = createRunAnalysis({
+    ...generatedArtifactSnapshotOptions,
     state,
     getPyodide: () => null,
     ensurePyodide: async () => {
@@ -560,16 +754,19 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       pyodideWrites += 1;
       throw new Error('mode none must not stage LOSAT input through Pyodide');
     },
-    serializeCanonicalFiles: (snapshot) => {
+    serializeCanonicalFiles: (snapshot, recordCatalog) => {
+      serializeCalls += 1;
       serializedSnapshot = snapshot;
+      serializedRecordCatalog = recordCatalog;
       return serializeActiveRenderFiles(state.mode.value, state, snapshot);
     },
+    prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: ({ loadComparison }) => {
       annotationValidationCalls += 1;
       assert.equal(loadComparison, false);
-      return '';
+      return annotationValidationError;
     },
     prepareCandidateCommit: ({
       results,
@@ -609,13 +806,51 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const payload = workerRunMessages.at(-1).payload;
   assert.equal(workerRunMessages.length, workerRunCountBefore + 1);
   assert.equal(serializedSnapshot, comparisonPlanSnapshot);
+  assert.equal(serializedRecordCatalog, preparedRecordCatalog);
   assert.equal(ensurePyodideCalls, 0);
   assert.equal(pyodideWrites, 0);
   assert.equal(losatCalls, 0);
+  assert.equal(dormantRawCache.probes, 0);
+  assert.equal(dormantDerivedCache.probes, 0);
   assert.equal(annotationValidationCalls, 1);
   assert.equal(activePrimaryReads, primaryReadsBefore + 3);
   assert.equal(inactiveFileReads, inactiveReadsBefore);
   assert.deepEqual(payload.request.comparisons, []);
+  assert.deepEqual({
+    adv: {
+      comparison_height: state.adv.comparison_height,
+      min_bitscore: state.adv.min_bitscore,
+      evalue: state.adv.evalue,
+      identity: state.adv.identity,
+      alignment_length: state.adv.alignment_length,
+      pairwise_match_style: state.adv.pairwise_match_style
+    },
+    losatProgram: state.losatProgram.value,
+    losat: state.losat
+  }, dormantComparisonSettingsBefore);
+  for (const field of [
+    'pairwiseMatchStyle',
+    'evalue',
+    'bitscore',
+    'identity',
+    'alignmentLength'
+  ]) {
+    assert.equal(Object.hasOwn(payload.request.diagramOptions, field), false);
+  }
+  assert.equal(
+    Object.hasOwn(
+      payload.request.diagramOptions.configOverrides,
+      'canvas.linear.comparison_height'
+    ),
+    false
+  );
+  assert.equal(
+    Object.hasOwn(
+      payload.request.diagramOptions.configOverrides,
+      'objects.blast_match.style'
+    ),
+    false
+  );
   assert.equal(payload.request.diagramOptions.annotations.sets[0].id, 'active-annotation');
   assert.equal(payload.request.diagramOptions.depthTracks.length, 1);
   assert.equal(
@@ -624,4 +859,49 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     )),
     false
   );
+
+  annotationValidationError = 'injected annotation target failure';
+  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
+  assert.match(state.errorLog.value?.summary || '', /injected annotation target failure/);
+  assert.equal(serializeCalls, 1, 'invalid annotations must fail before serialization');
+  assert.equal(
+    workerMessages.filter(({ type }) => type === 'run').length,
+    workerRunCountBefore + 1
+  );
+  annotationValidationError = '';
+
+  let releaseRecordCatalog;
+  prepareLinearRecordCatalogImpl = () => new Promise((resolve) => {
+    releaseRecordCatalog = resolve;
+  });
+  const committedResults = state.results.value;
+  const workerRunsBeforeCancel = workerMessages.filter(({ type }) => type === 'run').length;
+  const canceledRun = runner.runAnalysis(comparisonPlanSnapshot);
+  await Promise.resolve();
+  await runner.cancelRunAnalysis();
+  releaseRecordCatalog({ catalog: preparedRecordCatalog, error: '' });
+  assert.deepEqual(await canceledRun, { status: 'canceled' });
+  assert.equal(state.results.value, committedResults);
+  assert.equal(state.processing.value, false);
+  assert.equal(state.generationCancelRequested.value, false);
+  assert.equal(serializeCalls, 1);
+  assert.equal(
+    workerMessages.filter(({ type }) => type === 'run').length,
+    workerRunsBeforeCancel
+  );
+
+  prepareLinearRecordCatalogImpl = async () => {
+    throw new Error('injected record catalog failure');
+  };
+  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
+  assert.match(state.errorLog.value?.summary || '', /injected record catalog failure/);
+  assert.equal(state.processing.value, false);
+
+  prepareLinearRecordCatalogImpl = async () => ({
+    catalog: preparedRecordCatalog,
+    error: ''
+  });
+  const retryResult = result('linear-none-retry.svg', 'linear-none-retry');
+  workerResponses.push(response(retryResult, validCatalog(retryResult.name)));
+  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'ok' });
 });

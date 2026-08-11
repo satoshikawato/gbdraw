@@ -1,10 +1,10 @@
 import {
   getAllFeatureLegendGroups,
-  getLegendChildById,
   getVisibleFeatureLegendGroup,
   parseTransformXY
 } from './utils.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 import {
   diffLegendIntents,
   SPECIFIC_COLOR_FILE_OWNER
@@ -49,8 +49,14 @@ export const createLegendEntryActions = ({
     skipCaptureBaseConfig
   } = state;
 
-  const { updatePairwiseLegendPositions, reflowDualLegendLayout, compactLegendEntries, recenterCurrentLegendRoot } =
-    layoutActions;
+  const { updatePairwiseLegendPositions, reflowDualLegendLayout, compactLegendEntries } = layoutActions;
+  let legendGeometryChangedHandler = null;
+
+  const setLegendGeometryChangedHandler = (handler) => {
+    legendGeometryChangedHandler = typeof handler === 'function' ? handler : null;
+  };
+
+  const onLegendGeometryChanged = () => legendGeometryChangedHandler?.();
 
   const addLegendEntry = async (caption, color, options = {}) => {
     const owner = String(options.owner || '').trim();
@@ -70,6 +76,11 @@ export const createLegendEntryActions = ({
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
+    const composition = parseCompositionMetadata(svg);
+    const reflowMetrics = composition.legendReflow;
+    if (!reflowMetrics) {
+      throw new Error('This diagram has no legend reflow metadata. Regenerate it before editing the legend.');
+    }
 
     const legendGroup = svg.getElementById('legend');
     if (!legendGroup) {
@@ -125,17 +136,12 @@ export const createLegendEntryActions = ({
 
     caption = finalCaption;
 
-    let rectSize = 14;
+    const {
+      colorRectSize: rectSize,
+      lineHeight: lineMargin,
+      textXOffset: xMargin
+    } = reflowMetrics;
     const firstColorRect = targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
-    if (firstColorRect) {
-      const d = firstColorRect.getAttribute('d');
-      if (d) {
-        const lMatch = d.match(/L\s+([\d.]+),/);
-        if (lMatch) {
-          rectSize = parseFloat(lMatch[1]);
-        }
-      }
-    }
 
     let fontSize = 14;
     let fontFamily = 'Arial';
@@ -168,9 +174,6 @@ export const createLegendEntryActions = ({
       }
     }
 
-    const lineMargin = (24 / 14) * rectSize;
-    const xMargin = (22 / 14) * rectSize;
-
     let maxY = -lineMargin;
     const textElements = targetGroup.querySelectorAll('text');
     textElements.forEach((el) => {
@@ -202,28 +205,20 @@ export const createLegendEntryActions = ({
       const escapedFontFamily = fontFamily.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       const parser = new DOMParser();
 
-      let entryWidth = rectSize + xMargin + 100;
-      try {
-        const pyodide = getPyodide();
-        if (!pyodide) throw new Error('Pyodide not ready');
-        const widthResult = pyodide.runPython(`
+      const pyodide = getPyodide();
+      if (!pyodide) throw new Error('Pyodide not ready');
+      const widthResult = pyodide.runPython(`
 import json
 from gbdraw.core.text import calculate_bbox_dimensions
 width, _ = calculate_bbox_dimensions("${escapedCaption}", "${escapedFontFamily}", ${fontSize}, 72)
 json.dumps({"width": width})
 `);
-        const widthData = JSON.parse(widthResult);
-        entryWidth = rectSize + xMargin + widthData.width + xMargin;
-      } catch (e) {
-        console.warn('Could not calculate text width, using estimate');
+      const measuredWidth = Number(JSON.parse(widthResult).width);
+      if (!Number.isFinite(measuredWidth) || measuredWidth < 0) {
+        throw new Error('Python returned an invalid legend text width.');
       }
-
-      const viewBox = svg.getAttribute('viewBox');
-      let canvasWidth = 800;
-      if (viewBox) {
-        const parts = viewBox.split(/\s+/);
-        if (parts.length >= 4) canvasWidth = parseFloat(parts[2]);
-      }
+      const entryWidth = rectSize + xMargin + measuredWidth + xMargin;
+      const canvasWidth = composition.primary.finalBounds.width;
 
       for (const group of allTargetGroups) {
         const parentId = group.parentElement?.id || '';
@@ -233,17 +228,7 @@ json.dumps({"width": width})
           newY = 0;
 
         if (isHorizontalGroup) {
-          let featureLegendMaxWidth = canvasWidth;
-          const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-          if (horizontalLegend) {
-            const hPairwiseLegend = getLegendChildById(horizontalLegend, 'pairwise_legend');
-            if (hPairwiseLegend) {
-              const pairwiseTransform = hPairwiseLegend.getAttribute('transform');
-              if (pairwiseTransform) {
-                featureLegendMaxWidth = parseTransformXY(pairwiseTransform).x - xMargin;
-              }
-            }
-          }
+          const featureLegendMaxWidth = canvasWidth;
 
           let maxY = rectSize / 2;
           let maxXOnMaxY = 0;
@@ -358,7 +343,7 @@ json.dumps({"width": width})
         } else {
           updatePairwiseLegendPositions(svg);
         }
-        recenterCurrentLegendRoot(svg);
+        onLegendGeometryChanged();
       }
 
       if (shouldCommit) {
@@ -451,7 +436,7 @@ json.dumps({"width": width})
 
     if (removed) {
       compactLegendEntries(svg);
-      recenterCurrentLegendRoot(svg);
+      onLegendGeometryChanged();
 
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
@@ -558,7 +543,7 @@ json.dumps({"width": width})
         !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
       if (hasDualLegends) reflowDualLegendLayout(svg);
       else updatePairwiseLegendPositions(svg);
-      recenterCurrentLegendRoot(svg);
+      onLegendGeometryChanged();
       skipCaptureBaseConfig.value = true;
       if (resultIndex >= 0 && results.value.length > resultIndex) {
         results.value[resultIndex] = { ...results.value[resultIndex], content: serializeCleanSvg(svg) };
@@ -797,7 +782,7 @@ json.dumps({"width": width})
     } else {
       updatePairwiseLegendPositions(svg);
     }
-    recenterCurrentLegendRoot(svg);
+    onLegendGeometryChanged();
 
     skipCaptureBaseConfig.value = true;
     const resultIdx = selectedResultIndex.value;
@@ -843,8 +828,10 @@ json.dumps({"width": width})
     deleteLegendEntry,
     extractLegendEntries,
     legendEntryExists,
+    onLegendGeometryChanged,
     removeLegendEntry,
     restoreDeletedLegendEntries,
+    setLegendGeometryChangedHandler,
     syncFileLegendEntries,
     updateLegendEntryCaption,
     updateLegendEntryColor,

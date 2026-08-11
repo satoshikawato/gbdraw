@@ -14,6 +14,7 @@ from gbdraw.config.models import (
 )
 from gbdraw.config.toml import load_config_toml
 from gbdraw.configurators import LegendDrawingConfigurator, LegendMeasurement
+from gbdraw.layout.spatial import Aabb, union_aabbs
 from gbdraw.render.groups.circular.legend import LegendGroup as CircularLegendGroup
 from gbdraw.render.groups.linear.legend import LegendGroup as LinearLegendGroup
 
@@ -74,13 +75,24 @@ def test_circular_legend_measurement_carries_the_render_layout() -> None:
 
     measurement = configurator.measure_legend(
         _legend_table(),
-        canvas_config,
+        placement=canvas_config.legend_position,
+        wrap_width=canvas_config.total_width,
     )
 
     assert isinstance(measurement, LegendMeasurement)
     assert measurement.circular_layout is not None
     assert measurement.legend_width == measurement.circular_layout.width
     assert measurement.legend_height == measurement.circular_layout.height
+    assert measurement.local_bounds.min_x == pytest.approx(0.0)
+    assert measurement.local_bounds.min_y == pytest.approx(
+        -0.5 * measurement.color_rect_size
+    )
+    assert measurement.local_bounds.max_x == pytest.approx(
+        measurement.legend_width
+    )
+    assert measurement.local_bounds.max_y == pytest.approx(
+        measurement.legend_height - (0.5 * measurement.color_rect_size)
+    )
     assert measurement.has_gradient is True
     assert not hasattr(configurator, "legend_width")
 
@@ -151,7 +163,8 @@ def test_linear_legend_measurement_is_the_renderer_geometry_authority(
 
     measurement = configurator.measure_legend(
         legend_table,
-        canvas_config,
+        placement=canvas_config.legend_position,
+        wrap_width=canvas_config.total_width,
     )
     group = LinearLegendGroup(
         canvas_config,
@@ -183,6 +196,10 @@ def test_linear_legend_measurement_is_the_renderer_geometry_authority(
     )
     assert measurement.legend_width == pytest.approx(group.legend_width)
     assert measurement.legend_height == pytest.approx(group.legend_height)
+    assert measurement.local_bounds.min_x == pytest.approx(0.0)
+    assert measurement.local_bounds.min_y == pytest.approx(0.0)
+    assert measurement.local_bounds.max_x == pytest.approx(group.legend_width)
+    assert measurement.local_bounds.max_y == pytest.approx(group.legend_height)
     with pytest.raises(FrozenInstanceError):
         measurement.linear_layout.active.width = 1
 
@@ -208,7 +225,11 @@ def test_empty_legend_measurement_is_an_immutable_zero_value(mode: str) -> None:
         )
     configurator = _configurator(profile, canvas_config)
 
-    measurement = configurator.measure_legend({}, canvas_config)
+    measurement = configurator.measure_legend(
+        {},
+        placement=canvas_config.legend_position,
+        wrap_width=canvas_config.total_width,
+    )
 
     assert measurement.legend_width == 0
     assert measurement.legend_height == 0
@@ -220,11 +241,15 @@ def test_empty_legend_measurement_is_an_immutable_zero_value(mode: str) -> None:
     assert measurement.has_gradient is False
     assert measurement.circular_layout is None
     assert measurement.linear_layout is None
+    assert measurement.local_bounds.min_x == 0.0
+    assert measurement.local_bounds.min_y == 0.0
+    assert measurement.local_bounds.max_x == 0.0
+    assert measurement.local_bounds.max_y == 0.0
     with pytest.raises(FrozenInstanceError):
         measurement.legend_width = 1
 
 
-def test_legend_mode_dispatch_does_not_use_the_canvas_class_name() -> None:
+def test_legend_mode_dispatch_uses_the_render_profile() -> None:
     profile = LinearRenderProfile(_config())
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=1,
@@ -233,19 +258,86 @@ def test_legend_mode_dispatch_does_not_use_the_canvas_class_name() -> None:
         legend="right",
     )
     configurator = _configurator(profile, canvas_config)
-    misleading_canvas_type = type(
-        "CircularCanvasConfigurator",
-        (),
-        {
-            "legend_position": "right",
-            "total_width": canvas_config.total_width,
-        },
-    )
-
     measurement = configurator.measure_legend(
         _legend_table(),
-        misleading_canvas_type(),
+        placement="right",
+        wrap_width=canvas_config.total_width,
     )
 
     assert measurement.circular_layout is None
     assert measurement.legend_height > 0
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_legend_local_bounds_include_stroke_at_its_painted_position(mode: str) -> None:
+    cfg = _config()
+    if mode == "circular":
+        profile = CircularRenderProfile(cfg)
+        canvas_config = CircularCanvasConfigurator(
+            output_prefix="out",
+            profile=profile,
+            legend="right",
+            gb_record=_record(),
+        )
+    else:
+        profile = LinearRenderProfile(cfg)
+        canvas_config = LinearCanvasConfigurator(
+            num_of_entries=1,
+            longest_genome=1_000,
+            profile=profile,
+            legend="right",
+        )
+    legend_table = _legend_table()
+    legend_table["CDS"]["stroke"] = "#222222"
+    legend_table["CDS"]["width"] = 6
+    measurement = _configurator(profile, canvas_config).measure_legend(
+        legend_table,
+        placement=canvas_config.legend_position,
+        wrap_width=canvas_config.total_width,
+    )
+
+    rect_size = float(measurement.color_rect_size)
+    if mode == "circular":
+        assert measurement.circular_layout is not None
+        layout = measurement.circular_layout
+        entry = layout.solid_entries[0]
+        base = Aabb(
+            0.0,
+            -0.5 * rect_size,
+            float(layout.width),
+            float(layout.height) - (0.5 * rect_size),
+        )
+        rect_x = float(entry.rect_x)
+        rect_y = float(entry.rect_y)
+    else:
+        assert measurement.linear_layout is not None
+        layout = measurement.linear_layout.active
+        entry = layout.feature.entries[0]
+        base = Aabb(0.0, 0.0, float(layout.width), float(layout.height))
+        rect_x = float(layout.feature_x) + float(entry.rect_x)
+        rect_y = float(layout.feature_y) + float(entry.rect_y)
+    stroked_rect = Aabb(
+        rect_x,
+        rect_y - (0.5 * rect_size),
+        rect_x + rect_size,
+        rect_y + (0.5 * rect_size),
+    ).expanded(3.0)
+    assert measurement.local_bounds == union_aabbs((base, stroked_rect))
+
+
+@pytest.mark.parametrize("wrap_width", [-1.0, float("inf"), float("nan")])
+def test_legend_measurement_rejects_invalid_wrap_width(wrap_width: float) -> None:
+    profile = CircularRenderProfile(_config())
+    canvas_config = CircularCanvasConfigurator(
+        output_prefix="out",
+        profile=profile,
+        legend="right",
+        gb_record=_record(),
+    )
+
+    with pytest.raises(ValueError, match="wrap width"):
+        _configurator(profile, canvas_config).measure_legend(
+            _legend_table(),
+            placement="right",
+            wrap_width=wrap_width,
+        )

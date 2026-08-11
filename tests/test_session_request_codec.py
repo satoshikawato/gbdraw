@@ -64,8 +64,10 @@ from gbdraw.session_request_codec import (
     CanonicalRequestDecodingError,
     CanonicalRequestEncodingError,
     EncodedCanonicalRequest,
+    _read_typed_json_resource,
     decode_canonical_request,
     encode_canonical_request,
+    encode_canonical_typed_resource,
 )
 from gbdraw.tracks import (
     CircularTrackSlot,
@@ -93,6 +95,89 @@ def _materialize_resources(
 def _source_file(path: Path, content: str = "source\n") -> Path:
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def test_typed_collinearity_anchor_schema2_and_schema1_compatibility(
+    tmp_path: Path,
+) -> None:
+    anchor = CollinearityAnchor(
+        query_protein_id="query-protein",
+        subject_protein_id="subject-protein",
+        query_record_index=0,
+        subject_record_index=1,
+        query_order=0,
+        subject_order=0,
+        query_start=10,
+        query_end=20,
+        subject_start=30,
+        subject_end=40,
+        identity=95.0,
+        evalue=1e-10,
+        bitscore=100.0,
+        alignment_length=10,
+        query_feature_svg_id="query-stable",
+        subject_feature_svg_id="subject-stable",
+        source="test",
+        query_unit_id="query-unit",
+        subject_unit_id="subject-unit",
+        query_unit_kind="cds",
+        subject_unit_kind="cds",
+        query_locus_id=None,
+        subject_locus_id=None,
+        query_display_name="Query",
+        subject_display_name="Subject",
+        query_view_feature_svg_id="query-view",
+        subject_view_feature_svg_id="subject-view",
+        query_feature_index=3,
+        subject_feature_index=7,
+    )
+    current = json.loads(
+        encode_canonical_typed_resource("anchor", anchor).decode("utf-8")
+    )
+    assert current["schema"] == 2
+
+    def decode(payload: dict[str, Any], name: str) -> CollinearityAnchor:
+        path = tmp_path / name
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return _read_typed_json_resource(
+            "typed-anchor",
+            value_kind="anchor",
+            expected=CollinearityAnchor,
+            path="test.anchor",
+            resource_paths={"typed-anchor": path},
+        )
+
+    assert decode(current, "current.json") == anchor
+
+    legacy = copy.deepcopy(current)
+    legacy["schema"] = 1
+    for field_name in (
+        "queryViewFeatureSvgId",
+        "subjectViewFeatureSvgId",
+        "queryFeatureIndex",
+        "subjectFeatureIndex",
+    ):
+        legacy["value"]["fields"].pop(field_name)
+    decoded_legacy = decode(legacy, "legacy.json")
+    assert decoded_legacy.query_view_feature_svg_id == ""
+    assert decoded_legacy.subject_view_feature_svg_id == ""
+    assert decoded_legacy.query_feature_index is None
+    assert decoded_legacy.subject_feature_index is None
+
+    missing_current = copy.deepcopy(current)
+    missing_current["value"]["fields"].pop("queryFeatureIndex")
+    with pytest.raises(CanonicalRequestDecodingError, match="Missing required"):
+        decode(missing_current, "missing-current.json")
+
+    missing_legacy_required = copy.deepcopy(legacy)
+    missing_legacy_required["value"]["fields"].pop("queryProteinId")
+    with pytest.raises(CanonicalRequestDecodingError, match="Missing required"):
+        decode(missing_legacy_required, "missing-legacy.json")
+
+    unknown_legacy = copy.deepcopy(legacy)
+    unknown_legacy["value"]["fields"]["unknownIdentity"] = "bad"
+    with pytest.raises(CanonicalRequestDecodingError, match="Unknown field"):
+        decode(unknown_legacy, "unknown-legacy.json")
 
 
 def _payload_for_schema(

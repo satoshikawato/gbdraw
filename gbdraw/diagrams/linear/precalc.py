@@ -99,9 +99,7 @@ def _precalculate_definition_metrics(
 def _precalculate_feature_layers(
     records: list[SeqRecord],
     feature_config: FeatureDrawingConfigurator,
-    canvas_config: LinearCanvasConfigurator,
     profile: LinearRenderProfile,
-    orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
 ) -> list[FeatureBuildResult]:
     """Build feature objects once per record for the linear assembly pipeline."""
 

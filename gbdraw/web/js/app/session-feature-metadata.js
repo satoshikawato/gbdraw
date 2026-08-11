@@ -3,6 +3,14 @@ import {
   extractFeatureMetadataForPreview
 } from './feature-metadata-extraction.js';
 import { cloneJsonValue } from '../services/json-clone.js';
+import { enrichFeatureWithOrthogroup } from '../services/orthogroup-feature-metadata.js';
+import {
+  RECORD_INDEX_KEYS,
+  RENDERED_FEATURE_ID_KEYS,
+  STABLE_FEATURE_ID_KEYS,
+  nonnegativeIntegerAliasStatus,
+  textAliasStatus
+} from '../services/feature-identity.js';
 
 const MISSING_INPUTS_WARNING =
   'Feature metadata could not be recovered because the session does not include embedded GenBank inputs. Generate the diagram again or save a session with embedded inputs.';
@@ -20,8 +28,10 @@ const normalizeKey = (value) => String(value || '').trim();
 
 export const normalizeRecordIndex = (value) => {
   if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
+  const text = String(value).trim();
+  if (typeof value === 'boolean' || !/^\d+$/.test(text)) return null;
+  const numeric = Number(text);
+  return Number.isSafeInteger(numeric) ? numeric : null;
 };
 
 const addNormalizedId = (ids, value) => {
@@ -34,6 +44,7 @@ const renderedFeatureIdRegex = () => /data-gbdraw-feature-id\s*=\s*["']([^"']+)[
 const createRenderedIdentityCollection = () => ({
   byRenderedId: new Map(),
   renderedIds: new Set(),
+  ambiguousRenderedIds: new Set(),
   byStableId: new Map(),
   byStableRecordKey: new Map(),
   totalRenderedCount: 0
@@ -54,9 +65,34 @@ const addToIdentityListMap = (target, key, identity) => {
   target.set(key, items);
 };
 
+const removeFromIdentityListMap = (target, key, identity) => {
+  if (!key) return;
+  const remaining = (target.get(key) || []).filter((item) => item !== identity);
+  if (remaining.length > 0) target.set(key, remaining);
+  else target.delete(key);
+};
+
+const markRenderedIdentityAmbiguous = (collection, renderedId) => {
+  const normalizedRenderedId = normalizeRenderedFeatureId(renderedId);
+  if (!normalizedRenderedId) return;
+  const existing = collection.byRenderedId.get(normalizedRenderedId);
+  if (existing) {
+    collection.byRenderedId.delete(normalizedRenderedId);
+    removeFromIdentityListMap(collection.byStableId, existing.stableId, existing);
+    removeFromIdentityListMap(
+      collection.byStableRecordKey,
+      stableRecordKey(existing.stableId, existing.recordIndex),
+      existing
+    );
+  }
+  collection.renderedIds.add(normalizedRenderedId);
+  collection.ambiguousRenderedIds.add(normalizedRenderedId);
+  collection.totalRenderedCount = collection.renderedIds.size;
+};
+
 const addRenderedIdentity = (collection, identity) => {
   const renderedId = normalizeRenderedFeatureId(identity?.renderedId);
-  if (!renderedId || collection.byRenderedId.has(renderedId)) return;
+  if (!renderedId || collection.ambiguousRenderedIds.has(renderedId)) return;
   const stableId = normalizeRenderedFeatureId(identity?.stableId) || renderedId;
   const recordIndex = normalizeRecordIndex(identity?.recordIndex);
   const normalized = {
@@ -66,6 +102,17 @@ const addRenderedIdentity = (collection, identity) => {
     recordId: normalizeKey(identity?.recordId),
     elementId: normalizeKey(identity?.elementId) || renderedId
   };
+  const existing = collection.byRenderedId.get(renderedId);
+  if (existing) {
+    const agrees = (
+      existing.stableId === normalized.stableId &&
+      existing.recordIndex === normalized.recordIndex &&
+      existing.recordId === normalized.recordId
+    );
+    if (agrees) return;
+    markRenderedIdentityAmbiguous(collection, renderedId);
+    return;
+  }
   collection.byRenderedId.set(renderedId, normalized);
   collection.renderedIds.add(renderedId);
   addToIdentityListMap(collection.byStableId, stableId, normalized);
@@ -144,9 +191,14 @@ export const collectRenderedFeatureIdsFromResults = (results) => {
     const identities = collectRenderedFeatureIdentitiesFromSvg(result?.content || '');
     identitiesByResultIndex[index] = identities;
     byResultIndex[index] = identities.renderedIds;
-    identities.byRenderedId.forEach((identity) => {
-      allIds.add(identity.renderedId);
-      addRenderedIdentity(allIdentities, identity);
+    identities.renderedIds.forEach((renderedId) => {
+      allIds.add(renderedId);
+      if (identities.ambiguousRenderedIds.has(renderedId)) {
+        markRenderedIdentityAmbiguous(allIdentities, renderedId);
+        return;
+      }
+      const identity = identities.byRenderedId.get(renderedId);
+      if (identity) addRenderedIdentity(allIdentities, identity);
     });
   });
   return {
@@ -191,11 +243,33 @@ export const featureRenderedCandidate = (feature) =>
   );
 
 export const featureRecordIndexCandidate = (feature) => {
-  for (const value of [feature?.fileIdx, feature?.record_idx, feature?.recordIndex, feature?.record_index]) {
-    const normalized = normalizeRecordIndex(value);
-    if (normalized !== null) return normalized;
+  const status = nonnegativeIntegerAliasStatus(feature, RECORD_INDEX_KEYS);
+  return status.valid && status.supplied ? status.value : null;
+};
+
+const featureAgreesWithRenderedIdentity = (feature, identity) => {
+  if (!identity?.renderedId) return false;
+  const stable = textAliasStatus(feature, STABLE_FEATURE_ID_KEYS);
+  const rendered = textAliasStatus(feature, RENDERED_FEATURE_ID_KEYS);
+  const legacySvg = textAliasStatus(feature, ['svg_id', 'svgId']);
+  const recordIndex = nonnegativeIntegerAliasStatus(feature, RECORD_INDEX_KEYS);
+  const recordId = textAliasStatus(feature, ['record_id', 'recordId']);
+  if (![stable, rendered, legacySvg, recordIndex, recordId].every((status) => status.valid)) {
+    return false;
   }
-  return null;
+  if (stable.supplied && stable.value !== identity.stableId) return false;
+  if (rendered.supplied && rendered.value !== identity.renderedId) return false;
+  if (
+    legacySvg.supplied &&
+    legacySvg.value !== identity.renderedId &&
+    legacySvg.value !== identity.stableId
+  ) return false;
+  if (
+    recordIndex.supplied &&
+    (identity.recordIndex === null || recordIndex.value !== identity.recordIndex)
+  ) return false;
+  if (recordId.supplied && recordId.value !== identity.recordId) return false;
+  return true;
 };
 
 const collectAliasMetadataFeatureIds = (features) => {
@@ -225,6 +299,7 @@ export const classifyFeatureMetadataState = ({
   let exactMatchingCount = 0;
   let aliasMatchingCount = 0;
   selectedIds.forEach((id) => {
+    if (selectedIdentities.ambiguousRenderedIds?.has(id)) return;
     if (exactMetadataIds.has(id)) {
       exactMatchingCount += 1;
       return;
@@ -411,17 +486,25 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
 
   sourceFeatures.forEach((feature, index) => {
     const oldSvgId = featureSvgId(feature);
-    const explicitRenderedId = featureRenderedCandidate(feature);
+    const explicitRenderedStatus = textAliasStatus(feature, RENDERED_FEATURE_ID_KEYS);
+    const legacySvgStatus = textAliasStatus(feature, ['svg_id', 'svgId']);
+    const explicitRenderedId = explicitRenderedStatus.valid ? explicitRenderedStatus.value : '';
     const exactRenderedId = (
-      explicitRenderedId && rendered.renderedIds.has(explicitRenderedId)
+      explicitRenderedStatus.valid && legacySvgStatus.valid &&
+      explicitRenderedId && rendered.renderedIds.has(explicitRenderedId) &&
+      !rendered.ambiguousRenderedIds?.has(explicitRenderedId)
         ? explicitRenderedId
-        : (oldSvgId && rendered.renderedIds.has(oldSvgId) ? oldSvgId : '')
+        : (
+          explicitRenderedStatus.valid && legacySvgStatus.valid &&
+          !explicitRenderedStatus.supplied && oldSvgId && rendered.renderedIds.has(oldSvgId) &&
+          !rendered.ambiguousRenderedIds?.has(oldSvgId)
+            ? oldSvgId
+            : ''
+        )
     );
-    if (exactRenderedId) {
-      const identity = rendered.byRenderedId.get(exactRenderedId) || {
-        renderedId: exactRenderedId,
-        stableId: featureStableCandidate(feature)
-      };
+    const exactIdentity = exactRenderedId ? rendered.byRenderedId.get(exactRenderedId) : null;
+    if (exactIdentity && featureAgreesWithRenderedIdentity(feature, exactIdentity)) {
+      const identity = exactIdentity;
       const nextFeature = withRenderedFeatureIdentity(
         feature,
         identity,
@@ -456,16 +539,9 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
     if (recordMatches.length === 1) {
       match = recordMatches[0];
       method = 'stable-record';
-    } else if (
-      stableId &&
-      (stableFeatureCounts.get(stableId) || 0) === 1 &&
-      stableMatches.length === 1
-    ) {
-      match = stableMatches[0];
-      method = 'unique-stable';
     }
 
-    if (match?.renderedId) {
+    if (match?.renderedId && featureAgreesWithRenderedIdentity(feature, match)) {
       const oldId = featureId(feature);
       const newFeature = withRenderedFeatureIdentity(
         feature,
@@ -698,35 +774,6 @@ export const migrateFeatureOverrideState = ({
     editorState: nextEditorState,
     warnings,
     skippedOverrideCount: skipped.count
-  };
-};
-
-const orthogroupIndexKey = (recordIndex, svgId) => `${Number(recordIndex)}:${String(svgId || '').trim()}`;
-
-const enrichFeatureWithOrthogroup = (orthogroupIndex, feature, recordIndex) => {
-  const svgId = String(feature?.svg_id || '').trim();
-  if (!svgId) return feature;
-  const stableSvgId = featureStableCandidate(feature);
-  const entry = orthogroupIndex instanceof Map
-    ? (
-        orthogroupIndex.get(orthogroupIndexKey(recordIndex, svgId)) ||
-        orthogroupIndex.get(svgId) ||
-        orthogroupIndex.get(orthogroupIndexKey(recordIndex, stableSvgId)) ||
-        orthogroupIndex.get(stableSvgId)
-      )
-    : null;
-  if (!entry) return feature;
-  return {
-    ...feature,
-    proteinId: entry.proteinId,
-    sourceProteinId: entry.sourceProteinId,
-    orthogroupId: entry.orthogroupId,
-    orthogroupMemberCount: entry.orthogroupMemberCount,
-    orthogroupRecordCoverage: entry.orthogroupRecordCoverage,
-    orthogroupRepresentative: entry.orthogroupRepresentative,
-    orthogroupScope: entry.orthogroupScope,
-    orthogroupSourceRecordIndex: entry.orthogroupSourceRecordIndex,
-    orthogroupMember: entry.orthogroupMember
   };
 };
 

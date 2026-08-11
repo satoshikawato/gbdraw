@@ -1,0 +1,425 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "Codex session work-pattern audit",
+    "description": "Aggregate analysis of local Codex sessions and recommendations for reusable Codex customization.",
+    "generatedAt": "2026-08-04T03:31:02Z",
+    "sources": [
+      {
+        "id": "session_projects",
+        "label": "Local Codex session archives, project aggregation",
+        "query": {
+          "engine": "SQLite 3",
+          "sql": "SELECT CASE WHEN project IN ('gbdraw','LOSAT','ganflu') THEN project ELSE 'Other research/tool repos' END AS project_group, COUNT(*) AS sessions, ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM sessions), 1) AS share_pct FROM sessions GROUP BY project_group ORDER BY sessions DESC;",
+          "description": "Groups deduplicated top-level user sessions by working-directory project.",
+          "language": "sql",
+          "executed_at": "2026-08-04T03:31:02Z",
+          "tables_used": ["sessions"],
+          "filters": ["source = vscode", "exclude internal title-generation sessions", "exclude approval-reviewer and spawned subagent sessions"],
+          "metric_definitions": ["Session count is the number of unique Codex session IDs after duplicate and migration removal.", "Project share is session count divided by 1,389 top-level user sessions."]
+        }
+      },
+      {
+        "id": "session_activities",
+        "label": "Local Codex session archives, activity tags",
+        "query": {
+          "engine": "SQLite 3",
+          "sql": "SELECT activity, COUNT(DISTINCT session_id) AS sessions, ROUND(100.0 * COUNT(DISTINCT session_id) / (SELECT COUNT(*) FROM sessions), 1) AS share_pct FROM session_activity GROUP BY activity ORDER BY sessions DESC;",
+          "description": "Counts sessions matched to each activity tag from the session title or first cleaned user request.",
+          "language": "sql",
+          "executed_at": "2026-08-04T03:31:02Z",
+          "tables_used": ["session_activity", "sessions"],
+          "filters": ["source = vscode", "one count per session and activity"],
+          "metric_definitions": ["Activity tags are multi-label keyword classifications; shares do not sum to 100%."]
+        }
+      },
+      {
+        "id": "prompt_behaviors",
+        "label": "Local Codex session archives, recurring request patterns",
+        "query": {
+          "engine": "SQLite 3",
+          "sql": "SELECT behavior, COUNT(DISTINCT session_id) AS sessions, ROUND(100.0 * COUNT(DISTINCT session_id) / (SELECT COUNT(*) FROM sessions), 1) AS share_pct FROM prompt_behavior GROUP BY behavior ORDER BY sessions DESC;",
+          "description": "Counts recurring instructions across cleaned user prompts and session titles.",
+          "language": "sql",
+          "executed_at": "2026-08-04T03:31:02Z",
+          "tables_used": ["prompt_behavior", "sessions"],
+          "filters": ["source = vscode", "one count per session and behavior"],
+          "metric_definitions": ["Behavior matches are regex-based and overlapping; counts indicate workflow frequency, not exclusive task categories."]
+        }
+      },
+      {
+        "id": "artifact_inventory",
+        "label": "Local Codex, repository skill, plugin, agent, and guidance inventory"
+      },
+      {
+        "id": "codex_manual",
+        "label": "Official Codex customization manual",
+        "href": "https://learn.chatgpt.com/docs/customization/overview"
+      }
+    ],
+    "charts": [
+      {
+        "id": "project_distribution_chart",
+        "title": "Top-level Codex sessions by project",
+        "subtitle": "January 1 through August 4, 2026; 1,389 deduplicated user sessions",
+        "showDescription": true,
+        "type": "horizontalBar",
+        "dataset": "project_distribution",
+        "sourceId": "session_projects",
+        "encodings": {
+          "x": {
+            "field": "project_group",
+            "type": "nominal",
+            "label": "Project"
+          },
+          "y": {
+            "field": "sessions",
+            "type": "quantitative",
+            "format": "number",
+            "label": "Sessions"
+          },
+          "label": {
+            "field": "sessions",
+            "type": "quantitative",
+            "format": "number"
+          },
+          "tooltip": [
+            {
+              "field": "project_group",
+              "type": "nominal",
+              "label": "Project"
+            },
+            {
+              "field": "sessions",
+              "type": "quantitative",
+              "format": "number",
+              "label": "Sessions"
+            },
+            {
+              "field": "share_pct",
+              "type": "quantitative",
+              "format": "number",
+              "label": "Share",
+              "unit": "%"
+            }
+          ]
+        },
+        "xAxisTitle": "Sessions",
+        "yAxisTitle": "Project",
+        "valueFormat": "number",
+        "layout": "full",
+        "maxRows": 4,
+        "surface": {
+          "palettePolicy": "single-root preferred",
+          "showValueLabels": true
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "activity_table",
+        "title": "Recurring activity tags",
+        "subtitle": "Multi-label classification of the session title or first cleaned request",
+        "showDescription": true,
+        "dataset": "activity_counts",
+        "density": "comfortable",
+        "sourceId": "session_activities",
+        "defaultSort": {
+          "field": "sessions",
+          "direction": "desc"
+        },
+        "columns": [
+          {
+            "field": "activity",
+            "label": "Activity",
+            "type": "text"
+          },
+          {
+            "field": "sessions",
+            "label": "Sessions",
+            "type": "number",
+            "format": "number",
+            "align": "right"
+          },
+          {
+            "field": "share_pct",
+            "label": "Share of sessions",
+            "type": "number",
+            "format": "number",
+            "unit": "%",
+            "align": "right"
+          }
+        ]
+      },
+      {
+        "id": "behavior_table",
+        "title": "Repeated request patterns",
+        "subtitle": "Overlapping prompt-pattern matches across 1,389 user sessions",
+        "showDescription": true,
+        "dataset": "behavior_counts",
+        "density": "comfortable",
+        "sourceId": "prompt_behaviors",
+        "defaultSort": {
+          "field": "sessions",
+          "direction": "desc"
+        },
+        "columns": [
+          {
+            "field": "behavior",
+            "label": "Request pattern",
+            "type": "text"
+          },
+          {
+            "field": "sessions",
+            "label": "Sessions",
+            "type": "number",
+            "format": "number",
+            "align": "right"
+          },
+          {
+            "field": "share_pct",
+            "label": "Share of sessions",
+            "type": "number",
+            "format": "number",
+            "unit": "%",
+            "align": "right"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# Codex session work-pattern audit"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "sourceId": "session_projects",
+        "body": "## Your Codex use is focused enough to automate\n\nThe local archives contain 1,853 transcript files and 1,684 unique session IDs. After removing 169 duplicate or migrated copies, 67 internal title-generation sessions, and 228 approval-reviewer or spawned-agent threads, the analysis covers **1,389 top-level user sessions** from January 1 through August 4, 2026.\n\nMost work sits in two codebases: `gbdraw` accounts for 992 sessions (71.4%) and `LOSAT` for 332 (23.9%). The strongest workflow signal is plan-led implementation. A named plan appears in 486 sessions, and 127 sessions explicitly ask Codex to update the plan after work. That should become a skill first.\n\nThe best customization sequence is: consolidate stable repository rules, make four focused skills, add two read-only custom agents, then package the stable skills as a plugin only if you want cross-repository or team distribution."
+      },
+      {
+        "id": "project_concentration",
+        "type": "markdown",
+        "sourceId": "session_projects",
+        "body": "## `gbdraw` and `LOSAT` account for 95.3% of sessions\n\nThe project mix is not broad general coding. You spend most sessions building scientific software with publication-quality rendering, browser interfaces, exact reference parity, and performance constraints. This concentration favors repository skills and guidance over a large personal plugin today."
+      },
+      {
+        "id": "project_chart_block",
+        "type": "chart",
+        "chartId": "project_distribution_chart",
+        "layout": "full"
+      },
+      {
+        "id": "activity_findings",
+        "type": "markdown",
+        "sourceId": "session_activities",
+        "body": "## You alternate between implementation and skeptical verification\n\nDiagram/rendering work, feature implementation, and bug diagnosis each appear in about 29% to 32% of sessions. Web UI work appears in 19.2%, while planning/review appears in 18.1%. Performance is smaller overall at 9.6%, but it is concentrated in `LOSAT`, where 91 of 332 sessions mention performance and 123 mention NCBI parity.\n\nThese categories overlap. A typical session may implement a rendering feature, change the browser UI, and add regression tests, so the percentages should not be added together."
+      },
+      {
+        "id": "activity_table_block",
+        "type": "table",
+        "tableId": "activity_table",
+        "layout": "full"
+      },
+      {
+        "id": "workflow_findings",
+        "type": "markdown",
+        "sourceId": "prompt_behaviors",
+        "body": "## Plan execution is the clearest reusable procedure\n\nA named plan appears in 486 sessions (35.0%). Fidelity or no-workaround language appears in 136, and explicit KISS/YAGNI/SOLID/DRY language appears in 133. You ask for five concrete problems in 63 sessions. These are not isolated preferences; they define two stable roles: a plan executor and an independent plan critic."
+      },
+      {
+        "id": "behavior_table_block",
+        "type": "table",
+        "tableId": "behavior_table",
+        "layout": "full"
+      },
+      {
+        "id": "scope_and_definitions",
+        "type": "markdown",
+        "body": "## Scope and metric definitions\n\nA **top-level user session** is a unique session ID whose source is the user-facing Codex client. Approval-reviewer threads, explicit spawned-agent threads, and internal title-generation threads are excluded from workload counts. Active and archived JSONL files from both local Codex profiles are included.\n\nProject is assigned from the session working directory. Activity and behavior counts are multi-label keyword matches against the session title or cleaned first user request. They measure repeated workflow shape, not engineering effort, elapsed time, or lines changed."
+      },
+      {
+        "id": "methodology",
+        "type": "markdown",
+        "body": "## Methodology separates user work from Codex bookkeeping\n\nThe scan streamed active and archived session JSONL files from the WSL and Windows Codex stores. It read session metadata, user-message text, and tool-call names; it did not read authentication files or attachments. Session IDs were deduplicated across stores and archive locations, retaining the copy with the most usable prompts.\n\nThe prompt cleaner removed injected plugin lists, repository instructions, environment blocks, and older IDE open-tab wrappers. Aggregate project, activity, and prompt-pattern tables were recomputed in SQLite before report generation."
+      },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "body": "## Counts are reliable; semantic tags are directional\n\nThe session and project counts are direct metadata counts and are ready to use. Keyword categories are useful for prioritization but can miss synonyms or assign one session to several themes. Session count also treats a short question and a week-long implementation thread equally.\n\nA robustness check excluded 67 title-generator sessions and 228 reviewer/subagent threads. Including those would overstate Codex customization, approval, and agent work. No raw transcript excerpts or secrets are included in this report."
+      },
+      {
+        "id": "skills_recommendation",
+        "type": "markdown",
+        "sourceId": "prompt_behaviors",
+        "body": "## Skills should capture the repeated procedures\n\n1. **`execute-plan-with-evidence` (highest priority, personal/global):** read a named plan, audit assumptions, execute one phase at a time, run the declared checks, update the plan with evidence and deviations, and stop on a defined regression gate. Evidence: 486 named-plan sessions and 127 plan-update sessions.\n2. **`verify-ncbi-parity-and-speed` (highest priority, LOSAT repo):** bundle the parity fixture matrix, exact-output comparison commands, NCBI source routing, native/WASM variants, benchmark protocol, and rollback gate. Evidence: 123 NCBI-parity sessions and 91 performance sessions inside LOSAT.\n3. **`change-gbdraw-rendering-surface` (high priority, gbdraw repo):** trace a rendering setting through typed core, Python API, CLI, Web request/session projection, tests, Gallery, and reference outputs. The existing guides already contain much of this knowledge; the skill should orchestrate it.\n4. **`browser-offline-qa` (medium priority, personal or shared):** verify Pyodide/WASM/offline startup, CSP and vendored assets, Python/Node Playwright fallbacks, cancellation, worker cleanup, narrow layouts, and cache-bust behavior. Evidence: 115 browser/offline request matches and 267 Web/UI sessions.\n5. **`prepare-bioinformatics-release` (medium priority):** build, package, smoke-test, and check generated artifacts for PyPI, Bioconda, WASM, and static deployment. Keep project-specific commands in references rather than one branching main workflow.\n\nDo not create new documentation or GitHub skills that duplicate the installed `document-generate`, `love-me-love-my-docs`, `avoid-ai-writing`, or GitHub plugin workflows."
+      },
+      {
+        "id": "agents_recommendation",
+        "type": "markdown",
+        "sourceId": "prompt_behaviors",
+        "body": "## Custom agents should supply an independent point of view\n\n- **`plan-critic` (read-only):** inspect the plan and codebase, return exactly five material issues with evidence, impact, and a decision or correction. This matches 63 explicit five-problem requests and can run beside the main implementation thread.\n- **`ncbi-parity-auditor` (read-only):** compare the Rust/WASM path, NCBI source, fixtures, output, and benchmark deltas without editing code. The separation matters because the implementer should not grade its own parity work.\n- **`visual-regression-reviewer` (optional):** render final examples and inspect layout, clipping, labels, Gallery truthfulness, and interaction regressions. Use it only when an independent visual pass can run in parallel.\n\nDo not make a generic implementation agent, documentation agent, or code explorer. Codex already has built-in worker and explorer roles; the reusable procedure belongs in a skill."
+      },
+      {
+        "id": "plugins_recommendation",
+        "type": "markdown",
+        "sourceId": "codex_manual",
+        "body": "## A plugin is a later distribution step\n\nA plugin is useful when the skills are stable enough to install as one package, when you want to share them with collaborators, or when the workflow needs external tools. Start with the skills above. If they work across `gbdraw`, `LOSAT`, and `ganflu`, package them later as a **`bioinformatics-maintainer`** skills-only plugin.\n\nUse the installed GitHub plugin for PR, CI, and publish work. For Cloudflare Pages operations, install the available Cloudflare plugin when you need live deployment actions instead of building a custom connector. A repo-specific `gbdraw` plugin adds packaging overhead without improving discovery inside the repository."
+      },
+      {
+        "id": "guidance_recommendation",
+        "type": "markdown",
+        "sourceId": "artifact_inventory",
+        "body": "## `AGENTS.md` or `CLAUDE.md` should hold only stable local rules\n\n- **`gbdraw`:** the root and Web guides already cover architecture, rendering contracts, browser checks, Gallery quality, generated artifacts, and the setting lifecycle. Avoid adding another large section. Move `docs/skills/maintain-python-api` and `docs/skills/web-gallery-screenshot-maintenance` into `.agents/skills` so Codex can discover both. Keep a short routing line in the Web guide.\n- **`LOSAT`:** make `AGENTS.md` the authoritative static guide and remove duplicated live status from `CLAUDE.md`. The current files already conflict: `AGENTS.md` says the long-sequence TBLASTX 2x-hit issue is resolved, while `CLAUDE.md` still lists it as under investigation. Move session resume, known issues, recently fixed work, and phase state into plan documents.\n- **`ganflu`:** add a concise repository guide. It currently has no `AGENTS.md` or `CLAUDE.md`. Capture build/test commands, classification-mode semantics, fixture expectations, browser/serverless privacy boundaries, generated artifacts, and Cloudflare deployment checks.\n- **Global guidance:** the personal Codex `AGENTS.md` is empty. Add only defaults that truly span repositories, such as minimizing new branches and compatibility paths, avoiding silent workarounds, running relevant verification after edits, and providing a commit handoff. Keep full plan execution in the skill.\n\nCodex discovers `AGENTS.md`, not `CLAUDE.md`, by default. If both tools must share guidance, choose one canonical file and make the other a short router; do not maintain two copies of changing status."
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "body": "## Recommended implementation order\n\n1. Consolidate the LOSAT guidance and create a minimal ganflu guide.\n2. Move the two hidden gbdraw skills into `.agents/skills`.\n3. Build and forward-test `execute-plan-with-evidence`.\n4. Build `verify-ncbi-parity-and-speed` and the read-only `ncbi-parity-auditor`.\n5. Add `plan-critic`, then measure whether it catches issues before implementation.\n6. Add browser/offline QA only after the first two skills are stable.\n7. Revisit a shared plugin after several successful uses in more than one repository."
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "body": "## Decisions to make before scaffolding\n\n- Should the plan-execution skill be personal across repositories or checked into each repository? The evidence favors personal/global, with project commands loaded from local guidance.\n- Should LOSAT parity verification fail on any byte difference or retain named, documented exceptions? The current guide has one narrow genetic-code exception, so the skill needs an explicit exception registry.\n- Do you want the eventual plugin only for yourself, for collaborators, or for public distribution? That decision changes how much metadata, compatibility work, and connector packaging is justified."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-04T03:31:02Z",
+    "status": "ready",
+    "datasets": {
+      "project_distribution": [
+        {
+          "project_group": "gbdraw",
+          "sessions": 992,
+          "share_pct": 71.4
+        },
+        {
+          "project_group": "LOSAT",
+          "sessions": 332,
+          "share_pct": 23.9
+        },
+        {
+          "project_group": "ganflu",
+          "sessions": 45,
+          "share_pct": 3.2
+        },
+        {
+          "project_group": "Other research/tool repos",
+          "sessions": 20,
+          "share_pct": 1.4
+        }
+      ],
+      "activity_counts": [
+        {
+          "activity": "Diagram and rendering work",
+          "sessions": 440,
+          "share_pct": 31.7
+        },
+        {
+          "activity": "Feature/change implementation",
+          "sessions": 429,
+          "share_pct": 30.9
+        },
+        {
+          "activity": "Bug diagnosis and fixes",
+          "sessions": 400,
+          "share_pct": 28.8
+        },
+        {
+          "activity": "Web UI and interaction",
+          "sessions": 267,
+          "share_pct": 19.2
+        },
+        {
+          "activity": "Planning, review, and audits",
+          "sessions": 251,
+          "share_pct": 18.1
+        },
+        {
+          "activity": "Tests and verification",
+          "sessions": 162,
+          "share_pct": 11.7
+        },
+        {
+          "activity": "Performance optimization",
+          "sessions": 134,
+          "share_pct": 9.6
+        },
+        {
+          "activity": "Documentation and writing",
+          "sessions": 97,
+          "share_pct": 7.0
+        },
+        {
+          "activity": "Release, packaging, and deploy",
+          "sessions": 49,
+          "share_pct": 3.5
+        },
+        {
+          "activity": "Git and GitHub",
+          "sessions": 43,
+          "share_pct": 3.1
+        },
+        {
+          "activity": "Architecture, API, and refactor",
+          "sessions": 29,
+          "share_pct": 2.1
+        },
+        {
+          "activity": "Codex customization",
+          "sessions": 28,
+          "share_pct": 2.0
+        }
+      ],
+      "behavior_counts": [
+        {
+          "behavior": "Execute a named plan",
+          "sessions": 486,
+          "share_pct": 35.0
+        },
+        {
+          "behavior": "Require fidelity/no workaround",
+          "sessions": 136,
+          "share_pct": 9.8
+        },
+        {
+          "behavior": "State KISS/YAGNI/SOLID/DRY",
+          "sessions": 133,
+          "share_pct": 9.6
+        },
+        {
+          "behavior": "Update the plan after work",
+          "sessions": 127,
+          "share_pct": 9.1
+        },
+        {
+          "behavior": "Browser/offline work",
+          "sessions": 115,
+          "share_pct": 8.3
+        },
+        {
+          "behavior": "Benchmark/performance work",
+          "sessions": 88,
+          "share_pct": 6.3
+        },
+        {
+          "behavior": "Ask for five problems",
+          "sessions": 63,
+          "share_pct": 4.5
+        },
+        {
+          "behavior": "Ask to persist/continue",
+          "sessions": 56,
+          "share_pct": 4.0
+        }
+      ]
+    }
+  },
+  "sources": []
+}

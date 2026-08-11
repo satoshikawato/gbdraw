@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { gunzipSync } from 'node:zlib';
 
 globalThis.window = {
   Vue: {
@@ -501,6 +503,48 @@ ORIGIN
     aliases: ['CATALOG.1', 'CATALOG'],
     sourceIndex: null
   }]);
+
+  const secondGenbank = genbank
+    .replaceAll('CATALOG', 'SECOND')
+    .replace('aaccggtt', 'ttggccaa');
+  const incompletePayload = structuredClone(payload);
+  incompletePayload.renderRequest.records.push({
+    ...structuredClone(renderRequest.records[0]),
+    recordKey: 'second-record',
+    source: { kind: 'genbank', resourceId: 'second-record' }
+  });
+  incompletePayload.resources['second-record'] = canonicalResource(
+    'genbank',
+    'second-primary.gbk',
+    secondGenbank
+  );
+  incompletePayload.webFiles.bindings.linearSeqs.push({
+    ...structuredClone(incompletePayload.webFiles.bindings.linearSeqs[0]),
+    uid: 'second-record',
+    gb: {
+      resourceId: 'second-record',
+      name: 'second-primary.gbk',
+      type: 'application/genbank',
+      lastModified: 8
+    }
+  });
+  incompletePayload.editorState.featureCatalog.items[0].recordKeys.push(
+    'second-record'
+  );
+  restoredPrimaryTextReads = 0;
+  const incompleteResult = await importSession({
+    target: {
+      files: [new Blob([JSON.stringify(incompletePayload)], { type: 'application/json' })],
+      value: 'selected'
+    }
+  });
+
+  assert.equal(incompleteResult.status, 'ok');
+  assert.equal(restoredPrimaryTextReads, 2);
+  assert.deepEqual(
+    state.matchSequenceRegistry.values().map((source) => source.recordId),
+    ['CATALOG.1', 'SECOND.1']
+  );
 });
 
 test('fresh Circular LOSAT resources become session-owned live files', async () => {
@@ -666,6 +710,68 @@ test('legacy standalone config import migrates retired values without a writer e
   assert.deepEqual(alerts, [
     'Legacy configuration loaded. Save as a session to use the current format.'
   ]);
+});
+
+const frozenV39Session = () => JSON.parse(gunzipSync(readFileSync(new URL(
+  '../fixtures/sessions/BGC0000708-BGC0000713.v39.gbdraw-session.json.gz',
+  import.meta.url
+))));
+
+test('visible protein cache entries from the frozen v39 session recover stable edge identities', async () => {
+  alerts.length = 0;
+  const sessionData = frozenV39Session();
+  const sourcePairs = sessionData.losatCache.entries
+    .filter((entry) => entry.display !== false)
+    .map((entry) => [entry.queryRecordInstanceKey, entry.subjectRecordInstanceKey]);
+  const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
+  const result = await importSession({ target: { files: [file], value: 'selected' } });
+
+  assert.equal(result.status, 'ok');
+  assert.deepEqual(
+    state.losatCacheInfo.value.map((entry) => [
+      entry.edgeKey,
+      entry.queryUid,
+      entry.subjectUid,
+      entry.queryIndex,
+      entry.subjectIndex,
+      entry.ordinal
+    ]),
+    sourcePairs.map(([queryUid, subjectUid], ordinal) => [
+      `${queryUid}->${subjectUid}`,
+      queryUid,
+      subjectUid,
+      ordinal,
+      ordinal + 1,
+      ordinal
+    ])
+  );
+  const firstRawEntry = state.losatCache.value.get(state.losatCacheInfo.value[0].key);
+  assert.deepEqual(
+    [firstRawEntry.queryRecordInstanceKey, firstRawEntry.subjectRecordInstanceKey],
+    sourcePairs[0]
+  );
+});
+
+test('a conflicting restored edge key is not exposed under the wrong endpoints', async () => {
+  alerts.length = 0;
+  const sessionData = frozenV39Session();
+  const visibleEntries = sessionData.losatCache.entries.filter(
+    (entry) => entry.display !== false
+  );
+  const conflictingEdgeKey = [
+    visibleEntries[1].queryRecordInstanceKey,
+    visibleEntries[1].subjectRecordInstanceKey
+  ].join('->');
+  visibleEntries[0].edgeKey = conflictingEdgeKey;
+  const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
+  const result = await importSession({ target: { files: [file], value: 'selected' } });
+
+  assert.equal(result.status, 'ok');
+  assert.equal(state.losatCacheInfo.value[0].edgeKey, undefined);
+  assert.equal(
+    state.losatCacheInfo.value.filter((entry) => entry.edgeKey === conflictingEdgeKey).length,
+    1
+  );
 });
 
 for (const version of [39, 40]) {

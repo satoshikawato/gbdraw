@@ -5,10 +5,9 @@ from typing import Literal, Mapping
 
 from ..core.text import calculate_bbox_dimensions
 from .circular_layout import min_gradient_label_text
+from .metrics import legend_line_height, legend_text_x_offset
 
 
-LINE_MARGIN_RATIO = 24 / 14
-X_MARGIN_RATIO = 22 / 14
 GRADIENT_BAR_WIDTH_RATIO = 10
 GRADIENT_LABEL_GAP_RATIO = 0.2
 
@@ -361,8 +360,8 @@ def build_linear_legend_layout(
             active_orientation=active_orientation,
         )
 
-    line_height = LINE_MARGIN_RATIO * color_rect_size
-    text_x_offset = X_MARGIN_RATIO * color_rect_size
+    line_height = legend_line_height(color_rect_size)
+    text_x_offset = legend_text_x_offset(color_rect_size)
     solid_entries = _measure_solid_entries(
         legend_table,
         font_family=font_family,

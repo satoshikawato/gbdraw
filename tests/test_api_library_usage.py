@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-import re
 from pathlib import Path
 
 import pandas as pd
@@ -10,7 +9,6 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw import CircularOptions
 import gbdraw.api.diagram as api_diagram_module
 from gbdraw.api import (
     CircularMultiRecordOptions,
@@ -51,53 +49,21 @@ SELECTED_FEATURES = [
 ]
 
 
-@pytest.mark.circular
-def test_documented_python_api_example_runs(
-    examples_dir: Path,
-    temp_output_dir: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    documentation = (Path(__file__).parents[1] / "docs" / "PYTHON_API.md").read_text(
-        encoding="utf-8"
-    )
-    blocks = re.findall(r"```python\n(.*?)\n```", documentation, re.DOTALL)
-    assert blocks
-    monkeypatch.setenv("GBDRAW_EXAMPLE_GBK", str(examples_dir / "MjeNMV.gb"))
-    monkeypatch.setenv("GBDRAW_EXAMPLES_DIR", str(examples_dir))
-    monkeypatch.setenv(
-        "GBDRAW_TEST_INPUTS_DIR",
-        str(Path(__file__).parent / "test_inputs"),
-    )
-    monkeypatch.setenv("GBDRAW_API_OUTPUT_DIR", str(temp_output_dir))
-
-    namespace: dict[str, object] = {}
-    for index, block in enumerate(blocks, start=1):
-        exec(compile(block, f"docs/PYTHON_API.md:block-{index}", "exec"), namespace)
-
-    documented_record = namespace["record"]
-    documented_options = namespace["options"]
-    assert isinstance(documented_record, SeqRecord)
-    assert isinstance(documented_options, CircularOptions)
-    assert set(documented_options.features.types) <= {
-        feature.type for feature in documented_record.features
-    }
-    assert (temp_output_dir / "api_circular.svg").exists()
-
-
 @pytest.mark.linear
 def test_documented_gff3_fasta_fixture_preserves_records_and_cds() -> None:
-    fixture_dir = Path(__file__).parents[1] / "examples" / "gff3_lambda"
+    fixture_dir = Path(__file__).parents[1] / "gbdraw" / "web" / "tutorial-data" / "lambda-gff3"
     records = load_gff_fasta(
-        [str(fixture_dir / "lambda_two_contigs.gff3")],
-        [str(fixture_dir / "lambda_two_contigs.fna")],
+        [str(fixture_dir / "NC_001416.gff3")],
+        [str(fixture_dir / "NC_001416.fna")],
         selected_features_set=["CDS", "gene"],
     )
 
-    assert [record.id for record in records] == ["lambda_left", "lambda_right"]
+    assert [record.id for record in records] == ["NC_001416.1"]
+    assert len(records[0]) == 48_502
     cds_features = [
         feature for record in records for feature in record.features if feature.type == "CDS"
     ]
-    assert len(cds_features) == 45
+    assert len(cds_features) == 73
     assert {feature.location.strand for feature in cds_features} == {1, -1}
     assert all(feature.qualifiers.get("translation") for feature in cds_features)
 
@@ -830,7 +796,7 @@ def test_circular_multi_builder_forwards_layout_options(
 
 
 @pytest.mark.circular
-def test_api_circular_minimal(examples_dir: Path, temp_output_dir: Path) -> None:
+def test_api_circular_minimal(examples_dir: Path, tmp_path: Path) -> None:
     record_path = examples_dir / "MjeNMV.gb"
     record = next(SeqIO.parse(str(record_path), "genbank"))
 
@@ -838,7 +804,7 @@ def test_api_circular_minimal(examples_dir: Path, temp_output_dir: Path) -> None
     default_colors = load_default_colors("", palette="default")
     color_table = read_color_table("")
 
-    output_prefix = temp_output_dir / "api_circular_minimal"
+    output_prefix = tmp_path / "api_circular_minimal"
     canvas = assemble_circular_diagram_from_record(
         record,
         cfg=GbdrawConfig.from_dict(config_dict),
@@ -859,7 +825,7 @@ def test_api_circular_minimal(examples_dir: Path, temp_output_dir: Path) -> None
 @pytest.mark.linear
 def test_api_linear_gene_specific_rule_uses_default_fallback_for_legend(
     test_inputs_dir: Path,
-    temp_output_dir: Path,
+    tmp_path: Path,
 ) -> None:
     record_path = test_inputs_dir / "HmmtDNA.gbk"
     record = next(SeqIO.parse(str(record_path), "genbank"))
@@ -871,7 +837,7 @@ def test_api_linear_gene_specific_rule_uses_default_fallback_for_legend(
         columns=["feature_type", "qualifier_key", "value", "color", "caption"],
     )
 
-    output_prefix = temp_output_dir / "api_linear_gene_legend_fallback"
+    output_prefix = tmp_path / "api_linear_gene_legend_fallback"
     canvas = assemble_linear_diagram_from_records(
         [record],
         blast_files=None,
@@ -891,7 +857,7 @@ def test_api_linear_gene_specific_rule_uses_default_fallback_for_legend(
 
 
 @pytest.mark.linear
-def test_api_linear_minimal(examples_dir: Path, temp_output_dir: Path) -> None:
+def test_api_linear_minimal(examples_dir: Path, tmp_path: Path) -> None:
     gbk_files = [
         str(examples_dir / "MjeNMV.gb"),
         str(examples_dir / "MelaMJNV.gb"),
@@ -902,7 +868,7 @@ def test_api_linear_minimal(examples_dir: Path, temp_output_dir: Path) -> None:
     default_colors = load_default_colors("", palette="default", load_comparison=False)
     color_table = read_color_table("")
 
-    output_prefix = temp_output_dir / "api_linear_minimal"
+    output_prefix = tmp_path / "api_linear_minimal"
     canvas = assemble_linear_diagram_from_records(
         records,
         blast_files=None,

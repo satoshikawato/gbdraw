@@ -96,12 +96,12 @@ def _extract_group_y(svg_text: str, group_id: str) -> float:
         None,
     )
     assert group is not None
-    match = re.search(
-        r"translate\([^,]+,([\-0-9.]+)\)",
+    translations = re.findall(
+        r"translate\(\s*([-+0-9.eE]+)[,\s]+([-+0-9.eE]+)\s*\)",
         group.attrib.get("transform", ""),
     )
-    assert match is not None
-    return float(match.group(1))
+    assert translations
+    return sum(float(y_value) for _x_value, y_value in translations)
 
 
 def _extract_axis_baseline_y(svg_text: str, group_id: str) -> float:

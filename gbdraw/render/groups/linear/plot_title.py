@@ -8,6 +8,7 @@ from svgwrite.text import TSpan, Text
 
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from ....core.text import calculate_bbox_dimensions, parse_mixed_content_text
+from ....layout.spatial import Aabb
 
 
 class PlotTitleGroup:
@@ -37,6 +38,12 @@ class PlotTitleGroup:
             self.font_family,
             self.font_size,
             cfg.canvas.dpi,
+        )
+        self.local_bounds = Aabb(
+            -0.5 * float(self.text_bbox_width),
+            -0.5 * float(self.text_bbox_height),
+            0.5 * float(self.text_bbox_width),
+            0.5 * float(self.text_bbox_height),
         )
         self._build()
 

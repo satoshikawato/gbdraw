@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -19,22 +16,6 @@ def test_generated_web_mode_profiles_match_python_source() -> None:
             "tools/generate_mode_profiles.py",
             "--check",
         ],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_web_mode_profile_helpers() -> None:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node is not available")
-
-    result = subprocess.run(
-        [node, "tests/web/mode-profiles.test.mjs"],
         cwd=REPO_ROOT,
         check=False,
         capture_output=True,

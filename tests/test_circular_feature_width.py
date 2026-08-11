@@ -15,6 +15,11 @@ from gbdraw.api.diagram import assemble_circular_diagram_from_record
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
+from gbdraw.diagrams.circular.presets import (
+    circular_feature_lane_direction_for_preset,
+    normalize_circular_track_preset,
+)
+from gbdraw.diagrams.circular.radial_layout import build_circular_feature_layout
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict
@@ -29,19 +34,6 @@ from svgwrite import Drawing
 
 
 SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
-
-
-def _stub_typed_request_export(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
 
 
 def _feature_width_slots(width: str) -> list[str]:
@@ -154,15 +146,72 @@ def _annulus_overlaps_band(
     return annulus_inner < (band_outer - tol) and annulus_outer > (band_inner + tol)
 
 
-def _extract_group_translate(svg_text: str, group_id: str) -> tuple[float, float] | None:
-    pattern = (
-        rf'<g id="{re.escape(group_id)}"[^>]*\btransform="translate\(\s*'
-        r'([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)"'
+def _feature_band_bounds_px(
+    feature_dict: dict | None,
+    total_length: int,
+    *,
+    base_radius_px: float,
+    track_ratio: float,
+    track_ratio_factor: float,
+    profile: CircularRenderProfile,
+    track_id_whitelist: set[int] | None = None,
+    preset: str | None = None,
+    **_unused: object,
+) -> tuple[float, float] | None:
+    """Measure the authoritative feature layout without a retired assembly seam."""
+    if not feature_dict or total_length <= 0:
+        return None
+    filtered = feature_dict
+    if track_id_whitelist is not None:
+        filtered = {
+            feature_id: feature
+            for feature_id, feature in feature_dict.items()
+            if int(getattr(feature, "feature_track_id", 0)) in track_id_whitelist
+        }
+        if not filtered:
+            return None
+    resolved_preset = normalize_circular_track_preset(
+        preset or profile.config.canvas.circular.track_type
     )
-    match = re.search(pattern, svg_text)
+    layout = build_circular_feature_layout(
+        filtered,
+        axis_radius_px=float(base_radius_px),
+        width_px=float(base_radius_px) * float(track_ratio) * float(track_ratio_factor),
+        lane_direction=circular_feature_lane_direction_for_preset(resolved_preset),
+        strandedness=profile.strandedness,
+    )
+    if layout is None:
+        return None
+    return float(layout.all_band_px.inner_px), float(layout.all_band_px.outer_px)
+
+
+def _add_mock_primary_group(canvas: Drawing) -> Drawing:
+    canvas.add(canvas.g(id="mock_primary"))
+    return canvas
+
+
+def _sum_translate(transform: str) -> tuple[float, float] | None:
+    matches = re.findall(
+        r"translate\(\s*([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)",
+        transform,
+    )
+    if not matches:
+        return None
+    return (
+        sum(float(x_value) for x_value, _y_value in matches),
+        sum(float(y_value) for _x_value, y_value in matches),
+    )
+
+
+def _extract_group_translate(svg_text: str, group_id: str) -> tuple[float, float] | None:
+    match = re.search(
+        rf'<g\b(?=[^>]*\bid="{re.escape(group_id)}")[^>]*>',
+        svg_text,
+    )
     if match is None:
         return None
-    return float(match.group(1)), float(match.group(2))
+    transform_match = re.search(r'\btransform="([^"]*)"', match.group(0))
+    return _sum_translate(transform_match.group(1)) if transform_match is not None else None
 
 
 def test_feature_width_override_reaches_feature_drawer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -259,7 +308,7 @@ def test_short_tuckin_separate_strands_default_tracks_do_not_overlap() -> None:
     base_radius = float(cfg.canvas.circular.radius)
     base_track_ratio = float(cfg.canvas.circular.track_ratio)
     feature_track_ratio_factor = float(cfg.canvas.circular.track_ratio_factors[length_param][0])
-    feature_band = circular_assemble_module._compute_feature_band_bounds_px(
+    feature_band = _feature_band_bounds_px(
         feature_dict,
         len(record.seq),
         base_radius_px=base_radius,
@@ -291,7 +340,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
 
     def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
         captured["axis_radius"] = radius_override
-        return canvas
+        return _add_mock_primary_group(canvas)
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
         captured["ticks_radius"] = radius_override
@@ -346,7 +395,7 @@ def test_feature_width_generates_auto_relayout_overrides(monkeypatch: pytest.Mon
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -376,7 +425,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
 
     def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
         captured["axis_radius"] = radius_override
-        return canvas
+        return _add_mock_primary_group(canvas)
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
         captured["ticks_radius"] = radius_override
@@ -414,7 +463,7 @@ def test_explicit_track_placement_beats_auto_relayout(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -519,6 +568,7 @@ def test_cli_labels_mode_maps_to_circular_scope(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
@@ -526,7 +576,6 @@ def test_cli_labels_mode_maps_to_circular_scope(
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_modify_config_dict(
         config_dict: dict,
@@ -571,6 +620,7 @@ def test_cli_labels_mode_maps_to_circular_scope(
 def test_cli_fractional_definition_font_size_forwards_derived_interval(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, object] = {}
@@ -582,7 +632,6 @@ def test_cli_fractional_definition_font_size_forwards_derived_interval(
         lambda paths, **_kwargs: [record],
     )
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_modify_config_dict(
         config_dict: dict,
@@ -622,13 +671,16 @@ def test_cli_fractional_definition_font_size_forwards_derived_interval(
     assert captured["objects.definition.circular.interval"] == 14
 
 
-def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_cli_feature_width_forwards_internal_feature_track_spec(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stub_typed_request_export,
+) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
@@ -648,13 +700,13 @@ def test_cli_feature_width_forwards_internal_feature_track_spec(monkeypatch: pyt
 def test_cli_hidden_scale_geometry_shortcut_omits_implicit_ticks(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
@@ -699,12 +751,12 @@ def test_cli_geometry_shortcuts_reject_explicit_slot_geometry(
     value: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     with pytest.raises(
         ValidationError,
@@ -729,13 +781,13 @@ def test_cli_geometry_shortcuts_reject_explicit_slot_geometry(
 def test_cli_gc_track_width_radius_forwards_internal_track_specs(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
@@ -774,13 +826,13 @@ def test_cli_gc_track_width_radius_respects_suppress_flags(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch, tmp_path)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
@@ -944,7 +996,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
         cfg.canvas.resolve_overlaps,
         label_filtering,
     )
-    default_band = circular_assemble_module._compute_feature_band_bounds_px(
+    default_band = _feature_band_bounds_px(
         feature_dict,
         len(record.seq),
         base_radius_px=base_radius,
@@ -954,7 +1006,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
         profile=CircularRenderProfile(cfg),
         track_id_whitelist={0},
     )
-    widened_band = circular_assemble_module._compute_feature_band_bounds_px(
+    widened_band = _feature_band_bounds_px(
         feature_dict,
         len(record.seq),
         base_radius_px=base_radius,
@@ -971,7 +1023,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
 
     def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
         captured["axis"] = radius_override
-        return canvas
+        return _add_mock_primary_group(canvas)
 
     def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
         captured["ticks"] = radius_override
@@ -995,7 +1047,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1048,7 +1100,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
         cfg.canvas.resolve_overlaps,
         label_filtering,
     )
-    all_feature_band = circular_assemble_module._compute_feature_band_bounds_px(
+    all_feature_band = _feature_band_bounds_px(
         feature_dict,
         len(record.seq),
         base_radius_px=base_radius,
@@ -1077,7 +1129,11 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_axis_group_on_canvas",
+        lambda canvas, *args, **kwargs: _add_mock_primary_group(canvas),
+    )
     monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
     monkeypatch.setattr(
@@ -1088,7 +1144,7 @@ def test_resolve_overlaps_repositions_core_tracks_away_from_all_feature_tracks(
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1190,7 +1246,11 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_axis_group_on_canvas",
+        lambda canvas, *args, **kwargs: _add_mock_primary_group(canvas),
+    )
     monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
     monkeypatch.setattr(
@@ -1201,7 +1261,7 @@ def test_middle_resolve_overlaps_repositions_gc_and_skew_away_from_tick_label_an
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1276,7 +1336,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
         cfg.canvas.resolve_overlaps,
         label_filtering,
     )
-    all_feature_band = circular_assemble_module._compute_feature_band_bounds_px(
+    all_feature_band = _feature_band_bounds_px(
         feature_dict,
         len(record.seq),
         base_radius_px=base_radius,
@@ -1301,7 +1361,11 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_axis_group_on_canvas",
+        lambda canvas, *args, **kwargs: _add_mock_primary_group(canvas),
+    )
     monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
     monkeypatch.setattr(
@@ -1312,7 +1376,7 @@ def test_tuckin_resolve_overlaps_repositions_core_tracks_away_from_feature_band_
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1407,7 +1471,11 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
     monkeypatch.setattr(circular_assemble_module, "add_tick_group_on_canvas", fake_add_tick_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_gc_content_group_on_canvas)
     monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_gc_skew_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_axis_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
+    monkeypatch.setattr(
+        circular_assemble_module,
+        "add_axis_group_on_canvas",
+        lambda canvas, *args, **kwargs: _add_mock_primary_group(canvas),
+    )
     monkeypatch.setattr(circular_assemble_module, "add_labels_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
     monkeypatch.setattr(circular_assemble_module, "add_record_group_on_canvas", lambda canvas, *args, **kwargs: canvas)
     monkeypatch.setattr(
@@ -1418,7 +1486,7 @@ def test_resolve_overlaps_keeps_explicit_core_track_specs(
     monkeypatch.setattr(
         circular_assemble_module,
         "add_legend_group_on_canvas",
-        lambda canvas, canvas_config, legend_config, legend_table: canvas,
+        lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas,
     )
 
     assemble_circular_diagram_from_record(
@@ -1459,7 +1527,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
 
         def fake_add_axis_group_on_canvas(canvas, canvas_config, *, radius_override=None):
             captured["axis"] = radius_override
-            return canvas
+            return _add_mock_primary_group(canvas)
 
         def fake_add_tick_group_on_canvas(canvas, gb_record, canvas_config, *, radius_override=None, **kwargs):
             captured["ticks"] = radius_override
@@ -1501,7 +1569,7 @@ def test_auto_relayout_core_tracks_are_stable_across_show_labels_toggle() -> Non
             lambda canvas, gb_record, canvas_config, species, strain, **kwargs: canvas
         )
         circular_assemble_module.add_legend_group_on_canvas = (
-            lambda canvas, canvas_config, legend_config, legend_table: canvas
+            lambda canvas, canvas_config, legend_config, legend_table, **kwargs: canvas
         )
         try:
             assemble_circular_diagram_from_record(
@@ -1561,21 +1629,14 @@ def test_feature_width_keeps_axis_concentric_with_rendered_tracks(track_type: st
         r'<g[^>]*data-gbdraw-slot-id="features"[^>]*>',
         svg_text,
     )
-    record_transform_match = (
-        re.search(
-            r'\btransform="translate\(\s*'
-            r'([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)"',
-            record_group_match.group(0),
-        )
+    record_transform_attr = (
+        re.search(r'\btransform="([^"]*)"', record_group_match.group(0))
         if record_group_match is not None
         else None
     )
     record_transform = (
-        (
-            float(record_transform_match.group(1)),
-            float(record_transform_match.group(2)),
-        )
-        if record_transform_match is not None
+        _sum_translate(record_transform_attr.group(1))
+        if record_transform_attr is not None
         else None
     )
     assert axis_transform is not None

@@ -34,18 +34,6 @@ from tests.utils.circular_drawer_fakes import (
 )
 
 
-def _stub_typed_request_export(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
-
-
 SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
 
 
@@ -144,19 +132,27 @@ def test_circular_spacer_reserves_resolved_geometry_without_rendering_a_group() 
 
 
 def _axis_circle_radius(svg_text: str) -> float:
-    match = re.search(r'<g id="Axis"[^>]*>.*?<circle\b[^>]*\br="([^"]+)"', svg_text, re.S)
+    match = re.search(
+        r'<g\b(?=[^>]*\bid="Axis")[^>]*>.*?<circle\b[^>]*\br="([^"]+)"',
+        svg_text,
+        re.S,
+    )
     assert match is not None
     return float(match.group(1))
 
 
 def _svg_group_fragment(svg_text: str, group_id: str) -> str:
     match = re.search(
-        rf'<g data-gbdraw-slot-id="{re.escape(group_id)}"[^>]*>.*?</g>',
+        rf'<g\b(?=[^>]*\bdata-gbdraw-slot-id="{re.escape(group_id)}")[^>]*>.*?</g>',
         svg_text,
         re.S,
     )
     if match is None:
-        match = re.search(rf'<g id="{re.escape(group_id)}"[^>]*>.*?</g>', svg_text, re.S)
+        match = re.search(
+            rf'<g\b(?=[^>]*\bid="{re.escape(group_id)}")[^>]*>.*?</g>',
+            svg_text,
+            re.S,
+        )
     assert match is not None
     return match.group(0)
 
@@ -1112,7 +1108,10 @@ def test_default_preset_slots_compress_to_clear_center_definition(
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
 
     record = _load_mjenmv_record()
-    config_dict = _base_config(track_type="tuckin")
+    config_dict = modify_config_dict(
+        _base_config(track_type="tuckin"),
+        {"canvas.strandedness": True},
+    )
     default_colors = load_default_colors("", palette="default")
     captured: dict[str, object] = {}
     _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
@@ -1157,6 +1156,17 @@ def test_default_preset_slots_compress_to_clear_center_definition(
     layout = captured["radial_layout"]
     by_id = {track.id: track for track in layout.tracks}  # type: ignore[attr-defined]
     definition_reserved = float(captured["definition_reserved"])
+    # Styled definition paint bounds belong to outer composition and must not
+    # change the established record-local radial slot reservation.
+    assert definition_reserved == pytest.approx(210.142578125)
+    assert by_id["gc_content"].anchor_radius_px == pytest.approx(285.44407552083335)
+    assert by_id["gc_content"].draw_width_px == pytest.approx(46.3125)
+    assert by_id["gc_content"].draw_inner_radius_px == pytest.approx(262.28782552083335)
+    assert by_id["gc_content"].draw_outer_radius_px == pytest.approx(308.60032552083335)
+    assert by_id["gc_skew"].anchor_radius_px == pytest.approx(235.23157552083337)
+    assert by_id["gc_skew"].draw_width_px == pytest.approx(46.3125)
+    assert by_id["gc_skew"].draw_inner_radius_px == pytest.approx(212.07532552083337)
+    assert by_id["gc_skew"].draw_outer_radius_px == pytest.approx(258.38782552083335)
     assert by_id["gc_content"].reserved_inner_radius_px >= definition_reserved - 1e-6
     assert by_id["gc_skew"].reserved_inner_radius_px >= definition_reserved - 1e-6
     assert by_id["gc_content"].compressed or by_id["gc_skew"].compressed
@@ -2240,13 +2250,16 @@ def test_slot_mode_tick_radius_does_not_move_axis(monkeypatch: pytest.MonkeyPatc
     assert _axis_circle_radius(canvas.tostring()) == pytest.approx(390.0)
 
 
-def test_cli_circular_track_order_forwards_slots(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_cli_circular_track_order_forwards_slots(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stub_typed_request_export,
+) -> None:
     record = _load_record()
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
@@ -2300,13 +2313,13 @@ def test_cli_hidden_scale_preserves_explicit_tick_slot_authority(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
         options = kwargs["options"]
@@ -2347,13 +2360,13 @@ def test_cli_hidden_scale_preserves_explicit_tick_slot_authority(
 def test_cli_circular_track_slot_forwards_typed_slots(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _load_record()
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_slots"] = kwargs["options"].tracks.circular_track_slots
@@ -2387,13 +2400,16 @@ def test_cli_circular_track_slot_forwards_typed_slots(
     assert slots[1].params == {"nt": "AT"}
 
 
-def test_cli_circular_track_axis_index_forwards_value(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_cli_circular_track_axis_index_forwards_value(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stub_typed_request_export,
+) -> None:
     record = _load_record()
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
         captured["circular_track_axis_index"] = (
@@ -2435,13 +2451,16 @@ def test_center_reserved_radius_overrides_radial_definition_band(monkeypatch: py
     assert layout.definition_reserved_band_px.outer_px == pytest.approx(42.0)
 
 
-def test_cli_center_reserved_radius_forwards_value(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_cli_center_reserved_radius_forwards_value(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stub_typed_request_export,
+) -> None:
     record = _load_record()
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    _stub_typed_request_export(monkeypatch)
 
     def fake_assemble(*args, **kwargs):
         captured["center_reserved_radius"] = (

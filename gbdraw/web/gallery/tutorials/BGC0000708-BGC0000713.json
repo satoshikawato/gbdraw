@@ -106,11 +106,12 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const expected = ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk', 'BGC0000713.gbk']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('BGC GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = '<i>Streptomyces lividus</i> CBS 844.73'; seq.record_subtitle = 'Lividomycin biosynthetic gene cluster'; const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = Array.from(card?.querySelectorAll('div') || []).find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); if (!row) throw new Error('BGC Linear input row 1 was not found.'); const fieldInput = (labelText) => { const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === labelText && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error(`BGC ${labelText} input was not found.`); return input; }; fieldInput('Organism / strain (optional)').dataset.capture = 'bgc-organism-input'; fieldInput('Subtitle / title (optional)').dataset.capture = 'bgc-subtitle-input'; row.dataset.capture = 'bgc-record-row'; row.scrollIntoView({ block: 'center' });"
-              }
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk', 'BGC0000712.gbk', 'BGC0000713.gbk']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('BGC GenBank order was not restored.'); const seq = app.linearSeqs[0]; seq.definition = '<i>Streptomyces lividus</i> CBS 844.73'; seq.record_subtitle = 'Lividomycin biosynthetic gene cluster'; const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('BGC Linear input row 1 was not found.'); options.open = true; const fieldInput = (labelText) => { const label = Array.from(row.querySelectorAll('div')).find((node) => node.textContent?.trim() === labelText && node.nextElementSibling?.matches('input[type=\"text\"]')); const input = label?.nextElementSibling; if (!input) throw new Error(`BGC ${labelText} input was not found.`); return input; }; fieldInput('Organism / strain (optional)').dataset.capture = 'bgc-organism-input'; fieldInput('Subtitle / title (optional)').dataset.capture = 'bgc-subtitle-input'; row.dataset.capture = 'bgc-record-row'; row.scrollIntoView({ block: 'center' });"
+              },
+              {"type": "evaluate", "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"}
             ],
             "selector": "[data-capture='bgc-record-row']",
-            "cropPadding": 14,
+            "cropPadding": {"top": 0, "right": 14, "bottom": 14, "left": 14},
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 5,
@@ -133,7 +134,7 @@
     },
     {
       "title": "Configure browser LOSAT",
-      "body": "In Pairwise Comparisons, choose Run LOSAT. Use LOSATP with blastp mode Similarity groups.",
+      "body": "In Comparison, choose Run LOSAT, open Settings, set LOSAT Mode to LOSATP, and set LOSATP mode to Similarity groups. Runtime controls are under Advanced comparison and layout.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -141,7 +142,8 @@
           ["Total threads", "Safe"],
           ["Parallel runs", "Auto"],
           ["Threads per run", "Auto"],
-          ["blastp mode", "Similarity groups"],
+          ["LOSAT Mode", "LOSATP"],
+          ["LOSATP mode", "Similarity groups"],
           ["Bitscore", "50"],
           ["E-value", "0.01"],
           ["Minimum Identity", "30"],
@@ -152,11 +154,11 @@
       "operations": [
         {
           "dataDependent": true,
-          "title": "Run LOSAT settings panel",
+          "title": "Comparison settings",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-03-01-open-pairwise.webp",
-            "alt": "Run LOSAT settings with LOSATP Similarity groups, Auto execution, Safe total threads, and the 50, 0.01, 30, and 0 thresholds.",
-            "caption": "Set LOSATP Similarity groups with Auto execution, Safe total threads, and thresholds 50 / 0.01 / 30 / 0."
+            "alt": "Open Comparison Settings with Run LOSAT active, the LOSATP button pressed, LOSATP mode set to Similarity groups, and result filters 50, 0.01, 30, and 0.",
+            "caption": "Choose Run LOSAT, press LOSATP, select Similarity groups, and set the four result filters."
           },
           "capture": {
             "source": "webapp",
@@ -165,14 +167,16 @@
               "width": 1600,
               "height": 1100
             },
-            "clipSelectors": ["[data-capture='linear-blast-source']", "[data-capture='linear-losat-settings']"],
-            "cropPadding": {
-              "top": 12,
-              "right": 36,
-              "bottom": 12,
-              "left": 12
-            },
-            "waitForSelector": "[data-capture='linear-losat-settings']",
+            "openDetails": ["Settings"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.adv.min_bitscore = 50; app.adv.evalue = '0.01'; app.adv.identity = 30; app.adv.alignment_length = 0;"
+              }
+            ],
+            "selector": "[data-linear-comparison-card]",
+            "cropPadding": 14,
+            "waitForSelector": "[data-linear-comparison-card]",
             "assertAppState": {
               "mode": "linear",
               "linearComparisonPlan.mode": "adjacent",
@@ -186,62 +190,244 @@
               "adv.identity": 30,
               "adv.alignment_length": 0
             },
+            "visibleText": [
+              "Comparison",
+              "Run LOSAT",
+              "Current: Run LOSAT",
+              "Settings",
+              "Selected pairs (4)"
+            ],
             "visibleControls": [
-              {"label": "Run LOSAT", "checked": true},
-              {"label": "LOSATP", "checked": true},
-              {"label": "Execution", "value": "auto"},
-              {"label": "Total threads", "value": "safe"},
-              {"label": "blastp mode", "value": "Similarity groups"},
+              {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
+              {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},
+              {"selector": "[data-linear-comparison-losat-mode-option='tblastx']", "pressed": false},
+              {"label": "LOSATP mode", "value": "Similarity groups"},
               {"label": "Bitscore", "value": 50},
               {"label": "E-value", "value": "0.01"},
-              {"label": "Minimum Identity", "value": 30},
-              {"label": "Minimum Length", "value": 0}
+              {"label": "Minimum identity", "value": 30},
+              {"label": "Minimum length", "value": 0}
             ]
           }
         },
         {
-          "title": "LOSATP similarity groups mode",
+          "dataDependent": true,
+          "title": "Runtime and reproducibility",
           "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
-            "alt": "LOSAT Settings panel with the blastp mode menu open and the Similarity groups option highlighted.",
-            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Similarity groups option."
+            "src": "./media/BGC0000708-BGC0000713/manual-03-02-runtime-reproducibility.webp",
+            "alt": "Runtime and reproducibility controls showing Auto execution, Safe total threads, and automatic parallel runs and threads per run.",
+            "caption": "Open Advanced comparison and layout to review the LOSAT runtime and reproducibility controls."
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {"width": 1600, "height": 1100},
+            "openDetails": ["Advanced comparison and layout"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = 'auto';"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+              },
+              {
+                "type": "evaluate",
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'bgc-losat-runtime'; section.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='bgc-losat-runtime']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losat.executionMode": "auto",
+              "losat.totalThreadBudget": "safe",
+              "losat.threadsPerJob": "auto"
+            },
+            "visibleText": ["Runtime and reproducibility", "Parallel runs"],
+            "visibleControls": [
+              {"label": "Execution", "value": "auto"},
+              {"label": "Total threads", "value": "safe"},
+              {"label": "Threads per run", "value": "auto"}
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "LOSATP similarity groups mode",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-03-02-select-losatp-orthogroups.webp",
+            "alt": "Comparison Settings showing all three LOSAT Mode buttons with LOSATP pressed and the LOSATP mode menu open with Similarity groups highlighted.",
+            "caption": "Press LOSATP, then open LOSATP mode and choose the highlighted Similarity groups option."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {"width": 1600, "height": 1100},
             "crop": "openSelect",
             "cropPadding": {
-              "top": 80,
-              "right": 80,
-              "bottom": 66,
-              "left": 80
+              "top": 68,
+              "right": 12,
+              "bottom": 20,
+              "left": 140
             },
+            "clipSelectors": ["[data-linear-comparison-losat-mode]"],
             "openSelect": {
               "selectedLabel": "Similarity groups",
-              "options": ["Similarity groups", "Collinear blocks", "Pairwise"],
-              "label": "blastp mode"
-            }
+              "options": ["Similarity groups", "Collinear blocks", "Pairwise matches"],
+              "label": "LOSATP mode",
+              "hideFollowingSiblings": true
+            },
+            "openDetails": ["Settings"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup');"
+              },
+              {"type": "wait", "ms": 300}
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "orthogroup"
+            },
+            "visibleControls": [
+              {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
+              {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},
+              {"selector": "[data-linear-comparison-losat-mode-option='tblastx']", "pressed": false},
+              {"label": "LOSATP mode", "value": "Similarity groups"}
+            ],
+            "visibleText": ["LOSAT Mode"]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "First comparison boundary",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-03-03-first-comparison-boundary.webp",
+            "alt": "Selected pairs editor for sequence 1 to sequence 2 with Run LOSAT selected.",
+            "caption": "Open Selected pairs to inspect or override the source assigned to the sequence 1 to sequence 2 boundary."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {"width": 1600, "height": 1100},
+            "selector": "[data-edge-key='record-1->record-2']",
+            "cropPadding": {"top": 0, "right": 24, "bottom": 12, "left": 12},
+            "waitForSelector": "[data-edge-key='record-1->record-2']",
+            "openDetails": ["Selected pairs"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup');"
+              }
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.0.uid": "record-1",
+              "linearSeqs.1.uid": "record-2",
+              "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
+              "linearComparisonResolution.edges.0.source": "losat"
+            },
+            "visibleControls": [
+              {
+                "selector": "[data-edge-key='record-1->record-2'] input[type='radio']:checked",
+                "checked": true
+              }
+            ],
+            "visibleText": [
+              "#1",
+              "Streptomyces lividus CBS 844.73",
+              "#2",
+              "Streptomyces fradiae ATCC 10745",
+              "Run LOSAT"
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "First raw LOSAT result",
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-03-04-first-raw-result.webp",
+            "alt": "Raw LOSAT result controls for sequence 1 to sequence 2 with the filename field, result status, and Save Raw LOSAT TSV action.",
+            "caption": "Open Advanced comparison and layout to manage the first pair's raw filename, readiness status, and TSV download."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {"width": 1600, "height": 1100},
+            "selector": "[data-linear-raw-result='record-1->record-2']",
+            "cropPadding": 14,
+            "waitForSelector": "[data-linear-raw-result='record-1->record-2']",
+            "openDetails": ["Advanced comparison and layout"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup');"
+              }
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonResolution.edges.0.edgeKey": "record-1->record-2",
+              "linearComparisonResolution.edges.0.source": "losat"
+            },
+            "visibleControls": [
+              {
+                "selector": "[data-linear-raw-result='record-1->record-2'] input[aria-label='Raw LOSAT filename for #1 to #2']",
+                "value": ""
+              }
+            ],
+            "visibleText": ["Raw LOSAT filename", "Raw result", "Save Raw LOSAT TSV"]
           }
         }
       ]
     },
     {
       "title": "Set record orientation and comparison layout",
-      "body": "Reverse-complement BGC0000713, keep features in the middle of each axis, and draw curved pairwise matches before the first generation.",
+      "body": "Reverse-complement BGC0000713 and keep features in the middle of each axis before the first generation.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
           ["Reverse complement", "BGC0000713 only"],
-          ["Track Layout", "Middle"],
-          ["Pairwise Match Style", "Curve"]
+          ["Track Layout", "Middle"]
         ]
       },
       "operations": [
         {
+          "dataDependent": true,
           "title": "Reverse-complement selector",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-04-02-reverse-bgc0000713.webp",
-            "alt": "Fifth Linear input row for BGC0000713.gbk with the Region reverse complement checkbox checked.",
-            "caption": "Use the BGC0000713 row's Region controls and check Reverse complement for that record only."
+            "alt": "BGC0000713 record card with Record options open and Reverse complement checked in Region.",
+            "caption": "Open BGC0000713 Record options and check Reverse complement for that record only."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {"width": 1280, "height": 1000},
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const seq = app.linearSeqs[4]; if (seq?.uid !== 'record-5') throw new Error('BGC0000713 record was not restored as sequence 5.'); seq.region_reverse = true; const row = document.querySelector('[data-linear-record-card=\"record-5\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-5\"]'); if (!row || !options) throw new Error('BGC0000713 Record options were not found.'); options.open = true; row.scrollIntoView({ block: 'center' });"
+              },
+              {"type": "evaluate", "script": "window.__GBDRAW_APP__.sidebarWidth = 600;"}
+            ],
+            "selector": "[data-linear-record-card='record-5']",
+            "cropPadding": {"top": 0, "right": 14, "bottom": 14, "left": 14},
+            "assertAppState": {
+              "mode": "linear",
+              "linearSeqs.4.uid": "record-5",
+              "linearSeqs.4.gb.name": "BGC0000713.gbk",
+              "linearSeqs.4.region_reverse": true
+            },
+            "visibleText": ["BGC0000713.gbk", "Record options", "Region (optional)", "Reverse complement"],
+            "visibleControls": [
+              {"selector": "input[aria-label='Reverse complement for sequence 5']", "checked": true}
+            ]
           }
         },
         {
@@ -266,30 +452,6 @@
               "label": "Track Layout"
             },
             "openDetails": ["Layout"]
-          }
-        },
-        {
-          "title": "Pairwise match style selector",
-          "media": {
-            "src": "./media/BGC0000708-BGC0000713/manual-04-04-pairwise-style-curve.webp",
-            "alt": "Pairwise Match card with the Pairwise Match Style menu open and the Curve option highlighted.",
-            "caption": "Open Pairwise Match Style in the Pairwise Match card and choose the highlighted Curve option."
-          },
-          "capture": {
-            "source": "webapp",
-            "crop": "openSelect",
-            "cropPadding": {
-              "top": 54,
-              "right": 80,
-              "bottom": 24,
-              "left": 80
-            },
-            "openSelect": {
-              "selectedLabel": "Curve",
-              "options": ["Ribbon", "Curve"],
-              "label": "Pairwise Match Style"
-            },
-            "openDetails": ["Pairwise Match"]
           }
         }
       ]

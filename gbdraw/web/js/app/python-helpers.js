@@ -12,8 +12,8 @@ from gbdraw.web_support.feature_metadata import (
     extract_features_from_genbank_json,
     extract_features_from_gff_fasta_json,
 )
-from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload as _serialize_shared_orthogroups_payload
 from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+from gbdraw.session_request_codec import encode_canonical_typed_resource
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -214,40 +214,6 @@ def _web_read_record_coord_map(record):
         step = 1
     return base, (1 if step > 0 else -1)
 
-def _web_absolute_display_interval(start, end, coord_base, coord_step):
-    start = int(start)
-    end = int(end)
-    coord_base = int(coord_base)
-    coord_step = 1 if int(coord_step) > 0 else -1
-    if end <= start:
-        coord = coord_base + (coord_step * start)
-        return coord - 1, coord
-    first_coord = coord_base + (coord_step * start)
-    last_coord = coord_base + (coord_step * (end - 1))
-    return min(first_coord, last_coord) - 1, max(first_coord, last_coord)
-
-def _web_member_display_coord_map(data, view_transform):
-    normalized = _normalize_web_view_transform(view_transform)
-    try:
-        base = int(data.get("coord_base", 1))
-    except Exception:
-        base = 1
-    try:
-        step = int(data.get("coord_step", 1))
-    except Exception:
-        step = 1
-    if step == 0:
-        step = 1
-    step = 1 if step > 0 else -1
-    if normalized["reverse"]:
-        try:
-            length = int(data.get("coord_length") or normalized["length"] or 0)
-        except Exception:
-            length = int(normalized["length"] or 0)
-        base = base + (step * max(0, length - 1))
-        step = -step
-    return base, step
-
 def _compute_web_feature_svg_id(record_id, feature_type, start, end, strand):
     from gbdraw.features.ids import compute_feature_hash_from_parts
 
@@ -307,27 +273,25 @@ def _normalize_web_feature_hash_parts(raw_parts):
 def _display_feature_svg_id_from_data(data, display_start, display_end, display_strand, view_transform):
     normalized = _normalize_web_view_transform(view_transform)
     if not normalized["reverse"]:
-        existing = data.get("feature_svg_id")
+        existing = data.get("view_feature_svg_id")
         if existing:
             return existing
-    hash_parts = _normalize_web_feature_hash_parts(data.get("feature_hash_parts"))
-    if hash_parts:
+    view_hash_parts = _normalize_web_feature_hash_parts(
+        data.get("view_feature_hash_parts")
+    )
+    if view_hash_parts:
         display_hash_parts = [
             _web_transform_cds_span(start, end, strand, normalized)
-            for start, end, strand in hash_parts
+            for start, end, strand in view_hash_parts
         ]
         return _compute_web_feature_svg_id_from_parts(
             data.get("record_id"),
             data.get("feature_type") or "CDS",
             display_hash_parts,
         )
-    hash_start = data.get("feature_hash_start")
-    hash_end = data.get("feature_hash_end")
-    hash_strand = data.get("feature_hash_strand")
-    if hash_start is None or hash_end is None:
-        hash_start = data.get("start", display_start)
-        hash_end = data.get("end", display_end)
-        hash_strand = data.get("strand", display_strand)
+    hash_start = data.get("start", display_start)
+    hash_end = data.get("end", display_end)
+    hash_strand = data.get("strand", display_strand)
     display_hash_start, display_hash_end, display_hash_strand = _web_transform_cds_span(
         hash_start,
         hash_end,
@@ -340,6 +304,46 @@ def _display_feature_svg_id_from_data(data, display_start, display_end, display_
         display_hash_start,
         display_hash_end,
         display_hash_strand,
+    )
+
+def _web_feature_view_hash_parts_index(record):
+    if record is None:
+        return {}
+    from gbdraw.core.record_metadata import _source_feature_index
+
+    indexed = {}
+    fallback_index = 0
+
+    def walk(features):
+        nonlocal fallback_index
+        for feature in features or ():
+            source_index = _source_feature_index(feature)
+            resolved_index = fallback_index if source_index is None else source_index
+            fallback_index += 1
+            location = getattr(feature, "location", None)
+            raw_parts = list(getattr(location, "parts", None) or [location])
+            indexed.setdefault(
+                int(resolved_index),
+                tuple(
+                    (
+                        int(part.start),
+                        int(part.end),
+                        int(part.strand) if part.strand in (-1, 1) else None,
+                    )
+                    for part in raw_parts
+                    if part is not None
+                )
+            )
+            walk(getattr(feature, "sub_features", None))
+    walk(record.features)
+    return indexed
+
+def _web_feature_view_hash_parts(record, source_feature_position):
+    if source_feature_position is None:
+        return ()
+    return _web_feature_view_hash_parts_index(record).get(
+        int(source_feature_position),
+        (),
     )
 
 def convert_losat_nucleotide_to_display_tsv(blast_text, query_view_transform=None, subject_view_transform=None):
@@ -413,8 +417,22 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         raise ValueError("No records found")
     return records[0]
 
-def _serialize_cds_protein(protein, record=None):
+def _serialize_cds_protein(protein, record=None, view_hash_parts_index=None):
     coord_base, coord_step = _web_read_record_coord_map(record)
+    source_feature_position = getattr(
+        protein,
+        "source_feature_position",
+        protein.feature_index,
+    )
+    view_feature_hash_parts = (
+        ()
+        if source_feature_position is None
+        else (
+            _web_feature_view_hash_parts(record, source_feature_position)
+            if view_hash_parts_index is None
+            else view_hash_parts_index.get(int(source_feature_position), ())
+        )
+    )
     return {
         "protein_id": protein.protein_id,
         "record_index": protein.record_index,
@@ -427,6 +445,8 @@ def _serialize_cds_protein(protein, record=None):
         "protein_length": protein.protein_length,
         "source_protein_id": protein.source_protein_id,
         "feature_svg_id": protein.feature_svg_id,
+        "view_feature_svg_id": getattr(protein, "view_feature_svg_id", None),
+        "view_feature_hash_parts": [list(part) for part in view_feature_hash_parts],
         "gene": getattr(protein, "gene", None),
         "product": getattr(protein, "product", None),
         "note": getattr(protein, "note", None),
@@ -499,8 +519,13 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
         proteins = result.proteins_by_record[0] if result.proteins_by_record else []
         if not proteins:
             return json.dumps({"error": f"No CDS proteins found in {record.id}"})
+        view_hash_parts_index = _web_feature_view_hash_parts_index(record)
         protein_map = {
-            protein.protein_id: _serialize_cds_protein(protein, record)
+            protein.protein_id: _serialize_cds_protein(
+                protein,
+                record,
+                view_hash_parts_index,
+            )
             for protein in proteins
         }
         return json.dumps({
@@ -516,45 +541,6 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             "runtime_binding_hash": result.runtime_binding_hashes[0],
             "display_binding_hash": result.display_binding_hashes[0],
         })
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
-
-def convert_protein_blast_to_genomic_tsv(blast_text, protein_maps_json, max_hits=5):
-    """Convert LOSATP blastp output into genomic comparison TSV for gbdraw linear."""
-    try:
-        from io import StringIO
-        from gbdraw.analysis.protein_colinearity import (
-            cap_hits_per_query,
-            convert_protein_hits_to_genomic_links,
-            parse_losatp_outfmt6,
-        )
-        from gbdraw.io.comparisons import COMPARISON_COLUMNS
-        try:
-            from gbdraw.analysis.protein_colinearity import convert_pair_protein_hits_to_genomic_links
-        except ImportError:
-            convert_pair_protein_hits_to_genomic_links = None
-
-        raw_maps = json.loads(str(protein_maps_json))
-        if isinstance(raw_maps, dict):
-            raw_maps = [raw_maps]
-
-        protein_maps = [_build_web_cds_protein_map(raw_map) for raw_map in raw_maps]
-        hits = parse_losatp_outfmt6(str(blast_text or ""))
-        capped = cap_hits_per_query(hits, max_hits=int(max_hits or 5))
-        if len(protein_maps) >= 2 and convert_pair_protein_hits_to_genomic_links is not None:
-            converted = convert_pair_protein_hits_to_genomic_links(
-                capped,
-                protein_maps[0],
-                protein_maps[1],
-            )
-        else:
-            protein_map = {}
-            for current_map in protein_maps:
-                protein_map.update(current_map)
-            converted = convert_protein_hits_to_genomic_links(capped, protein_map)
-        handle = StringIO()
-        converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(handle, sep=chr(9), header=False, index=False, lineterminator=chr(10))
-        return json.dumps({"tsv": handle.getvalue(), "hit_count": int(converted.shape[0])})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
@@ -593,6 +579,7 @@ def _build_web_cds_protein_map(raw_map):
             "old_locus_tag",
             "gff_id",
             "gene_parent_id",
+            "view_feature_svg_id",
         ):
             if optional_field in supported_fields:
                 kwargs[optional_field] = data.get(optional_field)
@@ -607,7 +594,10 @@ def _build_web_cds_protein_map(raw_map):
                     kwargs[optional_int_field] = int(raw_value)
         if "feature_hash_parts" in supported_fields:
             kwargs["feature_hash_parts"] = _normalize_web_feature_hash_parts(data.get("feature_hash_parts"))
-        for optional_int_field in ("source_feature_position", "same_location_ordinal"):
+        for optional_int_field in (
+            "source_feature_position",
+            "same_location_ordinal",
+        ):
             if optional_int_field in supported_fields:
                 raw_value = data.get(optional_int_field)
                 kwargs[optional_int_field] = (
@@ -845,16 +835,17 @@ def _build_display_web_cds_protein_map(raw_map, view_transform):
             display_data.get("strand"),
             normalized,
         )
-        display_data["start"] = start
-        display_data["end"] = end
-        display_data["strand"] = strand
-        display_data["feature_svg_id"] = _display_feature_svg_id_from_data(
-            display_data,
+        view_feature_svg_id = _display_feature_svg_id_from_data(
+            data,
             start,
             end,
             strand,
             normalized,
         )
+        display_data["start"] = start
+        display_data["end"] = end
+        display_data["strand"] = strand
+        display_data["view_feature_svg_id"] = view_feature_svg_id
         display_map[str(protein_id)] = display_data
     return _build_web_cds_protein_map(display_map)
 
@@ -897,60 +888,6 @@ def _dataframe_json_rows(df):
     for row in df.to_dict(orient="records"):
         rows.append({str(key): _clean_json_scalar(value) for key, value in row.items()})
     return rows
-
-def _serialize_orthogroups_payload(orthogroups):
-    return _serialize_shared_orthogroups_payload(orthogroups, include_stable_feature_ids=True)
-
-def _web_orthogroup_member_display_metadata(record_payloads):
-    metadata = {}
-    for record in record_payloads:
-        raw_map = record.get("protein_map") or {}
-        view_transform = record.get("view_transform") or {}
-        if not isinstance(raw_map, dict):
-            continue
-        for protein_id, data in raw_map.items():
-            if not isinstance(data, dict):
-                continue
-            try:
-                display_start, display_end, display_strand = _web_transform_cds_span(
-                    data.get("start", 0),
-                    data.get("end", 0),
-                    data.get("strand"),
-                    view_transform,
-                )
-                coord_base, coord_step = _web_member_display_coord_map(data, view_transform)
-                absolute_start, absolute_end = _web_absolute_display_interval(
-                    display_start,
-                    display_end,
-                    coord_base,
-                    coord_step,
-                )
-            except Exception:
-                continue
-            metadata[str(data.get("protein_id") or protein_id)] = {
-                "start": absolute_start,
-                "end": absolute_end,
-                "strand": _web_strand_symbol(display_strand),
-            }
-    return metadata
-
-def _apply_web_orthogroup_member_display_metadata(groups, metadata_by_protein_id):
-    if not metadata_by_protein_id:
-        return groups
-    for group in groups or []:
-        if not isinstance(group, dict):
-            continue
-        for member in group.get("members", []) or []:
-            if not isinstance(member, dict):
-                continue
-            protein_id = str(member.get("proteinId") or member.get("protein_id") or "")
-            metadata = metadata_by_protein_id.get(protein_id)
-            if not metadata:
-                continue
-            member["start"] = metadata["start"]
-            member["end"] = metadata["end"]
-            member["strand"] = metadata["strand"]
-    return groups
 
 def convert_losatp_blastp_pairs_to_genomic_payload(
     pairs_json,
@@ -1115,8 +1052,6 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 record["protein_map"],
                 record["view_transform"],
             )
-        member_display_metadata = _web_orthogroup_member_display_metadata(record_payloads)
-
         combined_protein_map = {}
         for protein_map in protein_maps_by_record.values():
             combined_protein_map.update(protein_map)
@@ -1198,7 +1133,6 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 return str(value).strip()
             anchor_mode = normalized_collinear_anchor_mode
             search_scope = normalized_collinear_search_scope
-            group_scope = "global_collinear" if search_scope == "all" else "adjacent_local"
             max_paralog_links = normalized_max_paralog_links
             directional_tables = {}
             for item in pair_items:
@@ -1226,11 +1160,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 collinearity_result,
                 record_ids=record_ids,
                 color_mode=_collinear_text(collinear_color_mode, "orientation"),
+                search_scope=search_scope,
             )
-            for converted in converted_frames:
-                converted["group_kind"] = "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group"
-                converted["group_scope"] = group_scope
-                converted["collinear_group_scope"] = group_scope
             converted_pairs = []
             for pair_index, converted in enumerate(converted_frames):
                 handle = StringIO()
@@ -1249,45 +1180,14 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                         "hit_count": int(converted.shape[0]),
                     }
                 )
-            block_payload = [
-                {
-                    "id": block.block_id,
-                    "kind": block.kind,
-                    "orientation": block.orientation,
-                    "score": block.score,
-                    "blockEvalue": block.block_evalue,
-                    "anchorCount": len(block.anchors),
-                    "anchor_count": len(block.anchors),
-                    "orthogroupIds": sorted({anchor.orthogroup_id for anchor in block.anchors if anchor.orthogroup_id}),
-                    "groupKind": "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group",
-                    "groupScope": group_scope,
-                    "collinearGroupScope": group_scope,
-                    "querySpan": [
-                        min(min(anchor.query_start, anchor.query_end) for anchor in block.anchors),
-                        max(max(anchor.query_start, anchor.query_end) for anchor in block.anchors),
-                    ],
-                    "subjectSpan": [
-                        min(min(anchor.subject_start, anchor.subject_end) for anchor in block.anchors),
-                        max(max(anchor.subject_start, anchor.subject_end) for anchor in block.anchors),
-                    ],
-                    "queryRecordIndex": block.query_record_index,
-                    "subjectRecordIndex": block.subject_record_index,
-                }
-                for block in collinearity_result.blocks
-            ]
-            serialized_groups = _serialize_orthogroups_payload(collinearity_result.orthogroups)
-            _apply_web_orthogroup_member_display_metadata(serialized_groups, member_display_metadata)
-            for group in serialized_groups:
-                group["scope"] = group_scope
-                group["groupKind"] = "orthogroup" if group_scope == "global_collinear" else "collinear_gene_group"
-            orthogroup_groups = serialized_groups if group_scope == "global_collinear" else []
-            collinear_groups = serialized_groups if group_scope == "adjacent_local" else []
             return _finalize_losatp_payload({
                 "pairs": converted_pairs,
-                "orthogroups": orthogroup_groups,
-                "collinearGroups": collinear_groups,
-                "collinearGroupScope": group_scope,
-                "collinearityBlocks": block_payload,
+                "collinearityResult": json.loads(
+                    encode_canonical_typed_resource(
+                        "result",
+                        collinearity_result,
+                    ).decode("utf-8")
+                ),
             })
 
         if normalized_mode == "pairwise":
@@ -1366,9 +1266,15 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "hit_count": int(converted.shape[0]),
                 }
             )
-        serialized_groups = _serialize_orthogroups_payload(orthogroups)
-        _apply_web_orthogroup_member_display_metadata(serialized_groups, member_display_metadata)
-        return _finalize_losatp_payload({"pairs": converted_pairs, "orthogroups": serialized_groups})
+        return _finalize_losatp_payload({
+            "pairs": converted_pairs,
+            "orthogroupResult": json.loads(
+                encode_canonical_typed_resource(
+                    "orthogroupResult",
+                    orthogroups,
+                ).decode("utf-8")
+            ),
+        })
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 

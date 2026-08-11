@@ -77,10 +77,22 @@ import {
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
 import {
+  normalizeCollinearAnchorMode,
+  normalizeCollinearSearchScope,
+  normalizeOrthogroupMembershipMode
+} from '../app/losat-normalization.js';
+import {
   canonicalComparisonResourceKind,
   isResourceBackedCanonicalComparison,
   mapResourceBackedCanonicalComparison
 } from './canonical-comparisons.js';
+import {
+  base64ToBytes,
+  bytesToBase64,
+  bytesToText,
+  textToBase64,
+  textToBytes
+} from './file-content-cache.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 5;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
@@ -295,16 +307,6 @@ const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
   }
 };
 
-const textToBase64 = (text) => {
-  const bytes = new TextEncoder().encode(String(text));
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-  return btoa(binary);
-};
-
 const normalizeResourceName = (resourceId, name) => {
   const basename = String(name || 'resource.dat').replace(/\\/g, '/').split('/').pop();
   const safe = basename.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '');
@@ -330,12 +332,16 @@ const normalizeOriginalResourceName = (name) => {
 const createResourceBuilder = () => {
   const resources = {};
   const resourceOriginalNames = {};
+  const fileResourceIds = new Map();
 
   const addFile = (resourceId, kind, entry) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       throw new Error(`Canonical resource ${resourceId} is missing.`);
     }
     if (resources[resourceId]) return resourceId;
+    const kindResourceIds = fileResourceIds.get(kind) || new WeakMap();
+    const existingResourceId = kindResourceIds.get(entry);
+    if (existingResourceId) return existingResourceId;
     resources[resourceId] = {
       kind,
       name: normalizeResourceName(resourceId, entry.name),
@@ -345,6 +351,8 @@ const createResourceBuilder = () => {
       encoding: entry.encoding || 'base64',
       data: entry.data
     };
+    kindResourceIds.set(entry, resourceId);
+    fileResourceIds.set(kind, kindResourceIds);
     const originalName = normalizeOriginalResourceName(entry.name);
     if (originalName) resourceOriginalNames[resourceId] = originalName;
     return resourceId;
@@ -353,11 +361,27 @@ const createResourceBuilder = () => {
   const addText = (resourceId, kind, name, text) => {
     if (resources[resourceId]) return resourceId;
     const normalized = String(text || '');
-    const bytes = new TextEncoder().encode(normalized);
+    const bytes = textToBytes(normalized);
     resources[resourceId] = {
       kind,
       name: normalizeResourceName(resourceId, name),
       type: 'text/tab-separated-values',
+      size: bytes.byteLength,
+      lastModified: 0,
+      encoding: 'base64',
+      data: textToBase64(normalized)
+    };
+    return resourceId;
+  };
+
+  const addJson = (resourceId, kind, name, value) => {
+    if (resources[resourceId]) return resourceId;
+    const normalized = JSON.stringify(value);
+    const bytes = textToBytes(normalized);
+    resources[resourceId] = {
+      kind,
+      name: normalizeResourceName(resourceId, name),
+      type: 'application/json',
       size: bytes.byteLength,
       lastModified: 0,
       encoding: 'base64',
@@ -426,6 +450,7 @@ const createResourceBuilder = () => {
     resourceOriginalNames,
     addFile,
     addText,
+    addJson,
     addCanonicalTable
   };
 };
@@ -522,7 +547,13 @@ const buildRecords = ({ state, filesData, resources }) => {
   }));
 };
 
-const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_depth) } = {}) => {
+const buildConfigOverrides = (
+  state,
+  {
+    depthRequested = Boolean(state.form.show_depth),
+    hasComparisonIntent = false
+  } = {}
+) => {
   const { form, adv } = state;
   const circular = state.mode.value === 'circular';
   const linearLabelPlacement = circular
@@ -531,8 +562,10 @@ const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_
   const linearTrackLayout = circular
     ? null
     : requireCurrentLinearTrackLayout(form.linear_track_layout);
-  const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
-  if (!circular && comparisonHeight.status === 'invalid') {
+  const comparisonHeight = !circular && hasComparisonIntent
+    ? classifyOptionalPositiveNumber(adv.comparison_height)
+    : null;
+  if (comparisonHeight?.status === 'invalid') {
     throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
   }
   const linearAxisManaged = state.modeProfileStateManager?.isManaged?.(
@@ -641,8 +674,13 @@ const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_
           [CONFIG_OVERRIDE_PATHS.linearTrackLayout]: linearTrackLayout,
           [CONFIG_OVERRIDE_PATHS.linearTrackAxisGap]: optionalNumber(adv.track_axis_gap),
           [CONFIG_OVERRIDE_PATHS.linearRulerOnAxis]: Boolean(form.linear_ruler_on_axis),
-          [CONFIG_OVERRIDE_PATHS.comparisonHeight]:
-            comparisonHeight.status === 'auto' ? null : comparisonHeight.value,
+          ...(hasComparisonIntent
+            ? {
+                [CONFIG_OVERRIDE_PATHS.comparisonHeight]:
+                  comparisonHeight.status === 'auto' ? null : comparisonHeight.value,
+                [CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle]: adv.pairwise_match_style
+              }
+            : {}),
           [CONFIG_OVERRIDE_PATHS.gcHeight]: optionalNumber(adv.gc_height),
           [CONFIG_OVERRIDE_PATHS.depthHeight]: optionalNumber(adv.depth_height),
           [CONFIG_OVERRIDE_PATHS.scaleStyle]: form.scale_style,
@@ -650,7 +688,6 @@ const buildConfigOverrides = (state, { depthRequested = Boolean(state.form.show_
           [CONFIG_OVERRIDE_PATHS.scaleLabelColor]: adv.ruler_label_color || null,
           [CONFIG_OVERRIDE_PATHS.scaleStrokeWidth]:
             optionalNumber(adv.scale_stroke_width),
-          [CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle]: adv.pairwise_match_style,
           [CONFIG_OVERRIDE_PATHS.normalizeLength]: Boolean(form.normalize_length)
         })
   };
@@ -1101,6 +1138,28 @@ const buildTrackPlan = ({
 
 const generatedProteinSettings = (state, baseline = {}) => {
   const blastp = state.losat.blastp || {};
+  const positiveInteger = (value, fallback) => optionalPositiveInteger(value) ?? fallback;
+  const nonNegativeInteger = (value, fallback) => {
+    const numeric = optionalNumber(value);
+    return Number.isInteger(numeric) && numeric >= 0 ? numeric : fallback;
+  };
+  const rawCollinearityUnitMode = String(blastp.collinearUnitMode || '').trim().toLowerCase();
+  const collinearityUnitMode = ['auto', 'cds', 'locus'].includes(rawCollinearityUnitMode)
+    ? rawCollinearityUnitMode
+    : 'auto';
+  const rawCollinearityColorMode = String(
+    blastp.collinearColorMode || ''
+  ).trim().toLowerCase().replace(/-/g, '_');
+  const resolvedCollinearityColorMode = rawCollinearityColorMode === 'identity'
+    ? 'average_identity'
+    : rawCollinearityColorMode;
+  const collinearityColorMode = [
+    'average_identity',
+    'orientation',
+    'orientation_identity'
+  ].includes(resolvedCollinearityColorMode)
+    ? resolvedCollinearityColorMode
+    : 'orientation';
   const baselineCollinearity = baseline.collinearityParams &&
     typeof baseline.collinearityParams === 'object' &&
     !Array.isArray(baseline.collinearityParams)
@@ -1118,27 +1177,29 @@ const generatedProteinSettings = (state, baseline = {}) => {
       kind: baselineCollinearity.kind || 'lossless',
       parameters: {
         ...baselineParameters,
-        minAnchors: Number(blastp.collinearMinAnchors) || 1,
-        maxUnitGap: Number(blastp.collinearMaxUnitGap) || 0,
-        maxDiagonalDrift: Number(blastp.collinearMaxDiagonalDrift) || 0,
-        maxConflicts: Number(blastp.collinearMaxConflictsInMergeGap) || 0,
+        minAnchors: positiveInteger(blastp.collinearMinAnchors, 1),
+        maxUnitGap: nonNegativeInteger(blastp.collinearMaxUnitGap, 0),
+        maxDiagonalDrift: nonNegativeInteger(blastp.collinearMaxDiagonalDrift, 0),
+        maxConflicts: nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
         mergeOrientation: baselineParameters.mergeOrientation || 'either'
       }
     },
-    collinearityUnitMode: String(blastp.collinearUnitMode || 'auto'),
-    collinearityAnchorMode: String(blastp.collinearAnchorMode || 'rbh'),
-    collinearitySearchScope: String(blastp.collinearSearchScope || 'adjacent'),
-    collinearityColorMode: String(blastp.collinearColorMode || 'orientation'),
+    collinearityUnitMode,
+    collinearityAnchorMode: normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
+    collinearitySearchScope: normalizeCollinearSearchScope(blastp.collinearSearchScope),
+    collinearityColorMode,
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
     losatpThreads: optionalPositiveInteger(state.losat.threadsPerJob),
-    proteinBlastpMaxHits: Number(blastp.maxHits) || 5,
+    proteinBlastpMaxHits: positiveInteger(blastp.maxHits, 5),
     proteinBlastpCandidateLimit:
       baseline.proteinBlastpCandidateLimit ?? optionalPositiveInteger(blastp.candidateLimit),
-    orthogroupMembershipMode: String(blastp.orthogroupMembershipMode || 'anchor_core_v1'),
-    orthogroupMemberMaxHits: Number(blastp.orthogroupMemberMaxHits) || 5,
+    orthogroupMembershipMode: normalizeOrthogroupMembershipMode(
+      blastp.orthogroupMembershipMode
+    ),
+    orthogroupMemberMaxHits: positiveInteger(blastp.orthogroupMemberMaxHits, 5),
     collinearMaxParalogLinksPerOrthogroup:
-      Number(blastp.collinearMaxParalogLinksPerOrthogroup) || 2,
+      positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2),
     alignOrthogroupFeature:
       String(state.selectedOrthogroupAlignmentFeature.value || '').trim() || null
   };
@@ -1266,6 +1327,28 @@ const buildComparisons = ({
     }
     resolvedByEdgeKey.set(edgeKey, comparison);
   });
+  const resolvedAnalysisArtifacts = new Map();
+  (Array.isArray(resolvedComparisons) ? resolvedComparisons : []).forEach((comparison) => {
+    if (!['orthogroupResult', 'collinearityResult'].includes(comparison?.kind)) return;
+    if (resolvedAnalysisArtifacts.has(comparison.kind)) {
+      throw new Error(`Multiple resolved ${comparison.kind} artifacts were produced.`);
+    }
+    const expectedValueKind = comparison.kind === 'collinearityResult'
+      ? 'result'
+      : 'orthogroupResult';
+    const typedResource = comparison.typedResource;
+    if (
+      !typedResource
+      || typeof typedResource !== 'object'
+      || Array.isArray(typedResource)
+      || ![1, 2].includes(typedResource.schema)
+      || typedResource.kind !== expectedValueKind
+      || !Object.prototype.hasOwnProperty.call(typedResource, 'value')
+    ) {
+      throw new Error(`Resolved ${comparison.kind} metadata is not a canonical typed resource.`);
+    }
+    resolvedAnalysisArtifacts.set(comparison.kind, typedResource);
+  });
 
   const persistedCanonicalComparisons = Array.isArray(filesData.linearCanonicalComparisons)
     ? filesData.linearCanonicalComparisons
@@ -1285,7 +1368,11 @@ const buildComparisons = ({
       comparison?.kind === 'collinearityResult'
     ) && activeProteinPipeline && comparison.canonicalInput !== true
   ));
-  [...persistedCanonicalInputs, ...persistedMetadata].forEach((comparison, index) => {
+  let hasResolvedProteinAnalysis = false;
+  [
+    ...(resolvedAnalysisArtifacts.size === 0 ? persistedCanonicalInputs : []),
+    ...(resolvedAnalysisArtifacts.size === 0 ? persistedMetadata : [])
+  ].forEach((comparison, index) => {
     if (!comparison.file) return;
     if (comparison.kind === 'orthogroupResult') {
       comparisons.push({
@@ -1297,6 +1384,7 @@ const buildComparisons = ({
         ),
         encoding: String(comparison.encoding || 'canonicalJson')
       });
+      if (comparison.canonicalInput !== true) hasResolvedProteinAnalysis = true;
       return;
     }
     if (comparison.kind === 'collinearityResult') {
@@ -1310,6 +1398,7 @@ const buildComparisons = ({
         encoding: String(comparison.encoding || 'canonicalJson'),
         valueKind: String(comparison.valueKind || 'result')
       });
+      if (comparison.canonicalInput !== true) hasResolvedProteinAnalysis = true;
       return;
     }
     if (comparison.kind !== 'precomputedProteinComparison') return;
@@ -1327,10 +1416,28 @@ const buildComparisons = ({
       resources
     }));
   });
+  resolvedAnalysisArtifacts.forEach((typedResource, kind) => {
+    const collinearity = kind === 'collinearityResult';
+    const resourceId = collinearity
+      ? 'comparison-resolved-collinearity'
+      : 'comparison-resolved-orthogroups';
+    comparisons.push({
+      kind,
+      resourceId: resources.addJson(
+        resourceId,
+        canonicalComparisonResourceKind({ kind }),
+        `${resourceId}.json`,
+        typedResource
+      ),
+      encoding: 'canonicalJson',
+      ...(collinearity ? { valueKind: 'result' } : {})
+    });
+    hasResolvedProteinAnalysis = true;
+  });
 
   const persistedProteinByEdgeKey = new Map();
   const persistedProteinByEndpoints = new Map();
-  if (activeProteinPipeline) {
+  if (activeProteinPipeline && resolvedAnalysisArtifacts.size === 0) {
     persistedCanonicalComparisons
       .filter((comparison) => (
         comparison?.kind === 'precomputedProteinComparison' &&
@@ -1415,7 +1522,7 @@ const buildComparisons = ({
   const shouldEmitResolvedProteinMarker = (
     activeProteinPipeline &&
     activeLosatEdges.length > 0 &&
-    hasPrecomputedProteinComparisons
+    (hasPrecomputedProteinComparisons || hasResolvedProteinAnalysis)
   );
   const shouldGenerateSelectedProteinPairs = (
     selectedPairwiseLosat &&
@@ -1527,6 +1634,13 @@ export const buildCanonicalRenderRequest = ({
       'Turn Normalize off or assign each record to a separate row.'
     );
   }
+  const hasLinearComparisonIntent = (
+    state.mode.value === 'linear' &&
+    comparisonPlanSnapshot?.hasComparisonIntent === true
+  );
+  const comparisonOptionsRequested = (
+    state.mode.value === 'circular' || hasLinearComparisonIntent
+  );
   const resources = createResourceBuilder();
   const webFiles = {};
   const records = buildRecords({ state, filesData, resources });
@@ -1575,7 +1689,8 @@ export const buildCanonicalRenderRequest = ({
       );
   const diagramOptions = {
     configOverrides: buildConfigOverrides(state, {
-      depthRequested: trackPlan.depthRequested
+      depthRequested: trackPlan.depthRequested,
+      hasComparisonIntent: hasLinearComparisonIntent
     }),
     tracks: trackPlan.tracks,
     output: {
@@ -1594,10 +1709,14 @@ export const buildCanonicalRenderRequest = ({
     depthStep: optionalPositiveInteger(state.adv.depth_step_size),
     plotTitle: String(state.form.plot_title || '').trim() || null,
     plotTitleFontSize: optionalNumber(state.adv.plot_title_font_size),
-    evalue: Number(state.adv.evalue),
-    bitscore: Number(state.adv.min_bitscore),
-    identity: Number(state.adv.identity),
-    alignmentLength: Number(state.adv.alignment_length) || 0
+    ...(comparisonOptionsRequested
+      ? {
+          evalue: Number(state.adv.evalue),
+          bitscore: Number(state.adv.min_bitscore),
+          identity: Number(state.adv.identity),
+          alignmentLength: Number(state.adv.alignment_length) || 0
+        }
+      : {})
   };
   if (Array.isArray(state.annotationSets) && state.annotationSets.length > 0) {
     diagramOptions.annotations = annotationOptionsPayload(state.annotationSets);
@@ -1717,7 +1836,7 @@ export const buildCanonicalRenderRequest = ({
       );
       webFiles.conservationBlastSource = 'losat-cache';
     }
-  } else {
+  } else if (hasLinearComparisonIntent) {
     diagramOptions.pairwiseMatchStyle = String(state.adv.pairwise_match_style || 'ribbon');
   }
 
@@ -2203,14 +2322,13 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
   if (typeof entry.data !== 'string') {
     throw new Error(`Canonical resource ${resourceId} has no text payload.`);
   }
-  let binary;
+  let bytes;
   try {
-    binary = atob(entry.data);
+    bytes = base64ToBytes(entry.data);
   } catch (error) {
     throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`, { cause: error });
   }
-  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-  return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  return bytesToText(bytes, { fatal: true });
 };
 
 const resourceTextFromRef = (resources, ref) => (
@@ -2452,22 +2570,30 @@ const combineCircularGenbankResources = (resources, records, originalName = '') 
 
   const files = resourceIds.map((resourceId) => resourceAsLegacyFile(resources, resourceId));
   if (files.length === 1) return files[0];
-  const binary = files
-    .map((file) => {
-      if (file.encoding && file.encoding !== 'base64') {
-        throw new Error(`Unsupported canonical resource encoding: ${file.encoding}`);
-      }
-      const decoded = atob(String(file.data || ''));
-      return decoded.endsWith('\n') ? decoded : `${decoded}\n`;
-    })
-    .join('');
+  const chunks = files.map((file) => {
+    if (file.encoding && file.encoding !== 'base64') {
+      throw new Error(`Unsupported canonical resource encoding: ${file.encoding}`);
+    }
+    const decoded = base64ToBytes(file.data);
+    if (decoded[decoded.length - 1] === 0x0A) return decoded;
+    const terminated = new Uint8Array(decoded.length + 1);
+    terminated.set(decoded);
+    terminated[decoded.length] = 0x0A;
+    return terminated;
+  });
+  const bytes = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.length, 0));
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  });
   return {
     name: normalizeOriginalResourceName(originalName) || 'canonical-circular-records.gb',
     type: 'text/plain',
-    size: binary.length,
+    size: bytes.length,
     lastModified: Math.max(0, ...files.map((file) => Number(file.lastModified) || 0)),
     encoding: 'base64',
-    data: btoa(binary)
+    data: bytesToBase64(bytes)
   };
 };
 

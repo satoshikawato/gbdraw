@@ -1,47 +1,73 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+[Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md)
 
 # gbdraw documentation
 
-`gbdraw` is available as a hosted web app, a local browser-based GUI, and a command-line tool for circular and linear genome diagrams.
+gbdraw creates publication-quality Circular and Linear genome diagrams in a hosted web app, a local browser app, the command line, or Python.
 
-Use [https://gbdraw.app/](https://gbdraw.app/) to create a diagram without installing `gbdraw`, or install it locally for pipeline integration, non-SVG export, or offline use.
+## Choose a route
 
-## Choose an entry point
-
-- [Installation](./INSTALL.md): choose between the hosted web app, Bioconda, or a local development install.
-- [Quickstart](./QUICKSTART.md): draw a circular genome diagram from a GenBank record.
-- [Workflow guide](./WORKFLOW_GUIDE.md): choose the shortest path for one genome, comparisons, quantitative tracks, automation, or the web app.
-- [Recipes](./RECIPES.md): copy-paste command patterns for common tasks.
+| I want to... | Go to | What you will find |
+| --- | --- | --- |
+| Learn by building a complete figure | [Tutorials](./TUTORIALS/README.md) | Reproducible Circular and Linear projects for the web app, command line, and Python |
+| Look up exact behavior | [Technical documentation](./REFERENCE/README.md) | Controls, options, schemas, APIs, compatibility rules, and output contracts |
+| Choose an approach or solve a common problem | [FAQ](./FAQ.md) | Short answers about layouts, interfaces, comparison methods, privacy, publication, and troubleshooting |
+| Inspect finished figures | [Gallery](./GALLERY.md) | Curated static and interactive examples linked to reproducible Tutorials |
 
 ## Tutorials
 
-Use the [tutorial index](./TUTORIALS/README.md) for the complete set of numbered command-line guides, web app tutorials, and related guides.
+Tutorials begin with named inputs and end with a figure you can check. Begin
+with a first [Circular](./TUTORIALS/GUI/first-circular-genome-diagram.md)
+or [Linear](./TUTORIALS/GUI/first-linear-genome-diagram.md) project, then choose
+another outcome from the full index:
 
-## Reference
+- [All Tutorials](./TUTORIALS/README.md)
+- [Web app Tutorials](./TUTORIALS/GUI/README.md)
+- [Command-line Tutorials](./TUTORIALS/CLI/README.md)
+- [Python Tutorials](./TUTORIALS/PYTHON/README.md)
 
-- [CLI Reference](./CLI_Reference.md): current command help for `gbdraw`, `gbdraw circular`, and `gbdraw linear`.
-- [Python API](./PYTHON_API.md): render circular and linear diagrams from Python.
-- [Typed API](./TYPED_API.md): build explicit render requests and session-aware integrations.
-- [Session and request compatibility](./SESSION_COMPATIBILITY.md): supported persisted versions, migrations, and saved LOSAT cache behavior.
-- [0.14.0b0 release notes](./RELEASE_NOTES_0.14.0b0.md): Python API additions, behavior corrections, and migration guidance.
-- [GFF3 + FASTA input](./GFF3_FASTA.md): prepare, validate, and draw annotation files without GenBank conversion.
-- [Export formats](./EXPORT.md): choose SVG, interactive SVG, PNG, PDF, EPS, or PS and understand paired interactive output files.
-- [SVG IDs and semantic hooks](./SVG_SEMANTIC_HOOKS.md): stable selectors for records, tracks, definitions, features, matches, and annotations.
-- [Gallery](./GALLERY.md): example diagrams and the commands used to generate them.
-- [Interactive SVG gallery](https://gbdraw.app/gallery/): hosted genome diagrams with feature and match popups. Selected examples include web-app tutorials.
-- [FAQ](./FAQ.md): common questions, limitations, and workarounds.
-- [About](./ABOUT.md): citation information and project background.
+## Technical documentation
 
-## Choose an interface
+Use [Technical documentation](./REFERENCE/README.md) for exact controls, CLI
+options, schemas, APIs, compatibility rules, formats, SVG hooks, and source
+provenance. Common entry points include:
 
-- Hosted web app: [https://gbdraw.app/](https://gbdraw.app/)
-- Hosted interactive SVG gallery and web tutorials: [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/)
-- Local GUI: `gbdraw gui`
-- CLI entry point: `gbdraw circular ...` and `gbdraw linear ...`
-- Protein-search modes:
-  - `--protein_blastp_mode pairwise` draws adjacent CDS protein matches.
-  - `--protein_blastp_mode orthogroup` assigns CDS-derived proteins to gbdraw similarity groups. It does not infer phylogeny-based orthogroups.
-  - `--protein_blastp_mode collinear` combines compatible runs of protein-match anchors into collinear blocks.
-  - gbdraw uses LOSAT when available and can fall back to NCBI BLAST+ `blastp`. See [the protein-comparison guide](./TUTORIALS/4_Protein_Comparisons.md#4-gbdraw-similarity-group-ribbons-orthogroup-mode).
+- [Web app](./REFERENCE/web-app.md)
+- [Command line](./REFERENCE/command-line.md)
+- [Generated CLI option inventory](./CLI_Reference.md)
+- [Python API](./REFERENCE/python-api.md)
+- [Typed requests](./REFERENCE/typed-requests.md)
+- [Input formats and TSV schemas](./REFERENCE/input-formats-and-tsv-schemas.md)
+- [Comparison programs, thresholds, and results](./REFERENCE/comparison-programs-thresholds-and-results.md)
+- [Palettes, feature rules, labels, shapes, and tracks](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md)
+- [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md)
+- [Output formats and export](./REFERENCE/output-formats-and-export.md)
+- [Recipes](./RECIPES.md)
+- [SVG semantic hooks](./SVG_SEMANTIC_HOOKS.md)
 
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | [FAQ](./FAQ.md) | [About](./ABOUT.md)
+## FAQ
+
+The [FAQ](./FAQ.md) answers layout, interface, comparison method, privacy,
+publication, and troubleshooting questions. Each answer links to the full
+technical documentation when needed.
+
+## Gallery
+
+Use the [Gallery](./GALLERY.md) to compare finished figures. Its entries link
+back to reproducible Tutorials or the relevant technical documentation.
+
+## Supporting documents
+
+- [Installation](./INSTALL.md)
+- [Get the tutorial inputs](./GETTING_TUTORIAL_DATA.md)
+- [Palette Explorer](./PALETTE_EXPLORER.md)
+- [About and citation](./ABOUT.md)
+- [Release notes](./RELEASE_NOTES_0.14.0b0.md)
+
+## Entry points
+
+- Hosted web app: [gbdraw.app](https://gbdraw.app/)
+- Local web app: `gbdraw gui`
+- Command line: `gbdraw circular` and `gbdraw linear`
+- Python: package-root drawing API or typed `gbdraw.api` requests
+
+[Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | [FAQ](./FAQ.md) | [Gallery](./GALLERY.md)

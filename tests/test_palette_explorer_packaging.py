@@ -3,6 +3,11 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
+
+pytestmark = pytest.mark.gallery
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PALETTE_ENTRYPOINT = Path("gbdraw/web/gallery/palettes/index.html")

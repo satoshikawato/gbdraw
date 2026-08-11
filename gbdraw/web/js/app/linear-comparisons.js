@@ -17,6 +17,16 @@ let comparisonCounter = 0;
 
 const cleanUid = (value) => String(value || '').trim();
 
+export const plainTextLinearRecordLabel = (value) => {
+  let label = String(value ?? '');
+  let previous;
+  do {
+    previous = label;
+    label = label.replace(/<[^<>]*>/g, '');
+  } while (label !== previous);
+  return label.replace(/[<>]/g, '').trim() || 'Record';
+};
+
 const normalizeMode = (value) => {
   const mode = String(value || '').trim().toLowerCase();
   return VALID_MODES.has(mode) ? mode : LINEAR_COMPARISON_MODES.ADJACENT;
@@ -40,7 +50,7 @@ export const linearComparisonEdgeKey = (queryUid, subjectUid) => (
 );
 
 export const createDefaultLinearComparisonPlan = () => ({
-  mode: LINEAR_COMPARISON_MODES.ADJACENT,
+  mode: LINEAR_COMPARISON_MODES.NONE,
   defaultSource: LINEAR_COMPARISON_SOURCES.LOSAT,
   edges: []
 });
@@ -100,16 +110,9 @@ export const normalizeLinearComparisonPlan = (plan = {}) => {
   };
 };
 
-export const reconcileLinearComparisonPlan = (plan, sequences = []) => {
-  const normalized = normalizeLinearComparisonPlan(plan);
-  const validUids = new Set(
-    (Array.isArray(sequences) ? sequences : []).map((sequence) => cleanUid(sequence?.uid)).filter(Boolean)
-  );
-  normalized.edges = normalized.edges.filter((edge) => (
-    validUids.has(edge.queryUid) && validUids.has(edge.subjectUid)
-  ));
-  return normalized;
-};
+export const reconcileLinearComparisonPlan = (plan, _sequences = []) => (
+  normalizeLinearComparisonPlan(plan)
+);
 
 const positiveRow = (value, fallback) => {
   const row = Number(value);
@@ -129,29 +132,41 @@ export const normalizeLinearComparisonRows = (sequences = [], layout = []) => {
   }));
 };
 
-export const adjacentRowPairs = (sequences = [], layout = [], allPairs = false) => {
-  const rows = new Map(normalizeLinearComparisonRows(sequences, layout).map((entry) => [entry.uid, entry.row]));
-  const grouped = new Map();
-  (Array.isArray(sequences) ? sequences : []).forEach((sequence, index) => {
+const linearComparisonRowTopology = (sequences = [], layout = []) => {
+  const sequenceList = Array.isArray(sequences) ? sequences : [];
+  const normalizedRows = normalizeLinearComparisonRows(sequenceList, layout);
+  const rowByUid = new Map(normalizedRows.map((entry) => [entry.uid, entry.row]));
+  const recordsByRow = new Map();
+  sequenceList.forEach((sequence, index) => {
     const uid = cleanUid(sequence?.uid);
-    const row = rows.get(uid) || index + 1;
-    if (!grouped.has(row)) grouped.set(row, []);
-    grouped.get(row).push(uid);
+    const row = rowByUid.get(uid) || index + 1;
+    if (!recordsByRow.has(row)) recordsByRow.set(row, []);
+    recordsByRow.get(row).push({ uid, index, sequence });
   });
-  const orderedRows = [...grouped.keys()].sort((left, right) => left - right);
+  const orderedRows = [...recordsByRow.keys()].sort((left, right) => left - right);
+  return {
+    rowByUid,
+    recordsByRow,
+    orderedRows,
+    rowPositionByNumber: new Map(orderedRows.map((row, index) => [row, index]))
+  };
+};
+
+export const adjacentRowPairs = (sequences = [], layout = [], allPairs = false) => {
+  const { recordsByRow, orderedRows } = linearComparisonRowTopology(sequences, layout);
   const pairs = [];
   for (let index = 0; index < orderedRows.length - 1; index += 1) {
-    const upper = grouped.get(orderedRows[index]);
-    const lower = grouped.get(orderedRows[index + 1]);
+    const upper = recordsByRow.get(orderedRows[index]);
+    const lower = recordsByRow.get(orderedRows[index + 1]);
     if (allPairs) {
-      upper.forEach((queryUid) => {
-        lower.forEach((subjectUid) => pairs.push([queryUid, subjectUid]));
+      upper.forEach(({ uid: queryUid }) => {
+        lower.forEach(({ uid: subjectUid }) => pairs.push([queryUid, subjectUid]));
       });
       continue;
     }
     const pairCount = Math.min(upper.length, lower.length);
     for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
-      pairs.push([upper[pairIndex], lower[pairIndex]]);
+      pairs.push([upper[pairIndex].uid, lower[pairIndex].uid]);
     }
   }
   return pairs;
@@ -171,7 +186,7 @@ export const validateLinearComparisonEdges = ({
 } = {}) => {
   const sequenceList = Array.isArray(sequences) ? sequences : [];
   const validUids = new Set(sequenceList.map((sequence) => cleanUid(sequence?.uid)).filter(Boolean));
-  const rows = new Map(normalizeLinearComparisonRows(sequenceList, layout).map((entry) => [entry.uid, entry.row]));
+  const { rowByUid, rowPositionByNumber } = linearComparisonRowTopology(sequenceList, layout);
   const seen = new Set();
   const issues = [];
 
@@ -192,11 +207,13 @@ export const validateLinearComparisonEdges = ({
       issues.push(validationIssue('self', 'A comparison cannot connect a record to itself.', edge));
       return;
     }
-    const queryRow = rows.get(queryUid);
-    const subjectRow = rows.get(subjectUid);
+    const queryRow = rowByUid.get(queryUid);
+    const subjectRow = rowByUid.get(subjectUid);
     if (queryRow === subjectRow) {
       issues.push(validationIssue('same-row', 'Comparisons must connect records in different rows.', edge));
-    } else if (Math.abs(queryRow - subjectRow) !== 1) {
+    } else if (
+      Math.abs(rowPositionByNumber.get(queryRow) - rowPositionByNumber.get(subjectRow)) !== 1
+    ) {
       issues.push(validationIssue('non-adjacent', 'Comparisons must connect adjacent rows.', edge));
     }
     if (
@@ -325,14 +342,18 @@ const hasRetainedPayload = (edge) => Boolean(
 
 export const materializeResolvedEdgesAsSelectedPlan = (plan, resolution) => {
   const normalized = normalizeLinearComparisonPlan(plan);
-  const existingByKey = new Map(
-    normalized.edges.map((edge) => [linearComparisonEdgeKey(edge.queryUid, edge.subjectUid), edge])
-  );
+  const existingById = new Map(normalized.edges.map((edge) => [edge.id, edge]));
+  const existingByKey = new Map();
+  normalized.edges.forEach((edge) => {
+    const edgeKey = linearComparisonEdgeKey(edge.queryUid, edge.subjectUid);
+    if (!existingByKey.has(edgeKey)) existingByKey.set(edgeKey, edge);
+  });
   const activeKeys = new Set();
+  const activeIds = new Set();
   const selectedEdges = (Array.isArray(resolution?.edges) ? resolution.edges : []).map((edge) => {
     activeKeys.add(edge.edgeKey);
-    const existing = existingByKey.get(edge.edgeKey);
-    return createLinearComparisonEdge({
+    const existing = existingById.get(edge.id) || existingByKey.get(edge.edgeKey);
+    const selected = createLinearComparisonEdge({
       ...(existing || edge),
       id: existing?.id || '',
       queryUid: edge.queryUid,
@@ -340,10 +361,13 @@ export const materializeResolvedEdgesAsSelectedPlan = (plan, resolution) => {
       included: true,
       source: edge.source
     });
+    activeIds.add(selected.id);
+    return selected;
   });
   normalized.edges.forEach((edge) => {
     const edgeKey = linearComparisonEdgeKey(edge.queryUid, edge.subjectUid);
-    if (activeKeys.has(edgeKey) || !hasRetainedPayload(edge)) return;
+    if (activeIds.has(edge.id)) return;
+    if (!activeKeys.has(edgeKey) && !hasRetainedPayload(edge)) return;
     selectedEdges.push({ ...edge, included: false });
   });
   return {
@@ -351,6 +375,214 @@ export const materializeResolvedEdgesAsSelectedPlan = (plan, resolution) => {
     defaultSource: normalized.defaultSource,
     edges: selectedEdges
   };
+};
+
+const STRUCTURAL_PRESENTATION_ISSUES = new Set([
+  'duplicate',
+  'missing-uid',
+  'self',
+  'same-row',
+  'non-adjacent'
+]);
+
+const boundaryKey = (upperRow, lowerRow) => `${upperRow}->${lowerRow}`;
+
+const pairBoundary = ({ queryUid, subjectUid, rowByUid, rowPositionByNumber, boundariesByKey }) => {
+  const queryRow = rowByUid.get(queryUid);
+  const subjectRow = rowByUid.get(subjectUid);
+  const queryPosition = rowPositionByNumber.get(queryRow);
+  const subjectPosition = rowPositionByNumber.get(subjectRow);
+  if (
+    queryPosition === undefined ||
+    subjectPosition === undefined ||
+    Math.abs(queryPosition - subjectPosition) !== 1
+  ) {
+    return null;
+  }
+  const upperRow = queryPosition < subjectPosition ? queryRow : subjectRow;
+  const lowerRow = queryPosition < subjectPosition ? subjectRow : queryRow;
+  return boundariesByKey.get(boundaryKey(upperRow, lowerRow)) || null;
+};
+
+const presentationSource = ({ normalizedPlan, candidateKind, draft, resolved }) => {
+  if (resolved) return resolved.source;
+  if (
+    candidateKind === 'zipped' &&
+    normalizedPlan.mode === LINEAR_COMPARISON_MODES.ADJACENT
+  ) {
+    return normalizedPlan.defaultSource;
+  }
+  if (normalizedPlan.mode === LINEAR_COMPARISON_MODES.SELECTED && draft?.included) {
+    return draft.source;
+  }
+  return 'none';
+};
+
+export const buildLinearComparisonTimeline = ({
+  sequences = [],
+  layout = [],
+  plan = createDefaultLinearComparisonPlan(),
+  resolution = null
+} = {}) => {
+  const sequenceList = Array.isArray(sequences) ? sequences : [];
+  const normalizedPlan = normalizeLinearComparisonPlan(plan);
+  const indexByUid = new Map(sequenceList.map((sequence, index) => [cleanUid(sequence?.uid), index]));
+  const {
+    rowByUid,
+    recordsByRow,
+    orderedRows,
+    rowPositionByNumber
+  } = linearComparisonRowTopology(sequenceList, layout);
+  const boundariesByKey = new Map();
+  const rows = orderedRows.map((row, index) => {
+    let boundaryAfter = null;
+    if (index < orderedRows.length - 1) {
+      const lowerRow = orderedRows[index + 1];
+      boundaryAfter = {
+        upperRow: row,
+        lowerRow,
+        pairs: []
+      };
+      boundariesByKey.set(boundaryKey(row, lowerRow), boundaryAfter);
+    }
+    return {
+      row,
+      records: recordsByRow.get(row),
+      boundaryAfter
+    };
+  });
+
+  const issuesByDraftId = new Map();
+  validateLinearComparisonEdges({
+    edges: normalizedPlan.edges,
+    sequences: sequenceList,
+    layout
+  }).forEach((issue) => {
+    if (!STRUCTURAL_PRESENTATION_ISSUES.has(issue.code)) return;
+    if (!issuesByDraftId.has(issue.edgeId)) issuesByDraftId.set(issue.edgeId, []);
+    issuesByDraftId.get(issue.edgeId).push(issue);
+  });
+
+  const resolutionEdges = Array.isArray(resolution?.edges) ? resolution.edges : [];
+  const resolvedCandidateByEdgeKey = new Map();
+  resolutionEdges.forEach((edge) => {
+    if (!resolvedCandidateByEdgeKey.has(edge.edgeKey)) {
+      resolvedCandidateByEdgeKey.set(edge.edgeKey, edge);
+    }
+  });
+  const draftsByEdgeKey = new Map();
+  normalizedPlan.edges.forEach((draft) => {
+    const edgeKey = linearComparisonEdgeKey(draft.queryUid, draft.subjectUid);
+    if (!draftsByEdgeKey.has(edgeKey)) draftsByEdgeKey.set(edgeKey, []);
+    draftsByEdgeKey.get(edgeKey).push(draft);
+  });
+  const ownerDraftByEdgeKey = new Map();
+  draftsByEdgeKey.forEach((drafts, edgeKey) => {
+    const resolvedId = cleanUid(resolvedCandidateByEdgeKey.get(edgeKey)?.id);
+    ownerDraftByEdgeKey.set(
+      edgeKey,
+      drafts.find((draft) => draft.id === resolvedId) || drafts[0]
+    );
+  });
+
+  const unplacedDrafts = [];
+  const draftByEdgeKey = new Map();
+  normalizedPlan.edges.forEach((draft) => {
+    const edgeKey = linearComparisonEdgeKey(draft.queryUid, draft.subjectUid);
+    const owner = ownerDraftByEdgeKey.get(edgeKey);
+    const issues = (issuesByDraftId.get(draft.id) || [])
+      .filter((issue) => issue.code !== 'duplicate');
+    const boundary = pairBoundary({
+      queryUid: draft.queryUid,
+      subjectUid: draft.subjectUid,
+      rowByUid,
+      rowPositionByNumber,
+      boundariesByKey
+    });
+    if (draft !== owner) {
+      const fallbackIssues = [
+        validationIssue(
+          'duplicate',
+          'Selected comparisons cannot contain the same directed pair more than once.',
+          draft
+        ),
+        ...issues
+      ];
+      unplacedDrafts.push({ draft, issues: fallbackIssues });
+      return;
+    }
+    if (issues.length > 0 || !boundary) {
+      const fallbackIssues = issues.length > 0 ? issues : [validationIssue(
+        'non-adjacent',
+        'Comparisons must connect adjacent rows.',
+        draft
+      )];
+      unplacedDrafts.push({ draft, issues: fallbackIssues });
+      return;
+    }
+    draftByEdgeKey.set(edgeKey, draft);
+  });
+
+  const resolvedByEdgeKey = new Map();
+  resolutionEdges.forEach((edge) => {
+    const edgeDrafts = draftsByEdgeKey.get(edge.edgeKey) || [];
+    if (edgeDrafts.length > 0) {
+      const owner = draftByEdgeKey.get(edge.edgeKey);
+      if (!owner || owner.id !== edge.id) return;
+    }
+    if (!resolvedByEdgeKey.has(edge.edgeKey)) resolvedByEdgeKey.set(edge.edgeKey, edge);
+  });
+  const pairByEdgeKey = new Map();
+  const addPair = ({ queryUid, subjectUid, candidateKind }) => {
+    const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
+    const boundary = pairBoundary({
+      queryUid,
+      subjectUid,
+      rowByUid,
+      rowPositionByNumber,
+      boundariesByKey
+    });
+    if (!boundary || pairByEdgeKey.has(edgeKey)) return;
+    const draft = draftByEdgeKey.get(edgeKey) || null;
+    const resolved = resolvedByEdgeKey.get(edgeKey) || null;
+    const pair = {
+      edgeKey,
+      edgeId: draft?.id || resolved?.id || `linear-derived-${edgeKey}`,
+      queryUid,
+      subjectUid,
+      queryIndex: indexByUid.get(queryUid),
+      subjectIndex: indexByUid.get(subjectUid),
+      source: presentationSource({ normalizedPlan, candidateKind, draft, resolved }),
+      active: Boolean(resolved),
+      candidateKind,
+      draft,
+      resolved
+    };
+    boundary.pairs.push(pair);
+    pairByEdgeKey.set(edgeKey, pair);
+  };
+
+  adjacentRowPairs(sequenceList, layout).forEach(([queryUid, subjectUid]) => {
+    addPair({ queryUid, subjectUid, candidateKind: 'zipped' });
+  });
+  resolutionEdges.forEach((edge) => {
+    if (resolvedByEdgeKey.get(edge.edgeKey) !== edge) return;
+    addPair({
+      queryUid: cleanUid(edge?.queryUid),
+      subjectUid: cleanUid(edge?.subjectUid),
+      candidateKind: 'resolved'
+    });
+  });
+  normalizedPlan.edges.forEach((draft) => {
+    if (draftByEdgeKey.get(linearComparisonEdgeKey(draft.queryUid, draft.subjectUid)) !== draft) return;
+    addPair({
+      queryUid: draft.queryUid,
+      subjectUid: draft.subjectUid,
+      candidateKind: 'draft'
+    });
+  });
+
+  return { rows, unplacedDrafts };
 };
 
 export const buildPairwiseLosatJobSpecs = ({

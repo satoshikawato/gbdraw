@@ -13,6 +13,7 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from svgwrite.container import Group
 
+import gbdraw.labels.linear as linear_labels_module
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
@@ -274,6 +275,59 @@ def _label_bounds_overlap(label1: dict, label2: dict, min_gap_px: float = 0.0) -
         or bottom1 + min_gap_px <= top2
         or bottom2 + min_gap_px <= top1
     )
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("text_anchor", "expected"),
+    (
+        ("start", (100.0, 120.0, 45.0, 55.0)),
+        ("middle", (90.0, 110.0, 45.0, 55.0)),
+        ("end", (80.0, 100.0, 45.0, 55.0)),
+    ),
+)
+def test_unrotated_label_bounds_skip_rotated_corner_geometry(
+    monkeypatch: pytest.MonkeyPatch,
+    text_anchor: str,
+    expected: tuple[float, float, float, float],
+) -> None:
+    def unexpected_rotated_geometry(*_args, **_kwargs):
+        raise AssertionError("unrotated labels should use the exact axis-aligned path")
+
+    monkeypatch.setattr(
+        linear_labels_module,
+        "_rotated_bounds_from_anchor",
+        unexpected_rotated_geometry,
+    )
+
+    bounds = calculate_label_bounds(
+        {
+            "width_px": 20.0,
+            "height_px": 10.0,
+            "rotation_deg": 0.0,
+            "text_anchor": text_anchor,
+            "middle_x": 100.0,
+            "middle_y": 50.0,
+        }
+    )
+
+    assert bounds == expected
+
+
+@pytest.mark.linear
+def test_rotated_label_bounds_retain_oriented_geometry() -> None:
+    bounds = calculate_label_bounds(
+        {
+            "width_px": 20.0,
+            "height_px": 10.0,
+            "rotation_deg": 90.0,
+            "text_anchor": "start",
+            "middle_x": 100.0,
+            "middle_y": 50.0,
+        }
+    )
+
+    assert bounds == pytest.approx((95.0, 105.0, 50.0, 70.0))
 
 
 def _assert_no_label_bounds_overlap(labels: list[dict], min_gap_px: float = 0.0) -> None:
@@ -889,7 +943,6 @@ def test_linear_external_label_track_index_matches_legacy_scan() -> None:
             indexed_track_indexes,
             indexed_label_by_id,
             label,
-            bucket_size=16.0,
         )
         indexed_assignments.append(indexed_track)
         indexed_tracks.setdefault(f"track_{indexed_track}", []).append(label)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
-from dataclasses import asdict, dataclass, fields, is_dataclass
+from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
 from io import StringIO
 import json
 import math
@@ -437,6 +437,16 @@ _TYPED_TREE_CLASSES = {
         OrthologEdge,
         OrthologPath,
     )
+}
+_SCHEMA1_TYPED_OPTIONAL_FIELDS = {
+    "CollinearityAnchor": frozenset(
+        {
+            "queryViewFeatureSvgId",
+            "subjectViewFeatureSvgId",
+            "queryFeatureIndex",
+            "subjectFeatureIndex",
+        }
+    ),
 }
 
 
@@ -3405,13 +3415,30 @@ def _typed_json_resource(
     value: object,
     resources: _ResourceBuilder,
 ) -> str:
+    content = encode_canonical_typed_resource(value_kind, value)
+    resources.add_bytes(
+        resource_id,
+        kind=kind,
+        name=f"{resource_id}.json",
+        content=content,
+    )
+    return resource_id
+
+
+def encode_canonical_typed_resource(value_kind: str, value: object) -> bytes:
+    """Encode one value using the canonical request's typed JSON resource contract."""
+
+    if not isinstance(value_kind, str) or not value_kind.strip():
+        raise CanonicalRequestEncodingError(
+            "Canonical typed resources require a non-empty value kind."
+        )
     body = {
-        "schema": 1,
+        "schema": 2,
         "kind": value_kind,
         "value": _encode_typed_tree(value),
     }
     try:
-        content = json.dumps(
+        return json.dumps(
             body,
             ensure_ascii=False,
             sort_keys=True,
@@ -3420,15 +3447,8 @@ def _typed_json_resource(
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise CanonicalRequestEncodingError(
-            f"Could not encode typed resource {resource_id!r}."
+            f"Could not encode canonical typed resource {value_kind!r}."
         ) from exc
-    resources.add_bytes(
-        resource_id,
-        kind=kind,
-        name=f"{resource_id}.json",
-        content=content,
-    )
-    return resource_id
 
 
 def _read_typed_json_resource(
@@ -3451,11 +3471,17 @@ def _read_typed_json_resource(
     payload = _object(
         raw, path=f"{path} resource", required={"schema", "kind", "value"}
     )
-    if payload["schema"] != 1 or payload["kind"] != value_kind:
+    resource_schema = payload["schema"]
+    if resource_schema not in {1, 2} or payload["kind"] != value_kind:
         raise CanonicalRequestDecodingError(
             f"Canonical JSON resource metadata does not match {path}."
         )
-    return _decode_typed_tree(payload["value"], expected, path=f"{path}.value")
+    return _decode_typed_tree(
+        payload["value"],
+        expected,
+        path=f"{path}.value",
+        resource_schema=resource_schema,
+    )
 
 
 def _encode_typed_tree(value: object) -> Any:
@@ -3483,7 +3509,13 @@ def _encode_typed_tree(value: object) -> Any:
     return _json_value(value, path="typed resource")
 
 
-def _decode_typed_tree(value: object, hint: object, *, path: str) -> Any:
+def _decode_typed_tree(
+    value: object,
+    hint: object,
+    *,
+    path: str,
+    resource_schema: int,
+) -> Any:
     if hint is Any or hint is object:
         return value
     origin = get_origin(hint)
@@ -3496,12 +3528,18 @@ def _decode_typed_tree(value: object, hint: object, *, path: str) -> Any:
             if branch is type(None):
                 continue
             if isinstance(branch, type) and branch.__name__ == tagged_type:
-                return _decode_typed_tree(value, branch, path=path)
+                return _decode_typed_tree(
+                    value, branch, path=path, resource_schema=resource_schema
+                )
             branch_origin = get_origin(branch)
             if branch_origin in {tuple, list, Sequence, SequenceABC} and isinstance(value, list):
-                return _decode_typed_tree(value, branch, path=path)
+                return _decode_typed_tree(
+                    value, branch, path=path, resource_schema=resource_schema
+                )
             if _matches_type(value, branch):
-                return _decode_typed_tree(value, branch, path=path)
+                return _decode_typed_tree(
+                    value, branch, path=path, resource_schema=resource_schema
+                )
         raise CanonicalRequestDecodingError(
             f"Typed resource value at {path} does not match its union contract."
         )
@@ -3513,20 +3551,46 @@ def _decode_typed_tree(value: object, hint: object, *, path: str) -> Any:
             )
         raw_fields = _object(tagged["fields"], path=f"{path}.fields")
         hints = get_type_hints(hint)
-        field_map = {_camel(item.name): item.name for item in fields(hint)}
-        _require_exact_fields(raw_fields, path=f"{path}.fields", required=set(field_map))
-        kwargs = {
-            name: _decode_typed_tree(
-                raw_fields[key], hints[name], path=f"{path}.fields.{key}"
-            )
-            for key, name in field_map.items()
-        }
+        field_defs = {_camel(item.name): item for item in fields(hint)}
+        optional_fields = (
+            _SCHEMA1_TYPED_OPTIONAL_FIELDS.get(hint.__name__, frozenset())
+            if resource_schema == 1
+            else frozenset()
+        )
+        _require_exact_fields(
+            raw_fields,
+            path=f"{path}.fields",
+            required=set(field_defs).difference(optional_fields),
+            optional=set(optional_fields),
+        )
+        kwargs: dict[str, object] = {}
+        for key, item in field_defs.items():
+            if key in raw_fields:
+                kwargs[item.name] = _decode_typed_tree(
+                    raw_fields[key],
+                    hints[item.name],
+                    path=f"{path}.fields.{key}",
+                    resource_schema=resource_schema,
+                )
+            elif item.default is not MISSING:
+                kwargs[item.name] = item.default
+            elif item.default_factory is not MISSING:
+                kwargs[item.name] = item.default_factory()
+            else:  # pragma: no cover - guarded by the required-field check
+                raise CanonicalRequestDecodingError(
+                    f"Missing required field at {path}.fields.{key}."
+                )
         return hint(**kwargs)
     if origin in {tuple, list, Sequence, SequenceABC}:
         raw = _array(value, path=path)
         item_hint = args[0] if args else Any
         decoded = [
-            _decode_typed_tree(item, item_hint, path=f"{path}[{index}]")
+            _decode_typed_tree(
+                item,
+                item_hint,
+                path=f"{path}[{index}]",
+                resource_schema=resource_schema,
+            )
             for index, item in enumerate(raw)
         ]
         return tuple(decoded) if origin is tuple else decoded
@@ -3538,7 +3602,12 @@ def _decode_typed_tree(value: object, hint: object, *, path: str) -> Any:
                 f"Unsupported typed resource mapping key contract at {path}."
             )
         return {
-            key: _decode_typed_tree(item, value_hint, path=f"{path}.{key}")
+            key: _decode_typed_tree(
+                item,
+                value_hint,
+                path=f"{path}.{key}",
+                resource_schema=resource_schema,
+            )
             for key, item in raw.items()
         }
     if origin is Literal:
@@ -3606,13 +3675,14 @@ def _require_exact_fields(
     *,
     path: str,
     required: set[str],
+    optional: set[str] | frozenset[str] = frozenset(),
 ) -> None:
     missing = required - set(value)
     if missing:
         raise CanonicalRequestDecodingError(
             f"Missing required field(s) at {path}: {', '.join(sorted(missing))}."
         )
-    unknown = set(value) - required
+    unknown = set(value) - required - set(optional)
     if unknown:
         raise CanonicalRequestDecodingError(
             f"Unknown field(s) at {path}: {', '.join(sorted(unknown))}."
@@ -3799,5 +3869,6 @@ __all__ = [
     "CanonicalRequestResource",
     "EncodedCanonicalRequest",
     "decode_canonical_request",
+    "encode_canonical_typed_resource",
     "encode_canonical_request",
 ]

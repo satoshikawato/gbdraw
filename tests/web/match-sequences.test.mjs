@@ -70,6 +70,95 @@ test('registry refuses ambiguous record IDs and resolves stable keys first', () 
   ]);
   assert.equal(registry.resolve('linear:record:1', 'dup').source.sequence, 'CCCC');
   assert.match(registry.resolve('', 'dup', { origin: 'linear-record' }).reason, /ambiguous/);
+  assert.equal(
+    registry.resolve('', 'wrong-record', { origin: 'linear-record', recordIndex: 0 }).source,
+    null
+  );
+  assert.match(
+    registry.resolve('', 'wrong-record', { origin: 'linear-record', recordIndex: 0 }).reason,
+    /No sequence source matched/
+  );
+});
+
+test('registry validates every supplied source identity field and duplicate key', () => {
+  const registry = createSequenceSourceRegistry([
+    {
+      key: 'linear:record:0',
+      recordId: 'record-a',
+      aliases: ['record-a.1'],
+      sequence: 'AAAA',
+      origin: 'linear-record',
+      recordIndex: 0,
+      sourceIndex: 2
+    },
+    {
+      key: 'linear:record:0',
+      recordId: 'record-a',
+      aliases: ['record-a.1'],
+      sequence: 'AAAA',
+      origin: 'linear-record',
+      recordIndex: 0,
+      sourceIndex: 2
+    },
+    {
+      key: 'invalid:record',
+      recordId: 'invalid',
+      sequence: 'CCCC',
+      recordIndex: -1
+    },
+    {
+      key: 'duplicate:key',
+      recordId: 'first',
+      sequence: 'GGGG'
+    },
+    {
+      key: 'duplicate:key',
+      recordId: 'second',
+      sequence: 'TTTT'
+    }
+  ]);
+
+  assert.equal(
+    registry.values().filter((source) => source.key === 'linear:record:0').length,
+    1
+  );
+  assert.equal(registry.resolve('invalid:record', 'invalid').source, null);
+  assert.match(registry.resolve('duplicate:key', '').reason, /ambiguous/);
+
+  for (const context of [
+    { recordIndex: 'bogus' },
+    { recordIndex: -1 },
+    { recordIndex: Number.MAX_SAFE_INTEGER + 1 },
+    { sourceIndex: '0.5' },
+    { sourceIndex: -1 },
+    { sourceIndex: Number.MAX_SAFE_INTEGER + 1 }
+  ]) {
+    assert.equal(
+      registry.resolve('linear:record:0', 'record-a', context).source,
+      null
+    );
+  }
+
+  for (const [recordId, context] of [
+    ['wrong-record', {}],
+    ['record-a', { origin: 'homology-comparison' }],
+    ['record-a', { recordIndex: 1 }],
+    ['record-a', { sourceIndex: 3 }]
+  ]) {
+    assert.equal(
+      registry.resolve('linear:record:0', recordId, context).source,
+      null
+    );
+  }
+
+  assert.equal(
+    registry.resolve('linear:record:0', 'record-a.1', {
+      origin: 'linear-record',
+      recordIndex: '0',
+      sourceIndex: 2
+    }).source?.sequence,
+    'AAAA'
+  );
 });
 
 test('builds deterministic single and combined FASTA in query-subject order', () => {

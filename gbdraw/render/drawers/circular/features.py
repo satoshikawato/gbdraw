@@ -73,6 +73,7 @@ class FeatureDrawer:
         feature_data_id: Optional[str] = None,
         dom_element_id: Optional[str] = None,
         rendered_feature_id: Optional[str] = None,
+        source_feature_index: int | None = None,
         feature_part: Optional[str] = None,
     ) -> None:
         stroke_color: str = (
@@ -98,6 +99,10 @@ class FeatureDrawer:
                 path.attribs["data-gbdraw-rendered-feature-id"] = (
                     rendered_feature_id
                 )
+            if source_feature_index is not None:
+                path.attribs["data-gbdraw-source-feature-index"] = str(
+                    int(source_feature_index)
+                )
             if feature_part:
                 path.attribs["data-gbdraw-feature-part"] = feature_part
         group.add(path)
@@ -113,7 +118,7 @@ class FeatureDrawer:
         track_type: str,
         strandedness: bool,
         length_param,
-        feature_instance_id: str | None = None,
+        feature_instance_id: int | None = None,
         feature_dom_namespace: str | None = None,
     ) -> Group:
         """
@@ -196,6 +201,7 @@ class FeatureDrawer:
                         feature_data_id=feature_data_id,
                         dom_element_id=dom_element_id,
                         rendered_feature_id=rendered_feature_id,
+                        source_feature_index=feature_instance_id,
                         feature_part="block",
                     )
                 elif path_type == "line":
@@ -210,6 +216,7 @@ class FeatureDrawer:
                         feature_data_id=feature_data_id,
                         dom_element_id=dom_element_id,
                         rendered_feature_id=rendered_feature_id,
+                        source_feature_index=feature_instance_id,
                         feature_part="connector",
                     )
                 elif path_type == "label":

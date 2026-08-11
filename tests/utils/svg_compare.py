@@ -13,7 +13,7 @@ import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 import math
 
 
@@ -29,7 +29,7 @@ class SVGComparisonResult:
         return self.equal
 
 
-def normalize_number(value: str, tolerance: float = 1e-4) -> str:
+def normalize_number(value: str) -> str:
     """
     Normalize a numeric string for comparison.
 
@@ -37,8 +37,6 @@ def normalize_number(value: str, tolerance: float = 1e-4) -> str:
 
     Args:
         value: String that may contain a number
-        tolerance: Relative tolerance for float comparison
-
     Returns:
         Normalized string representation
     """
@@ -283,8 +281,6 @@ def parse_svg(content: str) -> ET.Element:
 def compare_svgs(
     expected: Union[str, Path],
     actual: Union[str, Path],
-    tolerance: float = 1e-4,
-    ignore_comments: bool = True,
     max_differences: int = 10
 ) -> SVGComparisonResult:
     """
@@ -297,8 +293,6 @@ def compare_svgs(
     Args:
         expected: Path to expected SVG file or SVG content string
         actual: Path to actual SVG file or SVG content string
-        tolerance: Floating point comparison tolerance
-        ignore_comments: Whether to ignore XML comments
         max_differences: Maximum number of differences to report
 
     Returns:
@@ -384,40 +378,3 @@ def compare_svgs(
         message="SVGs are semantically equivalent",
         differences=[]
     )
-
-
-def compare_svg_files(expected_path: Path, actual_path: Path) -> SVGComparisonResult:
-    """
-    Convenience function to compare two SVG files.
-
-    Args:
-        expected_path: Path to expected SVG file
-        actual_path: Path to actual SVG file
-
-    Returns:
-        SVGComparisonResult with comparison outcome
-    """
-    return compare_svgs(expected_path, actual_path)
-
-
-def quick_hash_compare(file1: Path, file2: Path) -> bool:
-    """
-    Quick comparison using file hash.
-
-    If hashes match, files are identical. If not, need deeper comparison.
-
-    Args:
-        file1: First file path
-        file2: Second file path
-
-    Returns:
-        True if files are byte-identical
-    """
-    import hashlib
-
-    def file_hash(path: Path) -> str:
-        h = hashlib.sha256()
-        h.update(path.read_bytes())
-        return h.hexdigest()
-
-    return file_hash(file1) == file_hash(file2)

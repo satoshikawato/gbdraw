@@ -20,6 +20,7 @@ await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join
 await writeFile(join(tempDir, 'app', 'color-utils.js'), await readFile(join(sourceDir, 'app', 'color-utils.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'svg-serialization.js'), await readFile(join(sourceDir, 'services', 'svg-serialization.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'feature-catalog.js'), await readFile(join(sourceDir, 'services', 'feature-catalog.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'services', 'feature-identity.js'), await readFile(join(sourceDir, 'services', 'feature-identity.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'feature-override-identity.js'), await readFile(join(sourceDir, 'services', 'feature-override-identity.js'), 'utf8'), 'utf8');
 
 const { createFeatureColorActions } = await import(
@@ -92,6 +93,8 @@ const colorScopeDialog = {
 
 let addLegendEntryCount = 0;
 let applySpecificRulesCount = 0;
+let legendGeometryChangedCount = 0;
+const svgContainer = ref(null);
 
 const actions = createFeatureColorActions({
   state: {
@@ -103,7 +106,7 @@ const actions = createFeatureColorActions({
     extractedFeatures,
     biologicalFeatures,
     featureColorOverrides,
-    svgContainer: ref(null),
+    svgContainer,
     clickedFeature: ref(null),
     colorScopeDialog,
     resetColorDialog: {},
@@ -131,9 +134,11 @@ const actions = createFeatureColorActions({
       if (entry) entry.color = color;
     },
     compactLegendEntries: () => {},
-    recenterCurrentLegendRoot: () => {},
+    onLegendGeometryChanged: () => {
+      legendGeometryChangedCount += 1;
+    },
     extractLegendEntries: () => {},
-    getAllFeatureLegendGroups: () => []
+    getAllFeatureLegendGroups: (svg) => svg?.legendGroups || []
   },
   svgActions: {
     applySpecificRulesToSvg: () => {
@@ -478,3 +483,31 @@ assert.deepEqual(featureColorOverrides[stableColorKey], {
   caption: 'No fill'
 });
 assert.equal(manualSpecificRules[0].color, 'none');
+
+globalThis.CSS = { escape: (value) => String(value) };
+const legendText = { textContent: 'Short caption' };
+const legendPath = {
+  getAttribute: (name) => name === 'fill' ? '#123456' : null,
+  setAttribute: () => {}
+};
+const legendAttributes = new Map([['data-legend-key', 'Short caption']]);
+const legendEntryGroup = {
+  getAttribute: (name) => legendAttributes.get(name) || null,
+  setAttribute: (name, value) => legendAttributes.set(name, value),
+  querySelector: (selector) => selector === 'text' ? legendText : null,
+  querySelectorAll: (selector) => selector === 'path' ? [legendPath] : []
+};
+const legendFeatureGroup = {
+  querySelector: (selector) => selector.includes('Short caption') ? legendEntryGroup : null
+};
+const svg = { legendGroups: [legendFeatureGroup] };
+svgContainer.value = { querySelector: (selector) => selector === 'svg' ? svg : null };
+legendEntries.value = [{ caption: 'Short caption', color: '#123456', featureIds: [] }];
+extractedFeatures.value = [];
+biologicalFeatures.value = [];
+
+await actions.renameLegendEntry(0, 'Oxidative phosphorylation');
+
+assert.equal(legendGeometryChangedCount, 1);
+assert.equal(legendText.textContent, 'Oxidative phosphorylation');
+assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation');

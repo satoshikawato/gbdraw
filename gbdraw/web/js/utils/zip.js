@@ -148,16 +148,3 @@ export const createZipBlob = (files) => {
 
   return new Blob([...localParts, ...centralParts, eocd], { type: 'application/zip' });
 };
-
-export const downloadZipFile = (filename, files) => {
-  const blob = createZipBlob(files);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename || 'gbdraw-cli-files.zip';
-  link.addEventListener('click', (event) => {
-    event.stopPropagation();
-  }, { once: true });
-  link.click();
-  URL.revokeObjectURL(url);
-};

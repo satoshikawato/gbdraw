@@ -1,16 +1,12 @@
-import {
-  getDefinitionGroupTranslate,
-  getLocalVerticalBounds,
-  getTransformedBBox,
-  parseTransform
-} from './legend-layout/transform-utils.js';
+import { parseTransform } from './legend-layout/transform-utils.js';
+import { COMPOSITION_ROLE_ATTRIBUTE } from './legend-layout/composition-actions.js';
 import { COMPARISON_LEGEND_SELECTOR } from './legend/utils.js';
-import { closestRecordGroup, isMultiRecordCanvasSvg } from './record-groups.js';
+import { isMultiRecordCanvasSvg } from './record-groups.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 
 const RECORD_DEFINITION_SELECTOR = 'g[data-gbdraw-role="record-definition"]';
 
-export const findRecordDefinitionGroup = (svg, entry = {}) => {
+const findRecordDefinitionGroup = (svg, entry = {}) => {
   const rawRecordIndex = entry?.record_index ?? entry?.recordIndex;
   const hasRecordIndex =
     rawRecordIndex !== null &&
@@ -32,7 +28,7 @@ export const findRecordDefinitionGroup = (svg, entry = {}) => {
   return definitionGroupId ? svg?.getElementById?.(definitionGroupId) || null : null;
 };
 
-export const preserveDefinitionGroupDomIdentity = (existingGroup, importedGroup) => {
+const preserveDefinitionGroupDomIdentity = (existingGroup, importedGroup) => {
   if (!existingGroup || !importedGroup) return importedGroup;
 
   const existingId = existingGroup.getAttribute?.('id');
@@ -43,25 +39,34 @@ export const preserveDefinitionGroupDomIdentity = (existingGroup, importedGroup)
   if (existingTransform) {
     importedGroup.setAttribute('transform', existingTransform);
   }
+  const compositionRole = existingGroup.getAttribute?.(COMPOSITION_ROLE_ATTRIBUTE);
+  if (compositionRole) {
+    importedGroup.setAttribute(COMPOSITION_ROLE_ATTRIBUTE, compositionRole);
+  }
   return importedGroup;
 };
 
-export const findSingleRecordDefinitionGroup = (svg) => {
-  const semanticMatch = Array.from(
-    svg?.querySelectorAll?.(RECORD_DEFINITION_SELECTOR) || []
-  ).find((group) => !closestRecordGroup(group));
-  if (semanticMatch) return semanticMatch;
-
-  return (
-    Array.from(svg?.querySelectorAll?.('g[id$="_definition"]') || [])
-      .find((group) => !closestRecordGroup(group)) || null
-  );
+const stageCircularDefinitionSource = async ({
+  inputType,
+  inputFile,
+  writeFileToFs,
+  path = '/definition-input.gb'
+}) => {
+  if (String(inputType || '').trim().toLowerCase() !== 'gb' || !inputFile) return null;
+  if (typeof writeFileToFs !== 'function') {
+    throw new Error('Circular definition input staging is unavailable.');
+  }
+  if (!await writeFileToFs(inputFile, path)) {
+    throw new Error('Circular definition input could not be staged.');
+  }
+  return path;
 };
 
 export const createResultsManager = ({
   state,
   getPyodide,
   ensurePyodide = null,
+  writeFileToFs = null,
   legendLayout,
   rerenderLinearDefinitions = null
 }) => {
@@ -72,6 +77,7 @@ export const createResultsManager = ({
     shouldDeferCircularPreviewUpdates,
     svgContainer,
     cInputType,
+    files,
     linearSeqs,
     form,
     adv,
@@ -89,7 +95,7 @@ export const createResultsManager = ({
     normalizePaletteColors,
     normalizePaletteDefinitions
   } = state;
-  const { clearPlotTitleState, setPlotTitleAutoTransform } = legendLayout;
+  const { refreshCompositionGeometry } = legendLayout;
 
   let definitionUpdateTimeout = null;
   const cloneColors = (colors) => ({ ...(colors || {}) });
@@ -229,51 +235,6 @@ export const createResultsManager = ({
     });
   };
 
-  const parseSvgCanvasSize = (svg) => {
-    const viewBox = String(svg.getAttribute('viewBox') || '').trim().split(/\s+/);
-    if (viewBox.length === 4) {
-      const width = Number(viewBox[2]);
-      const height = Number(viewBox[3]);
-      if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
-        return { width, height };
-      }
-    }
-    const width = Number(svg.getAttribute('width'));
-    const height = Number(svg.getAttribute('height'));
-    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
-      return { width, height };
-    }
-    return null;
-  };
-
-  const setGroupTranslate = (group, x, y) => {
-    if (!group) return;
-    group.setAttribute('transform', `translate(${x}, ${y})`);
-  };
-
-  const syncSvgCanvasSize = (svg, width, height) => {
-    svg.setAttribute('width', `${width}px`);
-    svg.setAttribute('height', `${height}px`);
-    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  };
-
-  const translateTopLevelGroups = (svg, dy, excludedIds = new Set()) => {
-    if (!Number.isFinite(dy) || Math.abs(dy) <= 1e-6) return;
-    Array.from(svg.children).forEach((child) => {
-      const tagName = String(child.tagName || '').toLowerCase();
-      if (tagName === 'defs') return;
-      const childId = String(child.getAttribute('id') || '');
-      if (excludedIds.has(childId)) return;
-      const current = parseTransform(child.getAttribute('transform'));
-      setGroupTranslate(child, current.x, current.y + dy);
-    });
-  };
-
-  const placeDefinitionGroup = (group, canvasWidth, canvasHeight, position) => {
-    const nextTransform = getDefinitionGroupTranslate(group, canvasWidth, canvasHeight, position);
-    setGroupTranslate(group, nextTransform.x, nextTransform.y);
-  };
-
   const parseGroupSvg = (svgMarkup) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(
@@ -298,10 +259,15 @@ export const createResultsManager = ({
       const pyodide = getPyodide();
       if (!pyodide) return;
 
-      const gbPath = cInputType.value === 'gb' ? '/input.gb' : '/input.gb';
       const isMultiRecordCanvasOnSvg = isMultiRecordCanvasSvg(svg);
 
       try {
+        const gbPath = await stageCircularDefinitionSource({
+          inputType: cInputType.value,
+          inputFile: files?.c_gb,
+          writeFileToFs
+        });
+        if (!gbPath) return;
         const species = form.species || '';
         const strain = form.strain || '';
         const hasDefinitionFontSize =
@@ -395,56 +361,11 @@ export const createResultsManager = ({
           updated = true;
         }
 
-        const canvasSize = parseSvgCanvasSize(svg);
-        if (canvasSize) {
-          let canvasWidth = canvasSize.width;
-          let canvasHeight = canvasSize.height;
-          const legendPosition = String(form.legend || 'right').trim().toLowerCase();
-          const legendGroup = svg.getElementById('legend');
-          const singleDefinitionGroup = findSingleRecordDefinitionGroup(svg);
-          if (singleDefinitionGroup) {
-            placeDefinitionGroup(singleDefinitionGroup, canvasWidth, canvasHeight, 'center');
-            updated = true;
-          }
-
-          const plotTitleGroup = svg.getElementById('plot_title');
-          if (plotTitleGroup) {
-            const plotTitleBounds = getLocalVerticalBounds(plotTitleGroup);
-            if (normalizedPlotTitlePosition === 'top' && legendPosition === 'top' && legendGroup) {
-              const legendBounds = getTransformedBBox(legendGroup);
-              const requiredLegendTop = 24 + plotTitleBounds.height + 20;
-              if (legendBounds && legendBounds.y < requiredLegendTop) {
-                const shiftY = requiredLegendTop - legendBounds.y;
-                translateTopLevelGroups(svg, shiftY, new Set(['plot_title']));
-                canvasHeight += shiftY;
-                syncSvgCanvasSize(svg, canvasWidth, canvasHeight);
-                updated = true;
-              }
-            }
-            if (normalizedPlotTitlePosition === 'bottom' && legendPosition === 'bottom' && legendGroup) {
-              const legendBounds = getTransformedBBox(legendGroup);
-              const legendBottom = legendBounds ? legendBounds.y + legendBounds.height : 0;
-              const requiredHeight = legendBottom + 20 + plotTitleBounds.height + 24;
-              if (requiredHeight > canvasHeight) {
-                canvasHeight = requiredHeight;
-                syncSvgCanvasSize(svg, canvasWidth, canvasHeight);
-                updated = true;
-              }
-            }
-            const nextTitleTransform = getDefinitionGroupTranslate(
-              plotTitleGroup,
-              canvasWidth,
-              canvasHeight,
-              normalizedPlotTitlePosition
-            );
-            setPlotTitleAutoTransform(plotTitleGroup, nextTitleTransform, {
-              preserveUserOffset: true
-            });
-            updated = true;
-          } else {
-            clearPlotTitleState();
-          }
-        }
+        const plotTitleGroup = svg.getElementById('plot_title');
+        refreshCompositionGeometry({
+          titleSide: plotTitleGroup ? normalizedPlotTitlePosition : 'none',
+          titleTarget: plotTitleGroup
+        });
 
         if (updated) {
           skipCaptureBaseConfig.value = true;
@@ -545,28 +466,15 @@ export const createResultsManager = ({
             }
           });
         }
-        const canvasSize = parseSvgCanvasSize(svg);
-        if (canvasSize) {
-          const normalizedTitlePosition = String(adv.plot_title_position || 'bottom').trim().toLowerCase();
-          const safeTitlePosition = ['center', 'top', 'bottom'].includes(normalizedTitlePosition)
-            ? normalizedTitlePosition
-            : 'bottom';
-          const titleHeightRaw = titleTexts[0]?.getBBox?.().height;
-          const titleHeight = Number.isFinite(titleHeightRaw) && titleHeightRaw > 0 ? titleHeightRaw : 32;
-          const edgeMargin = 24;
-          let titleY = 0.5 * canvasSize.height;
-          if (safeTitlePosition === 'top') {
-            titleY = edgeMargin + (0.5 * titleHeight);
-          } else if (safeTitlePosition === 'bottom') {
-            titleY = canvasSize.height - edgeMargin - (0.5 * titleHeight);
-          }
-          setPlotTitleAutoTransform(
-            plotTitleGroup,
-            { x: 0.5 * canvasSize.width, y: titleY },
-            { preserveUserOffset: true }
-          );
-          updated = true;
-        }
+        const normalizedTitlePosition = String(adv.plot_title_position || 'bottom').trim().toLowerCase();
+        const safeTitlePosition = ['center', 'top', 'bottom'].includes(normalizedTitlePosition)
+          ? normalizedTitlePosition
+          : 'bottom';
+        refreshCompositionGeometry({
+          titleSide: safeTitlePosition,
+          titleTarget: plotTitleGroup
+        });
+        updated = true;
       }
 
       if (updated) {

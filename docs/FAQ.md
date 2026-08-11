@@ -1,189 +1,217 @@
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | **FAQ** | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | **FAQ** | [Gallery](./GALLERY.md)
 
 # Frequently asked questions
 
-## Is there a web GUI? Do I need Streamlit?
+## Choosing a workflow
+
+### Should I use the hosted app, local GUI, CLI, or Python?
+
+Use the hosted app for interactive work without installing Python. Use
+`gbdraw gui` for the same browser interface from a local installation, the CLI
+for repeatable commands and batches, and Python when a pipeline already owns
+Biopython records or needs output bytes. Integrations that need explicit
+planning and session conversion can use the typed request API.
+
+See the exact boundaries for the [web
+app](./REFERENCE/web-app.md#execution-privacy-and-offline-use), [command
+line](./REFERENCE/command-line.md), [package-root Python
+API](./REFERENCE/python-api.md), and [typed
+requests](./REFERENCE/typed-requests.md). The [Tutorials](./TUTORIALS/README.md)
+provide a first project for each surface.
 
-Use [https://gbdraw.app/](https://gbdraw.app/) for the hosted app, or run `gbdraw gui` locally after installation. Streamlit is not required. Local GUI analysis runs on your machine; the interactive gallery examples are hosted at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/).
+### Should I use Circular or Linear?
+
+Use Circular for a complete circular replicon and radial tracks. Circular
+multi-record layout places complete circular records on one canvas. Use Linear
+when record order, cropped regions, reverse-complement display, rows, or
+pairwise links are central to the figure.
 
-## Why do my CLI and browser renders differ slightly?
+Changing modes does not translate mode-specific placement. Circular grid
+positions do not become Linear rows, and Linear row assignments, crops, and
+reverse-complement states do not become Circular settings.
 
-Small differences in label placement and legend sizing are expected. The CLI uses kerning-aware font metrics, while the web UI uses browser text metrics.
+The [diagram-layout contract](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#diagram-layout)
+defines the two layouts. Start with the [first Circular
+Tutorial](./TUTORIALS/GUI/first-circular-genome-diagram.md) or [first Linear
+Tutorial](./TUTORIALS/GUI/first-linear-genome-diagram.md).
 
-## How do I hide the coordinate scale without hiding the genome axis?
+### Which comparison method should I use?
+
+Use an uploaded BLAST table when the search ran elsewhere or the evidence must
+stay fixed. LOSATN compares nucleotide sequence; TLOSATX is useful when coding
+similarity remains after nucleotide divergence. In Linear **Settings**,
+the three **LOSAT Mode** buttons choose LOSATN, LOSATP, or TLOSATX. When LOSATP is selected,
+**LOSATP mode** chooses Similarity groups, Collinear blocks, or Pairwise
+matches. Pairwise matches show individual protein matches, Similarity groups
+show search-derived membership, and Collinear blocks emphasize compatible
+ordered anchors. Similarity groups always searches all loaded record pairs.
+Fresh Collinear settings also default to **All records**, while a saved
+**Adjacent pairs** scope remains explicit. Circular rings place retained
+evidence around one reference. Linear comparisons connect selected query and
+subject record endpoints.
 
-Add `--hide_scale` in either Circular or Linear mode. In Linear mode, this
-removes the bottom scale bar or ruler and any coordinate ticks and labels drawn
-on record axes, while retaining each record's main axis line. In Circular
-simple layouts, it removes the primary coordinate ticks and labels while
-retaining the circular axis.
+The [comparison capability
+matrix](./REFERENCE/comparison-programs-thresholds-and-results.md#capability-matrix)
+lists interface availability, filters, direction, and scientific limits.
 
-An explicit Circular track list is authoritative. If it contains an enabled
-`ticks` slot, that slot remains visible even with `--hide_scale`; omit or
-disable the slot instead. In the web app, clear **Show Coordinate Scale** for a
-simple layout. While **Custom Track Slots** are active, use the **Ticks** slot
-instead.
+### Is my data uploaded, and can I work offline?
+
+The hosted page loads from `gbdraw.app`, but genome parsing, LOSAT searches,
+rendering, session handling, and export run in the browser without a gbdraw
+application-server upload. The hosted site may collect aggregate page-use
+analytics; genome files and generated diagrams are not analytics payloads.
+`gbdraw gui` can run the normal workflow offline after installation.
 
-GC-content and Depth axes and ticks are separate controls. Linear definition
-text such as **Length / Coord.** is also independent; use `--hide_length` to
-remove that line.
+Sessions embed input resources and should be protected like the source data.
+See [execution, privacy, and offline
+use](./REFERENCE/web-app.md#execution-privacy-and-offline-use) for the full
+boundary and browser-performance constraints.
 
-## Can I use a GFF3 file by itself?
+### How should I prepare a figure for publication?
 
-No. `gbdraw` requires both annotation and sequence data. When using GFF3 input, provide the matching FASTA file with `--fasta`.
+Keep an SVG master when the submission workflow accepts vector artwork, proof
+the final derivative at its placement size, and retain the inputs, software
+versions, comparison evidence, render instructions, and any manual-edit notes.
 
-```bash
-gbdraw circular --gff my_genome.gff --fasta my_genome.fasta -o my_plot
-```
+The [publication and reproducible-handoff
+contract](./REFERENCE/output-formats-and-export.md#publication-and-reproducible-handoff)
+lists the format choices and archive contents.
 
-## My labels overlap. What should I do?
+## Inputs, layout, and presentation
 
-Common fixes:
+### Why do my CLI and browser renders differ slightly?
 
-1. Reduce `--label_font_size`
-2. Hide noisy labels with `--label_blacklist`
-3. Keep only important labels with `--label_whitelist` regex patterns
-4. Use the `--track_type middle` circular preset or reduce the number of displayed labels
+Small differences in label placement and legend sizing are expected. The CLI
+uses kerning-aware font metrics, while the web app uses browser text metrics.
 
-See [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md) for examples.
+### How do I hide the coordinate scale without hiding the genome axis?
 
-## How do I change the color of one specific gene?
+Use `--hide_scale` on the command line or clear **Show Coordinate Scale** in
+the web app. Explicit custom track slots can own a separate `ticks` renderer,
+and quantitative tracks own their own axes. See [diagram
+layout](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#diagram-layout)
+and the [CLI layout
+options](./REFERENCE/command-line.md#record-selection-and-layout).
 
-Use a feature-specific color table with `-t`. This matches selected features by qualifier values and assigns a color and legend label.
+### Can I use a GFF3 file by itself?
 
-See [Set feature colors and labels](./TUTORIALS/3_Advanced_Customization.md) and [Recipes](./RECIPES.md).
+No. Pair each GFF3 input with the matching FASTA sequence. The [sequence and
+annotation contract](./REFERENCE/input-formats-and-tsv-schemas.md#sequence-and-annotation-files)
+defines ID matching, coordinates, phase, and translation behavior.
 
-## Why does a web app color edit create a qualifier rule for some labels and `hash` rules for others?
+### My labels overlap. What should I do?
 
-When you choose **Apply to all label** or **Apply to all source label**, the web app first tries to represent the selected group as one exact feature-specific rule. For example, CDS features labeled `wsv360-like protein` can become a `product` rule with the pattern `^wsv360-like protein$`. The app does this only when every selected feature resolves to the same feature type, qualifier, and value; that rule matches exactly the selected group among the loaded features; and existing specific rules do not make precedence ambiguous. Regex metacharacters in the value are escaped before the pattern is anchored, so the exact-label selection does not accidentally become a broader regex.
+Reduce the label size, filter the label set, or change the Circular track
+placement. The [feature-presentation
+contract](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
+defines qualifier priority, whitelist and blacklist behavior, overrides, and
+overlap controls.
 
-If a single qualifier rule would be unsafe—for example, because the displayed label was manually edited, different features obtain that label from different qualifiers, or the rule would also match an unselected feature—the app keeps one `hash` rule per feature. `hash` is normally an exact feature selector rather than a GenBank qualifier. This fallback preserves the selected scope when the features have distinct generated identities. Both forms appear under **Specific Rules (-t)** and are sent to **Generate Diagram**, which keeps regenerated colors and legends consistent with the preview.
+### How do I change the color of one specific gene?
 
-Exact duplicate records are a special case: identical feature type, record ID, coordinates, and strand produce the same generated `hash`. The editor can distinguish their rendered `_record_N` instances in the current preview, but **Generate Diagram** cannot reconstruct a one-instance-only color rule from identical biological identities. Use a distinguishing qualifier when available, or edit the duplicate instances together.
+Use a specific-color rule that matches the intended feature qualifier. See the
+[styling-table schemas](./REFERENCE/input-formats-and-tsv-schemas.md#styling-tables)
+and [feature-rule precedence](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation).
 
-## How do I mark a coordinate range or a group of features?
+### Why does a web color edit create a qualifier rule for some labels and `hash` rules for others?
 
-Use `--annotation_table` and bind each `set_id` to an `annotations` custom track slot. Coordinate targets are 1-based and inclusive. Feature targets use the qualifiers already loaded from GenBank or GFF3, such as `locus_tag=ABC_001`.
+The editor uses one exact qualifier rule only when that rule represents the
+selected scope without ambiguity. Otherwise it keeps feature-specific rules;
+identical duplicate biological identities cannot be reconstructed as one
+instance after regeneration. See [preview, search, and
+editor](./REFERENCE/web-app.md#preview-search-and-editor) for the exact
+conditions and scope controls.
 
-The same table works in Circular and Linear mode. See [Region annotation tables](./TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables).
+### How do I mark a coordinate range or a group of features?
 
-## My comparative diagram has no ribbons. What is usually wrong?
+Use an annotation table and bind its `set_id` to an `annotations` track
+slot. See [annotation table
+fields](./REFERENCE/input-formats-and-tsv-schemas.md#annotation-table-fields)
+and [track placement](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations).
 
-The most common causes are:
+### Can I use gene names instead of product descriptions for labels?
 
-1. The BLAST file is not in outfmt 6 or 7
-2. The BLAST file order does not match the genome input order
-3. Filtering thresholds such as `--evalue`, `--bitscore`, `--identity`, or `--alignment_length` are too strict
+Yes. Set qualifier priority so that `gene` precedes `product`. The
+[feature-presentation
+contract](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
+and [qualifier-priority
+schema](./REFERENCE/input-formats-and-tsv-schemas.md#styling-tables) define the
+behavior.
 
-See [Draw genome comparison links from precomputed BLAST results](./TUTORIALS/2_Comparative_Genomics.md) for a working example.
+## Comparisons and sessions
 
-## How do I draw several Linear records without comparing them in the web app?
+### My comparative diagram has no links. What should I check?
 
-Select **No comparison** above the Linear input rows, then click **Generate
-Diagram**. The app skips LOSAT and does not use an uploaded BLAST TSV for that
-render. Uploaded comparison files and custom raw-result filenames can remain in
-the saved session as inactive drafts; use their separate reuse actions before
-they can participate in a later comparison.
+Check the table format, record direction and identifiers, display thresholds,
+selected edges, and protein translations. Circular rings also require the
+intended reference side. The [result meanings and
+limits](./REFERENCE/comparison-programs-thresholds-and-results.md#result-meanings-and-limits)
+section lists the empty-result cases.
 
-See the screenshot in [Web app comparison plans](./TUTORIALS/2_Comparative_Genomics.md#web-app-comparison-plans)
-for the exact control to select.
+### How do I draw several Linear records without comparing them in the web app?
 
-Use **Run LOSAT** or **Upload BLAST TSV** for all positional adjacent gaps. In
-upload mode, a gap without a file is deliberately skipped. Use **Selected
-pairs** when one diagram needs a mixture of LOSAT edges, uploaded edges, and
-omitted edges. Edit an entry under **Adjacent gaps**, or click **Add** under
-**Selected pairs and retained drafts**, to create that plan. An included
-uploaded edge must have an active file.
+Fresh Linear pages and **Reset Settings** start with **No comparison**. If a
+comparison is active, select **No comparison** in the **Comparison** command
+group. The three buttons there apply one choice to every adjacent pair; the
+separate **Current:** status reports the effective plan. Open **Selected pairs
+(N)** to inspect or edit a custom pair plan. Choosing **No comparison** keeps
+retained pair files and raw-result names inactive for later reuse. See the [web
+comparison controls](./REFERENCE/web-app.md#comparison-surfaces) and
+[selected-edge contract](./REFERENCE/comparison-programs-thresholds-and-results.md#selected-linear-edges).
 
-## Why did gbdraw rerun LOSATP after I loaded a session?
+### Why did gbdraw rerun LOSATP after I loaded a session?
 
-A protein-search cache hit requires the same amino-acid sequences, selected
-proteins, record and feature bindings, direction, program, and meaningful search
-arguments. A changed filename or display label does not invalidate the raw
-search. Changed biological input or search settings do, and only the affected
-record pair is rerun.
+A cached search is reused only when its biological inputs, direction, program,
+and meaningful search settings still match. See [saved comparison results and
+cache reuse](./REFERENCE/session-and-request-compatibility.md#saved-comparison-results-and-cache-reuse).
 
-## Why does Save Raw LOSAT TSV not contain the internal `h_` IDs?
+### Why does Save Raw LOSAT TSV not contain the internal `h_` IDs?
 
-Those handles are session-internal references. For a generated protein result,
-**Save Raw LOSAT TSV** resolves them to readable protein or feature aliases. If
-any handle cannot be resolved safely, the download fails rather than exposing
-an internal ID. Uploaded comparison TSV is never rewritten.
+Generated protein results export stable readable aliases instead of
+session-only handles. Uploaded tables are not rewritten. See [raw results and
+cache identity](./REFERENCE/comparison-programs-thresholds-and-results.md#raw-results-and-cache-identity).
 
-The full cache and export contract is documented in
-[Session and request compatibility](./SESSION_COMPATIBILITY.md#saved-protein-comparison-results).
+### Can pairwise comparison links be curved?
 
-## Why is there less empty space between Linear comparison rows?
+Yes. `curve` bends the same mapped spans that `ribbon` draws as filled
+links; it does not change the evidence. See [result meanings and
+limits](./REFERENCE/comparison-programs-thresholds-and-results.md#result-meanings-and-limits).
 
-Automatic spacing now treats record bodies, comparison corridors, and definition text as separate X-aware constraints and uses the largest required clearance. A left-side definition block is not added to a plot-column comparison corridor when their horizontal ranges do not overlap, and `--comparison_height` is reserved only at boundaries crossed by a comparison. The value remains a minimum clear corridor; dense labels or tracks can still require more space.
+## Depth, content, and skew
 
-## What if one record has no Depth TSV for a sample?
+### What if one record has no Depth TSV for a sample?
 
-Keep the record's position in the repeated `--depth_track` group with a quoted empty argument:
+Keep an explicit missing entry for that record. gbdraw does not substitute
+another file or draw zero coverage. See [tracks, axes, and
+annotations](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)
+and the [CLI depth input](./REFERENCE/command-line.md#tracks-annotations-and-presentation).
 
-```bash
-gbdraw linear \
-  --gbk record-a.gb record-b.gb \
-  --depth_track record-a.depth.tsv '' \
-  -o depth-partial \
-  -f svg
-```
+### How do I make the GC content track smoother?
 
-Use `--depth_track '' record-b.depth.tsv` when only the second record has data. The empty argument means that the logical series is missing for that record. gbdraw does not substitute another file or draw zero coverage. In Linear mode the missing cell also reserves no vertical space, while the series identity remains stable for records that do contain data. Each group must contain at least one real file. See [Plot read depth and other numeric tracks](./TUTORIALS/6_Depth_Quantitative_Tracks.md#3-compare-depth-across-records) for a runnable example.
+Use a larger window and step. Larger values smooth the trace and reduce local
+detail; the [numeric-track
+contract](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)
+defines the relationship.
 
-## Why is my circular BLAST similarity ring empty?
+### Can I plot AT instead of GC?
 
-Check that the BLAST file is outfmt 6 or 7, the displayed circular record ID appears on the side selected by `--conservation_reference`, and the thresholds are not too strict. When BLAST was generated as `blastn -query comparison.fasta -subject reference.fasta`, use `--conservation_reference subject`.
+Yes. Select the `AT` dinucleotide. The [tracks, axes, and annotations
+contract](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)
+defines content and skew behavior for reversed pairs.
 
-These rings draw raw HSP spans; they do not infer evolutionary conservation. A BLAST row where the selected reference start is greater than the selected reference end is treated as reverse orientation, not as a hit crossing the circular origin. The current implementation does not infer binned or wraparound hits.
+## Output and limitations
 
-## Can pairwise comparison links be curved?
+### Why does SVG export work but PNG/PDF/EPS/PS export fail?
 
-Yes. In linear mode, `--pairwise_match_style ribbon` draws straight filled ribbons by default. Use `--pairwise_match_style curve` to bend the same match spans; curved links can be easier to distinguish in a dense comparison diagram.
+Command-line and Python conversion to those formats requires CairoSVG and its
+runtime libraries. See [output names, dependencies, and
+overwrite](./REFERENCE/output-formats-and-export.md#names-dependencies-and-overwrite).
 
-## Can I use gene names instead of product descriptions for labels?
+### Are there known visualization or conversion limitations?
 
-Yes. Use `--qualifier_priority` to prefer `gene`, `locus_tag`, or other qualifiers.
+Yes. See the [feature-presentation
+limits](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation)
+and [static, interactive, and raster
+output](./REFERENCE/output-formats-and-export.md#static-interactive-and-raster-output).
 
-```tsv
-CDS	gene
-```
-
-```bash
-gbdraw circular --gbk genome.gb --labels --qualifier_priority priority.tsv -o output -f svg
-```
-
-## How do I make the GC content track smoother?
-
-Increase the window and step sizes:
-
-```bash
-gbdraw circular --gbk genome.gb --window 10000 --step 1000 -o output -f svg
-```
-
-The montage uses one *E. coli* record and changes only `--window`/`--step`: 100000/10000, 10000/1000, and 1000/100 from left to right. This wider range makes the smoothing tradeoff visible without removing the feature, metadata, legend, GC content, or GC skew context.
-
-![Three E. coli diagrams showing coarse, medium, and fine GC-content and GC-skew windows](../examples/window_step_comparison.png)
-
-## Can I plot AT instead of GC?
-
-Yes. Use `--nt AT`.
-
-```bash
-gbdraw circular --gbk genome.gb --nt AT -o output -f svg
-```
-
-The 12-panel comparison keeps the *E. coli* record, feature tracks, metadata, and legend fixed. In reading order it shows GC, CG, AG, GA, CT, TC, TG, GT, CA, AC, AT, and TA; only `--nt` changes between panels. Reversing a pair keeps its content track unchanged while reversing the sign of its skew.
-
-![Twelve E. coli diagrams comparing dinucleotide content and skew for GC, CG, AG, GA, CT, TC, TG, GT, CA, AC, AT, and TA](../examples/skew_comparison.png)
-
-## Why does SVG export work but PNG/PDF/EPS/PS export fail?
-
-Non-SVG export requires CairoSVG. Install the optional export dependency and, if needed on your platform, the system Cairo/Pango libraries.
-
-## Are there known visualization limitations?
-
-- Trans-introns are not currently visualized.
-- Mixed-format text such as `<i>Ca.</i> Tyloplasma litorale` does not reliably survive SVG-to-PNG/PDF/EPS/PS conversion. Use SVG if you need exact mixed formatting.
-
-[Home](./DOCS.md) | [Installation](./INSTALL.md) | [Quickstart](./QUICKSTART.md) | [Tutorials](./TUTORIALS/README.md) | [Recipes](./RECIPES.md) | [CLI Reference](./CLI_Reference.md) | [Gallery](./GALLERY.md) | **FAQ** | [About](./ABOUT.md)
+[Documentation home](./DOCS.md) | [Tutorials](./TUTORIALS/README.md) | [Technical documentation](./REFERENCE/README.md) | **FAQ** | [Gallery](./GALLERY.md)

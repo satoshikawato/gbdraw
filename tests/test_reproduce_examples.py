@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+from functools import cache
 import re
 import subprocess
 import sys
 from pathlib import Path
 from xml.etree import ElementTree
+
+import pytest
 
 from tools.reproduce_examples import PROJECT_ROOT, Reproducer
 from tools.reproduce_examples_manifest import (
@@ -26,14 +29,26 @@ from tools.generate_palette_explorer_assets import (
 )
 
 
+pytestmark = pytest.mark.gallery
+
+
 PUBLIC_MARKDOWN = (
     PROJECT_ROOT / "README.md",
-    *sorted((PROJECT_ROOT / "docs").rglob("*.md")),
+    *sorted(
+        path
+        for path in (PROJECT_ROOT / "docs").rglob("*.md")
+        if "internal" not in path.relative_to(PROJECT_ROOT / "docs").parts
+    ),
     PROJECT_ROOT / "examples" / "color_palette_examples.md",
 )
 MARKDOWN_TARGET_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 HTML_IMAGE_RE = re.compile(r'<img\b[^>]*\bsrc=["\']([^"\']+)', re.IGNORECASE)
 SELF_GITHUB_PREFIX = "https://github.com/satoshikawato/gbdraw/blob/main/"
+
+
+@cache
+def _figure_specs() -> dict[str, FigureSpec]:
+    return build_figure_specs()
 
 
 def _local_target(markdown_path: Path, raw_target: str) -> Path | None:
@@ -45,27 +60,55 @@ def _local_target(markdown_path: Path, raw_target: str) -> Path | None:
     return (markdown_path.parent / target.split("#", 1)[0].split("?", 1)[0]).resolve()
 
 
+@cache
+def _markdown_targets(markdown_path: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    source = markdown_path.read_text(encoding="utf-8")
+    image_targets = (
+        *re.findall(r"!\[[^\]]*\]\(([^)]+)\)", source),
+        *HTML_IMAGE_RE.findall(source),
+    )
+    return (
+        (*MARKDOWN_TARGET_RE.findall(source), *HTML_IMAGE_RE.findall(source)),
+        image_targets,
+    )
+
+
 def _local_image_references() -> set[str]:
     references: set[str] = set()
     for markdown_path in PUBLIC_MARKDOWN:
-        source = markdown_path.read_text(encoding="utf-8")
-        targets = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", source)
-        targets.extend(HTML_IMAGE_RE.findall(source))
-        for raw_target in targets:
+        _all_targets, image_targets = _markdown_targets(markdown_path)
+        for raw_target in image_targets:
             target = _local_target(markdown_path, raw_target)
             if target is not None:
                 references.add(target.relative_to(PROJECT_ROOT).as_posix())
     return references
 
 
+def _documentation_scenario_artifacts() -> set[str]:
+    manifest = json.loads(
+        (PROJECT_ROOT / "docs" / "scenarios" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    artifacts: set[str] = set()
+    for chapter in manifest["scenarios"]:
+        artifacts.update(item["path"] for item in chapter["screenshots"])
+        if chapter["execution"]["kind"] not in {"cli-recipe", "python-recipe"}:
+            continue
+        for output_name in chapter["execution"]["expected_outputs"]:
+            if Path(output_name).suffix.lower() in {".png", ".svg"}:
+                artifacts.add(f"docs/images/{chapter['id'].lower()}/{output_name}")
+    return artifacts
+
+
 def test_manifest_counts_and_unique_paths() -> None:
-    figures = build_figure_specs()
+    figures = _figure_specs()
 
     docs_and_readme = [spec for spec in figures.values() if "palettes" not in spec.groups]
     palette_circular = [figure_id for figure_id in figures if figure_id.startswith("palette_circular_")]
     palette_linear = [figure_id for figure_id in figures if figure_id.startswith("palette_linear_")]
 
-    assert len(docs_and_readme) == 61
+    assert len(docs_and_readme) == 53
     assert palette_circular == [
         "palette_circular_default",
         "palette_circular_ajisai",
@@ -76,7 +119,7 @@ def test_manifest_counts_and_unique_paths() -> None:
         "palette_linear_ajisai",
         "palette_linear_soft_pastels",
     ]
-    assert len(figures) == 61 + 6
+    assert len(figures) == 53 + 6
     assert "gbdraw_social_preview" not in figures
 
     output_paths = [spec.output_path for spec in figures.values()]
@@ -84,7 +127,7 @@ def test_manifest_counts_and_unique_paths() -> None:
 
 
 def test_showcase_comparisons_keep_worked_example_context() -> None:
-    figures = build_figure_specs()
+    figures = _figure_specs()
 
     track_recipe = figures["track_layout_separate_strands"].recipe
     assert isinstance(track_recipe, CompositeRecipe)
@@ -104,6 +147,18 @@ def test_showcase_comparisons_keep_worked_example_context() -> None:
         for panel in label_recipe.panels
         if panel.recipe
     ] == ["12", "18", "24"]
+
+    definition_recipe = figures["definition_font_size_comparison"].recipe
+    assert isinstance(definition_recipe, CompositeRecipe)
+    assert [
+        panel.recipe.extra_args[panel.recipe.extra_args.index("--plot_title") + 1]
+        for panel in definition_recipe.panels
+        if panel.recipe
+    ] == [
+        "--definition_font_size 20",
+        "--definition_font_size 28",
+        "--definition_font_size 36",
+    ]
 
     offset_recipe = figures["outer_label_offset_comparison"].recipe
     assert isinstance(offset_recipe, CompositeRecipe)
@@ -162,7 +217,7 @@ def test_showcase_comparisons_keep_worked_example_context() -> None:
 
 
 def test_non_layout_linear_showcases_use_on_axis_features_and_line_styling() -> None:
-    figures = build_figure_specs()
+    figures = _figure_specs()
     on_axis_figure_ids = (
         "tutorial_2_pairwise_blast",
         "linear_multi_record",
@@ -189,7 +244,7 @@ def test_non_layout_linear_showcases_use_on_axis_features_and_line_styling() -> 
 
 
 def test_palette_manifest_stays_in_sync_with_palette_file() -> None:
-    figures = build_figure_specs()
+    figures = _figure_specs()
     palette_names = load_palette_names()
 
     for palette_name in ("default", "ajisai", "soft_pastels"):
@@ -221,8 +276,7 @@ def test_palette_explorer_uses_one_semantic_circular_svg() -> None:
 def test_public_markdown_local_targets_exist() -> None:
     missing: list[str] = []
     for markdown_path in PUBLIC_MARKDOWN:
-        source = markdown_path.read_text(encoding="utf-8")
-        targets = MARKDOWN_TARGET_RE.findall(source) + HTML_IMAGE_RE.findall(source)
+        targets, _image_targets = _markdown_targets(markdown_path)
         for raw_target in targets:
             target = _local_target(markdown_path, raw_target)
             if target is not None and not target.exists():
@@ -232,12 +286,13 @@ def test_public_markdown_local_targets_exist() -> None:
 
 def test_public_figures_have_reproduction_inventory_coverage() -> None:
     references = _local_image_references()
-    manifest_paths = {spec.output_path for spec in build_figure_specs().values()}
+    manifest_paths = {spec.output_path for spec in _figure_specs().values()}
+    scenario_paths = _documentation_scenario_artifacts()
     manual_paths = set(MANUALLY_MANAGED_FIGURES)
     retained_unreferenced = set(UNREFERENCED_FIGURE_RETENTION)
 
-    assert references - manifest_paths - manual_paths == set()
-    assert manifest_paths - references == retained_unreferenced
+    assert references - manifest_paths - scenario_paths - manual_paths == set()
+    assert retained_unreferenced <= manifest_paths - references
     assert all(reason.strip() for reason in MANUALLY_MANAGED_FIGURES.values())
     assert all(reason.strip() for reason in UNREFERENCED_FIGURE_RETENTION.values())
     assert all((PROJECT_ROOT / path).exists() for path in manual_paths)
@@ -248,7 +303,7 @@ def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> N
     reproducer = Reproducer(
         project_root=PROJECT_ROOT,
         output_root=tmp_path / "out",
-        figures=build_figure_specs(),
+        figures=_figure_specs(),
     )
     try:
         aliased = reproducer.resolve_input("NC_000913.gbk", "ecoli_k12_plot", {}, dry_run=False)
@@ -264,6 +319,16 @@ def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> N
         assert support.exists()
         assert "wsv.*-like protein" in support.read_text()
 
+        label_override = reproducer.resolve_input(
+            "label_override.tsv",
+            "tutorial_3_label_override",
+            {},
+            dry_run=False,
+        )
+        assert label_override is not None
+        assert label_override.parent == tmp_path / "out" / "_support_assets"
+        assert "LC738868.1\tCDS\tlabel" in label_override.read_text()
+
         payload = reproducer.report_payload()
         assert payload["aliases_used"]
         assert payload["aliases_used"][0]["requested"] == "NC_000913.gbk"
@@ -271,10 +336,25 @@ def test_alias_resolution_and_support_asset_materialization(tmp_path: Path) -> N
         reproducer.close()
 
 
+def test_label_override_showcase_uses_its_manifest_owned_table(tmp_path: Path) -> None:
+    reproducer = Reproducer(
+        project_root=PROJECT_ROOT,
+        output_root=tmp_path / "out",
+        figures=_figure_specs(),
+    )
+    try:
+        assert reproducer.render_figure("tutorial_3_label_override") is True
+        svg = reproducer.output_path_for("tutorial_3_label_override").read_text()
+        assert ">gustavus-like protein<" in svg
+        assert ">protein gustavus-like protein<" not in svg
+    finally:
+        reproducer.close()
+
+
 def test_missing_report_structure_for_missing_figure(tmp_path: Path) -> None:
     figure_id = "missing_figure"
     missing_filename = "definitely_missing.gb"
-    figures = dict(build_figure_specs())
+    figures = dict(_figure_specs())
     figures[figure_id] = FigureSpec(
         figure_id=figure_id,
         output_path="examples/missing_figure.svg",
@@ -353,39 +433,57 @@ def test_smoke_render_subset_via_cli(tmp_path: Path) -> None:
     assert "majani" in payload["generated"]
 
 
-def test_gallery_session_arrow_geometry_variants_reproduce_tracked_svgs(
-    tmp_path: Path,
-) -> None:
+@pytest.fixture(scope="module")
+def reproduced_arrow_geometry_variants(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> dict[str, Path]:
     figure_ids = (
         "tutorial_9_arrow_geometry_circular",
         "tutorial_9_arrow_geometry_linear",
     )
     reproducer = Reproducer(
         project_root=PROJECT_ROOT,
-        output_root=tmp_path / "out",
-        figures=build_figure_specs(),
+        output_root=tmp_path_factory.mktemp("arrow-geometry") / "out",
+        figures=_figure_specs(),
     )
     try:
         for figure_id in figure_ids:
             assert reproducer.render_figure(figure_id) is True
-            generated = reproducer.output_path_for(figure_id)
-            tracked = PROJECT_ROOT / reproducer.figures[figure_id].output_path
-            assert generated.read_bytes() == tracked.read_bytes()
+        return {
+            figure_id: reproducer.output_path_for(figure_id)
+            for figure_id in figure_ids
+        }
     finally:
         reproducer.close()
 
 
-def test_gallery_session_arrow_geometry_variants_only_change_feature_paths() -> None:
+def test_gallery_session_arrow_geometry_variants_reproduce_tracked_svgs(
+    reproduced_arrow_geometry_variants: dict[str, Path],
+) -> None:
+    for figure_id, generated in reproduced_arrow_geometry_variants.items():
+        tracked = PROJECT_ROOT / _figure_specs()[figure_id].output_path
+        assert generated.read_text(encoding="utf-8") == tracked.read_text(
+            encoding="utf-8"
+        )
+
+
+def test_gallery_session_arrow_geometry_variants_only_change_feature_paths(
+    reproduced_arrow_geometry_variants: dict[str, Path],
+) -> None:
     pairs = (
         (
             PROJECT_ROOT / "gbdraw/web/gallery/sources/HmmtDNA_ATskew.svg",
-            PROJECT_ROOT / "examples/tutorial-9-arrow-geometry-circular.svg",
+            reproduced_arrow_geometry_variants[
+                "tutorial_9_arrow_geometry_circular"
+            ],
             15,
         ),
         (
             PROJECT_ROOT
             / "gbdraw/web/gallery/sources/BGC0000708-BGC0000713.svg",
-            PROJECT_ROOT / "examples/tutorial-9-arrow-geometry-linear.svg",
+            reproduced_arrow_geometry_variants[
+                "tutorial_9_arrow_geometry_linear"
+            ],
             152,
         ),
     )

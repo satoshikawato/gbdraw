@@ -74,8 +74,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-02-01-upload-row-context.webp",
-            "alt": "Linear GenBank input row 1 with AP027078.gb uploaded and the organism, subtitle, and region controls visible.",
-            "caption": "The first uploaded row shows AP027078.gb in the Linear input card; repeat the remaining files in the table order."
+            "alt": "AP027078.gb record card with Record options open to the organism, subtitle, and region controls.",
+            "caption": "Upload AP027078.gb, open Record options if metadata or region settings are needed, and repeat the remaining files in table order."
           },
           "capture": {
             "source": "webapp",
@@ -84,25 +84,25 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const expected = ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Hepatoplasmataceae GenBank order was not restored.'); const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('.card-header')?.textContent?.includes('Input Genomes')); const badge = Array.from(card?.querySelectorAll('div') || []).find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const row = badge?.closest('.p-3'); if (!row) throw new Error('Hepatoplasmataceae Linear input row 1 was not found.'); row.dataset.capture = 'hepatoplasmataceae-record-row'; row.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const expected = ['AP027078.gb', 'AP027131.gb', 'AP027133.gb', 'AP027132.gb', 'NZ_CP006932.gb']; const names = (app?.linearSeqs || []).map((seq) => seq.gb?.name || ''); if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error('Hepatoplasmataceae GenBank order was not restored.'); const row = document.querySelector('[data-linear-record-card=\"record-1\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-1\"]'); if (!row || !options) throw new Error('Hepatoplasmataceae Linear input row 1 was not found.'); options.open = true; row.dataset.capture = 'hepatoplasmataceae-record-row'; row.scrollIntoView({ block: 'center' });"
               }
             ],
             "selector": "[data-capture='hepatoplasmataceae-record-row']",
-            "cropPadding": 14,
+            "cropPadding": {"top": 0, "right": 14, "bottom": 14, "left": 14},
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 5,
               "linearSeqs.0.gb.name": "AP027078.gb",
               "linearSeqs.4.gb.name": "NZ_CP006932.gb"
             },
-            "visibleText": ["AP027078.gb", "Organism / strain (optional)", "Subtitle / title (optional)", "Region (optional)"]
+            "visibleText": ["AP027078.gb", "Record options", "Organism / strain (optional)", "Subtitle / title (optional)", "Region (optional)"]
           }
         }
       ]
     },
     {
       "title": "Use browser LOSAT",
-      "body": "In Pairwise Comparisons, choose Run LOSAT. Set LOSAT Mode to LOSATP.",
+      "body": "In Comparison, choose Run LOSAT. Open Advanced comparison and layout when you need to review the browser runtime controls.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -117,16 +117,23 @@
           "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-01-open-pairwise.webp",
-            "alt": "Pairwise Comparisons panel with Run LOSAT and LOSATP selected.",
-            "caption": "Select Run LOSAT and set LOSAT Mode to LOSATP."
+            "alt": "Comparison card with Run LOSAT active, Current: Run LOSAT status, closed Settings, and Selected pairs 4.",
+            "caption": "Choose Run LOSAT for all four adjacent comparisons; the status confirms the active command."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
             "viewport": {"width": 1600, "height": 1100},
-            "clipSelectors": ["[data-capture='linear-blast-source']", "[data-capture='linear-losat-settings']"],
-            "cropPadding": {"top": 12, "right": 12, "bottom": 12, "left": 12},
-            "waitForSelector": "[data-capture='linear-losat-settings']",
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear');"
+              },
+              {"type": "wait", "ms": 300}
+            ],
+            "selector": "[data-linear-comparison-card]",
+            "cropPadding": 14,
+            "waitForSelector": "[data-linear-comparison-card]",
             "assertAppState": {
               "mode": "linear",
               "linearComparisonPlan.mode": "adjacent",
@@ -134,9 +141,51 @@
               "losatProgram": "blastp",
               "losat.blastp.mode": "collinear"
             },
+            "visibleText": ["Comparison", "Run LOSAT", "Current: Run LOSAT", "Settings", "Selected pairs (4)"]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "Runtime and reproducibility",
+          "media": {
+            "src": "./media/hepatoplasmataceae_collinear/manual-03-02-runtime-reproducibility.webp",
+            "alt": "Runtime and reproducibility controls showing Auto execution, Safe total threads, and automatic run allocation.",
+            "caption": "Open Advanced comparison and layout to review the execution and thread allocation used by browser LOSAT."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
+            "openDetails": ["Advanced comparison and layout"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); app.losat.executionMode = 'auto'; app.losat.totalThreadBudget = 'safe'; app.losat.parallelWorkers = undefined; app.losat.threadsPerJob = 'auto';"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Runtime and reproducibility'))"
+              },
+              {
+                "type": "evaluate",
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Runtime and reproducibility')); if (!section) throw new Error('Runtime and reproducibility section was not found.'); section.dataset.capture = 'hep-collinear-runtime'; section.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='hep-collinear-runtime']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losat.executionMode": "auto",
+              "losat.totalThreadBudget": "safe",
+              "losat.threadsPerJob": "auto"
+            },
+            "visibleText": ["Runtime and reproducibility", "Parallel runs"],
             "visibleControls": [
-              {"label": "Run LOSAT", "checked": true},
-              {"label": "LOSATP", "checked": true}
+              {"label": "Execution", "value": "auto"},
+              {"label": "Total threads", "value": "safe"},
+              {"label": "Threads per run", "value": "auto"}
             ]
           }
         }
@@ -144,11 +193,12 @@
     },
     {
       "title": "Build collinear blocks",
-      "body": "In LOSATP settings, set blastp mode to Collinear blocks. Use Orientation + identity for Color mode.",
+      "body": "Open Comparison Settings, set LOSAT Mode to LOSATP and LOSATP mode to Collinear blocks, then use Orientation + identity for Color mode. Diagonal drift and Merge conflicts are under Advanced comparison and layout.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
-          ["blastp mode", "Collinear blocks"],
+          ["LOSAT Mode", "LOSATP"],
+          ["LOSATP mode", "Collinear blocks"],
           ["Max unit gap", "0"],
           ["Min block genes", "1"],
           ["Color mode", "Orientation + identity"],
@@ -164,58 +214,147 @@
       "note": "These settings combine compatible runs of protein-match anchors from gbdraw similarity groups into collinear blocks.",
       "operations": [
         {
+          "dataDependent": true,
           "title": "LOSATP collinear controls",
-          "body": "Open the blastp mode selector and choose Collinear blocks.",
+          "body": "Set LOSAT Mode to LOSATP, then open LOSATP mode in Settings and choose Collinear blocks.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-04-01-collinear-reduction.webp",
-            "alt": "LOSAT Settings panel with the blastp mode menu open and the Collinear blocks option highlighted.",
-            "caption": "Open blastp mode in LOSAT Settings and choose the highlighted Collinear blocks option."
+            "alt": "Comparison Settings showing all three LOSAT Mode buttons with LOSATP pressed and the LOSATP mode menu open with Collinear blocks highlighted.",
+            "caption": "Press LOSATP, then open LOSATP mode and choose the highlighted Collinear blocks option."
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
             "crop": "openSelect",
             "cropPadding": {
-              "top": 80,
-              "right": 80,
-              "bottom": 66,
-              "left": 80
+              "top": 68,
+              "right": 12,
+              "bottom": 20,
+              "left": 140
             },
+            "clipSelectors": ["[data-linear-comparison-losat-mode]"],
             "openSelect": {
               "selectedLabel": "Collinear blocks",
-              "options": ["Similarity groups", "Collinear blocks", "Pairwise"],
-              "label": "blastp mode"
-            }
+              "options": ["Similarity groups", "Collinear blocks", "Pairwise matches"],
+              "label": "LOSATP mode",
+              "hideFollowingSiblings": true
+            },
+            "openDetails": ["Settings"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear');"
+              },
+              {"type": "wait", "ms": 300}
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "linearComparisonPlan.mode": "adjacent",
+              "linearComparisonPlan.defaultSource": "losat",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear"
+            },
+            "visibleControls": [
+              {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
+              {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},
+              {"selector": "[data-linear-comparison-losat-mode-option='tblastx']", "pressed": false},
+              {"label": "LOSATP mode", "value": "Collinear blocks"}
+            ],
+            "visibleText": ["LOSAT Mode"]
           }
         },
         {
+          "dataDependent": true,
           "title": "Collinear color mode",
           "body": "Open Color mode and choose Orientation + identity.",
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-04-02-orientation-identity.webp",
-            "alt": "LOSAT Settings panel with the Color mode menu open and the Orientation + identity option highlighted.",
-            "caption": "Open Color mode in LOSAT Settings and choose the highlighted Orientation + identity option."
+            "alt": "Comparison Settings with the Color mode menu open and Orientation + identity highlighted.",
+            "caption": "Open Color mode in Settings and choose the highlighted Orientation + identity option."
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
             "crop": "openSelect",
             "cropPadding": {
-              "top": 64,
+              "top": 24,
               "right": 80,
-              "bottom": 84,
+              "bottom": 20,
               "left": 80
             },
             "openSelect": {
               "selectedLabel": "Orientation + identity",
               "options": ["Average identity", "Orientation", "Orientation + identity"],
               "label": "Color mode"
-            }
+            },
+            "openDetails": ["Settings"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); app.losat.blastp.collinearColorMode = 'orientation_identity';"
+              }
+            ],
+            "assertAppState": {
+              "mode": "linear",
+              "losatProgram": "blastp",
+              "losat.blastp.mode": "collinear",
+              "losat.blastp.collinearColorMode": "orientation_identity"
+            },
+            "visibleControls": [
+              {"label": "Color mode", "value": "Orientation + identity"}
+            ]
+          }
+        },
+        {
+          "dataDependent": true,
+          "title": "Advanced collinear controls",
+          "body": "Open Advanced comparison and layout to set Diagonal drift and Merge conflicts.",
+          "media": {
+            "src": "./media/hepatoplasmataceae_collinear/manual-04-03-advanced-collinear.webp",
+            "alt": "Advanced collinear search controls showing Diagonal drift 0 and Merge conflicts 1.",
+            "caption": "Use Advanced collinear search for the diagonal drift and merge conflict limits."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+            "viewport": {"width": 1600, "height": 1100},
+            "openDetails": ["Advanced comparison and layout"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); app.losat.blastp.collinearMaxDiagonalDrift = 0; app.losat.blastp.collinearMaxConflictsInMergeGap = 1;"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).some((section) => section.textContent.includes('Advanced collinear search'))"
+              },
+              {
+                "type": "evaluate",
+                "script": "const section = Array.from(document.querySelectorAll('[data-linear-advanced-comparison] section')).find((node) => node.textContent.includes('Advanced collinear search')); if (!section) throw new Error('Advanced collinear search was not found.'); section.dataset.capture = 'hep-advanced-collinear'; section.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "selector": "[data-capture='hep-advanced-collinear']",
+            "cropPadding": 14,
+            "assertAppState": {
+              "mode": "linear",
+              "losat.blastp.mode": "collinear",
+              "losat.blastp.collinearMaxDiagonalDrift": 0,
+              "losat.blastp.collinearMaxConflictsInMergeGap": 1
+            },
+            "visibleText": ["Advanced collinear search"],
+            "visibleControls": [
+              {"label": "Diagonal drift", "value": 0},
+              {"label": "Merge conflicts", "value": 1}
+            ]
           }
         }
       ]
     },
     {
       "title": "Set the diagram layout",
-      "body": "Use the ajisai palette, a Middle track layout, curved matches, and a ruler. Center the records, separate the strands, and show GC content and GC skew.",
+      "body": "Use the ajisai palette, a Middle track layout, and a ruler. Center the records, separate the strands, and show GC content and GC skew.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -226,7 +365,6 @@
           ["Scale Style", "Ruler (Ticks)"],
           ["Show GC Content", "On"],
           ["Show GC Skew", "On"],
-          ["Pairwise Match Style", "Curve"],
           ["Palette", "ajisai"]
         ]
       },
@@ -498,7 +636,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check input order, Color mode, Pairwise Match Style, Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
+      "body": "Check input order, LOSAT Mode LOSATP, LOSATP mode Collinear blocks, Color mode, Align to Center, Separate Strands, Show GC Content, and Show GC Skew."
     }
   ],
   "related": [

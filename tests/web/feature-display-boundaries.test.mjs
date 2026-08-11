@@ -31,6 +31,44 @@ const unsupportedHistoricalTransportId = `record@instance|alias~f_${'c'.repeat(6
 const legacyId = 'p_r_old_0_9_1_deadbeefdead';
 const generatedId = 'gbd_r0001_cds000001';
 
+test('FASTA uses NCBI-style coordinates, identifiers, and wrapping', () => {
+  const fasta = buildFeatureSequenceFastas({
+    record_id: 'NC_000001.1',
+    start: 0,
+    end: 9,
+    strand: '+',
+    organism: 'Example organism',
+    qualifiers: {
+      product: ['example protein'],
+      protein_id: ['WP_000001.1'],
+      locus_tag: ['ABC_0001']
+    },
+    nucleotide_sequence: 'ATGAAATAA',
+    amino_acid_sequence: 'MK'
+  });
+  assert.equal(
+    fasta.nucleotideFasta,
+    '>NC_000001.1:1-9 example protein [Example organism]\nATGAAATAA'
+  );
+  assert.equal(
+    fasta.aminoAcidFasta,
+    '>WP_000001.1 example protein [Example organism]\nMK'
+  );
+
+  const fallback = buildFeatureSequenceFastas({
+    record_id: 'seq1',
+    start: 0,
+    end: 6,
+    strand: '-',
+    qualifiers: { locus_tag: ['LOC_1'], product: ['fallback protein'] },
+    nucleotide_sequence: 'ATGAAA',
+    amino_acid_sequence: 'M'.repeat(61)
+  });
+  assert.equal(fallback.nucleotideFasta, '>seq1:c6-1 fallback protein\nATGAAA');
+  assert.match(fallback.aminoAcidFasta, /^>LOC_1 fallback protein\n/);
+  assert.match(fallback.aminoAcidFasta, /M{60}\nM$/);
+});
+
 test('protein FASTA skips internal IDs and uses biological aliases', () => {
   const { aminoAcidFasta } = buildFeatureSequenceFastas({
     record_id: 'record-a',

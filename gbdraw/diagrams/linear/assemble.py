@@ -18,6 +18,7 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 import pandas as pd
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
+from svgwrite.container import Group  # type: ignore[reportMissingImports]
 
 from ...analysis.skew import skew_df  # type: ignore[reportMissingImports]
 from ...analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
@@ -54,6 +55,8 @@ from ...render.groups.linear import LengthBarGroup, LegendGroup, PlotTitleGroup 
 from ...render.groups.linear.length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
+    auto_linear_tick_interval,
+    format_linear_tick_label,
 )
 from ...io.comparisons import filter_comparison_dataframe, load_comparisons
 from ...legend.table import (  # type: ignore[reportMissingImports]
@@ -73,6 +76,14 @@ from ...layout.linear import (  # type: ignore[reportMissingImports]
     measure_linear_label_band,
     resolve_axis_gap,
 )
+from ...layout.composition import (
+    CompositionItem,
+    CompositionRequest,
+    LegendPlacement,
+    TitlePlacement,
+    plan_composition,
+)
+from ...layout.spatial import Aabb, union_aabbs
 from ...layout.linear_multi_record import (
     LinearRecordMeasurement,
     LinearRecordPlacement,
@@ -87,6 +98,13 @@ from ...linear_comparison import (
     validate_linear_comparison_topology,
 )
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px  # type: ignore[reportMissingImports]
+from ...layout.scalar_axis import (
+    _depth_axis_bounds,
+    _format_depth_tick,
+    format_percent_tick,
+    scalar_axis_tick_values,
+)
+from ...labels.linear import calculate_label_bounds
 from ...tracks import (
     LinearTrackSlot,
     ScalarSpec,
@@ -99,6 +117,7 @@ from ...annotations import (
     ResolvedAnnotationBundle,
     ResolvedAnnotationTrack,
     annotation_track_params_from_mapping,
+    effective_annotation_style,
     feature_underlay_anchor_slot_id,
     feature_underlay_slot_id,
     layout_annotation_track,
@@ -107,13 +126,14 @@ from ...annotations import (
 )
 from ...annotations.planning import prepare_annotation_track_slots
 from ...render.drawers.linear.annotations import draw_linear_annotation_track
+from ...render.groups.linear import build_linear_feature_dom_index
+from ...render.composition import apply_composition_plan
 
 from .builders import (
     add_explicit_comparisons_on_linear_canvas,
     add_depth_group,
     add_gc_content_group,
     add_gc_skew_group,
-    add_legends_on_linear_canvas,
     add_length_bar_on_linear_canvas,
     add_record_definition_group,
     add_record_group,
@@ -924,7 +944,6 @@ def _build_linear_record_vertical_plans(
     feature_geometries: list[LinearFeatureLaneGeometry],
     labels_by_record: list[list[dict]],
     canvas_config: LinearCanvasConfigurator,
-    cfg: GbdrawConfig,
     gc_config: GcContentConfigurator,
     skew_config: GcSkewConfigurator,
     record_depth_by_index: list[dict[int, DepthTrackData]],
@@ -1138,6 +1157,418 @@ def _record_collision_bands(
     return tuple(bands)
 
 
+def _linear_axis_ruler_bounds(
+    record: SeqRecord,
+    placement: LinearRecordPlacement,
+    plan: LinearRecordVerticalPlan,
+    *,
+    canvas_config: LinearCanvasConfigurator,
+    render_context: LinearRecordRenderContext,
+    cfg: GbdrawConfig,
+    record_local_ruler: bool,
+) -> Aabb | None:
+    """Return exact horizontal text extents for a ruler drawn on the record axis."""
+
+    if not render_context.axis_ruler_enabled or placement.sequence_width <= 0.0:
+        return None
+    if record_local_ruler:
+        start_coord, end_coord = 0, len(record.seq)
+    else:
+        annotations = getattr(record, "annotations", None) or {}
+        try:
+            start_coord = int(annotations.get("gbdraw_coord_base", 1))
+        except (TypeError, ValueError):
+            start_coord = 1
+        try:
+            step = int(annotations.get("gbdraw_coord_step", 1))
+        except (TypeError, ValueError):
+            step = 1
+        step = 1 if step >= 0 else -1
+        end_coord = start_coord + (step * max(0, len(record.seq) - 1))
+
+    span = abs(end_coord - start_coord)
+    interval = cfg.objects.scale.interval
+    tick_interval = (
+        int(interval)
+        if interval is not None and int(interval) > 0
+        else auto_linear_tick_interval(max(1, int(canvas_config.longest_genome)))
+    )
+    if span <= 0 or tick_interval <= 0:
+        return None
+    minimum = min(start_coord, end_coord)
+    maximum = max(start_coord, end_coord)
+    tick = (minimum // tick_interval) * tick_interval
+    if tick < minimum:
+        tick += tick_interval
+    ticks: list[int] = []
+    while tick < maximum:
+        if tick > minimum:
+            ticks.append(int(tick))
+        tick += tick_interval
+    if not ticks:
+        return None
+
+    bounds: list[Aabb] = []
+    font_size = cfg.objects.scale.ruler_label_font_size.for_length_param(
+        canvas_config.length_param
+    )
+    for coordinate in ticks:
+        x = placement.sequence_width * (
+            abs(coordinate - start_coord) / float(span)
+        )
+        label = format_linear_tick_label(
+            coordinate,
+            context_length=max(1, int(canvas_config.longest_genome)),
+            tick_interval=tick_interval,
+        )
+        width, _height = calculate_bbox_dimensions(
+            label,
+            cfg.objects.text.font_family,
+            font_size,
+            cfg.canvas.dpi,
+        )
+        bounds.append(
+            Aabb(
+                placement.x + x - (0.5 * width),
+                placement.axis_y + plan.axis_band.top_y,
+                placement.x + x + (0.5 * width),
+                placement.axis_y + plan.axis_band.bottom_y,
+            )
+        )
+    return union_aabbs(bounds)
+
+
+def _linear_scalar_axis_left_overhang(
+    plan: LinearRecordVerticalPlan,
+    *,
+    gc_config: GcContentConfigurator,
+    depth_by_index: dict[int, DepthTrackData],
+    cfg: GbdrawConfig,
+) -> float:
+    """Measure left-facing scalar-axis ticks and labels from resolved data."""
+
+    overhang = 0.0
+    for slot in plan.slots:
+        if slot.paint_band is None:
+            continue
+        labels: list[str] = []
+        axis_config: object | None = None
+        if slot.renderer == "depth":
+            depth_track = depth_by_index.get(_depth_slot_track_index(slot))
+            if depth_track is None:
+                continue
+            axis_config = depth_track.config
+            if not bool(getattr(axis_config, "show_axis", False)):
+                continue
+            axis_min, axis_max = _depth_axis_bounds(
+                depth_track.df,
+                getattr(axis_config, "min_depth", None),
+                getattr(axis_config, "max_depth", None),
+            )
+            labels = [
+                _format_depth_tick(value)
+                for value in scalar_axis_tick_values(
+                    axis_min,
+                    axis_max,
+                    show_ticks=bool(getattr(axis_config, "show_ticks", False)),
+                    large_tick_interval=getattr(
+                        axis_config,
+                        "large_tick_interval",
+                        None,
+                    ),
+                )
+                if not (
+                    getattr(axis_config, "min_depth", None) is None
+                    and math.isclose(value, axis_min, rel_tol=1e-9, abs_tol=1e-9)
+                )
+            ]
+        elif (
+            slot.renderer == "dinucleotide_content"
+            and str(getattr(gc_config, "mode", "deviation")).strip().lower()
+            == "percent"
+        ):
+            axis_config = gc_config
+            if not bool(getattr(axis_config, "show_axis", False)):
+                continue
+            labels = [
+                format_percent_tick(value)
+                for value in scalar_axis_tick_values(
+                    float(getattr(gc_config, "min_percent", 0.0) or 0.0),
+                    float(getattr(gc_config, "max_percent", 100.0) or 100.0),
+                    show_ticks=bool(getattr(gc_config, "show_ticks", False)),
+                    large_tick_interval=getattr(
+                        gc_config,
+                        "large_tick_interval",
+                        None,
+                    ),
+                )
+            ]
+        if axis_config is None:
+            continue
+        overhang = max(overhang, 0.4)
+        font_size = linear_scalar_axis_tick_font_size_px(
+            axis_config,
+            float(slot.height),
+        )
+        for label in labels:
+            width, _height = calculate_bbox_dimensions(
+                label,
+                cfg.objects.text.font_family,
+                font_size,
+                cfg.canvas.dpi,
+            )
+            overhang = max(overhang, 4.5 + float(width))
+    return overhang
+
+
+def _linear_annotation_bounds(
+    record_index: int,
+    record_length: int,
+    placement: LinearRecordPlacement,
+    plan: LinearRecordVerticalPlan,
+    *,
+    annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
+    cfg: GbdrawConfig,
+) -> list[Aabb]:
+    """Return structured mark and label bounds for rendered annotation slots."""
+
+    scale = placement.sequence_width / max(1, int(record_length))
+    bounds: list[Aabb] = []
+    for slot in plan.slots:
+        if slot.renderer != "annotations" or slot.paint_band is None:
+            continue
+        track = annotation_track_layouts.get(slot.id)
+        if track is None:
+            continue
+        params = annotation_track_params_from_mapping(slot.params)
+        for item in track.placements:
+            annotation = item.annotation
+            if annotation.record_index != record_index:
+                continue
+            style = effective_annotation_style(annotation, params)
+            half_stroke = 0.5 * max(0.0, float(style.stroke_width))
+            min_x = min(float(start) for start, _end in annotation.segments) * scale
+            max_x = max(float(end) for _start, end in annotation.segments) * scale
+            if params.show_labels and annotation.label:
+                font_size = float(style.label_font_size or 10.0)
+                width, _height = calculate_bbox_dimensions(
+                    annotation.label,
+                    cfg.objects.text.font_family,
+                    font_size,
+                    cfg.canvas.dpi,
+                )
+                if style.label_position == "start":
+                    label_x = float(annotation.segments[0][0]) * scale
+                    label_min_x, label_max_x = label_x, label_x + width
+                elif style.label_position == "end":
+                    label_x = float(annotation.segments[-1][1]) * scale
+                    label_min_x, label_max_x = label_x - width, label_x
+                else:
+                    label_x = float(annotation.midpoint_bp) * scale
+                    label_min_x = label_x - (0.5 * width)
+                    label_max_x = label_x + (0.5 * width)
+                min_x = min(min_x, label_min_x)
+                max_x = max(max_x, label_max_x)
+            bounds.append(
+                Aabb(
+                    placement.x + min_x - half_stroke,
+                    placement.axis_y + slot.paint_band.top_y,
+                    placement.x + max_x + half_stroke,
+                    placement.axis_y + slot.paint_band.bottom_y,
+                )
+            )
+    return bounds
+
+
+def _collect_linear_primary_bounds(
+    *,
+    records: list[SeqRecord],
+    record_placements: dict[int, LinearRecordPlacement],
+    record_plans: list[LinearRecordVerticalPlan],
+    record_collision_bands: list[tuple[CollisionBand, ...]],
+    labels_by_record: list[list[dict]],
+    record_depth_by_index: list[dict[int, DepthTrackData]],
+    annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
+    normalized_comparisons: list[LinearComparison],
+    canvas_config: LinearCanvasConfigurator,
+    feature_config: FeatureDrawingConfigurator,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+    blast_config: object,
+    render_context: LinearRecordRenderContext,
+    cfg: GbdrawConfig,
+    multi_record_enabled: bool,
+    length_bar_group: LengthBarGroup | None,
+    length_bar_offset_x: float,
+    length_bar_offset_y: float,
+) -> Aabb:
+    """Collect one authoritative plot-space box without inspecting rendered SVG."""
+
+    axis_stroke = cfg.objects.axis.linear.stroke_width.for_length_param(
+        canvas_config.length_param
+    )
+    half_stroke = 0.5 * max(
+        0.0,
+        float(axis_stroke),
+        float(feature_config.block_stroke_width),
+        float(feature_config.line_stroke_width),
+        float(gc_config.stroke_width),
+        float(skew_config.stroke_width),
+    )
+    horizontal_offset = float(canvas_config.horizontal_offset)
+    label_half_stroke = 0.5 * max(
+        0.0,
+        float(cfg.labels.stroke_width.long),
+    )
+    bounds: list[Aabb] = []
+    for record_index, record in enumerate(records):
+        placement = record_placements[record_index]
+        plan = record_plans[record_index]
+        scalar_overhang = _linear_scalar_axis_left_overhang(
+            plan,
+            gc_config=gc_config,
+            depth_by_index=record_depth_by_index[record_index],
+            cfg=cfg,
+        )
+        bounds.append(
+            Aabb(
+                horizontal_offset + placement.x - max(half_stroke, scalar_overhang),
+                placement.axis_y + plan.paint_band.top_y - half_stroke,
+                horizontal_offset + placement.x + placement.sequence_width + half_stroke,
+                placement.axis_y + plan.paint_band.bottom_y + half_stroke,
+            )
+        )
+
+        for band in record_collision_bands[record_index]:
+            if band.kind != "definition" or band.x_end <= band.x_start:
+                continue
+            bounds.append(
+                Aabb(
+                    horizontal_offset + band.x_start,
+                    placement.axis_y + band.top_y,
+                    horizontal_offset + band.x_end,
+                    placement.axis_y + band.bottom_y,
+                )
+            )
+
+        feature_origin_y = next(
+            (
+                float(slot.origin_y)
+                for slot in plan.slots
+                if slot.renderer == "features"
+            ),
+            0.0,
+        )
+        for label in labels_by_record[record_index]:
+            left, right, top, bottom = calculate_label_bounds(label)
+            bounds.append(
+                Aabb(
+                    horizontal_offset + placement.x + left,
+                    placement.axis_y + feature_origin_y + top,
+                    horizontal_offset + placement.x + right,
+                    placement.axis_y + feature_origin_y + bottom,
+                )
+            )
+            leader_points = [
+                (
+                    float(label[name_x]),
+                    float(label[name_y]),
+                )
+                for name_x, name_y in (
+                    ("leader_start_x", "leader_start_y"),
+                    ("leader_end_x", "leader_end_y"),
+                )
+                if label.get(name_x) is not None and label.get(name_y) is not None
+            ]
+            if leader_points:
+                bounds.append(
+                    Aabb(
+                        horizontal_offset
+                        + placement.x
+                        + min(point[0] for point in leader_points)
+                        - label_half_stroke,
+                        placement.axis_y
+                        + feature_origin_y
+                        + min(point[1] for point in leader_points)
+                        - label_half_stroke,
+                        horizontal_offset
+                        + placement.x
+                        + max(point[0] for point in leader_points)
+                        + label_half_stroke,
+                        placement.axis_y
+                        + feature_origin_y
+                        + max(point[1] for point in leader_points)
+                        + label_half_stroke,
+                    )
+                )
+
+        ruler_bounds = _linear_axis_ruler_bounds(
+            record,
+            placement,
+            plan,
+            canvas_config=canvas_config,
+            render_context=render_context,
+            cfg=cfg,
+            record_local_ruler=multi_record_enabled,
+        )
+        if ruler_bounds is not None:
+            bounds.append(ruler_bounds.translated(horizontal_offset, 0.0))
+        bounds.extend(
+            item.translated(horizontal_offset, 0.0)
+            for item in _linear_annotation_bounds(
+                record_index,
+                len(record.seq),
+                placement,
+                plan,
+                annotation_track_layouts=annotation_track_layouts,
+                cfg=cfg,
+            )
+        )
+
+    comparison_half_stroke = 0.5 * max(
+        0.0,
+        float(getattr(blast_config, "stroke_width", 0.0)),
+    )
+    for comparison in normalized_comparisons:
+        query = record_placements[comparison.query_record_index]
+        subject = record_placements[comparison.subject_record_index]
+        query_y = (
+            query.comparison_bottom_y
+            if query.row < subject.row
+            else query.comparison_top_y
+        )
+        subject_y = (
+            subject.comparison_bottom_y
+            if subject.row < query.row
+            else subject.comparison_top_y
+        )
+        bounds.append(
+            Aabb(
+                horizontal_offset + min(query.x, subject.x) - comparison_half_stroke,
+                min(query_y, subject_y) - comparison_half_stroke,
+                horizontal_offset
+                + max(
+                    query.x + query.sequence_width,
+                    subject.x + subject.sequence_width,
+                )
+                + comparison_half_stroke,
+                max(query_y, subject_y) + comparison_half_stroke,
+            )
+        )
+
+    if length_bar_group is not None and length_bar_group.local_bounds.width > 0.0:
+        bounds.append(
+            length_bar_group.local_bounds.translated(
+                horizontal_offset + float(length_bar_offset_x),
+                float(length_bar_offset_y),
+            )
+        )
+    primary_bounds = union_aabbs(bounds)
+    if primary_bounds is None or primary_bounds.width <= 0.0 or primary_bounds.height <= 0.0:
+        raise RuntimeError("linear assembly produced no primary painted bounds")
+    return primary_bounds
+
+
 def _precalculate_gc_dataframes(
     records: list[SeqRecord],
     *,
@@ -1268,22 +1699,12 @@ def assemble_linear_diagram(
         raise ValueError("plot_title_position must be one of: center, top, bottom")
 
     plot_title_obj: PlotTitleGroup | None = None
-    plot_title_edge_margin = 24.0
-    plot_title_vertical_gap = float(canvas_config.vertical_padding)
-    plot_title_top_reserve = 0.0
-    plot_title_bottom_reserve = 0.0
     if normalized_plot_title:
         plot_title_obj = PlotTitleGroup(
             normalized_plot_title,
             font_size=float(plot_title_font_size),
             cfg=cfg,
         )
-        plot_title_text_height = max(float(plot_title_obj.text_bbox_height), float(plot_title_font_size))
-        reserve = plot_title_edge_margin + plot_title_text_height + plot_title_vertical_gap
-        if normalized_plot_title_position == "top":
-            plot_title_top_reserve = reserve
-        elif normalized_plot_title_position == "bottom":
-            plot_title_bottom_reserve = reserve
 
     legacy_comparison_frames = _load_linear_comparison_dataframes(
         blast_files,
@@ -1322,6 +1743,7 @@ def assemble_linear_diagram(
         orthogroup_label_eligibility = build_orthogroup_label_eligibility(
             orthogroups=orthogroups,
             comparisons=comparisons,
+            records=records,
         )
     if (
         label_scope == "orthogroup_top"
@@ -1337,13 +1759,12 @@ def assemble_linear_diagram(
     record_feature_layers = _precalculate_feature_layers(
         records,
         feature_config,
-        canvas_config,
         profile,
-        orthogroup_label_eligibility=orthogroup_label_eligibility,
     )
     record_feature_dicts = [
         result.foreground_features for result in record_feature_layers
     ]
+    feature_dom_index = build_linear_feature_dom_index(record_feature_dicts)
     (
         linear_track_slots,
         resolved_annotations,
@@ -1478,7 +1899,6 @@ def assemble_linear_diagram(
         feature_geometries=record_feature_lane_geometries,
         labels_by_record=all_labels,
         canvas_config=canvas_config,
-        cfg=cfg,
         gc_config=gc_config,
         skew_config=skew_config,
         record_depth_by_index=record_depth_by_index,
@@ -1522,9 +1942,6 @@ def assemble_linear_diagram(
     # Prepare legend group
     configure_pairwise_identity_legend_from_comparisons(blast_config, comparisons)
     legend_table: dict = {}
-    legend_group: LegendGroup | None = None
-    legend_measurement: LegendMeasurement | None = None
-    required_legend_height = 0.0
     if canvas_config.legend_position != "none":
         color_map = feature_config.specific_color_rules
         default_color_map = feature_config.default_color_map
@@ -1573,45 +1990,12 @@ def assemble_linear_diagram(
             resolved_annotations,
             normalized_linear_track_slots,
         )
-        legend_measurement = legend_config.measure_legend(
-            legend_table,
-            canvas_config,
-        )
-        legend_group = LegendGroup(
-            canvas_config,
-            legend_measurement,
-            legend_table,
-            cfg=cfg,
-        )
-        required_legend_height = float(legend_measurement.legend_height)
-        definition_reserve_width = (
-            row_definition_width
-            if split_row_definitions
-            else (0.0 if multi_record_enabled else max_def_width)
-        )
-        canvas_config.recalculate_canvas_dimensions(
-            legend_measurement,
-            definition_reserve_width,
-        )
-    else:
-        definition_reserve_width = (
-            row_definition_width
-            if split_row_definitions
-            else (0.0 if multi_record_enabled else max_def_width)
-        )
-        canvas_config.alignment_width = canvas_config.fig_width
-        canvas_config.horizontal_offset = (
-            2 * canvas_config.canvas_padding
-            + definition_reserve_width
-            + canvas_config.definition_gap
-        )
-        canvas_config.total_width = (
-            canvas_config.horizontal_offset
-            + canvas_config.alignment_width
-            + 2 * canvas_config.canvas_padding
-        )
-        canvas_config.legend_offset_x = 0
-        canvas_config.legend_offset_y = 0
+    definition_reserve_width = (
+        row_definition_width
+        if split_row_definitions
+        else (0.0 if multi_record_enabled else max_def_width)
+    )
+    canvas_config.configure_plot_width(definition_reserve_width)
     ordinary_row_gap = float(canvas_config.cds_padding) * 1.5
     definition_clear_gap = max(1.0, 0.5 * float(canvas_config.vertical_padding))
     comparison_endpoint_gap_px = (
@@ -1676,18 +2060,10 @@ def assemble_linear_diagram(
     multi_record_plan = None
 
     def resolve_first_axis_y() -> float:
-        if canvas_config.legend_position == "top":
-            first_axis_y = (
-                canvas_config.original_vertical_offset
-                + required_legend_height
-                + canvas_config.vertical_offset
-            )
-        else:
-            first_axis_y = max(
-                canvas_config.vertical_offset,
-                canvas_config.original_vertical_offset,
-            )
-        return first_axis_y + plot_title_top_reserve
+        return max(
+            canvas_config.vertical_offset,
+            canvas_config.original_vertical_offset,
+        )
 
     current_y = resolve_first_axis_y()
 
@@ -1824,7 +2200,6 @@ def assemble_linear_diagram(
             feature_geometries=record_feature_lane_geometries,
             labels_by_record=all_labels,
             canvas_config=canvas_config,
-            cfg=cfg,
             gc_config=gc_config,
             skew_config=skew_config,
             record_depth_by_index=record_depth_by_index,
@@ -1947,12 +2322,6 @@ def assemble_linear_diagram(
             cfg=cfg,
             ruler_width=alignment_extents.ruler_width,
         )
-    length_bar_height = (
-        float(length_bar_group.scale_group_height)
-        if length_bar_group is not None
-        else 0.0
-    )
-
     painted_content_bottom = max(
         (
             float(record_offsets[index]) + plan.canvas_band.bottom_y
@@ -1964,50 +2333,16 @@ def assemble_linear_diagram(
         painted_content_bottom
         + 4 * canvas_config.vertical_padding
     )
-    bottom_title_stack = (
-        plot_title_obj is not None
-        and normalized_plot_title_position == "bottom"
-        and canvas_config.legend_position == "bottom"
-        and legend_group is not None
+    length_bar_offset_y = float(canvas_config.height_below_final_record)
+    length_bar_bottom = (
+        length_bar_offset_y + float(length_bar_group.local_bounds.max_y)
+        if length_bar_group is not None
+        else painted_content_bottom
     )
-    bottom_stack_gap = float(canvas_config.vertical_padding)
-    if bottom_title_stack:
-        final_height = (
-            canvas_config.height_below_final_record
-            + length_bar_height
-            + bottom_stack_gap
-            + required_legend_height
-            + bottom_stack_gap
-            + float(plot_title_obj.text_bbox_height)
-            + plot_title_edge_margin
-        )
-    else:
-        final_height = (
-            canvas_config.height_below_final_record
-            + length_bar_height
-            + canvas_config.original_vertical_offset
-            + plot_title_bottom_reserve
-        )
-        if canvas_config.legend_position in ["top", "bottom"]:
-            final_height += int(required_legend_height)
-    canvas_config.total_height = max(final_height, required_legend_height)
-
-    if legend_measurement is not None:
-        canvas_config.recalculate_canvas_dimensions(
-            legend_measurement,
-            definition_reserve_width,
-        )
-
-    alignment_shift_x = alignment_extents.horizontal_shift
-    alignment_width_extension = alignment_extents.width_extension
-    if alignment_shift_x or alignment_width_extension:
-        width_extension_px = math.ceil(alignment_width_extension)
-        canvas_config.horizontal_offset += alignment_shift_x
-        canvas_config.total_width += width_extension_px
-        if canvas_config.legend_position == "right":
-            canvas_config.legend_offset_x += width_extension_px
-        elif canvas_config.legend_position in {"top", "bottom"}:
-            canvas_config.legend_offset_x += 0.5 * width_extension_px
+    canvas_config.total_height = max(
+        1.0,
+        length_bar_bottom + float(canvas_config.vertical_padding),
+    )
     record_placements: dict[int, LinearRecordPlacement] = {}
     for record_index, record in enumerate(records):
         if multi_record_plan is not None:
@@ -2049,57 +2384,12 @@ def assemble_linear_diagram(
             px_per_bp=sequence_width / max(1, len(record.seq)),
         )
     canvas: Drawing = canvas_config.create_svg_canvas()
-
-    # Embed both viewBox configurations as data attributes for JavaScript repositioning
-    # This allows switching between horizontal and vertical legend layouts without accumulation errors
-    vertical_vb_width = canvas_config.total_width
-    vertical_vb_height = canvas_config.total_height
-    horizontal_vb_width = canvas_config.total_width
-    horizontal_vb_height = canvas_config.total_height
-    if (
-        legend_measurement is not None
-        and legend_measurement.linear_layout is not None
-    ):
-        linear_legend_layout = legend_measurement.linear_layout
-        h_legend_width = linear_legend_layout.horizontal.width
-        h_legend_height = linear_legend_layout.horizontal.height
-        v_legend_width = linear_legend_layout.vertical.width
-
-        if canvas_config.legend_position in ["top", "bottom"]:
-            vertical_vb_width = canvas_config.total_width - h_legend_width + v_legend_width
-            vertical_vb_height = canvas_config.total_height - h_legend_height
-
-        if canvas_config.legend_position in ["left", "right"]:
-            horizontal_vb_width = canvas_config.total_width - v_legend_width
-            horizontal_vb_height = canvas_config.total_height + h_legend_height
-
-    canvas.attribs["data-vertical-viewbox"] = f"0 0 {vertical_vb_width} {vertical_vb_height}"
-    canvas.attribs["data-horizontal-viewbox"] = f"0 0 {horizontal_vb_width} {horizontal_vb_height}"
-
-    if canvas_config.legend_position == "top" and plot_title_top_reserve > 0:
-        canvas_config.legend_offset_y += plot_title_top_reserve
-    if bottom_title_stack:
-        canvas_config.legend_offset_y = (
-            float(canvas_config.total_height)
-            - plot_title_edge_margin
-            - float(plot_title_obj.text_bbox_height)
-            - bottom_stack_gap
-            - required_legend_height
-        )
-
-    if canvas_config.legend_position != "none":
-        canvas = add_legends_on_linear_canvas(
-            canvas,
-            canvas_config,
-            legend_group,
-            legend_table,
-        )
+    primary_target_start = len(getattr(canvas, "elements", []))
     if length_bar_group is not None:
         canvas = add_length_bar_on_linear_canvas(
             canvas,
             canvas_config,
             length_bar_group,
-            legend_group,
             offset_x=length_bar_offset_x,
         )
 
@@ -2113,6 +2403,7 @@ def assemble_linear_diagram(
             blast_config,
             records,
             comparison_placements,
+            feature_dom_index=feature_dom_index,
         )
 
     label_font_size = _resolve_linear_diagram_label_font_size(
@@ -2415,24 +2706,102 @@ def assemble_linear_diagram(
             )
             continue
 
-    if plot_title_obj is not None:
-        title_group = plot_title_obj.get_group()
-        title_height = float(plot_title_obj.text_bbox_height)
-        title_y = 0.5 * float(canvas_config.total_height)
-        if normalized_plot_title_position == "top":
-            title_y = plot_title_edge_margin + (0.5 * title_height)
-        elif normalized_plot_title_position == "bottom":
-            if bottom_title_stack:
-                title_y = (
-                    canvas_config.legend_offset_y
-                    + required_legend_height
-                    + bottom_stack_gap
-                    + (0.5 * title_height)
-                )
-            else:
-                title_y = float(canvas_config.total_height) - plot_title_edge_margin - (0.5 * title_height)
-        title_group.translate(0.5 * float(canvas_config.total_width), title_y)
-        canvas.add(title_group)
+    primary_targets = tuple(
+        element
+        for element in getattr(canvas, "elements", [])[primary_target_start:]
+        if isinstance(element, Group)
+    )
+    source_primary_bounds = _collect_linear_primary_bounds(
+        records=records,
+        record_placements=record_placements,
+        record_plans=record_vertical_plans,
+        record_collision_bands=record_collision_bands,
+        labels_by_record=all_labels,
+        record_depth_by_index=record_depth_by_index,
+        annotation_track_layouts=annotation_track_layouts,
+        normalized_comparisons=normalized_comparisons,
+        canvas_config=canvas_config,
+        feature_config=feature_config,
+        gc_config=gc_config,
+        skew_config=skew_config,
+        blast_config=blast_config,
+        render_context=render_context,
+        cfg=cfg,
+        multi_record_enabled=multi_record_enabled,
+        length_bar_group=length_bar_group,
+        length_bar_offset_x=length_bar_offset_x,
+        length_bar_offset_y=length_bar_offset_y,
+    )
+
+    legend_measurement: LegendMeasurement | None = None
+    legend_target: Group | None = None
+    if canvas_config.legend_position != "none":
+        legend_measurement = legend_config.measure_legend(
+            legend_table,
+            placement=canvas_config.legend_position,
+            wrap_width=source_primary_bounds.width,
+        )
+        if (
+            legend_measurement.local_bounds.width > 0.0
+            and legend_measurement.local_bounds.height > 0.0
+        ):
+            legend_target = LegendGroup(
+                canvas_config,
+                legend_measurement,
+                legend_table,
+                cfg=cfg,
+            ).get_group()
+            canvas.add(legend_target)
+
+    title_target = (
+        plot_title_obj.get_group()
+        if plot_title_obj is not None
+        else None
+    )
+    if title_target is not None:
+        canvas.add(title_target)
+
+    legend_placement = LegendPlacement(str(canvas_config.legend_position))
+    title_placement = (
+        TitlePlacement(normalized_plot_title_position)
+        if title_target is not None
+        else TitlePlacement.NONE
+    )
+    composition_plan = plan_composition(
+        CompositionRequest(
+            primary=CompositionItem("primary", source_primary_bounds),
+            legend=(
+                CompositionItem("legend", legend_measurement.local_bounds)
+                if legend_target is not None and legend_measurement is not None
+                else None
+            ),
+            title=(
+                CompositionItem("title", plot_title_obj.local_bounds)
+                if title_target is not None and plot_title_obj is not None
+                else None
+            ),
+            legend_placement=legend_placement,
+            title_placement=title_placement,
+        )
+    )
+    apply_composition_plan(
+        canvas,
+        composition_plan,
+        primary_targets=primary_targets,
+        legend_target=legend_target,
+        legend_side=legend_placement,
+        legend_reflow_metrics=(
+            legend_measurement.reflow_metrics
+            if legend_target is not None and legend_measurement is not None
+            else None
+        ),
+        title_target=title_target,
+        title_side=title_placement,
+    )
+
+    primary_placement = composition_plan.placement_for("primary")
+    if primary_placement is None:  # pragma: no cover - primary is required
+        raise RuntimeError("linear composition has no primary placement")
 
     if linear_track_layout is not None:
         setattr(
@@ -2442,11 +2811,16 @@ def assemble_linear_diagram(
                 records=records,
                 layout=linear_track_layout,
                 record_plans=record_vertical_plans,
-                record_offsets=record_offsets,
+                record_offsets=[
+                    float(offset) + primary_placement.dy
+                    for offset in record_offsets
+                ],
                 record_collision_bands=record_collision_bands,
                 boundary_gap_resolutions=boundary_gap_resolutions,
             ),
         )
+    setattr(canvas, "_gbdraw_linear_source_content_bounds", source_primary_bounds)
+    setattr(canvas, "_gbdraw_linear_composition_plan", composition_plan)
 
     return canvas
 

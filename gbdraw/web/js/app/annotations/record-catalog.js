@@ -106,7 +106,12 @@ const buildLinearCatalog = (sources, inputType, loadComparison) => {
         : `${sourceLabel}: wait for the record list to finish loading.`);
       return;
     }
-    const selected = selectSourceRecords(sourceRecords(source, `linear-source-${sourceIndex + 1}`), source?.selector);
+    const availableRecords = sourceRecords(source, `linear-source-${sourceIndex + 1}`);
+    if (availableRecords.length === 0) {
+      issues.push(`${sourceLabel}: no records were found.`);
+      return;
+    }
+    const selected = selectSourceRecords(availableRecords, source?.selector);
     if (selected.error) {
       issues.push(`${sourceLabel}: ${selected.error}.`);
       return;
@@ -116,7 +121,7 @@ const buildLinearCatalog = (sources, inputType, loadComparison) => {
       const truncate = cleanText(inputType) === 'gff' || normalizedSources.length > 1;
       if (truncate) materialized = materialized.slice(0, 1);
     }
-    records.push(...materialized);
+    records.push(...materialized.map((record) => ({ ...record, sourceIndex })));
   });
   const finalized = finalizeRecords(records);
   return {

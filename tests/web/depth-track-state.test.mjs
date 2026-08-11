@@ -25,12 +25,9 @@ const {
   normalizeRecordMajorDepthFileRows,
   padDepthFileSlots,
   representativeDepthFiles,
-  referencedDepthTrackWidth,
   reindexDepthSlots,
   reconcileDepthTracksToFiles,
-  removeDepthTrackColumnAt,
-  removeDepthTrackAt,
-  syncDepthSlotLabels
+  removeDepthTrackColumnAt
 } = await import(pathToFileURL(tempModulePath));
 
 const file = (name) => ({ name });
@@ -38,17 +35,6 @@ const labels = (tracks) => tracks.map((track) => track.label);
 const depthIndexes = (slots) => slots
   .filter((slot) => slot.renderer === 'depth' && slot.enabled !== false)
   .map((slot) => slot.params.track_index);
-const depthLabels = (slots) => slots
-  .filter((slot) => slot.renderer === 'depth' && slot.enabled !== false)
-  .map((slot) => slot.params.legend_label);
-const depthSlots = (count) => Array.from({ length: count }, (_, index) => ({
-  id: `depth_${index + 1}`,
-  renderer: 'depth',
-  params: {
-    track_index: index,
-    legend_label: ['24 hpi', '12 hpi', '6 hpi'][index]
-  }
-}));
 
 {
   assert.equal(
@@ -109,88 +95,11 @@ const depthSlots = (count) => Array.from({ length: count }, (_, index) => ({
 }
 
 {
-  assert.equal(referencedDepthTrackWidth([
-    { id: 'features', renderer: 'features', params: {} },
-    { id: 'custom-depth', renderer: 'depth', params: { track_index: 3 } }
-  ]), 4);
   assert.equal(depthTrackSessionWidth({
     rows: [[file('only-source.tsv')], []],
     depthTracks: [{ label: 'A' }, { label: 'B' }],
     slots: [{ id: 'custom-depth', renderer: 'depth', params: { track_index: 3 } }]
   }), 4);
-}
-
-{
-  const removal = removeDepthTrackAt({
-    files: [file('24 hpi.tsv'), file('12 hpi.tsv'), file('6 hpi.tsv')],
-    depthTracks: [{ label: '24 hpi' }, { label: '12 hpi' }, { label: '6 hpi' }],
-    index: 1
-  });
-  const slots = reindexDepthSlots({
-    slots: depthSlots(3),
-    removedIndex: 1,
-    activeCount: depthFileSlotsFromValue(removal.files).length
-  });
-  syncDepthSlotLabels({ slots, depthTracks: removal.depthTracks, activeCount: 2 });
-
-  assert.deepEqual(removal.files.map((entry) => entry.name), ['24 hpi.tsv', '6 hpi.tsv']);
-  assert.deepEqual(labels(removal.depthTracks), ['24 hpi', '6 hpi']);
-  assert.deepEqual(depthIndexes(slots), [0, 1]);
-  assert.deepEqual(depthLabels(slots), ['24 hpi', '6 hpi']);
-}
-
-{
-  const removal = removeDepthTrackAt({
-    files: [file('24 hpi.tsv'), file('12 hpi.tsv'), file('6 hpi.tsv')],
-    depthTracks: [{ label: '24 hpi' }, { label: '12 hpi' }, { label: '6 hpi' }],
-    index: 0
-  });
-  const slots = reindexDepthSlots({
-    slots: depthSlots(3),
-    removedIndex: 0,
-    activeCount: 2
-  });
-  syncDepthSlotLabels({ slots, depthTracks: removal.depthTracks, activeCount: 2 });
-
-  assert.deepEqual(removal.files.map((entry) => entry.name), ['12 hpi.tsv', '6 hpi.tsv']);
-  assert.deepEqual(labels(removal.depthTracks), ['12 hpi', '6 hpi']);
-  assert.deepEqual(depthIndexes(slots), [0, 1]);
-  assert.deepEqual(depthLabels(slots), ['12 hpi', '6 hpi']);
-}
-
-{
-  const removal = removeDepthTrackAt({
-    files: [file('24 hpi.tsv'), file('12 hpi.tsv'), file('6 hpi.tsv')],
-    depthTracks: [{ label: '24 hpi' }, { label: '12 hpi' }, { label: '6 hpi' }],
-    index: 2
-  });
-  const slots = reindexDepthSlots({
-    slots: depthSlots(3),
-    removedIndex: 2,
-    activeCount: 2
-  });
-  syncDepthSlotLabels({ slots, depthTracks: removal.depthTracks, activeCount: 2 });
-
-  assert.deepEqual(removal.files.map((entry) => entry.name), ['24 hpi.tsv', '12 hpi.tsv']);
-  assert.deepEqual(labels(removal.depthTracks), ['24 hpi', '12 hpi']);
-  assert.deepEqual(depthIndexes(slots), [0, 1]);
-}
-
-{
-  const removal = removeDepthTrackAt({
-    files: [file('24 hpi.tsv')],
-    depthTracks: [{ label: '24 hpi' }],
-    index: 0
-  });
-  const slots = reindexDepthSlots({
-    slots: depthSlots(1),
-    removedIndex: 0,
-    activeCount: 0
-  });
-
-  assert.deepEqual(removal.files, []);
-  assert.deepEqual(depthIndexes(slots), []);
-  assert.equal(removal.depthTracks.length, 1);
 }
 
 {

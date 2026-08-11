@@ -18,6 +18,7 @@ from ....core.text import (
     create_text_element,
     parse_mixed_content_text,
 )
+from ....layout.spatial import Aabb, union_aabbs
 from ....svg.ids import definition_group_svg_id
 
 _COORD_BASE_KEY = "gbdraw_coord_base"
@@ -106,6 +107,7 @@ class DefinitionGroup:
                 line for line in self.definition_lines if line.kind in self._line_kinds
             ]
         self.calculate_start_coordinates()
+        self.local_bounds = self._calculate_local_bounds()
         self.definition_group = Group(id=self.definition_group_id, debug=False)
         self.definition_group.attribs["data-gbdraw-role"] = (
             "record-definition"
@@ -135,6 +137,29 @@ class DefinitionGroup:
         for line in self.definition_lines:
             line.y = current_top + (line.height / 2.0)
             current_top += line.height + self.interval
+
+    def _calculate_local_bounds(self) -> Aabb:
+        """Return the exact measured text box in definition-local coordinates."""
+
+        bounds: list[Aabb] = []
+        anchor = str(self.linear_text_anchor).strip().lower()
+        for line in self.definition_lines:
+            width = float(line.width)
+            if anchor == "start":
+                min_x = self.text_x
+            elif anchor == "end":
+                min_x = self.text_x - width
+            else:
+                min_x = self.text_x - (0.5 * width)
+            bounds.append(
+                Aabb(
+                    min_x,
+                    float(line.y) - (0.5 * float(line.height)),
+                    min_x + width,
+                    float(line.y) + (0.5 * float(line.height)),
+                )
+            )
+        return union_aabbs(bounds) if bounds else Aabb(0.0, 0.0, 0.0, 0.0)
 
     def get_definition_details(self) -> None:
         """Resolve all labels that may participate in the stacked definition."""

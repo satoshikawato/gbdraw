@@ -1,22 +1,9 @@
 const { test, expect } = require('@playwright/test');
-const { createReadStream, existsSync, readFileSync } = require('node:fs');
-const { createServer } = require('node:http');
-const { extname, join, normalize, resolve, sep } = require('node:path');
+const { readFileSync } = require('node:fs');
+const { join, resolve } = require('node:path');
+const { gunzipSync } = require('node:zlib');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
-const contentTypes = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.wasm': 'application/wasm',
-  '.whl': 'application/octet-stream'
-};
-
-let server;
-let baseUrl;
 
 const makeComparisonGenbank = (recordId, base = 'atg') => {
   const sequence = base.repeat(100);
@@ -39,6 +26,69 @@ ORIGIN
 ${origin}
 //
 `;
+};
+
+const linearRecordCard = (page, uid) => (
+  page.locator(`[data-linear-record-card="${uid}"]`)
+);
+
+const linearComparisonBoundary = (page, upperRow, lowerRow) => (
+  page.locator(`[data-linear-comparison-boundary="${upperRow}->${lowerRow}"]`)
+);
+
+const linearComparisonPair = (page, edgeKey) => (
+  page.locator(`fieldset[data-edge-key="${edgeKey}"]`)
+);
+
+const linearSelectedPairs = (page) => (
+  page.locator('details[data-linear-comparison-disclosure="selected-pairs"]')
+);
+
+const openLinearSelectedPairs = async (page) => {
+  const details = linearSelectedPairs(page);
+  await expect(details).toHaveCount(1);
+  if (!await details.evaluate((element) => element.open)) {
+    await details.locator(':scope > summary').press('Enter');
+  }
+  await expect(details).toHaveAttribute('open', '');
+  return details;
+};
+
+const openLinearAdvancedComparison = async (page) => {
+  const details = page.locator(
+    'details[data-linear-comparison-disclosure="advanced"]'
+  );
+  await expect(details).toHaveCount(1);
+  if (!await details.evaluate((element) => element.open)) {
+    await details.locator(':scope > summary').press('Enter');
+  }
+  await expect(details).toHaveAttribute('open', '');
+  return details;
+};
+
+const expectExactEdgeKeys = async (container, expectedKeys) => {
+  const pairs = container.locator('fieldset[data-edge-key]');
+  await expect(pairs).toHaveCount(expectedKeys.length);
+  const actualKeys = await pairs.evaluateAll((elements) => (
+    elements.map((element) => element.dataset.edgeKey)
+  ));
+  expect(new Set(actualKeys).size).toBe(actualKeys.length);
+  expect([...actualKeys].sort()).toEqual([...expectedKeys].sort());
+};
+
+const focusLastTabStop = async (container) => {
+  await container.evaluate((element) => {
+    const candidates = [...element.querySelectorAll(
+      'a[href], button, input, select, textarea, [tabindex]'
+    )].filter((candidate) => (
+      !candidate.disabled &&
+      candidate.tabIndex >= 0 &&
+      candidate.getClientRects().length > 0
+    ));
+    const target = candidates.at(-1);
+    if (!target) throw new Error('Expected at least one tab stop.');
+    target.focus();
+  });
 };
 
 const installDiagramRequestObserver = async (page) => {
@@ -74,39 +124,42 @@ const installDiagramRequestObserver = async (page) => {
   });
 };
 
-test.beforeAll(async () => {
-  await new Promise((resolveServer, rejectServer) => {
-    server = createServer((request, response) => {
-      const url = new URL(request.url || '/', 'http://127.0.0.1');
-      const requestedPath = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.(?:\/|\\|$))+/, '');
-      const filePath = resolve(repoRoot, requestedPath.replace(/^[/\\]+/, ''));
-      if ((!filePath.startsWith(`${repoRoot}${sep}`) && filePath !== repoRoot) || !existsSync(filePath)) {
-        response.writeHead(404);
-        response.end('Not found');
-        return;
-      }
-      response.writeHead(200, {
-        'Content-Type': contentTypes[extname(filePath)] || 'application/octet-stream'
-      });
-      createReadStream(filePath).pipe(response);
-    });
-    server.once('error', rejectServer);
-    server.listen(0, '127.0.0.1', () => {
-      baseUrl = `http://127.0.0.1:${server.address().port}`;
-      resolveServer();
-    });
-  });
-});
+test('Pairwise match popup selects the active SVG match until closed', async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
 
-test.afterAll(async () => {
-  await new Promise((resolveClose) => server.close(resolveClose));
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.results.splice(0, app.results.length, {
+      name: 'pairwise-selection.svg',
+      content: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
+        <path data-gbdraw-pairwise-match-id="match-1" data-match-kind="pairwise"
+          data-query-record-id="query" data-subject-record-id="subject"
+          data-qstart="1" data-qend="20" data-sstart="5" data-send="24"
+          fill="#94a3b8" d="M 10 20 L 40 20 L 45 60 L 15 60 Z" />
+      </svg>`
+    });
+    app.selectedResultIndex = 0;
+  });
+
+  const match = page.getByRole('button', { name: 'Pairwise match 1', exact: true });
+  await expect(match).toBeVisible();
+  await match.press('Enter');
+
+  await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toBeVisible();
+  await expect(match).toHaveClass(/\bgbdraw-match-selected\b/);
+
+  await page.getByRole('button', { name: 'Close match popup' }).click();
+  await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toHaveCount(0);
+  await expect(match).not.toHaveClass(/\bgbdraw-match-selected\b/);
 });
 
 test('Linear record rows and N-to-M comparison batches remain keyed by sequence uid', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
-  const state = await page.evaluate(() => {
+  const setup = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     app.addLinearSeq();
@@ -122,49 +175,406 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
     app.setLinearRecordRow(app.linearSeqs[1].uid, 1);
     app.setLinearRecordRow(app.linearSeqs[2].uid, 2);
     app.setLinearRecordRow(app.linearSeqs[3].uid, 2);
-    app.addLinearComparisonBatch(true);
+    app.setLinearComparisonGlobalAction('losat');
     return {
+      uids: app.linearSeqs.map((item) => item.uid),
       tokens: app.linearLayoutTokens,
       comparisonMode: app.linearComparisonPlan.mode,
-      comparisonCount: app.linearComparisonPlan.edges.filter((item) => item.included).length,
-      endpoints: app.linearComparisonPlan.edges
-        .filter((item) => item.included)
-        .map((item) => [item.queryUid, item.subjectUid]),
       uniqueUids: new Set(app.linearSeqs.map((item) => item.uid)).size,
       canonicalComparisonCount: app.files.linearCanonicalComparisons.length,
       cacheInfo: app.losatCacheInfo.map((entry) => entry.key)
     };
   });
 
-  expect(state.tokens).toEqual(['#1@1', '#2@1', '#3@2', '#4@2']);
+  const [uidA, uidB, uidC, uidD] = setup.uids;
+  const zippedEdgeKeys = [`${uidA}->${uidC}`, `${uidB}->${uidD}`];
+  const crossProductEdgeKeys = [
+    `${uidA}->${uidC}`, `${uidA}->${uidD}`,
+    `${uidB}->${uidC}`, `${uidB}->${uidD}`
+  ];
+  const boundary = linearComparisonBoundary(page, 1, 2);
+
+  expect(setup.tokens).toEqual(['#1@1', '#2@1', '#3@2', '#4@2']);
+  expect(setup.comparisonMode).toBe('adjacent');
+  expect(setup.uniqueUids).toBe(4);
+  expect(setup.canonicalComparisonCount).toBe(0);
+  expect(setup.cacheInfo).toEqual(['circular-cache']);
+  const advancedComparison = page.locator(
+    'details[data-linear-comparison-disclosure="advanced"]'
+  );
+  await advancedComparison.locator(':scope > summary').press('Enter');
+  await expect(page.getByRole('spinbutton', {
+    name: /^Linear record row for sequence \d+$/
+  })).toHaveCount(4);
+  await expect(page.locator('[data-linear-display-row]')).toHaveCount(2);
+  await expect(page.locator('[data-linear-comparison-boundary]')).toHaveCount(1);
+  await expectExactEdgeKeys(boundary, zippedEdgeKeys);
+
+  await openLinearSelectedPairs(page);
+  const editedPair = linearComparisonPair(page, `${uidA}->${uidC}`);
+  await editedPair.getByRole('radio', { name: 'Upload BLAST TSV' }).check();
+  const materialized = await page.evaluate(() => ({
+    mode: window.__GBDRAW_APP__.linearComparisonPlan.mode,
+    edges: window.__GBDRAW_APP__.linearComparisonPlan.edges
+      .filter((edge) => edge.included)
+      .map((edge) => [
+        `${edge.queryUid}->${edge.subjectUid}`,
+        edge.source
+      ])
+  }));
+  expect(materialized.mode).toBe('selected');
+  expect(Object.fromEntries(materialized.edges)).toEqual({
+    [`${uidA}->${uidC}`]: 'upload',
+    [`${uidB}->${uidD}`]: 'losat'
+  });
+
+  await page.getByRole('button', {
+    name: 'All adjacent-row pairs (cross-product)', exact: true
+  }).click();
+  await expectExactEdgeKeys(boundary, crossProductEdgeKeys);
+  const state = await page.evaluate(() => ({
+    comparisonMode: window.__GBDRAW_APP__.linearComparisonPlan.mode,
+    comparisonCount: window.__GBDRAW_APP__.linearComparisonPlan.edges
+      .filter((item) => item.included).length,
+    endpoints: window.__GBDRAW_APP__.linearComparisonPlan.edges
+      .filter((item) => item.included)
+      .map((item) => [item.queryUid, item.subjectUid])
+  }));
   expect(state.comparisonMode).toBe('selected');
   expect(state.comparisonCount).toBe(4);
-  expect(state.uniqueUids).toBe(4);
-  expect(state.canonicalComparisonCount).toBe(0);
-  expect(state.cacheInfo).toEqual(['circular-cache']);
   expect(new Set(state.endpoints.map((pair) => pair.join('->'))).size).toBe(4);
-  await expect(page.locator('input[aria-label="Linear record row"]')).toHaveCount(4);
-  await expect(page.getByText('All adjacent-row pairs (cross-product)', { exact: true })).toBeVisible();
-  const globalComparisonControls = page.locator('[data-capture="linear-blast-source"]');
-  await expect(globalComparisonControls.getByRole('radio', { name: 'No comparison' })).toBeVisible();
-  await expect(globalComparisonControls.getByRole('radio', { name: 'Run LOSAT' })).toBeVisible();
-  await expect(globalComparisonControls.getByRole('radio', { name: 'Upload BLAST TSV' })).toBeVisible();
-  await globalComparisonControls.getByRole('radio', { name: 'No comparison' }).check();
+
+  const globalComparisonControls = page.getByRole('group', {
+    name: 'Set all adjacent comparisons'
+  });
+  await expect(globalComparisonControls.getByRole('button', {
+    name: 'Set no comparison'
+  })).toBeVisible();
+  await expect(globalComparisonControls.getByRole('button', {
+    name: 'Run LOSAT for all adjacent pairs'
+  })).toBeVisible();
+  await expect(globalComparisonControls.getByRole('button', {
+    name: 'Use uploaded BLAST TSV for all adjacent pairs'
+  })).toBeVisible();
+  await globalComparisonControls.getByRole('button', {
+    name: 'Set no comparison'
+  }).click();
   const optedOut = await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.linearComparisonPlan.mode,
     retainedDrafts: window.__GBDRAW_APP__.linearComparisonPlan.edges.length,
     resolvedEdges: window.__GBDRAW_APP__.linearComparisonResolution.edges.length
   }));
   expect(optedOut).toEqual({ mode: 'none', retainedDrafts: 4, resolvedEdges: 0 });
-  await expect(page.locator('[data-capture="linear-losat-settings"]')).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'LOSAT Mode' })).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toHaveCount(0);
+});
+
+test('Linear records precede comparison pairs in DOM and keyboard order at narrow width', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const uids = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    while (app.linearSeqs.length < 5) app.addLinearSeq();
+    app.linearSeqs.forEach((sequence, index) => {
+      sequence.definition = `Timeline record ${index + 1}`;
+    });
+    app.setLinearComparisonGlobalAction('losat');
+    return app.linearSeqs.map((sequence) => sequence.uid);
+  });
+  const edgeKeys = uids.slice(0, -1).map((uid, index) => `${uid}->${uids[index + 1]}`);
+  const expectedTimelineTokens = [
+    ...uids.map((uid) => `record:${uid}`),
+    ...uids.slice(0, -1).map((_, index) => `boundary:${index + 1}->${index + 2}`)
+  ];
+
+  const rows = page.locator('[data-linear-display-row]');
+  const boundaries = page.locator('[data-linear-comparison-boundary]');
+  await expect(rows).toHaveCount(5);
+  await expect(boundaries).toHaveCount(4);
+  expect(await rows.evaluateAll((elements) => (
+    elements.map((element) => element.dataset.linearDisplayRow)
+  ))).toEqual(['1', '2', '3', '4', '5']);
+  expect(await boundaries.evaluateAll((elements) => (
+    elements.map((element) => element.dataset.linearComparisonBoundary)
+  ))).toEqual(['1->2', '2->3', '3->4', '4->5']);
+  const timelineTokens = await page.locator(
+    '[data-linear-record-card], [data-linear-comparison-boundary]'
+  ).evaluateAll((elements) => elements.map((element) => (
+    element.dataset.linearRecordCard
+      ? `record:${element.dataset.linearRecordCard}`
+      : `boundary:${element.dataset.linearComparisonBoundary}`
+  )));
+  expect(timelineTokens).toEqual(expectedTimelineTokens);
+  for (let index = 0; index < edgeKeys.length; index += 1) {
+    await expectExactEdgeKeys(linearComparisonBoundary(page, index + 1, index + 2), [edgeKeys[index]]);
+  }
+
+  const recordList = page.locator('[data-linear-record-list]');
+  await expect(recordList.locator('[data-linear-comparison-boundary]')).toHaveCount(0);
+  await expect(recordList.locator('[data-edge-key]')).toHaveCount(0);
+  await expect(linearSelectedPairs(page)).not.toHaveAttribute('open', '');
+
+  await focusLastTabStop(linearRecordCard(page, uids[0]));
+  await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => ({
+    edgeKey: document.activeElement?.closest('[data-edge-key]')?.dataset.edgeKey || '',
+    recordUid: document.activeElement?.closest('[data-linear-record-card]')
+      ?.dataset.linearRecordCard || ''
+  }))).toMatchObject({ edgeKey: '' });
+
+  await page.getByRole('button', { name: 'Add sequence' }).last().focus();
+  const focusTrail = [];
+  for (let step = 0; step < 5; step += 1) {
+    await page.keyboard.press('Tab');
+    focusTrail.push(await page.evaluate(() => ({
+      edgeKey: document.activeElement?.closest('[data-edge-key]')?.dataset.edgeKey || '',
+      command: document.activeElement?.getAttribute('aria-label') || ''
+    })));
+    if (focusTrail.at(-1).command === 'Set no comparison') break;
+  }
+  expect(focusTrail.some((entry) => entry.edgeKey)).toBe(false);
+  expect(focusTrail.at(-1).command).toBe('Set no comparison');
+
+  const overflow = await page.locator('.settings-pane').evaluate((settingsPane) => {
+    const comparison = settingsPane.querySelector('[data-linear-comparison-card]');
+    return {
+      paneClientWidth: settingsPane.clientWidth,
+      paneScrollWidth: settingsPane.scrollWidth,
+      comparisonClientWidth: comparison?.clientWidth || 0,
+      comparisonScrollWidth: comparison?.scrollWidth || 0
+    };
+  });
+  expect(overflow.paneScrollWidth).toBeLessThanOrEqual(overflow.paneClientWidth + 1);
+  expect(overflow.comparisonScrollWidth).toBeLessThanOrEqual(
+    overflow.comparisonClientWidth + 1
+  );
+});
+
+test('Linear region controls do not overlap at supported sidebar widths', async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+
+  const recordOptions = page.locator('details[data-linear-record-options]').first();
+  await expect(recordOptions).toHaveCount(1);
+  if (!await recordOptions.evaluate((element) => element.open)) {
+    await recordOptions.locator(':scope > summary').press('Enter');
+  }
+  await expect(recordOptions).toHaveAttribute('open', '');
+
+  const recordSelector = page.getByRole('combobox', {
+    name: 'Record selector for sequence 1', exact: true
+  });
+  const reverseComplement = page.getByRole('checkbox', {
+    name: 'Reverse complement for sequence 1', exact: true
+  });
+  await expect(recordSelector).toBeVisible();
+  await expect(reverseComplement).toBeVisible();
+
+  for (const width of [320, 240]) {
+    await page.evaluate((sidebarWidth) => {
+      window.__GBDRAW_APP__.sidebarWidth = sidebarWidth;
+    }, width);
+    await expect.poll(
+      () => page.evaluate(() => window.__GBDRAW_APP__.sidebarWidth)
+    ).toBe(width);
+
+    const [selectorGeometry, reverseGeometry] = await Promise.all([
+      recordSelector.evaluate((select) => {
+        const cell = select.parentElement;
+        const grid = cell?.parentElement;
+        const bounds = (element) => {
+          const rect = element?.getBoundingClientRect();
+          return rect ? {
+            x: rect.x, y: rect.y, width: rect.width, height: rect.height
+          } : null;
+        };
+        return { control: bounds(select), cell: bounds(cell), grid: bounds(grid) };
+      }),
+      reverseComplement.evaluate((checkbox) => {
+        let label = checkbox.parentElement;
+        while (label && String(label.tagName || '').toLowerCase() !== 'label') {
+          label = label.parentElement;
+        }
+        const rect = label?.getBoundingClientRect();
+        return {
+          label: rect ? {
+            x: rect.x, y: rect.y, width: rect.width, height: rect.height
+          } : null,
+          clientWidth: label?.clientWidth || 0,
+          scrollWidth: label?.scrollWidth || 0
+        };
+      })
+    ]);
+    const selectorBox = selectorGeometry.control;
+    const selectorCellBox = selectorGeometry.cell;
+    const gridBox = selectorGeometry.grid;
+    const reverseBox = reverseGeometry.label;
+    expect(selectorBox).not.toBeNull();
+    expect(selectorCellBox).not.toBeNull();
+    expect(gridBox).not.toBeNull();
+    expect(reverseBox).not.toBeNull();
+    const intersects = (
+      selectorBox.x < reverseBox.x + reverseBox.width
+      && selectorBox.x + selectorBox.width > reverseBox.x
+      && selectorBox.y < reverseBox.y + reverseBox.height
+      && selectorBox.y + selectorBox.height > reverseBox.y
+    );
+    expect(intersects, `Region controls overlap at ${width}px`).toBe(false);
+    expect(selectorBox.x).toBeGreaterThanOrEqual(selectorCellBox.x - 1);
+    expect(selectorBox.x + selectorBox.width).toBeLessThanOrEqual(
+      selectorCellBox.x + selectorCellBox.width + 1
+    );
+    expect(reverseGeometry.scrollWidth).toBeLessThanOrEqual(
+      reverseGeometry.clientWidth + 1
+    );
+    expect(selectorCellBox.x).toBeGreaterThanOrEqual(gridBox.x - 1);
+    expect(reverseBox.x + reverseBox.width).toBeLessThanOrEqual(
+      gridBox.x + gridBox.width + 1
+    );
+  }
+});
+
+test('Selected pairs focuses Add and repairs an unplaced draft in its boundary', async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const uids = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.addLinearSeq();
+    app.addLinearSeq();
+    app.linearSeqs.forEach((sequence, index) => {
+      sequence.definition = `Advanced record ${index + 1}`;
+    });
+    app.setLinearComparisonGlobalAction('losat');
+    app.clearSelectedLinearComparisons();
+    return app.linearSeqs.map((sequence) => sequence.uid);
+  });
+  const [uidA, uidB, uidC] = uids;
+  await openLinearSelectedPairs(page);
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+
+  const addedPair = linearComparisonPair(page, `${uidA}->${uidB}`);
+  await expect(addedPair).toBeVisible();
+  expect(await addedPair.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  expect(await page.evaluate(() => ({
+    mode: window.__GBDRAW_APP__.linearComparisonPlan.mode,
+    included: window.__GBDRAW_APP__.linearComparisonPlan.edges.filter((edge) => edge.included).length
+  }))).toEqual({ mode: 'selected', included: 1 });
+
+  await page.evaluate(({ queryUid, subjectUid }) => {
+    const app = window.__GBDRAW_APP__;
+    app.linearComparisonPlan.mode = 'selected';
+    app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length, {
+      id: 'non-adjacent-browser-draft',
+      queryUid,
+      subjectUid,
+      included: true,
+      fileActive: false,
+      losatFilenameActive: false,
+      source: 'losat',
+      file: null,
+      losatFilename: ''
+    });
+  }, { queryUid: uidA, subjectUid: uidC });
+
+  await expect(linearComparisonPair(page, `${uidA}->${uidC}`)).toHaveCount(0);
+  const unplacedDraft = page.locator(
+    '[data-linear-unplaced-draft="non-adjacent-browser-draft"]'
+  );
+  await expect(unplacedDraft).toBeVisible();
+  await expect(unplacedDraft).toContainText(/adjacent (display )?rows/i);
+  await unplacedDraft.getByRole('combobox', {
+    name: 'To record for unplaced comparison non-adjacent-browser-draft'
+  }).selectOption(uidB);
+
+  await expect(unplacedDraft).toHaveCount(0);
+  await expectExactEdgeKeys(linearComparisonBoundary(page, 1, 2), [`${uidA}->${uidB}`]);
+  await expect(addedPair.getByRole('radio', { name: 'Run LOSAT' })).toBeChecked();
+  expect(await page.evaluate(() => ({
+    valid: window.__GBDRAW_APP__.linearComparisonResolution.valid,
+    edgeKeys: window.__GBDRAW_APP__.linearComparisonResolution.edges.map((edge) => edge.edgeKey)
+  }))).toEqual({ valid: true, edgeKeys: [`${uidA}->${uidB}`] });
+});
+
+test('Comparison card actions target the active owner of duplicate directional drafts', async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const [uidA, uidB] = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.addLinearSeq();
+    const [first, second] = app.linearSeqs;
+    app.linearComparisonPlan.mode = 'selected';
+    app.linearComparisonPlan.defaultSource = 'losat';
+    app.linearComparisonPlan.edges.splice(0, app.linearComparisonPlan.edges.length,
+      {
+        id: 'inactive-first-duplicate', queryUid: first.uid, subjectUid: second.uid,
+        included: false, fileActive: false, losatFilenameActive: false,
+        source: 'losat', file: null, losatFilename: 'inactive-first.tsv'
+      },
+      {
+        id: 'active-second-duplicate', queryUid: first.uid, subjectUid: second.uid,
+        included: true, fileActive: false, losatFilenameActive: true,
+        source: 'losat', file: null, losatFilename: 'active-second.tsv'
+      }
+    );
+    return [first.uid, second.uid];
+  });
+  const edgeKey = `${uidA}->${uidB}`;
+  await openLinearSelectedPairs(page);
+  const pair = linearComparisonPair(page, edgeKey);
+  await expect(pair).toBeVisible();
+  expect(await page.evaluate((key) => {
+    const app = window.__GBDRAW_APP__;
+    const owner = app.linearComparisonTimeline.rows
+      .flatMap((row) => row.boundaryAfter?.pairs || [])
+      .find((entry) => entry.edgeKey === key);
+    return [
+      owner?.edgeId,
+      owner?.draft?.id,
+      owner?.resolved?.id,
+      app.linearComparisonTimeline.unplacedDrafts.map((entry) => entry.draft.id)
+    ];
+  }, edgeKey)).toEqual([
+    'active-second-duplicate',
+    'active-second-duplicate',
+    'active-second-duplicate',
+    ['inactive-first-duplicate']
+  ]);
+
+  await pair.getByRole('radio', { name: 'Upload BLAST TSV' }).check();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearComparisonPlan.edges.map((edge) => [
+    edge.id, edge.included, edge.source, edge.fileActive, edge.file?.name || '', edge.losatFilename
+  ]))).toEqual([
+    ['inactive-first-duplicate', false, 'losat', false, '', 'inactive-first.tsv'],
+    ['active-second-duplicate', true, 'upload', false, '', 'active-second.tsv']
+  ]);
+
+  await pair.locator('input[type="file"][aria-label="BLAST TSV for #1 to #2"]').setInputFiles({
+    name: 'active-second-upload.tsv',
+    mimeType: 'text/tab-separated-values',
+    buffer: Buffer.from('A\tB\t100\t30\t0\t0\t1\t30\t1\t30\t1e-20\t90\n')
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearComparisonPlan.edges.map((edge) => [
+    edge.id, edge.included, edge.source, edge.fileActive, edge.file?.name || '', edge.losatFilename
+  ]))).toEqual([
+    ['inactive-first-duplicate', false, 'losat', false, '', 'inactive-first.tsv'],
+    ['active-second-duplicate', true, 'upload', true, 'active-second-upload.tsv', 'active-second.tsv']
+  ]);
 });
 
 test('Normalize Record Lengths rejects a shared Linear row and remains recoverable', async ({ page }) => {
   test.setTimeout(300000);
   await installDiagramRequestObserver(page);
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.evaluate((records) => {
+  const sharedRowUids = await page.evaluate((records) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     app.lInputType = 'gb';
@@ -187,10 +597,17 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
     app.setLinearRecordLayoutEnabled(true);
     app.setLinearRecordRow(app.linearSeqs[0].uid, 1);
     app.setLinearRecordRow(app.linearSeqs[1].uid, 1);
+    return app.linearSeqs.map((sequence) => sequence.uid);
   }, [
     makeComparisonGenbank('NormalizeRecA', 'atg'),
     makeComparisonGenbank('NormalizeRecB', 'gct')
   ]);
+
+  await expect(page.locator('[data-linear-display-row="1"]')).toBeVisible();
+  await expect(page.locator('[data-linear-display-row]')).toHaveCount(1);
+  await expect(page.locator('[data-linear-comparison-boundary]')).toHaveCount(0);
+  await expect(linearRecordCard(page, sharedRowUids[0])).toBeVisible();
+  await expect(linearRecordCard(page, sharedRowUids[1])).toBeVisible();
 
   const invalid = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -241,9 +658,9 @@ test('No comparison completes a real render without touching dormant comparison 
       throw new Error('No comparison must not execute LOSAT.');
     };
   });
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.evaluate(async (records) => {
+  const dormantEdgeKey = await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
     app.mode = 'linear';
@@ -281,6 +698,7 @@ test('No comparison completes a real render without touching dormant comparison 
       return nativeGet(key);
     };
     state.losatCache.value = window.Vue.markRaw(rawCache);
+    return `${first.uid}->${second.uid}`;
   }, [
     makeComparisonGenbank('NoneRecA', 'atg'),
     makeComparisonGenbank('NoneRecB', 'gct'),
@@ -297,6 +715,8 @@ test('No comparison completes a real render without touching dormant comparison 
       result,
       error: app.errorLog,
       request: [request.records.length, request.comparisons.length],
+      planMode: app.linearComparisonPlan.mode,
+      timelineSource: app.linearComparisonTimeline.rows[0].boundaryAfter.pairs[0].source,
       resolution: [Object.isFrozen(app.linearComparisonResolution), app.linearComparisonResolution.edges.length],
       draft: app.linearComparisonPlan.edges.map((edge) => [
         edge.id, edge.included, edge.fileActive, edge.losatFilenameActive,
@@ -317,11 +737,241 @@ test('No comparison completes a real render without touching dormant comparison 
     };
   });
   expect(outcome).toEqual({
-    result: { status: 'ok' }, error: null, request: [3, 0], resolution: [true, 0],
+    result: { status: 'ok' }, error: null, request: [3, 0], planMode: 'none', timelineSource: 'none',
+    resolution: [true, 0],
     draft: [['dormant-none-edge', true, true, true, 'dormant-comparison.tsv', 'dormant-losat-name.tsv']],
     skipped: [0, 0, 0], cacheSize: 1, losatRuntimeUrls: [], comparisonSvgNodes: 0
   });
-  await expect(page.getByText('Raw LOSAT results', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Raw LOSAT results', { exact: true })).not.toBeVisible();
+
+  await openLinearSelectedPairs(page);
+  const dormantPair = linearComparisonPair(page, dormantEdgeKey);
+  await expect(dormantPair).toBeVisible();
+  const dormantUpload = dormantPair.locator(
+    'input[type="file"][aria-label="BLAST TSV for #1 to #2"]'
+  );
+  await expect(dormantUpload).toHaveCount(0);
+  await expect(dormantPair.getByRole('textbox', {
+    name: 'Raw LOSAT filename for #1 to #2'
+  })).toHaveCount(0);
+  await expect(dormantPair.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #1 to #2'
+  })).toHaveCount(0);
+  await expect(dormantPair).toContainText('Retained, inactive BLAST TSV: dormant-comparison.tsv');
+
+  await openLinearAdvancedComparison(page);
+  const dormantRawResult = page.locator(`[data-linear-raw-result="${dormantEdgeKey}"]`);
+  await expect(dormantRawResult).toContainText(
+    'Retained, inactive filename: dormant-losat-name.tsv'
+  );
+
+  await dormantPair.getByRole('button', { name: 'Reuse BLAST TSV for #1 to #2' }).click();
+  await expect(dormantUpload).toHaveCount(1);
+  await expect(dormantPair).toContainText('dormant-comparison.tsv');
+  expect(await page.evaluate(() => {
+    const edge = window.__GBDRAW_APP__.linearComparisonPlan.edges[0];
+    return [
+      window.__GBDRAW_APP__.linearComparisonPlan.mode,
+      edge.included,
+      edge.source,
+      edge.fileActive,
+      edge.file?.name
+    ];
+  })).toEqual(['selected', true, 'upload', true, 'dormant-comparison.tsv']);
+
+  await dormantPair.getByRole('radio', { name: 'No comparison' }).check();
+  await expect(dormantUpload).toHaveCount(0);
+  await expect(dormantPair).toContainText('Retained, inactive BLAST TSV: dormant-comparison.tsv');
+  expect(await page.evaluate(() => {
+    const edge = window.__GBDRAW_APP__.linearComparisonPlan.edges[0];
+    return [edge.included, edge.fileActive, edge.file?.name, edge.losatFilename];
+  })).toEqual([false, true, 'dormant-comparison.tsv', 'dormant-losat-name.tsv']);
+
+  await dormantRawResult.getByRole('button', {
+    name: 'Reuse Raw LOSAT filename for #1 to #2'
+  }).click();
+  await expect(dormantRawResult.getByRole('textbox', {
+    name: 'Raw LOSAT filename for #1 to #2'
+  })).toHaveValue('dormant-losat-name.tsv');
+  await expect(dormantRawResult.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #1 to #2'
+  })).toBeDisabled();
+});
+
+test('Automatic Linear renders every record from one GenBank source and survives session reload', async ({ page }) => {
+  test.setTimeout(300000);
+  await installDiagramRequestObserver(page);
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.waitForFunction(
+    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    null,
+    { timeout: 180000 }
+  );
+
+  const sourceName = 'automatic-multi-record.gbk';
+  await page.evaluate(({ content, name }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    const source = new File(
+      [content], name, { type: 'text/plain', lastModified: 1 }
+    );
+    const nativeArrayBuffer = source.arrayBuffer.bind(source);
+    window.__GBDRAW_SOURCE_READS__ = 0;
+    source.arrayBuffer = () => {
+      window.__GBDRAW_SOURCE_READS__ += 1;
+      return nativeArrayBuffer();
+    };
+    app.setLinearSeqPrimaryFile(0, 'gb', source);
+    Object.assign(app.form, {
+      legend: 'none',
+      show_gc: false,
+      show_skew: false,
+      show_depth: false,
+      show_labels_linear: 'none'
+    });
+    app.setLinearComparisonGlobalAction('none');
+    app.sessionTitle = 'automatic-multi-record';
+  }, {
+    content: makeComparisonGenbank('AutomaticA', 'atg') +
+      makeComparisonGenbank('AutomaticB', 'gct'),
+    name: sourceName
+  });
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs[0]).length
+  ))).toBe(3);
+
+  await page.evaluate(() => {
+    window.__GBDRAW_AUTOMATIC_RUN__ = { done: false, result: null, error: '' };
+    window.__GBDRAW_APP__.runAnalysis().then((result) => {
+      Object.assign(window.__GBDRAW_AUTOMATIC_RUN__, { done: true, result });
+    }).catch((error) => {
+      Object.assign(window.__GBDRAW_AUTOMATIC_RUN__, {
+        done: true,
+        error: error?.message || String(error)
+      });
+    });
+  });
+  await page.waitForFunction(() => window.__GBDRAW_AUTOMATIC_RUN__?.done === true);
+  const generated = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const run = window.__GBDRAW_AUTOMATIC_RUN__;
+    if (run.error) throw new Error(run.error);
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    return {
+      result: run.result,
+      error: app.errorLog,
+      sourceReads: window.__GBDRAW_SOURCE_READS__,
+      cardCount: app.linearSeqs.length,
+      selector: app.linearSeqs[0].region_record_id,
+      grouping: request.grouping,
+      selectors: request.records.map((record) => record.selector),
+      sharedResourceCount: new Set(
+        request.records.map((record) => record.source.resourceId)
+      ).size
+    };
+  });
+  expect(generated).toEqual({
+    result: { status: 'ok' },
+    error: null,
+    sourceReads: 1,
+    cardCount: 1,
+    selector: '',
+    grouping: 'single',
+    selectors: [
+      { kind: 'recordIndex', index: 0 },
+      { kind: 'recordIndex', index: 1 }
+    ],
+    sharedResourceCount: 1
+  });
+
+  const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
+  expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
+    .toBe('saved');
+  const sessionPath = await (await sessionDownloadPromise).path();
+  const session = JSON.parse(gunzipSync(readFileSync(sessionPath)).toString('utf8'));
+  expect(session.webFiles.bindings.linearSeqs).toHaveLength(1);
+  expect(session.webFiles.bindings.linearSeqs[0].region_record_id).toBe('');
+  expect(session.renderRequest.records.map((record) => record.selector)).toEqual([
+    { kind: 'recordIndex', index: 0 },
+    { kind: 'recordIndex', index: 1 }
+  ]);
+  expect(new Set(
+    session.renderRequest.records.map((record) => record.source.resourceId)
+  ).size).toBe(1);
+
+  await page.addInitScript((recordSourceName) => {
+    const nativeArrayBuffer = File.prototype.arrayBuffer;
+    let releaseRecordRead;
+    const recordReadGate = new Promise((resolve) => { releaseRecordRead = resolve; });
+    window.__GBDRAW_RECORD_TEXT_READS__ = 0;
+    window.__GBDRAW_RELEASE_RECORD_TEXT__ = releaseRecordRead;
+    File.prototype.arrayBuffer = async function (...args) {
+      if (this.name !== recordSourceName) return nativeArrayBuffer.apply(this, args);
+      const { state } = await import('./js/state.js');
+      if (state.semanticFileWatchersSuppressed.value) {
+        return nativeArrayBuffer.apply(this, args);
+      }
+      window.__GBDRAW_RECORD_TEXT_READS__ += 1;
+      await recordReadGate;
+      return nativeArrayBuffer.apply(this, args);
+    };
+  }, sourceName);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.waitForFunction(
+    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    null,
+    { timeout: 180000 }
+  );
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+  await page.waitForFunction(() => window.__GBDRAW_RECORD_TEXT_READS__ === 1);
+
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.labelReflowForceRequestReason.value = 'multi-record-session-reflow';
+    state.labelReflowForceRequestSeq.value += 1;
+    await window.Vue.nextTick();
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_RECORD_TEXT_READS__)).toBe(1);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return [window.__GBDRAW_DIAGRAM_RUNS__.length, state.labelReflowLastError.value];
+  })).toEqual([0, null]);
+  await page.evaluate(() => window.__GBDRAW_RELEASE_RECORD_TEXT__());
+  await page.waitForFunction(() => window.__GBDRAW_DIAGRAM_RUNS__.length === 1);
+
+  const restored = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    return {
+      error: state.labelReflowLastError.value,
+      cardCount: app.linearSeqs.length,
+      selector: app.linearSeqs[0].region_record_id,
+      optionCount: app.linearRecordOptions(app.linearSeqs[0]).length,
+      selectors: request.records.map((record) => record.selector),
+      sharedResource: new Set(
+        request.records.map((record) => record.source.resourceId)
+      ).size
+    };
+  });
+  expect(restored).toEqual({
+    error: null,
+    cardCount: 1,
+    selector: '',
+    optionCount: 3,
+    selectors: [
+      { kind: 'recordIndex', index: 0 },
+      { kind: 'recordIndex', index: 1 }
+    ],
+    sharedResource: 1
+  });
 });
 
 test('Sparse upload and mixed selected renders keep snapshots and raw cache identity stable', async ({ page }) => {
@@ -345,7 +995,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       }));
     };
   });
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const [uidA, uidB, uidC] = await page.evaluate((records) => {
     const app = window.__GBDRAW_APP__;
@@ -360,7 +1010,10 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       legend: 'bottom', show_gc: false, show_skew: false,
       show_depth: false, show_labels_linear: 'none'
     });
-    app.setLinearLosatProgram('blastn');
+    app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('collinear');
+    app.setLinearComparisonLosatMode('blastn');
     app.losat.executionMode = 'serial';
     const [first, second, third] = app.linearSeqs;
     const blastRow = 'MixedRecA\tMixedRecB\t100\t60\t0\t0\t1\t60\t1\t60\t1e-30\t150\n';
@@ -414,9 +1067,6 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   });
   expect(independentReuse).toEqual([[true, false, 'upload'], [false, true, 'losat']]);
 
-  await page.waitForFunction(() => window.__GBDRAW_APP__?.pyodideReady === true, null, {
-    timeout: 240000
-  });
   const selectedResolution = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const { buildPairwiseLosatJobSpecs, resolveLinearComparisonPlan } = await import(
@@ -506,11 +1156,95 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     app.moveLinearSeqUp(1);
     return [app.linearSeqs.map((record) => record.uid), app.linearComparisonResolution.edges.map(
       (edge) => [edge.edgeKey, edge.queryIndex, edge.subjectIndex]
+    ), app.losatCacheInfo.map(
+      (entry) => [entry.edgeKey, entry.ordinal, entry.queryIndex, entry.subjectIndex]
     )];
   });
   expect(reordered).toEqual([[uidC, uidA, uidB], [
     [`${uidA}->${uidB}`, 1, 2], [`${uidB}->${uidC}`, 2, 0]
+  ], [
+    [`${uidB}->${uidC}`, 1, 2, 0]
   ]]);
+  await openLinearSelectedPairs(page);
+  await openLinearAdvancedComparison(page);
+  const uploadPair = linearComparisonPair(page, `${uidA}->${uidB}`);
+  const losatPair = linearComparisonPair(page, `${uidB}->${uidC}`);
+  const losatRawResult = page.locator(
+    `[data-linear-raw-result="${uidB}->${uidC}"]`
+  );
+  await expect(uploadPair).toBeVisible();
+  await expect(losatPair).toBeVisible();
+  expect(await uploadPair.evaluate((element) => (
+    element.closest('[data-linear-comparison-boundary]')
+      ?.dataset.linearComparisonBoundary
+  ))).toBe('1->2');
+  expect(await losatPair.evaluate((element) => (
+    element.closest('[data-linear-comparison-boundary]')
+      ?.dataset.linearComparisonBoundary
+  ))).toBe('2->3');
+  await expect(uploadPair.locator(
+    'input[type="file"][aria-label="BLAST TSV for #2 to #3"]'
+  )).toHaveCount(1);
+  await expect(uploadPair).toContainText('mixed-a-to-b.tsv');
+  await expect(losatRawResult.getByRole('textbox', {
+    name: 'Raw LOSAT filename for #3 to #1'
+  })).toHaveValue('selected-b-to-c.tsv');
+  await expect(losatRawResult.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #3 to #1'
+  })).toBeEnabled();
+
+  await page.evaluate((uid) => window.__GBDRAW_APP__.setLinearRecordRow(uid, 1), uidC);
+  expect(await losatPair.evaluate((element) => (
+    element.closest('[data-linear-comparison-boundary]')
+      ?.dataset.linearComparisonBoundary
+  ))).toBe('1->2');
+  await expect(losatRawResult.getByRole('textbox', {
+    name: 'Raw LOSAT filename for #3 to #1'
+  })).toHaveValue('selected-b-to-c.tsv');
+  await expect(losatRawResult.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #3 to #1'
+  })).toBeEnabled();
+
+  const movedWithinRow = await page.evaluate((uid) => {
+    const app = window.__GBDRAW_APP__;
+    app.moveLinearRecordWithinRow(uid, -1);
+    return [
+      app.linearSeqs.map((record) => record.uid),
+      app.losatCacheInfo.map(
+        (entry) => [entry.edgeKey, entry.ordinal, entry.queryIndex, entry.subjectIndex]
+      )
+    ];
+  }, uidA);
+  expect(movedWithinRow).toEqual([[uidA, uidC, uidB], [
+    [`${uidB}->${uidC}`, 1, 2, 1]
+  ]]);
+  await expect(losatRawResult.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #3 to #2'
+  })).toBeEnabled();
+  await page.evaluate((uid) => window.__GBDRAW_APP__.moveLinearRecordWithinRow(uid, 1), uidA);
+  await expect(losatRawResult.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #3 to #1'
+  })).toBeEnabled();
+
+  await page.evaluate((uid) => window.__GBDRAW_APP__.setLinearRecordRow(uid, 3), uidC);
+  expect(await losatPair.evaluate((element) => (
+    element.closest('[data-linear-comparison-boundary]')
+      ?.dataset.linearComparisonBoundary
+  ))).toBe('2->3');
+  await expect(losatRawResult.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #3 to #1'
+  })).toBeEnabled();
+  const rawBeforeRerunPromise = page.waitForEvent('download', { timeout: 120000 });
+  await losatRawResult.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #3 to #1'
+  }).click();
+  const rawBeforeRerun = await rawBeforeRerunPromise;
+  expect(rawBeforeRerun.suggestedFilename()).toBe('selected-b-to-c.tsv');
+  expect(readFileSync(await rawBeforeRerun.path(), 'utf8')).toBe(
+    'MixedRecB\tMixedRecC\t100\t60\t0\t0\t1\t60\t1\t60\t1e-30\t150\n'
+  );
+  expect(await page.evaluate(() => window.__GBDRAW_LOSAT_EXECUTOR_CALLS__)).toBe(1);
+
   const cachedRun = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
@@ -533,6 +1267,9 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   expect(cachedRun.cacheInfo).toEqual([[
     `${uidB}->${uidC}`, 2, 0, 'selected-b-to-c.tsv'
   ]]);
+  await expect(losatRawResult.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #3 to #1'
+  })).toBeEnabled();
 
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'linear-comparison-browser-matrix'; });
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
@@ -541,7 +1278,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
   const dialog = await dialogPromise;
   expect(dialog.message()).toBe('Session loaded successfully!');
   await dialog.accept();
@@ -558,17 +1295,58 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
         entry.edgeKey, entry.ordinal, entry.queryUid, entry.subjectUid,
         entry.queryIndex, entry.subjectIndex, entry.filename
       ]),
-      cacheSize: state.losatCache.value.size
+      cacheSize: state.losatCache.value.size,
+      ui: {
+        intent: app.linearComparisonUi.intentKey,
+        losatMode: app.linearComparisonUi.activeLosatModeKey,
+        losatpMode: app.linearComparisonUi.activeLosatpModeKey,
+        summary: app.linearComparisonUi.summaryText,
+        settings: app.linearComparisonUi.sectionKeys.settings
+      }
     };
   });
   expect(restored).toEqual({
     mode: 'selected',
     resolution: [[`${uidA}->${uidB}`, 1, 2], [`${uidB}->${uidC}`, 2, 0]],
     cache: [[`${uidB}->${uidC}`, 1, uidB, uidC, 2, 0, 'selected-b-to-c.tsv']],
-    cacheSize: 1
+    cacheSize: 1,
+    ui: {
+      intent: 'custom',
+      losatMode: 'blastn',
+      losatpMode: 'collinear',
+      summary: expect.stringContaining('LOSATN · 2 selected pairs · 1 LOSAT, 1 upload'),
+      settings: [
+        'losat-mode', 'blastn-task', 'upload-readiness',
+        'result-filters', 'comparison-appearance'
+      ]
+    }
   });
+  const restoredComparisonCard = page.locator('[data-linear-comparison-card]');
+  const restoredCommands = restoredComparisonCard.getByRole('group', {
+    name: 'Set all adjacent comparisons'
+  });
+  await expect(restoredCommands.getByRole('button')).toHaveCount(3);
+  await expect(restoredComparisonCard.getByRole('status')).toContainText(
+    'Current: Selected pairs (2; 1 LOSAT, 1 upload)'
+  );
+  await expect(restoredComparisonCard.getByText('Custom', { exact: true })).toBeVisible();
+  await expect(linearSelectedPairs(page).locator(':scope > summary')).toContainText(
+    'Selected pairs (2)'
+  );
+  await openLinearSelectedPairs(page);
+  await openLinearAdvancedComparison(page);
+  const restoredUploadPair = linearComparisonPair(page, `${uidA}->${uidB}`);
+  const restoredLosatRawResult = page.locator(
+    `[data-linear-raw-result="${uidB}->${uidC}"]`
+  );
+  await expect(restoredUploadPair).toContainText('mixed-a-to-b.tsv');
+  await expect(restoredLosatRawResult.getByRole('textbox', {
+    name: 'Raw LOSAT filename for #3 to #1'
+  })).toHaveValue('selected-b-to-c.tsv');
   const rawDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  await page.evaluate((edgeKey) => window.__GBDRAW_APP__.downloadLosatPair(edgeKey, ''), `${uidB}->${uidC}`);
+  await restoredLosatRawResult.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #3 to #1'
+  }).click();
   const rawDownload = await rawDownloadPromise;
   expect(rawDownload.suggestedFilename()).toBe('selected-b-to-c.tsv');
   expect(readFileSync(await rawDownload.path(), 'utf8')).toBe(
@@ -576,8 +1354,63 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   );
 });
 
+test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ page }) => {
+  test.setTimeout(180000);
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const imported = await page.evaluate(async () => {
+    const response = await fetch(
+      '/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
+    );
+    const text = await response.text();
+    const session = JSON.parse(text);
+    const sourceVisibleEntries = session.losatCache.entries.filter(
+      (entry) => entry.display !== false
+    );
+    const file = new File(
+      [text],
+      'BGC0000708-BGC0000713.gbdraw-session.json',
+      { type: 'application/json' }
+    );
+    const result = await window.__GBDRAW_APP__.importSession({
+      target: { files: [file], value: '' }
+    });
+    return {
+      status: result?.status,
+      sourceHasNoEdgeIdentity: sourceVisibleEntries.every(
+        (entry) => !entry.edgeKey && !entry.queryUid && !entry.subjectUid
+      ),
+      restoredEdgeKeys: window.__GBDRAW_APP__.losatCacheInfo.map(
+        (entry) => entry.edgeKey
+      )
+    };
+  });
+
+  expect(imported).toEqual({
+    status: 'ok',
+    sourceHasNoEdgeIdentity: true,
+    restoredEdgeKeys: [
+      'record-1->record-2',
+      'record-2->record-3',
+      'record-3->record-4',
+      'record-4->record-5'
+    ]
+  });
+  await openLinearSelectedPairs(page);
+  await openLinearAdvancedComparison(page);
+  const firstRawResult = page.locator(
+    '[data-linear-raw-result="record-1->record-2"]'
+  );
+  await expect(firstRawResult).toContainText('Raw result ready');
+  await expect(firstRawResult.getByRole('button', {
+    name: 'Save Raw LOSAT TSV for #1 to #2'
+  })).toBeEnabled();
+});
+
 test('Candidate render post-processing sanitizes and reapplies stable styles before commit', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const outcome = await page.evaluate(async () => {
@@ -709,7 +1542,7 @@ ${origin}
 `;
   };
 
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   await page.evaluate(({ firstRecord, secondRecord }) => {
@@ -734,12 +1567,6 @@ ${origin}
     firstRecord: makeGenbank('ColorRecA'),
     secondRecord: makeGenbank('ColorRecB')
   });
-  await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.pyodideReady === true,
-    null,
-    { timeout: 180000 }
-  );
-
   const firstRun = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
@@ -1052,7 +1879,7 @@ ${origin}
 });
 
 test('Region annotations expose and persist an explicit target-record selection', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const genbank = `LOCUS       RecA                      10 bp    DNA     linear   UNA 01-JAN-2000
@@ -1116,7 +1943,7 @@ ORIGIN
 });
 
 test('Region annotation IDs accept continuous typing without losing focus', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   await page.evaluate(() => {
@@ -1139,7 +1966,7 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
 });
 
 test('GFF annotation targets follow FASTA record order', async ({ page }) => {
-  await page.goto(`${baseUrl}/gbdraw/web/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
   const gff = `##gff-version 3

@@ -11,6 +11,12 @@ const LOSAT_OUTFMT6_INTEGER_COLUMN_INDEXES = new Set([3, 4, 5, 6, 7, 8, 9]);
 const STRICT_DECIMAL_INTEGER_RE = /^[+-]?[0-9]+$/;
 const STRICT_DECIMAL_NUMBER_RE =
   /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/;
+const MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = [
+  'viewfeaturesvgid',
+  'viewfeaturehashparts',
+  'renderedfeaturesvgid',
+  'renderedsvgid'
+];
 
 export const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -119,6 +125,23 @@ const mergeManifestMap = (target, incoming, owner) => {
   });
 };
 
+const containsManifestPresentationIdentity = (value, visited = new WeakSet()) => {
+  if (Array.isArray(value)) {
+    return value.some((item) => containsManifestPresentationIdentity(item, visited));
+  }
+  if (!isPlainObject(value) || visited.has(value)) return false;
+  visited.add(value);
+  return Object.entries(value).some(([key, item]) => {
+    const normalizedKey = String(key)
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+    return MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS.some(
+      (fragment) => normalizedKey.includes(fragment)
+    ) || containsManifestPresentationIdentity(item, visited);
+  });
+};
+
 export const emptyProteinIdentityManifest = () => ({
   schema: PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   proteinSets: {},
@@ -130,6 +153,7 @@ export const validateProteinIdentityManifest = (manifest) => {
   if (!isPlainObject(manifest) || manifest.schema !== PROTEIN_IDENTITY_MANIFEST_SCHEMA) {
     return false;
   }
+  if (containsManifestPresentationIdentity(manifest)) return false;
   if (
     !isPlainObject(manifest.proteinSets) ||
     !isPlainObject(manifest.recordAnalyses) ||

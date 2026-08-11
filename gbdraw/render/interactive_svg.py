@@ -8,7 +8,7 @@ import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, replace
 from importlib import resources
-from typing import Literal, Mapping, Sequence
+from typing import Callable, Literal, Mapping, Sequence
 
 from gbdraw.exceptions import GbdrawError
 
@@ -26,6 +26,37 @@ INTERACTIVE_SCHEMA = 3
 _FEATURE_ELEMENT_SUFFIX_RE = re.compile(r"__(?:part|line)\d+$")
 _FEATURE_CONNECTOR_SUFFIX_RE = re.compile(r"__line\d+$")
 _FEATURE_RECORD_SUFFIX_RE = re.compile(r"_record_(\d+)$")
+_FEATURE_INSTANCE_SUFFIX_RE = re.compile(r"__instance_.+_[0-9a-f]{16}$")
+_NONNEGATIVE_INTEGER_RE = re.compile(r"\d+")
+_FEATURE_RECORD_INDEX_KEYS = (
+    "record_idx",
+    "record_index",
+    "recordIndex",
+    "fileIdx",
+    "file_idx",
+)
+_FEATURE_STABLE_ID_KEYS = (
+    "stable_feature_id",
+    "stable_svg_id",
+    "stableFeatureSvgId",
+    "stable_feature_svg_id",
+    "stableFeatureId",
+    "stableSvgId",
+    "feature_svg_id",
+    "featureSvgId",
+)
+_FEATURE_RENDERED_ID_KEYS = (
+    "rendered_feature_svg_id",
+    "renderedFeatureSvgId",
+    "rendered_svg_id",
+    "renderedSvgId",
+)
+_FEATURE_SOURCE_INDEX_KEYS = (
+    "feature_index",
+    "featureIndex",
+    "source_feature_index",
+    "sourceFeatureIndex",
+)
 _ASSET_IDS = {
     INTERACTIVE_METADATA_ID,
     INTERACTIVE_STYLE_ID,
@@ -56,6 +87,7 @@ class InteractiveSvgContext:
     sequence_sources: Sequence[Mapping[str, object]] = ()
     biological_features: Sequence[Mapping[str, object]] = ()
     record_keys: Sequence[str] = ()
+    collinearity_search_scope: Literal["adjacent", "all"] | None = None
 
 
 @dataclass
@@ -63,6 +95,11 @@ class _RenderedFeatureEntry:
     svg_id: str
     element: ET.Element
     fill: str
+    stable_id: str
+    stable_id_supplied: bool
+    record_index: int | None
+    record_index_supplied: bool
+    source_index: int | None
 
 
 def _local_name(tag: str) -> str:
@@ -117,69 +154,119 @@ def _element_feature_id(element: ET.Element) -> str:
     )
 
 
-def _feature_svg_id_candidates(feature: Mapping[str, object]) -> list[str]:
-    candidates: list[str] = []
-    seen: set[str] = set()
-    for value in (
-        feature.get("rendered_feature_svg_id"),
-        feature.get("renderedFeatureSvgId"),
-        feature.get("rendered_svg_id"),
-        feature.get("renderedSvgId"),
-        feature.get("svg_id"),
-        feature.get("svgId"),
-        feature.get("feature_svg_id"),
-        feature.get("featureSvgId"),
-        feature.get("stable_svg_id"),
-        feature.get("stableSvgId"),
-        feature.get("stable_feature_id"),
-        feature.get("stableFeatureId"),
-    ):
-        text = _normalize_feature_id(value)
-        if not text:
-            continue
-        for candidate in (text, _FEATURE_RECORD_SUFFIX_RE.sub("", text)):
-            if candidate and candidate not in seen:
-                seen.add(candidate)
-                candidates.append(candidate)
-    return candidates
-
-
-def _feature_rendered_id(feature: Mapping[str, object]) -> str:
-    return _normalize_feature_id(
-        _first_text(
-            feature.get("rendered_feature_svg_id"),
-            feature.get("renderedFeatureSvgId"),
-            feature.get("rendered_svg_id"),
-            feature.get("renderedSvgId"),
-        )
+def _feature_rendered_id_status(
+    feature: Mapping[str, object],
+) -> tuple[str, bool]:
+    value, valid = _consistent_text_alias(
+        feature,
+        _FEATURE_RENDERED_ID_KEYS,
+        normalize=_normalize_feature_id,
     )
+    return value, valid
 
 
 def _feature_stable_id(feature: Mapping[str, object]) -> str:
-    stable_id = _normalize_feature_id(
-        _first_text(
-            feature.get("stable_feature_id"),
-            feature.get("stable_svg_id"),
-            feature.get("stableFeatureSvgId"),
-            feature.get("stableFeatureId"),
-            feature.get("stableSvgId"),
-            feature.get("feature_svg_id"),
-            feature.get("featureSvgId"),
-            feature.get("svg_id"),
-            feature.get("svgId"),
-        )
+    stable_id, valid = _feature_stable_id_status(feature)
+    return stable_id if valid else ""
+
+
+def _consistent_text_alias(
+    payload: Mapping[str, object],
+    keys: Sequence[str],
+    *,
+    normalize: Callable[[object], str] = lambda value: str(value).strip(),
+) -> tuple[str, bool]:
+    values = {
+        normalize(payload.get(key))
+        for key in keys
+        if key in payload
+        and payload.get(key) is not None
+        and str(payload.get(key)).strip()
+    }
+    values.discard("")
+    if len(values) > 1:
+        return "", False
+    return (next(iter(values), ""), True)
+
+
+def _feature_stable_id_status(
+    feature: Mapping[str, object],
+) -> tuple[str, bool]:
+    stable_id, valid = _consistent_text_alias(
+        feature,
+        _FEATURE_STABLE_ID_KEYS,
+        normalize=lambda value: _FEATURE_RECORD_SUFFIX_RE.sub(
+            "",
+            _normalize_feature_id(value),
+        ),
     )
-    return _FEATURE_RECORD_SUFFIX_RE.sub("", stable_id)
+    if not valid or stable_id:
+        return stable_id, valid
+    rendered_id, rendered_valid = _feature_rendered_id_status(feature)
+    if not rendered_valid:
+        return "", False
+    if rendered_id:
+        return "", True
+    return _consistent_text_alias(
+        feature,
+        ("svg_id", "svgId"),
+        normalize=lambda value: _FEATURE_RECORD_SUFFIX_RE.sub(
+            "",
+            _normalize_feature_id(value),
+        ),
+    )
+
+
+def _strict_nonnegative_integer(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    text = str(value).strip()
+    if not _NONNEGATIVE_INTEGER_RE.fullmatch(text):
+        return None
+    return int(text)
+
+
+def _consistent_nonnegative_integer_alias(
+    payload: Mapping[str, object],
+    keys: Sequence[str],
+) -> tuple[int | None, bool]:
+    values: set[int] = set()
+    for key in keys:
+        if key not in payload:
+            continue
+        raw = payload.get(key)
+        if raw is None or str(raw).strip() == "":
+            continue
+        parsed = _strict_nonnegative_integer(raw)
+        if parsed is None:
+            return None, False
+        values.add(parsed)
+    if len(values) > 1:
+        return None, False
+    return (next(iter(values), None), True)
+
+
+def _feature_record_index_status(
+    feature: Mapping[str, object],
+) -> tuple[int | None, bool]:
+    return _consistent_nonnegative_integer_alias(
+        feature,
+        _FEATURE_RECORD_INDEX_KEYS,
+    )
+
+
+def _feature_source_index_status(
+    feature: Mapping[str, object],
+) -> tuple[int | None, bool]:
+    return _consistent_nonnegative_integer_alias(
+        feature,
+        _FEATURE_SOURCE_INDEX_KEYS,
+    )
 
 
 def _feature_record_index(feature: Mapping[str, object]) -> int | None:
-    return _int_or_none(
-        _first_text(
-            feature.get("record_idx"),
-            feature.get("record_index"),
-            feature.get("recordIndex"),
-        )
-    )
+    value, valid = _feature_record_index_status(feature)
+    return value if valid else None
 
 
 def _is_feature_candidate(element: ET.Element) -> bool:
@@ -210,6 +297,87 @@ def _is_match_candidate(element: ET.Element) -> bool:
     )
 
 
+def _element_match_id_status(element: ET.Element) -> tuple[str, bool]:
+    return _consistent_text_alias(
+        {
+            "match_id": element.get("data-gbdraw-match-id"),
+            "pairwise_match_id": element.get("data-gbdraw-pairwise-match-id"),
+        },
+        ("match_id", "pairwise_match_id"),
+    )
+
+
+def _catalog_match_id_status(match: Mapping[str, object]) -> tuple[str, bool]:
+    return _consistent_text_alias(match, ("id", "matchId", "match_id"))
+
+
+def _rendered_element_identity(
+    rendered_id: str,
+    element: ET.Element,
+) -> tuple[str, bool, int | None, bool, int | None]:
+    raw_record_index = element.get("data-gbdraw-record-index")
+    record_index_supplied = raw_record_index not in {None, ""}
+    record_index = (
+        _strict_nonnegative_integer(raw_record_index)
+        if raw_record_index not in {None, ""}
+        else None
+    )
+    if raw_record_index not in {None, ""} and record_index is None:
+        raise GbdrawError(
+            f"Rendered feature {rendered_id!r} has an invalid record index."
+        )
+    record_suffix = _FEATURE_RECORD_SUFFIX_RE.search(rendered_id)
+    suffix_record_index = (
+        int(record_suffix.group(1)) - 1
+        if record_suffix is not None
+        else None
+    )
+    if suffix_record_index is not None and suffix_record_index < 0:
+        raise GbdrawError(
+            f"Rendered feature {rendered_id!r} has an invalid record suffix."
+        )
+    if (
+        record_index is not None
+        and suffix_record_index is not None
+        and record_index != suffix_record_index
+    ):
+        raise GbdrawError(
+            f"Rendered feature {rendered_id!r} has conflicting record identity."
+        )
+    if record_index is None:
+        record_index = suffix_record_index
+
+    raw_source_indexes = [
+        element.get("data-gbdraw-feature-index"),
+        element.get("data-gbdraw-source-feature-index"),
+    ]
+    source_indexes = {
+        parsed
+        for raw in raw_source_indexes
+        if raw not in {None, ""}
+        for parsed in [_strict_nonnegative_integer(raw)]
+        if parsed is not None
+    }
+    if any(
+        raw not in {None, ""} and _strict_nonnegative_integer(raw) is None
+        for raw in raw_source_indexes
+    ) or len(source_indexes) > 1:
+        raise GbdrawError(
+            f"Rendered feature {rendered_id!r} has invalid source feature identity."
+        )
+    raw_stable_id = _normalize_feature_id(
+        element.get("data-gbdraw-stable-feature-id")
+    )
+    stable_id = raw_stable_id or _FEATURE_RECORD_SUFFIX_RE.sub("", rendered_id)
+    return (
+        stable_id,
+        bool(raw_stable_id),
+        record_index,
+        record_index_supplied,
+        next(iter(source_indexes), None),
+    )
+
+
 def _collect_rendered_features(root: ET.Element) -> dict[str, _RenderedFeatureEntry]:
     entries: dict[str, _RenderedFeatureEntry] = {}
     for element in root.iter():
@@ -218,28 +386,111 @@ def _collect_rendered_features(root: ET.Element) -> dict[str, _RenderedFeatureEn
         svg_id = _element_feature_id(element)
         if not svg_id:
             continue
+        (
+            stable_id,
+            stable_id_supplied,
+            record_index,
+            record_index_supplied,
+            source_index,
+        ) = _rendered_element_identity(svg_id, element)
         existing = entries.get(svg_id)
-        if existing is not None and (
-            _is_feature_fill_target(existing.element) or not _is_feature_fill_target(element)
-        ):
-            continue
+        if existing is not None:
+            if (
+                (
+                    existing.stable_id_supplied
+                    and stable_id_supplied
+                    and existing.stable_id != stable_id
+                )
+                or (
+                    existing.record_index_supplied
+                    and record_index_supplied
+                    and existing.record_index != record_index
+                )
+                or (
+                    existing.source_index is not None
+                    and source_index is not None
+                    and existing.source_index != source_index
+                )
+            ):
+                raise GbdrawError(
+                    f"Rendered feature SVG ID {svg_id!r} has conflicting DOM identity."
+                )
+            if existing.stable_id_supplied:
+                stable_id = existing.stable_id
+            stable_id_supplied = existing.stable_id_supplied or stable_id_supplied
+            record_index = existing.record_index if existing.record_index is not None else record_index
+            record_index_supplied = (
+                existing.record_index_supplied or record_index_supplied
+            )
+            source_index = existing.source_index if existing.source_index is not None else source_index
+            if _is_feature_fill_target(existing.element) or not _is_feature_fill_target(element):
+                element = existing.element
         entries[svg_id] = _RenderedFeatureEntry(
             svg_id=svg_id,
             element=element,
             fill=str(element.get("fill") or "#94a3b8"),
+            stable_id=stable_id,
+            stable_id_supplied=stable_id_supplied,
+            record_index=record_index,
+            record_index_supplied=record_index_supplied,
+            source_index=source_index,
         )
     return entries
 
 
+def _rendered_space_stable_id_candidates(rendered_id: str) -> set[str]:
+    """Return stable-looking bases encoded by one rendered-space handle."""
+
+    base = _FEATURE_RECORD_SUFFIX_RE.sub("", _normalize_feature_id(rendered_id))
+    candidates = {base} if base else set()
+    instance_base = _FEATURE_INSTANCE_SUFFIX_RE.sub("", base)
+    if instance_base:
+        candidates.add(instance_base)
+    return candidates
+
+
+def _rendered_entry_agrees_with_identity(
+    entry: _RenderedFeatureEntry,
+    *,
+    rendered_id: str,
+    record_index: int | None,
+    stable_id: str,
+    source_index: int | None = None,
+    allow_rendered_space_stable_id: bool = False,
+) -> bool:
+    if (
+        record_index is not None
+        and entry.record_index is not None
+        and record_index != entry.record_index
+    ):
+        return False
+    if (
+        stable_id
+        and entry.stable_id_supplied
+        and entry.stable_id != stable_id
+        and not (
+            allow_rendered_space_stable_id
+            and entry.stable_id
+            in _rendered_space_stable_id_candidates(rendered_id)
+        )
+    ):
+        return False
+    return not (
+        source_index is not None
+        and entry.source_index is not None
+        and source_index != entry.source_index
+    )
+
+
 def _rendered_feature_id_index(
     root: ET.Element,
-) -> dict[tuple[int | None, str], str]:
+) -> dict[tuple[str, int | None, str], str]:
     """Index only feature IDs that are present in the final SVG DOM."""
 
-    index: dict[tuple[int | None, str], str] = {}
-    ambiguous: set[tuple[int | None, str]] = set()
+    index: dict[tuple[str, int | None, str], str] = {}
+    ambiguous: set[tuple[str, int | None, str]] = set()
 
-    def add(key: tuple[int | None, str], rendered_id: str) -> None:
+    def add(key: tuple[str, int | None, str], rendered_id: str) -> None:
         if key in ambiguous:
             return
         existing = index.get(key)
@@ -250,37 +501,46 @@ def _rendered_feature_id_index(
         index[key] = rendered_id
 
     for rendered_id, entry in _collect_rendered_features(root).items():
-        record_index = _int_or_none(entry.element.get("data-gbdraw-record-index"))
-        if record_index is None:
-            record_suffix = _FEATURE_RECORD_SUFFIX_RE.search(rendered_id)
-            if record_suffix is not None:
-                record_index = int(record_suffix.group(1)) - 1
-        stable_id = _normalize_feature_id(
-            entry.element.get("data-gbdraw-stable-feature-id")
-        ) or _FEATURE_RECORD_SUFFIX_RE.sub("", rendered_id)
-        candidates = {stable_id, rendered_id}
-        for candidate in candidates:
-            if not candidate:
-                continue
-            if record_index is not None:
-                add((record_index, candidate), rendered_id)
-            else:
-                add((None, candidate), rendered_id)
+        if entry.stable_id:
+            add(("stable", entry.record_index, entry.stable_id), rendered_id)
+        add(("rendered", entry.record_index, rendered_id), rendered_id)
     return index
 
 
 def _resolve_rendered_feature_id(
-    rendered_index: Mapping[tuple[int | None, str], str],
+    rendered_index: Mapping[tuple[str, int | None, str], str],
     record_index: int | None,
     stable_feature_id: str,
 ) -> str:
     if not stable_feature_id:
         return ""
     return _first_text(
-        rendered_index.get((record_index, stable_feature_id))
-        if record_index is not None
-        else "",
-        rendered_index.get((None, stable_feature_id)),
+        rendered_index.get(("stable", record_index, stable_feature_id))
+    )
+
+
+def _resolve_explicit_rendered_feature_id(
+    rendered_index: Mapping[tuple[str, int | None, str], str],
+    record_index: int | None,
+    rendered_feature_id: str,
+) -> str:
+    if not rendered_feature_id:
+        return ""
+    return _first_text(
+        rendered_index.get(("rendered", record_index, rendered_feature_id))
+    )
+
+
+def _resolve_explicit_recordless_rendered_id(
+    rendered_index: Mapping[tuple[str, int | None, str], str],
+    rendered_feature_id: str,
+) -> str:
+    """Bind an exact rendered handle when legacy DOM omits record metadata."""
+
+    if not rendered_feature_id:
+        return ""
+    return _first_text(
+        rendered_index.get(("rendered", None, rendered_feature_id))
     )
 
 
@@ -349,8 +609,7 @@ def _number_or_none(value: object) -> float | int | None:
 
 
 def _int_or_none(value: object) -> int | None:
-    number = _number_or_none(value)
-    return int(number) if isinstance(number, (int, float)) else None
+    return _strict_nonnegative_integer(value)
 
 
 def _build_feature_location(feature: Mapping[str, object]) -> str:
@@ -503,126 +762,6 @@ def _normalize_orthogroup_member(
     return payload
 
 
-def _normalize_orthogroup_candidate(candidate: object | None) -> dict[str, object] | None:
-    if not isinstance(candidate, Mapping):
-        return None
-    return {
-        "text": _first_text(candidate.get("text")),
-        "source": _first_text(candidate.get("source")),
-        "member_count": _int_or_none(
-            _first_text(candidate.get("memberCount"), candidate.get("member_count"))
-        )
-        or 0,
-        "record_coverage_count": _int_or_none(
-            _first_text(candidate.get("recordCoverageCount"), candidate.get("record_coverage_count"))
-        )
-        or 0,
-        "representative_count": _int_or_none(
-            _first_text(candidate.get("representativeCount"), candidate.get("representative_count"))
-        )
-        or 0,
-        "score": _number_or_none(candidate.get("score")) or 0,
-    }
-
-
-def _orthogroup_payloads(
-    root: ET.Element,
-    context: InteractiveSvgContext,
-) -> list[dict[str, object]]:
-    rendered_index = _rendered_feature_id_index(root)
-
-    def resolve_member_feature_id(member: Mapping[str, object]) -> str:
-        record_index = _int_or_none(
-            _first_text(member.get("recordIndex"), member.get("record_index"))
-        )
-        stable_feature_id = _first_text(
-            member.get("stableFeatureSvgId"),
-            member.get("stable_feature_svg_id"),
-            member.get("featureSvgId"),
-            member.get("feature_svg_id"),
-        )
-        return _resolve_rendered_feature_id(
-            rendered_index,
-            record_index,
-            stable_feature_id,
-        )
-
-    payloads: list[dict[str, object]] = []
-    for group in context.orthogroups or []:
-        if not isinstance(group, Mapping):
-            continue
-        group_id = _first_text(group.get("id"))
-        raw_members = group.get("members")
-        raw_member_list = (
-            raw_members
-            if isinstance(raw_members, Sequence) and not isinstance(raw_members, (str, bytes))
-            else []
-        )
-        members = [
-            normalized
-            for normalized in (
-                _normalize_orthogroup_member(
-                    member,
-                    rendered_feature_svg_id=resolve_member_feature_id(member),
-                )
-                for member in raw_member_list
-                if isinstance(member, Mapping)
-            )
-            if normalized is not None
-        ]
-        member_count = _int_or_none(_first_text(group.get("member_count"), group.get("memberCount"))) or len(members)
-        record_coverage_fallback = len(
-            {
-                member.get("record_index")
-                for member in members
-                if isinstance(member.get("record_index"), int)
-            }
-        )
-        record_coverage_count = (
-            _int_or_none(
-                _first_text(group.get("record_coverage_count"), group.get("recordCoverageCount"))
-            )
-            or record_coverage_fallback
-            or 0
-        )
-        raw_candidates = group.get("nameCandidates") or group.get("name_candidates")
-        raw_candidate_list = (
-            raw_candidates
-            if isinstance(raw_candidates, Sequence) and not isinstance(raw_candidates, (str, bytes))
-            else []
-        )
-        candidates = [
-            normalized
-            for normalized in (
-                _normalize_orthogroup_candidate(candidate)
-                for candidate in raw_candidate_list
-            )
-            if normalized is not None
-        ]
-        display_name = _first_text(
-            group.get("display_name"),
-            group.get("displayName"),
-            group.get("name"),
-            group_id,
-        )
-        payloads.append(
-            {
-                "id": group_id,
-                "name": _first_text(group.get("name")),
-                "display_name": display_name,
-                "description": _first_text(group.get("description")),
-                "name_confidence": _first_text(
-                    group.get("nameConfidence"), group.get("name_confidence")
-                ),
-                "name_candidates": candidates,
-                "member_count": member_count,
-                "record_coverage_count": record_coverage_count,
-                "members": members,
-            }
-        )
-    return payloads
-
-
 def _fallback_feature_payload(
     svg_id: str,
     entry: _RenderedFeatureEntry,
@@ -689,36 +828,73 @@ def _feature_payloads(
         "simple" if context.popup_mode == "simple" else "rich"
     )
     for feature in context.features:
-        record_index = _feature_record_index(feature)
-        stable_feature_id = _feature_stable_id(feature)
-        rendered_feature_id = _feature_rendered_id(feature)
-        mapped_svg_id = _first_text(
-            _resolve_rendered_feature_id(
-                rendered_index,
-                record_index,
-                rendered_feature_id,
-            ),
-            _resolve_rendered_feature_id(
+        record_index, record_index_valid = _feature_record_index_status(feature)
+        stable_feature_id, stable_feature_id_valid = _feature_stable_id_status(
+            feature
+        )
+        rendered_feature_id, rendered_feature_id_valid = (
+            _feature_rendered_id_status(feature)
+        )
+        generic_svg_id, generic_svg_id_valid = _consistent_text_alias(
+            feature,
+            ("svg_id", "svgId"),
+            normalize=_normalize_feature_id,
+        )
+        feature_index, feature_index_valid = _feature_source_index_status(feature)
+        if not all(
+            (
+                record_index_valid,
+                stable_feature_id_valid,
+                rendered_feature_id_valid,
+                generic_svg_id_valid,
+                feature_index_valid,
+            )
+        ):
+            raise GbdrawError(
+                "Feature metadata contains conflicting or invalid identity aliases."
+            )
+        rendered_handle = rendered_feature_id or generic_svg_id
+        mapped_svg_id = (
+            _first_text(
+                _resolve_explicit_rendered_feature_id(
+                    rendered_index,
+                    record_index,
+                    rendered_handle,
+                ),
+                _resolve_explicit_recordless_rendered_id(
+                    rendered_index,
+                    rendered_handle,
+                ),
+            )
+            if rendered_handle
+            else _resolve_rendered_feature_id(
                 rendered_index,
                 record_index,
                 stable_feature_id,
-            ),
+            )
         )
-        fallback_candidates = (
-            _feature_svg_id_candidates(feature)
-            if mapped_svg_id or record_index is None
-            else []
-        )
-        svg_id = next(
-            (
-                candidate
-                for candidate in (
-                    mapped_svg_id,
-                    *fallback_candidates,
-                )
-                if candidate in rendered and candidate not in seen
-            ),
-            "",
+        mapped_entry = rendered.get(mapped_svg_id)
+        if mapped_entry is not None and not _rendered_entry_agrees_with_identity(
+            mapped_entry,
+            rendered_id=mapped_svg_id,
+            record_index=record_index,
+            stable_id=stable_feature_id,
+            source_index=feature_index,
+            allow_rendered_space_stable_id=True,
+        ):
+            raise GbdrawError(
+                f"Feature metadata identity does not agree with rendered SVG ID "
+                f"{mapped_svg_id!r}."
+            )
+        if mapped_svg_id and mapped_svg_id in seen:
+            raise GbdrawError(
+                f"Multiple feature metadata entries resolve to rendered SVG ID "
+                f"{mapped_svg_id!r}."
+            )
+        svg_id = (
+            mapped_svg_id
+            if mapped_svg_id in rendered and mapped_svg_id not in seen
+            else ""
         )
         if not svg_id or svg_id not in rendered or svg_id in seen:
             continue
@@ -757,8 +933,8 @@ def _feature_payloads(
             "display_label": display_label,
             "search_labels": _get_search_labels(feature, fallback_label, display_label),
             "record_id": _first_text(feature.get("record_id")),
-            "record_idx": _int_or_none(feature.get("record_idx")),
-            "feature_index": _int_or_none(feature.get("feature_index")),
+            "record_idx": record_index,
+            "feature_index": feature_index,
             "type": _first_text(feature.get("type")),
             "start": _int_or_none(feature.get("start")),
             "end": _int_or_none(feature.get("end")),
@@ -854,1198 +1030,6 @@ def _feature_payloads(
         element.set("data-gbdraw-interactive-feature", "true")
         _add_class_token(element, "gbdraw-interactive-feature")
     return payloads
-
-
-def _biological_feature_payloads(
-    root: ET.Element,
-    context: InteractiveSvgContext,
-) -> list[dict[str, object]]:
-    rendered_index = _rendered_feature_id_index(root)
-    payloads: list[dict[str, object]] = []
-    for feature in context.biological_features:
-        if not isinstance(feature, Mapping):
-            continue
-        stable_feature_id = _feature_stable_id(feature)
-        record_index = _feature_record_index(feature)
-        payload = dict(feature)
-        for key in (
-            "rendered_svg_id",
-            "renderedSvgId",
-            "rendered_feature_svg_id",
-            "renderedFeatureSvgId",
-        ):
-            payload.pop(key, None)
-        if stable_feature_id:
-            payload["svg_id"] = stable_feature_id
-            payload["stable_svg_id"] = stable_feature_id
-            payload["stable_feature_id"] = stable_feature_id
-        rendered_feature_id = _resolve_rendered_feature_id(
-            rendered_index,
-            record_index,
-            stable_feature_id,
-        )
-        if rendered_feature_id:
-            payload["rendered_svg_id"] = rendered_feature_id
-        payloads.append(dict(_compact_wire_value(payload) or {}))
-    return payloads
-
-
-def _match_kind(element: ET.Element) -> str:
-    value = _first_text(element.get("data-match-kind")).lower()
-    if value in {"pairwise", "orthogroup", "collinear", "homology"}:
-        return value
-    if element.get("data-collinearity-block-id"):
-        return "collinear"
-    if element.get("data-orthogroup-id"):
-        return "orthogroup"
-    return "pairwise"
-
-
-_MATCH_TITLES = {
-    "pairwise": "Pairwise match",
-    "orthogroup": "Similarity-group match",
-    "collinear": "Collinearity block",
-    "homology": "Homology ring match",
-}
-
-
-def _add_match_row(rows: list[list[str]], label: str, value: object) -> None:
-    text = _first_text(value)
-    if text:
-        rows.append([label, text])
-
-
-def _interval_text(start: object, end: object) -> str:
-    start_text = _first_text(start)
-    end_text = _first_text(end)
-    if start_text and end_text:
-        return f"{start_text}..{end_text}"
-    return start_text or end_text
-
-
-def _split_metadata_values(value: object | None) -> list[str]:
-    return [
-        part.strip()
-        for part in _first_text(value).split(";")
-        if part.strip()
-    ]
-
-
-def _unique_metadata_values(value: object | None) -> list[str]:
-    seen: set[str] = set()
-    values: list[str] = []
-    for item in _split_metadata_values(value):
-        if item in seen:
-            continue
-        seen.add(item)
-        values.append(item)
-    return values
-
-
-_GENERATED_PROTEIN_ID_RE = re.compile(
-    r"^(?:gbd_r\d+_cds\d+|p_.+_\d+_\d+_-?\d+_[0-9a-f]{12}(?:_\d+)?)$",
-    re.IGNORECASE,
-)
-_GENERATED_UNIT_ID_RE = re.compile(r"^gbd_r\d+_unit\d+$", re.IGNORECASE)
-
-
-def _is_internal_display_id(value: object) -> bool:
-    text = _first_text(value)
-    return bool(text and (_GENERATED_PROTEIN_ID_RE.match(text) or _GENERATED_UNIT_ID_RE.match(text)))
-
-
-def _add_unique_display_text(values: list[str], value: object) -> None:
-    text = _first_text(value)
-    if not text or _is_internal_display_id(text) or text in values:
-        return
-    values.append(text)
-
-
-def _first_non_internal_display_text(*values: object) -> str:
-    for value in values:
-        text = _first_text(value)
-        if text and not _is_internal_display_id(text):
-            return text
-    return ""
-
-
-def _member_feature_svg_id(member: Mapping[str, object]) -> str:
-    return _first_text(
-        member.get("renderedFeatureSvgId"),
-        member.get("rendered_feature_svg_id"),
-        member.get("featureSvgId"),
-        member.get("feature_svg_id"),
-    )
-
-
-def _feature_orthogroup_id(feature: Mapping[str, object] | None) -> str:
-    if feature is None:
-        return ""
-    member = feature.get("orthogroup_member") or feature.get("orthogroupMember")
-    member = member if isinstance(member, Mapping) else {}
-    return _first_text(
-        feature.get("orthogroup_id"),
-        feature.get("orthogroupId"),
-        member.get("orthogroupId"),
-        member.get("orthogroup_id"),
-    )
-
-
-def _feature_product(feature: Mapping[str, object] | None) -> str:
-    if feature is None:
-        return ""
-    member = feature.get("orthogroup_member") or feature.get("orthogroupMember")
-    member = member if isinstance(member, Mapping) else {}
-    return _first_text(
-        feature.get("product"),
-        member.get("product"),
-        feature.get("note"),
-        feature.get("label"),
-        feature.get("display_label"),
-        feature.get("displayLabel"),
-    )
-
-
-def _feature_to_member(feature: Mapping[str, object] | None) -> dict[str, object] | None:
-    if feature is None:
-        return None
-    member = feature.get("orthogroup_member") or feature.get("orthogroupMember")
-    member = member if isinstance(member, Mapping) else {}
-    return {
-        "recordId": _first_text(member.get("recordId"), member.get("record_id"), feature.get("record_id")),
-        "start": member.get("start") if member.get("start") is not None else feature.get("start"),
-        "end": member.get("end") if member.get("end") is not None else feature.get("end"),
-        "strand": _first_text(member.get("strand"), feature.get("strand")),
-        "proteinId": _first_text(
-            member.get("proteinId"),
-            member.get("protein_id"),
-            feature.get("protein_id"),
-            feature.get("proteinId"),
-        ),
-        "sourceProteinId": _first_text(
-            member.get("sourceProteinId"),
-            member.get("source_protein_id"),
-            feature.get("source_protein_id"),
-            feature.get("sourceProteinId"),
-        ),
-        "product": _first_text(member.get("product"), _feature_product(feature)),
-        "note": _first_text(member.get("note"), feature.get("note")),
-        "featureSvgId": _first_text(
-            member.get("renderedFeatureSvgId"),
-            member.get("rendered_feature_svg_id"),
-            feature.get("svg_id"),
-            member.get("featureSvgId"),
-            member.get("feature_svg_id"),
-        ),
-    }
-
-
-def _build_fallback_orthogroup(
-    *,
-    orthogroup_id: str,
-    query_feature: Mapping[str, object] | None,
-    subject_feature: Mapping[str, object] | None,
-    features: Sequence[Mapping[str, object]],
-) -> dict[str, object] | None:
-    group_id = _first_text(orthogroup_id)
-    if not group_id:
-        return None
-    matching_features = [
-        feature
-        for feature in features
-        if _feature_orthogroup_id(feature) == group_id
-    ]
-    fallback_features = matching_features or [
-        feature for feature in (query_feature, subject_feature) if feature is not None
-    ]
-    if not fallback_features:
-        return None
-    members = [
-        member
-        for member in (_feature_to_member(feature) for feature in fallback_features)
-        if member is not None
-    ]
-    first_feature = fallback_features[0]
-    record_coverage_fallback = len(
-        {
-            _first_text(
-                feature.get("record_id"),
-                feature.get("recordId"),
-                feature.get("record_idx"),
-                feature.get("recordIndex"),
-            )
-            for feature in fallback_features
-            if _first_text(
-                feature.get("record_id"),
-                feature.get("recordId"),
-                feature.get("record_idx"),
-                feature.get("recordIndex"),
-            )
-        }
-    )
-    return {
-        "id": group_id,
-        "name": _feature_product(first_feature),
-        "member_count": _first_text(
-            first_feature.get("orthogroup_member_count"),
-            first_feature.get("orthogroupMemberCount"),
-            len(members),
-        ),
-        "record_coverage_count": _first_text(
-            first_feature.get("orthogroup_record_coverage"),
-            first_feature.get("orthogroupRecordCoverage"),
-            record_coverage_fallback,
-        ),
-        "members": members,
-    }
-
-
-def _group_has_feature_svg_id(group: Mapping[str, object], feature_svg_id: str) -> bool:
-    ids = set(_split_metadata_values(feature_svg_id))
-    if not ids:
-        return False
-    members = group.get("members")
-    if not isinstance(members, Sequence) or isinstance(members, (str, bytes)):
-        return False
-    return any(
-        isinstance(member, Mapping) and _member_feature_svg_id(member) in ids
-        for member in members
-    )
-
-
-def _find_orthogroup(
-    orthogroups: Sequence[Mapping[str, object]],
-    by_id: Mapping[str, Mapping[str, object]],
-    orthogroup_id: str,
-    query_feature_svg_id: str,
-    subject_feature_svg_id: str,
-) -> Mapping[str, object] | None:
-    if orthogroup_id and orthogroup_id in by_id:
-        return by_id[orthogroup_id]
-    for group in orthogroups:
-        if _group_has_feature_svg_id(group, query_feature_svg_id) or _group_has_feature_svg_id(
-            group,
-            subject_feature_svg_id,
-        ):
-            return group
-    return None
-
-
-def _member_location_text(member: Mapping[str, object]) -> str:
-    try:
-        start = int(member.get("start")) + 1
-    except (TypeError, ValueError):
-        start = _first_text(member.get("start"))
-    try:
-        end = int(member.get("end"))
-    except (TypeError, ValueError):
-        end = _first_text(member.get("end"))
-    if start and end:
-        text = f"{start}..{end}"
-    else:
-        text = _first_text(start, end)
-    strand = _strand_symbol(member.get("strand"))
-    return f"{text} ({strand})" if text and strand else text
-
-
-def _display_protein_id(
-    feature: Mapping[str, object] | None,
-    member: Mapping[str, object] | None,
-    fallback: object = "",
-) -> str:
-    qualifiers = feature.get("qualifiers") if feature else {}
-    protein_qualifier = ""
-    locus_tag = ""
-    gene_id = ""
-    old_locus_tag = ""
-    id_qualifier = ""
-    name_qualifier = ""
-    parent_qualifier = ""
-    gene_qualifier = ""
-    if isinstance(qualifiers, Mapping):
-        protein_qualifier = _first_text(qualifiers.get("protein_id"))
-        locus_tag = _first_text(qualifiers.get("locus_tag"))
-        gene_id = _first_text(qualifiers.get("gene_id"))
-        old_locus_tag = _first_text(qualifiers.get("old_locus_tag"))
-        id_qualifier = _first_text(qualifiers.get("ID"))
-        name_qualifier = _first_text(qualifiers.get("Name"))
-        parent_qualifier = _first_text(qualifiers.get("Parent"))
-        gene_qualifier = _first_text(qualifiers.get("gene"))
-    return _first_text(
-        feature.get("source_protein_id") if feature else "",
-        feature.get("sourceProteinId") if feature else "",
-        member.get("sourceProteinId") if member else "",
-        member.get("source_protein_id") if member else "",
-        protein_qualifier,
-        feature.get("locus_tag") if feature else "",
-        feature.get("locusTag") if feature else "",
-        locus_tag,
-        member.get("locusTag") if member else "",
-        member.get("locus_tag") if member else "",
-        feature.get("gene_id") if feature else "",
-        feature.get("geneId") if feature else "",
-        gene_id,
-        member.get("geneId") if member else "",
-        member.get("gene_id") if member else "",
-        feature.get("old_locus_tag") if feature else "",
-        feature.get("oldLocusTag") if feature else "",
-        old_locus_tag,
-        member.get("oldLocusTag") if member else "",
-        member.get("old_locus_tag") if member else "",
-        feature.get("ID") if feature else "",
-        id_qualifier,
-        feature.get("Name") if feature else "",
-        name_qualifier,
-        feature.get("Parent") if feature else "",
-        parent_qualifier,
-        feature.get("gene") if feature else "",
-        gene_qualifier,
-        member.get("gene") if member else "",
-        feature.get("protein_id") if feature else "",
-        feature.get("proteinId") if feature else "",
-        member.get("proteinId") if member else "",
-        member.get("protein_id") if member else "",
-        fallback,
-    )
-
-
-def _orthogroup_display_name(group: Mapping[str, object] | None) -> str:
-    if group is None:
-        return ""
-    return _first_text(group.get("display_name"), group.get("displayName"), group.get("name"))
-
-
-def _build_match_member_rows(
-    group: Mapping[str, object] | None,
-) -> list[dict[str, object]]:
-    if group is None:
-        return []
-    members = group.get("members")
-    if not isinstance(members, Sequence) or isinstance(members, (str, bytes)):
-        return []
-    group_id = _first_text(group.get("id"), group.get("orthogroupId"), group.get("orthogroup_id"))
-    display_name = _orthogroup_display_name(group)
-    rows: list[dict[str, object]] = []
-    for member in members:
-        if not isinstance(member, Mapping):
-            continue
-        feature_svg_id = _member_feature_svg_id(member)
-        row = {
-            "featureSvgId": feature_svg_id,
-            "feature_svg_id": feature_svg_id,
-            "orthogroupId": group_id,
-            "orthogroup_id": group_id,
-            "displayName": display_name,
-            "display_name": display_name,
-            "record": _first_text(member.get("recordId"), member.get("record_id")),
-            "coordinates": _member_location_text(member),
-            "proteinId": _display_protein_id(None, member),
-            "productOrNote": _first_text(member.get("product"), member.get("note")),
-        }
-        if (
-            row["record"]
-            or row["coordinates"]
-            or row["proteinId"]
-            or row["productOrNote"]
-            or row["featureSvgId"]
-        ):
-            rows.append(row)
-    return rows
-
-
-def _get_group_member_for_feature_svg_id(
-    group: Mapping[str, object] | None,
-    feature_svg_id: str,
-) -> Mapping[str, object] | None:
-    if group is None:
-        return None
-    members = group.get("members")
-    if not isinstance(members, Sequence) or isinstance(members, (str, bytes)):
-        return None
-    for member in members:
-        if isinstance(member, Mapping) and _member_feature_svg_id(member) == feature_svg_id:
-            return member
-    return None
-
-
-def _resolve_block_member_labels(
-    group: Mapping[str, object] | None,
-    feature_svg_ids: str,
-    features_by_id: Mapping[str, Mapping[str, object]],
-) -> str:
-    if group is None:
-        return ""
-    values: list[str] = []
-    for feature_svg_id in _unique_metadata_values(feature_svg_ids):
-        feature = features_by_id.get(feature_svg_id)
-        member = _get_group_member_for_feature_svg_id(group, feature_svg_id)
-        if member is None:
-            continue
-        text = _display_protein_id(feature, member)
-        _add_unique_display_text(values, text)
-    return "; ".join(values)
-
-
-def _orthogroup_title(orthogroup_id: str, display_name: str) -> str:
-    group_id = _first_text(orthogroup_id)
-    name = _first_text(display_name)
-    if group_id and name:
-        return f"{group_id}:{name}"
-    return group_id or name or _MATCH_TITLES["orthogroup"]
-
-
-def _feature_location_text(feature: Mapping[str, object] | None) -> str:
-    if feature is None:
-        return ""
-    direct = _first_text(feature.get("location"))
-    if direct and direct != "..":
-        return direct
-    built = _build_feature_location(feature)
-    return built if built and built != ".." else ""
-
-
-def _feature_row_locus_id(feature: Mapping[str, object] | None, fallback_locus_id: object) -> str:
-    if feature is None:
-        return _first_text(fallback_locus_id)
-    return _first_text(
-        feature.get("locusTag"),
-        feature.get("locus_tag"),
-        _first_qualifier_value(feature, "locus_tag"),
-        feature.get("geneId"),
-        feature.get("gene_id"),
-        _first_qualifier_value(feature, "gene_id"),
-        fallback_locus_id,
-    )
-
-
-def _feature_row_display_name(
-    feature: Mapping[str, object] | None,
-    fallback_display_name: object,
-) -> str:
-    if feature is None:
-        return _first_text(fallback_display_name)
-    return _first_text(
-        fallback_display_name,
-        feature.get("displayLabel"),
-        feature.get("display_label"),
-        feature.get("label"),
-        feature.get("gene"),
-        _first_qualifier_value(feature, "gene"),
-        feature.get("locus_tag"),
-        feature.get("locusTag"),
-        _first_qualifier_value(feature, "locus_tag"),
-        _feature_product(feature),
-    )
-
-
-def _list_get(values: Sequence[str], index: int) -> str:
-    return values[index] if index < len(values) else ""
-
-
-def _resolve_feature_section_protein_ids(
-    *,
-    feature: Mapping[str, object] | None,
-    feature_svg_ids: str,
-    features_by_id: Mapping[str, Mapping[str, object]],
-    group: Mapping[str, object] | None,
-    fallback_protein_ids: str,
-    locus_id: str,
-    display_name: str,
-) -> str:
-    values: list[str] = []
-
-    def add_feature_protein_id(
-        candidate_feature: Mapping[str, object] | None,
-        member: Mapping[str, object] | None = None,
-    ) -> None:
-        _add_unique_display_text(values, _display_protein_id(candidate_feature, member, ""))
-
-    ids = _split_metadata_values(feature_svg_ids)
-    for feature_svg_id in ids:
-        candidate_feature = features_by_id.get(feature_svg_id)
-        member = _get_group_member_for_feature_svg_id(group, feature_svg_id)
-        add_feature_protein_id(candidate_feature, member)
-    if feature is not None:
-        add_feature_protein_id(
-            feature,
-            _get_group_member_for_feature_svg_id(group, ids[0])
-            if len(ids) == 1
-            else None,
-        )
-    if not values:
-        for value in _split_metadata_values(locus_id):
-            _add_unique_display_text(values, value)
-    if not values:
-        for value in _split_metadata_values(display_name):
-            _add_unique_display_text(values, value)
-    if not values:
-        for value in _split_metadata_values(fallback_protein_ids):
-            _add_unique_display_text(values, value)
-    return "; ".join(values)
-
-
-def _build_feature_list_rows(
-    *,
-    feature_svg_ids: str,
-    features_by_id: Mapping[str, Mapping[str, object]],
-    group: Mapping[str, object] | None,
-    record_id: str,
-    interval: str,
-    protein_id: str,
-    locus_id: str,
-    display_name: str,
-) -> list[dict[str, object]]:
-    feature_ids = _unique_metadata_values(feature_svg_ids)
-    protein_ids = _split_metadata_values(protein_id)
-    locus_ids = _split_metadata_values(locus_id)
-    display_names = _split_metadata_values(display_name)
-    count = max(len(feature_ids), len(protein_ids), len(locus_ids), len(display_names))
-    if count == 0:
-        return []
-
-    rows: list[dict[str, object]] = []
-    for index in range(count):
-        svg_id = _list_get(feature_ids, index)
-        feature = features_by_id.get(svg_id) if svg_id else None
-        member = _get_group_member_for_feature_svg_id(group, svg_id) if svg_id else None
-        fallback_protein_id = _first_non_internal_display_text(
-            _list_get(locus_ids, index),
-            _list_get(display_names, index),
-            _list_get(protein_ids, index),
-        )
-        resolved_protein_id = _display_protein_id(feature, member, "")
-        display_protein_id = _first_text(
-            "" if _is_internal_display_id(resolved_protein_id) else resolved_protein_id,
-            fallback_protein_id,
-            resolved_protein_id,
-            _list_get(protein_ids, index),
-        )
-        row_record = _first_text(
-            feature.get("record_id") if feature else "",
-            feature.get("recordId") if feature else "",
-            member.get("recordId") if member else "",
-            member.get("record_id") if member else "",
-            record_id,
-        )
-        row_location = _first_text(
-            _feature_location_text(feature),
-            _member_location_text(member) if member else "",
-            interval if count == 1 else "",
-        )
-        row_locus_id = _feature_row_locus_id(feature, _list_get(locus_ids, index))
-        row_display_name = _feature_row_display_name(feature, _list_get(display_names, index))
-        product = _feature_product(feature)
-        label = _first_text(
-            display_protein_id,
-            row_display_name,
-            row_locus_id,
-            product,
-            svg_id,
-            f"Feature {index + 1}",
-        )
-        copy_text = "\t".join(
-            [
-                row_record,
-                row_location,
-                display_protein_id,
-                row_locus_id,
-                row_display_name,
-                product,
-            ]
-        )
-        row = {
-            "key": f"{svg_id or 'feature'}-{index}",
-            "svg_id": svg_id,
-            "svgId": svg_id,
-            "can_open": bool(feature and feature.get("svg_id")),
-            "canOpen": bool(feature and feature.get("svg_id")),
-            "label": label,
-            "record": row_record,
-            "location": row_location,
-            "protein_id": display_protein_id,
-            "proteinId": display_protein_id,
-            "locus_id": row_locus_id,
-            "locusId": row_locus_id,
-            "display_name": row_display_name,
-            "displayName": row_display_name,
-            "product": product,
-            "type": _first_text(feature.get("type") if feature else ""),
-            "copy_text": copy_text,
-            "copyText": copy_text,
-        }
-        if (
-            row["svg_id"]
-            or row["record"]
-            or row["location"]
-            or row["protein_id"]
-            or row["locus_id"]
-            or row["display_name"]
-            or row["product"]
-        ):
-            rows.append(row)
-    return rows
-
-
-def _build_match_feature_section(
-    *,
-    title: str,
-    feature: Mapping[str, object] | None,
-    record_id: str,
-    interval: str,
-    protein_id: str,
-    locus_id: str,
-    display_name: str,
-    feature_svg_ids: str,
-    features_by_id: Mapping[str, Mapping[str, object]],
-    group: Mapping[str, object] | None,
-) -> dict[str, object]:
-    rows: list[list[str]] = []
-    feature_rows = _build_feature_list_rows(
-        feature_svg_ids=feature_svg_ids,
-        features_by_id=features_by_id,
-        group=group,
-        record_id=record_id,
-        interval=interval,
-        protein_id=protein_id,
-        locus_id=locus_id,
-        display_name=display_name,
-    )
-    display_protein_ids = _resolve_feature_section_protein_ids(
-        feature=feature,
-        feature_svg_ids=feature_svg_ids,
-        features_by_id=features_by_id,
-        group=group,
-        fallback_protein_ids=protein_id,
-        locus_id=locus_id,
-        display_name=display_name,
-    )
-    _add_match_row(rows, "Record", _first_text(feature.get("record_id") if feature else "", record_id))
-    _add_match_row(rows, "Location", _first_text(feature.get("location") if feature else "", interval))
-    _add_match_row(rows, "Protein IDs" if ";" in display_protein_ids else "Protein ID", display_protein_ids)
-    _add_match_row(rows, "Type", feature.get("type") if feature else "")
-    _add_match_row(rows, "Locus ID", locus_id)
-    _add_match_row(rows, "Display name", display_name)
-    return _match_section(
-        title,
-        rows,
-        feature_rows=feature_rows,
-        featureRows=feature_rows,
-    )
-
-
-def _build_orthogroup_detail_rows(
-    *,
-    orthogroup_id: str,
-    display_name: str,
-    description: str,
-    member_count: str,
-    record_coverage: str,
-) -> list[list[str]]:
-    rows: list[list[str]] = []
-    _add_match_row(rows, "Similarity group ID", orthogroup_id)
-    _add_match_row(rows, "Display name", display_name)
-    _add_match_row(rows, "Description", description)
-    _add_match_row(rows, "Members", member_count)
-    _add_match_row(rows, "Record coverage", record_coverage)
-    return rows
-
-
-def _build_block_orthogroups(
-    *,
-    orthogroup_ids: Sequence[str],
-    orthogroups_by_id: Mapping[str, Mapping[str, object]],
-    features_by_id: Mapping[str, Mapping[str, object]],
-    query_feature_svg_id: str,
-    subject_feature_svg_id: str,
-) -> list[dict[str, object]]:
-    block_orthogroups: list[dict[str, object]] = []
-    for orthogroup_id in orthogroup_ids:
-        group = orthogroups_by_id.get(orthogroup_id)
-        display_name = _orthogroup_display_name(group)
-        description = _first_text(group.get("description")) if group else ""
-        member_count = (
-            _first_text(
-                group.get("member_count"),
-                group.get("memberCount"),
-                len(group.get("members")) if isinstance(group.get("members"), Sequence) else "",
-            )
-            if group
-            else ""
-        )
-        record_coverage = (
-            _first_text(group.get("record_coverage_count"), group.get("recordCoverage"))
-            if group
-            else ""
-        )
-        member_rows = _build_match_member_rows(group)
-        block_orthogroups.append(
-            {
-                "id": orthogroup_id,
-                "display_name": display_name,
-                "displayName": display_name,
-                "description": description,
-                "member_count": member_count,
-                "memberCount": member_count,
-                "record_coverage": record_coverage,
-                "recordCoverage": record_coverage,
-                "query_member": _resolve_block_member_labels(
-                    group,
-                    query_feature_svg_id,
-                    features_by_id,
-                ),
-                "subject_member": _resolve_block_member_labels(
-                    group,
-                    subject_feature_svg_id,
-                    features_by_id,
-                ),
-                "detail_rows": _build_orthogroup_detail_rows(
-                    orthogroup_id=orthogroup_id,
-                    display_name=display_name,
-                    description=description,
-                    member_count=member_count,
-                    record_coverage=record_coverage,
-                ),
-                "member_rows": member_rows,
-                "member_copy_text": _member_copy_text(member_rows),
-            }
-        )
-    return block_orthogroups
-
-
-def _member_copy_text(member_rows: Sequence[Mapping[str, object]]) -> str:
-    if not member_rows:
-        return ""
-    return "\n".join(
-        [
-            "Record\tCoordinates (+/-)\tProtein ID\tProduct / note",
-            *[
-                "\t".join(
-                    [
-                        _first_text(row.get("record")),
-                        _first_text(row.get("coordinates")),
-                        _first_text(row.get("proteinId")),
-                        _first_text(row.get("productOrNote")),
-                    ]
-                )
-                for row in member_rows
-            ],
-        ]
-    )
-
-
-def _match_section(title: str, rows: Sequence[Sequence[str]], **extras: object) -> dict[str, object]:
-    section: dict[str, object] = {
-        "title": title,
-        "rows": [
-            [str(row[0]), str(row[1])]
-            for row in rows
-            if len(row) >= 2 and _first_text(row[1])
-        ],
-    }
-    section.update(extras)
-    return section
-
-
-def _match_payload_v1(
-    element: ET.Element,
-    index: int,
-    *,
-    features: Sequence[Mapping[str, object]],
-    features_by_id: Mapping[str, Mapping[str, object]],
-    orthogroups: Sequence[Mapping[str, object]],
-    orthogroups_by_id: Mapping[str, Mapping[str, object]],
-) -> dict[str, object]:
-    match_id = _first_text(element.get("data-gbdraw-pairwise-match-id"))
-    if not match_id:
-        match_id = f"pairwise_match_{index + 1}"
-        element.set("data-gbdraw-pairwise-match-id", match_id)
-
-    kind = _match_kind(element)
-    orthogroup_id = _first_text(element.get("data-orthogroup-id"))
-    orthogroup_ids = _unique_metadata_values(orthogroup_id)
-    block_id = _first_text(element.get("data-collinearity-block-id"))
-    query_feature_svg_id = _first_text(element.get("data-query-feature-svg-id"))
-    subject_feature_svg_id = _first_text(element.get("data-subject-feature-svg-id"))
-    query_feature = features_by_id.get(query_feature_svg_id)
-    subject_feature = features_by_id.get(subject_feature_svg_id)
-    group = (
-        None
-        if kind == "collinear"
-        else _find_orthogroup(
-            orthogroups,
-            orthogroups_by_id,
-            orthogroup_id,
-            query_feature_svg_id,
-            subject_feature_svg_id,
-        )
-        or _build_fallback_orthogroup(
-            orthogroup_id=orthogroup_id,
-            query_feature=query_feature,
-            subject_feature=subject_feature,
-            features=features,
-        )
-    )
-    block_orthogroups: list[dict[str, object]] = []
-    if kind == "collinear":
-        block_orthogroups = _build_block_orthogroups(
-            orthogroup_ids=orthogroup_ids,
-            orthogroups_by_id=orthogroups_by_id,
-            features_by_id=features_by_id,
-            query_feature_svg_id=query_feature_svg_id,
-            subject_feature_svg_id=subject_feature_svg_id,
-        )
-
-    query_interval = _interval_text(element.get("data-qstart"), element.get("data-qend"))
-    subject_interval = _interval_text(element.get("data-sstart"), element.get("data-send"))
-    summary_rows: list[list[str]] = []
-    _add_match_row(
-        summary_rows,
-        "Query record",
-        _first_text(element.get("data-query-record-id"), element.get("data-query")),
-    )
-    _add_match_row(
-        summary_rows,
-        "Subject record",
-        _first_text(element.get("data-subject-record-id"), element.get("data-subject")),
-    )
-    _add_match_row(summary_rows, "Query interval", query_interval)
-    _add_match_row(summary_rows, "Subject interval", subject_interval)
-    _add_match_row(
-        summary_rows,
-        "Orientation",
-        _first_text(element.get("data-collinearity-orientation"), element.get("data-orientation")),
-    )
-
-    alignment_rows: list[list[str]] = []
-    _add_match_row(alignment_rows, "Identity", element.get("data-identity"))
-    _add_match_row(alignment_rows, "Alignment length", element.get("data-alignment-length"))
-    _add_match_row(alignment_rows, "E-value", element.get("data-evalue"))
-    _add_match_row(alignment_rows, "Bit score", element.get("data-bitscore"))
-    _add_match_row(alignment_rows, "Mismatches", element.get("data-mismatches"))
-    _add_match_row(alignment_rows, "Gap opens", element.get("data-gap-opens"))
-
-    orthogroup_display_name = _first_text(
-        group.get("display_name") if group else "",
-        group.get("displayName") if group else "",
-        group.get("name") if group else "",
-        _feature_product(query_feature),
-        _feature_product(subject_feature),
-    )
-    orthogroup_rows: list[list[str]] = []
-    if kind != "collinear":
-        _add_match_row(orthogroup_rows, "Similarity group ID", orthogroup_id)
-        _add_match_row(orthogroup_rows, "Display name", orthogroup_display_name)
-        _add_match_row(orthogroup_rows, "Description", group.get("description") if group else "")
-        _add_match_row(
-            orthogroup_rows,
-            "Members",
-            _first_text(group.get("member_count"), group.get("memberCount")) if group else "",
-        )
-        _add_match_row(
-            orthogroup_rows,
-            "Record coverage",
-            _first_text(group.get("record_coverage_count"), group.get("recordCoverage")) if group else "",
-        )
-    member_rows = _build_match_member_rows(group)
-
-    block_rows: list[list[str]] = []
-    _add_match_row(block_rows, "Block ID", block_id)
-    _add_match_row(block_rows, "Kind", element.get("data-collinearity-block-kind"))
-    _add_match_row(block_rows, "Orientation", element.get("data-collinearity-orientation"))
-    _add_match_row(block_rows, "Color mode", element.get("data-collinearity-color-mode"))
-    if kind == "collinear":
-        _add_match_row(block_rows, "Average identity", element.get("data-identity"))
-        _add_match_row(block_rows, "Aligned length", element.get("data-alignment-length"))
-    _add_match_row(block_rows, "Block score", element.get("data-collinearity-block-score"))
-    _add_match_row(block_rows, "Block e-value", element.get("data-collinearity-block-evalue"))
-    _add_match_row(
-        block_rows,
-        "Anchor",
-        " / ".join(
-            value
-            for value in (
-                _first_text(element.get("data-collinearity-anchor-index")),
-                _first_text(element.get("data-collinearity-anchor-count")),
-            )
-            if value
-        ),
-    )
-
-    if kind == "orthogroup":
-        summary_section = _match_section(
-            "Summary",
-            orthogroup_rows,
-            member_rows=member_rows,
-            member_copy_text=_member_copy_text(member_rows),
-        )
-        hover_rows: list[list[str]] = []
-        _add_match_row(hover_rows, "Kind", kind)
-        _add_match_row(hover_rows, "Similarity group", orthogroup_id)
-        _add_match_row(hover_rows, "Display name", orthogroup_display_name)
-        _add_match_row(
-            hover_rows,
-            "Members",
-            _first_text(group.get("member_count"), group.get("memberCount")) if group else "",
-        )
-        return {
-            "id": match_id,
-            "title": _orthogroup_title(orthogroup_id, orthogroup_display_name),
-            "subtitle": "",
-            "match_kind": kind,
-            "orthogroup_id": orthogroup_id,
-            "collinearity_block_id": block_id,
-            "fill": _first_text(element.get("fill"), "#94a3b8"),
-            "sections": (
-                [summary_section]
-                if summary_section["rows"] or summary_section.get("member_rows")
-                else []
-            ),
-            "hover_rows": hover_rows,
-        }
-
-    sections: list[dict[str, object]] = [_match_section("Summary", summary_rows)]
-    if kind != "collinear":
-        sections.append(_match_section("Alignment", alignment_rows))
-    if orthogroup_rows or kind == "orthogroup":
-        sections.append(
-            _match_section(
-                "Similarity group",
-                orthogroup_rows,
-                member_rows=member_rows,
-                member_copy_text=_member_copy_text(member_rows),
-            )
-        )
-    if kind == "collinear":
-        block_orthogroup_rows: list[list[str]] = []
-        _add_match_row(
-            block_orthogroup_rows,
-            "Number of similarity groups covered",
-            str(len(orthogroup_ids)),
-        )
-        sections.append(
-            _match_section(
-                "Similarity groups covered",
-                block_orthogroup_rows,
-                block_orthogroups=block_orthogroups,
-            )
-        )
-    if block_rows or kind == "collinear":
-        sections.append(_match_section("Collinearity", block_rows))
-    sections.append(
-        _build_match_feature_section(
-            title="Query",
-            feature=query_feature,
-            record_id=_first_text(element.get("data-query-record-id")),
-            interval=query_interval,
-            protein_id=_first_text(element.get("data-query-protein-id")),
-            locus_id=_first_text(element.get("data-query-locus-id")),
-            display_name=_first_text(element.get("data-query-display-name")),
-            feature_svg_ids=query_feature_svg_id,
-            features_by_id=features_by_id,
-            group=group,
-        )
-    )
-    sections.append(
-        _build_match_feature_section(
-            title="Subject",
-            feature=subject_feature,
-            record_id=_first_text(element.get("data-subject-record-id")),
-            interval=subject_interval,
-            protein_id=_first_text(element.get("data-subject-protein-id")),
-            locus_id=_first_text(element.get("data-subject-locus-id")),
-            display_name=_first_text(element.get("data-subject-display-name")),
-            feature_svg_ids=subject_feature_svg_id,
-            features_by_id=features_by_id,
-            group=group,
-        )
-    )
-
-    def find_row(section_title: str, row_label: str) -> str:
-        for section in sections:
-            if section.get("title") != section_title:
-                continue
-            rows = section.get("rows")
-            if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
-                continue
-            for row in rows:
-                if isinstance(row, Sequence) and not isinstance(row, (str, bytes)) and len(row) >= 2 and row[0] == row_label:
-                    return _first_text(row[1])
-        return ""
-
-    hover_rows: list[list[str]] = []
-    _add_match_row(hover_rows, "Kind", kind)
-    _add_match_row(
-        hover_rows,
-        "Identity",
-        _first_text(
-            find_row("Alignment", "Identity"),
-            find_row("Collinearity", "Average identity"),
-        ),
-    )
-    _add_match_row(hover_rows, "Query", find_row("Summary", "Query interval"))
-    _add_match_row(hover_rows, "Subject", find_row("Summary", "Subject interval"))
-    if kind == "collinear":
-        _add_match_row(hover_rows, "Similarity groups", str(len(block_orthogroups) or len(orthogroup_ids)))
-    else:
-        _add_match_row(hover_rows, "Similarity group", orthogroup_id)
-    _add_match_row(hover_rows, "Block", block_id)
-
-    return {
-        "id": match_id,
-        "title": _MATCH_TITLES.get(kind, _MATCH_TITLES["pairwise"]),
-        "subtitle": _first_text(
-            block_id,
-            orthogroup_id,
-            match_id,
-        ),
-        "match_kind": kind,
-        "orthogroup_id": orthogroup_id,
-        "collinearity_block_id": block_id,
-        "block_orthogroup_count": len(block_orthogroups)
-        or (len(orthogroup_ids) if kind == "collinear" else 0),
-        "block_orthogroups": block_orthogroups,
-        "fill": _first_text(element.get("fill"), "#94a3b8"),
-        "sections": [
-            section
-            for section in sections
-            if section["rows"]
-            or (
-                isinstance(section.get("feature_rows"), Sequence)
-                and not isinstance(section.get("feature_rows"), (str, bytes))
-                and len(section.get("feature_rows")) > 0
-            )
-        ],
-        "hover_rows": hover_rows,
-    }
-
-
-def _match_payload_v2(element: ET.Element, index: int) -> dict[str, object]:
-    match_id = _first_text(
-        element.get("data-gbdraw-match-id"),
-        element.get("data-gbdraw-pairwise-match-id"),
-    )
-    if not match_id:
-        match_id = f"match_{index + 1}"
-    element.set("data-gbdraw-match-id", match_id)
-    payload = {
-        "id": match_id,
-        "match_kind": _match_kind(element),
-        "orthogroup_ids": _unique_metadata_values(element.get("data-orthogroup-id")),
-        "collinearity_block_id": _first_text(element.get("data-collinearity-block-id")),
-        "fill": _first_text(element.get("fill"), "#94a3b8"),
-        "query_record_id": _first_text(
-            element.get("data-query-record-id"), element.get("data-query")
-        ),
-        "query_record_index": _first_text(element.get("data-query-record-index")),
-        "subject_record_id": _first_text(
-            element.get("data-subject-record-id"), element.get("data-subject")
-        ),
-        "subject_record_index": _first_text(element.get("data-subject-record-index")),
-        "qstart": _first_text(element.get("data-qstart")),
-        "qend": _first_text(element.get("data-qend")),
-        "sstart": _first_text(element.get("data-sstart")),
-        "send": _first_text(element.get("data-send")),
-        "orientation": _first_text(
-            element.get("data-collinearity-orientation"), element.get("data-orientation")
-        ),
-        "identity": _first_text(element.get("data-identity")),
-        "alignment_length": _first_text(element.get("data-alignment-length")),
-        "evalue": _first_text(element.get("data-evalue")),
-        "bitscore": _first_text(element.get("data-bitscore")),
-        "mismatches": _first_text(element.get("data-mismatches")),
-        "gap_opens": _first_text(element.get("data-gap-opens")),
-        "source_index": _first_text(element.get("data-source-index")),
-        "track_index": _first_text(element.get("data-track-index")),
-        "track_label": _first_text(element.get("data-track-label")),
-        "reference_side": _first_text(element.get("data-reference-side")),
-        "reference_record_id": _first_text(element.get("data-reference-record-id")),
-        "block_kind": _first_text(element.get("data-collinearity-block-kind")),
-        "collinear_group_scope": _first_text(element.get("data-collinear-group-scope")),
-        "group_kind": _first_text(element.get("data-group-kind")),
-        "block_color_mode": _first_text(element.get("data-collinearity-color-mode")),
-        "block_score": _first_text(element.get("data-collinearity-block-score")),
-        "block_evalue": _first_text(element.get("data-collinearity-block-evalue")),
-        "anchor_index": _first_text(element.get("data-collinearity-anchor-index")),
-        "anchor_count": _first_text(element.get("data-collinearity-anchor-count")),
-        "query_feature_svg_id": _first_text(element.get("data-query-feature-svg-id")),
-        "subject_feature_svg_id": _first_text(element.get("data-subject-feature-svg-id")),
-        "query_protein_id": _first_text(element.get("data-query-protein-id")),
-        "subject_protein_id": _first_text(element.get("data-subject-protein-id")),
-        "query_locus_id": _first_text(element.get("data-query-locus-id")),
-        "subject_locus_id": _first_text(element.get("data-subject-locus-id")),
-        "query_display_name": _first_text(element.get("data-query-display-name")),
-        "subject_display_name": _first_text(element.get("data-subject-display-name")),
-    }
-    return dict(_compact_wire_value(payload) or {})
-
-
-def _match_payloads(
-    root: ET.Element,
-    features: Sequence[Mapping[str, object]],
-    orthogroups: Sequence[Mapping[str, object]],
-) -> list[dict[str, object]]:
-    payloads: list[dict[str, object]] = []
-    for element in root.iter():
-        if not _is_match_candidate(element):
-            continue
-        payloads.append(
-            _match_payload_v2(element, len(payloads))
-        )
-        element.set("data-gbdraw-interactive-match", "true")
-        _add_class_token(element, "gbdraw-interactive-pairwise-match")
-    return payloads
-
-
-def _sequence_sources_for_matches(
-    matches: Sequence[Mapping[str, object]],
-    sources: Sequence[Mapping[str, object]],
-) -> list[Mapping[str, object]]:
-    if not matches:
-        return []
-    linear_indexes: set[int] = set()
-    circular_record_ids: set[str] = set()
-    comparison_source_indexes: set[int] = set()
-    for match in matches:
-        kind = _first_text(match.get("match_kind"))
-        if kind == "homology":
-            reference_side = _first_text(match.get("reference_side"))
-            circular_record_ids.add(
-                _first_text(match.get(f"{reference_side}_record_id"))
-            )
-            try:
-                comparison_source_indexes.add(int(str(match.get("source_index"))))
-            except (TypeError, ValueError):
-                pass
-            continue
-        for role in ("query", "subject"):
-            try:
-                linear_indexes.add(int(str(match.get(f"{role}_record_index"))))
-            except (TypeError, ValueError):
-                pass
-
-    selected: list[Mapping[str, object]] = []
-    for source in sources:
-        origin = _first_text(source.get("origin"))
-        if origin == "linear-record":
-            try:
-                if int(str(source.get("recordIndex"))) in linear_indexes:
-                    selected.append(source)
-            except (TypeError, ValueError):
-                continue
-        elif origin == "circular-reference":
-            aliases = {
-                _first_text(source.get("recordId")),
-                *(_normalize_string_array(source.get("aliases"))),
-            }
-            if aliases & circular_record_ids:
-                selected.append(source)
-        elif origin == "homology-comparison":
-            try:
-                if int(str(source.get("sourceIndex"))) in comparison_source_indexes:
-                    selected.append(source)
-            except (TypeError, ValueError):
-                continue
-    return selected
 
 
 def _extract_template_literal(source: str, name: str) -> str:
@@ -2269,6 +1253,128 @@ def _apply_viewport_root(root: ET.Element) -> None:
     _set_style_properties(root)
 
 
+def _validate_catalog_feature_bindings(
+    root: ET.Element,
+    catalog_item: Mapping[str, object],
+) -> dict[str, _RenderedFeatureEntry]:
+    """Require one exact, record-scoped catalog binding per rendered feature."""
+
+    record_keys_value = catalog_item.get("recordKeys")
+    biological_value = catalog_item.get("biologicalFeatures")
+    rendered_value = catalog_item.get("features")
+    if any(
+        not isinstance(value, Sequence) or isinstance(value, (str, bytes))
+        for value in (record_keys_value, biological_value, rendered_value)
+    ):
+        raise GbdrawError("Interactive feature catalog is missing feature arrays.")
+
+    record_keys = [str(value).strip() for value in record_keys_value]
+    if any(not value for value in record_keys) or len(set(record_keys)) != len(
+        record_keys
+    ):
+        raise GbdrawError(
+            "Interactive feature catalog record keys must be non-empty and unique."
+        )
+    record_indexes = {record_key: index for index, record_key in enumerate(record_keys)}
+
+    biological_identities: dict[tuple[str, str], tuple[str, int | None]] = {}
+    for feature in biological_value:
+        if not isinstance(feature, Mapping):
+            raise GbdrawError(
+                "Interactive feature catalog biological features must be objects."
+            )
+        record_key, record_key_valid = _consistent_text_alias(
+            feature,
+            ("recordKey", "record_key"),
+        )
+        biological_id, biological_id_valid = _consistent_text_alias(
+            feature,
+            ("biologicalFeatureId", "biological_feature_id"),
+        )
+        stable_id, stable_id_valid = _consistent_text_alias(
+            feature,
+            _FEATURE_STABLE_ID_KEYS,
+        )
+        source_index, source_index_valid = _feature_source_index_status(feature)
+        key = (record_key, biological_id)
+        if (
+            not record_key_valid
+            or not biological_id_valid
+            or not stable_id_valid
+            or not source_index_valid
+            or not all(key)
+            or record_key not in record_indexes
+            or key in biological_identities
+        ):
+            raise GbdrawError(
+                "Interactive feature catalog contains invalid or duplicate "
+                "biological feature identity."
+            )
+        biological_identities[key] = (stable_id or biological_id, source_index)
+
+    catalog_features: dict[
+        str,
+        tuple[int, str, int | None],
+    ] = {}
+    for feature in rendered_value:
+        if not isinstance(feature, Mapping):
+            raise GbdrawError(
+                "Interactive feature catalog rendered features must be objects."
+            )
+        svg_id, svg_id_valid = _consistent_text_alias(
+            feature,
+            ("svgId", "svg_id", *_FEATURE_RENDERED_ID_KEYS),
+        )
+        record_key, record_key_valid = _consistent_text_alias(
+            feature,
+            ("recordKey", "record_key"),
+        )
+        biological_id, biological_id_valid = _consistent_text_alias(
+            feature,
+            ("biologicalFeatureId", "biological_feature_id"),
+        )
+        reference = (record_key, biological_id)
+        biological_identity = biological_identities.get(reference)
+        if (
+            not svg_id_valid
+            or not record_key_valid
+            or not biological_id_valid
+            or not svg_id
+            or svg_id != _normalize_feature_id(svg_id)
+            or svg_id in catalog_features
+            or biological_identity is None
+        ):
+            raise GbdrawError(
+                "Interactive feature catalog contains an invalid or duplicate "
+                "rendered feature identity."
+            )
+        stable_id, source_index = biological_identity
+        catalog_features[svg_id] = (
+            record_indexes[record_key],
+            stable_id,
+            source_index,
+        )
+
+    rendered_entries = _collect_rendered_features(root)
+    if catalog_features.keys() != rendered_entries.keys():
+        raise GbdrawError(
+            "Interactive feature catalog rendered feature IDs do not match the SVG."
+        )
+    for rendered_id, (record_index, stable_id, source_index) in catalog_features.items():
+        if not _rendered_entry_agrees_with_identity(
+            rendered_entries[rendered_id],
+            rendered_id=rendered_id,
+            record_index=record_index,
+            stable_id=stable_id,
+            source_index=source_index,
+        ):
+            raise GbdrawError(
+                "Interactive feature catalog identity does not agree with rendered "
+                f"SVG ID {rendered_id!r}."
+            )
+    return rendered_entries
+
+
 def enrich_svg(
     svg_source: str,
     context: InteractiveSvgContext | None = None,
@@ -2314,17 +1420,37 @@ def enrich_svg(
             result_index=result_index,
             result_name=result_name,
         )
+        _validate_catalog_feature_bindings(root, catalog_item)
     else:
         if not context.biological_features:
-            fallback_features = (
-                list(context.features)
-                if context.features
-                else _feature_payloads(root, context)
+            metadata_free_features = not context.features and not context.record_keys
+            fallback_features = [
+                dict(feature)
+                for feature in (
+                    context.features
+                    if context.features
+                    else _feature_payloads(root, context)
+                )
+            ]
+            synthesize_local_record = (
+                metadata_free_features
+                and bool(fallback_features)
+                and all(
+                    _feature_record_index(feature) is None
+                    for feature in fallback_features
+                )
             )
+            if synthesize_local_record:
+                for feature in fallback_features:
+                    feature["record_idx"] = 0
+                    feature["rendered_feature_svg_id"] = _first_text(
+                        feature.get("svg_id")
+                    )
             context = replace(
                 context,
                 features=fallback_features,
                 biological_features=fallback_features,
+                record_keys=("record-1",) if synthesize_local_record else context.record_keys,
             )
         catalog_item = build_feature_catalog_item(
             ET.tostring(root, encoding="unicode"),
@@ -2379,12 +1505,29 @@ def enrich_svg(
         if isinstance(match, Mapping)
     ]
     match_elements = [element for element in root.iter() if _is_match_candidate(element)]
-    for index, element in enumerate(match_elements):
-        match = matches[index] if index < len(matches) else {}
-        match_id = _first_text(match.get("id"))
-        if match_id:
-            element.set("data-gbdraw-match-id", match_id)
-            element.set("data-gbdraw-pairwise-match-id", match_id)
+    matches_by_id: dict[str, Mapping[str, object]] = {}
+    for match in matches:
+        match_id, valid = _catalog_match_id_status(match)
+        if not valid or not match_id or match_id in matches_by_id:
+            raise GbdrawError(
+                "Interactive feature catalog contains invalid or duplicate match IDs."
+            )
+        matches_by_id[match_id] = match
+    elements_by_match_id: dict[str, ET.Element] = {}
+    for element in match_elements:
+        match_id, valid = _element_match_id_status(element)
+        if not valid or not match_id or match_id in elements_by_match_id:
+            raise GbdrawError(
+                "Rendered SVG contains invalid or duplicate match IDs."
+            )
+        elements_by_match_id[match_id] = element
+    if matches_by_id.keys() != elements_by_match_id.keys():
+        raise GbdrawError(
+            "Interactive feature catalog match IDs do not match the rendered SVG."
+        )
+    for match_id, element in elements_by_match_id.items():
+        element.set("data-gbdraw-match-id", match_id)
+        element.set("data-gbdraw-pairwise-match-id", match_id)
         element.set("data-gbdraw-interactive-match", "true")
         _add_class_token(element, "gbdraw-interactive-pairwise-match")
 

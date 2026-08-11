@@ -97,9 +97,9 @@ const noneState = {
   linearSeqs: [{}, {}, {}],
   linearComparisonResolution: resolved({ mode: 'none', sources: [] }),
   losat: {
-    totalThreadBudget: 'safe',
-    threadsPerJob: 'auto',
-    parallelWorkers: undefined,
+    totalThreadBudget: '17',
+    threadsPerJob: '32',
+    parallelWorkers: '9',
     blastp: { mode: 'pairwise', collinearSearchScope: 'adjacent' }
   },
   losatProgram: { value: 'blastn' }
@@ -109,6 +109,9 @@ assert.equal(noneSettings.losatEstimatedJobCount.value, 0);
 assert.equal(noneSettings.losatMaxPairWorkers.value, 0);
 assert.equal(noneSettings.losatAutoPairWorkers.value, 0);
 assert.deepEqual(noneSettings.losatPairWorkerOptions.value, []);
+assert.equal(noneState.losat.totalThreadBudget, '17');
+assert.equal(noneState.losat.threadsPerJob, '32');
+assert.equal(noneState.losat.parallelWorkers, '9');
 
 const mixedState = {
   linearSeqs: [{}, {}, {}, {}],
@@ -137,14 +140,28 @@ const expansionState = {
     totalThreadBudget: 'safe',
     threadsPerJob: 'auto',
     parallelWorkers: undefined,
-    blastp: { mode: 'orthogroup', collinearSearchScope: 'adjacent' }
+    blastp: { mode: 'orthogroup', collinearSearchScope: 'all' }
   },
   losatProgram: { value: 'blastp' }
 };
 const expansionSettings = createLosatSettings({ state: expansionState });
-assert.equal(expansionSettings.losatEstimatedJobCount.value, 25);
+assert.equal(
+  expansionSettings.losatEstimatedJobCount.value,
+  25,
+  'Similarity groups must plan all five self and ordered cross-record searches'
+);
 expansionState.losat.blastp.mode = 'collinear';
-assert.equal(expansionSettings.losatEstimatedJobCount.value, 13);
+assert.equal(
+  expansionSettings.losatEstimatedJobCount.value,
+  25,
+  'fresh Collinear all-vs-all must plan all five self and ordered cross-record searches'
+);
+expansionState.losat.blastp.collinearSearchScope = 'adjacent';
+assert.equal(
+  expansionSettings.losatEstimatedJobCount.value,
+  13,
+  'an explicit adjacent Collinear scope must retain the narrower job plan'
+);
 expansionState.losat.blastp.collinearSearchScope = 'all';
 assert.equal(expansionSettings.losatEstimatedJobCount.value, 25);
 

@@ -41,13 +41,17 @@ from .definition_line_styles import (
 )
 from .analysis.collinearity import (
     LosslessCollinearityParameters,
+    normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
 )
 from .analysis.protein_colinearity import (
     ORTHOGROUP_INFERENCE_VERSION,
     PROTEIN_BLASTP_MODES,
+    hydrate_protein_losat_tsv,
+    is_protein_losat_cache_entry,
 )
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from .config.models.objects import normalize_pairwise_match_style
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
 from .mode_profiles import ComparisonThresholds, LINEAR_MODE_PROFILE
@@ -94,96 +98,8 @@ from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
 )
+from .render.output_paths import commit_staged_output_file, preflight_output_paths
 from .session_io import load_session, session_to_cli_args
-
-
-def _linear_session_record_metadata(
-    records: Sequence[object],
-    input_paths: Sequence[str],
-) -> tuple[Mapping[str, object], ...]:
-    source_indices: list[int] = []
-    for record_index, record in enumerate(records):
-        source_indices.append(
-            _linear_record_source_index(
-                record,
-                input_paths,
-                fallback_index=record_index if len(records) == len(input_paths) else None,
-            )
-        )
-    source_counts: dict[int, int] = {}
-    for source_index in source_indices:
-        if source_index >= 0:
-            source_counts[source_index] = source_counts.get(source_index, 0) + 1
-    source_seen: dict[int, int] = {}
-    metadata: list[Mapping[str, object]] = []
-    for loaded_index, (record, source_index) in enumerate(zip(records, source_indices)):
-        source_loaded_index = source_seen.get(source_index, 0)
-        if source_index >= 0:
-            source_seen[source_index] = source_loaded_index + 1
-        annotations = getattr(record, "annotations", {}) or {}
-        source_file = str(
-            annotations.get("gbdraw_source_file")
-            or (input_paths[source_index] if 0 <= source_index < len(input_paths) else "")
-        )
-        source_basename = str(
-            annotations.get("gbdraw_source_basename")
-            or (Path(source_file).name if source_file else "")
-        )
-        metadata.append(
-            {
-                "loaded_index": loaded_index,
-                "source_index": source_index,
-                "source_loaded_index": source_loaded_index,
-                "source_loaded_count": source_counts.get(source_index, 0),
-                "record_id": str(getattr(record, "id", "") or ""),
-                "source_file": source_file,
-                "source_basename": source_basename,
-            }
-        )
-    return tuple(metadata)
-
-
-def _linear_record_source_index(
-    record: object,
-    input_paths: Sequence[str],
-    *,
-    fallback_index: int | None,
-) -> int:
-    annotations = getattr(record, "annotations", {}) or {}
-    provenance_index = annotations.get("gbdraw_input_index")
-    if (
-        isinstance(provenance_index, int)
-        and not isinstance(provenance_index, bool)
-        and 0 <= provenance_index < len(input_paths)
-    ):
-        return provenance_index
-    source_file = str(annotations.get("gbdraw_source_file") or "")
-    source_basename = str(annotations.get("gbdraw_source_basename") or "")
-    if source_file:
-        for index, path in enumerate(input_paths):
-            if source_file == str(path):
-                return index
-        try:
-            resolved_source = str(Path(source_file).resolve())
-        except OSError:
-            resolved_source = ""
-        if resolved_source:
-            for index, path in enumerate(input_paths):
-                try:
-                    if resolved_source == str(Path(path).resolve()):
-                        return index
-                except OSError:
-                    continue
-    candidates = {source_basename, Path(source_file).name if source_file else ""}
-    basenames: dict[str, list[int]] = {}
-    for index, path in enumerate(input_paths):
-        basenames.setdefault(Path(str(path)).name, []).append(index)
-    for candidate in candidates:
-        if candidate and len(basenames.get(candidate, [])) == 1:
-            return basenames[candidate][0]
-    if fallback_index is not None and 0 <= fallback_index < len(input_paths):
-        return fallback_index
-    return -1
 
 
 def _parse_optional_positive_int(value: str) -> int | None:
@@ -251,21 +167,17 @@ def _parse_linear_track_axis_gap(value: str) -> float | None:
 
 
 def _parse_pairwise_match_style(value: str) -> str:
-    normalized = str(value).strip().lower()
-    if normalized not in {"ribbon", "curve"}:
-        raise argparse.ArgumentTypeError("pairwise_match_style must be one of: ribbon, curve")
-    return normalized
+    try:
+        return normalize_pairwise_match_style(value)
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _parse_collinear_color_mode(value: str) -> str:
-    normalized = str(value).strip().lower().replace("-", "_")
-    if normalized == "identity":
-        normalized = "average_identity"
-    if normalized not in {"average_identity", "orientation", "orientation_identity"}:
-        raise argparse.ArgumentTypeError(
-            "collinear_color_mode must be one of: average_identity, orientation, orientation_identity"
-        )
-    return normalized
+    try:
+        return normalize_collinearity_color_mode(value)
+    except ValidationError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _parse_collinear_search_scope(value: str) -> str:
@@ -381,6 +293,16 @@ def _get_args(args) -> argparse.Namespace:
         dest='protein_blastp_candidate_limit',
         help="Optional protein blastp candidate cap per query; use 'none' for no cap (default: none).",
         type=_parse_optional_positive_int,
+        default=None)
+    parser.add_argument(
+        '--protein_blastp_output',
+        metavar='TSV',
+        help=(
+            'Write the raw protein-search evidence to one deterministic TSV. '
+            'Runtime handles are replaced with user-visible protein IDs; requires '
+            '--protein_blastp_mode.'
+        ),
+        type=str,
         default=None)
     parser.add_argument(
         '--align_orthogroup_feature',
@@ -832,6 +754,13 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--protein_blastp_mode cannot be used with -b/--blast")
     if args.protein_blastp_max_hits <= 0:
         parser.error("--protein_blastp_max_hits must be > 0")
+    if args.protein_blastp_output:
+        if args.protein_blastp_mode == "none":
+            parser.error(
+                "--protein_blastp_output requires --protein_blastp_mode"
+            )
+        if Path(args.protein_blastp_output).suffix.lower() != ".tsv":
+            parser.error("--protein_blastp_output must use a .tsv suffix")
     if args.losatp_threads is not None and args.losatp_threads <= 0:
         parser.error("--losatp_threads must be > 0")
     if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
@@ -1004,6 +933,11 @@ def linear_main(cmd_args) -> None:
 
     args: argparse.Namespace = _get_args(cmd_args)
     run_result = run_linear_from_namespace(args)
+    _write_protein_blastp_output(
+        args.protein_blastp_output,
+        run_result=run_result,
+        overwrite=bool(args.overwrite),
+    )
     save_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
         session_output=args.session_output,
@@ -1012,6 +946,86 @@ def linear_main(cmd_args) -> None:
         cmd_args=cmd_args,
         overwrite=bool(args.overwrite),
     )
+
+
+def _protein_blastp_output_text(run_result: DiagramRunResult) -> str:
+    entries = tuple(
+        entry
+        for entry in (run_result.losat_cache_entries or ())
+        if is_protein_losat_cache_entry(entry)
+    )
+    manifest = run_result.protein_identity_manifest
+    if not entries or manifest is None:
+        raise ValidationError(
+            "Protein-search output requested, but no raw protein evidence was produced."
+        )
+
+    sections = [
+        "# gbdraw raw protein-search evidence",
+        "# Non-comment lines use the 12 BLAST outfmt 6 columns.",
+    ]
+    for index, entry in enumerate(entries, start=1):
+        filename = str(entry.get("filename") or f"losat_pair_{index}.tsv")
+        if "\n" in filename or "\r" in filename:
+            raise ValidationError("Protein-search evidence filename contains a newline.")
+        hydrated = hydrate_protein_losat_tsv(entry, manifest).rstrip("\r\n")
+        sections.extend((f"# entry {index}: {filename}", hydrated))
+    return "\n".join(sections) + "\n"
+
+
+def _write_protein_blastp_output(
+    output: str | None,
+    *,
+    run_result: DiagramRunResult,
+    overwrite: bool,
+) -> Path | None:
+    if not output:
+        return None
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(
+        prefix=f".{output_path.name}.",
+        dir=output_path.parent,
+    ) as temp_name:
+        staged_path = Path(temp_name) / output_path.name
+        with staged_path.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(_protein_blastp_output_text(run_result))
+        commit_staged_output_file(
+            staged_path,
+            output_path,
+            overwrite=overwrite,
+        )
+    return output_path
+
+
+def _preflight_protein_blastp_output(
+    output: str | None,
+    *,
+    diagram_output_paths: Sequence[Path],
+    session_output_path: Path | None,
+    overwrite: bool,
+) -> None:
+    if not output:
+        return
+    output_path = Path(output)
+    preflight_output_paths((output_path,), overwrite=overwrite)
+    try:
+        output_identity = output_path.resolve(strict=False)
+        reserved_paths = tuple(diagram_output_paths) + (
+            ((session_output_path,) if session_output_path is not None else ())
+        )
+        collides = any(
+            path.resolve(strict=False) == output_identity for path in reserved_paths
+        )
+    except (OSError, ValueError) as exc:
+        raise ValidationError(
+            f"Could not resolve protein-search output path: {output_path}."
+        ) from exc
+    if collides:
+        raise ValidationError(
+            "Protein-search output path collides with a diagram or session output: "
+            f"{output_path}."
+        )
 
 
 def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
@@ -1434,11 +1448,18 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             overwrite=args.overwrite,
         ),
     )
-    preflight_session_sidecar_if_requested(
+    diagram_output_paths = diagram_request_output_paths(canonical_request)
+    session_output_path = preflight_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
         session_output=args.session_output,
         output_prefix=args.output,
-        diagram_output_paths=diagram_request_output_paths(canonical_request),
+        diagram_output_paths=diagram_output_paths,
+        overwrite=bool(args.overwrite),
+    )
+    _preflight_protein_blastp_output(
+        args.protein_blastp_output,
+        diagram_output_paths=diagram_output_paths,
+        session_output_path=session_output_path,
         overwrite=bool(args.overwrite),
     )
     legacy_protein_raw_candidates = None
@@ -1464,11 +1485,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         )
     canvas = render_result.drawing
     interactive_context = render_result.interactive_context
-    linear_record_metadata = _linear_session_record_metadata(
-        render_result.records,
-        record_manifest.source_paths,
-    )
-
     rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)
     track_slot_geometry_records = collect_track_slot_geometry_records(
         canvas,
@@ -1497,7 +1513,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         protein_identity_manifest=render_result.protein_identity_manifest,
         legacy_protein_raw_candidates=legacy_protein_raw_candidates,
         legacy_protein_derived_evidence=legacy_protein_derived_evidence,
-        linear_record_metadata=linear_record_metadata,
         run_metadata=build_track_slot_geometry_run_metadata(
             mode="linear",
             records=track_slot_geometry_records,

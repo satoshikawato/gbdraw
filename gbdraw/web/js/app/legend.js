@@ -13,7 +13,6 @@ export const createLegendManager = ({
   state,
   getPyodide,
   ensurePyodide = null,
-  debugLog,
   history = null
 }) => {
   const layoutActions = createLegendLayoutActions({ state });
@@ -24,7 +23,7 @@ export const createLegendManager = ({
     layoutActions
   });
   const sortActions = createLegendSortActions({ state, extractLegendEntries: entryActions.extractLegendEntries });
-  const strokeActions = createLegendStrokeActions({ state, debugLog });
+  const strokeActions = createLegendStrokeActions({ state });
   const dragActions = createLegendDragActions({
     state,
     extractLegendEntries: entryActions.extractLegendEntries,

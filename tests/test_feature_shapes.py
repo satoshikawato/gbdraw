@@ -468,19 +468,16 @@ def test_circular_multipart_feature_connector_shares_feature_id() -> None:
     assert connector_paths[0].attrib.get("id") == f"{feature_id}__line1"
 
 
-def test_circular_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_circular_cli_feature_shape_forwards(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stub_typed_request_export,
+) -> None:
     record = _build_test_record()
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
 
     def fake_assemble(*_args, **kwargs):
         captured["feature_shapes"] = kwargs["options"].feature_shapes
@@ -565,18 +562,8 @@ def test_linear_cli_feature_shape_forwards(monkeypatch: pytest.MonkeyPatch, tmp_
 
 
 @pytest.mark.parametrize(
-    "cmd_args",
-    [
-        ["--gbk", "dummy.gb", "--feature_shape", "CDSarrow"],
-        ["--gbk", "dummy.gb", "--feature_shape", "=arrow"],
-        ["--gbk", "dummy.gb", "--feature_shape", "CDS=triangle"],
-    ],
+    "parser", [circular_cli_module._get_args, linear_cli_module._get_args]
 )
-def test_circular_cli_feature_shape_validation(cmd_args: list[str]) -> None:
-    with pytest.raises(SystemExit):
-        circular_cli_module._get_args(cmd_args)
-
-
 @pytest.mark.parametrize(
     "cmd_args",
     [
@@ -585,9 +572,9 @@ def test_circular_cli_feature_shape_validation(cmd_args: list[str]) -> None:
         ["--gbk", "dummy.gb", "--feature_shape", "CDS=triangle"],
     ],
 )
-def test_linear_cli_feature_shape_validation(cmd_args: list[str]) -> None:
+def test_cli_feature_shape_validation(parser, cmd_args: list[str]) -> None:
     with pytest.raises(SystemExit):
-        linear_cli_module._get_args(cmd_args)
+        parser(cmd_args)
 
 
 @pytest.mark.parametrize("parser", [circular_cli_module._get_args, linear_cli_module._get_args])

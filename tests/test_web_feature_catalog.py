@@ -15,6 +15,131 @@ from gbdraw.web_support.feature_catalog import (
 )
 
 
+def test_sequence_source_deduplication_is_order_independent_and_fail_closed() -> None:
+    matches = [
+        {
+            "match_kind": "pairwise",
+            "query_record_index": 0,
+            "subject_record_index": 0,
+        }
+    ]
+    source_a = {
+        "key": "linear:record:0",
+        "origin": "linear-record",
+        "recordIndex": 0,
+        "recordId": "record-a",
+        "sequence": "AAAA",
+    }
+    source_b = {**source_a, "sequence": "CCCC"}
+
+    identical = feature_catalog_module._deduplicated_sequence_sources(
+        matches,
+        InteractiveSvgContext(sequence_sources=(source_a, dict(source_a))),
+    )
+    assert identical == [source_a]
+
+    for sources in ((source_a, source_b), (source_b, source_a)):
+        with pytest.raises(GbdrawError, match="duplicated with conflicting content"):
+            feature_catalog_module._deduplicated_sequence_sources(
+                matches,
+                InteractiveSvgContext(sequence_sources=sources),
+            )
+
+    with pytest.raises(GbdrawError, match="require a non-empty key"):
+        feature_catalog_module._deduplicated_sequence_sources(
+            matches,
+            InteractiveSvgContext(
+                sequence_sources=({key: value for key, value in source_a.items() if key != "key"},)
+            ),
+        )
+
+    item = {
+        "resultIndex": 0,
+        "resultName": "diagram.svg",
+        "recordKeys": [],
+        "features": [],
+        "biologicalFeatures": [],
+        "orthogroups": [],
+        "annotations": [],
+        "comparisonMatches": [],
+        "sequenceSources": [source_a, dict(source_a)],
+    }
+    with pytest.raises(GbdrawError, match="unique non-empty keys"):
+        select_feature_catalog_item(
+            {"schema": 3, "items": [item]},
+            result_index=0,
+            result_name="diagram.svg",
+        )
+
+
+def test_feature_catalog_rejects_missing_conflicting_and_duplicate_match_ids() -> None:
+    base_item = {
+        "resultIndex": 0,
+        "resultName": "diagram.svg",
+        "recordKeys": [],
+        "features": [],
+        "biologicalFeatures": [],
+        "orthogroups": [],
+        "annotations": [],
+        "comparisonMatches": [],
+    }
+    invalid_match_sets = [
+        [{"match_kind": "pairwise"}],
+        [{"id": "M1", "matchId": "M2"}],
+        [{"id": "M1"}, {"match_id": "M1"}],
+    ]
+
+    for comparison_matches in invalid_match_sets:
+        with pytest.raises(GbdrawError, match="match ID"):
+            select_feature_catalog_item(
+                {
+                    "schema": 3,
+                    "items": [
+                        {**base_item, "comparisonMatches": comparison_matches}
+                    ],
+                },
+                result_index=0,
+                result_name="diagram.svg",
+            )
+
+
+def test_feature_catalog_rejects_ambiguous_orthogroup_identity() -> None:
+    member = {
+        "recordKey": "record-a",
+        "biologicalFeatureId": "feature-a",
+    }
+    base_item = {
+        "resultIndex": 0,
+        "resultName": "diagram.svg",
+        "recordKeys": ["record-a"],
+        "features": [],
+        "biologicalFeatures": [dict(member)],
+        "orthogroups": [],
+        "annotations": [],
+        "comparisonMatches": [],
+    }
+    invalid_group_sets = [
+        [{"members": [member]}],
+        [{"id": "og-a", "orthogroupId": "og-b", "members": [member]}],
+        [
+            {"id": "og-a", "members": [member]},
+            {"orthogroup_id": "og-a", "members": []},
+        ],
+        [{"id": "og-a", "members": [member, dict(member)]}],
+    ]
+
+    for orthogroups in invalid_group_sets:
+        with pytest.raises(GbdrawError, match="[Oo]rthogroup"):
+            select_feature_catalog_item(
+                {
+                    "schema": 3,
+                    "items": [{**base_item, "orthogroups": orthogroups}],
+                },
+                result_index=0,
+                result_name="diagram.svg",
+            )
+
+
 def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
     full_note = ("x" * 49) + "😀tail"
     compact_note = ("x" * 49) + "😀"
@@ -339,6 +464,7 @@ def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
     unreferenced_invalid_source = json.loads(json.dumps(item))
     unreferenced_invalid_source["sequenceSources"].append(
         {
+            "key": "linear:record:invalid",
             "origin": "linear-record",
             "recordIndex": 0,
             "sequence": "ATG AAA",
@@ -509,6 +635,544 @@ def test_feature_catalog_disambiguates_identical_biological_feature_ids() -> Non
     ]
     assert len(set(identities)) == 2
     assert all(identity.startswith("duplicate~") for identity in identities)
+    assert [
+        feature["sourceFeatureIndex"]
+        for feature in item["biologicalFeatures"]
+    ] == [4, 7]
+
+
+def test_feature_catalog_preserves_duplicate_location_source_identity() -> None:
+    context = InteractiveSvgContext(
+        record_keys=("record-key",),
+        features=(
+            {
+                "stable_feature_id": "same-location",
+                "rendered_feature_svg_id": "same-location__i4",
+                "record_idx": 0,
+                "feature_index": 4,
+                "type": "CDS",
+            },
+            {
+                "stable_feature_id": "same-location",
+                "rendered_feature_svg_id": "same-location__i7",
+                "record_idx": 0,
+                "feature_index": 7,
+                "type": "CDS",
+            },
+        ),
+        biological_features=(
+            {
+                "stable_feature_id": "same-location",
+                "record_idx": 0,
+                "feature_index": 4,
+                "type": "CDS",
+            },
+            {
+                "stable_feature_id": "same-location",
+                "record_idx": 0,
+                "feature_index": 7,
+                "type": "CDS",
+            },
+        ),
+    )
+    svg = """\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path id="same-location__i4"
+        data-gbdraw-feature-id="same-location__i4"
+        data-gbdraw-stable-feature-id="same-location"
+        data-gbdraw-record-index="0"
+        data-gbdraw-source-feature-index="4" />
+  <path id="same-location__i7"
+        data-gbdraw-feature-id="same-location__i7"
+        data-gbdraw-stable-feature-id="same-location"
+        data-gbdraw-record-index="0"
+        data-gbdraw-source-feature-index="7" />
+  <path data-gbdraw-match-id="duplicate-location-endpoints"
+        data-match-kind="pairwise"
+        data-query-record-index="0"
+        data-query-feature-svg-id="same-location__i4;same-location__i7"
+        data-query-stable-feature-svg-id="same-location;same-location"
+        data-query-feature-index="4;7" />
+</svg>
+"""
+
+    item = build_feature_catalog_item(
+        svg,
+        context,
+        result_index=0,
+        result_name="duplicates.svg",
+    )
+    by_source_index = {
+        feature["sourceFeatureIndex"]: feature["biologicalFeatureId"]
+        for feature in item["biologicalFeatures"]
+    }
+    assert set(by_source_index) == {4, 7}
+    assert item["comparisonMatches"][0]["queryFeatureReferences"] == [
+        {
+            "recordKey": "record-key",
+            "biologicalFeatureId": by_source_index[4],
+        },
+        {
+            "recordKey": "record-key",
+            "biologicalFeatureId": by_source_index[7],
+        },
+    ]
+    select_feature_catalog_item(
+        {"schema": 3, "items": [item]},
+        result_index=0,
+        result_name="duplicates.svg",
+    )
+    item["biologicalFeatures"][0].pop("sourceFeatureIndex")
+    with pytest.raises(GbdrawError, match="unique source feature indexes"):
+        select_feature_catalog_item(
+            {"schema": 3, "items": [item]},
+            result_index=0,
+            result_name="duplicates.svg",
+        )
+
+
+@pytest.mark.parametrize(
+    "identity_overrides",
+    (
+        {"record_idx": "0.9"},
+        {"record_idx": -1},
+        {"record_idx": 0, "recordIndex": 1},
+        {"stable_feature_id": "stable-a", "stableFeatureId": "stable-b"},
+        {"feature_index": 7, "featureIndex": 9},
+    ),
+)
+def test_feature_catalog_rejects_invalid_or_conflicting_source_aliases(
+    identity_overrides: dict[str, object],
+) -> None:
+    biological = {
+        "record_idx": 0,
+        "stable_feature_id": "stable-a",
+        "feature_index": 7,
+        "type": "CDS",
+        **identity_overrides,
+    }
+    context = InteractiveSvgContext(
+        record_keys=("record-key", "other-record-key"),
+        biological_features=(biological,),
+    )
+
+    with pytest.raises(GbdrawError):
+        build_feature_catalog_item(
+            '<svg xmlns="http://www.w3.org/2000/svg" />',
+            context,
+            result_index=0,
+            result_name="invalid.svg",
+        )
+
+
+def test_feature_catalog_rejects_duplicate_canonical_source_identity() -> None:
+    source = {
+        "record_idx": 0,
+        "stable_feature_id": "duplicate",
+        "feature_index": 7,
+        "type": "CDS",
+    }
+    context = InteractiveSvgContext(
+        record_keys=("record-key",),
+        biological_features=(source, dict(source)),
+    )
+
+    with pytest.raises(GbdrawError, match="duplicate biological source identity"):
+        build_feature_catalog_item(
+            '<svg xmlns="http://www.w3.org/2000/svg" />',
+            context,
+            result_index=0,
+            result_name="duplicate.svg",
+        )
+
+
+@pytest.mark.parametrize(
+    "member",
+    (
+        {
+            "recordIndex": 0,
+            "proteinId": "PUBLIC_001",
+            "sourceProteinId": "PUBLIC_001",
+        },
+        {
+            "recordIndex": 0,
+            "featureIndex": 7,
+            "stableFeatureSvgId": "different-stable-id",
+            "proteinId": "PUBLIC_001",
+        },
+        {
+            "featureIndex": 7,
+            "stableFeatureSvgId": "stable-feature",
+            "proteinId": "PUBLIC_001",
+        },
+        {
+            "stableFeatureSvgId": "stable-feature",
+            "proteinId": "PUBLIC_001",
+        },
+    ),
+)
+def test_feature_catalog_fails_closed_without_matching_source_identity(
+    member: dict[str, object],
+) -> None:
+    context = InteractiveSvgContext(
+        record_keys=("record-key",),
+        biological_features=(
+            {
+                "stable_feature_id": "stable-feature",
+                "record_idx": 0,
+                "feature_index": 7,
+                "protein_id": "PUBLIC_001",
+                "type": "CDS",
+            },
+        ),
+        orthogroups=(
+            {
+                "id": "og-public-id-is-display-only",
+                "members": [member],
+            },
+        ),
+    )
+
+    with pytest.raises(
+        GbdrawError,
+        match=(
+            "record-scoped stable feature ID or source feature index"
+        ),
+    ):
+        build_feature_catalog_item(
+            '<svg xmlns="http://www.w3.org/2000/svg" />',
+            context,
+            result_index=0,
+            result_name="empty.svg",
+        )
+
+
+def test_feature_catalog_resolves_hidden_match_endpoints_by_source_identity() -> None:
+    context = InteractiveSvgContext(
+        record_keys=("query-record", "subject-record"),
+        biological_features=(
+            {
+                "stable_feature_id": "stable-query",
+                "record_idx": 0,
+                "feature_index": 3,
+                "protein_id": "PUBLIC_QUERY",
+                "type": "CDS",
+            },
+            {
+                "stable_feature_id": "stable-subject",
+                "record_idx": 1,
+                "feature_index": 5,
+                "protein_id": "PUBLIC_SUBJECT",
+                "type": "CDS",
+            },
+        ),
+    )
+    svg = """\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path data-gbdraw-match-id="hidden-endpoints"
+        data-match-kind="pairwise"
+        data-query-record-index="0"
+        data-subject-record-index="1"
+        data-query-stable-feature-svg-id="stable-query"
+        data-subject-stable-feature-svg-id="stable-subject"
+        data-query-feature-index="3"
+        data-subject-feature-index="5"
+        data-query-protein-id="NOT_A_JOIN_KEY"
+        data-subject-protein-id="NOT_A_JOIN_KEY" />
+</svg>
+"""
+
+    item = build_feature_catalog_item(
+        svg,
+        context,
+        result_index=0,
+        result_name="hidden.svg",
+    )
+
+    match = item["comparisonMatches"][0]
+    assert match["queryRecordKey"] == "query-record"
+    assert match["queryBiologicalFeatureId"] == "stable-query"
+    assert match["subjectRecordKey"] == "subject-record"
+    assert match["subjectBiologicalFeatureId"] == "stable-subject"
+    assert "query_protein_id" not in match
+    assert "subject_protein_id" not in match
+
+
+def test_feature_catalog_distinguishes_membership_and_presentation_scopes() -> None:
+    svg = """\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path data-gbdraw-match-id="orthogroup-match"
+        data-match-kind="orthogroup"
+        data-orthogroup-id="og-1"
+        data-group-kind="orthogroup"
+        data-group-scope="cross_record" />
+</svg>
+"""
+
+    item = build_feature_catalog_item(
+        svg,
+        InteractiveSvgContext(),
+        result_index=0,
+        result_name="orthogroup.svg",
+    )
+
+    assert item["orthogroups"] == [
+        {"id": "og-1", "scope": "cross_record", "members": []}
+    ]
+    assert item["comparisonMatches"][0]["orthogroup_ids"] == ["og-1"]
+    select_feature_catalog_item(
+        {"schema": 3, "items": [item]},
+        result_index=0,
+        result_name="orthogroup.svg",
+    )
+
+    with pytest.raises(GbdrawError, match="invalid membership scope"):
+        build_feature_catalog_item(
+            svg.replace("cross_record", "invalid"),
+            InteractiveSvgContext(),
+            result_index=0,
+            result_name="orthogroup.svg",
+        )
+
+
+def test_feature_catalog_derives_collinear_group_presentation_from_matches() -> None:
+    biological_features = (
+        {
+            "stable_feature_id": "stable-query",
+            "record_idx": 0,
+            "feature_index": 3,
+            "type": "CDS",
+        },
+        {
+            "stable_feature_id": "stable-subject",
+            "record_idx": 1,
+            "feature_index": 5,
+            "type": "CDS",
+        },
+    )
+    context = InteractiveSvgContext(
+        record_keys=("query-record", "subject-record"),
+        biological_features=biological_features,
+        orthogroups=(
+            {
+                "id": "og-1",
+                "scope": "cross_record",
+                "members": [
+                    {"recordIndex": 0, "stableFeatureSvgId": "stable-query"},
+                    {"recordIndex": 1, "stableFeatureSvgId": "stable-subject"},
+                ],
+            },
+        ),
+    )
+    svg = """\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path data-gbdraw-match-id="collinear-match"
+        data-match-kind="collinear"
+        data-orthogroup-id="og-1"
+        data-group-kind="collinear_gene_group"
+        data-collinear-group-scope="adjacent_local"
+        data-query-record-index="0"
+        data-subject-record-index="1"
+        data-query-stable-feature-svg-id="stable-query"
+        data-subject-stable-feature-svg-id="stable-subject"
+        data-query-feature-index="3"
+        data-subject-feature-index="5" />
+</svg>
+"""
+
+    item = build_feature_catalog_item(
+        svg,
+        context,
+        result_index=0,
+        result_name="collinear.svg",
+    )
+
+    group = item["orthogroups"][0]
+    assert group["scope"] == "cross_record"
+    assert group["presentationScope"] == "adjacent_local"
+    assert group["collinearGroupScope"] == "adjacent_local"
+    assert group["groupKind"] == "collinear_gene_group"
+
+    with pytest.raises(GbdrawError, match="missing orthogroup metadata"):
+        build_feature_catalog_item(
+            svg,
+            InteractiveSvgContext(
+                record_keys=("query-record", "subject-record"),
+                biological_features=biological_features,
+            ),
+            result_index=0,
+            result_name="collinear.svg",
+        )
+
+
+def test_feature_catalog_applies_collinear_presentation_to_unrendered_groups() -> None:
+    biological_features = (
+        {
+            "stable_feature_id": "stable-query",
+            "record_idx": 0,
+            "feature_index": 3,
+            "type": "CDS",
+        },
+        {
+            "stable_feature_id": "stable-subject",
+            "record_idx": 1,
+            "feature_index": 5,
+            "type": "CDS",
+        },
+    )
+    members = [
+        {"recordIndex": 0, "stableFeatureSvgId": "stable-query"},
+        {"recordIndex": 1, "stableFeatureSvgId": "stable-subject"},
+    ]
+    context = InteractiveSvgContext(
+        record_keys=("query-record", "subject-record"),
+        biological_features=biological_features,
+        orthogroups=(
+            {"id": "og-rendered", "scope": "cross_record", "members": members},
+            {"id": "og-unrendered", "scope": "record_local", "members": members},
+        ),
+        collinearity_search_scope="adjacent",
+    )
+    svg = """\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path data-gbdraw-match-id="collinear-match"
+        data-match-kind="collinear"
+        data-orthogroup-id="og-rendered"
+        data-group-kind="collinear_gene_group"
+        data-collinear-group-scope="adjacent_local"
+        data-query-record-index="0"
+        data-subject-record-index="1"
+        data-query-stable-feature-svg-id="stable-query"
+        data-subject-stable-feature-svg-id="stable-subject"
+        data-query-feature-index="3"
+        data-subject-feature-index="5" />
+</svg>
+"""
+
+    item = build_feature_catalog_item(
+        svg,
+        context,
+        result_index=0,
+        result_name="collinear.svg",
+    )
+
+    assert {group["scope"] for group in item["orthogroups"]} == {
+        "cross_record",
+        "record_local",
+    }
+    assert {
+        (
+            group["presentationScope"],
+            group["collinearGroupScope"],
+            group["groupKind"],
+        )
+        for group in item["orthogroups"]
+    } == {("adjacent_local", "adjacent_local", "collinear_gene_group")}
+
+    conflicting_svg = svg.replace(
+        'data-group-kind="collinear_gene_group"',
+        'data-group-kind="orthogroup"',
+    ).replace(
+        'data-collinear-group-scope="adjacent_local"',
+        'data-collinear-group-scope="global_collinear"',
+    )
+    with pytest.raises(GbdrawError, match="conflicting collinearity presentation"):
+        build_feature_catalog_item(
+            conflicting_svg,
+            context,
+            result_index=0,
+            result_name="collinear.svg",
+        )
+
+
+def test_feature_catalog_rejects_incomplete_group_presentation_aliases() -> None:
+    item = {
+        "resultIndex": 0,
+        "resultName": "diagram.svg",
+        "recordKeys": [],
+        "features": [],
+        "biologicalFeatures": [],
+        "orthogroups": [
+            {
+                "id": "og-1",
+                "members": [],
+                "presentationScope": "adjacent_local",
+                "groupKind": "collinear_gene_group",
+            }
+        ],
+        "annotations": [],
+        "comparisonMatches": [],
+    }
+    with pytest.raises(GbdrawError, match="incomplete or conflicting"):
+        select_feature_catalog_item(
+            {"schema": 3, "items": [item]},
+            result_index=0,
+            result_name="diagram.svg",
+        )
+
+
+@pytest.mark.parametrize(
+    ("stable_feature_id", "feature_index"),
+    (
+        ("stable-subject", 1),
+        ("stable-query", 1),
+    ),
+)
+def test_feature_catalog_rejects_disagreeing_match_identity_fields(
+    stable_feature_id: str,
+    feature_index: int,
+) -> None:
+    context = InteractiveSvgContext(
+        record_keys=("record-key",),
+        features=(
+            {
+                "rendered_feature_svg_id": "rendered-query",
+                "stable_feature_id": "stable-query",
+                "record_idx": 0,
+                "feature_index": 0,
+                "type": "CDS",
+            },
+        ),
+        biological_features=(
+            {
+                "stable_feature_id": "stable-query",
+                "record_idx": 0,
+                "feature_index": 0,
+                "type": "CDS",
+            },
+            {
+                "stable_feature_id": "stable-subject",
+                "record_idx": 0,
+                "feature_index": 1,
+                "type": "CDS",
+            },
+        ),
+    )
+    svg = f"""\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path id="rendered-query"
+        data-gbdraw-feature-id="rendered-query"
+        data-gbdraw-stable-feature-id="stable-query"
+        data-gbdraw-record-index="0" />
+  <path data-gbdraw-match-id="inconsistent-endpoint"
+        data-match-kind="pairwise"
+        data-query-record-index="0"
+        data-query-feature-svg-id="rendered-query"
+        data-query-stable-feature-svg-id="{stable_feature_id}"
+        data-query-feature-index="{feature_index}" />
+</svg>
+"""
+
+    with pytest.raises(
+        GbdrawError,
+        match="identity fields do not resolve to the same biological feature",
+    ):
+        build_feature_catalog_item(
+            svg,
+            context,
+            result_index=0,
+            result_name="inconsistent.svg",
+        )
 
 
 def test_feature_catalog_references_one_biological_payload_from_many_renderings() -> None:
@@ -592,6 +1256,7 @@ def test_sequence_source_validation_is_bounded_by_source_count(
 ) -> None:
     source_sequence = "ATG" + ("A" * 1_000_000)
     source = {
+        "key": "linear:record:0",
         "origin": "linear-record",
         "recordIndex": 0,
         "sequence": source_sequence,

@@ -608,6 +608,7 @@ def test_get_label_text_normal_qualifier_override_works() -> None:
 def test_circular_cli_label_table_injects_override_df(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    stub_typed_request_export,
 ) -> None:
     record = _make_record()
     override_df = _rules_df([["*", "*", "label", "^enzyme alpha$", "CLI label"]])
@@ -615,13 +616,6 @@ def test_circular_cli_label_table_injects_override_df(
 
     monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: [record])
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(
-        request_render_module,
-        "save_figure_to",
-        lambda *_args, output_dir=None, output_prefix=None, **_kwargs: [
-            str(Path(output_dir or ".") / f"{output_prefix}.svg")
-        ],
-    )
     monkeypatch.setattr(request_render_module, "read_label_override_file", lambda _path: override_df)
 
     def fake_assemble(*_args: Any, **kwargs: Any) -> Drawing:
