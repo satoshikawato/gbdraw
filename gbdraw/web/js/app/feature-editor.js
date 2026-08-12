@@ -13,7 +13,7 @@ export const createFeatureEditor = ({
   previewRuntime = null
 }) => {
   const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions });
-  const labelActions = createFeatureLabelActions({ state });
+  const labelActions = createFeatureLabelActions({ state, previewRuntime });
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
@@ -63,6 +63,7 @@ export const createFeatureEditor = ({
     featureVisibilityQualifierSuggestions: visibilityActions.featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail: visibilityActions.featureVisibilityRuleDetail,
     getFeatureVisibility: visibilityActions.getFeatureVisibility,
+    reconcileFeatureVisibility: visibilityActions.reconcileFeatureVisibility,
     handleFeatureVisibilityScopeChoice: visibilityActions.handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: visibilityActions.moveFeatureVisibilityRuleDown,
     moveFeatureVisibilityRuleUp: visibilityActions.moveFeatureVisibilityRuleUp,
@@ -102,6 +103,7 @@ export const createFeatureEditor = ({
     handleGlobalLabelModeChoice: labelActions.handleGlobalLabelModeChoice,
     requestLabelTextChangeByFeatureId: labelActions.requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey: labelActions.requestLabelTextChangeByKey,
+    reconcileLabelOverrides: labelActions.reconcileLabelOverrides,
     resetAllLabelTextOverrides: labelActions.resetAllLabelTextOverrides
   };
 };

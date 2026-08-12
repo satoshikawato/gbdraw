@@ -135,6 +135,96 @@ jobs:
           -m "browser and not slow"
           --durations=30
 
+      - name: Run offline GUI browser contracts
+        run: >-
+          python -m pytest tests/test_web_packaging.py
+          -m "slow and browser"
+          --durations=30
+
+  playwright-functional:
+    name: Playwright functional
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Playwright functional dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Run Playwright functional tests
+        run: npm run test:web:functional-smoke
+
+      - name: Upload Playwright functional traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-functional-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  playwright-performance:
+    name: Playwright performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Playwright performance dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Run Playwright performance tests
+        run: npm run test:web:perf-smoke
+
+      - name: Upload Playwright performance traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-performance-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   acceptance-supported-main:
     name: ${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }})
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -200,9 +290,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install slow test dependencies
-        run: |
-          python -m pip install -e ".[dev]"
-          python -m playwright install --with-deps chromium
+        run: python -m pip install -e ".[dev]"
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py
@@ -210,7 +298,7 @@ jobs:
       - name: Run slow tests
         run: >-
           python -m pytest tests/
-          -m "slow"
+          -m "slow and not browser"
           --timeout=600
           --durations=30
 

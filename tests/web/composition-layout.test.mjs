@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 
 import {
   applyCompositionEdit,
+  applyCompositionUserDeltas,
   bindCompositionMetadata,
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_ROLE_ATTRIBUTE,
@@ -353,6 +354,18 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
 }
 
 {
+  const { svg } = schemaOneSvg();
+  const desired = {
+    primary: [[8, 3], [-4, 2]],
+    legend: [-6, 7],
+    title: [9, -5]
+  };
+  assert.equal(applyCompositionUserDeltas(svg, desired).changed, true);
+  assert.deepEqual(compositionUserDeltas(svg), desired);
+  assert.equal(applyCompositionUserDeltas(svg, desired).changed, false);
+}
+
+{
   const missing = new FakeElement({ tagName: 'svg' });
   assert.throws(
     () => parseCompositionMetadata(missing),
@@ -551,6 +564,49 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
     primary: [[0, 0]],
     legend: [0, 0],
     title: null
+  });
+}
+
+{
+  const legacy = new FakeElement({
+    tagName: 'svg',
+    attributes: {
+      viewBox: '0 0 200 120',
+      'data-horizontal-viewbox': '0 0 200 120',
+      'data-vertical-viewbox': '0 0 160 100'
+    }
+  });
+  const primary = new FakeElement({
+    id: 'record',
+    attributes: { transform: 'translate(10,20)' }
+  });
+  const legend = new FakeElement({
+    id: 'legend',
+    attributes: { transform: 'translate(75,92)' }
+  });
+  const title = new FakeElement({
+    id: 'plot_title',
+    attributes: { transform: 'translate(100,86)' }
+  });
+  primary.getBBox = legend.getBBox = title.getBBox = () => {
+    throw new Error('Detached legacy admission must not call getBBox().');
+  };
+  legacy.appendChild(primary);
+  legacy.appendChild(legend);
+  legacy.appendChild(title);
+  const binding = normalizeLegacyComposition(legacy, {
+    legendSide: 'bottom',
+    titleSide: 'bottom',
+    userDeltas: { legend: [5, 2] }
+  });
+  assert.deepEqual(binding.metadata.primary.finalBounds, {
+    x: 0, y: 0, width: 200, height: 100
+  });
+  assert.deepEqual(binding.metadata.legend.localBounds, {
+    x: 70, y: 90, width: 60, height: 20
+  });
+  assert.deepEqual(binding.metadata.title.localBounds, {
+    x: 0, y: 76, width: 200, height: 20
   });
 }
 

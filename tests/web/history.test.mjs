@@ -63,12 +63,16 @@ const createLayoutPreferences = () => ({
 {
   let value = 0;
   const applied = [];
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => {
+    value = snapshot.value;
+    applied.push(value);
+  };
   const history = createHistoryManager({
-    buildSnapshot: async () => ({ value }),
-    applySnapshot: async (snapshot) => {
-      value = snapshot.value;
-      applied.push(value);
-    }
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState
   });
 
   await history.captureBaseline('initial');
@@ -91,11 +95,78 @@ const createLayoutPreferences = () => ({
 
 {
   let value = 0;
+  const buildState = () => ({ value });
   const history = createHistoryManager({
-    buildSnapshot: async () => ({ value }),
-    applySnapshot: async (snapshot) => {
+    buildIntent: buildState,
+    applyIntent: (snapshot) => {
+      value = snapshot.value;
+    },
+    buildCheckpoint: buildState,
+    applyCheckpoint: (snapshot) => {
       value = snapshot.value;
     }
+  });
+
+  await history.captureBaseline('initial');
+  const reset = history.runUndoableCheckpoint('Synchronous reset', () => {
+    value = 1;
+  });
+  assert.equal(value, 1);
+  await reset;
+  assert.equal(history.undoLabel(), 'Synchronous reset');
+  await history.undo();
+  assert.equal(value, 0);
+}
+
+{
+  let setting = 0;
+  let artifact = 'artifact-a';
+  const history = createHistoryManager({
+    buildIntent: () => ({ setting }),
+    applyIntent: (intent) => {
+      setting = intent.setting;
+    },
+    buildCheckpoint: () => ({ setting, artifact }),
+    applyCheckpoint: (checkpoint) => {
+      setting = checkpoint.setting;
+      artifact = checkpoint.artifact;
+    }
+  });
+
+  await history.captureBaseline('initial');
+  const pendingEdit = await history.begin('Edit setting');
+  setting = 1;
+  await history.runUndoableCheckpoint('Generate', () => {
+    artifact = 'artifact-b';
+  });
+
+  assert.equal(pendingEdit.closed, true);
+  assert.equal(history.getUndoCount(), 2);
+  assert.equal(history.undoLabel(), 'Generate');
+  await history.undo();
+  assert.equal(setting, 1);
+  assert.equal(artifact, 'artifact-a');
+  assert.equal(history.undoLabel(), 'Edit setting');
+  await history.undo();
+  assert.equal(setting, 0);
+  assert.equal(artifact, 'artifact-a');
+  await history.redo();
+  await history.redo();
+  assert.equal(setting, 1);
+  assert.equal(artifact, 'artifact-b');
+}
+
+{
+  let value = 0;
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => {
+    value = snapshot.value;
+  };
+  const history = createHistoryManager({
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState
   });
 
   await history.captureBaseline('initial');
@@ -115,12 +186,16 @@ const createLayoutPreferences = () => ({
 
 {
   let value = 0;
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => {
+    value = snapshot.value;
+  };
   const history = createHistoryManager({
     maxActions: 2,
-    buildSnapshot: async () => ({ value }),
-    applySnapshot: async (snapshot) => {
-      value = snapshot.value;
-    }
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState
   });
 
   await history.captureBaseline('initial');
@@ -139,12 +214,16 @@ const createLayoutPreferences = () => ({
 
 {
   let value = 'small';
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => {
+    value = snapshot.value;
+  };
   const history = createHistoryManager({
     maxBytes: 220,
-    buildSnapshot: async () => ({ value }),
-    applySnapshot: async (snapshot) => {
-      value = snapshot.value;
-    }
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState
   });
 
   await history.captureBaseline('initial');
@@ -163,13 +242,17 @@ const createLayoutPreferences = () => ({
   assert.equal(first.fileId, second.fileId);
 
   let currentFile = file;
+  const buildState = async () => ({ file: fileStore.describeFile(currentFile) });
+  const applyState = async (snapshot) => {
+    currentFile = fileStore.restoreFile(snapshot.file);
+  };
   const history = createHistoryManager({
     maxActions: 0,
     fileStore,
-    buildSnapshot: async () => ({ file: fileStore.describeFile(currentFile) }),
-    applySnapshot: async (snapshot) => {
-      currentFile = fileStore.restoreFile(snapshot.file);
-    }
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState
   });
   await history.captureBaseline('initial');
   currentFile = null;
@@ -180,14 +263,18 @@ const createLayoutPreferences = () => ({
 {
   let value = 0;
   let history = null;
-  history = createHistoryManager({
-    buildSnapshot: async () => ({ value }),
-    applySnapshot: async (snapshot) => {
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => {
+    value = snapshot.value;
+    await history.runUndoable('Nested restore edit', () => {
       value = snapshot.value;
-      await history.runUndoable('Nested restore edit', () => {
-        value = snapshot.value;
-      });
-    }
+    });
+  };
+  history = createHistoryManager({
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState
   });
 
   await history.captureBaseline('initial');
@@ -202,15 +289,26 @@ const createLayoutPreferences = () => ({
 
 {
   let value = 0;
-  let snapshotBuildCount = 0;
-  let snapshotApplyCount = 0;
+  let intentBuildCount = 0;
+  let intentApplyCount = 0;
+  let checkpointBuildCount = 0;
+  let checkpointApplyCount = 0;
+  let commandSizeComputations = 0;
   const history = createHistoryManager({
-    buildSnapshot: async () => {
-      snapshotBuildCount += 1;
+    buildIntent: async () => {
+      intentBuildCount += 1;
       return { value };
     },
-    applySnapshot: async (snapshot) => {
-      snapshotApplyCount += 1;
+    applyIntent: async (snapshot) => {
+      intentApplyCount += 1;
+      value = snapshot.value;
+    },
+    buildCheckpoint: async () => {
+      checkpointBuildCount += 1;
+      return { value };
+    },
+    applyCheckpoint: async (snapshot) => {
+      checkpointApplyCount += 1;
       value = snapshot.value;
     }
   });
@@ -219,7 +317,7 @@ const createLayoutPreferences = () => ({
   await history.runUndoable('Snapshot set one', () => {
     value = 1;
   });
-  const buildsAfterSnapshot = snapshotBuildCount;
+  const checkpointsAfterIntentEdit = checkpointBuildCount;
 
   await history.runUndoableCommand('Command set two', () => ({
     apply: () => {
@@ -228,28 +326,35 @@ const createLayoutPreferences = () => ({
     revert: () => {
       value = 1;
     },
-    estimateBytes: () => 8
+    estimateBytes: () => {
+      commandSizeComputations += 1;
+      return 8;
+    }
   }));
 
   assert.equal(value, 2);
   assert.equal(history.getUndoCount(), 2);
   assert.equal(history.undoLabel(), 'Command set two');
-  assert.equal(snapshotBuildCount, buildsAfterSnapshot);
+  assert.equal(checkpointBuildCount, checkpointsAfterIntentEdit);
+  assert.equal(commandSizeComputations, 1);
 
   await history.undo();
   assert.equal(value, 1);
-  assert.equal(snapshotApplyCount, 0);
+  assert.equal(checkpointApplyCount, 0);
   assert.equal(history.undoLabel(), 'Snapshot set one');
 
   await history.undo();
   assert.equal(value, 0);
-  assert.equal(snapshotApplyCount, 1);
+  assert.equal(intentApplyCount, 1);
 
   await history.redo();
   assert.equal(value, 1);
   await history.redo();
   assert.equal(value, 2);
-  assert.equal(snapshotApplyCount, 2);
+  assert.equal(intentApplyCount, 2);
+  assert.equal(checkpointApplyCount, 0);
+  assert.equal(intentBuildCount > 0, true);
+  assert.equal(commandSizeComputations, 1);
 }
 
 {
@@ -259,11 +364,15 @@ const createLayoutPreferences = () => ({
   const warnings = [];
   const originalWarn = console.warn;
   console.warn = (message) => warnings.push(String(message));
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => {
+    value = snapshot.value;
+  };
   const history = createHistoryManager({
-    buildSnapshot: async () => ({ value }),
-    applySnapshot: async (snapshot) => {
-      value = snapshot.value;
-    }
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState
   });
 
   try {
@@ -517,7 +626,7 @@ const createLayoutPreferences = () => ({
     }
   });
 
-  const snapshot = await snapshots.buildHistorySnapshot();
+  const snapshot = await snapshots.buildArtifactCheckpoint();
   state.form.prefix = 'after';
   state.form.show_scale = false;
   state.adv.arrow_head_length_ratio = null;
@@ -534,7 +643,7 @@ const createLayoutPreferences = () => ({
 
   assert.equal(snapshot.config.form.prefix, 'before');
   assert.equal(snapshot.files.c_gb.name, 'restore.gb');
-  await snapshots.applyHistorySnapshot(snapshot);
+  await snapshots.applyArtifactCheckpoint(snapshot);
   assert.equal(state.form.prefix, 'before');
   assert.equal(state.form.show_scale, true);
   assert.equal(state.adv.feature_shapes.CDS, 'arrow');
@@ -584,20 +693,46 @@ const createLayoutPreferences = () => ({
 
   const history = createHistoryManager({
     fileStore,
-    buildSnapshot: snapshots.buildHistorySnapshot,
-    applySnapshot: snapshots.applyHistorySnapshot
+    buildIntent: snapshots.buildHistoryIntent,
+    applyIntent: snapshots.applyHistoryIntent,
+    buildCheckpoint: snapshots.buildArtifactCheckpoint,
+    applyCheckpoint: snapshots.applyArtifactCheckpoint
   });
   await history.captureBaseline('P3 baseline');
+  const stableResults = state.results.value;
+  const stableExtractedFeatures = state.extractedFeatures.value;
   await history.runUndoable('Hide coordinate scale', () => {
     state.form.show_scale = false;
   });
   assert.equal(state.form.show_scale, false);
   await history.undo();
   assert.equal(state.form.show_scale, true);
+  assert.equal(state.results.value, stableResults);
+  assert.equal(state.extractedFeatures.value, stableExtractedFeatures);
+  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  const serializedAfterConfigUndo = await snapshots.buildArtifactCheckpoint();
+  assert.equal(
+    fileStore.restoreValue(serializedAfterConfigUndo.files.linearComparisons[0].file),
+    comparisonUpload
+  );
   await history.redo();
   assert.equal(state.form.show_scale, false);
+  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
   await history.undo();
   assert.equal(state.form.show_scale, true);
+  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+
+  const replacementComparisonUpload = makeFile('replacement-comparison.tsv', 39);
+  await history.runUndoable('Replace comparison upload', () => {
+    state.linearComparisonPlan.edges[0].file = replacementComparisonUpload;
+  });
+  assert.equal(state.linearComparisonPlan.edges[0].file, replacementComparisonUpload);
+  await history.undo();
+  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  await history.redo();
+  assert.equal(state.linearComparisonPlan.edges[0].file, replacementComparisonUpload);
+  await history.undo();
+  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
 
   await history.runUndoable('Edit arrow geometry', () => {
     state.adv.arrow_head_length_ratio = 2;
@@ -754,7 +889,7 @@ const createLayoutPreferences = () => ({
     }
   });
 
-  await snapshots.applyHistorySnapshot({
+  await snapshots.applyArtifactCheckpoint({
     config: { form: { prefix: 'restored', legend: 'bottom' }, adv: { features: ['CDS'] } },
     ui: { mode: 'linear', lInputType: 'gb', selectedResultIndex: 0 },
     files: { linearSeqs: [] },
@@ -777,6 +912,265 @@ const createLayoutPreferences = () => ({
   assert.equal(state.featureRecordIds.value.length, 1);
   assert.equal(state.orthogroups.value.length, 1);
   assert.equal(state.selectedOrthogroupId.value, 'og_1');
+}
+
+{
+  let setting = 0;
+  let artifact = { id: 'artifact-a', svg: '<svg>' + 'x'.repeat(100_000) + '</svg>' };
+  let checkpointBuilds = 0;
+  const history = createHistoryManager({
+    buildIntent: async () => ({ setting }),
+    applyIntent: async (intent) => {
+      setting = intent.setting;
+    },
+    buildCheckpoint: async () => {
+      checkpointBuilds += 1;
+      return { setting, artifact };
+    },
+    applyCheckpoint: async (checkpoint) => {
+      setting = checkpoint.setting;
+      artifact = checkpoint.artifact;
+    }
+  });
+
+  await history.captureBaseline('large artifact baseline');
+  const baseline = history.getDiagnostics();
+  const originalArtifact = artifact;
+  for (let index = 1; index <= 10; index += 1) {
+    await history.runUndoable(`Setting ${index}`, () => {
+      setting = index;
+    });
+  }
+  const afterEdits = history.getDiagnostics();
+  assert.equal(checkpointBuilds, 1);
+  assert.equal(afterEdits.artifactCheckpointBuilds - baseline.artifactCheckpointBuilds, 0);
+  assert.equal(afterEdits.signatureComputations - baseline.signatureComputations, 20);
+  assert.equal(afterEdits.byteEstimateComputations - baseline.byteEstimateComputations, 10);
+  assert.equal(afterEdits.historySvgBytes - baseline.historySvgBytes, 0);
+  assert.equal(artifact, originalArtifact);
+
+  const beforeNoop = history.getDiagnostics();
+  await history.runUndoable('No-op setting', () => {});
+  const afterNoop = history.getDiagnostics();
+  assert.equal(history.getUndoCount(), 10);
+  assert.equal(afterNoop.byteEstimateComputations, beforeNoop.byteEstimateComputations);
+
+  await history.undo();
+  assert.equal(setting, 9);
+  assert.equal(artifact, originalArtifact);
+  await history.redo();
+  assert.equal(setting, 10);
+  assert.equal(artifact, originalArtifact);
+
+  const replacementArtifact = { id: 'artifact-b', svg: '<svg id="b" />' };
+  await history.runUndoableCheckpoint('Generate', () => {
+    artifact = replacementArtifact;
+  });
+  assert.equal(history.undoLabel(), 'Generate');
+  await history.undo();
+  assert.equal(artifact, originalArtifact);
+  await history.redo();
+  assert.equal(artifact, replacementArtifact);
+}
+
+{
+  let setting = 0;
+  let rejectRestore = false;
+  const history = createHistoryManager({
+    buildIntent: async () => ({ setting }),
+    applyIntent: async (intent) => {
+      if (rejectRestore) throw new Error('restore rejected');
+      setting = intent.setting;
+    },
+    buildCheckpoint: async () => ({ setting }),
+    applyCheckpoint: async (checkpoint) => {
+      setting = checkpoint.setting;
+    }
+  });
+  await history.captureBaseline();
+  await history.runUndoable('Set one', () => {
+    setting = 1;
+  });
+  rejectRestore = true;
+  await assert.rejects(history.undo(), /restore rejected/);
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(history.getRedoCount(), 0);
+}
+
+{
+  const fileStore = createHistoryFileStore();
+  let forbiddenArtifactBuilds = 0;
+  const state = {
+    form: { setting: 1 },
+    adv: {},
+    files: {
+      c_gb: null,
+      c_gff: null,
+      c_fasta: null,
+      c_depth: null,
+      c_conservation_blasts: [],
+      c_conservation_blasts_source: 'losat-cache',
+      c_conservation_fastas: [],
+      c_conservation_sequence_sources: [makeFile('generated-source.fa', 9_000_000)],
+      linearCanonicalComparisons: [{ kind: 'generated', pairs: ['x'.repeat(100_000)] }],
+      d_color: null,
+      t_color: null,
+      blacklist: null,
+      whitelist: null,
+      qualifier_priority: null
+    },
+    linearSeqs: [],
+    linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
+    results: ref([{ name: 'large.svg', content: '<svg>' + 'x'.repeat(100_000) + '</svg>' }]),
+    selectedResultIndex: ref(0),
+    mode: ref('circular'),
+    cInputType: ref('gb'),
+    lInputType: ref('gb'),
+    downloadDpi: ref(300),
+    canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 },
+    layoutPreferences: createLayoutPreferences(),
+    extractedFeatures: ref([{ featureCatalog: 'x'.repeat(100_000) }]),
+    selectedFeatureRecordIdx: ref(0),
+    featureColorOverrides: {},
+    featureVisibilityManualRules: [],
+    featureVisibilityOverrides: {},
+    featureStrokeOverrides: {},
+    labelTextFeatureOverrides: {},
+    labelTextBulkOverrides: {},
+    labelTextFeatureOverrideSources: {},
+    labelVisibilityOverrides: {},
+    labelOverrideContextKey: ref(''),
+    orthogroups: ref([{ members: ['x'.repeat(100_000)] }]),
+    selectedOrthogroupId: ref(''),
+    selectedOrthogroupAlignmentFeature: ref(''),
+    orthogroupNameOverrides: {},
+    orthogroupDescriptionOverrides: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    legendColorOverrides: {},
+    legendStrokeOverrides: {},
+    addedLegendCaptions: ref(new Set()),
+    semanticFileWatchersSuppressed: ref(false)
+  };
+  const snapshots = createHistorySnapshotService({
+    state,
+    fileStore,
+    buildConfigData: () => ({ form: state.form, adv: state.adv }),
+    buildFeatureStateData: () => {
+      forbiddenArtifactBuilds += 1;
+      throw new Error('feature artifacts must not be built for intent');
+    },
+    buildEditorStateData: () => {
+      forbiddenArtifactBuilds += 1;
+      throw new Error('feature catalog must not be built for intent');
+    },
+    buildOrthogroupStateData: () => {
+      forbiddenArtifactBuilds += 1;
+      throw new Error('orthogroup artifacts must not be built for intent');
+    },
+    serializeResults: () => {
+      forbiddenArtifactBuilds += 1;
+      throw new Error('Results must not be serialized for intent');
+    }
+  });
+  const intent = await snapshots.buildHistoryIntent();
+  assert.equal(forbiddenArtifactBuilds, 0);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent, 'results'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent, 'runState'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.features, 'extractedFeatures'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.editorState, 'featureCatalog'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.orthogroupState, 'groups'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'linearCanonicalComparisons'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'c_conservation_sequence_sources'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'c_conservation_blasts'), false);
+}
+
+{
+  const fileStore = createHistoryFileStore();
+  const state = {
+    form: {},
+    adv: {},
+    files: {},
+    linearSeqs: [],
+    linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
+    results: ref([]),
+    selectedResultIndex: ref(0),
+    selectedAnnotation: ref({ setId: 'set-a', id: 'annotation-a' }),
+    selectedSpecificPreset: ref('bakta'),
+    newSpecRule: { feat: 'CDS', qual: 'product', val: 'before', color: '#112233', cap: 'Before' },
+    newPriorityRule: { feat: 'CDS', order: 'product,gene' },
+    newColorFeat: ref('gene'),
+    newColorVal: ref('#123456'),
+    newFeatureToAdd: ref('mobile_element'),
+    newLegendCaption: ref('Draft legend'),
+    newLegendColor: ref('#654321'),
+    fileLegendCaptions: ref(new Set(['Imported legend'])),
+    semanticFileWatchersSuppressed: ref(false)
+  };
+  const snapshots = createHistorySnapshotService({
+    state,
+    fileStore,
+    buildUiStateData: () => ({}),
+    applyUiStateData: () => {},
+    serializeResults: () => [],
+    applyResultsData: () => {}
+  });
+  const history = createHistoryManager({
+    fileStore,
+    buildIntent: snapshots.buildHistoryIntent,
+    applyIntent: snapshots.applyHistoryIntent,
+    buildCheckpoint: snapshots.buildArtifactCheckpoint,
+    applyCheckpoint: snapshots.applyArtifactCheckpoint
+  });
+  const draftState = () => ({
+    selectedAnnotation: structuredClone(state.selectedAnnotation.value),
+    selectedSpecificPreset: state.selectedSpecificPreset.value,
+    newSpecRule: structuredClone(state.newSpecRule),
+    newPriorityRule: structuredClone(state.newPriorityRule),
+    newColorFeat: state.newColorFeat.value,
+    newColorVal: state.newColorVal.value,
+    newFeatureToAdd: state.newFeatureToAdd.value,
+    newLegendCaption: state.newLegendCaption.value,
+    newLegendColor: state.newLegendColor.value,
+    fileLegendCaptions: Array.from(state.fileLegendCaptions.value)
+  });
+  const before = draftState();
+
+  await history.captureBaseline('draft baseline');
+  await history.runUndoable('Edit rule drafts', () => {
+    state.selectedAnnotation.value = { setId: 'set-b', id: 'annotation-b' };
+    state.selectedSpecificPreset.value = 'pharokka';
+    Object.assign(state.newSpecRule, { val: 'after', cap: 'After' });
+    Object.assign(state.newPriorityRule, { feat: 'gene', order: 'gene,note' });
+    state.newColorFeat.value = 'CDS';
+    state.newColorVal.value = '#abcdef';
+    state.newFeatureToAdd.value = 'repeat_region';
+    state.newLegendCaption.value = 'Edited legend';
+    state.newLegendColor.value = '#fedcba';
+    state.fileLegendCaptions.value = new Set(['Edited imported legend']);
+  });
+  const after = draftState();
+
+  assert.equal(history.getUndoCount(), 1);
+  await history.undo();
+  assert.deepEqual(draftState(), before);
+  await history.redo();
+  assert.deepEqual(draftState(), after);
+
+  await history.runUndoableCheckpoint('Reset settings', () => {
+    state.selectedAnnotation.value = null;
+    state.selectedSpecificPreset.value = '';
+    Object.assign(state.newSpecRule, { feat: 'CDS', qual: 'product', val: '', color: '#ff0000', cap: '' });
+    Object.assign(state.newPriorityRule, { feat: 'CDS', order: 'product,gene,locus_tag' });
+    state.newColorFeat.value = 'gene';
+    state.newColorVal.value = '#d3d3d3';
+    state.newFeatureToAdd.value = 'mobile_element';
+    state.newLegendCaption.value = '';
+    state.newLegendColor.value = '#808080';
+    state.fileLegendCaptions.value = new Set();
+  });
+  await history.undo();
+  assert.deepEqual(draftState(), after);
 }
 
 console.log('history tests passed');

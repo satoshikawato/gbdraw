@@ -637,9 +637,35 @@ const transformPoint = (matrix, x, y) => ({
   y: matrix.b * x + matrix.d * y + matrix.f
 });
 
+const rootRelativeMatrix = (target, matrix) => {
+  const rootMatrix = target.ownerSVGElement?.getCTM?.();
+  if (!rootMatrix || !['a', 'b', 'c', 'd', 'e', 'f'].every(
+    (key) => Number.isFinite(rootMatrix[key])
+  )) return matrix;
+  const determinant = rootMatrix.a * rootMatrix.d - rootMatrix.b * rootMatrix.c;
+  if (!Number.isFinite(determinant) || Math.abs(determinant) < Number.EPSILON) return matrix;
+  const inverse = {
+    a: rootMatrix.d / determinant,
+    b: -rootMatrix.b / determinant,
+    c: -rootMatrix.c / determinant,
+    d: rootMatrix.a / determinant,
+    e: (rootMatrix.c * rootMatrix.f - rootMatrix.d * rootMatrix.e) / determinant,
+    f: (rootMatrix.b * rootMatrix.e - rootMatrix.a * rootMatrix.f) / determinant
+  };
+  return {
+    a: inverse.a * matrix.a + inverse.c * matrix.b,
+    b: inverse.b * matrix.a + inverse.d * matrix.b,
+    c: inverse.a * matrix.c + inverse.c * matrix.d,
+    d: inverse.b * matrix.c + inverse.d * matrix.d,
+    e: inverse.a * matrix.e + inverse.c * matrix.f + inverse.e,
+    f: inverse.b * matrix.e + inverse.d * matrix.f + inverse.f
+  };
+};
+
 const targetFinalBounds = (target) => {
   const bbox = target.getBBox();
-  const matrix = target.getCTM?.();
+  const sourceMatrix = target.getCTM?.();
+  const matrix = sourceMatrix ? rootRelativeMatrix(target, sourceMatrix) : null;
   if (matrix && ['a', 'b', 'c', 'd', 'e', 'f'].every((key) => Number.isFinite(matrix[key]))) {
     const corners = [
       transformPoint(matrix, bbox.x, bbox.y),
@@ -720,7 +746,23 @@ export const applyCompositionEdit = (svg, options = {}) => {
       ? measureCompositionTargetLocalBounds(titleTarget)
       : metadata.title?.localBounds || null
   );
-  const plan = replanCompositionMetadata(metadata, {
+  // Legacy sessions are admitted while detached, where browser geometry APIs
+  // return empty boxes. Their renderer-authored canvas geometry is sufficient
+  // for a safe, layout-neutral import. The first explicit layout edit happens
+  // on the already-mounted SVG, so replace that conservative primary envelope
+  // with the authoritative painted bounds as part of the same user action.
+  const planningMetadata = metadata.legacyNormalized
+    ? {
+        ...metadata,
+        primary: {
+          ...metadata.primary,
+          finalBounds: wireBounds(unionBounds(
+            binding.primary.targets.map(measureCompositionTargetLocalBounds)
+          ))
+        }
+      }
+    : metadata;
+  const plan = replanCompositionMetadata(planningMetadata, {
     legendSide,
     titleSide,
     legendLocalBounds,
@@ -781,7 +823,6 @@ export const applyCompositionEdit = (svg, options = {}) => {
     title: titlePayload,
     titleSide
   };
-  if (metadata.legacyNormalized) nextMetadata.legacyNormalized = true;
   const baseWidth = wireNumber(plan.width);
   const baseHeight = wireNumber(plan.height);
   if (svg.dataset) {
@@ -870,6 +911,44 @@ export const resetCompositionUserDeltas = (svg) => {
   return binding;
 };
 
+export const applyCompositionUserDeltas = (svg, deltas = {}) => {
+  const binding = bindCompositionMetadata(svg);
+  let changed = false;
+
+  const applyDelta = (target, automaticTranslation, requested) => {
+    if (!target || !Array.isArray(requested) || requested.length !== 2) return;
+    const x = Number(requested[0]);
+    const y = Number(requested[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const current = targetLeadingTranslate(target, target.getAttribute?.(COMPOSITION_ROLE_ATTRIBUTE) || 'unknown');
+    const nextX = automaticTranslation[0] + x;
+    const nextY = automaticTranslation[1] + y;
+    if (current.x === nextX && current.y === nextY) return;
+    setLeading(target, automaticTranslation, [x, y]);
+    changed = true;
+  };
+
+  binding.primary.targets.forEach((target, index) => {
+    applyDelta(target, binding.metadata.primary.automaticTranslation, deltas.primary?.[index]);
+  });
+  if (binding.legend.metadata) {
+    applyDelta(
+      binding.legend.targets[0],
+      binding.legend.metadata.automaticTranslation,
+      deltas.legend
+    );
+  }
+  if (binding.title.metadata) {
+    applyDelta(
+      binding.title.targets[0],
+      binding.title.metadata.automaticTranslation,
+      deltas.title
+    );
+  }
+
+  return { binding, changed };
+};
+
 const elementTag = (element) => String(element?.tagName || '').toLowerCase().replace(/^.*:/, '');
 const discoverLegacyTargets = (svg) => {
   const legend = svg.getElementById?.('legend') || null;
@@ -921,6 +1000,99 @@ const factorLegacyUserDelta = (target, deltaValue) => {
   return [dx, dy];
 };
 
+const legacyViewBox = (value, label) => {
+  const parts = String(value || '')
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number);
+  if (
+    parts.length !== 4
+    || !parts.every(Number.isFinite)
+    || parts[2] <= 0
+    || parts[3] <= 0
+  ) {
+    fail(`The legacy SVG has no valid ${label} geometry. Regenerate the diagram.`);
+  }
+  return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] };
+};
+
+const legacyBaseTranslation = (target, deltaValue) => {
+  const [dx, dy] = legacyDelta(deltaValue);
+  const leading = readLeadingTranslate(target?.getAttribute?.('transform') || '');
+  return leading.found
+    ? { x: leading.x - dx, y: leading.y - dy }
+    : { x: -dx, y: -dy };
+};
+
+const legacyTitleBounds = (rootBounds, target, side, deltaValue) => {
+  if (!target) return null;
+  const translation = legacyBaseTranslation(target, deltaValue);
+  const edgeMargin = 24;
+  let height = 0;
+  if (side === 'bottom') {
+    height = 2 * (rootBounds.y + rootBounds.height - edgeMargin - translation.y);
+  } else if (side === 'top') {
+    height = 2 * (translation.y - rootBounds.y - edgeMargin);
+  }
+  if (!Number.isFinite(height) || height <= 0 || height > rootBounds.height) {
+    const fontSize = Number(target.querySelector?.('text')?.getAttribute?.('font-size'));
+    height = Number.isFinite(fontSize) && fontSize > 0
+      ? Math.min(rootBounds.height, fontSize * 1.25)
+      : rootBounds.height;
+  }
+  return {
+    x: rootBounds.x,
+    y: translation.y - height / 2,
+    width: rootBounds.width,
+    height
+  };
+};
+
+const legacyAdmissionBounds = (
+  svg,
+  targets,
+  { legendSide, titleSide, userDeltas: savedUserDeltas }
+) => {
+  const rootBounds = legacyViewBox(svg.getAttribute('viewBox'), 'root viewBox');
+  const horizontalValue = svg.getAttribute('data-horizontal-viewbox');
+  const verticalValue = svg.getAttribute('data-vertical-viewbox');
+  const horizontal = horizontalValue === null
+    ? null
+    : legacyViewBox(horizontalValue, 'horizontal viewBox');
+  const vertical = verticalValue === null
+    ? null
+    : legacyViewBox(verticalValue, 'vertical viewBox');
+
+  let primary = rootBounds;
+  let legend = targets.legend ? rootBounds : null;
+  if (horizontal && vertical) {
+    // Pre-composition linear SVGs persist two renderer-authored canvases.
+    // H excludes vertical-legend width; V excludes horizontal-legend height.
+    // Their H.width x V.height envelope is therefore the orientation-neutral
+    // canvas and needs no browser layout measurement.
+    primary = {
+      x: horizontal.x,
+      y: vertical.y,
+      width: horizontal.width,
+      height: vertical.height
+    };
+    if (targets.legend && (legendSide === 'top' || legendSide === 'bottom')) {
+      const translation = legacyBaseTranslation(targets.legend, savedUserDeltas?.legend);
+      const width = 2 * (horizontal.x + horizontal.width / 2 - translation.x);
+      const height = horizontal.height - vertical.height;
+      if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+        legend = { x: translation.x, y: translation.y, width, height };
+      }
+    }
+  }
+
+  return {
+    primary,
+    legend,
+    title: legacyTitleBounds(rootBounds, targets.title, titleSide, savedUserDeltas?.title)
+  };
+};
+
 export const normalizeLegacyComposition = (
   svg,
   { legendSide = 'none', titleSide = 'none', userDeltas: savedUserDeltas = null } = {}
@@ -934,6 +1106,12 @@ export const normalizeLegacyComposition = (
   const targets = discoverLegacyTargets(svg);
   if (targets.primary.length === 0) fail('The legacy SVG has no top-level primary groups.');
 
+  const admissionBounds = legacyAdmissionBounds(svg, targets, {
+    legendSide,
+    titleSide,
+    userDeltas: savedUserDeltas
+  });
+
   const primaryDeltaValues = Array.isArray(savedUserDeltas?.primary?.[0])
     ? savedUserDeltas.primary
     : targets.primary.map((target) => (
@@ -945,14 +1123,11 @@ export const normalizeLegacyComposition = (
     factorLegacyUserDelta(target, primaryDeltaValues[index] || [0, 0]);
     target.setAttribute(COMPOSITION_ROLE_ATTRIBUTE, 'primary');
   });
-  const primaryFinalBounds = unionBounds(
-    targets.primary.map(measureCompositionTargetLocalBounds)
-  );
   const decorateLegacyTarget = (target, role) => {
     if (!target) return null;
     factorLegacyUserDelta(target, savedUserDeltas?.[role]);
     target.setAttribute(COMPOSITION_ROLE_ATTRIBUTE, role);
-    const localBounds = measureCompositionTargetLocalBounds(target);
+    const localBounds = admissionBounds[role];
     return targetPayload(role, [0, 0], 'localBounds', wireBounds(localBounds));
   };
   const metadata = {
@@ -966,7 +1141,7 @@ export const normalizeLegacyComposition = (
       canvasGrowthScoreOrder: [...LEGACY_OVERLAY_POLICY_V0.canvasGrowthScoreOrder],
       quadrantBoundaryRatio: LEGACY_OVERLAY_POLICY_V0.quadrantBoundaryRatio
     },
-    primary: targetPayload('primary', [0, 0], 'finalBounds', wireBounds(primaryFinalBounds)),
+    primary: targetPayload('primary', [0, 0], 'finalBounds', wireBounds(admissionBounds.primary)),
     spacing: { ...LEGACY_COMPOSITION_SPACING_V0 },
     title: decorateLegacyTarget(targets.title, 'title'),
     titleSide,

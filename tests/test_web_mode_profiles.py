@@ -36,6 +36,9 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(
         encoding="utf-8"
     )
+    candidate_source = (WEB_ROOT / "js" / "app" / "candidate-render.js").read_text(
+        encoding="utf-8"
+    )
     request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(
         encoding="utf-8"
     )
@@ -69,10 +72,14 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert not (WEB_ROOT / "js" / "app" / "cli-args.js").exists()
     assert "effectiveLinearAxisColor({" in request_source
     assert "state.modeProfileStateManager?.isManaged?." in request_source
-    assert "import { PAIRWISE_LEGEND_SELECTOR }" in run_source
-    assert "querySelectorAll(PAIRWISE_LEGEND_SELECTOR)" in run_source
+    assert (
+        "suppressPairwiseIdentityLegend = shouldSuppressPairwiseIdentityLegend("
+        in run_source
+    )
+    assert "import { PAIRWISE_LEGEND_SELECTOR }" in candidate_source
+    assert "querySelectorAll(PAIRWISE_LEGEND_SELECTOR)" in candidate_source
     assert (
         """querySelectorAll(
       '[data-gbdraw-role="comparison-legend"]"""
-        not in run_source
+        not in candidate_source
     )

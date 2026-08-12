@@ -24,8 +24,7 @@ const setLegendVariant = (legendGroup, side) => {
 
 export const createLegendRepositionActions = ({
   state,
-  legendActions,
-  svgActions
+  legendActions
 }) => {
   const {
     svgContent,
@@ -48,11 +47,6 @@ export const createLegendRepositionActions = ({
     reflowDualLegendLayout,
     reflowSingleLegendLayout
   } = legendActions;
-  const {
-    ensureUniquePairwiseGradientIds,
-    ensureUniqueSkewClipPathIds
-  } = svgActions;
-
   const persist = (svg) => {
     skipCaptureBaseConfig.value = true;
     skipPositionReapply.value = true;
@@ -135,8 +129,6 @@ export const createLegendRepositionActions = ({
           widthHint
         );
       }
-      ensureUniqueSkewClipPathIds(svg);
-      ensureUniquePairwiseGradientIds(svg);
     }
 
     const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding });

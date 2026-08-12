@@ -11,6 +11,17 @@ import {
   nonnegativeIntegerAliasStatus,
   textAliasStatus
 } from '../services/feature-identity.js';
+import { getCommittedSvgResultMetadata } from '../services/svg-result-ingestion.js';
+import {
+  addRenderedIdentity,
+  createRenderedIdentityCollection,
+  markRenderedIdentityAmbiguous,
+  normalizeFeatureRecordIndex,
+  normalizeRenderedFeatureId,
+  stableRenderedFeatureRecordKey
+} from '../services/session-feature-metadata.js';
+
+export { normalizeRenderedFeatureId } from '../services/session-feature-metadata.js';
 
 const MISSING_INPUTS_WARNING =
   'Feature metadata could not be recovered because the session does not include embedded GenBank inputs. Generate the diagram again or save a session with embedded inputs.';
@@ -21,166 +32,16 @@ const EXTRACTION_FAILED_WARNING =
 const MIGRATION_SKIPPED_WARNING =
   'Feature metadata was recovered, but some old feature edits could not be matched to recovered feature IDs.';
 
-export const normalizeRenderedFeatureId = (value) =>
-  String(value || '').trim().replace(/__part\d+$/, '');
-
 const normalizeKey = (value) => String(value || '').trim();
 
-export const normalizeRecordIndex = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const text = String(value).trim();
-  if (typeof value === 'boolean' || !/^\d+$/.test(text)) return null;
-  const numeric = Number(text);
-  return Number.isSafeInteger(numeric) ? numeric : null;
-};
+export const normalizeRecordIndex = normalizeFeatureRecordIndex;
 
 const addNormalizedId = (ids, value) => {
   const normalized = normalizeRenderedFeatureId(value);
   if (normalized) ids.add(normalized);
 };
 
-const renderedFeatureIdRegex = () => /data-gbdraw-feature-id\s*=\s*["']([^"']+)["']/g;
-
-const createRenderedIdentityCollection = () => ({
-  byRenderedId: new Map(),
-  renderedIds: new Set(),
-  ambiguousRenderedIds: new Set(),
-  byStableId: new Map(),
-  byStableRecordKey: new Map(),
-  totalRenderedCount: 0
-});
-
-export const stableRecordKey = (stableId, recordIndex) => {
-  const normalizedStableId = normalizeRenderedFeatureId(stableId);
-  const normalizedRecordIndex = normalizeRecordIndex(recordIndex);
-  return normalizedStableId && normalizedRecordIndex !== null
-    ? `${normalizedStableId}\u001f${normalizedRecordIndex}`
-    : '';
-};
-
-const addToIdentityListMap = (target, key, identity) => {
-  if (!key) return;
-  const items = target.get(key) || [];
-  items.push(identity);
-  target.set(key, items);
-};
-
-const removeFromIdentityListMap = (target, key, identity) => {
-  if (!key) return;
-  const remaining = (target.get(key) || []).filter((item) => item !== identity);
-  if (remaining.length > 0) target.set(key, remaining);
-  else target.delete(key);
-};
-
-const markRenderedIdentityAmbiguous = (collection, renderedId) => {
-  const normalizedRenderedId = normalizeRenderedFeatureId(renderedId);
-  if (!normalizedRenderedId) return;
-  const existing = collection.byRenderedId.get(normalizedRenderedId);
-  if (existing) {
-    collection.byRenderedId.delete(normalizedRenderedId);
-    removeFromIdentityListMap(collection.byStableId, existing.stableId, existing);
-    removeFromIdentityListMap(
-      collection.byStableRecordKey,
-      stableRecordKey(existing.stableId, existing.recordIndex),
-      existing
-    );
-  }
-  collection.renderedIds.add(normalizedRenderedId);
-  collection.ambiguousRenderedIds.add(normalizedRenderedId);
-  collection.totalRenderedCount = collection.renderedIds.size;
-};
-
-const addRenderedIdentity = (collection, identity) => {
-  const renderedId = normalizeRenderedFeatureId(identity?.renderedId);
-  if (!renderedId || collection.ambiguousRenderedIds.has(renderedId)) return;
-  const stableId = normalizeRenderedFeatureId(identity?.stableId) || renderedId;
-  const recordIndex = normalizeRecordIndex(identity?.recordIndex);
-  const normalized = {
-    renderedId,
-    stableId,
-    recordIndex,
-    recordId: normalizeKey(identity?.recordId),
-    elementId: normalizeKey(identity?.elementId) || renderedId
-  };
-  const existing = collection.byRenderedId.get(renderedId);
-  if (existing) {
-    const agrees = (
-      existing.stableId === normalized.stableId &&
-      existing.recordIndex === normalized.recordIndex &&
-      existing.recordId === normalized.recordId
-    );
-    if (agrees) return;
-    markRenderedIdentityAmbiguous(collection, renderedId);
-    return;
-  }
-  collection.byRenderedId.set(renderedId, normalized);
-  collection.renderedIds.add(renderedId);
-  addToIdentityListMap(collection.byStableId, stableId, normalized);
-  addToIdentityListMap(collection.byStableRecordKey, stableRecordKey(stableId, recordIndex), normalized);
-  collection.totalRenderedCount = collection.renderedIds.size;
-};
-
-const elementRenderedId = (element) =>
-  normalizeRenderedFeatureId(element?.getAttribute?.('data-gbdraw-feature-id')) ||
-  normalizeRenderedFeatureId(element?.getAttribute?.('id'));
-
-const elementStableId = (element, renderedId) =>
-  normalizeRenderedFeatureId(element?.getAttribute?.('data-gbdraw-stable-feature-id')) ||
-  renderedId;
-
-const collectRenderedFeatureElements = (doc) => {
-  const selector = [
-    '[data-gbdraw-feature-id]',
-    'path[id^="f"]',
-    'polygon[id^="f"]',
-    'rect[id^="f"]'
-  ].join(', ');
-  return Array.from(doc.querySelectorAll(selector) || []);
-};
-
-export const collectRenderedFeatureIdentitiesFromSvg = (svgText) => {
-  const collection = createRenderedIdentityCollection();
-  const text = String(svgText || '');
-  if (!text) return collection;
-
-  if (typeof DOMParser !== 'undefined') {
-    try {
-      const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
-      if (doc.querySelector('parsererror')) throw new Error('SVG parse error');
-      collectRenderedFeatureElements(doc).forEach((element) => {
-        const renderedId = elementRenderedId(element);
-        if (!renderedId) return;
-        addRenderedIdentity(collection, {
-          renderedId,
-          stableId: elementStableId(element, renderedId),
-          recordIndex: element.getAttribute('data-gbdraw-record-index'),
-          recordId: element.getAttribute('data-gbdraw-record-id'),
-          elementId: element.getAttribute('id') || renderedId
-        });
-      });
-      return collection;
-    } catch (_err) {
-      // Regex compatibility is intentionally ID-only for malformed SVG.
-    }
-  }
-
-  for (const match of text.matchAll(renderedFeatureIdRegex())) {
-    const renderedId = normalizeRenderedFeatureId(match[1]);
-    addRenderedIdentity(collection, {
-      renderedId,
-      stableId: renderedId,
-      recordIndex: null,
-      recordId: '',
-      elementId: renderedId
-    });
-  }
-  return collection;
-};
-
-export const collectRenderedFeatureIdsFromSvg = (svgText) => {
-  const identities = collectRenderedFeatureIdentitiesFromSvg(svgText);
-  return identities.renderedIds;
-};
+export const stableRecordKey = stableRenderedFeatureRecordKey;
 
 export const collectRenderedFeatureIdsFromResults = (results) => {
   const byResultIndex = [];
@@ -188,7 +49,8 @@ export const collectRenderedFeatureIdsFromResults = (results) => {
   const allIds = new Set();
   const allIdentities = createRenderedIdentityCollection();
   (Array.isArray(results) ? results : []).forEach((result, index) => {
-    const identities = collectRenderedFeatureIdentitiesFromSvg(result?.content || '');
+    const identities = getCommittedSvgResultMetadata(result)?.renderedFeatureIdentities
+      || createRenderedIdentityCollection();
     identitiesByResultIndex[index] = identities;
     byResultIndex[index] = identities.renderedIds;
     identities.renderedIds.forEach((renderedId) => {

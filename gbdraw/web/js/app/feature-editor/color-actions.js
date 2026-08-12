@@ -1,7 +1,6 @@
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, getFeatureHashCandidates, ruleMatchesFeature } from '../feature-utils.js';
 import { exactRegexValue } from '../feature-selector.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
   featureOverrideKey,
   getFeatureOverride
@@ -17,8 +16,6 @@ export const createFeatureColorActions = ({
   previewRuntime = null
 }) => {
   const {
-    results,
-    selectedResultIndex,
     appliedPaletteColors,
     manualSpecificRules,
     extractedFeatures,
@@ -36,15 +33,14 @@ export const createFeatureColorActions = ({
     originalLegendColors,
     originalSvgStroke,
     featureStrokeOverrides,
-    skipCaptureBaseConfig,
     skipExtractOnSvgChange,
     addedLegendCaptions
   } = state;
 
   const {
-    addLegendEntry,
-    removeLegendEntry,
-    updateLegendEntryColorByCaption,
+    addLegendEntry: addLegendEntryRaw,
+    removeLegendEntry: removeLegendEntryRaw,
+    updateLegendEntryColorByCaption: updateLegendEntryColorByCaptionRaw,
     compactLegendEntries,
     extractLegendEntries,
     getAllFeatureLegendGroups,
@@ -64,7 +60,7 @@ export const createFeatureColorActions = ({
     getFeatureQualifier,
     getLabelSpecificRule
   } = ruleActions;
-  const { applyInstantPreview, getFeatureElements, getFeatureFillElements } = featureSvgActions;
+  const { getFeatureElements, getFeatureFillElements } = featureSvgActions;
   const normalizeCaption = (value) => String(value || '').trim();
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
   const normalizeColor = (value) => String(value || '').trim().toLowerCase();
@@ -73,6 +69,56 @@ export const createFeatureColorActions = ({
   const isHashSpecificRule = (rule) => String(rule?.qual || '').toLowerCase() === 'hash';
   const SUFFIXED_CAPTION_PATTERN = /^(.*?)\s*\((\d+)\)$/;
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
+  let colorActionDepth = 0;
+  let colorActionChangedPreview = false;
+
+  const markColorPreviewDirty = (reason = 'feature-color') => {
+    const marked = previewRuntime?.markActiveResultDirty?.(reason) === true;
+    colorActionChangedPreview = colorActionChangedPreview || marked;
+    return marked;
+  };
+
+  const applyFeatureColorPreview = (feature, color) => {
+    const featureId = String(
+      feature?.rendered_svg_id
+      || feature?.renderedSvgId
+      || feature?.rendered_feature_svg_id
+      || feature?.renderedFeatureSvgId
+      || feature?.svg_id
+      || ''
+    ).trim();
+    if (!featureId || !previewRuntime?.applyFeatureFillChanges) return false;
+    const updated = previewRuntime.applyFeatureFillChanges(
+      [{ featureId, color }],
+      { reason: 'feature-color' }
+    ) === true;
+    colorActionChangedPreview = colorActionChangedPreview || updated;
+    return updated;
+  };
+
+  const runColorAction = async (action) => {
+    const isOuterAction = colorActionDepth === 0;
+    const wasDirty = Boolean(previewRuntime?.getActiveRuntime?.()?.dirty);
+    if (isOuterAction) colorActionChangedPreview = false;
+    colorActionDepth += 1;
+    let completed = false;
+    try {
+      const result = await action();
+      completed = true;
+      return result;
+    } finally {
+      colorActionDepth -= 1;
+      if (isOuterAction) {
+        const becameDirty = !wasDirty && Boolean(previewRuntime?.getActiveRuntime?.()?.dirty);
+        if (completed && (colorActionChangedPreview || becameDirty) && previewRuntime?.flushActiveResult) {
+          previewRuntime.flushActiveResult();
+        }
+        colorActionChangedPreview = false;
+      }
+    }
+  };
+
+  const colorAction = (action) => (...args) => runColorAction(() => action(...args));
 
   const hashRuleTargetsFeatureExactly = (rule, feature) => {
     if (!isHashSpecificRule(rule) || rule?.feat !== feature?.type) return false;
@@ -95,6 +141,18 @@ export const createFeatureColorActions = ({
     if (value === null || value === undefined || value === '') return null;
     const numeric = Number(value);
     return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+  };
+
+  const strokeColorAttributeMatches = (element, color) => {
+    const current = element?.getAttribute?.('stroke');
+    return color === null ? current === null : colorsMatch(current, color);
+  };
+
+  const strokeWidthAttributeMatches = (element, width) => {
+    const current = element?.getAttribute?.('stroke-width');
+    if (width === null) return current === null;
+    const currentNumeric = Number(current);
+    return Number.isFinite(currentNumeric) && currentNumeric === Number(width);
   };
 
   const findFeatureBySvgId = (svgId) => {
@@ -191,17 +249,98 @@ export const createFeatureColorActions = ({
 
   const getCurrentSvg = () => svgContainer.value?.querySelector('svg') || null;
 
-  const persistCurrentSvg = (svg = getCurrentSvg()) => {
-    if (!svg) return;
-    if (previewRuntime?.markActiveResultDirty) {
-      previewRuntime.markActiveResultDirty('feature-color');
-      return;
+  const persistCurrentSvg = (svg = getCurrentSvg(), reason = 'feature-color') => {
+    if (!svg) return false;
+    return markColorPreviewDirty(reason);
+  };
+
+  const getLiveLegendColor = (caption) => {
+    const svg = getCurrentSvg();
+    const normalizedCaption = normalizeCaption(caption);
+    if (!svg || !normalizedCaption) return null;
+    const escapedCaption = globalThis.CSS?.escape
+      ? globalThis.CSS.escape(normalizedCaption)
+      : normalizedCaption.replace(/["\\]/g, '\\$&');
+    for (const targetGroup of getAllFeatureLegendGroups(svg)) {
+      const entryGroup = targetGroup.querySelector(`g[data-legend-key="${escapedCaption}"]`);
+      if (!entryGroup) continue;
+      const colorPath = Array.from(entryGroup.querySelectorAll('path')).find((path) => {
+        const fill = path.getAttribute('fill');
+        return fill && fill !== 'none' && !fill.startsWith('url(');
+      });
+      if (colorPath) return colorPath.getAttribute('fill');
     }
-    skipCaptureBaseConfig.value = true;
-    const resultIdx = selectedResultIndex.value;
-    if (resultIdx >= 0 && results.value.length > resultIdx) {
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
+    return null;
+  };
+
+  const addLegendEntry = async (caption, color, options = {}) => {
+    const beforeColor = getLiveLegendColor(caption);
+    const addedCaption = await addLegendEntryRaw(caption, color, { ...options, commit: false });
+    if (!addedCaption) return addedCaption;
+    if (
+      !beforeColor
+      || !captionsMatch(addedCaption, caption)
+      || !colorsMatch(beforeColor, color)
+    ) {
+      markColorPreviewDirty('feature-color-legend');
     }
+    return addedCaption;
+  };
+
+  const updateLegendEntryColorByCaption = (caption, color) => {
+    const updated = updateLegendEntryColorByCaptionRaw(caption, color, { commit: false }) === true;
+    if (updated) markColorPreviewDirty('feature-color-legend');
+    return updated;
+  };
+
+  const removeLegendEntry = (caption) => {
+    const removed = removeLegendEntryRaw(caption, { commit: false }) === true;
+    if (removed) markColorPreviewDirty('feature-color-legend');
+    return removed;
+  };
+
+  const exactHashRulesForFeature = (feature) => manualSpecificRules.filter(
+    (rule) => hashRuleTargetsFeatureExactly(rule, feature)
+  );
+
+  const liveFeatureColorMatches = (feature, color) => {
+    const svg = getCurrentSvg();
+    if (!svg) return true;
+    const featureId = String(
+      feature?.rendered_svg_id
+      || feature?.renderedSvgId
+      || feature?.rendered_feature_svg_id
+      || feature?.renderedFeatureSvgId
+      || feature?.svg_id
+      || ''
+    ).trim();
+    if (!featureId) return false;
+    const fillElements = getFeatureFillElements(svg, featureId);
+    return fillElements.length > 0 && fillElements.every(
+      (element) => colorsMatch(element.getAttribute('fill'), color)
+    );
+  };
+
+  const featureColorAssignmentMatches = (
+    feature,
+    color,
+    caption,
+    { requireLegend = true } = {}
+  ) => {
+    const override = getFeatureOverride(featureColorOverrides, feature);
+    if (!override || !colorsMatch(override.color, color) || !captionsMatch(override.caption, caption)) {
+      return false;
+    }
+    const matchingRules = exactHashRulesForFeature(feature);
+    if (!matchingRules.some(
+      (rule) => colorsMatch(rule.color, color) && captionsMatch(rule.cap, caption)
+    )) {
+      return false;
+    }
+    if (!liveFeatureColorMatches(feature, color)) return false;
+    if (!requireLegend) return true;
+    const legendEntry = findLegendEntryByCaption(caption);
+    return Boolean(legendEntry && colorsMatch(legendEntry.color, color));
   };
 
   const findCaptionKey = (store, caption) => {
@@ -523,7 +662,7 @@ export const createFeatureColorActions = ({
       upsertFeatureHashRule(feature, color, caption);
       featureColorOverrides[featureOverrideKey(feature)] = { color, caption };
       updateClickedFeatureLegendState(feature, caption, color);
-      applyInstantPreview(feature, color, caption);
+      applyFeatureColorPreview(feature, color);
     }
   };
 
@@ -990,6 +1129,8 @@ export const createFeatureColorActions = ({
   const applyColorToLegendSpecificRules = async (targetCaption, color, captionFeatures = []) => {
     const normalizedTargetCaption = normalizeCaption(targetCaption);
     if (!normalizedTargetCaption) return false;
+    const normalizedColor = String(color || '').trim();
+    if (!normalizedColor) return false;
 
     const specificRules = manualSpecificRules.filter(
       (rule) => !isHashSpecificRule(rule) && captionsMatch(rule.cap, normalizedTargetCaption)
@@ -998,36 +1139,69 @@ export const createFeatureColorActions = ({
 
     const existingLegendEntry = findLegendEntryByCaption(normalizedTargetCaption);
     const finalCaption = existingLegendEntry?.caption || normalizeCaption(specificRules[0].cap) || normalizedTargetCaption;
-
-    for (const rule of specificRules) {
-      rule.color = color;
-      rule.cap = finalCaption;
-    }
-    updateLegendEntryColorByCaption(finalCaption, color);
-
     const coveredFeatures = extractedFeatures.value.filter((feature) =>
       specificRules.some((rule) => ruleMatchesFeature(feature, rule))
     );
+    const affectedFeatures = new Map();
+    [...captionFeatures, ...coveredFeatures].forEach((feature) => {
+      const key = String(feature?.svg_id || feature?.id || '').trim();
+      if (key) affectedFeatures.set(key, feature);
+    });
+    const captionHashRules = manualSpecificRules.filter(
+      (rule) => isHashSpecificRule(rule) && captionsMatch(rule.cap, finalCaption)
+    );
+    const removesCoveredHashRule = captionHashRules.some((rule) => (
+      coveredFeatures.some((feature) => hashRuleTargetsFeatureExactly(rule, feature))
+    ));
+    const rulesAlreadyMatch = specificRules.every(
+      (rule) => colorsMatch(rule.color, normalizedColor) && captionsMatch(rule.cap, finalCaption)
+    ) && captionHashRules.every(
+      (rule) => colorsMatch(rule.color, normalizedColor) && captionsMatch(rule.cap, finalCaption)
+    );
+    const overridesAlreadyMatch = Array.from(affectedFeatures.values()).every((feature) => {
+      if (!feature?.id) return true;
+      const override = getFeatureOverride(featureColorOverrides, feature);
+      return Boolean(
+        override
+        && colorsMatch(override.color, normalizedColor)
+        && captionsMatch(override.caption, finalCaption)
+      );
+    });
+    const liveColorsAlreadyMatch = Array.from(affectedFeatures.values()).every(
+      (feature) => liveFeatureColorMatches(feature, normalizedColor)
+    );
+    const legendAlreadyMatches = !existingLegendEntry || colorsMatch(existingLegendEntry.color, normalizedColor);
+    if (
+      !removesCoveredHashRule
+      && rulesAlreadyMatch
+      && overridesAlreadyMatch
+      && liveColorsAlreadyMatch
+      && legendAlreadyMatches
+    ) {
+      return false;
+    }
+
+    for (const rule of specificRules) {
+      rule.color = normalizedColor;
+      rule.cap = finalCaption;
+    }
+    updateLegendEntryColorByCaption(finalCaption, normalizedColor);
+
     for (let i = manualSpecificRules.length - 1; i >= 0; i--) {
       const rule = manualSpecificRules[i];
       if (!isHashSpecificRule(rule) || !captionsMatch(rule.cap, finalCaption)) continue;
       if (coveredFeatures.some((feature) => hashRuleTargetsFeatureExactly(rule, feature))) {
         manualSpecificRules.splice(i, 1);
       } else {
-        rule.color = color;
+        rule.color = normalizedColor;
         rule.cap = finalCaption;
       }
     }
 
-    const affectedFeatures = new Map();
-    [...captionFeatures, ...coveredFeatures].forEach((feature) => {
-      const key = String(feature?.svg_id || feature?.id || '').trim();
-      if (key) affectedFeatures.set(key, feature);
-    });
     affectedFeatures.forEach((feature) => {
       if (!feature?.id) return;
-      featureColorOverrides[featureOverrideKey(feature)] = { color, caption: finalCaption };
-      updateClickedFeatureLegendState(feature, finalCaption, color);
+      featureColorOverrides[featureOverrideKey(feature)] = { color: normalizedColor, caption: finalCaption };
+      updateClickedFeatureLegendState(feature, finalCaption, normalizedColor);
     });
 
     applySpecificRulesToSvg();
@@ -1273,7 +1447,7 @@ export const createFeatureColorActions = ({
           color: existingCaptionColor,
           caption: targetLegendName
         };
-        applyInstantPreview(feat, existingCaptionColor, targetLegendName);
+        applyFeatureColorPreview(feat, existingCaptionColor);
         applySpecificRulesToSvg();
       }
     }
@@ -1282,69 +1456,86 @@ export const createFeatureColorActions = ({
   };
 
   const updateClickedFeatureStroke = (strokeColor, strokeWidth) => {
-    if (!clickedFeature.value) return;
-    if (!svgContainer.value) return;
+    if (!clickedFeature.value) return false;
+    if (!svgContainer.value) return false;
 
     const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
+    if (!svg) return false;
 
     const svgId = clickedFeature.value.svg_id;
     const elements = getFeatureElements(svg, svgId);
+    if (elements.length === 0) return false;
+    const normalizedStrokeColor = strokeColor === null || strokeColor === undefined
+      ? null
+      : String(strokeColor).trim();
+    const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
+    if (normalizedStrokeColor === null && normalizedStrokeWidth === null) return false;
+    const firstElement = elements[0] || null;
+    let changed = false;
+
+    elements.forEach((element) => {
+      if (normalizedStrokeColor !== null && !strokeColorAttributeMatches(element, normalizedStrokeColor)) {
+        element.setAttribute('stroke', normalizedStrokeColor);
+        changed = true;
+      }
+      if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth)) {
+        element.setAttribute('stroke-width', normalizedStrokeWidth);
+        changed = true;
+      }
+    });
+
+    if (!changed) return false;
     recordFeatureStrokeOverride(clickedFeature.value.feat || clickedFeature.value, {
-      strokeColor,
-      strokeWidth,
+      strokeColor: normalizedStrokeColor,
+      strokeWidth: normalizedStrokeWidth,
       originalStrokeColor: clickedFeature.value.originalStrokeColor ?? null,
-      originalStrokeWidth: clickedFeature.value.originalStrokeWidth ?? null
+      originalStrokeWidth: clickedFeature.value.originalStrokeWidth ?? firstElement?.getAttribute('stroke-width') ?? null
     });
 
-    elements.forEach((el) => {
-      if (strokeColor !== null) {
-        el.setAttribute('stroke', strokeColor);
-        clickedFeature.value.strokeColor = strokeColor;
-      }
-      if (strokeWidth !== null) {
-        const widthVal = parseFloat(strokeWidth);
-        if (!isNaN(widthVal)) {
-          el.setAttribute('stroke-width', widthVal);
-          clickedFeature.value.strokeWidth = widthVal;
-        }
-      }
-    });
+    if (normalizedStrokeColor !== null) clickedFeature.value.strokeColor = normalizedStrokeColor;
+    if (normalizedStrokeWidth !== null) clickedFeature.value.strokeWidth = normalizedStrokeWidth;
 
-    persistCurrentSvg(svg);
+    persistCurrentSvg(svg, 'feature-stroke');
+    return true;
   };
 
   const resetClickedFeatureStroke = () => {
-    if (!clickedFeature.value) return;
-    if (!svgContainer.value) return;
+    if (!clickedFeature.value) return false;
+    if (!svgContainer.value) return false;
 
     const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
+    if (!svg) return false;
 
     const svgId = clickedFeature.value.svg_id;
     const elements = getFeatureElements(svg, svgId);
 
     const originalColor = originalSvgStroke.value.color;
-    const originalWidth = originalSvgStroke.value.width;
+    const originalWidth = normalizeStrokeWidthValue(originalSvgStroke.value.width);
+    let changed = false;
 
-    elements.forEach((el) => {
-      if (originalColor === null) {
-        el.removeAttribute('stroke');
-      } else {
-        el.setAttribute('stroke', originalColor);
+    elements.forEach((element) => {
+      if (!strokeColorAttributeMatches(element, originalColor)) {
+        if (originalColor === null) element.removeAttribute('stroke');
+        else element.setAttribute('stroke', originalColor);
+        changed = true;
       }
-      if (originalWidth === null) {
-        el.removeAttribute('stroke-width');
-      } else {
-        el.setAttribute('stroke-width', originalWidth);
+      if (!strokeWidthAttributeMatches(element, originalWidth)) {
+        if (originalWidth === null) element.removeAttribute('stroke-width');
+        else element.setAttribute('stroke-width', originalWidth);
+        changed = true;
       }
     });
 
+    const feature = clickedFeature.value.feat || clickedFeature.value;
+    const overrideKey = featureStrokeKey(feature, svgId);
+    const hadOverride = Boolean(overrideKey && featureStrokeOverrides[overrideKey]);
+    if (!changed && !hadOverride) return false;
     clickedFeature.value.strokeColor = originalColor || '';
     clickedFeature.value.strokeWidth = originalWidth ?? '';
-    clearFeatureStrokeOverride(clickedFeature.value.feat || clickedFeature.value, svgId);
+    clearFeatureStrokeOverride(feature, svgId);
 
-    persistCurrentSvg(svg);
+    if (changed) persistCurrentSvg(svg, 'feature-stroke');
+    return true;
   };
 
   const getFeatureStrokeColorValue = (featureLike) => {
@@ -1357,23 +1548,27 @@ export const createFeatureColorActions = ({
 
   const setClickedFeatureStrokeColorValue = (value) => {
     if (value !== null) {
-      updateClickedFeatureStroke(String(value || '').trim(), null);
-      return;
+      return updateClickedFeatureStroke(String(value || '').trim(), null);
     }
-    if (!clickedFeature.value || !svgContainer.value) return;
+    if (!clickedFeature.value || !svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
+    if (!svg) return false;
     const feature = clickedFeature.value.feat || clickedFeature.value;
     const key = featureStrokeKey(feature, clickedFeature.value.svg_id);
     const override = key ? featureStrokeOverrides[key] : null;
     const inheritedColor = override && hasOwn(override, 'originalStrokeColor')
       ? override.originalStrokeColor
       : (clickedFeature.value.originalStrokeColor ?? originalSvgStroke.value.color);
+    const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
+    const domChanged = elements.some((element) => !strokeColorAttributeMatches(element, inheritedColor));
+    const stateChanged = Boolean(override && hasOwn(override, 'strokeColor'));
+    if (!domChanged && !stateChanged) return false;
     if (override) {
       delete override.strokeColor;
       if (!hasOwn(override, 'strokeWidth')) delete featureStrokeOverrides[key];
     }
-    getFeatureElements(svg, clickedFeature.value.svg_id).forEach((element) => {
+    elements.forEach((element) => {
+      if (strokeColorAttributeMatches(element, inheritedColor)) return;
       if (inheritedColor === null || inheritedColor === '') {
         element.removeAttribute('stroke');
       } else {
@@ -1381,7 +1576,8 @@ export const createFeatureColorActions = ({
       }
     });
     clickedFeature.value.strokeColor = inheritedColor || '';
-    persistCurrentSvg(svg);
+    if (domChanged) persistCurrentSvg(svg, 'feature-stroke');
+    return true;
   };
 
   const resetClickedFeatureFillColor = () => {
@@ -1513,21 +1709,22 @@ export const createFeatureColorActions = ({
   };
 
   const applyStrokeToAllSiblings = async () => {
-    if (!clickedFeature.value) return;
-    if (!svgContainer.value) return;
+    if (!clickedFeature.value) return false;
+    if (!svgContainer.value) return false;
 
     const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
+    if (!svg) return false;
 
-    const currentStrokeColor = clickedFeature.value.strokeColor;
-    const currentStrokeWidth = clickedFeature.value.strokeWidth;
+    const currentStrokeColor = String(clickedFeature.value.strokeColor || '').trim();
+    const currentStrokeWidth = normalizeStrokeWidthValue(clickedFeature.value.strokeWidth);
+    if (!currentStrokeColor && currentStrokeWidth === null) return false;
     const currentFillColor = clickedFeature.value.color;
     const clickedSvgId = clickedFeature.value.svg_id;
 
     const feat = clickedFeature.value.feat;
     if (!feat) {
       console.warn('No feature data found in clickedFeature');
-      return;
+      return false;
     }
     const caption = getFeatureCaption(feat);
 
@@ -1557,8 +1754,15 @@ export const createFeatureColorActions = ({
       );
     }
 
+    let domChanged = false;
+    let stateChanged = false;
     for (const svgId of siblingFeatureIds) {
       const elements = getFeatureElements(svg, svgId);
+      const featureNeedsUpdate = elements.some((element) => (
+        (currentStrokeColor && !strokeColorAttributeMatches(element, currentStrokeColor))
+        || (currentStrokeWidth !== null && !strokeWidthAttributeMatches(element, currentStrokeWidth))
+      ));
+      if (!featureNeedsUpdate) continue;
       const firstElement = elements[0] || null;
       const siblingFeature = findFeatureBySvgId(svgId) || { id: svgId, svg_id: svgId };
       recordFeatureStrokeOverride(siblingFeature, {
@@ -1568,13 +1772,16 @@ export const createFeatureColorActions = ({
         originalStrokeWidth: firstElement?.getAttribute('stroke-width') ?? null
       });
       elements.forEach((el) => {
-        if (currentStrokeColor) {
+        if (currentStrokeColor && !strokeColorAttributeMatches(el, currentStrokeColor)) {
           el.setAttribute('stroke', currentStrokeColor);
+          domChanged = true;
         }
-        if (currentStrokeWidth !== null && currentStrokeWidth !== '') {
-          el.setAttribute('stroke-width', parseFloat(currentStrokeWidth));
+        if (currentStrokeWidth !== null && !strokeWidthAttributeMatches(el, currentStrokeWidth)) {
+          el.setAttribute('stroke-width', currentStrokeWidth);
+          domChanged = true;
         }
       });
+      stateChanged = true;
     }
 
     console.log(`Applied stroke to ${siblingFeatureIds.length} features`);
@@ -1591,10 +1798,14 @@ export const createFeatureColorActions = ({
             const fill = path.getAttribute('fill');
             if (fill && fill !== 'none' && !fill.startsWith('url(')) {
               if (currentStrokeColor) {
-                path.setAttribute('stroke', currentStrokeColor);
+                if (!strokeColorAttributeMatches(path, currentStrokeColor)) {
+                  path.setAttribute('stroke', currentStrokeColor);
+                  domChanged = true;
+                }
               }
-              if (currentStrokeWidth !== null && currentStrokeWidth !== '') {
-                path.setAttribute('stroke-width', parseFloat(currentStrokeWidth));
+              if (currentStrokeWidth !== null && !strokeWidthAttributeMatches(path, currentStrokeWidth)) {
+                path.setAttribute('stroke-width', currentStrokeWidth);
+                domChanged = true;
               }
               console.log(`Updated legend rect stroke for "${targetLegendEntry.caption}"`);
               break;
@@ -1610,6 +1821,7 @@ export const createFeatureColorActions = ({
       const fillColor = clickedFeature.value.color || '#cccccc';
       const addedCaption = await addLegendEntry(caption, fillColor);
       if (addedCaption) {
+        domChanged = true;
         extractLegendEntries();
         targetLegendEntry = legendEntries.value.find((e) => e.caption === addedCaption);
         if (targetLegendEntry) {
@@ -1630,24 +1842,34 @@ export const createFeatureColorActions = ({
           featureIds: [clickedSvgId]
         };
         legendEntries.value.push(targetLegendEntry);
+        stateChanged = true;
       }
     }
 
+    if (!domChanged && !stateChanged) return false;
+
     if (!legendStrokeOverrides[overrideKey]) {
       legendStrokeOverrides[overrideKey] = {};
+      stateChanged = true;
     }
-    if (currentStrokeColor) {
+    if (currentStrokeColor && !colorsMatch(legendStrokeOverrides[overrideKey].strokeColor, currentStrokeColor)) {
       legendStrokeOverrides[overrideKey].strokeColor = currentStrokeColor;
+      stateChanged = true;
     }
-    if (currentStrokeWidth !== null && currentStrokeWidth !== '') {
-      legendStrokeOverrides[overrideKey].strokeWidth = parseFloat(currentStrokeWidth);
+    if (
+      currentStrokeWidth !== null
+      && normalizeStrokeWidthValue(legendStrokeOverrides[overrideKey].strokeWidth) !== currentStrokeWidth
+    ) {
+      legendStrokeOverrides[overrideKey].strokeWidth = currentStrokeWidth;
+      stateChanged = true;
     }
 
-    persistCurrentSvg(svg);
+    if (domChanged) persistCurrentSvg(svg, 'feature-stroke');
 
     console.log(
       `Applied stroke (color: ${currentStrokeColor}, width: ${currentStrokeWidth}) to ${siblingFeatureIds.length} features`
     );
+    return domChanged || stateChanged;
   };
 
   const uniqueFeaturesBySvgId = (features) => {
@@ -1683,6 +1905,11 @@ export const createFeatureColorActions = ({
     targetFeatures.forEach((feature) => {
       const elements = getFeatureElements(svg, feature.svg_id);
       if (elements.length === 0) return;
+      const needsUpdate = elements.some((element) => (
+        (normalizedStrokeColor && !strokeColorAttributeMatches(element, normalizedStrokeColor))
+        || (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth))
+      ));
+      if (!needsUpdate) return;
       const firstElement = elements[0] || null;
       recordFeatureStrokeOverride(feature, {
         strokeColor: normalizedStrokeColor || null,
@@ -1691,13 +1918,16 @@ export const createFeatureColorActions = ({
         originalStrokeWidth: firstElement?.getAttribute('stroke-width') ?? null
       });
       elements.forEach((element) => {
-        if (normalizedStrokeColor) {
+        let changed = false;
+        if (normalizedStrokeColor && !strokeColorAttributeMatches(element, normalizedStrokeColor)) {
           element.setAttribute('stroke', normalizedStrokeColor);
+          changed = true;
         }
-        if (normalizedStrokeWidth !== null) {
+        if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth)) {
           element.setAttribute('stroke-width', normalizedStrokeWidth);
+          changed = true;
         }
-        updatedCount += 1;
+        if (changed) updatedCount += 1;
       });
       if (clickedFeature.value?.svg_id === feature.svg_id) {
         if (normalizedStrokeColor) clickedFeature.value.strokeColor = normalizedStrokeColor;
@@ -1706,31 +1936,35 @@ export const createFeatureColorActions = ({
     });
 
     if (updatedCount > 0) {
-      persistCurrentSvg(svg);
+      persistCurrentSvg(svg, 'feature-stroke');
     }
     return updatedCount > 0;
   };
 
   const setFeatureColor = async (feat, color, customCaption = null) => {
+    if (!feat) return false;
     const qualInfo = getFeatureQualifier(feat);
     if (!qualInfo) {
       console.warn(
         `Cannot identify feature: ${feat.type} at ${feat.start}..${feat.end} (no locus_tag, gene, or product)`
       );
-      return;
+      return false;
     }
+    const normalizedColor = String(color || '').trim();
+    if (!normalizedColor) return false;
     const featureKey = featureOverrideKey(feat);
 
     const caption = normalizeCaption(
       customCaption || feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`
     );
-    if (!caption) return;
+    if (!caption) return false;
+    if (featureColorAssignmentMatches(feat, normalizedColor, caption)) return false;
 
     const oldOverride = featureColorOverrides[featureKey];
     const oldCaption = normalizeCaption(oldOverride?.caption);
-    featureColorOverrides[featureKey] = { color, caption };
+    featureColorOverrides[featureKey] = { color: normalizedColor, caption };
 
-    applyInstantPreview(feat, color, caption);
+    applyFeatureColorPreview(feat, normalizedColor);
 
     await nextTick();
     let actualCaption = caption;
@@ -1746,39 +1980,39 @@ export const createFeatureColorActions = ({
           });
 
           if (hasNonHashRule || hasOtherUses) {
-            actualCaption = await addLegendEntry(caption, color);
+            actualCaption = await addLegendEntry(caption, normalizedColor);
             if (actualCaption && typeof actualCaption === 'string') {
               addedLegendCaptions.value.add(actualCaption);
             }
           } else {
-            updateLegendEntryColorByCaption(oldCaption, color);
+            updateLegendEntryColorByCaption(oldCaption, normalizedColor);
           }
         } else {
           removeLegendEntry(oldCaption);
-          actualCaption = await addLegendEntry(caption, color);
+          actualCaption = await addLegendEntry(caption, normalizedColor);
           if (actualCaption && typeof actualCaption === 'string') {
             addedLegendCaptions.value.add(actualCaption);
           }
         }
       } else {
-        actualCaption = await addLegendEntry(caption, color);
+        actualCaption = await addLegendEntry(caption, normalizedColor);
         if (actualCaption && typeof actualCaption === 'string') {
           addedLegendCaptions.value.add(actualCaption);
         }
       }
 
       if (actualCaption && typeof actualCaption === 'string' && actualCaption !== caption) {
-        featureColorOverrides[featureKey] = { color, caption: actualCaption };
+        featureColorOverrides[featureKey] = { color: normalizedColor, caption: actualCaption };
       }
     }
 
     skipExtractOnSvgChange.value = true;
 
     const finalCaption = actualCaption && typeof actualCaption === 'string' ? actualCaption : caption;
-    upsertFeatureHashRule(feat, color, finalCaption);
+    upsertFeatureHashRule(feat, normalizedColor, finalCaption);
 
-    featureColorOverrides[featureKey] = { color, caption: finalCaption };
-    updateClickedFeatureLegendState(feat, finalCaption, color);
+    featureColorOverrides[featureKey] = { color: normalizedColor, caption: finalCaption };
+    updateClickedFeatureLegendState(feat, finalCaption, normalizedColor);
 
     await reclaimOrphanedBaseCaptions();
 
@@ -1786,26 +2020,26 @@ export const createFeatureColorActions = ({
     await nextTick();
     skipExtractOnSvgChange.value = false;
     extractLegendEntries();
+    return true;
   };
 
   const setFeatureColorValue = async (feat, value, customCaption = null) => {
-    if (!feat) return;
+    if (!feat) return false;
     const featureKey = featureOverrideKey(feat);
-    if (!featureKey) return;
+    if (!featureKey) return false;
     if (value === null) {
+      if (!getFeatureOverride(featureColorOverrides, feat) && exactHashRulesForFeature(feat).length === 0) {
+        return false;
+      }
       delete featureColorOverrides[featureKey];
       removeFeatureHashRules(feat);
       const inheritedColor = appliedPaletteColors.value[feat.type] || '#cccccc';
-      applyInstantPreview(
-        feat,
-        inheritedColor,
-        normalizeCaption(getEffectiveLegendCaption(feat) || getFeatureCaption(feat))
-      );
+      applyFeatureColorPreview(feat, inheritedColor);
       applySpecificRulesToSvg();
       if (clickedFeature.value?.feat === feat || clickedFeature.value?.svg_id === feat.svg_id) {
         clickedFeature.value.color = inheritedColor;
       }
-      return;
+      return true;
     }
     const normalizedValue = String(value || '').trim();
     if (normalizedValue.toLowerCase() === 'none') {
@@ -1815,34 +2049,37 @@ export const createFeatureColorActions = ({
         || getFeatureCaption(feat)
         || feat.type
       );
+      if (featureColorAssignmentMatches(feat, 'none', caption, { requireLegend: false })) {
+        return false;
+      }
       featureColorOverrides[featureKey] = { color: 'none', caption };
       upsertFeatureHashRule(feat, 'none', caption);
-      applyInstantPreview(feat, 'none', caption);
+      applyFeatureColorPreview(feat, 'none');
       applySpecificRulesToSvg();
       updateClickedFeatureLegendState(feat, caption, 'none');
-      return;
+      return true;
     }
-    await setFeatureColor(feat, normalizedValue, customCaption);
+    return setFeatureColor(feat, normalizedValue, customCaption);
   };
 
   return {
-    applyStrokeToAllSiblings,
-    handleColorScopeChoice,
-    handleLegendNameCommit,
-    handleLegendRenameChoice,
-    renameLegendEntry,
-    requestFeatureColorChange,
-    selectLegendNameOption,
-    handleResetColorChoice,
-    applyColorToSelectedFeatures,
-    applyStrokeToSelectedFeatures,
-    resetClickedFeatureFillColor,
-    resetClickedFeatureStroke,
+    applyStrokeToAllSiblings: colorAction(applyStrokeToAllSiblings),
+    handleColorScopeChoice: colorAction(handleColorScopeChoice),
+    handleLegendNameCommit: colorAction(handleLegendNameCommit),
+    handleLegendRenameChoice: colorAction(handleLegendRenameChoice),
+    renameLegendEntry: colorAction(renameLegendEntry),
+    requestFeatureColorChange: colorAction(requestFeatureColorChange),
+    selectLegendNameOption: colorAction(selectLegendNameOption),
+    handleResetColorChoice: colorAction(handleResetColorChoice),
+    applyColorToSelectedFeatures: colorAction(applyColorToSelectedFeatures),
+    applyStrokeToSelectedFeatures: colorAction(applyStrokeToSelectedFeatures),
+    resetClickedFeatureFillColor: colorAction(resetClickedFeatureFillColor),
+    resetClickedFeatureStroke: colorAction(resetClickedFeatureStroke),
     getFeatureStrokeColorValue,
-    setClickedFeatureStrokeColorValue,
-    setFeatureColor,
-    setFeatureColorValue,
-    updateClickedFeatureColor,
-    updateClickedFeatureStroke
+    setClickedFeatureStrokeColorValue: colorAction(setClickedFeatureStrokeColorValue),
+    setFeatureColor: colorAction(setFeatureColor),
+    setFeatureColorValue: colorAction(setFeatureColorValue),
+    updateClickedFeatureColor: colorAction(updateClickedFeatureColor),
+    updateClickedFeatureStroke: colorAction(updateClickedFeatureStroke)
   };
 };

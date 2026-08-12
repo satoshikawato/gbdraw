@@ -1,9 +1,13 @@
 import {
-  FEATURE_SELECTOR,
   filterFeatureFillTargets,
+  getFeatureElementIndex,
   getFeatureIdentity,
   normalizeFeatureIdentity
 } from './feature-dom.js';
+import {
+  markCommittedSvgResultMounted,
+  markCommittedSvgResultUnmounted
+} from '../services/svg-result-ingestion.js';
 
 const normalizeVisibilityMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -43,16 +47,32 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
 
   const getMountedSvg = () => state.svgContainer?.value?.querySelector?.('svg') || null;
 
+  const releaseActiveResult = () => {
+    if (!activeRuntime) return;
+    markCommittedSvgResultUnmounted(state.results.value[activeRuntime.resultIndex]);
+  };
+
   const mountResultSvg = (resultIndex = state.selectedResultIndex?.value || 0, svg = getMountedSvg()) => {
     if (!svg) {
+      releaseActiveResult();
       activeRuntime = null;
       return null;
     }
-    activeRuntime = makeRuntime(Number(resultIndex) || 0, svg);
+    const normalizedIndex = Number(resultIndex) || 0;
+    if (
+      activeRuntime?.svg === svg
+      && activeRuntime.resultIndex === normalizedIndex
+    ) {
+      return activeRuntime;
+    }
+    releaseActiveResult();
+    activeRuntime = makeRuntime(normalizedIndex, svg);
+    markCommittedSvgResultMounted(state.results.value[normalizedIndex]);
     return activeRuntime;
   };
 
   const clearActiveRuntime = () => {
+    releaseActiveResult();
     activeRuntime = null;
   };
 
@@ -63,7 +83,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     if (!svg) return null;
     const resultIndex = Number(state.selectedResultIndex?.value || 0);
     if (!activeRuntime || activeRuntime.svg !== svg || activeRuntime.resultIndex !== resultIndex) {
-      activeRuntime = makeRuntime(resultIndex, svg);
+      return mountResultSvg(resultIndex, svg);
     }
     return activeRuntime;
   };
@@ -127,20 +147,14 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       return false;
     }
     flushActiveResult({ markIncremental: false });
+    releaseActiveResult();
+    activeRuntime = null;
     state.selectedResultIndex.value = nextIndex;
-    clearActiveRuntime();
     return true;
   };
 
   const buildFeatureIndex = (runtime) => {
-    const indexed = new Map();
-    if (!runtime?.svg) return indexed;
-    Array.from(runtime.svg.querySelectorAll?.(FEATURE_SELECTOR) || []).forEach((element) => {
-      const featureId = getFeatureIdentity(element);
-      if (!featureId) return;
-      if (!indexed.has(featureId)) indexed.set(featureId, []);
-      indexed.get(featureId).push(element);
-    });
+    const indexed = runtime?.svg ? getFeatureElementIndex(runtime.svg) : new Map();
     runtime.indexes.features = indexed;
     return indexed;
   };
@@ -167,6 +181,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       const color = String(change?.color || '').trim();
       if (!color) return;
       filterFeatureFillTargets(getFeatureElements(change.featureId)).forEach((element) => {
+        if (element.getAttribute?.('fill') === color) return;
         element.setAttribute('fill', color);
         updated += 1;
       });
@@ -185,8 +200,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       const mode = normalizeVisibilityMode(change?.mode);
       getFeatureElements(change.featureId).forEach((element) => {
         if (mode === 'off') {
+          if (element.getAttribute?.('display') === 'none') return;
           element.setAttribute('display', 'none');
         } else {
+          if (element.getAttribute?.('display') === null) return;
           element.removeAttribute('display');
         }
         updated += 1;
@@ -207,9 +224,17 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       const strokeWidth = change?.strokeWidth;
       const hasStrokeWidth = strokeWidth !== null && strokeWidth !== undefined && strokeWidth !== '';
       getFeatureElements(change.featureId).forEach((element) => {
-        if (strokeColor) element.setAttribute('stroke', strokeColor);
-        if (hasStrokeWidth) element.setAttribute('stroke-width', Number(strokeWidth));
-        updated += 1;
+        let changed = false;
+        if (strokeColor && element.getAttribute?.('stroke') !== strokeColor) {
+          element.setAttribute('stroke', strokeColor);
+          changed = true;
+        }
+        const normalizedWidth = hasStrokeWidth ? String(Number(strokeWidth)) : '';
+        if (hasStrokeWidth && element.getAttribute?.('stroke-width') !== normalizedWidth) {
+          element.setAttribute('stroke-width', normalizedWidth);
+          changed = true;
+        }
+        if (changed) updated += 1;
       });
     });
 

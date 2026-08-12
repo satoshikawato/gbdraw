@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 globalThis.window = {
   Vue: {
@@ -11,6 +12,7 @@ globalThis.window = {
   DOMPurify: { sanitize: (value) => value }
 };
 globalThis.document = {};
+installFakeSvgDom();
 globalThis.File = class File extends Blob {
   constructor(parts, name, options = {}) {
     super(parts, options);

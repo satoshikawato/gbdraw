@@ -13,17 +13,19 @@ export const createLegendManager = ({
   state,
   getPyodide,
   ensurePyodide = null,
-  history = null
+  history = null,
+  previewRuntime = null
 }) => {
   const layoutActions = createLegendLayoutActions({ state });
   const entryActions = createLegendEntryActions({
     state,
     getPyodide,
     ensurePyodide,
-    layoutActions
+    layoutActions,
+    previewRuntime
   });
   const sortActions = createLegendSortActions({ state, extractLegendEntries: entryActions.extractLegendEntries });
-  const strokeActions = createLegendStrokeActions({ state });
+  const strokeActions = createLegendStrokeActions({ state, previewRuntime });
   const dragActions = createLegendDragActions({
     state,
     extractLegendEntries: entryActions.extractLegendEntries,

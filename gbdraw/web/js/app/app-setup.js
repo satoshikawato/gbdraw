@@ -52,10 +52,7 @@ import { createRunAnalysis } from './run-analysis.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
-import {
-  COMPOSITION_METADATA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_ATTRIBUTE
-} from './legend-layout/composition-actions.js';
+import { compositionUserDeltas } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
@@ -965,6 +962,15 @@ export const createAppSetup = () => {
     applyConfigData,
     buildUiStateData,
     applyUiStateData,
+    buildCompositionIntent: () => {
+      const svg = svgContainer.value?.querySelector?.('svg') || null;
+      if (!svg) return null;
+      try {
+        return compositionUserDeltas(svg);
+      } catch (_error) {
+        return null;
+      }
+    },
     buildFeatureStateData,
     applyFeatureStateData,
     buildEditorStateData,
@@ -977,9 +983,11 @@ export const createAppSetup = () => {
     applyRunStateData
   });
   const history = createHistoryManager({
-    buildSnapshot: historySnapshots.buildHistorySnapshot,
-    applySnapshot: historySnapshots.applyHistorySnapshot,
-    snapshotSignature: historySnapshots.snapshotSignature,
+    buildIntent: historySnapshots.buildHistoryIntent,
+    applyIntent: historySnapshots.applyHistoryIntent,
+    buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
+    applyCheckpoint: historySnapshots.applyArtifactCheckpoint,
+    signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
     makeRef: ref
   });
@@ -1013,13 +1021,15 @@ export const createAppSetup = () => {
     state,
     getPyodide,
     ensurePyodide: pyodideManager.initPyodide,
-    history
+    history,
+    previewRuntime
   });
   const svgActions = createSvgStyles({
     state,
     watch,
     nextTick,
-    legendActions
+    legendActions,
+    previewRuntime
   });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
@@ -1817,7 +1827,7 @@ export const createAppSetup = () => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
-  const legendLayout = createLegendLayout({ state, legendActions, svgActions, history });
+  const legendLayout = createLegendLayout({ state, legendActions, history });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
@@ -1897,7 +1907,7 @@ export const createAppSetup = () => {
     }
   });
 
-  const refreshLoadedSessionSvgLayout = async ({ ui = {} } = {}) => {
+  const refreshLoadedSessionSvgLayout = async () => {
     await nextTick();
     await new Promise((resolve) => {
       if (typeof window.requestAnimationFrame === 'function') {
@@ -1910,33 +1920,9 @@ export const createAppSetup = () => {
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return;
     try {
-      const hasSchema = svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null;
-      const hasMetadata = svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null;
-      if (!hasSchema && !hasMetadata) {
-        legendLayout.normalizeLegacySvg({
-          legendSide: form.legend || 'none',
-          titleSide: adv.plot_title_position || 'none',
-          userDeltas: {
-            primary: ui.diagramOffset
-              ? [ui.diagramOffset.x, ui.diagramOffset.y]
-              : null,
-            legend: ui.legendCurrentOffset
-              ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
-              : null,
-            lengthBar: ui.lengthBarUserOffset
-              ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
-              : null,
-            title: ui.plotTitleUserOffset
-              ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
-              : null
-          }
-        });
-      } else {
-        legendLayout.captureBaseConfig();
-      }
+      legendLayout.captureBaseConfig();
       legendActions.setupLegendDrag();
       legendLayout.setupDiagramDrag(false);
-      legendLayout.persistCurrentSvg();
     } catch (error) {
       errorLog.value = {
         summary: error?.message || 'The saved SVG composition metadata is invalid.',
@@ -1946,20 +1932,8 @@ export const createAppSetup = () => {
     }
   };
 
-  const restoreLoadedSessionLegendEntries = async (editorState) => {
-    const entries = Array.isArray(editorState?.legend?.entries)
-      ? editorState.legend.entries
-          .map((entry) => ({
-            ...entry,
-            caption: String(entry?.caption || '').trim(),
-            color: String(entry?.color || '').trim()
-          }))
-          .filter((entry) => entry.caption && entry.color)
-      : [];
-    if (!entries.length || !svgContent.value) return;
-
-    if (!pyodideReady.value) await pyodideManager.initPyodide();
-    if (!pyodideReady.value) return;
+  const synchronizeLoadedSessionLegendEntries = async () => {
+    if (!svgContent.value) return;
 
     let svgReady = false;
     for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -1972,25 +1946,9 @@ export const createAppSetup = () => {
     }
     if (!svgReady) return;
 
+    // The admitted, sanitized Result is the sole visual authority. Extraction
+    // only carries nonvisual metadata when both its caption and color match.
     legendActions.extractLegendEntries();
-
-    const expectedCaptions = new Set(entries.map((entry) => entry.caption));
-    for (const entry of [...legendEntries.value]) {
-      const caption = String(entry?.caption || '').trim();
-      if (caption && !expectedCaptions.has(caption)) {
-        legendActions.removeLegendEntry(caption);
-      }
-    }
-
-    for (const entry of entries) {
-      await legendActions.addLegendEntry(entry.caption, entry.color);
-    }
-
-    legendEntries.value = entries.map((entry) => ({
-      ...entry,
-      showStroke: Boolean(entry.showStroke),
-      featureIds: Array.isArray(entry.featureIds) ? entry.featureIds : []
-    }));
   };
 
   const importSession = async (event) => {
@@ -2007,7 +1965,7 @@ export const createAppSetup = () => {
     if (result?.status === 'ok' || result?.status === 'legacy') {
       await nextTick();
       if (result?.status === 'ok') {
-        await restoreLoadedSessionLegendEntries(result.data?.editorState);
+        await synchronizeLoadedSessionLegendEntries();
       }
       await history.captureBaseline('Loaded session');
     }
@@ -2028,6 +1986,8 @@ export const createAppSetup = () => {
     setLegendEntryStrokeColorValue,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
+    reconcileLegendEntries,
+    reconcileStrokeOverrides,
     resetLegendEntryStroke,
     resetAllStrokes
   } = legendActions;
@@ -2091,8 +2051,32 @@ export const createAppSetup = () => {
     handleGlobalLabelModeChoice,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
+    reconcileFeatureVisibility,
+    reconcileLabelOverrides,
     resetAllLabelTextOverrides
   } = featureActions;
+
+  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains } = {}) => {
+    if (!svgContainer.value?.querySelector?.('svg')) return;
+    const changedDomains = domains instanceof Set ? domains : new Set();
+    if (changedDomains.has('ui')) {
+      legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
+    }
+    if (changedDomains.has('config') || changedDomains.has('features')) {
+      svgActions.applyPaletteToSvg();
+      svgActions.applySpecificRulesToSvg();
+    }
+    if (changedDomains.has('features')) {
+      reconcileFeatureVisibility();
+      reconcileLabelOverrides();
+    }
+    if (changedDomains.has('editorState')) {
+      reconcileLegendEntries();
+      reconcileStrokeOverrides();
+      reconcileLabelOverrides();
+    }
+    await nextTick();
+  });
 
   const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;
   const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
@@ -2233,7 +2217,7 @@ export const createAppSetup = () => {
         };
   }
 
-  const runAnalysis = async () => history.runUndoable('Generate diagram', async () => {
+  const runAnalysis = async () => history.runUndoableCheckpoint('Generate diagram', async () => {
     cancelDefinitionUpdate();
     const comparisonPlanSnapshot = mode.value === 'linear'
       ? linearComparisonResolution.value
@@ -2346,16 +2330,19 @@ export const createAppSetup = () => {
     const proceed = window.confirm(
       'Reset all settings to the webapp defaults?\n\nUploaded files and current results will be kept.'
     );
-    if (!proceed) return;
+    if (!proceed) return false;
 
-    cancelDefinitionUpdate();
-    resetSettingsState(state);
-    invalidateLinearComparisonArtifacts();
-    matchSequenceRegistry?.reset?.();
-    circularTrackNewRenderer.value = 'dinucleotide_skew';
-    linearTrackNewRenderer.value = 'dinucleotide_skew';
-    depthTrackUiCounts.circular = 1;
-    ensureDepthTrackConfigCount(activeDepthTrackCount());
+    return history.runUndoableCheckpoint('Reset settings', async () => {
+      cancelDefinitionUpdate();
+      resetSettingsState(state);
+      invalidateLinearComparisonArtifacts();
+      matchSequenceRegistry?.reset?.();
+      circularTrackNewRenderer.value = 'dinucleotide_skew';
+      linearTrackNewRenderer.value = 'dinucleotide_skew';
+      depthTrackUiCounts.circular = 1;
+      ensureDepthTrackConfigCount(activeDepthTrackCount());
+      return true;
+    });
   };
 
   const resetLayout = () => {
