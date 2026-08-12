@@ -352,3 +352,27 @@ interactive feature metadata.
 - No SVG reference, Gallery session, screenshot, public showcase, wheel, or
   other tracked generated artifact changed. The prepared browser wheel remains
   ignored and untracked.
+
+### CI follow-up
+
+- The first pushed combined-tree run exposed one stale Python architecture
+  assertion. `tests/test_web_mode_profiles.py` still required pairwise-legend
+  DOM ownership in `run-analysis.js`, although P0-2 deliberately moved the
+  shared selector and removal into `candidate-render.js` inside the single
+  detached SVG-ingestion transaction. The test now checks the suppression
+  intent at `run-analysis.js` and the selector/removal at its canonical owner;
+  no production path was restored. The exact test file passes 2/2.
+- The first CI performance run passed all 25,000-feature structural mutation
+  gates but reported 1,254 ms against the 1,000 ms apply ceiling. The old
+  Node-side `Date.now()` interval included Playwright locator resolution,
+  browser IPC, assertion polling, and a second browser round trip. It did not
+  isolate application work. The test now starts `performance.now()` in the
+  browser immediately before the native click and ends after the same two-frame
+  application settlement. The 1,000 ms apply and 250 ms navigation ceilings,
+  match assertions, mutation caps, and exact two-mutation navigation gate are
+  unchanged. A CI-mode focused run measured 153.9 ms apply and 6.7 ms
+  navigation.
+- `CI=1 TMPDIR=/tmp npm run test:web:perf-smoke`: 7/7 passed in 25.5 s with
+  one worker and zero retries. Its WSSV probe reported 1,980 ms restore, 523 ms
+  maximum long task, begin p95 2.4 ms, commit p95 6.3 ms, one of each ingestion
+  ownership operation, and zero main-thread Pyodide initialization.

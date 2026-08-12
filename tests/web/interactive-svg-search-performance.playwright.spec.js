@@ -45,11 +45,14 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   await page.evaluate(() => { window.__featureClassMutations = []; });
 
   await page.locator('[data-search-query]').fill('needle');
-  const started = Date.now();
-  await page.locator('[data-search-apply]').click();
+  const applyElapsedMs = await page.locator('[data-search-apply]').evaluate(async (button) => {
+    const started = performance.now();
+    button.click();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return performance.now() - started;
+  });
   await expect(page.locator('svg')).toHaveClass(/gbdraw-feature-search-active/);
-  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  expect(Date.now() - started).toBeLessThan(1000);
+  expect(applyElapsedMs).toBeLessThan(1000);
   await expect(page.locator('.gbdraw-interactive-feature--match')).toHaveCount(5);
   await expect(page.locator('.gbdraw-interactive-feature--active-match')).toHaveCount(1);
   await expect(page.locator('.gbdraw-interactive-feature--dimmed')).toHaveCount(0);
@@ -57,9 +60,12 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   expect(resultMutations.length).toBeLessThanOrEqual(6);
 
   await page.evaluate(() => { window.__featureClassMutations = []; });
-  const navigationStarted = Date.now();
-  await page.locator('[data-search-next]').click();
-  expect(Date.now() - navigationStarted).toBeLessThan(250);
+  const navigationElapsedMs = await page.locator('[data-search-next]').evaluate((button) => {
+    const started = performance.now();
+    button.click();
+    return performance.now() - started;
+  });
+  expect(navigationElapsedMs).toBeLessThan(250);
   const navigationMutations = await page.evaluate(() => window.__featureClassMutations);
   expect(navigationMutations).toHaveLength(2);
   expect(navigationMutations.every((entry) => entry.token.includes('active-match'))).toBeTruthy();
