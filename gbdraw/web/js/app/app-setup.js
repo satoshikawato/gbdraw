@@ -1,5 +1,4 @@
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
-import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyConfigData,
@@ -143,6 +142,13 @@ import {
 } from './depth-track-state.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, reactive } = window.Vue;
+
+let exportServicePromise = null;
+
+const loadExportService = () => {
+  exportServicePromise ??= import('../services/export.js');
+  return exportServicePromise;
+};
 
 export const createSessionImportRollbackState = ({
   depthTrackUiCounts,
@@ -2697,6 +2703,32 @@ export const createAppSetup = () => {
     if (!value) return;
     downloadTextFile(String(filename || 'gbdraw.txt'), value, type);
   };
+
+  const runExportAction = async (methodName, label) => {
+    try {
+      const exportService = await loadExportService();
+      const exportMethod = exportService?.[methodName];
+      if (typeof exportMethod !== 'function') {
+        throw new Error('The export service did not provide the requested action.');
+      }
+      return await exportMethod();
+    } catch (error) {
+      const normalized = normalizeUserFacingError(error);
+      errorLog.value = {
+        type: 'Export error',
+        message: `${label} export failed: ${normalized?.summary || 'Unknown export error.'}`,
+        details: normalized?.details || []
+      };
+      return { status: 'error' };
+    }
+  };
+
+  const downloadSVG = () => runExportAction('downloadSVG', 'SVG');
+  const downloadInteractiveSVG = () => (
+    runExportAction('downloadInteractiveSVG', 'Interactive SVG')
+  );
+  const downloadPNG = () => runExportAction('downloadPNG', 'PNG');
+  const downloadPDF = () => runExportAction('downloadPDF', 'PDF');
 
   const specificRuleLegendOptions = computed(() => {
     const byCaption = new Map();
